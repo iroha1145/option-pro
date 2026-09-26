@@ -509,7 +509,7 @@ def test_intraday_tod_rvol_is_same_clock_and_hold_uses_per_bar_vwap() -> None:
     from app.services.breakouts.models import MarketSession, TemporalCutoff
     session_starts = [
         int(datetime(2025, 1, day, 14, 30, tzinfo=timezone.utc).timestamp())
-        for day in (6, 7, 8, 9, 10, 13)
+        for day in (6, 7, 8, 10, 13, 14)
     ]
     bars: list[dict] = []
     for day_i, start in enumerate(session_starts):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import ipaddress
 import sqlite3
 
@@ -246,20 +247,33 @@ def test_customer_session_never_grants_owner_access(
 def test_wrong_password_and_unknown_user_are_indistinguishable(
     client: TestClient,
     store: AccountStore,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store.register("dave", "fixture-password-for-tests")
+    derivations: list[int] = []
+    real_pbkdf2 = hashlib.pbkdf2_hmac
+
+    def counting_pbkdf2(*args, **kwargs):
+        derivations.append(1)
+        return real_pbkdf2(*args, **kwargs)
+
+    monkeypatch.setattr(hashlib, "pbkdf2_hmac", counting_pbkdf2)
     wrong = client.post(
         "/api/access/login",
         json={"username": "dave", "password": "nope"},
         headers={**HEADERS, "Content-Type": "application/json"},
     )
+    wrong_derivations = len(derivations)
     missing = client.post(
         "/api/access/login",
         json={"username": "nobody", "password": "nope"},
         headers={**HEADERS, "Content-Type": "application/json"},
     )
+    missing_derivations = len(derivations) - wrong_derivations
     assert wrong.status_code == missing.status_code == 401
     assert wrong.json() == missing.json()
+    # Equal cost by construction, not by wall clock: one key derivation each.
+    assert wrong_derivations == missing_derivations == 1
 
 
 def test_repeated_failures_trigger_a_cooldown(

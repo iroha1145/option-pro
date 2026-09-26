@@ -8,14 +8,14 @@ from datetime import date, datetime, timezone
 from typing import Any, Callable, Mapping, Sequence
 
 from app.services.research_eod_v1 import FEATURE_VERSION
-from app.services.research_eod_v1.calendar_asof import eod_evaluation_as_of
+from app.services.research_eod_v1.calendar_asof import eod_evaluation_as_of, last_completed_session
 from app.services.research_eod_v1.capability import PRICE_ONLY_DIAGNOSTIC
 from app.services.research_eod_v1.composite import m1_consensus
 from app.services.research_eod_v1.constants import ALGORITHMS
 from app.services.research_eod_v1.factors import apply_sector_gates, extract_raw
 from app.services.research_eod_v1.membership import has_complete_session_bar, is_theme_candidate, source_is_available
 from app.services.research_eod_v1.snapshot import compute_snapshot
-from app.services.research_eod_v1.series import clip_panel_to_as_of
+from app.services.research_eod_v1.series import SecuritySeries, session_is_halted
 
 from . import COMPUTE_VERSION, MODE_ID, PURPOSE_LIVE, VOLUME_SCOPE
 from .panel import prepare_limited_panel
@@ -51,6 +51,44 @@ def observation_consensus(
     return out
 
 
+def _through(series: SecuritySeries, cutoff: date) -> SecuritySeries | None:
+    """``series`` cut after ``cutoff``; the same object when nothing would be cut.
+
+    ``slice_through`` copies every array even when the series already ends on
+    or before the cutoff, which for the live all-market panel duplicates the
+    whole panel. Reuse is limited to series whose slice would be identical.
+    """
+
+    last = len(series.dates) - 1
+    if (
+        last >= 0
+        and series.dates[last] <= cutoff
+        and not series.dividend_events
+        and all(day <= cutoff for day, _value in series.dividends)
+        and all(day <= cutoff for day, _ratio in series.splits)
+        and bool(series.halted) == session_is_halted(series, last)
+    ):
+        return series
+    return series.slice_through(cutoff)
+
+
+def session_panel(panel: Mapping[str, Any], session: date) -> dict[str, Any]:
+    """Series known at the session's evaluation instant, each with a complete session bar.
+
+    One cut per series at ``min(session, calendar cutoff)``; the result shares
+    the input's series (and their date lists) wherever the cut changes nothing.
+    """
+
+    cutoff = min(session, last_completed_session(eod_evaluation_as_of(session)))
+    keep = WARMUP_SESSIONS + 40
+    clipped: dict[str, Any] = {}
+    for sid, series in panel.items():
+        through = _through(series, cutoff)
+        if through is not None and has_complete_session_bar(through, session):
+            clipped[sid] = through.last_n(keep)
+    return clipped
+
+
 def precompute_session_raws(
     panel: Mapping[str, Any],
     session: date,
@@ -59,18 +97,7 @@ def precompute_session_raws(
     horizon: str,
     include_setup: bool = True,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    as_of = eod_evaluation_as_of(session)
-    clipped = {
-        sid: series.slice_through(session)
-        for sid, series in clip_panel_to_as_of(panel, as_of).items()
-        if series is not None
-    }
-    keep = WARMUP_SESSIONS + 40
-    clipped = {
-        sid: series.last_n(keep)
-        for sid, series in clipped.items()
-        if series is not None and has_complete_session_bar(series, session)
-    }
+    clipped = session_panel(panel, session)
     seed = next(iter(registry["sectors"]))
     gates = registry["sectors"][seed]["gates"]
     blend = tuple(registry["horizons"][horizon]["momentum_blend"])

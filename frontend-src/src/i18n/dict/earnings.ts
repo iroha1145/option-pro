@@ -261,4 +261,13 @@ export const EARNINGS: Dict = {
   "当前显示 {n} 家公司的财报，部分公司数据缺失。": ["Showing earnings for {n} companies. Some company data is missing.", "{n}社の決算を表示しています。一部企業のデータが不足しています。"],
   "分析 {ticker} 的财报对相关公司的影响。": ["Analyze how {ticker} earnings may affect related companies.", "{ticker}の決算が関連企業に与える影響を分析します。"],
   "为 {ticker} 生成本次财报分析。": ["Generate an analysis of this earnings report for {ticker}.", "{ticker}の今回の決算を分析します。"],
+  /* 审计修复 2026-09-25：轮询停表、读取失败、限流与取消文案 */
+  '暂时读不到最新状态，正在自动重试': ['The latest status is temporarily unavailable. Retrying automatically…', '最新の状態を一時的に取得できません。自動で再試行しています…'],
+  '服务暂时不可用，请稍后重试': ['The service is temporarily unavailable. Try again later.', 'サービスは一時的に利用できません。しばらくしてから再試行してください。'],
+  '自动查询已暂停，分析可能仍在进行': ['Automatic checks have paused; the analysis may still be running.', '自動確認を停止しました。分析はまだ進行中の可能性があります。'],
+  '重新查询': ['Check again', '再確認'],
+  '财报分析触发过于频繁': ['Earnings analyses are being requested too often', '決算分析のリクエストが多すぎます'],
+  '请求过于频繁': ['Too many requests', 'リクエストが多すぎます'],
+  '分析任务已取消': ['The analysis job was cancelled', '分析ジョブはキャンセルされました'],
+  '可以重新生成分析': ['You can generate the analysis again.', '分析をもう一度生成できます。'],
 };

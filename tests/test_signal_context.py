@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 
 import pytest
 
+from app import failure_diagnostics as diagnostics
 from app.api import signals
 from app.services import signal_context
 from app.services.ai_jobs import runtime
@@ -15,6 +17,15 @@ from app.services.ai_jobs.models import (
     validate_job_payload,
     validate_result,
 )
+
+
+@pytest.fixture(autouse=True)
+def _clear_fallback_diagnostics():
+    """诊断按 (stage, symbol, error_type) 300 秒去重，隔离测试间的计时器状态。"""
+
+    diagnostics._seen.clear()
+    yield
+    diagnostics._seen.clear()
 
 
 def _chain_fixture() -> dict:
@@ -253,6 +264,93 @@ def test_build_signal_context_drops_blocks_that_exceed_the_time_budget(
 
     assert context["status"]["market_context"] == "unavailable"
     assert context["status"]["upcoming_earnings"] == "ok"
+
+
+def test_build_signal_context_cancels_pending_tasks_and_reports_timeout_once(
+    monkeypatch, caplog
+):
+    """超时块的 task 必须真正被 cancel（而非留着裸跑），且只汇总记一次诊断。"""
+
+    cancelled = {"market": False}
+
+    async def market_slow():
+        try:
+            await asyncio.sleep(30)
+            return {"never": True}
+        except asyncio.CancelledError:
+            cancelled["market"] = True
+            raise
+
+    async def earnings_ok(_symbol):
+        return {"earnings_date": "2026-08-27"}
+
+    monkeypatch.setattr(signal_context, "CONTEXT_TIMEOUT_SECONDS", 0.2)
+    monkeypatch.setattr(signal_context, "_market_block", market_slow)
+    monkeypatch.setattr(signal_context, "_earnings_block", earnings_ok)
+    monkeypatch.setattr(signal_context, "_options_block", lambda _symbol: None)
+    monkeypatch.setattr(signal_context, "_news_block", lambda _symbol: None)
+    monkeypatch.setattr(signal_context, "macro_conditions_context", lambda: None)
+
+    with caplog.at_level(logging.WARNING, logger=diagnostics.__name__):
+        context = asyncio.run(signal_context.build_signal_context("AMD"))
+
+    # 取消真正送达了挂起的协程（不是任务被抛弃后继续裸跑）。
+    assert cancelled["market"] is True
+    # 契约不变：函数正常返回，超时块如实标注 unavailable，其余块不受影响。
+    assert context["status"]["market_context"] == "unavailable"
+    assert context["status"]["upcoming_earnings"] == "ok"
+    timeout_messages = [
+        record.getMessage()
+        for record in caplog.records
+        if "signal_context_timeout" in record.getMessage()
+    ]
+    assert len(timeout_messages) == 1
+    assert "symbol=AMD" in timeout_messages[0]
+
+
+def test_options_block_records_one_diagnostic_per_stage_on_partial_failure(
+    monkeypatch, caplog
+):
+    """两个到期日各失败/正常一次、IV 失败：各 stage 只汇总记一条诊断。"""
+
+    good_chain = _chain_fixture()
+    good_chain["expiration"] = "2026-08-14"
+
+    def get_expirations_snapshot(symbol):
+        assert symbol == "AMD"
+        return {"expirations": ["2026-08-07", "2026-08-14"]}
+
+    def get_option_chain(symbol, expiration):
+        assert symbol == "AMD"
+        if expiration == "2026-08-07":
+            raise RuntimeError("yahoo rate limited")
+        assert expiration == "2026-08-14"
+        return good_chain
+
+    def get_stock_iv(symbol):
+        assert symbol == "AMD"
+        raise RuntimeError("iv provider down")
+
+    monkeypatch.setattr(
+        signal_context.yahoo, "get_expirations_snapshot", get_expirations_snapshot
+    )
+    monkeypatch.setattr(signal_context.yahoo, "get_option_chain", get_option_chain)
+    monkeypatch.setattr(signal_context.yahoo, "get_stock_iv", get_stock_iv)
+
+    with caplog.at_level(logging.WARNING, logger=diagnostics.__name__):
+        block = signal_context._options_block("AMD")
+
+    # 一个到期日失败，另一个正常：摘要保留正常的那个，IV 失败降级为 None。
+    assert block is not None
+    assert block["atm_iv_20_60d"] is None
+    assert len(block["expirations"]) == 1
+    assert block["expirations"][0]["expiration"] == "2026-08-14"
+
+    messages = [record.getMessage() for record in caplog.records]
+    chain_messages = [m for m in messages if "signal_context_option_chain" in m]
+    iv_messages = [m for m in messages if "signal_context_stock_iv" in m]
+    assert len(chain_messages) == 1
+    assert len(iv_messages) == 1
 
 
 def test_market_block_prefers_fresh_snapshot_and_falls_back_to_live(monkeypatch):

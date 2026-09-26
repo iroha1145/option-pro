@@ -6,9 +6,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAccess } from '@/hooks/useAccess';
 import { usePolling } from '@/hooks/usePolling';
+import { remoteState } from '@/hooks/remoteState';
 import { useToast } from '@/hooks/useToast';
+import { boundedReadRetryDelayMs } from '@/lib/boundedReadRetry';
 import { catalystsContract } from './api';
 import type { FocusCycleJob, MarketFocusCycle, NewsClassification } from './api';
+import { focusCycleOutcome } from './analysisErrorText';
 import { ImpactValue, Led } from './bits';
 import ConfirmDialog from './ConfirmDialog';
 import { SkeletonBlock, SkeletonText } from '@/components/shared/Skeleton';
@@ -93,15 +96,40 @@ const CYCLE_STATUS_CN: Record<string, string> = {
   cancelled: t('已取消'),
   canceled: t('已取消'),
   failed: t('失败'),
+  budget_blocked: t('额度已用完'),
 };
+
+/* 周期仍在跑（含打开页面前就开始的）：卡片低频跟踪 latest，并禁止重复触发。 */
+const ACTIVE_CYCLE_STATUSES = new Set(['pending', 'queued', 'in_progress', 'cancel_requested']);
+const SETTLED_FAILURE_STATUSES = new Set(['failed', 'cancelled', 'canceled', 'budget_blocked']);
+const LATEST_TRACK_MS = 15_000;
+/* 共享读缓存默认 30 秒；跟踪时放宽到 10 秒，才能真的按 15 秒一次看到新状态。 */
+const LATEST_MAX_AGE_MS = 10_000;
+const POLL_BACKOFF_MS = [2000, 3000, 5000, 8000, 10000];
+/* 任务状态读取失败的本地退避；实际等待取它与 Retry-After 的较大值。 */
+const POLL_FAILURE_WAITS_MS = [5_000, 10_000, 20_000, 30_000] as const;
+
+function attemptNotice(status: string): string {
+  if (status === 'cancelled' || status === 'canceled') return t('最近一次更新已取消，当前展示上次成功结果');
+  if (status === 'budget_blocked') return t('最近一次更新没有执行，当前展示上次成功结果');
+  return t('最近一次更新失败，当前展示上次成功结果');
+}
 
 function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; compact?: boolean }) {
   const statusCn = cycle.status && cycle.status !== 'completed' ? CYCLE_STATUS_CN[cycle.status] ?? cycle.status : null;
+  /* 当前周期本身失败 / 取消 / 预算受限（没有更早的成功结果可退回）时，写明原因。 */
+  const failure = cycle.status && SETTLED_FAILURE_STATUSES.has(cycle.status)
+    ? focusCycleOutcome(cycle.status, cycle.errorCode)
+    : null;
+  const attempt = cycle.latestAttempt
+    ? focusCycleOutcome(cycle.latestAttempt.status, cycle.latestAttempt.errorCode)
+    : null;
   return (
     <div>
-      {cycle.latestAttempt && (
+      {cycle.latestAttempt && attempt && (
         <StatusNotice className="mb-4">
-          <p>{t('最近一次更新失败，当前展示上次成功结果')}</p>
+          <p>{attemptNotice(cycle.latestAttempt.status)}</p>
+          <p className="mt-1 text-micro text-ink-500">{attempt.reason}</p>
           <p className="mt-1 break-all font-mono text-micro text-ink-400 tnum">
             {cycle.latestAttempt.cycleId} · {fmtCycleDate(cycle.latestAttempt.startedAt, true)}
           </p>
@@ -118,6 +146,7 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
           </SoftBadge>
         )}
       </div>
+      {failure && <p className="mt-2 text-caption leading-5 text-ink-500">{failure.reason}</p>}
       <p className="mt-2 font-mono text-micro leading-5 text-ink-400 tnum">
         {t('启动')} {fmtCycleDate(cycle.startedAt, false)} {t('· 生成')} {fmtCycleDate(cycle.generatedAt, true)} {t('· 样本')} {cycle.newsCount}{' '}
         {cycle.sampleLabel ?? t('条')}
@@ -209,18 +238,29 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
 
 export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
   refreshToken?: number;
-  onDataRefreshed?: () => void;
+  /** cacheCleared：调用方的写操作已清过读缓存，页面只需重新读取。 */
+  onDataRefreshed?: (options?: { cacheCleared?: boolean }) => void;
 } = {}) {
   const { isOwner } = useAccess();
   const toast = useToast();
+  const [job, setJob] = useState<FocusCycleJob | null>(null);
+  const [pollNotice, setPollNotice] = useState<string | null>(null);
+  const running = job && (job.status === 'queued' || job.status === 'in_progress');
+  /* latest 显示周期仍在跑时按 15 秒跟踪；本卡自己在轮询任务时由任务轮询负责，不重复查。 */
+  const [latestActive, setLatestActive] = useState(false);
   /* refreshToken 参与依赖：页头「刷新」必须真的刷新焦点周期（审计 P2-21）。 */
-  const latestQ = usePolling(() => catalystsContract.latestFocusCycle(), null, [refreshToken]);
-  const prevQ = usePolling(() => catalystsContract.previousFocusCycle(), null, [refreshToken]);
+  const latestInterval = latestActive && !running ? LATEST_TRACK_MS : null;
+  const latestQ = usePolling(() => catalystsContract.latestFocusCycle(LATEST_MAX_AGE_MS), latestInterval, [refreshToken]);
+  const nextLatestActive = latestQ.data ? ACTIVE_CYCLE_STATUSES.has(latestQ.data.status ?? '') : latestActive;
+  if (nextLatestActive !== latestActive) setLatestActive(nextLatestActive);
+  /* 历史对照跟着 latest 已结束的周期走：跟踪中的周期完成后，上一成功周期也随之更换。 */
+  const settledLatestId = latestQ.data && !nextLatestActive ? latestQ.data.cycleId : '';
+  const prevQ = usePolling(() => catalystsContract.previousFocusCycle(), null, [refreshToken, settledLatestId]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [job, setJob] = useState<FocusCycleJob | null>(null);
   const pollRef = useRef<number | null>(null);
   const pollGenRef = useRef(0);
+  const timersRef = useRef<Set<number>>(new Set());
 
   /* stopPoll 只杀计时器；换代（作废在途响应与收尾）只发生在真正「弃链」的
      场合：卸载、或新一次提交顶掉旧链。终态分支里调 stopPoll 后收尾定时器
@@ -235,8 +275,23 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
     pollGenRef.current += 1;
     stopPoll();
   }, [stopPoll]);
+  /* 兜底刷新与收尾清理的一次性定时器登记在这里，卸载时一并取消（审计 3-E）。 */
+  const later = useCallback((fn: () => void, ms: number) => {
+    const id = window.setTimeout(() => {
+      timersRef.current.delete(id);
+      fn();
+    }, ms);
+    timersRef.current.add(id);
+  }, []);
 
-  useEffect(() => abandonPoll, [abandonPoll]);
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      abandonPoll();
+      for (const id of timers) window.clearTimeout(id);
+      timers.clear();
+    };
+  }, [abandonPoll]);
 
   const submittingRef = useRef(false);
   const startJob = useCallback(async () => {
@@ -244,60 +299,63 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
     submittingRef.current = true;
     setConfirmOpen(false);
     try {
+      const latest = latestQ.data;
       const failedCycleId =
-        latestQ.data?.latestAttempt?.cycleId
-        ?? (
-          latestQ.data?.status
-          && ['failed', 'cancelled', 'canceled', 'budget_blocked'].includes(latestQ.data.status)
-            ? latestQ.data.cycleId
-            : null
-        );
+        latest?.latestAttempt?.cycleId
+        ?? (latest?.status && SETTLED_FAILURE_STATUSES.has(latest.status) ? latest.cycleId : null);
       const j = await catalystsContract.triggerFocusCycle(failedCycleId);
       setJob(j);
-      onDataRefreshed?.();
+      setPollNotice(null);
+      /* triggerFocusCycle 已清过读缓存；这里只让页面各区重新读取，不再清第二次（审计 2-E）。 */
+      onDataRefreshed?.({ cacheCleared: true });
       toast.info(t('焦点周期计算已提交'), t('完成后自动刷新'));
       abandonPoll();
       if (!j.cycleId) {
         // 202 已受理但响应未携带周期编号：延迟拉取 latest 兜底，不误报失败
-        window.setTimeout(() => {
+        later(() => {
           latestQ.refresh();
           setJob(null);
         }, 12_000);
         return;
       }
+      const cycleId = j.cycleId;
       const pollDeadline = Date.now() + 5 * 60_000;
-      const BACKOFF = [2000, 3000, 5000, 8000, 10000];
       const generation = pollGenRef.current;
       let attempt = 0;
+      let failures = 0;
       const stillThisPoll = () => generation === pollGenRef.current;
       const tick = async () => {
         if (!stillThisPoll()) return;
         if (Date.now() >= pollDeadline) {
           stopPoll();
-          latestQ.refresh();
           setJob(null);
-          toast.error(t('焦点周期仍在处理中'), t('稍后刷新页面可继续查看结果'));
+          setPollNotice(null);
+          latestQ.refresh();
+          // latest 仍显示进行中时卡片会继续低频跟踪，不必让用户刷新页面。
+          toast.info(t('焦点周期仍在处理中'), t('卡片会继续自动检查结果'));
           return;
         }
         try {
-          const next = await catalystsContract.focusCycleJob(j.cycleId!);
+          const next = await catalystsContract.focusCycleJob(cycleId);
           if (!stillThisPoll()) return;
+          failures = 0;
+          setPollNotice(null);
           setJob({ ...next });
-          /* nFocusJob 已把状态归一到 queued|in_progress|completed|failed（cancelled
-             归 failed、cancel_requested 归 in_progress），这里只认这四值——此前多写的
-             cancelled/cancel_requested 分支永远不可达，还被 grep 测试钉住了死字串。 */
-          if (next.status === 'completed' || next.status === 'failed') {
+          /* 终态保留原因：取消、预算受限、失败各有文案，不再一律「计算失败」（审计 FE-5）。 */
+          if (next.status === 'completed' || next.status === 'failed' || next.status === 'cancelled' || next.status === 'budget_blocked') {
             stopPoll();
             // Update availability and history with the settled provider result.
             onDataRefreshed?.();
             if (next.status === 'completed') {
               toast.success(t('新焦点周期已生成'));
             } else {
-              toast.error(t('焦点周期计算失败'), t('请稍后重试'));
+              const outcome = focusCycleOutcome(next.status, next.errorCode);
+              if (next.status === 'cancelled') toast.info(outcome.title, outcome.reason);
+              else toast.error(outcome.title, outcome.reason);
             }
             // 成败都重读 latest：失败态（含被取消的）也要让卡片回到最新可用周期。
             latestQ.refresh();
-            window.setTimeout(() => {
+            later(() => {
               // 按 cycleId 函数式清理：1200ms 内再提交不误伤新 job。
               setJob((cur) => (cur && cur.cycleId === j.cycleId ? null : cur));
             }, 1200);
@@ -305,25 +363,45 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
           }
         } catch (error) {
           if (!stillThisPoll()) return;
-          stopPoll();
-          setJob(null);
-          latestQ.refresh();
-          toast.error(t('焦点周期状态读取失败'), error instanceof Error ? error.message : t('请稍后刷新页面'));
+          if ((error as { code?: unknown } | null)?.code === 404) {
+            // 周期记录已不在：同一编号只会再 404，交回 latest 显示当前状态。
+            stopPoll();
+            setJob(null);
+            setPollNotice(null);
+            latestQ.refresh();
+            toast.error(t('焦点周期记录已不存在'), t('已改为显示最新周期'));
+            return;
+          }
+          /* 读取失败按退避继续查，不停表也不清任务：清掉会让卡片停在「计算中」、
+             按钮却又能点（审计 FE-6）。 */
+          failures += 1;
+          if (failures >= 2) setPollNotice(t('焦点周期状态暂时读不到，正在重试'));
+          const retryDelay = boundedReadRetryDelayMs(failures - 1, error, POLL_FAILURE_WAITS_MS);
+          pollRef.current = window.setTimeout(() => void tick(), retryDelay);
           return;
         }
-        const delay = BACKOFF[Math.min(attempt, BACKOFF.length - 1)];
+        const delay = POLL_BACKOFF_MS[Math.min(attempt, POLL_BACKOFF_MS.length - 1)];
         attempt += 1;
         pollRef.current = window.setTimeout(() => void tick(), delay);
       };
-      pollRef.current = window.setTimeout(() => void tick(), BACKOFF[0]);
+      pollRef.current = window.setTimeout(() => void tick(), POLL_BACKOFF_MS[0]);
     } catch (e) {
       toast.error(t('提交失败'), e instanceof Error ? e.message : undefined);
     } finally {
       submittingRef.current = false;
     }
-  }, [abandonPoll, latestQ, onDataRefreshed, stopPoll, toast]);
+  }, [abandonPoll, later, latestQ, onDataRefreshed, stopPoll, toast]);
 
-  const running = job && (job.status === 'queued' || job.status === 'in_progress');
+  const busy = Boolean(running) || latestActive;
+  const latestFailed = Boolean(latestQ.data?.latestAttempt)
+    || SETTLED_FAILURE_STATUSES.has(latestQ.data?.status ?? '');
+  /* 读取失败与业务空态分开：失败有旧数据就继续显示并标注，没有就给错误说明与重试（审计 FE-7）。 */
+  const latestState = remoteState(latestQ, (cycle) => !cycle.cycleId);
+  const retryLatest = (
+    <button type="button" className="control-button" onClick={() => latestQ.refresh({ force: true })}>
+      {t('重试')}
+    </button>
+  );
 
   return (
     /* 后续区块 rise-in 减量：直接呈现 */
@@ -341,23 +419,23 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
         {isOwner ? (
           <button
             onClick={() => setConfirmOpen(true)}
-            disabled={!!running}
+            disabled={busy}
             className={cn(
               'btn-primary',
-              running
+              busy
                 ? 'cursor-wait opacity-60'
                 : '',
             )}
           >
-            {running ? (
+            {busy ? (
               <>
                 <Led tone="ai" pulse className="size-1.5 bg-white" />
-                {t('周期计算中')}{job.progress !== null ? ` ${job.progress}%` : ''}
+                {t('周期计算中')}{running && job.progress !== null ? ` ${job.progress}%` : ''}
               </>
             ) : (
               <>
                 <AnalysisIcon size={14} />
-                {latestQ.data?.latestAttempt || latestQ.data?.status === 'failed'
+                {latestFailed
                   ? t('重试焦点周期')
                   : t('触发新周期')}
               </>
@@ -368,7 +446,7 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
         )}
       </div>
 
-      {/* 任务进度条 */}
+      {/* 任务进度条：后端给出百分比时才显示 */}
       <AnimatePresence>
         {running && job.progress !== null && (
           <motion.div
@@ -386,15 +464,29 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
       </AnimatePresence>
 
       <div className="mt-4">
-        {latestQ.loading && !latestQ.data ? (
+        {pollNotice && (
+          <p className="mb-3 text-caption text-ink-500" role="status">{pollNotice}</p>
+        )}
+        {latestState === 'loading' ? (
           <div>
             <SkeletonBlock className="h-6 w-56" />
             <SkeletonText lines={3} className="mt-3" />
           </div>
-        ) : latestQ.error ? (
+        ) : latestState === 'error' ? (
+          <StatusNotice action={retryLatest}>
+            <p>{t('焦点周期暂时读不到，可以稍后重试')}</p>
+          </StatusNotice>
+        ) : latestState === 'empty' ? (
           <p className="text-body-s text-ink-500">{t('暂无焦点周期数据')}</p>
         ) : latestQ.data ? (
-          <CycleSummary cycle={latestQ.data} />
+          <>
+            {latestState === 'stale' && (
+              <StatusNotice className="mb-4" action={retryLatest}>
+                <p>{t('最新状态读取失败，显示上次结果')}</p>
+              </StatusNotice>
+            )}
+            <CycleSummary cycle={latestQ.data} />
+          </>
         ) : null}
       </div>
 

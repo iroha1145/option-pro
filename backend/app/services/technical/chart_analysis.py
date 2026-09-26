@@ -19,6 +19,7 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
+from app.failure_diagnostics import record_fallback_failure
 from app.services.market_calendar import early_close_minutes, is_trading_day
 from app.services.strength.features import _feature_row as build_feature_row
 from app.services.strength.scoring import score_intrinsic
@@ -1124,32 +1125,38 @@ def _intraday_overlays(series: Mapping[str, list], data_through: str, chart_rang
     last_span = highs[-1] - lows[-1] if n else 0.0
     last_clv = ((2 * closes[-1] - highs[-1] - lows[-1]) / last_span) if last_span > 0 else None
     tod_rvol = None
-    from app.services.breakouts.feature_engine import compute_time_of_day_rvol
-    from app.services.breakouts.models import MarketSession, TemporalCutoff
+    try:
+        from app.services.breakouts.feature_engine import compute_time_of_day_rvol
+        from app.services.breakouts.models import MarketSession, TemporalCutoff
 
-    index = pd.DatetimeIndex([datetime.fromtimestamp(int(t), tz=timezone.utc) for t in times])
-    frame = pd.DataFrame(
-        {
-            "Open": opens if len(opens) == n else closes,
-            "High": highs,
-            "Low": lows,
-            "Close": closes,
-            "Volume": volumes if len(volumes) == n else [None] * n,
-        },
-        index=index,
-    )
-    event_at = index[-1].to_pydatetime()
-    if event_at.tzinfo is None:
-        event_at = event_at.replace(tzinfo=timezone.utc)
-    cutoff = TemporalCutoff(
-        event_at=event_at,
-        include_current_bar=True,
-        session=MarketSession.REGULAR,
-    )
-    rvol = compute_time_of_day_rvol(frame, cutoff)
-    raw_rvol = rvol.get("rvol_time_of_day")
-    if raw_rvol is not None:
-        tod_rvol = round(float(raw_rvol), 4)
+        index = pd.DatetimeIndex([datetime.fromtimestamp(int(t), tz=timezone.utc) for t in times])
+        frame = pd.DataFrame(
+            {
+                "Open": opens if len(opens) == n else closes,
+                "High": highs,
+                "Low": lows,
+                "Close": closes,
+                "Volume": volumes if len(volumes) == n else [None] * n,
+            },
+            index=index,
+        )
+        event_at = index[-1].to_pydatetime()
+        if event_at.tzinfo is None:
+            event_at = event_at.replace(tzinfo=timezone.utc)
+        cutoff = TemporalCutoff(
+            event_at=event_at,
+            include_current_bar=True,
+            session=MarketSession.REGULAR,
+        )
+        rvol = compute_time_of_day_rvol(frame, cutoff)
+        raw_rvol = rvol.get("rvol_time_of_day")
+        if raw_rvol is not None:
+            tod_rvol = round(float(raw_rvol), 4)
+    except Exception as exc:
+        # RVOL is one input among several on these overlays (M-低): a failure
+        # here must leave tod_rvol at None, not take VWAP and the opening
+        # range down with it.
+        record_fallback_failure("technical_intraday_rvol", exc)
     start = dates[session_start] if dates else data_through
     overlays = [
         _overlay(

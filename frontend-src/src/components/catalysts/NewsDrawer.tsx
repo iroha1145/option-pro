@@ -13,18 +13,31 @@ import { fmtLocaleDateTime, fmtLocaleTime } from '@/lib/format';
 import { getQueryPrincipalGeneration } from '@/api/queryRegistry';
 import {
   ReadAttemptAborted,
+  boundedReadRetryDelayMs,
   createCancellableSleep,
   runBoundedRead,
   shouldApplyRecoveryJob,
 } from '@/lib/boundedReadRetry';
 import { catalystsContract } from './api';
 import type { CatalystNewsItem, NewsAnalysisJob, TrustedStockImpact } from './api';
+import { newsAnalysisFailureText } from './analysisErrorText';
 import { AnalysisStatusChip, ClassificationChip, ConfidenceLabel, ImpactValue, Led, StaleChip, TickerChip } from './bits';
 import ConfirmDialog from './ConfirmDialog';
 import { t as __t } from '../../i18n/core.ts';
 
 const TERMINAL: NewsAnalysisJob['status'][] = ['completed', 'failed', 'cancelled', 'insufficient_context'];
 const inFlight = (status: CatalystNewsItem['analysisStatus']) => status === 'queued' || status === 'in_progress';
+/* 轮询成功后的退避；失败后的等待取本地退避与 Retry-After 的较大值。 */
+const POLL_BACKOFF_MS = [2000, 3000, 5000, 8000, 10000];
+const POLL_FAILURE_WAITS_MS = [5_000, 10_000, 20_000, 30_000] as const;
+/* 一次轮询最多自动查 5 分钟（页面隐藏的时间不计入），之后交给手动重试。 */
+const POLL_BUDGET_MS = 5 * 60_000;
+const pageHidden = () => typeof document !== 'undefined' && document.visibilityState === 'hidden';
+
+/** 任务状态 → 列表与芯片口径，与 api.ts 的 nAnalysisStatus 一致：取消回到「未分析」。 */
+function itemStatusOf(job: NewsAnalysisJob): CatalystNewsItem['analysisStatus'] {
+  return job.status === 'cancelled' ? 'pending' : job.status;
+}
 
 /* ---------------- 逐股影响卡 ---------------- */
 function StockImpactCard({ imp, index }: { imp: TrustedStockImpact; index: number }) {
@@ -52,15 +65,20 @@ function StockImpactCard({ imp, index }: { imp: TrustedStockImpact; index: numbe
 
 /* ---------------- 服务端任务进度 ---------------- */
 function JobStepper({ job }: { job: NewsAnalysisJob }) {
-  const label = job.status === 'queued' ? __t('任务排队中') : __t('模型分析中');
+  const label = job.cancelRequested
+    ? __t('已请求取消，等待服务端确认')
+    : job.status === 'queued' ? __t('任务排队中') : __t('模型分析中');
   return (
     <div className="rounded-sm border border-line bg-card px-3 py-2.5">
       <div className="flex min-w-0 items-center gap-2">
         <Led tone="brand" pulse={job.status === 'in_progress'} />
         <p className="truncate text-body-s font-medium text-ink-700">{label}</p>
-        <span className="ml-auto shrink-0 font-mono text-micro text-ink-400 tnum">
-          {job.progress === null ? __t('等待服务端状态') : `${Math.round(job.progress)}%`}
-        </span>
+        {/* 任务查询接口不提供进度，只有明确给出百分比时才显示，没有就不占位。 */}
+        {job.progress !== null && (
+          <span className="ml-auto shrink-0 font-mono text-micro text-ink-400 tnum">
+            {`${Math.round(job.progress)}%`}
+          </span>
+        )}
       </div>
       {job.progress !== null && (
         <div className="mt-2 h-1 overflow-hidden rounded-pill bg-brand-100">
@@ -77,7 +95,13 @@ function JobStepper({ job }: { job: NewsAnalysisJob }) {
 /** POST 之后补读的详情不得把刚提交的任务降级：服务端投影若还没带上新任务，保留提交态。 */
 function mergeSubmittedJob(fresh: CatalystNewsItem, submitted: CatalystNewsItem): CatalystNewsItem {
   if (fresh.analysisJobId === submitted.analysisJobId) return fresh;
-  return { ...fresh, analysisStatus: submitted.analysisStatus, analysisJobId: submitted.analysisJobId };
+  return {
+    ...fresh,
+    analysisStatus: submitted.analysisStatus,
+    analysisJobId: submitted.analysisJobId,
+    analysisJobStatus: submitted.analysisJobStatus,
+    analysisErrorCode: submitted.analysisErrorCode,
+  };
 }
 
 /* ================= 抽屉主体 ================= */
@@ -118,6 +142,8 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
   const pollRef = useRef<number | null>(null);
   const backoffRef = useRef(0);
   const pollFailuresRef = useRef(0);
+  /* 自动查询的截止时间属于「本次轮询」（这次打开抽屉跟的这个任务），关抽屉、换条、手动重试都重新计时。 */
+  const pollDeadlineRef = useRef<{ key: string; at: number } | null>(null);
   /* 关闭抽屉 / 换条时递增，作废在途 analysisJob 响应（审计 P1）。 */
   const pollGenRef = useRef(0);
   /* 跟 prop，不跟 item：关抽屉后 item 仍可能留着给退场动画，item.newsId 守卫会继续热。 */
@@ -230,6 +256,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
     invalidateDetailRead();
     missingJobIdRef.current = null;
     setMissingJobId(null);
+    pollDeadlineRef.current = null;
     if (!newsId) {
       /* 抽屉关闭（newsId=null）时必须停掉分析任务轮询（审计 2.2.17）：
          组件常驻不卸载，不清理的话 setTimeout 会继续以 2s→10s 打后端，
@@ -310,7 +337,8 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
         if (!shouldApplyRecoveryJob(jobRef.current, j, jobId, itemJobIdRef.current)) return;
         recoveryOkRef.current = recoveryKey;
         setJobNotice(null);
-        setJob(j);
+        // 任务查询接口不带 news_id，归属以发起恢复时的新闻为准。
+        setJob({ ...j, newsId: j.newsId || forNews });
         if (!TERMINAL.includes(j.status)) return;
         await refreshDetail(forNews, jobId);
       } catch (error) {
@@ -331,8 +359,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newsId, item?.newsId, item?.analysisJobId, item?.analysisStatus, recoveryEpoch]);
 
-  /* 轮询任务至终态（退避 2s→3s→5s→8s→10s，总超时 5 分钟） */
-  const pollDeadlineRef = useRef<{ jobId: string; at: number } | null>(null);
+  /* 轮询任务至终态（退避 2s→3s→5s→8s→10s，本次轮询自动查 5 分钟） */
   const retryPoll = () => {
     pollDeadlineRef.current = null;
     pollFailuresRef.current = 0;
@@ -341,43 +368,71 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
   };
   useEffect(() => {
     if (!newsId || !job || TERMINAL.includes(job.status)) return;
-    if (pollDeadlineRef.current?.jobId !== job.jobId) {
-      pollDeadlineRef.current = { jobId: job.jobId, at: Date.now() + 5 * 60_000 };
+    /* 任务查询接口（AIJobPublic）不带 news_id：归属按本次轮询开始时抽屉打开的新闻判断。
+       拿响应里的 newsId 当守卫会让真实后端下的轮询只查一次就停（审计 FE-1）。 */
+    const forNews = newsId;
+    const jobId = job.jobId;
+    const deadlineKey = `${forNews}\u0000${jobId}`;
+    if (pollDeadlineRef.current?.key !== deadlineKey) {
+      pollDeadlineRef.current = { key: deadlineKey, at: Date.now() + POLL_BUDGET_MS };
     }
-    const deadline = pollDeadlineRef.current.at;
-    const BACKOFF = [2000, 3000, 5000, 8000, 10000];
     const generation = pollGenRef.current;
     const stillThisPoll = () =>
-      generation === pollGenRef.current && openNewsRef.current === job.newsId;
+      generation === pollGenRef.current && openNewsRef.current === forNews;
+    let onVisible: (() => void) | null = null;
+    const dropVisibleWait = () => {
+      if (onVisible) document.removeEventListener('visibilitychange', onVisible);
+      onVisible = null;
+    };
+    /* 页面隐藏时不查也不计时：剩余额度留到回到前台，回来立即补查一次。 */
+    const waitUntilVisible = () => {
+      const remaining = Math.max(0, (pollDeadlineRef.current?.at ?? 0) - Date.now());
+      dropVisibleWait();
+      const resume = () => {
+        if (pageHidden()) return;
+        dropVisibleWait();
+        if (!stillThisPoll()) return;
+        if (pollDeadlineRef.current?.key === deadlineKey) {
+          pollDeadlineRef.current = { key: deadlineKey, at: Date.now() + remaining };
+        }
+        void tick();
+      };
+      onVisible = resume;
+      document.addEventListener('visibilitychange', resume);
+    };
     const tick = async () => {
       if (!stillThisPoll()) return;
-      if (Date.now() >= deadline) {
+      if (pageHidden()) {
+        waitUntilVisible();
+        return;
+      }
+      if (Date.now() >= (pollDeadlineRef.current?.at ?? 0)) {
         stopPoll();
-        if (openNewsRef.current === job.newsId) {
+        if (openNewsRef.current === forNews) {
           setJobNotice({ text: __t('自动查询已暂停，点击重试查看任务状态'), retryable: true, pollRetry: true });
           toast.error(__t('分析任务仍在处理中'), __t('稍后刷新页面可继续查看结果'));
         }
         return;
       }
       try {
-        const next = await catalystsContract.analysisJob(job.jobId);
+        const next = await catalystsContract.analysisJob(jobId);
         if (!stillThisPoll()) return;
         pollFailuresRef.current = 0;
         setJobNotice(null);
-        setJob({ ...next });
+        setJob({ ...next, newsId: next.newsId || forNews });
         if (TERMINAL.includes(next.status)) {
           stopPoll();
           /* 终态收尾只认「抽屉还开着且仍是这条」。不能用链条世代判：
              stopPoll/effect 清理都会换代，拿 stillThisPoll 守收尾必然永假，
              完成结果就写不回抽屉与列表、状态芯片也清不掉（首版事故）。
              也不能跟 item.newsId：关抽屉后 item 仍可能留着给退场动画。 */
-          const sameNews = () => openNewsRef.current === job.newsId;
+          const sameNews = () => openNewsRef.current === forNews;
           if (!sameNews()) return;
           /* 取回详情要自己会重试：这里已 stopPoll 换代，外层 catch 的 stillThisPoll
              必然为假，会把一次瞬时 429 直接吞成永久静默（toast 已喊完成、抽屉却停在
              旧态，复审实锤）。有界三次、1.5s/3s 退避；抽屉已关或已换条就放弃。 */
           const refreshItem = async () => {
-            const request = beginDetailRead(job.newsId, job.jobId);
+            const request = beginDetailRead(forNews, jobId);
             try {
               const fresh = await request.read();
               if (!request.isAlive()) return;
@@ -400,39 +455,41 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
             await refreshItem();
             if (sameNews()) toast.info(__t('规则判定信息不足'), __t('未调用模型'));
           } else if (next.status === 'failed') {
-            toast.error(__t('分析失败'), next.error ?? __t('可重试'));
+            toast.error(__t('分析失败'), newsAnalysisFailureText(next.error));
             await refreshItem();
           } else {
             toast.info(__t('任务已取消'));
             await refreshItem();
           }
-          window.setTimeout(() => {
-            // 按 jobId 函数式清理：600ms 内若已提交新任务，不误伤新 job。
-            setJob((cur) => (cur && cur.jobId === job.jobId ? null : cur));
-          }, 600);
+          /* 终态任务留在抽屉里（换条或提交新任务时才替换）：失败原因、取消状态
+             不能几百毫秒后就被清掉，退回一句笼统的失败文案（审计 FE-3）。 */
           return;
         }
-        const delay = BACKOFF[Math.min(backoffRef.current, BACKOFF.length - 1)];
+        const delay = POLL_BACKOFF_MS[Math.min(backoffRef.current, POLL_BACKOFF_MS.length - 1)];
         backoffRef.current += 1;
         pollRef.current = window.setTimeout(() => void tick(), delay);
       } catch (error) {
         if (!stillThisPoll()) return;
         if ((error as { code?: unknown } | null)?.code === 404) {
           stopPoll();
-          markJobMissing(job.newsId, job.jobId);
+          markJobMissing(forNews, jobId);
           return;
         }
         pollFailuresRef.current += 1;
         if (pollFailuresRef.current >= 2) {
           setJobNotice({ text: __t('任务状态暂时读不到，正在重试'), retryable: false });
         }
-        pollRef.current = window.setTimeout(() => void tick(), 5000);
+        const delay = boundedReadRetryDelayMs(pollFailuresRef.current - 1, error, POLL_FAILURE_WAITS_MS);
+        pollRef.current = window.setTimeout(() => void tick(), delay);
       }
     };
     backoffRef.current = 0;
     pollFailuresRef.current = 0;
-    pollRef.current = window.setTimeout(() => void tick(), 2000);
-    return stopPoll;
+    pollRef.current = window.setTimeout(() => void tick(), POLL_BACKOFF_MS[0]);
+    return () => {
+      stopPoll();
+      dropVisibleWait();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newsId, job?.jobId, job?.status, pollRetryEpoch]);
 
@@ -445,16 +502,29 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
       setConfirm(null);
       try {
         const forNews = item.newsId;
+        const submittedFrom = item;
         // 提交前详情还没到、抽屉在用列表 seed：作废的初次读取要补回来。
         const onSeed = !fetched || fetched.newsId !== forNews;
         const j = await catalystsContract.createAnalysisJob(forNews, force);
-        invalidateDetailRead();
-        setJob(j);
-        const nextItem = { ...item, analysisStatus: (j.status === 'queued' ? 'queued' : 'in_progress') as CatalystNewsItem['analysisStatus'], analysisJobId: j.jobId };
-        setFetched(nextItem);
+        /* 同一份输入不带 force 时，后端会交回这条新闻已结束的旧任务：如实显示它的结果，
+           不能当成新提交画成「分析中」。 */
+        const settled = TERMINAL.includes(j.status);
+        const nextItem: CatalystNewsItem = {
+          ...submittedFrom,
+          analysisStatus: itemStatusOf(j),
+          analysisJobId: j.jobId,
+          analysisJobStatus: j.status,
+          analysisErrorCode: j.status === 'failed' ? j.error : null,
+        };
+        // 列表按新闻编号回写；抽屉只在仍停在这条新闻时才接收结果（审计 1-B）。
         onUpdate(nextItem);
-        toast.info(__t('分析任务已提交'), force ? __t('强制重新分析') : __t('可在本页查看进度'));
-        if (onSeed) {
+        if (settled) toast.info(__t('这条新闻已有任务结果'), __t('需要重新分析请使用强制重试'));
+        else toast.info(__t('分析任务已提交'), force ? __t('强制重新分析') : __t('可在本页查看进度'));
+        if (openNewsRef.current !== forNews) return;
+        invalidateDetailRead();
+        setJob({ ...j, newsId: j.newsId || forNews });
+        setFetched(nextItem);
+        if (onSeed || settled) {
           /* 读缓存已被 createAnalysisJob 清掉；读取绑定新任务 id，换条/换任务即作废。
              合并时不降级任务态：详情投影若还没带上新任务，仍按刚提交的任务显示。 */
           itemJobIdRef.current = j.jobId;
@@ -463,7 +533,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
             try {
               const fresh = await request.read();
               if (!request.isAlive()) return;
-              const merged = mergeSubmittedJob(fresh, nextItem);
+              const merged = settled ? fresh : mergeSubmittedJob(fresh, nextItem);
               setFetched(merged);
               setDetailNotice(null);
               setLoadError(null);
@@ -487,21 +557,58 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
 
   const cancelJob = useCallback(async () => {
     if (!job) return;
+    const jobId = job.jobId;
+    const forNews = newsId;
     setConfirm(null);
     try {
-      const next = await catalystsContract.cancelAnalysisJob(job.jobId);
-      setJob({ ...next });
+      const next = await catalystsContract.cancelAnalysisJob(jobId);
+      // 回来时抽屉已换条或已换任务：结果不能写进别的新闻（审计 1-B）。
+      if (!forNews || openNewsRef.current !== forNews || jobRef.current?.jobId !== jobId) return;
+      setJob({ ...next, newsId: next.newsId || forNews });
+      if (next.status === 'cancelled') {
+        /* 排队中的任务当场取消：芯片、列表与「任务已取消」提示同步，
+           不再停在「排队中」（审计 1-E）。 */
+        toast.info(__t('任务已取消'));
+        if (item && item.newsId === forNews) {
+          const cancelledItem: CatalystNewsItem = {
+            ...item,
+            analysisStatus: 'pending',
+            analysisJobId: jobId,
+            analysisJobStatus: 'cancelled',
+            analysisErrorCode: null,
+          };
+          setFetched(cancelledItem);
+          onUpdate(cancelledItem);
+        }
+      } else if (next.cancelRequested) {
+        toast.info(__t('已请求取消'), __t('模型已在处理，等服务端确认后停止'));
+      }
     } catch (e) {
       toast.error(__t('取消失败'), e instanceof Error ? e.message : undefined);
     }
-  }, [job, toast]);
+  }, [job, newsId, item, onUpdate, toast]);
 
   const running = !!job && !TERMINAL.includes(job.status);
+  /* 已结束的任务只在仍是这条新闻的当前任务时参与展示；详情已指向别的任务就以详情为准。 */
+  const settledJob = job && !running && (!item?.analysisJobId || item.analysisJobId === job.jobId) ? job : null;
   const analysis = item?.analysis ?? null;
   const showCompleted = item?.analysisStatus === 'completed' && analysis && !running;
-  const showInsufficient = (item?.analysisStatus === 'insufficient_context' || job?.status === 'insufficient_context') && !running;
-  const showFailed = (item?.analysisStatus === 'failed' || job?.status === 'failed') && !running;
-  const showCancelled = job?.status === 'cancelled';
+  const showInsufficient = (item?.analysisStatus === 'insufficient_context' || settledJob?.status === 'insufficient_context') && !running;
+  const showFailed = (item?.analysisStatus === 'failed' || settledJob?.status === 'failed') && !running;
+  /* 取消后列表按「未分析」显示；抽屉读任务状态（刚取消的任务或详情里的关联任务）说明是取消。 */
+  const showCancelled = !running && !showFailed && (
+    settledJob?.status === 'cancelled'
+    || (!settledJob && item?.analysisStatus === 'pending' && item.analysisJobStatus === 'cancelled')
+  );
+  const failureText = newsAnalysisFailureText(
+    settledJob?.status === 'failed' ? settledJob.error : item?.analysisErrorCode,
+  );
+  /* 详情还停在在途状态、任务已结束（例如刚取消）：芯片跟任务走，不和下方提示矛盾。 */
+  const chipStatus: CatalystNewsItem['analysisStatus'] | null = !item
+    ? null
+    : running
+      ? (job.status === 'queued' ? 'queued' : 'in_progress')
+      : settledJob && inFlight(item.analysisStatus) ? itemStatusOf(settledJob) : item.analysisStatus;
   /* 详情仍指向已确认缺失的在途任务：不再显示排队/分析中，改给重新发起的入口。 */
   const jobMissing = Boolean(
     item?.analysisJobId && item.analysisJobId === missingJobId && inFlight(item.analysisStatus),
@@ -593,7 +700,11 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
               </p>
               {jobMissing
                 ? <SoftBadge tone="warn">{__t('任务记录缺失')}</SoftBadge>
-                : <AnalysisStatusChip status={running ? (job.status === 'queued' ? 'queued' : 'in_progress') : item.analysisStatus} />}
+                : running && job.cancelRequested
+                  ? <SoftBadge tone="warn">{__t('取消中')}</SoftBadge>
+                  : showCancelled
+                    ? <SoftBadge>{__t('已取消')}</SoftBadge>
+                    : chipStatus && <AnalysisStatusChip status={chipStatus} />}
             </div>
             {jobNotice && (
               <p className="mt-3 flex flex-wrap items-center gap-2 text-caption text-ink-500" role="status">
@@ -671,12 +782,12 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
             {showFailed && (
               <div className="mt-4 rounded-md border border-down-600/20 bg-down-50 p-3.5">
                 <p className="text-body-s font-medium text-down-700">{__t('分析失败')}</p>
-                <p className="mt-1 text-micro text-ink-500">{job?.error ?? __t('分析结果未通过检查，请重试')}</p>
+                <p className="mt-1 text-micro text-ink-500">{failureText}</p>
               </div>
             )}
 
             {/* 已取消 */}
-            {showCancelled && !showFailed && (
+            {showCancelled && (
               <div className="mt-4 rounded-md border border-line bg-paper-2 p-3.5 text-center text-body-s text-ink-500">{__t('任务已取消')}</div>
             )}
 
@@ -685,7 +796,8 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
               <div className="mt-4 flex flex-wrap items-center gap-2.5">
                 {accessLoading ? null : isOwner ? (
                   <>
-                    {(item.analysisStatus === 'pending' || showCancelled || jobMissing) && (
+                    {/* 已取消的任务不带 force 重新提交只会拿回同一条取消记录，只给强制重试。 */}
+                    {((item.analysisStatus === 'pending' && !showCancelled) || jobMissing) && (
                       <button
                         onClick={() => setConfirm('create')}
                         className="flex items-center gap-1.5 rounded-md bg-ai-600 px-3.5 py-2 text-caption font-medium text-on-accent shadow-btn transition-[filter] hover:brightness-105"
@@ -694,13 +806,13 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
                         {__t('生成 AI 分析')}
                       </button>
                     )}
-                    {(showCompleted || showFailed || showInsufficient) && (
+                    {(showCompleted || showFailed || showInsufficient || showCancelled) && (
                       <button
                         onClick={() => setConfirm('force')}
                         className="flex items-center gap-1.5 rounded-md bg-ai-600 px-3.5 py-2 text-caption font-medium text-on-accent shadow-btn transition-[filter] hover:brightness-105"
                       >
                         <Icon name="refresh" size={13} />
-                        {showFailed || showInsufficient ? __t('重试分析（强制）') : __t('重新分析（强制）')}
+                        {showFailed || showInsufficient || showCancelled ? __t('重试分析（强制）') : __t('重新分析（强制）')}
                       </button>
                     )}
                   </>

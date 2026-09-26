@@ -54,11 +54,12 @@ export interface WatchlistItem {
   name: string;
   sector: string;
   price: number;
-  change: number;
-  changePct: number;
+  /* 下列数值接口可能缺失：缺失为 null（自选列表映射的涨跌沿用 NaN），显示前按有限数判断，缺失显示「—」，不补 0。 */
+  change: number | null;
+  changePct: number | null;
   sparkline: number[];    // 兼容旧短图；线上为最多 7 个日线/最新报价点
   dailyTrend?: { date: string; close: number }[]; // 最多 30 个缓存日线，不拼接盘前盘后报价
-  strengthScore: number;  // 0–100
+  strengthScore: number | null;  // 0–100
   signals: Signal[];
   updatedAt: string;
 }
@@ -225,16 +226,16 @@ export interface StockSearchResult {
 }
 
 export interface StockDetail extends WatchlistItem {
-  open: number;
-  high: number;
-  low: number;
-  prevClose: number;
-  volume: number;
-  avgVolume: number;
-  marketCap: number;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  prevClose: number | null;
+  volume: number | null;
+  avgVolume: number | null;
+  marketCap: number | null;
   pe: number | null;
-  ivPercentile: number;   // 0–100
-  range52w: [number, number];
+  ivPercentile: number | null;   // 0–100
+  range52w: [number, number] | null;
   /** 实时报价与公司资料的真实供应方；接口未标注时保持 null。 */
   priceProvider?: string | null;
   profileProvider?: string | null;
@@ -726,27 +727,6 @@ export interface NewsItem {
   tickers: string[];
   heat: number; // 0–100
 }
-export interface Hotspot {
-  id: string;
-  theme: string;
-  heat: number;
-  newsCount: number;
-  representative: string; // 代表新闻标题
-  tickers: string[];
-}
-export interface FocusCycle {
-  id: string;
-  theme: string;
-  startedAt: string;
-  days: number;
-  stage: '发酵' | '主升' | '退潮';
-  summary: string;
-}
-export interface CatalystsStatus {
-  newsToday: number;
-  hotspotsActive: number;
-  lastCrawlAt: string;
-}
 
 /* ---------- 期权 ---------- */
 /**
@@ -810,4 +790,8 @@ export interface AiJob {
   error?: string;
   /** 失败诊断细节（owner 排障用；后端对非 owner 置空） */
   errorDetail?: string;
+  /** 服务端已记下取消请求、任务还没停下（后端 cancel_requested）；再点取消没有意义。 */
+  cancelRequested?: boolean;
+  /** 创建响应 Retry-After 头给出的首次查询时机（秒）；只在创建时有值。 */
+  retryAfter?: number | null;
 }

@@ -158,11 +158,15 @@ def macro_conditions_factor_history(
         Depends(require_same_origin_action),
     ],
 )
-async def refresh_macro_conditions(
+def refresh_macro_conditions(
     body: MacroRefreshRequest,
     response: Response,
 ) -> dict[str, Any]:
-    """Queue one macro refresh. The request thread performs no network I/O."""
+    """Queue one macro refresh. The request thread performs no network I/O.
+
+    Sync like the read routes: the worker-state write may wait up to 30 s for
+    the SQLite lock, and that wait belongs in the thread pool, not the loop.
+    """
 
     config = _config()
     if not config.enabled:

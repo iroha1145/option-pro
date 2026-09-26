@@ -10,7 +10,9 @@ FEATURE_VERSION = "us-eod-research-features-v1.6"
 PURPOSE_LIVE = "live_eod_inference"
 PURPOSE_HISTORICAL = "historical_example"
 PURPOSE_SYNTHETIC = "synthetic"
-VOLUME_SCOPE = "VENDOR_DAILY_UNVERIFIED"
+# The one volume label for rows, views and the market manifest: Massive
+# grouped daily volume, whose session hours are not verified.
+VOLUME_SCOPE = "MASSIVE_GROUPED_DAILY_SESSION_UNVERIFIED"
 RETURN_BASIS = "close_price_return"
 MOMENTUM_BASIS = "price_return_not_total_return"
 SCORE_BASIS = "price_only_diagnostic + m1_consensus"

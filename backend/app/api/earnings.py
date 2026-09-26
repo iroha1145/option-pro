@@ -18,10 +18,12 @@ from app.access import (
     public_snapshot_unavailable,
     require_same_origin_action,
 )
-from app.services.cache import cache
+from app.failure_diagnostics import record_fallback_failure
+from app.services.cache import cache, estimate_size
 from app.services.numeric import finite_number_or_none as _to_optional_float
 from app.public_home_snapshot import (
     public_home_resource_parameters,
+    read_owner_public_home_entry,
     read_owner_public_home_entry_async,
     read_public_home_resource_async,
 )
@@ -138,30 +140,35 @@ async def _read_current_upcoming_earnings_snapshot(
     cached = cache.get(key)
     if isinstance(cached, dict):
         return cached
-    config = get_personal_config()
+    fresh_for_seconds = float(get_personal_config().public_home.earnings_seconds)
     now = time.time()
-    disk_entry = await read_owner_public_home_entry_async(
-        "earnings",
-        parameters=public_home_resource_parameters("earnings", now=now),
-        fresh_for_seconds=float(config.public_home.earnings_seconds),
-        now=now,
-    )
-    if (
-        disk_entry is None
-        or not bool(disk_entry.get("fresh"))
-        or not isinstance(disk_entry.get("payload"), dict)
-    ):
+
+    def read() -> tuple[dict[str, Any], float, int] | None:
+        disk_entry = read_owner_public_home_entry(
+            "earnings",
+            # The caller's market date: the cache key above is keyed by it, and
+            # the worker may pass a date other than the current one.
+            parameters={"market_date": observed.isoformat()},
+            fresh_for_seconds=fresh_for_seconds,
+            now=now,
+        )
+        if (
+            disk_entry is None
+            or not bool(disk_entry.get("fresh"))
+            or not isinstance(disk_entry.get("payload"), dict)
+        ):
+            return None
+        payload = dict(disk_entry["payload"])
+        # Sizing a multi-megabyte calendar for the cache budget is CPU work;
+        # it runs here, off the event loop, and set() reuses the result.
+        return payload, float(disk_entry["saved_at"]), estimate_size(payload)
+
+    loaded = await asyncio.to_thread(read)
+    if loaded is None:
         return None
-    payload = dict(disk_entry["payload"])
-    remaining = max(
-        1,
-        int(
-            float(disk_entry["saved_at"])
-            + float(config.public_home.earnings_seconds)
-            - now
-        ),
-    )
-    return cache.set(key, payload, remaining)
+    payload, saved_at, size = loaded
+    remaining = max(1, int(saved_at + fresh_for_seconds - now))
+    return cache.set(key, payload, remaining, size_hint=size)
 
 
 def _coerce_date(value: Any) -> date | None:
@@ -944,7 +951,8 @@ async def refresh_upcoming_earnings():
     cache-only and never start a refresh.
     """
     if get_personal_config().access.mode == "password":
-        return _queue_earnings_calendar_refresh()
+        # The worker-state write may wait up to 30 s for the SQLite lock.
+        return await asyncio.to_thread(_queue_earnings_calendar_refresh)
     today = _market_today()
     key = f"earnings:upcoming:{today.isoformat()}"
 
@@ -1153,7 +1161,8 @@ async def _build_upcoming_earnings(today: date):
                     "source_status": "active",
                     "observed_at": observed_at,
                 }}
-            except Exception:
+            except Exception as exc:
+                record_fallback_failure("earnings_yahoo_ticker", exc, symbol=ticker)
                 return {"ticker": ticker, "ok": False, "source_observed": False, "data": None}
 
         async with sem:
@@ -1319,6 +1328,8 @@ async def _build_upcoming_earnings(today: date):
             "calendar_conflict": None,
         }
     earnings = list(earnings_by_ticker.values())
+    # FMP 行常缺 year/quarter；用同一报告已知的期次回填，report_id 才不会随来源切换漂移。
+    earnings_enrichment.stabilize_report_periods(earnings, today=today)
 
     # ── 市值：批量 + 持久缓存（Worker 低频刷新；绝不逐家请求资料） ──
     config = get_personal_config()

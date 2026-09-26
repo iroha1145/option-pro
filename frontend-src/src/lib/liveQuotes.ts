@@ -233,8 +233,9 @@ export class QuoteStore {
     if (visible === this.visible) return;
     this.visible = visible;
     if (!visible) {
+      // 在途的定时快照一并撤下：隐藏后它的结果会被世代守卫丢弃，没必要继续占着连接。
       this.generation++; this.closeStream();
-      this.connectController?.abort();
+      this.connectController?.abort(); this.pollController?.abort();
       this.markDisconnected();
     } else {
       this.radarResyncOnConnect = true;

@@ -16,15 +16,15 @@ export type WatchlistSortKey = 'ticker' | 'price' | 'changePct' | 'strength';
 
 const NUMERIC_ACCESSORS: Record<
   Exclude<WatchlistSortKey, 'ticker'>,
-  (row: WatchlistItem) => number
+  (row: WatchlistItem) => number | null
 > = {
   price: (row) => row.price,
   changePct: (row) => row.changePct,
   strength: (row) => row.strengthScore,
 };
 
-function comparable(value: number): number | null {
-  return Number.isFinite(value) ? value : null;
+function comparable(value: number | null): number | null {
+  return value !== null && Number.isFinite(value) ? value : null;
 }
 
 /**

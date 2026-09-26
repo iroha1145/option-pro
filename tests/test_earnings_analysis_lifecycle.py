@@ -897,12 +897,12 @@ def test_visitor_rate_limit_counts_unique_reports_but_reuses_exact_task() -> Non
         ai._public_earnings_recent.clear()
 
 
-def test_scheduled_actuals_without_pre_release_require_manual_analysis(
-    tmp_path,
+def _released_final_task(
+    repository: AIJobRepository,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    repository = AIJobRepository(tmp_path / "ai-jobs.db")
-    settings = _settings(repository.path)
+    name: str,
+    rows: list[dict],
+) -> EarningsAnalysisTask:
     effective = SimpleNamespace(
         ai=SimpleNamespace(manual_analysis_enabled=True),
         earnings=SimpleNamespace(
@@ -920,41 +920,156 @@ def test_scheduled_actuals_without_pre_release_require_manual_analysis(
         return {
             "data_limited": False,
             "source_status": "active",
-            "earnings": [
-                {
-                    "ticker": "AAPL",
-                    "name": "Apple",
-                    "earnings_date": "2026-07-23",
-                    "days_until": -1,
-                    "year": 2026,
-                    "quarter": 2,
-                    "eps_estimate": 1.4,
-                    "eps_actual": 1.6,
-                    "release_status": "released",
-                }
-            ],
+            "earnings": [dict(row) for row in rows],
         }
 
-    task = EarningsAnalysisTask(
-        "scheduled-final-without-pre-release",
-        settings=settings,
+    return EarningsAnalysisTask(
+        name,
+        settings=_settings(repository.path),
         repository=repository,
         builder=builder,
         runtime_settings_reader=lambda: effective,
         today=lambda: datetime(2026, 7, 24, tzinfo=timezone.utc).date(),
     )
 
-    scheduled = asyncio.run(task())
-    assert scheduled.details["queued"] == 0
-    assert scheduled.details["skipped_final_without_pre_release"] == 1
-    assert repository.latest_for_ticker("earnings_impact", "AAPL") is None
 
-    manual = asyncio.run(task.run_for_actions([{"request_id": "manual"}]))
-    assert manual.details["queued"] == 1
+_RELEASED_AAPL = {
+    "ticker": "AAPL",
+    "name": "Apple",
+    "earnings_date": "2026-07-23",
+    "days_until": -1,
+    "year": 2026,
+    "quarter": 2,
+    "eps_estimate": 1.4,
+    "eps_actual": 1.6,
+    "release_status": "released",
+}
+
+
+def _aapl_pre_release_payload() -> dict:
+    return normalize_earnings_analysis_payload(
+        {
+            "ticker": "AAPL",
+            "name": "Apple",
+            "earnings_date": "2026-07-23",
+            "year": 2026,
+            "quarter": 2,
+            "eps_estimate": 1.4,
+            "release_status": "scheduled",
+        },
+        analysis_stage="pre_release",
+    )
+
+
+def test_scheduled_actuals_without_completed_pre_release_queue_final(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A report whose preliminary run never completed still gets its final.
+
+    Requiring a completed pre-release left every report whose preliminary
+    analysis failed, or never ran, without a scheduled final analysis.
+    """
+
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    task = _released_final_task(
+        repository, monkeypatch, "scheduled-final-without-pre-release", [_RELEASED_AAPL]
+    )
+
+    scheduled = asyncio.run(task())
+    assert scheduled.details["queued"] == 1
+    assert scheduled.details["skipped_final_pre_release_active"] == 0
     stored = repository.latest_for_ticker("earnings_impact", "AAPL")
     assert stored is not None
     assert json.loads(stored["payload_json"])["analysis_stage"] == (
-        "post_release_manual"
+        "post_release_final"
+    )
+    assert stored["priority"] == runtime.EARNINGS_FINAL_PRIORITY
+
+    again = asyncio.run(task())
+    assert again.details["queued"] == 0
+    assert again.details["existing"] == 1
+
+
+def test_in_flight_pre_release_holds_back_the_scheduled_final(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    pre, created = _create(repository, _aapl_pre_release_payload())
+    assert created is True
+    task = _released_final_task(
+        repository, monkeypatch, "final-waits-for-pre-release", [_RELEASED_AAPL]
+    )
+
+    waiting = asyncio.run(task())
+    assert waiting.details["queued"] == 0
+    assert waiting.details["skipped_final_pre_release_active"] == 1
+
+    claimed = repository.claim_due("pre-release-worker", 60)
+    assert claimed is not None and claimed["job_id"] == pre["job_id"]
+    repository.fail(claimed["job_id"], "pre-release-worker", "provider_failed")
+
+    finalized = asyncio.run(task())
+    assert finalized.details["queued"] == 1
+    assert finalized.details["skipped_final_pre_release_active"] == 0
+    latest = repository.latest_for_ticker("earnings_impact", "AAPL")
+    assert json.loads(latest["payload_json"])["analysis_stage"] == (
+        "post_release_final"
+    )
+
+
+def test_report_crowded_out_of_pre_release_still_gets_final(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    monkeypatch.setattr(runtime, "EARNINGS_PRE_RELEASE_ACTIVE_LIMIT", 1)
+    version, digest = runtime.schema_identity("earnings_impact")
+    repository.create_job(
+        job_type="earnings_impact",
+        payload=normalize_earnings_analysis_payload(
+            {
+                "ticker": "MSFT",
+                "name": "Microsoft",
+                "earnings_date": "2026-07-28",
+                "eps_estimate": 3.1,
+                "release_status": "scheduled",
+            },
+            analysis_stage="pre_release",
+        ),
+        model="gpt-5.6-terra",
+        reasoning="max",
+        execution_mode="background",
+        prompt_version="earnings-impact-zh-cn-v5",
+        schema_version=version,
+        schema_sha256=digest,
+        max_queued=200,
+        submission_source="scheduled",
+        priority=runtime.EARNINGS_PRE_RELEASE_PRIORITY,
+    )
+    upcoming_nvda = {
+        "ticker": "NVDA",
+        "name": "NVIDIA",
+        "earnings_date": "2026-07-26",
+        "days_until": 2,
+        "eps_estimate": 1.0,
+    }
+    task = _released_final_task(
+        repository,
+        monkeypatch,
+        "crowded-out-final",
+        [upcoming_nvda, _RELEASED_AAPL],
+    )
+
+    result = asyncio.run(task())
+
+    assert result.details["skipped_pre_release_capacity"] == 1
+    assert result.details["queued"] == 1
+    assert repository.latest_for_ticker("earnings_impact", "NVDA") is None
+    final = repository.latest_for_ticker("earnings_impact", "AAPL")
+    assert json.loads(final["payload_json"])["analysis_stage"] == (
+        "post_release_final"
     )
 
 
@@ -1367,3 +1482,43 @@ def test_report_lookup_can_reuse_analyses_written_before_report_ids(
     body = response.json()
     assert body["status"] == "completed"
     assert body["result"]["ticker"] == "AAPL"
+
+
+def test_owner_earnings_run_keeps_the_manual_queue_reserve(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    settings = _settings(repository.path)
+    _seed_active_jobs(repository, settings.openai_job_max_queued)
+    limits: list[tuple[str, int]] = []
+    real_create = repository.create_job
+
+    def create_job(**kwargs):
+        limits.append((kwargs["submission_source"], kwargs["max_queued"]))
+        return real_create(**kwargs)
+
+    monkeypatch.setattr(repository, "create_job", create_job)
+    upcoming = {
+        "ticker": "NVDA",
+        "name": "NVIDIA",
+        "earnings_date": "2026-07-26",
+        "days_until": 2,
+        "eps_estimate": 1.0,
+    }
+    task = _released_final_task(repository, monkeypatch, "manual-reserve", [upcoming])
+
+    scheduled = asyncio.run(task())
+    manual = asyncio.run(task.run_for_actions([{"request_id": "owner"}]))
+
+    assert scheduled.error_code == "ai_job_queue_full"
+    assert scheduled.details["queued"] == 0
+    assert manual.details["queued"] == 1
+    reserve = max(
+        runtime.MANUAL_QUEUE_RESERVE,
+        runtime.EARNINGS_MANUAL_QUEUE_RESERVE,
+    )
+    assert limits == [
+        ("scheduled", settings.openai_job_max_queued),
+        ("manual", settings.openai_job_max_queued + reserve),
+    ]

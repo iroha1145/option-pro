@@ -9,21 +9,21 @@
  *     触发需 expected_prepared_revision（取自 hotspots/status.prepared_revision）
  *   snake_case → camelCase 的归一在本文件完成；契约缺失字段不编造（null/空由 UI 显「—」或隐藏）。
  */
-import { ApiError, get, idFromLocation, invalidateBootPrefetch, mockOr, notifyPrincipalInvalid, post, postCreate, toQuery } from '@/api/client';
+import { ApiError, get, idFromLocation, invalidateBootPrefetch, mockOr, post, postCreate, toQuery } from '@/api/client';
 import { asRec, pickB, pickN, pickS, unwrap, type Rec } from '@/api/live';
 import * as fx2 from '@/mocks/fixtures2';
 import type {
   AnalysisJobStatus,
   CatalystFeedQuery,
-  CatalystNewsItem,
+  CatalystNewsItem as FixtureNewsItem,
   CatalystsStatusDetail,
   CatalystStreamHealth,
   EconomicEvent,
-  FocusCycleJob,
+  FocusCycleJob as FixtureFocusCycleJob,
   HotspotGroup,
   HotspotsStatusDetail,
-  MarketFocusCycle,
-  NewsAnalysisJob,
+  MarketFocusCycle as FixtureFocusCycle,
+  NewsAnalysisJob as FixtureNewsAnalysisJob,
   NewsClassification,
   NewsImpactResult,
   SourceHealth,
@@ -39,16 +39,12 @@ import { notifyCatalystReadsInvalidated, type CatalystInvalidateOptions } from '
 
 export type {
   CatalystFeedQuery,
-  CatalystNewsItem,
   CatalystsStatusDetail,
   CatalystStreamHealth,
   EconomicEvent,
-  FocusCycleJob,
   FocusCycleStockAssessment,
   HotspotGroup,
   HotspotsStatusDetail,
-  MarketFocusCycle,
-  NewsAnalysisJob,
   NewsClassification,
   NewsAnalysisStatus,
   NewsImpactResult,
@@ -56,6 +52,38 @@ export type {
   TickerImpactSummary,
   TrustedStockImpact,
 } from '@/mocks/fixtures2';
+
+/* 以下四个类型在演示夹具的形状上补回真实后端才有的字段；字段都可选，夹具数据照常可用。 */
+
+export interface CatalystNewsItem extends FixtureNewsItem {
+  /** 详情信封里关联任务的原始状态（仅 owner 可见）：列表把取消归为「未分析」，抽屉要据此说明原因。 */
+  analysisJobStatus?: string | null;
+  /** 关联任务失败或预算受限时的原因码；运行中的推迟码不在此列。 */
+  analysisErrorCode?: string | null;
+}
+
+export interface NewsAnalysisJob extends FixtureNewsAnalysisJob {
+  /** 运行中的任务已请求取消，等服务端确认。 */
+  cancelRequested?: boolean;
+}
+
+/** 焦点周期的取消与预算受限是独立终态，不能压成 failed：界面要按原因给文案。 */
+export type FocusCycleJobStatus = FixtureFocusCycleJob['status'] | 'cancelled' | 'budget_blocked';
+
+export interface FocusCycleJob extends Omit<FixtureFocusCycleJob, 'status'> {
+  status: FocusCycleJobStatus;
+  errorCode?: string | null;
+}
+
+export interface MarketFocusCycle extends FixtureFocusCycle {
+  errorCode?: string | null;
+  latestAttempt?: {
+    cycleId: string;
+    status: string;
+    startedAt: string;
+    errorCode?: string | null;
+  } | null;
+}
 
 /* ================= live 契约归一（snake_case → camelCase） ================= */
 
@@ -123,11 +151,22 @@ function nAnalysisStatus(v: unknown): CatalystNewsItem['analysisStatus'] {
   // 个人版匿名态只回 not_requested|completed：not_requested 视作「未分析」
   if (s === 'not_requested' || s === 'preparing') return 'pending';
   if (s === 'processing' || s === 'running' || s === 'cancel_requested') return 'in_progress';
-  // 已取消与预算受限都没有分析结果，列表按「未分析」显示，抽屉照常给出重新发起入口。
-  // 不归入 failed：失败态会显示「分析结果未通过检查」，与这两种原因不符。
-  if (s === 'cancelled' || s === 'budget_blocked') return 'pending';
+  // 已取消没有结果，列表按「未分析」显示；抽屉另读 analysisJobStatus 说明是取消。
+  if (s === 'cancelled' || s === 'canceled') return 'pending';
+  // 预算受限与任务层（nJobStatus）同一口径：都是「未完成、带原因」的终态。
+  // 同一份输入不带 force 重新提交只会拿回这条受限任务，必须走强制重试入口。
+  if (s === 'budget_blocked') return 'failed';
   if (s === 'queued' || s === 'in_progress' || s === 'completed' || s === 'insufficient_context' || s === 'failed' || s === 'pending') return s;
   return 'pending';
+}
+
+/* 终态任务才有可展示的失败原因；排队期的推迟码（并发、冷却）属于运行中状态。 */
+const FAILED_JOB_STATUSES = new Set(['failed', 'budget_blocked']);
+
+function failureCode(job: Rec): string | null {
+  const status = pickS(job, 'status');
+  if (!status || !FAILED_JOB_STATUSES.has(status)) return null;
+  return pickS(job, 'error_code', 'errorCode', 'error') ?? (status === 'budget_blocked' ? 'budget_blocked' : null);
 }
 
 /* 哨兵对照的是后端落库的中文字面量：绝不能过 __t——EN/JA 下集合里装的是译文，
@@ -142,6 +181,7 @@ function nNewsItem(r: Rec): CatalystNewsItem {
   const rawSummary = usefulZh(pickS(r, 'summary'));
   const titleZh = usefulZh(pickS(r, 'titleZh', 'title_zh'));
   const summaryZh = usefulZh(pickS(r, 'summaryZh', 'summary_zh'));
+  const linkedJob = asRec(r.analysis_job);
   return {
     newsId: pickId(r, 'newsId', 'news_id') ?? '',
     source: pickS(r, 'source') ?? '',
@@ -158,7 +198,9 @@ function nNewsItem(r: Rec): CatalystNewsItem {
     themeIds: Array.isArray(r.theme_ids) ? (r.theme_ids as string[]) : Array.isArray(r.themeIds) ? (r.themeIds as string[]) : [],
     analysisStatus: nAnalysisStatus(r.analysis_status ?? r.analysisStatus),
     analysis: impact,
-    analysisJobId: pickS(r, 'analysisJobId', 'analysis_job_id') ?? pickS(asRec(r.analysis_job), 'job_id') ?? (typeof r.analysis_job === 'string' ? r.analysis_job : null),
+    analysisJobId: pickS(r, 'analysisJobId', 'analysis_job_id') ?? pickS(linkedJob, 'job_id') ?? (typeof r.analysis_job === 'string' ? r.analysis_job : null),
+    analysisJobStatus: pickS(linkedJob, 'status'),
+    analysisErrorCode: failureCode(linkedJob),
   };
 }
 
@@ -170,7 +212,7 @@ function nJobStatus(v: unknown): AnalysisJobStatus {
   if (s === 'completed') return 'completed';
   if (s === 'insufficient_context') return 'insufficient_context';
   if (s === 'canceled' || s === 'cancelled') return 'cancelled';
-  return 'failed'; // failed 及其余失败类终态
+  return 'failed'; // failed、budget_blocked 及其余失败类终态；原因由 error 码说明
 }
 
 function nJobProgress(raw: unknown): number | null {
@@ -180,9 +222,14 @@ function nJobProgress(raw: unknown): number | null {
     : null;
 }
 
+/**
+ * 任务查询接口（GET /catalysts/analysis-jobs/{id}）只返回 AIJobPublic，没有 news_id 与 progress：
+ * newsId 为空串、progress 为 null 是真实形状，调用方不得拿 newsId 判断任务归属。
+ */
 function nAnalysisJob(raw: unknown, fallbackId?: string | null): NewsAnalysisJob {
   const r = asRec(raw);
   const status = nJobStatus(r.status);
+  const rawStatus = pickS(r, 'status');
   return {
     jobId: pickS(r, 'jobId', 'job_id') ?? fallbackId ?? '',
     newsId: pickId(r, 'newsId', 'news_id') ?? '',
@@ -190,9 +237,17 @@ function nAnalysisJob(raw: unknown, fallbackId?: string | null): NewsAnalysisJob
     progress: nJobProgress(raw),
     submittedAt: pickS(r, 'submittedAt', 'submitted_at', 'created_at') ?? '',
     updatedAt: pickS(r, 'updatedAt', 'updated_at', 'completed_at') ?? '',
-    error: pickS(r, 'error', 'error_code'),
+    error: pickS(r, 'error', 'error_code') ?? (rawStatus === 'budget_blocked' ? 'budget_blocked' : null),
     cancellable: pickB(r, 'cancellable') ?? (status === 'queued' || status === 'in_progress'),
+    cancelRequested: pickB(r, 'cancel_requested', 'cancelRequested') === true || rawStatus === 'cancel_requested',
   };
+}
+
+function nFocusStatus(v: unknown): FocusCycleJobStatus {
+  if (v === 'budget_blocked') return 'budget_blocked';
+  const s = nJobStatus(v);
+  // 焦点周期没有「信息不足」终态；出现即按失败停表。
+  return s === 'insufficient_context' ? 'failed' : s;
 }
 
 function nFocusJob(
@@ -201,7 +256,7 @@ function nFocusJob(
   fallbackCycleId?: string | null,
 ): FocusCycleJob {
   const r = asRec(raw);
-  const s = nJobStatus(r.status);
+  const status = nFocusStatus(r.status);
   const locationCycleId =
     fallbackId && /^mfc_[0-9a-f]{32}$/.test(fallbackId) ? fallbackId : null;
   return {
@@ -209,8 +264,7 @@ function nFocusJob(
       pickS(r, 'jobId', 'job_id', 'intent_id', 'request_id') ??
       (locationCycleId ? '' : fallbackId) ??
       '',
-    // FocusCycleJob 状态机不含 cancelled/insufficient_context：归一到 failed 停止轮询
-    status: s === 'queued' ? 'queued' : s === 'in_progress' ? 'in_progress' : s === 'completed' ? 'completed' : 'failed',
+    status,
     progress: nJobProgress(raw),
     submittedAt: pickS(r, 'submittedAt', 'submitted_at', 'created_at') ?? '',
     updatedAt: pickS(r, 'updatedAt', 'updated_at', 'completed_at') ?? '',
@@ -218,6 +272,10 @@ function nFocusJob(
       pickS(r, 'cycleId', 'cycle_id') ??
       fallbackCycleId ??
       locationCycleId,
+    // 进行中的周期可能带排队期残留码，只有终态才读原因。
+    errorCode: status === 'failed' || status === 'cancelled' || status === 'budget_blocked'
+      ? pickS(r, 'error_code', 'errorCode')
+      : null,
   };
 }
 
@@ -238,6 +296,7 @@ function nCycleRecord(r: Rec): MarketFocusCycle {
     newsCount: pickN(r, 'newsCount', 'news_count') ?? pickN(r, 'event_group_count') ?? 0,
     sampleLabel: pickN(r, 'newsCount', 'news_count') !== null ? __t('条') : __t('组事件'),
     status: pickS(r, 'status'),
+    errorCode: pickS(r, 'error_code', 'errorCode'),
     summary: pickS(result, 'summary_zh', 'market_summary') ?? pickS(r, 'summary') ?? '',
     headline: pickS(result, 'headline_summary'),
     uncertainties: unwrap(result, 'market_uncertainties').length
@@ -295,6 +354,7 @@ function nCycle(raw: unknown): MarketFocusCycle {
       cycleId: pickS(current, 'cycleId', 'cycle_id', 'id') ?? '',
       status: currentStatus ?? 'failed',
       startedAt: pickS(current, 'startedAt', 'started_at', 'created_at') ?? '',
+      errorCode: pickS(current, 'error_code', 'errorCode'),
     };
   }
   return normalized;
@@ -329,8 +389,9 @@ function nStatus(d: unknown): CatalystsStatusDetail {
       .map(([k, v]) => nStream(k, v))
       .filter((s): s is CatalystStreamHealth => s !== null);
     const avail = asRec(r.analysis_availability);
+    // 原因码只说明「当前身份能不能发起分析」。owner_login_required 对所有非 owner（含已登录的
+    // 客户账户）都会出现，不是会话失效信号；会话失效只认接口的 401。
     const analysisReason = pickS(avail, 'reason');
-    if (analysisReason === 'owner_login_required') notifyPrincipalInvalid();
     return {
       // 缺少 enabled 不能默认打开，避免把不完整快照误报成正在采集。
       collecting: pickS(r, 'status') === 'active' && pickB(r, 'enabled') === true,
@@ -669,12 +730,12 @@ function cachedPost<T = unknown>(path: string, body: unknown, ttlMs = READ_CACHE
 
 export const catalystsContract = {
   status: (): Promise<CatalystsStatusDetail> =>
-    mockOr(() => fx2.getCatalystsStatusV2(), () => cachedGet('/catalysts/status').then(nStatus)),
+    mockOr(() => fx2.getCatalystsStatus(), () => cachedGet('/catalysts/status').then(nStatus)),
   /** 今日新闻计数优先使用后端完整过滤窗口汇总；旧后端才退回当前页计数。 */
   newsToday: (): Promise<{ count: number; analyzed: number; pending: number; saturated: boolean }> =>
     mockOr(
       async () => {
-        const s = await fx2.getCatalystsStatusV2();
+        const s = await fx2.getCatalystsStatus();
         const count = s.newsToday ?? 0;
         const analyzed = s.analyzedToday ?? 0;
         return {
@@ -721,7 +782,7 @@ export const catalystsContract = {
   }> =>
     mockOr(
       async () => {
-        const res = await fx2.getCatalystsFeedV2(q);
+        const res = await fx2.getCatalystsFeed(q);
         return { ...res, hiddenUnanalyzed: res.hiddenUnanalyzed ?? 0 };
       },
       () =>
@@ -740,7 +801,7 @@ export const catalystsContract = {
         }),
     ),
   news: (id: string): Promise<CatalystNewsItem> =>
-    mockOr(() => fx2.getNewsDetailV2(id), () =>
+    mockOr(() => fx2.getNewsDetail(id), () =>
       get(`/catalysts/news/${encodeURIComponent(id)}`).then((d) => {
         const env = asRec(d);
         const record = asRec(env.item ?? env);
@@ -755,10 +816,10 @@ export const catalystsContract = {
       }),
     ),
   hotspots: (): Promise<HotspotGroup[]> =>
-    mockOr(() => fx2.getHotspotsV2(), () => cachedGet('/catalysts/hotspots?limit=8').then((d) => unwrap(d, 'items').map(nHotspot))),
+    mockOr(() => fx2.getHotspots(), () => cachedGet('/catalysts/hotspots?limit=8').then((d) => unwrap(d, 'items').map(nHotspot))),
   hotspotsStatus: (): Promise<HotspotsStatusDetail> =>
     mockOr(
-      () => fx2.getHotspotsStatusV2(),
+      () => fx2.getHotspotsStatus(),
       () =>
         cachedGet('/catalysts/hotspots/status').then((d) => {
           const r = asRec(d);
@@ -834,8 +895,9 @@ export const catalystsContract = {
         throw new ApiError(503, __t('数据源状态暂不可用'));
       },
     ),
-  latestFocusCycle: (): Promise<MarketFocusCycle> =>
-    mockOr(() => fx2.getLatestFocusCycleV2(), () => cachedGet('/catalysts/market-focus-cycles/latest').then(nCycle)),
+  /** maxAgeMs：周期进行中时卡片按 15 秒跟踪，共享读缓存不能把跟踪拉长到 30 秒一次。 */
+  latestFocusCycle: (maxAgeMs = READ_CACHE_TTL_MS): Promise<MarketFocusCycle> =>
+    mockOr(() => fx2.getLatestFocusCycle(), () => cachedGet('/catalysts/market-focus-cycles/latest', maxAgeMs).then(nCycle)),
   previousFocusCycle: (): Promise<MarketFocusCycle> =>
     mockOr(() => fx2.getPreviousSuccessfulFocusCycle(), () =>
       cachedGet('/catalysts/market-focus-cycles/latest').then((data) => {
@@ -850,7 +912,7 @@ export const catalystsContract = {
     ),
   triggerFocusCycle: (retryCycleId: string | null = null): Promise<FocusCycleJob> =>
     // 个人版：POST 需带 expected_prepared_revision（来自 hotspots/status），XOR retry_cycle_id
-    mockOr(() => {
+    mockOr<FocusCycleJob>(() => {
       const job = fx2.triggerFocusCycle();
       // mock 的任务表仍以 jobId 为键；统一放进轮询标识槽，live 始终使用真实 cycleId。
       return { ...job, cycleId: job.cycleId ?? job.jobId };
@@ -883,7 +945,7 @@ export const catalystsContract = {
       return job;
     }),
   focusCycleJob: (cycleId: string): Promise<FocusCycleJob> =>
-    mockOr(() => fx2.getFocusCycleJob(cycleId), () =>
+    mockOr<FocusCycleJob>(() => fx2.getFocusCycleJob(cycleId), () =>
       get(focusCyclePollPath(cycleId)).then((d) => nFocusJob(d, null, cycleId)),
     ),
   tickerSummaries: (q: CatalystFeedQuery = {}): Promise<TickerImpactSummary[]> =>

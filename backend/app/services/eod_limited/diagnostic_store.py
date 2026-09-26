@@ -17,11 +17,18 @@ from urllib.parse import quote
 from uuid import uuid4
 import zlib
 
+from app.failure_diagnostics import record_fallback_failure
+
 from .diagnostics import DATA_REASONS
-from .store import snapshot_dir, variant_key
+from .store import json_default, snapshot_dir, variant_key
 
 SCHEMA_VERSION = 2
 _NAME = re.compile(r"^diagnostics-[0-9a-f]{32}\.sqlite$")
+# Leftovers of a run killed mid-write: the diagnostics temp database, its
+# rollback journal, and batch.json temp files from store._atomic_write.
+_ORPHAN_NAME = re.compile(r"^(?:diagnostics-[0-9a-f]{32}\.sqlite\.tmp(?:-journal)?|batch\.json[^/]*\.tmp)$")
+GENERATION_MIN_AGE_SECONDS = 60 * 60
+ORPHAN_MIN_AGE_SECONDS = 60 * 60
 _ROW_FIELDS = frozenset({
     "security_id", "ticker_at_signal", "session_date", "feature_version",
     "algorithm_id", "profile", "horizon", "track", "stock_or_etf_track",
@@ -44,7 +51,7 @@ _ROW_FIELDS = frozenset({
 
 
 def _encoded(value: Any) -> bytes:
-    return zlib.compress(json.dumps(value, ensure_ascii=False, default=str, separators=(",", ":"), allow_nan=False).encode("utf-8"), 6)
+    return zlib.compress(json.dumps(value, ensure_ascii=False, default=json_default, separators=(",", ":"), allow_nan=False).encode("utf-8"), 6)
 
 
 def _decoded(value: bytes) -> Any:
@@ -390,15 +397,56 @@ def read_security_diagnostics(
     }
 
 
-def prune_old_generations(*, root: Path | None, active_name: str, keep: int = 3, min_age_seconds: int = 7 * 86400) -> None:
-    """Retain recent generations so readers holding an older batch can finish."""
+def _remove_if_older(path: Path, *, now: float, min_age_seconds: float) -> None:
+    try:
+        if now - path.stat().st_mtime > min_age_seconds:
+            path.unlink()
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        # Housekeeping only: record it and keep sweeping the other files.
+        record_fallback_failure("eod_diagnostics_prune", exc)
+
+
+def prune_old_generations(
+    *,
+    root: Path | None,
+    active_name: str,
+    keep: int = 3,
+    min_age_seconds: float = GENERATION_MIN_AGE_SECONDS,
+    orphan_min_age_seconds: float = ORPHAN_MIN_AGE_SECONDS,
+) -> None:
+    """Keep the newest ``keep`` generations and the active one; sweep old temp files.
+
+    Age is only a floor: it lets a reader that still holds the previous batch
+    finish. A temp file younger than ``orphan_min_age_seconds`` may belong to
+    a run in progress and is left alone.
+    """
     directory = snapshot_dir(root)
     now = time.time()
-    candidates = sorted(
-        (path for path in directory.glob("diagnostics-*.sqlite") if _NAME.fullmatch(path.name) and not path.is_symlink()),
-        key=lambda path: path.stat().st_mtime,
-        reverse=True,
-    )
-    for path in candidates[keep:]:
-        if path.name != active_name and now - path.stat().st_mtime > min_age_seconds:
-            path.unlink(missing_ok=True)
+    generations: list[tuple[float, Path]] = []
+    for path in directory.glob("diagnostics-*.sqlite"):
+        if not _NAME.fullmatch(path.name) or path.is_symlink():
+            continue
+        try:
+            generations.append((path.stat().st_mtime, path))
+        except FileNotFoundError:
+            continue
+    generations.sort(key=lambda item: item[0], reverse=True)
+    for _mtime, path in generations[keep:]:
+        if path.name != active_name:
+            _remove_if_older(path, now=now, min_age_seconds=min_age_seconds)
+    for path in directory.iterdir():
+        if not _ORPHAN_NAME.fullmatch(path.name) or path.is_symlink():
+            continue
+        if path.name.endswith("-journal"):
+            # SQLite writes the rollback journal once per transaction, so its
+            # mtime stops moving while the temp database keeps growing. Judge
+            # the journal by its owner; a live writer must keep its journal.
+            owner = path.with_name(path.name[: -len("-journal")])
+            try:
+                if now - owner.stat().st_mtime <= orphan_min_age_seconds:
+                    continue
+            except FileNotFoundError:
+                pass
+        _remove_if_older(path, now=now, min_age_seconds=orphan_min_age_seconds)

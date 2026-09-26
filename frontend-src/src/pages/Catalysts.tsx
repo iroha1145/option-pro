@@ -23,6 +23,7 @@ import SourcesPanel from '@/components/catalysts/SourcesPanel';
 import NewsDrawer from '@/components/catalysts/NewsDrawer';
 import { clearCatalystReadCache } from '@/components/catalysts/api';
 import type { CatalystNewsItem, NewsAnalysisStatus, NewsClassification } from '@/components/catalysts/api';
+import { addNewsPatch, type NewsPatches } from '@/components/catalysts/feedPatches';
 import { t as __t } from '../i18n/core.ts';
 
 type TabId = 'feed' | 'stocks' | 'calendar' | 'sources';
@@ -116,18 +117,22 @@ export default function Catalysts() {
   const [refreshToken, setRefreshToken] = useState(0);
   const [lastLoadedAt, setLastLoadedAt] = useState<number | null>(null);
   const [spinning, setSpinning] = useState(false);
-  const onRefresh = useCallback(() => {
+  const onRefresh = useCallback((options?: { cacheCleared?: boolean }) => {
     setSpinning(true);
-    clearCatalystReadCache({ userInitiated: true }); // 手动刷新必须穿透客户端读缓存，并绕过失败退避
+    // 手动刷新必须穿透客户端读缓存，并绕过失败退避；写操作已在 API 层清过时不再清第二次，
+    // 否则刚发出的重新读取会被作废再发一遍。
+    if (!options?.cacheCleared) clearCatalystReadCache({ userInitiated: true });
     setRefreshToken((v) => v + 1);
     window.setTimeout(() => setSpinning(false), 650);
   }, []);
 
   /* feed 计数 / 抽屉回写 */
   const [total, setTotal] = useState<number | null>(null);
-  const [patches, setPatches] = useState<Record<string, CatalystNewsItem>>({});
+  /* 补丁带时间戳：列表只套用比自己快照新的补丁，旧补丁不会在换条或切换筛选时把列表退回旧状态。 */
+  const [patches, setPatches] = useState<NewsPatches>({});
   const onNewsUpdate = useCallback((item: CatalystNewsItem) => {
-    setPatches((prev) => ({ ...prev, [item.newsId]: item }));
+    const at = Date.now();
+    setPatches((prev) => addNewsPatch(prev, item, at));
   }, []);
   /* 只有真正成功的一轮才更新时间戳（审计 P2-22）：旧实现在失败分支也调用
      onTotalChange(null)，于是用户看到一个很新的更新时间，而本轮数据根本没加载成功。 */
@@ -168,7 +173,7 @@ export default function Catalysts() {
               </span>
             )}
             <button
-              onClick={onRefresh}
+              onClick={() => onRefresh()}
               className="flex h-9 items-center gap-2 rounded-md border border-line bg-card px-3 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
               title={__t("刷新本页数据")}
             >

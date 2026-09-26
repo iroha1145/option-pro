@@ -20,7 +20,8 @@ from app.execution_limits import BREAKOUT_TASK_TIMEOUT_SECONDS
 from app.personal_config import get_personal_config
 
 from .inventory import DEFAULT_TASK_NAMES
-from .runtime import TaskResult, TaskSpec, _public_error_code
+from .runtime import TaskResult, TaskSpec, _backoff_seconds, _public_error_code
+from .state import _iso
 
 from app.personal_config import personal_analysis_permissions as _personal_analysis_permissions
 
@@ -30,6 +31,22 @@ _logger = logging.getLogger("optix.worker")
 # Full-market capture, geometry, nine scoring views and diagnostic publication
 # share this finite budget. Production runs can exceed the old 30-minute limit.
 STRENGTH_REFRESH_TIMEOUT_SECONDS = 7_200.0
+_FAILED_SESSIONS_SHOWN = 20
+
+
+def _strength_refresh_slot_et() -> str:
+    """America/New_York time when readers start to expect the new session.
+
+    Freshness waits VENDOR_BACKFILL_BUFFER after the regular close before it
+    marks a snapshot of the previous session stale; refreshing earlier can
+    read incomplete vendor bars, refreshing on process start-up time left
+    snapshots behind for most of a day.
+    """
+
+    from app.services.strength.freshness import VENDOR_BACKFILL_BUFFER
+
+    minutes = 16 * 60 + int(VENDOR_BACKFILL_BUFFER.total_seconds() // 60)
+    return f"{minutes // 60 % 24:02d}:{minutes % 60:02d}"
 
 
 def _canonical_sector_tickers() -> tuple[str, ...]:
@@ -46,7 +63,13 @@ def _canonical_sector_tickers() -> tuple[str, ...]:
     return tuple(sorted(values))
 
 
-async def _call_local(method: Any, *args: Any, **kwargs: Any) -> Any:
+async def _call_local(
+    method: Any,
+    /,
+    *args: Any,
+    on_late_result: Callable[[Any], None] | None = None,
+    **kwargs: Any,
+) -> Any:
     if inspect.iscoroutinefunction(method):
         return await method(*args, **kwargs)
     task = asyncio.create_task(asyncio.to_thread(method, *args, **kwargs))
@@ -64,9 +87,15 @@ async def _call_local(method: Any, *args: Any, **kwargs: Any) -> Any:
             except Exception:
                 break
         try:
-            task.result()
+            value = task.result()
         except BaseException:
             pass
+        else:
+            # The work finished after the caller's deadline and its effects
+            # (a published snapshot, a verified backup) are real: let the
+            # caller count it instead of running it again.
+            if on_late_result is not None:
+                on_late_result(value)
         raise cancelled
 
 
@@ -82,8 +111,20 @@ async def _close_optional(resource: Any) -> None:
 
 
 def _timestamp_text(value: float) -> str:
-    return datetime.fromtimestamp(value, timezone.utc).isoformat().replace(
-        "+00:00", "Z"
+    return _iso(datetime.fromtimestamp(value, timezone.utc))
+
+
+def _succeeded(result: TaskResult) -> bool:
+    return result.status == "idle" and not result.error_code
+
+
+def _complete_variant_demand(parameters: Mapping[str, Any], result: TaskResult) -> None:
+    from app.services.strength.variant_demand import complete_strength_variant_demand
+
+    complete_strength_variant_demand(
+        parameters,
+        status="completed" if _succeeded(result) else "failed",
+        error_code=result.error_code,
     )
 
 
@@ -107,7 +148,13 @@ async def _build_local_intelligence(
         factory = LocalCatalystIntelligence
     database_path = settings.macrolens_cache_db_path
     ai_repository = AIJobRepository(settings.openai_job_db_path)
-    await _call_local(ai_repository.initialize)
+    try:
+        await _call_local(ai_repository.initialize)
+    except (RuntimeError, sqlite3.Error, OSError) as exc:
+        # Only analysis steps read or write ai-jobs.db, and the repository
+        # retries its lazy initialization when one of them first needs it.
+        # A broken AI database must not stop the work that never touches it.
+        record_fallback_failure("ai_jobs_repository_init", exc)
     try:
         runtime_settings = get_effective_runtime_settings()
     except RuntimeSettingsStorageError:
@@ -168,8 +215,11 @@ class AIJobsTask:
         if self._repository is None:
             from app.services.ai_jobs.repository import AIJobRepository
 
-            self._repository = AIJobRepository(self._settings.openai_job_db_path)
-            await asyncio.to_thread(self._repository.initialize)
+            repository = AIJobRepository(self._settings.openai_job_db_path)
+            await asyncio.to_thread(repository.initialize)
+            # Cache only an initialized repository; a failed attempt retries
+            # the explicit schema and recovery checks on the next run.
+            self._repository = repository
         secret = self._settings.openai_api_key.get_secret_value().strip()
         if not secret:
             return TaskResult(
@@ -407,7 +457,7 @@ class EarningsAnalysisTask:
         queued = 0
         existing = 0
         invalid = 0
-        skipped_final_without_pre_release = 0
+        skipped_final_pre_release_active = 0
         scheduled_pre_release_active = (
             0
             if manual
@@ -463,15 +513,20 @@ class EarningsAnalysisTask:
                     payload["ticker"],
                     payload["report_id"],
                     analysis_stage="pre_release",
-                    status="completed",
                     # Analyses written before report ids were bound still
-                    # count as the preliminary run, otherwise a released
-                    # report can never finalize.
+                    # belong to this report.
                     legacy_report_date=payload.get("earnings_date"),
                     now=self._now(),
                 )
-                if not preliminary:
-                    skipped_final_without_pre_release += 1
+                # Only a preliminary run still in flight holds the final back.
+                # One that failed, or was never queued because the active
+                # pre-release limit was full, used to block it forever.
+                if preliminary and str(preliminary.get("status") or "") in {
+                    "pending",
+                    "queued",
+                    "in_progress",
+                }:
+                    skipped_final_pre_release_active += 1
                     continue
             latest = await _call_local(
                 repository.latest_for_report,
@@ -518,7 +573,15 @@ class EarningsAnalysisTask:
                 continue
             try:
                 queue_limit = self._settings.openai_job_max_queued
-                if analysis_stage == "post_release_final":
+                if manual:
+                    # The owner's run keeps the same reserve above the base
+                    # ceiling as every manual API submission, so scheduled
+                    # backlog cannot turn it away.
+                    queue_limit += max(
+                        ai_runtime.MANUAL_QUEUE_RESERVE,
+                        ai_runtime.EARNINGS_MANUAL_QUEUE_RESERVE,
+                    )
+                elif analysis_stage == "post_release_final":
                     # Final analyses must still enter when scheduled
                     # pre-release work and the manual reserve are saturated.
                     # The larger reserve remains a hard total cap.
@@ -574,9 +637,7 @@ class EarningsAnalysisTask:
             "queued": queued,
             "existing": existing,
             "invalid": invalid,
-            "skipped_final_without_pre_release": (
-                skipped_final_without_pre_release
-            ),
+            "skipped_final_pre_release_active": skipped_final_pre_release_active,
             "pre_release_active_limit": (
                 ai_runtime.EARNINGS_PRE_RELEASE_ACTIVE_LIMIT
             ),
@@ -653,33 +714,39 @@ class CatalystSyncTask:
         cache_path = self._runtime_settings.macrolens_cache_db_path
         repository = CatalystEtlRepository(cache_path)
         await asyncio.to_thread(repository.initialize)
-        intelligence: Any = None
-        client: Any = None
+        client = MacroLensEtlClient(
+            client_config,
+            transport=self._etl_transport,
+        )
         try:
-            intelligence = await _build_local_intelligence(
+            service = MacroLensIncrementalSync(client, repository)
+        except Exception:
+            await client.aclose()
+            raise
+        # Publish the sync state only after every sync dependency succeeds,
+        # so a failed attempt cannot cache a mode with a missing client or
+        # service. Local intelligence is built on its own: news and calendar
+        # sync do not depend on the analysis stores.
+        self._repository = repository
+        self._client = client
+        self._service = service
+        self._mode = "personal"
+        return self._mode
+
+    async def _local_intelligence(self, *, attempt: bool) -> Any:
+        """Return local intelligence, building it only when ``attempt`` allows."""
+
+        if self._intelligence is not None or not attempt:
+            return self._intelligence
+        try:
+            self._intelligence = await _build_local_intelligence(
                 self._personal_config,
                 self._runtime_settings,
                 factory=self._intelligence_factory,
             )
-            client = MacroLensEtlClient(
-                client_config,
-                transport=self._etl_transport,
-            )
-            service = MacroLensIncrementalSync(client, repository)
-        except Exception:
-            if client is not None:
-                await client.aclose()
-            await _close_optional(intelligence)
-            raise
-        # Publish the initialized state only after every dependency succeeds.
-        # A failed attempt therefore cannot leave a cached mode with missing
-        # client or service objects.
-        self._repository = repository
-        self._client = client
-        self._service = service
-        self._intelligence = intelligence
-        self._mode = "personal"
-        return self._mode
+        except (RuntimeError, sqlite3.Error, OSError) as exc:
+            record_fallback_failure("catalyst_local_intelligence_init", exc)
+        return self._intelligence
 
     async def _prepare(self) -> str:
         if self._mode == "personal":
@@ -723,27 +790,30 @@ class CatalystSyncTask:
                 next_delay_seconds=30.0,
             )
 
-        if hasattr(self._intelligence, "manual_refresh_cooldown_seconds"):
-            self._intelligence.manual_refresh_cooldown_seconds = int(
-                effective.catalyst.manual_refresh_cooldown_seconds
-            )
-        try:
-            raw_request = await _call_local(
-                self._intelligence.consume_refresh_requested
-            )
-            if isinstance(raw_request, dict):
-                manual_request = raw_request
-            else:
-                legacy_refresh_requested = bool(raw_request)
-        except Exception as exc:
-            errors["refresh_request"] = self._error_code(exc)
-
         sync_seconds = float(effective.catalyst.sync_seconds)
         clock = time.monotonic()
         scheduled_due = (
             self._last_personal_sync_monotonic is None
             or clock - self._last_personal_sync_monotonic >= sync_seconds
         )
+        # A failed build is retried once per sync slot, not on every poll.
+        intelligence = await self._local_intelligence(attempt=scheduled_due)
+        if intelligence is not None:
+            if hasattr(intelligence, "manual_refresh_cooldown_seconds"):
+                intelligence.manual_refresh_cooldown_seconds = int(
+                    effective.catalyst.manual_refresh_cooldown_seconds
+                )
+            try:
+                raw_request = await _call_local(
+                    intelligence.consume_refresh_requested
+                )
+                if isinstance(raw_request, dict):
+                    manual_request = raw_request
+                else:
+                    legacy_refresh_requested = bool(raw_request)
+            except Exception as exc:
+                errors["refresh_request"] = self._error_code(exc)
+
         requested_type = (
             str(manual_request.get("operation_type"))
             if manual_request is not None
@@ -752,6 +822,25 @@ class CatalystSyncTask:
             else None
         )
         if not scheduled_due and requested_type is None and not errors:
+            if intelligence is None:
+                # Stay visibly degraded between sync slots; nothing else can
+                # run until the next slot retries the build.
+                return TaskResult(
+                    status="degraded",
+                    error_code="catalyst_sync_degraded",
+                    details={
+                        "processed": [],
+                        "streams": {},
+                        "refresh_requested": False,
+                        "errors": {
+                            "local_intelligence": "local_intelligence_unavailable"
+                        },
+                    },
+                    next_delay_seconds=max(
+                        2.0,
+                        sync_seconds - (clock - self._last_personal_sync_monotonic),
+                    ),
+                )
             return TaskResult(
                 status="idle",
                 details={
@@ -788,10 +877,12 @@ class CatalystSyncTask:
                 metrics[stream]["deletes"] = int(result.deletes)
 
         projection = None
-        if selected_streams:
+        if selected_streams and intelligence is None:
+            errors["local_intelligence"] = "local_intelligence_unavailable"
+        elif selected_streams:
             try:
                 projection = await _call_local(
-                    self._intelligence.reconcile,
+                    intelligence.reconcile,
                     allow_scheduled_jobs=False,
                 )
             except Exception as exc:
@@ -807,7 +898,7 @@ class CatalystSyncTask:
         if (
             scheduled_due
             and "news" not in errors
-            and hasattr(self._intelligence, "prune_journal")
+            and hasattr(intelligence, "prune_journal")
             and (
                 self._last_journal_prune_monotonic is None
                 or clock - self._last_journal_prune_monotonic
@@ -824,7 +915,7 @@ class CatalystSyncTask:
             )
             try:
                 pruned = await _call_local(
-                    self._intelligence.prune_journal,
+                    intelligence.prune_journal,
                     retention_days=retention_days,
                 )
             except Exception as exc:
@@ -840,13 +931,13 @@ class CatalystSyncTask:
                     }
 
         if manual_request is not None and hasattr(
-            self._intelligence,
+            intelligence,
             "complete_refresh_request",
         ):
             error_code = next(iter(errors.values()), None)
             try:
                 await _call_local(
-                    self._intelligence.complete_refresh_request,
+                    intelligence.complete_refresh_request,
                     str(manual_request["request_id"]),
                     error_code=error_code,
                 )
@@ -883,9 +974,13 @@ class CatalystSyncTask:
                 status="degraded",
                 error_code="catalyst_sync_degraded",
                 details=details,
-                # Let the supervisor apply exponential backoff. A fixed 2s
-                # retry used to spin the worker and hide a broken cursor.
-                next_delay_seconds=None,
+                # Stream failures back off through the supervisor: a fixed 2s
+                # retry used to spin the worker and hide a broken cursor. A
+                # failing local analysis store keeps the sync cadence instead,
+                # since its next attempt already waits for the next sync slot.
+                next_delay_seconds=(
+                    delay if set(errors) == {"local_intelligence"} else None
+                ),
             )
         return TaskResult(
             status="idle",
@@ -2001,6 +2096,7 @@ class StrengthRefreshTask:
         snapshot_path: Path | None = None,
         clock: Callable[[], float] = time.time,
         scheduled_interval_seconds: float = 86_400.0,
+        refresh_times_et: Sequence[str] = (),
         eod_runner: Callable[..., Any] | None = None,
     ) -> None:
         self._scanner = scanner
@@ -2012,11 +2108,23 @@ class StrengthRefreshTask:
         self._eod_batch: ContextVar[dict[str, Any] | None] = ContextVar(
             "strength_eod_batch", default=None,
         )
+        # Set around a default run or an owner action group: a job that
+        # finishes after the task deadline has published, so its result
+        # still counts instead of the work being started again.
+        self._late_result_sink: ContextVar[
+            Callable[[TaskResult], None] | None
+        ] = ContextVar("strength_late_result_sink", default=None)
         self._snapshot_path = snapshot_path
         self._clock = clock
         self._scheduled_interval_seconds = float(scheduled_interval_seconds)
+        # Absolute America/New_York times for the default snapshot. Without
+        # them the default refreshes one interval after the previous run.
+        self._refresh_times_et = tuple(refresh_times_et)
         self._last_scheduled_at: float | None = None
         self._last_default_result: TaskResult | None = None
+        # The recent-variant refresh of a slot still owed after its round was
+        # cut short by the task deadline.
+        self._cycle_variants_pending = False
         self._variant_retries_this_cycle = 0
         self._variant_retry_at: float | None = None
         self._pending_variant_parameters: dict[str, dict[str, Any]] = {}
@@ -2056,21 +2164,49 @@ class StrengthRefreshTask:
             delay = min(delay, max(0.0, self._variant_retry_at - float(self._clock())))
         return delay
 
-    def _next_default_delay(self) -> float:
+    def _next_slot_at(self, after: float) -> float | None:
+        slot = next_et_slot_at(
+            datetime.fromtimestamp(after, timezone.utc),
+            self._refresh_times_et,
+        )
+        return slot.timestamp() if slot is not None else None
+
+    def _default_due_at(self) -> float | None:
         if self._last_scheduled_at is None:
-            return 0.0
-        due_at = self._last_scheduled_at + self._scheduled_interval_seconds
-        return min(
-            self._scheduled_interval_seconds,
-            max(0.0, due_at - float(self._clock())),
+            return None
+        if self._refresh_times_et:
+            # The absolute slot, not a capped delay: the day daylight saving
+            # time ends lasts 25 hours.
+            slot = self._next_slot_at(self._last_scheduled_at)
+            if slot is not None:
+                return slot
+        return self._last_scheduled_at + self._scheduled_interval_seconds
+
+    def _next_default_delay(self) -> float:
+        now = float(self._clock())
+        due_at = self._default_due_at()
+        if due_at is None:
+            if not self._refresh_times_et:
+                return 0.0
+            # After a restart the persisted schedule owns the first default
+            # run; an owner action that finishes first must not start it.
+            due_at = self._next_slot_at(now)
+            if due_at is None:
+                return 0.0
+        delay = max(0.0, due_at - now)
+        # Keep the absolute slot on a 25-hour day. A capped wake persisted
+        # before a restart would make a fresh runner start an hour early.
+        return (
+            delay
+            if self._refresh_times_et
+            else min(self._scheduled_interval_seconds, delay)
         )
 
     async def _run_eod_limited(self, parameters: dict[str, Any]) -> TaskResult:
         from app.api.strength import strength_scan_parameters_hash
         from app.services.eod_limited import PURPOSE_LIVE
-        from app.services.eod_limited.store import variant_key
         from app.services.eod_limited.worker import run_eod_limited_job
-        from app.services.research_eod_v1.constants import HORIZONS, PROFILES
+        from app.services.research_eod_v1.constants import HORIZONS
 
         horizon = str(parameters.get("timeframe") or "")
         if horizon not in HORIZONS:
@@ -2088,6 +2224,12 @@ class StrengthRefreshTask:
         digest = strength_scan_parameters_hash(parameters)
         batch = self._eod_batch.get()
         outcome = batch.get("outcome") if batch is not None else None
+        late_sink = self._late_result_sink.get()
+
+        def keep_late_outcome(late: Any) -> None:
+            if late_sink is not None and isinstance(late, Mapping):
+                late_sink(self._eod_result(late, parameters, digest, batch))
+
         try:
             if outcome is None:
                 outcome = await _call_local(
@@ -2096,19 +2238,53 @@ class StrengthRefreshTask:
                     horizon=horizon,
                     purpose=PURPOSE_LIVE,
                     all_variants=True,
+                    on_late_result=keep_late_outcome,
                 )
         except Exception as exc:
+            # A two-hour full-market run otherwise fails without a single log
+            # line; the task details only carry the exception type.
+            _logger.warning(
+                "full-market strength job failed error_type=%s",
+                type(exc).__name__,
+                exc_info=True,
+            )
+            details: dict[str, Any] = {
+                "result": "kept_previous_snapshot",
+                "reason": type(exc).__name__,
+                "parameters": parameters,
+                "parameters_hash": digest,
+                "published": False,
+            }
+            # AllMarketDataError names the trading days that failed, so the
+            # status API can show which session blocks the full-market input.
+            reason_code = getattr(exc, "reason_code", None)
+            if isinstance(reason_code, str) and reason_code:
+                details["reason_code"] = reason_code[:120]
+            failed_sessions = list(getattr(exc, "failed_sessions", None) or ())
+            if failed_sessions:
+                details["failed_session_count"] = len(failed_sessions)
+                # Bounded for the 16 KiB status row and 128-item action lists.
+                details["failed_sessions"] = [
+                    {"session": str(session)[:32], "reason_code": str(code)[:120]}
+                    for session, code in failed_sessions[:_FAILED_SESSIONS_SHOWN]
+                ]
             return TaskResult(
                 status="degraded",
                 error_code="eod_limited_input_unavailable",
-                details={
-                    "result": "kept_previous_snapshot",
-                    "reason": type(exc).__name__,
-                    "parameters": parameters,
-                    "parameters_hash": digest,
-                    "published": False,
-                },
+                details=details,
             )
+        return self._eod_result(outcome, parameters, digest, batch)
+
+    def _eod_result(
+        self,
+        outcome: Mapping[str, Any],
+        parameters: dict[str, Any],
+        digest: str,
+        batch: dict[str, Any] | None,
+    ) -> TaskResult:
+        from app.services.eod_limited.store import variant_key
+        from app.services.research_eod_v1.constants import HORIZONS, PROFILES
+
         publication = outcome.get("publish") or {}
         published_at = outcome.get("published_at", publication.get("published_at"))
         published = (
@@ -2263,22 +2439,12 @@ class StrengthRefreshTask:
             request_ids: list[str],
             group_result: TaskResult,
         ) -> None:
-            outcome = (
-                "completed"
-                if group_result.status == "idle" and not group_result.error_code
-                else "failed"
-            )
-            complete_strength_variant_demand(
-                selected,
-                status=outcome,
-                error_code=group_result.error_code,
-            )
+            _complete_variant_demand(selected, group_result)
             for original in demand_aliases.get(digest, []):
                 if original != selected:
-                    complete_strength_variant_demand(
-                        original, status=outcome, error_code=group_result.error_code,
-                    )
-            if group_result.status == "idle" and not group_result.error_code:
+                    _complete_variant_demand(original, group_result)
+            succeeded = _succeeded(group_result)
+            if succeeded:
                 self._pending_variant_parameters.pop(digest, None)
                 self._pending_variant_errors.pop(digest, None)
             compact = {
@@ -2286,7 +2452,6 @@ class StrengthRefreshTask:
                 for key, value in dict(group_result.details).items()
                 if key not in {"action_completions", "requeued_request_ids"}
             }
-            succeeded = group_result.status == "idle" and not group_result.error_code
             for request_id in request_ids:
                 action_completions.append(
                     {
@@ -2306,24 +2471,30 @@ class StrengthRefreshTask:
                 await self._publish_action_progress(action_completions, remaining_ids())
                 raise
             except Exception as error:
+                # The owner's actions already settled; only the log can show
+                # why a piggybacked pending variant failed.
+                record_fallback_failure("strength_variant_side_job", error)
                 complete_strength_variant_demand(
                     parameters,
                     status="failed",
                     error_code=_public_error_code(error),
                 )
                 return
-            complete_strength_variant_demand(
-                parameters,
-                status="completed" if side.status == "idle" and not side.error_code else "failed",
-                error_code=side.error_code,
-            )
+            _complete_variant_demand(parameters, side)
 
         while pending_groups:
             digest, selected, request_ids = pending_groups.pop(0)
+            late: list[TaskResult] = []
+            sink = self._late_result_sink.set(late.append)
             try:
                 result = await self._run(selected)
             except asyncio.CancelledError:
-                pending_groups.insert(0, (digest, selected, request_ids))
+                if late:
+                    # Settle the actions of a job that published after the
+                    # deadline; requeueing them would repeat the whole run.
+                    record_group(digest, selected, request_ids, late[-1])
+                else:
+                    pending_groups.insert(0, (digest, selected, request_ids))
                 await self._publish_action_progress(action_completions, remaining_ids())
                 raise
             except Exception as error:
@@ -2341,6 +2512,8 @@ class StrengthRefreshTask:
                 record_group(digest, selected, request_ids, result)
                 await self._publish_action_progress(action_completions, remaining_ids())
                 continue
+            finally:
+                self._late_result_sink.reset(sink)
             record_group(digest, selected, request_ids, result)
             await self._publish_action_progress(action_completions, remaining_ids())
         assert result is not None
@@ -2351,7 +2524,7 @@ class StrengthRefreshTask:
         ][:4]
         for parameters in extras:
             await run_side_job(parameters)
-        if result.status == "idle" and not result.error_code and not self._pending_variant_parameters:
+        if _succeeded(result) and not self._pending_variant_parameters:
             self._variant_retry_at = None
         details = dict(result.details)
         details["action_completions"] = action_completions
@@ -2387,23 +2560,38 @@ class StrengthRefreshTask:
         )
 
         now = float(self._clock())
-        due = (
-            self._last_scheduled_at is None
-            or now >= self._last_scheduled_at + self._scheduled_interval_seconds
-        )
+        due_at = self._default_due_at()
+        due = due_at is None or now >= due_at
+        if due:
+            # Mark the slot before running: a job that outlives the task
+            # deadline keeps publishing, and must not be started again the
+            # moment the timed-out round returns. Until this run or its late
+            # completion reports, the previous result must not stand in for
+            # it: a run that times out and then fails is retried instead.
+            self._last_scheduled_at = now
+            self._last_default_result = None
+            self._cycle_variants_pending = True
         scheduled_parameters = scheduled_strength_scan_parameters()
         if (
             due
             or self._last_default_result is None
             or self._last_default_result.status != "idle"
         ):
-            result = await self._run(scheduled_parameters)
+
+            def keep_late_default(late: TaskResult) -> None:
+                self._last_default_result = late
+
+            token = self._late_result_sink.set(keep_late_default)
+            try:
+                result = await self._run(scheduled_parameters)
+            finally:
+                self._late_result_sink.reset(token)
             self._last_default_result = result
         else:
             result = self._last_default_result
         extras: list[dict[str, Any]] = []
-        if due:
-            self._last_scheduled_at = now
+        if self._cycle_variants_pending:
+            self._cycle_variants_pending = False
             self._variant_retries_this_cycle = 0
             self._variant_retry_at = None
             self._pending_variant_parameters.clear()
@@ -2472,15 +2660,7 @@ class StrengthRefreshTask:
                 self._pending_variant_parameters[digest] = dict(parameters)
             try:
                 variant = await self._run(parameters)
-                complete_strength_variant_demand(
-                    parameters,
-                    status=(
-                        "completed"
-                        if variant.status == "idle" and not variant.error_code
-                        else "failed"
-                    ),
-                    error_code=variant.error_code,
-                )
+                _complete_variant_demand(parameters, variant)
             except Exception as exc:
                 failed_count += 1
                 complete_strength_variant_demand(
@@ -2594,12 +2774,14 @@ class BreakoutTask:
         self._settings: Any = None
         self._repository: Any = None
         self._service: Any = None
+        self._provider: Any = None
         self._clock: Any = None
 
     async def _prepare(self) -> bool:
         if self._settings is not None:
             return bool(self._settings.enabled)
         from app.services.breakouts.config import get_breakout_settings
+        from app.services.breakouts.providers import TradingViewDiscoveryProvider
         from app.services.breakouts.repository import BreakoutRepository
         from app.services.breakouts.service import BreakoutRadarService
 
@@ -2608,7 +2790,15 @@ class BreakoutTask:
             return False
         self._repository = BreakoutRepository(self._settings.db_path)
         self._service = BreakoutRadarService(self._settings)
+        # One discovery provider for the task's lifetime: its circuit breaker
+        # counts failures across scans and its stale snapshot outlives them.
+        # A provider per scan reset both, so neither could ever engage.
+        self._provider = TradingViewDiscoveryProvider(self._settings)
         return True
+
+    async def aclose(self) -> None:
+        provider, self._provider = self._provider, None
+        await _close_optional(provider)
 
     def _interval(self, session: str | None) -> float:
         if session == "premarket":
@@ -2654,6 +2844,7 @@ class BreakoutTask:
         worker = BreakoutWorker(
             self._settings,
             self._repository,
+            provider=self._provider,
             scan_service=self._service,
             clock=self._clock,
             owner_id=self.owner_id,
@@ -2703,18 +2894,8 @@ class BreakoutTask:
         )
 
 
-def seconds_until_next_et_slot(
-    now: datetime,
-    times_et: Sequence[str],
-    *,
-    default_seconds: float = 3_600.0,
-) -> float:
-    """Seconds to the next absolute America/New_York wall-clock slot.
-
-    Scheduling on absolute times rather than a fixed interval means the run
-    times never drift, and subtracting two zone-aware instants keeps daylight
-    saving transitions correct.
-    """
+def next_et_slot_at(now: datetime, times_et: Sequence[str]) -> datetime | None:
+    """The next absolute America/New_York wall-clock slot after ``now``."""
 
     from zoneinfo import ZoneInfo
 
@@ -2737,14 +2918,31 @@ def seconds_until_next_et_slot(
             )
             if candidate > local:
                 candidates.append(candidate)
-    if not candidates:
+    return min(candidates) if candidates else None
+
+
+def seconds_until_next_et_slot(
+    now: datetime,
+    times_et: Sequence[str],
+    *,
+    default_seconds: float = 3_600.0,
+) -> float:
+    """Seconds to the next absolute America/New_York wall-clock slot.
+
+    Scheduling on absolute times rather than a fixed interval means the run
+    times never drift, and subtracting two zone-aware instants keeps daylight
+    saving transitions correct.
+    """
+
+    slot = next_et_slot_at(now, times_et)
+    if slot is None:
         return default_seconds
     # Subtract in UTC on purpose. Python ignores a shared tzinfo when
     # subtracting two aware datetimes, so a same-zone subtraction returns the
     # wall-clock difference and would fire an hour early on a daylight saving
     # transition day. Converting first makes the delay real elapsed time.
     delay = (
-        min(candidates).astimezone(timezone.utc) - local.astimezone(timezone.utc)
+        slot.astimezone(timezone.utc) - now.astimezone(timezone.utc)
     ).total_seconds()
     return max(1.0, min(86_400.0, delay))
 
@@ -2876,69 +3074,210 @@ class MacroConditionsTask:
         return await self._run("manual")
 
 
+# The maintenance TaskSpec and the per-label retries share these values, so a
+# failing label backs off exactly like a failing task would.
+MAINTENANCE_INTERVAL_SECONDS = 21_600.0
+MAINTENANCE_FAILURE_BACKOFF_SECONDS = 300.0
+MAINTENANCE_MAX_BACKOFF_SECONDS = 3_600.0
+
+
+@dataclass
+class _BackupRetry:
+    failures: int
+    retry_at: datetime
+    error_code: str
+
+
 class MaintenanceTask:
+    """Back up every label once per cycle and retry only the labels that failed.
+
+    One failing database used to make every run degraded with a fixed 300 s
+    retry that copied all the healthy databases again, rotating their history
+    out within half an hour.
+    """
+
     def __init__(
         self,
         databases: dict[str, Path],
         *,
         destination: Path,
         keep: int,
+        files: Mapping[str, Path] | None = None,
+        interval_seconds: float = MAINTENANCE_INTERVAL_SECONDS,
+        failure_backoff_seconds: float = MAINTENANCE_FAILURE_BACKOFF_SECONDS,
+        max_backoff_seconds: float = MAINTENANCE_MAX_BACKOFF_SECONDS,
+        full_cycle_per_call: bool = False,
+        now: Callable[[], datetime] | None = None,
     ) -> None:
         self.databases = dict(databases)
+        self.files = dict(files or {})
+        # Retention backs up every label right before it prunes, whatever the
+        # schedule says; the scheduled task keeps the per-label cycle.
+        self.full_cycle_per_call = full_cycle_per_call
+        if set(self.databases) & set(self.files):
+            raise ValueError("backup labels must be unique across databases and files")
         self.destination = destination
         self.keep = keep
+        self.interval_seconds = float(interval_seconds)
+        self.failure_backoff_seconds = float(failure_backoff_seconds)
+        self.max_backoff_seconds = float(max_backoff_seconds)
+        self._now = now or (lambda: datetime.now(timezone.utc))
+        self._cycle_started_at: datetime | None = None
+        # Labels of the current cycle that have not been attempted yet. A run
+        # cancelled half way leaves them here for the next run.
+        self._unattempted: list[str] = []
+        self._retries: dict[str, _BackupRetry] = {}
+
+    def _labels(self) -> list[str]:
+        return [*self.databases, *self.files]
+
+    def _settle(self, label: str) -> None:
+        self._retries.pop(label, None)
+        if label in self._unattempted:
+            self._unattempted.remove(label)
+
+    def _recently_backed_up(self, label: str, since: datetime) -> bool:
+        from app.tools.sqlite_backup import (
+            DATABASE_SUFFIX,
+            file_backup_suffix,
+            latest_backup_at,
+        )
+
+        suffix = (
+            DATABASE_SUFFIX
+            if label in self.databases
+            else file_backup_suffix(self.files[label])
+        )
+        latest = latest_backup_at(self.destination, label, suffix=suffix)
+        return latest is not None and latest >= since
+
+    def _due_labels(self, observed: datetime) -> list[str]:
+        if (
+            self.full_cycle_per_call
+            or self._cycle_started_at is None
+            or observed
+            >= self._cycle_started_at + timedelta(seconds=self.interval_seconds)
+        ):
+            first_cycle = self._cycle_started_at is None
+            self._cycle_started_at = observed
+            labels = self._labels()
+            if first_cycle and not self.full_cycle_per_call:
+                # A restart while one label is retrying must not copy every
+                # healthy label again: a copy from within half an interval
+                # already covers this cycle.
+                since = observed - timedelta(seconds=self.interval_seconds / 2)
+                labels = [
+                    label
+                    for label in labels
+                    if not self._recently_backed_up(label, since)
+                ]
+            self._unattempted = labels
+            return list(labels)
+        return [
+            label
+            for label in self._labels()
+            if label in self._unattempted
+            or (label in self._retries and self._retries[label].retry_at <= observed)
+        ]
+
+    def _next_delay(self, observed: datetime) -> float:
+        cycle_start = self._cycle_started_at or observed
+        due = [cycle_start + timedelta(seconds=self.interval_seconds)]
+        due.extend(retry.retry_at for retry in self._retries.values())
+        if self._unattempted:
+            due.append(observed)
+        delay = (min(due) - observed).total_seconds()
+        return min(self.interval_seconds, max(1.0, delay))
 
     @bind_trusted_system_task
     async def __call__(self) -> TaskResult:
-        from app.tools.sqlite_backup import BackupError, backup_database
+        from app.tools.sqlite_backup import BackupError, backup_database, backup_file
 
         completed: list[str] = []
         skipped: list[str] = []
         failed: list[str] = []
-        for label, path in self.databases.items():
+        errors: dict[str, str] = {}
+        for label in self._due_labels(self._now()):
+            is_database = label in self.databases
+            path = self.databases[label] if is_database else self.files[label]
             if not path.is_file():
                 skipped.append(label)
+                self._settle(label)
                 continue
             try:
                 # _call_local, not a bare to_thread: after a task timeout the
-                # copy thread keeps running, and the retry 300 s later would
-                # start the next database's backup alongside it.
+                # copy thread keeps running, and the retry would start the
+                # next backup alongside it. A copy that still completes is
+                # verified and published, so it counts as done.
                 await _call_local(
-                    backup_database,
+                    backup_database if is_database else backup_file,
                     path,
                     self.destination,
                     label=label,
                     keep=self.keep,
+                    created_at=self._now(),
+                    on_late_result=lambda _result, done=label: self._settle(done),
                 )
             except (BackupError, OSError, sqlite3.Error) as exc:
-                # BackupError carries the cause (lock timeout, integrity check);
-                # the task status alone only says which database failed.
+                # BackupError carries the cause (lock timeout, integrity check,
+                # disk space); the task status alone only names the label.
                 _logger.warning(
                     "database backup failed label=%s error_type=%s error=%s",
                     label,
                     type(exc).__name__,
                     exc,
                 )
+                error_code = exc.code if isinstance(exc, BackupError) else "backup_failed"
+                previous = self._retries.get(label)
+                failures = (previous.failures if previous else 0) + 1
+                self._retries[label] = _BackupRetry(
+                    failures=failures,
+                    retry_at=self._now()
+                    + timedelta(
+                        seconds=_backoff_seconds(
+                            self.failure_backoff_seconds,
+                            self.max_backoff_seconds,
+                            failures,
+                        )
+                    ),
+                    error_code=error_code,
+                )
+                if label in self._unattempted:
+                    self._unattempted.remove(label)
                 failed.append(label)
+                errors[label] = error_code
             else:
+                self._settle(label)
                 completed.append(label)
-        details = {
+        details: dict[str, Any] = {
             "backed_up": completed,
             "skipped_missing": skipped,
             "failed": failed,
         }
-        if failed:
+        if errors:
+            details["errors"] = errors
+        if self._retries:
+            details["retrying"] = {
+                label: retry.error_code for label, retry in self._retries.items()
+            }
+        next_delay = self._next_delay(self._now())
+        if self._retries:
+            codes = {retry.error_code for retry in self._retries.values()}
             return TaskResult(
                 status="degraded",
-                error_code="backup_failed",
+                error_code=codes.pop() if len(codes) == 1 else "backup_failed",
                 details=details,
-                next_delay_seconds=300.0,
+                next_delay_seconds=next_delay,
             )
-        return TaskResult(status="idle", details=details)
+        return TaskResult(status="idle", details=details, next_delay_seconds=next_delay)
+
+
+# The local news retention default; scheduled AI history never goes below it.
+AI_HISTORY_MIN_RETAIN_DAYS = 30
 
 
 class RetentionTask:
-    """Back up personal databases before pruning bounded scan attachments."""
+    """Back up personal databases, then prune bounded scan data and old AI jobs."""
 
     def __init__(
         self,
@@ -2947,12 +3286,21 @@ class RetentionTask:
         *,
         settings_factory: Callable[[], Any] | None = None,
         repository_factory: Callable[[Path], Any] | None = None,
+        ai_repository_factory: Callable[[], Any] | None = None,
+        ai_history_retain_days: int = 30,
         now: Callable[[], datetime] | None = None,
     ) -> None:
         self.owner_id = f"{owner_id}:retention"
         self.backup = backup
         self._settings_factory = settings_factory
         self._repository_factory = repository_factory
+        self._ai_repository_factory = ai_repository_factory
+        # Local news revisions link to these jobs for the whole news window;
+        # pruning inside it would leave links pointing at deleted jobs.
+        self._ai_history_retain_days = max(
+            int(ai_history_retain_days),
+            AI_HISTORY_MIN_RETAIN_DAYS,
+        )
         self._now = now or (lambda: datetime.now(timezone.utc))
 
     @bind_trusted_system_task
@@ -2967,13 +3315,24 @@ class RetentionTask:
                 details={
                     "backup": dict(backup_result.details),
                     "retention": {"status": "skipped_backup_failed"},
-                    "completed_at": self._now()
-                    .astimezone(timezone.utc)
-                    .isoformat()
-                    .replace("+00:00", "Z"),
+                    "completed_at": _iso(self._now()),
                 },
             )
 
+        retention, error_code = await self._prune_breakouts()
+        details: dict[str, Any] = {
+            "backup": dict(backup_result.details),
+            "retention": retention,
+        }
+        if self._ai_repository_factory is not None:
+            details["ai_history"], ai_error = await self._prune_ai_history()
+            error_code = error_code or ai_error
+        details["completed_at"] = _iso(self._now())
+        if error_code:
+            return TaskResult(status="degraded", error_code=error_code, details=details)
+        return TaskResult(status="idle", details=details)
+
+    async def _prune_breakouts(self) -> tuple[dict[str, Any], str | None]:
         if self._settings_factory is None:
             from app.services.breakouts.config import get_breakout_settings
 
@@ -2983,15 +3342,7 @@ class RetentionTask:
         settings = await _call_local(settings_factory)
         database_path = Path(settings.db_path)
         if not database_path.is_file():
-            completed = self._now().astimezone(timezone.utc)
-            return TaskResult(
-                status="idle",
-                details={
-                    "backup": dict(backup_result.details),
-                    "retention": {"status": "skipped_missing_database"},
-                    "completed_at": completed.isoformat().replace("+00:00", "Z"),
-                },
-            )
+            return {"status": "skipped_missing_database"}, None
 
         if self._repository_factory is None:
             from app.services.breakouts.repository import BreakoutRepository
@@ -3016,15 +3367,7 @@ class RetentionTask:
             observed,
         )
         if lease_token is None:
-            return TaskResult(
-                status="degraded",
-                error_code="retention_locked",
-                details={
-                    "backup": dict(backup_result.details),
-                    "retention": {"status": "locked"},
-                    "completed_at": observed.isoformat().replace("+00:00", "Z"),
-                },
-            )
+            return {"status": "locked"}, "retention_locked"
         try:
             counts = await _call_local(
                 repository.prune_retention,
@@ -3043,18 +3386,34 @@ class RetentionTask:
                 int(lease_token),
                 self._now().astimezone(timezone.utc),
             )
-        completed = self._now().astimezone(timezone.utc)
-        return TaskResult(
-            status="idle",
-            details={
-                "backup": dict(backup_result.details),
-                "retention": {
-                    "status": "completed",
-                    **{str(key): int(value) for key, value in dict(counts).items()},
-                },
-                "completed_at": completed.isoformat().replace("+00:00", "Z"),
-            },
-        )
+        return {
+            "status": "completed",
+            **{str(key): int(value) for key, value in dict(counts).items()},
+        }, None
+
+    async def _prune_ai_history(self) -> tuple[dict[str, Any], str | None]:
+        # Scheduled news and focus jobs otherwise accumulate without bound, and
+        # every reconcile re-reads and re-validates all of them. Their window
+        # matches the news journal they analyse.
+        retain_days = self._ai_history_retain_days
+        try:
+            repository = await _call_local(self._ai_repository_factory)
+            deleted = await _call_local(
+                repository.prune_scheduled_history,
+                retain_days=retain_days,
+                now=self._now(),
+            )
+        except (RuntimeError, sqlite3.Error, OSError) as exc:
+            record_fallback_failure("ai_history_retention", exc)
+            return (
+                {"status": "failed", "retain_days": retain_days},
+                "ai_history_retention_failed",
+            )
+        return {
+            "status": "completed",
+            "retain_days": retain_days,
+            "deleted": int(deleted),
+        }, None
 
 
 class SectorIVTask:
@@ -3092,6 +3451,7 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
     )
     breakout = BreakoutTask(owner_id)
     manual_breakout = BreakoutTask(f"{owner_id}:manual")
+    data_paths = get_data_paths()
     maintenance = MaintenanceTask(
         {
             "optix": settings.breakout_db_path,
@@ -3099,16 +3459,36 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
             "ai-jobs": settings.openai_job_db_path,
             "optix-worker": settings.optix_worker_db_path,
             "macro-conditions": settings.macro_conditions_db_path,
+            # Customer accounts, per-principal watchlists and chart drawings:
+            # the one database here that cannot be rebuilt from a provider.
+            "accounts": data_paths.accounts_db,
         },
+        files={"runtime-settings": data_paths.runtime_settings},
         destination=settings.optix_backup_dir,
         keep=config.storage.backup_keep,
     )
     retention_backup = MaintenanceTask(
         dict(maintenance.databases),
+        files=dict(maintenance.files),
         destination=maintenance.destination,
         keep=maintenance.keep,
+        full_cycle_per_call=True,
     )
-    retention = RetentionTask(owner_id, retention_backup)
+
+    def ai_history_repository() -> Any:
+        from app.services.ai_jobs.repository import AIJobRepository
+
+        return AIJobRepository(settings.openai_job_db_path)
+
+    retention = RetentionTask(
+        owner_id,
+        retention_backup,
+        ai_repository_factory=ai_history_repository,
+        ai_history_retain_days=max(
+            int(config.catalyst.journal_retention_days),
+            AI_HISTORY_MIN_RETAIN_DAYS,
+        ),
+    )
     from app.public_stock_data import PublicStockDataRefresh
     from app.public_option_data import PublicOptionDataRefresh
 
@@ -3127,6 +3507,7 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         settings=settings,
         personal_config=config,
     )
+    strength_refresh_times_et = (_strength_refresh_slot_et(),)
     return (
         TaskSpec(
             "sector_iv_refresh",
@@ -3143,6 +3524,7 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
             enabled=config.features.breakout_enabled,
             timeout_seconds=BREAKOUT_TASK_TIMEOUT_SECONDS,
             may_block_event_loop=True,
+            close=breakout.aclose,
         ),
         TaskSpec(
             "catalyst_sync",
@@ -3172,10 +3554,10 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         TaskSpec(
             "maintenance",
             maintenance,
-            interval_seconds=21_600.0,
+            interval_seconds=MAINTENANCE_INTERVAL_SECONDS,
             timeout_seconds=1800.0,
-            failure_backoff_seconds=300.0,
-            max_backoff_seconds=3600.0,
+            failure_backoff_seconds=MAINTENANCE_FAILURE_BACKOFF_SECONDS,
+            max_backoff_seconds=MAINTENANCE_MAX_BACKOFF_SECONDS,
             # 重启不重跑：全量备份约 3GB 磁盘拷贝，跟着进程重启立即执行会
             # 与其余任务的启动风暴抢盘（2026-08-15 崩溃循环里每 5 分钟
             # 一轮从头备份）。沿用状态库里的 next_run_at。
@@ -3234,13 +3616,20 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         ),
         TaskSpec(
             "strength_refresh",
-            StrengthRefreshTask(),
-            # 默认快照每天刷新；参数化 API 动作不会重置默认快照的绝对截止时间。
+            StrengthRefreshTask(refresh_times_et=strength_refresh_times_et),
+            # 默认快照每天在收盘缓冲期结束的美东时刻刷新；参数化 API 动作不会
+            # 重置默认快照的绝对截止时间。
             interval_seconds=86_400.0,
             timeout_seconds=STRENGTH_REFRESH_TIMEOUT_SECONDS,
             # Let the local writer finish and report its real result on shutdown;
             # the task deadline still applies and the worker lease stays held.
             drain_on_shutdown=True,
+            # 重启不重跑：部署或崩溃后沿用状态库里的下一个美东时刻，而不是
+            # 按进程启动时间立即再跑一轮全市场作业。
+            honor_persisted_schedule=True,
+            next_calendar_run_at=lambda now: next_et_slot_at(
+                now, strength_refresh_times_et,
+            ),
         ),
         TaskSpec(
             "breakout_refresh",
@@ -3250,6 +3639,7 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
             timeout_seconds=BREAKOUT_TASK_TIMEOUT_SECONDS,
             may_block_event_loop=True,
             manual_only=True,
+            close=manual_breakout.aclose,
         ),
         TaskSpec(
             "retention",
@@ -3279,5 +3669,6 @@ __all__ = [
     "SectorIVTask",
     "StrengthRefreshTask",
     "build_default_tasks",
+    "next_et_slot_at",
     "seconds_until_next_et_slot",
 ]

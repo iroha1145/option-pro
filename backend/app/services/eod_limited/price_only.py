@@ -97,9 +97,9 @@ def apply_price_only_track(
             updated["score_gate_checks"] = {
                 "coverage_ratio": scored["coverage"],
                 "coverage_min": coverage_min,
-                "coverage_passed": scored["coverage"] + 1e-12 >= coverage_min,
+                "coverage_passed": bool(scored["coverage"] + 1e-12 >= coverage_min),
                 "score_floor": score_floor,
-                "score_floor_passed": scored["score"] >= score_floor if scored["score"] is not None else None,
+                "score_floor_passed": bool(scored["score"] >= score_floor) if scored["score"] is not None else None,
                 "required_factors_passed": all(
                     isinstance(updated["factors"].get(key), (int, float))
                     and not isinstance(updated["factors"].get(key), bool)

@@ -40,6 +40,7 @@ from app.services.breakouts.repository import (
 from app.services.strength.market_shape import MARKET_SHAPE_VERSION
 from app.services.strength.scoring import SCORE_VERSION as STRENGTH_SCORE_VERSION
 from app.public_stock_data import register_public_stock_demand
+from app.services.numeric import finite_number as _finite
 from app.services.runtime_settings import get_effective_runtime_settings
 from app.services.view_preferences import (
     ViewPreferenceStorageError,
@@ -277,12 +278,19 @@ def _versions(settings: BreakoutSettings, stored: Any = None) -> dict[str, str]:
     return versions
 
 
-def _finite(value: Any) -> Optional[float]:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    return number if number == number and abs(number) != float("inf") else None
+def _finite_float_map(mapping: Any) -> dict[str, float]:
+    """Drop non-finite values while coercing the rest to ``float`` keyed by ``str``.
+
+    The same cleanup was written out four times in ``_public_event`` for
+    ``configured_weights``, ``effective_weights``, ``contribution_breakdown``
+    and ``penalties``.
+    """
+
+    return {
+        str(key): float(value)
+        for key, value in dict(mapping or {}).items()
+        if _finite(value) is not None
+    }
 
 
 def _event_time(value: Any) -> datetime:
@@ -500,26 +508,10 @@ def _public_event(
         range_persistence_interaction=dict(
             features.get("range_persistence_interaction") or {}
         ),
-        configured_weights={
-            str(key): float(value)
-            for key, value in dict(priority.get("configured_weights") or {}).items()
-            if _finite(value) is not None
-        },
-        effective_weights={
-            str(key): float(value)
-            for key, value in dict(priority.get("effective_weights") or {}).items()
-            if _finite(value) is not None
-        },
-        contribution_breakdown={
-            str(key): float(value)
-            for key, value in dict(priority.get("contribution_breakdown") or {}).items()
-            if _finite(value) is not None
-        },
-        penalties={
-            str(key): float(value)
-            for key, value in dict(priority.get("penalties") or {}).items()
-            if _finite(value) is not None
-        },
+        configured_weights=_finite_float_map(priority.get("configured_weights")),
+        effective_weights=_finite_float_map(priority.get("effective_weights")),
+        contribution_breakdown=_finite_float_map(priority.get("contribution_breakdown")),
+        penalties=_finite_float_map(priority.get("penalties")),
         missing_components=[
             str(item) for item in list(priority.get("missing_components") or [])
         ],
@@ -563,6 +555,43 @@ def _public_event(
             else None
         ),
     )
+
+
+def _public_events(
+    settings: BreakoutSettings,
+    items: list[Any],
+    *,
+    default_session: Optional[str] = None,
+    observed_at: Optional[datetime] = None,
+    macro: Any = None,
+) -> list[BreakoutEventResponse]:
+    """Build a page of public events, isolating each row's failure (M-11).
+
+    A bare list comprehension over ``_public_event`` let one malformed row
+    (for example a stored timestamp with no timezone) take the whole page down
+    with it. Skip that one row instead, and record why.
+    """
+
+    built: list[BreakoutEventResponse] = []
+    for item in items:
+        stored = dict(item)
+        try:
+            built.append(
+                _public_event(
+                    settings,
+                    stored,
+                    default_session=default_session,
+                    observed_at=observed_at,
+                    macro=macro,
+                )
+            )
+        except Exception as exc:
+            record_fallback_failure(
+                "breakouts_public_event",
+                exc,
+                symbol=str(stored.get("ticker") or ""),
+            )
+    return built
 
 
 def _repository(settings: BreakoutSettings) -> BreakoutRepository:
@@ -703,16 +732,13 @@ def _root_from_scan(
             "runtime_reason": read_state.reason if read_state is not None else "fresh",
             "freshness": dict(read_state.details) if read_state is not None else {},
         },
-        events=[
-            _public_event(
-                settings,
-                dict(item),
-                default_session=scan_session,
-                observed_at=requested_at,
-                macro=macro,
-            )
-            for item in list(scan.get("events") or [])
-        ],
+        events=_public_events(
+            settings,
+            list(scan.get("events") or []),
+            default_session=scan_session,
+            observed_at=requested_at,
+            macro=macro,
+        ),
         scan_run_id=str(scan.get("scan_run_id") or "") or None,
         runtime_status=read_state.status if read_state is not None else "active",
         runtime_reason=read_state.reason if read_state is not None else "fresh",
@@ -899,10 +925,12 @@ def events(
             "runtime_reason": read_state.reason,
             "freshness": dict(read_state.details),
         },
-        events=[
-            _public_event(settings, dict(item), default_session=session, macro=macro)
-            for item in list(page.get("events") or [])
-        ],
+        events=_public_events(
+            settings,
+            list(page.get("events") or []),
+            default_session=session,
+            macro=macro,
+        ),
         scan_run_id=page.get("scan_run_id"),
         next_cursor=page.get("next_cursor"),
         cursor_stale=bool(page.get("cursor_stale")),
@@ -1005,7 +1033,7 @@ def ticker_events(ticker: str) -> BreakoutTickerResponse:
         status="active" if items else "empty",
         versions=_versions(settings),
         ticker=symbol,
-        events=[_public_event(settings, dict(item), macro=macro) for item in items],
+        events=_public_events(settings, items, macro=macro),
         current_state=str(items[0].get("lifecycle_state")) if items else None,
     )
 

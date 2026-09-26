@@ -203,9 +203,7 @@ def _target(
 def transition_state(
     current_state: BreakoutLifecycleState | str,
     observation: Mapping[str, Any],
-    settings: Any = None,
 ) -> TransitionResult:
-    del settings
     current = (
         current_state
         if isinstance(current_state, BreakoutLifecycleState)

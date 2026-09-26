@@ -128,6 +128,124 @@ def _title_signature(value: Any) -> str:
     return re.sub(r"[\W_]+", "", public.casefold(), flags=re.UNICODE)
 
 
+# ── AI-28b：标题相似度门槛 ────────────────────────────────────
+#
+# _candidate_score used to let a numeric coincidence (forecast+previous both
+# matching) qualify a candidate on its own, with an exact _title_signature
+# match only adding bonus points. Two distinct indicators released at the
+# same instant in the same currency can share forecast/previous by pure
+# chance, and an exact signature match is rare across providers on purpose:
+# an event's title has already been through local_intelligence's
+# _public_calendar_title once (see its own calendar serialization), and that
+# function deliberately keeps the upstream English original in a trailing
+# "（...）" whenever it recognized a qualifier (core / m-m / y-y / a digit),
+# precisely so it never conflates e.g. core and headline CPI. That means the
+# English words identifying the specific release are still present in the
+# event's now-mostly-Chinese title, and a candidate's own English title/
+# indicator carries the same words spelled its own way (an acronym vs. the
+# spelled-out name, "m/m" vs. "MoM"). We compare only those words: a shared
+# qualifier must match exactly (a different cadence or core-vs-headline is a
+# different number and must not borrow another release's actual value), and
+# the remaining core words must overlap substantially. This is deliberately a
+# small, curated list rather than a general synonym dictionary — a release
+# outside it is compared on its own words only, never guessed at.
+_TITLE_RELEASE_PHRASES: tuple[tuple[re.Pattern[str], str], ...] = tuple(
+    (re.compile(pattern), canonical)
+    for pattern, canonical in (
+        (r"\b(?:cpi|consumer price index)\b", "cpi"),
+        (r"\b(?:ppi|producer price index)\b", "ppi"),
+        (r"\bpce price index\b|\bpce\b|\bpersonal consumption expenditures?\b", "pce"),
+        (r"\bgdp\b|\bgross domestic product\b", "gdp"),
+        (r"\bnfp\b|\bnon-?farm payrolls?\b", "nfp"),
+        (r"\bpmi\b|\bpurchasing managers.? index\b", "pmi"),
+        (r"\bunemployment rate\b", "unemploymentrate"),
+        (r"\bunemployment claims\b|\binitial jobless claims\b", "initialjoblessclaims"),
+        (r"\bcontinuing jobless claims\b", "continuingjoblessclaims"),
+        (r"\bretail sales\b", "retailsales"),
+        (r"\bindustrial production\b", "industrialproduction"),
+        (r"\bconsumer confidence\b", "consumerconfidence"),
+        (r"\bexisting home sales\b", "existinghomesales"),
+        (r"\bnew home sales\b", "newhomesales"),
+        (r"\bhousing starts\b", "housingstarts"),
+        (r"\bbuilding permits?\b", "buildingpermits"),
+        (r"\bdurable goods orders?\b", "durablegoodsorders"),
+        (r"\btrade balance\b", "tradebalance"),
+        (r"\bjob openings\b", "jobopenings"),
+        (r"\binterest rate decision\b|\brate decision\b", "ratedecision"),
+    )
+)
+
+_TITLE_FREQUENCY_PHRASES: tuple[tuple[re.Pattern[str], str], ...] = tuple(
+    (re.compile(pattern), canonical)
+    for pattern, canonical in (
+        (r"\b(?:m/m|mom|month[- ]on[- ]month)\b", "mom"),
+        (r"\b(?:y/y|yoy|year[- ]on[- ]year)\b", "yoy"),
+        (r"\b(?:q/q|qoq|quarter[- ]on[- ]quarter)\b", "qoq"),
+        (r"\b(?:w/w|wow|week[- ]on[- ]week)\b", "wow"),
+    )
+)
+
+# Qualifiers that change what number a release actually reports. These must
+# match exactly between the two titles; they are never "overlap enough".
+_TITLE_QUALIFIER_TOKENS = frozenset(
+    {
+        "mom", "yoy", "qoq", "wow",
+        "core", "final", "preliminary", "flash", "advance", "revised", "headline",
+    }
+)
+
+_TITLE_STOPWORDS = frozenset(
+    {"the", "a", "an", "of", "and", "for", "in", "index", "report", "data", "level", "total", "net", "change"}
+)
+
+_TITLE_RELATED_MIN_OVERLAP = 0.6
+
+
+def _title_tokens(value: Any) -> frozenset[str]:
+    """English tokens used only by the fuzzy relatedness check below.
+
+    Deliberately does not call _public_calendar_title: it works directly off
+    whatever text is given (a raw upstream title, or an event title that has
+    already been translated but still carries its English original in a
+    "（...）" suffix — see the module note above), so it never depends on
+    running that translation a second time.
+    """
+
+    folded = re.sub(r"\s+", " ", str(value or "").casefold()).strip()
+    for pattern, canonical in _TITLE_RELEASE_PHRASES:
+        folded = pattern.sub(canonical, folded)
+    for pattern, canonical in _TITLE_FREQUENCY_PHRASES:
+        folded = pattern.sub(canonical, folded)
+    words = re.findall(r"[a-z0-9]+", folded)
+    return frozenset(word for word in words if len(word) > 1 and word not in _TITLE_STOPWORDS)
+
+
+def _titles_are_related(event_title: Any, candidate_title: Any) -> bool:
+    """Looser than an exact _title_signature match, but still release-specific.
+
+    Requires: (1) both sides yield at least one recognizable English token;
+    (2) any qualifier tokens present (core/mom/yoy/...) match exactly, so a
+    different cadence or core-vs-headline release is never treated as
+    related; (3) the remaining core words overlap at least
+    _TITLE_RELATED_MIN_OVERLAP of the shorter side's word count.
+    """
+
+    event_tokens = _title_tokens(event_title)
+    candidate_tokens = _title_tokens(candidate_title)
+    if not event_tokens or not candidate_tokens:
+        return False
+    if (event_tokens & _TITLE_QUALIFIER_TOKENS) != (candidate_tokens & _TITLE_QUALIFIER_TOKENS):
+        return False
+    event_core = event_tokens - _TITLE_QUALIFIER_TOKENS
+    candidate_core = candidate_tokens - _TITLE_QUALIFIER_TOKENS
+    if not event_core or not candidate_core:
+        return False
+    shared = event_core & candidate_core
+    if not shared:
+        return False
+    return len(shared) / min(len(event_core), len(candidate_core)) >= _TITLE_RELATED_MIN_OVERLAP
+
+
 def _candidate_score(
     event: Mapping[str, Any],
     candidate: Mapping[str, Any],
@@ -148,14 +266,26 @@ def _candidate_score(
         return None
 
     score = 0
-    event_title = _title_signature(event.get("title"))
+    event_title_raw = event.get("title")
+    candidate_title_raw = candidate.get("title")
+    candidate_indicator_raw = candidate.get("indicator")
+    event_title = _title_signature(event_title_raw)
     source_titles = {
-        _title_signature(candidate.get("title")),
-        _title_signature(candidate.get("indicator")),
+        _title_signature(candidate_title_raw),
+        _title_signature(candidate_indicator_raw),
     }
     source_titles.discard("")
-    if event_title and event_title in source_titles:
+    exact_title_match = bool(event_title) and event_title in source_titles
+    if exact_title_match:
         score += 8
+    elif not (
+        _titles_are_related(event_title_raw, candidate_title_raw)
+        or _titles_are_related(event_title_raw, candidate_indicator_raw)
+    ):
+        # AI-28b: same instant + same currency + coincidentally matching
+        # forecast/previous is not enough — the candidate must also name a
+        # related release, or it must not be used to fill in an actual.
+        return None
 
     for field, weight in (("forecast", 4), ("previous", 2)):
         expected = _value_signature(event.get(field))

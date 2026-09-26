@@ -38,7 +38,6 @@ function apiFor(payload) {
   });
   const { strengthScanPath } = load('lib/screenerScanFlow.ts', {
     '../api/client.ts': client,
-    './liveQuotes.ts': { fallbackQuoteLabel: value => value },
   });
   return { strengthApi, strengthScanPath, calls };
 }

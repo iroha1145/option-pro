@@ -20,6 +20,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 from app.services.breakouts.asset_policy import is_leveraged_etf
 
@@ -114,6 +115,15 @@ def _aware_utc(value: datetime | str, *, field: str = "datetime") -> datetime:
 
 def _timestamp(value: datetime | str) -> str:
     return _aware_utc(value).isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
+_MARKET_TIMEZONE = ZoneInfo("America/New_York")
+
+
+def _market_date(value: datetime | str) -> str:
+    """Trading dates follow the New York session, not the UTC calendar day."""
+
+    return _aware_utc(value).astimezone(_MARKET_TIMEZONE).date().isoformat()
 
 
 def _enum_value(value: Any) -> Any:
@@ -879,14 +889,16 @@ class BreakoutRepository:
         known_at = payload.get("known_at")
         first_known = payload.get("first_known_at") or known_at
         complete = t1_identity_complete(payload) and status in T1_SETTLED_STATUSES
+        if not identity:
+            identity = hashlib.sha256(
+                _json_dumps({"event_id": event_id, "kind": "incomplete_attempt"}).encode("utf-8")
+            ).hexdigest()
         current = connection.execute(
             "SELECT eval_version, identity_hash, status, first_known_at, published_at FROM breakout_t1_current WHERE event_id=?",
             (event_id,),
         ).fetchone()
-        current_settled = (
-            current is not None and str(current["status"] or "") in T1_SETTLED_STATUSES
-        )
-        if current_settled and not complete:
+        stored: dict[str, Any] | None = None
+        if current is not None:
             stored_row = connection.execute(
                 """
                 SELECT payload_json FROM breakout_t1_evaluations
@@ -894,9 +906,23 @@ class BreakoutRepository:
                 """,
                 (event_id, int(current["eval_version"])),
             ).fetchone()
-            stored = _json_loads(stored_row["payload_json"], {}) if stored_row is not None else {}
-            if isinstance(stored, dict):
-                stored = dict(stored)
+            loaded = _json_loads(stored_row["payload_json"], {}) if stored_row is not None else None
+            stored = dict(loaded) if isinstance(loaded, dict) else None
+        current_settled = (
+            current is not None and str(current["status"] or "") in T1_SETTLED_STATUSES
+        )
+        # Every scan re-persists the same pending attempt, so an unchanged
+        # incomplete attempt must not become a new version. The reason is part
+        # of the match because it decides close-time retry eligibility.
+        repeated_attempt = (
+            current is not None
+            and stored is not None
+            and str(current["identity_hash"] or "") == identity
+            and str(current["status"] or "") == status
+            and stored.get("reason") == payload.get("reason")
+        )
+        if not complete and (current_settled or repeated_attempt):
+            if stored is not None:
                 stored["latest_attempt"] = {
                     "status": status,
                     "reason": payload.get("reason"),
@@ -912,19 +938,8 @@ class BreakoutRepository:
                     (_json_dumps(stored), event_id, int(current["eval_version"])),
                 )
             return
-        if current is not None and complete and identity and current["identity_hash"] == identity:
-            stored = _json_loads(
-                connection.execute(
-                    """
-                    SELECT payload_json FROM breakout_t1_evaluations
-                    WHERE event_id=? AND eval_version=?
-                    """,
-                    (event_id, int(current["eval_version"])),
-                ).fetchone()["payload_json"],
-                {},
-            )
-            if isinstance(stored, dict):
-                stored = dict(stored)
+        if current is not None and complete and current["identity_hash"] == identity:
+            if stored is not None:
                 stored["computed_at"] = computed_at
                 stored.pop("latest_attempt", None)
                 connection.execute(
@@ -937,10 +952,6 @@ class BreakoutRepository:
                 )
             return
         version = int(current["eval_version"]) + 1 if current is not None else 1
-        if not identity:
-            identity = hashlib.sha256(
-                _json_dumps({"event_id": event_id, "kind": "incomplete_attempt"}).encode("utf-8")
-            ).hexdigest()
         body = dict(payload)
         body["eval_version"] = version
         body["identity_hash"] = identity
@@ -989,10 +1000,11 @@ class BreakoutRepository:
             ),
         )
 
-    def persist_t1_evaluations(self, events: Sequence[Mapping[str, Any]]) -> int:
+    def persist_t1_evaluations(self, events: Sequence[Any]) -> int:
         """Write versioned T1 evaluations without mutating scan snapshots."""
 
-        items = [dict(event) for event in events if isinstance(event, Mapping)]
+        # Published scan events are BreakoutEvent models, not plain mappings.
+        items = [_mapping(event) for event in events]
         if not items:
             return 0
         now = self._now()
@@ -1031,14 +1043,18 @@ class BreakoutRepository:
         if not result:
             return result
         event_ids = [str(item.get("event_id") or "") for item in result]
-        connection = self._read_connection()
+        connection: sqlite3.Connection | None = None
         try:
+            connection = self._read_connection()
             self._require_schema(connection)
             payloads = self._t1_payloads_locked(connection, event_ids)
-        except (FileNotFoundError, sqlite3.Error, SchemaVersionError):
+        except FileNotFoundError:
+            # No database yet means nothing to overlay. Database errors reach
+            # the caller, which reports them instead of serving stale T1.
             return result
         finally:
-            connection.close()
+            if connection is not None:
+                connection.close()
         if not payloads:
             return result
         overlaid: list[dict[str, Any]] = []
@@ -1069,8 +1085,9 @@ class BreakoutRepository:
         unique = [str(item) for item in dict.fromkeys(keys) if item]
         if not unique:
             return {}
-        connection = self._read_connection()
+        connection: sqlite3.Connection | None = None
         try:
+            connection = self._read_connection()
             self._require_schema(connection)
             if not self._has_t1_eval_schema(connection) or not self._has_t1_retry_table(connection):
                 return {}
@@ -1084,10 +1101,13 @@ class BreakoutRepository:
                 """,
                 unique,
             ).fetchall()
-        except (FileNotFoundError, sqlite3.Error, SchemaVersionError):
+        except FileNotFoundError:
+            # A read failure must not look like "no attempts yet": that would
+            # restart the retry budget, so database errors propagate.
             return {}
         finally:
-            connection.close()
+            if connection is not None:
+                connection.close()
         result: dict[str, dict[str, Any]] = {}
         for row in rows:
             result[str(row["retry_key"])] = {
@@ -1115,6 +1135,8 @@ class BreakoutRepository:
             self._require_schema(connection)
             self._initialize_t1_eval_schema(connection)
             written = 0
+            # A writer that could not read the stored state counts from zero;
+            # MAX keeps the attempt budget and exhaustion monotonic per key.
             for item in items:
                 connection.execute(
                     """
@@ -1126,10 +1148,10 @@ class BreakoutRepository:
                         event_id=excluded.event_id,
                         session_date=excluded.session_date,
                         algorithm=excluded.algorithm,
-                        attempt=excluded.attempt,
+                        attempt=MAX(breakout_t1_retry.attempt,excluded.attempt),
                         max_attempts=excluded.max_attempts,
                         next_eligible_at=excluded.next_eligible_at,
-                        exhausted=excluded.exhausted,
+                        exhausted=MAX(breakout_t1_retry.exhausted,excluded.exhausted),
                         last_reason=excluded.last_reason,
                         updated_at=excluded.updated_at
                     """,
@@ -1929,7 +1951,7 @@ class BreakoutRepository:
             enrichment = {
                 "event_id": event_id,
                 "trading_date": str(
-                    current_event.get("trading_date") or event_at[:10]
+                    current_event.get("trading_date") or _market_date(event_at)
                 ),
                 "ticker": str(row["ticker"]),
                 "session": str(row["session"]),
@@ -2783,7 +2805,9 @@ class BreakoutRepository:
             pivot_id = str(event.get("pivot_id") or "")
             if not ticker or not setup or not pivot_id:
                 raise ValueError("event ticker, setup_type and pivot_id are required")
-            trading_date = str(event.get("trading_date") or incoming_event_at[:10])
+            trading_date = str(
+                event.get("trading_date") or _market_date(incoming_event_at)
+            )
             incoming_id = str(
                 event.get("event_id")
                 or "event_"
@@ -2872,14 +2896,21 @@ class BreakoutRepository:
                 )
             else:
                 first_seen_at = str(existing["first_seen_at"])
-                stored_trigger = connection.execute(
-                    """
-                    SELECT evidence_at FROM breakout_transitions
-                    WHERE event_id=? AND to_state='TRIGGERED'
-                    ORDER BY evidence_at,transition_id LIMIT 1
-                    """,
-                    (event_id,),
-                ).fetchone()
+                # A stored TRIGGERED transition is evidence only for a row that
+                # reached a triggered state. A stray one must not stamp a
+                # WATCHING event's triggered_at or move its event_at.
+                stored_trigger = (
+                    connection.execute(
+                        """
+                        SELECT evidence_at FROM breakout_transitions
+                        WHERE event_id=? AND to_state='TRIGGERED'
+                        ORDER BY evidence_at,transition_id LIMIT 1
+                        """,
+                        (event_id,),
+                    ).fetchone()
+                    if str(existing["lifecycle_state"]) in _TRIGGERED_LIFECYCLE_STATES
+                    else None
+                )
                 existing_body = _json_loads(existing["event_json"], {})
                 existing_body_triggered = existing_body.get("triggered_at")
                 triggered_at = (
@@ -4054,7 +4085,9 @@ class BreakoutRepository:
 
         Event rows, transitions and shadow research records are retained. Old
         scan attachments are removed only when a newer completed scan still
-        references the same event.
+        references the same event. For T1, only superseded evaluation versions
+        and retry rows older than the scan window are removed; the current
+        evaluation of every event stays readable.
         """
         if raw_payload_hours < 1 or scan_days < 1:
             raise ValueError("retention windows must be positive")
@@ -4202,6 +4235,38 @@ class BreakoutRepository:
                     f"DELETE FROM breakout_provider_snapshots WHERE scan_run_id IN ({placeholders})",
                     old_ids,
                 ).rowcount
+            counts["t1_evaluations"] = 0
+            counts["t1_retry"] = 0
+            if self._has_t1_eval_schema(connection):
+                counts["t1_evaluations"] = connection.execute(
+                    """
+                    DELETE FROM breakout_t1_evaluations
+                    WHERE rowid IN (
+                        SELECT evaluation.rowid
+                        FROM breakout_t1_evaluations AS evaluation
+                        JOIN breakout_t1_current AS current
+                          ON current.event_id=evaluation.event_id
+                        WHERE evaluation.eval_version<current.eval_version
+                          AND evaluation.published_at<?
+                        ORDER BY evaluation.published_at,evaluation.event_id,
+                                 evaluation.eval_version
+                        LIMIT ?
+                    )
+                    """,
+                    (scan_cutoff, batch_size),
+                ).rowcount
+                if self._has_t1_retry_table(connection):
+                    counts["t1_retry"] = connection.execute(
+                        """
+                        DELETE FROM breakout_t1_retry
+                        WHERE retry_key IN (
+                            SELECT retry_key FROM breakout_t1_retry
+                            WHERE updated_at<?
+                            ORDER BY updated_at,retry_key LIMIT ?
+                        )
+                        """,
+                        (scan_cutoff, batch_size),
+                    ).rowcount
             connection.commit()
             return counts
         except Exception:

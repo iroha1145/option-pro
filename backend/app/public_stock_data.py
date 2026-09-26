@@ -11,6 +11,7 @@ import asyncio
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import fcntl
+from functools import partial
 import json
 import logging
 import math
@@ -24,7 +25,7 @@ from typing import Any, Callable, Iterable, Mapping
 from zoneinfo import ZoneInfo
 
 from app.data_paths import get_data_paths
-from app.stock_pull_snapshot import read_stock_pull_resource
+from app.stock_pull_snapshot import read_stock_pull_resource, read_stock_pull_summary
 
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,33 @@ def public_stock_snapshot_path(ticker: str, *, root: Path | None = None) -> Path
     return _base(root) / f"{symbol}.json"
 
 
+def _with_public_freshness(
+    items: Mapping[str, Mapping[str, Any]],
+    metadata: Mapping[str, Any],
+    observed: float,
+) -> dict[str, dict[str, Any]]:
+    """Worker bundles follow the refresh cadence, not the manual-pull window."""
+
+    if not items:
+        return {}
+    priority = metadata.get("priority")
+    interval = 5 * 60 if priority in (0, 1) else 30 * 60
+    if _market_phase(observed) == "closed":
+        interval = max(interval, 6 * 60 * 60)
+    return {
+        name: {
+            **item,
+            "fresh_seconds": interval,
+            "fresh": float(item["saved_at"]) + interval > observed,
+        }
+        for name, item in items.items()
+    }
+
+
+def _status_metadata(symbol: str, root: Path | None) -> dict[str, Any]:
+    return _read_metadata(_base(root) / "status" / f"{symbol}.json") or {}
+
+
 def read_public_stock_resource(
     ticker: str,
     resource: str,
@@ -75,15 +103,31 @@ def read_public_stock_resource(
     entry = read_stock_pull_resource(
         symbol, resource, path=public_stock_snapshot_path(symbol, root=root), now=now,
     )
-    if entry is not None:
-        metadata = _read_metadata(_base(root) / "status" / f"{symbol}.json") or {}
-        priority = metadata.get("priority")
-        interval = 5 * 60 if priority in (0, 1) else 30 * 60
-        if _market_phase(observed) == "closed":
-            interval = max(interval, 6 * 60 * 60)
-        entry["fresh_seconds"] = interval
-        entry["fresh"] = float(entry["saved_at"]) + interval > observed
-    return entry
+    if entry is None:
+        return None
+    return _with_public_freshness(
+        {resource: entry}, _status_metadata(symbol, root), observed,
+    )[resource]
+
+
+def read_public_stock_summary(
+    ticker: str,
+    *,
+    root: Path | None = None,
+    now: float | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Timestamps and freshness per resource without reading any payload."""
+
+    symbol = _symbol(ticker)
+    if symbol is None:
+        return {}
+    observed = time.time() if now is None else float(now)
+    summary = read_stock_pull_summary(
+        symbol, path=public_stock_snapshot_path(symbol, root=root), now=observed,
+    )
+    if not summary:
+        return {}
+    return _with_public_freshness(summary, _status_metadata(symbol, root), observed)
 
 
 def _directory(path: Path) -> None:
@@ -225,12 +269,16 @@ def read_public_stock_status(
     if symbol is None:
         raise ValueError("invalid public stock ticker")
     observed = time.time() if now is None else float(now)
-    entries = {
-        name: read_public_stock_resource(symbol, name, root=root, now=observed)
-        for name in _RESOURCES
-    }
+    metadata = _status_metadata(symbol, root)
+    summary = _with_public_freshness(
+        read_stock_pull_summary(
+            symbol, path=public_stock_snapshot_path(symbol, root=root), now=observed,
+        ),
+        metadata,
+        observed,
+    )
+    entries = {name: summary.get(name) for name in _RESOURCES}
     available = sum(entry is not None for entry in entries.values())
-    metadata = _read_metadata(_base(root) / "status" / f"{symbol}.json") or {}
     stamp = _finite_time(metadata.get("as_of"))
     retry = _finite_time(metadata.get("retry_after"))
     if retry is not None and retry > observed + 24 * 60 * 60:
@@ -506,7 +554,8 @@ class PublicStockDataRefresh:
                 if puller is None:
                     from app.api.stocks import _pull_stock_data_once
 
-                    puller = _pull_stock_data_once
+                    # The worker has no HTTP readers for the API process cache.
+                    puller = partial(_pull_stock_data_once, publish_to_cache=False)
                 async with self._start_lock:
                     loop = asyncio.get_running_loop()
                     delay = max(0.0, self._next_start - loop.time())

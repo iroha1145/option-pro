@@ -220,7 +220,7 @@ def test_failed_day_is_resumable_without_refetching_completed_days(
     assert set(panel) == {"AAAA"}
     assert calls["2026-09-14"] == 1
     assert calls["2026-09-16"] == 2
-    assert calls["2026-09-15"] == 3  # two bounded attempts, then one resumed request
+    assert calls["2026-09-15"] == market_data.PROVIDER_ATTEMPTS + 1  # bounded attempts, then one resumed request
 
 
 def test_failed_split_fetch_keeps_completed_day_cache(
@@ -264,7 +264,7 @@ def test_failed_split_fetch_keeps_completed_day_cache(
     assert grouped_calls == Counter(
         {"2026-09-14": 1, "2026-09-15": 2, "2026-09-16": 2}
     )
-    assert split_calls == 3
+    assert split_calls == market_data.PROVIDER_ATTEMPTS + 1
 
 
 def test_coverage_classifies_missing_history_session_invalid_and_excluded(
@@ -300,10 +300,16 @@ def test_coverage_classifies_missing_history_session_invalid_and_excluded(
     assert manifest["eligible_count"] == 4
     assert manifest["excluded_count"] == 1
     assert manifest["complete_bar_count"] == 1
-    assert manifest["missing_session_count"] == 3
+    # Only MISS lacks the target-session bar; NONE and BAD are counted apart.
+    assert manifest["missing_session_count"] == 1
     assert manifest["no_history_count"] == 1
     assert manifest["invalid_count"] == 1
-    assert manifest["complete_bar_count"] + manifest["missing_session_count"] == manifest["eligible_count"]
+    assert (
+        manifest["complete_bar_count"]
+        + manifest["missing_session_count"]
+        + manifest["no_history_count"]
+        + manifest["invalid_count"]
+    ) == manifest["eligible_count"]
 
 
 def test_panel_reads_each_exact_member_with_no_global_temp_sort(

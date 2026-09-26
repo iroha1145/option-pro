@@ -9,11 +9,11 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import random
 import re
 import sqlite3
 import time
 from typing import Any, Iterable, Mapping, Sequence
-from urllib.parse import parse_qs, urlsplit
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -23,29 +23,53 @@ from app.services import massive
 from app.services.market_calendar import is_trading_day, prior_trading_sessions
 from app.services.research_eod_v1.series import SecuritySeries
 
+from . import VOLUME_SCOPE
 from .universe import UniverseMember, select_all_market_universe
 
 
 HISTORY_SESSIONS = 370
 SHORT_HISTORY_SESSIONS = 252
 RESIDUAL_HISTORY_SESSIONS = 330
-MAX_PROVIDER_CONCURRENCY = 4
-PROVIDER_ATTEMPTS = 2
-RETRY_DELAY_SECONDS = 0.1
+# Leave one of the client's process-wide request slots to the other tasks;
+# taking every slot turns their requests and our retries into provider_busy.
+MAX_PROVIDER_CONCURRENCY = max(1, massive.MAX_CONCURRENT_REQUESTS - 1)
+PROVIDER_ATTEMPTS = 3
+RETRY_DELAY_SECONDS = 0.5
+RETRY_DELAY_CAP_SECONDS = 30.0
 RECENT_REFRESH_SESSIONS = 2
 SPLIT_CAPTURE_TTL_SECONDS = 15 * 60
 DB_NAME = "all-market-bars-v2.sqlite"
-VOLUME_SCOPE = "MASSIVE_GROUPED_DAILY_SESSION_UNVERIFIED"
 _TICKER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,31}$")
+_REFERENCE_PATH = "/v3/reference/tickers"
 _SPLIT_PATH = "/stocks/v1/splits"
 _MAX_SPLIT_PAGES = 50
 _MAX_DIRECTORY_PAGES = 50
-_MAX_NEXT_URL = 4096
 _NEW_YORK = ZoneInfo("America/New_York")
+_RETRYABLE_CODES = frozenset({"rate_limited", "provider_busy", "transport"})
+# Failures confined to one day's content. Anything else (key, plan, rate
+# limit, network, redirect, a missing endpoint) would repeat for every day.
+_DAY_SCOPED_CODES = frozenset({"empty_session", "protocol"})
+_REASON_BY_CODE = {"empty_session": "EMPTY_TRADING_SESSION"}
+_retry_jitter = random.Random()
 
 
 class AllMarketDataError(RuntimeError):
-    """A complete all-market input could not be assembled."""
+    """A complete all-market input could not be assembled.
+
+    ``reason_code`` names the earliest failure; ``failed_sessions`` holds every
+    ``(session, reason_code)`` pair of a daily fetch, oldest first.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason_code: str | None = None,
+        failed_sessions: Sequence[tuple[str, str]] = (),
+    ) -> None:
+        super().__init__(message)
+        self.reason_code = reason_code
+        self.failed_sessions = tuple(failed_sessions)
 
 
 def _data_root(root: Path | str | None) -> Path:
@@ -145,21 +169,30 @@ def _hash_json(value: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _retry_delay(attempt: int, error: massive.MassiveError) -> float:
+    """Exponential backoff with jitter; a Retry-After hint wins, up to the cap."""
+
+    delay = RETRY_DELAY_SECONDS * (2 ** attempt)
+    if error.retry_after is not None:
+        delay = max(delay, error.retry_after)
+    # Jitter keeps the fetch threads from retrying in lockstep.
+    return min(RETRY_DELAY_CAP_SECONDS, delay * _retry_jitter.uniform(1.0, 1.5))
+
+
 def _provider_get(path: str, params: dict[str, Any]) -> dict[str, Any]:
-    last: Exception | None = None
+    if PROVIDER_ATTEMPTS < 1:
+        raise ValueError("PROVIDER_ATTEMPTS must be positive")
     for attempt in range(PROVIDER_ATTEMPTS):
         try:
             return massive._get(path, params)  # noqa: SLF001 - one authenticated transport boundary
         except massive.MassiveError as exc:
-            last = exc
-            retryable = exc.code in {"rate_limited", "provider_busy", "transport"} or (
+            retryable = exc.code in _RETRYABLE_CODES or (
                 exc.code == "http" and isinstance(exc.status, int) and exc.status >= 500
             )
             if not retryable or attempt + 1 >= PROVIDER_ATTEMPTS:
                 raise
-            time.sleep(RETRY_DELAY_SECONDS * (attempt + 1))
-    assert last is not None
-    raise last
+            time.sleep(_retry_delay(attempt, exc))
+    raise AssertionError("unreachable: the last attempt returns or raises")
 
 
 def _fetch_directory() -> list[dict[str, Any]]:
@@ -181,7 +214,7 @@ def _fetch_directory() -> list[dict[str, Any]]:
             }
         else:
             params = {"cursor": cursor}
-        payload = _provider_get("/v3/reference/tickers", params)
+        payload = _provider_get(_REFERENCE_PATH, params)
         if payload.get("status") not in {None, "OK"}:
             raise massive.MassiveError("reference directory provider status was not OK", code="protocol")
         rows = payload.get("results")
@@ -208,7 +241,7 @@ def _fetch_directory() -> list[dict[str, Any]]:
         next_url = payload.get("next_url")
         if next_url is None or next_url == "":
             return [records[ticker] for ticker in sorted(records)]
-        next_cursor = massive._reference_page_cursor(next_url)  # noqa: SLF001
+        next_cursor = massive._page_cursor(next_url, path=_REFERENCE_PATH)  # noqa: SLF001
         if next_cursor == cursor or next_cursor in seen_cursors:
             raise massive.MassiveError("reference directory pagination did not advance", code="protocol")
         seen_cursors.add(next_cursor)
@@ -255,9 +288,14 @@ def _fetch_grouped_session(session: date) -> dict[str, Any]:
     rows = payload.get("results")
     if payload.get("status") not in {None, "OK"}:
         raise massive.MassiveError("grouped daily provider status was not OK", code="protocol")
-    if not isinstance(rows, list) or not rows:
-        raise massive.MassiveError("empty grouped daily response", code="protocol")
     declared = payload.get("resultsCount")
+    if (rows is None or rows == []) and _integer(declared) in {None, 0}:
+        # The calendar expects a session on this day, so no rows means an
+        # unscheduled closure missing from market_calendar.SPECIAL_CLOSURES
+        # or a provider gap. Neither may be stored as an empty market.
+        raise massive.MassiveError(f"empty grouped daily response for {day}", code="empty_session")
+    if not isinstance(rows, list):
+        raise massive.MassiveError("unexpected grouped daily results shape", code="protocol")
     if declared is not None and _integer(declared) != len(rows):
         raise massive.MassiveError("incomplete grouped daily response", code="protocol")
     if payload.get("adjusted") is not False:
@@ -323,6 +361,16 @@ def _store_grouped_capture(connection: sqlite3.Connection, capture: Mapping[str,
         )
 
 
+def _failure_reason(error: Exception) -> str:
+    if isinstance(error, massive.MassiveError):
+        return _REASON_BY_CODE.get(error.code, f"MASSIVE_{str(error.code).upper()}")
+    return "FETCH_FAILED"
+
+
+def _day_scoped(error: Exception) -> bool:
+    return isinstance(error, massive.MassiveError) and error.code in _DAY_SCOPED_CODES
+
+
 def _fill_missing_sessions(connection: sqlite3.Connection, sessions: Sequence[date]) -> None:
     stored = _stored_sessions(connection, sessions)
     refresh = {
@@ -334,9 +382,10 @@ def _fill_missing_sessions(connection: sqlite3.Connection, sessions: Sequence[da
         for session in sessions
         if session.isoformat() not in stored or session.isoformat() in refresh
     ]
+    failures: list[tuple[date, Exception]] = []
     for offset in range(0, len(missing), MAX_PROVIDER_CONCURRENCY):
         batch = missing[offset : offset + MAX_PROVIDER_CONCURRENCY]
-        failures: list[tuple[date, Exception]] = []
+        batch_failures: list[tuple[date, Exception]] = []
         with ThreadPoolExecutor(
             max_workers=min(MAX_PROVIDER_CONCURRENCY, len(batch)),
             thread_name_prefix="all-market-daily",
@@ -347,55 +396,35 @@ def _fill_missing_sessions(connection: sqlite3.Connection, sessions: Sequence[da
                 try:
                     capture = future.result()
                 except Exception as exc:
-                    failures.append((session, exc))
+                    batch_failures.append((session, exc))
                     continue
+                # Each completed day commits on its own; a failed sibling in
+                # the same batch never discards it.
                 _store_grouped_capture(connection, capture)
-        if failures:
-            failed_session, exc = sorted(failures, key=lambda item: item[0])[0]
-            raise AllMarketDataError(
-                f"Massive grouped daily fetch failed for {failed_session.isoformat()}"
-            ) from exc
-
-
-def _split_cursor(next_url: Any) -> str:
-    if not isinstance(next_url, str) or not next_url or len(next_url) > _MAX_NEXT_URL:
-        raise massive.MassiveError("unexpected splits next_url shape", code="protocol")
-    try:
-        parsed = urlsplit(next_url)
-        expected = urlsplit(str(massive.get_settings().massive_base_url).rstrip("/"))
-        parsed_port, expected_port = parsed.port, expected.port
-    except ValueError as exc:
-        raise massive.MassiveError("invalid splits next_url", code="protocol") from exc
-    if parsed.username or parsed.password or parsed.fragment:
-        raise massive.MassiveError("unsafe splits next_url", code="protocol")
-    if parsed.scheme or parsed.netloc:
-        if (
-            parsed.scheme.lower() != expected.scheme.lower()
-            or (parsed.hostname or "").lower() != (expected.hostname or "").lower()
-            or parsed_port != expected_port
+        failures.extend(batch_failures)
+        # One bad day must not leave the later days unrequested; a failure
+        # that would repeat for every day stops after this batch instead. A
+        # batch failing as a whole is treated the same way even when every
+        # error looks day-scoped: a bad response shape hits every day alike,
+        # and an empty cache would otherwise request the whole window.
+        if any(not _day_scoped(exc) for _session, exc in batch_failures) or (
+            batch_failures and len(batch_failures) == len(batch)
         ):
-            raise massive.MassiveError("unsafe splits next_url host", code="protocol")
-    if parsed.path.rstrip("/") != _SPLIT_PATH:
-        raise massive.MassiveError("unsafe splits next_url path", code="protocol")
-    try:
-        query = parse_qs(
-            parsed.query,
-            keep_blank_values=True,
-            strict_parsing=True,
-            max_num_fields=32,
-        )
-    except ValueError as exc:
-        raise massive.MassiveError("invalid splits next_url query", code="protocol") from exc
-    cursors = query.get("cursor")
-    if (
-        not isinstance(cursors, list)
-        or len(cursors) != 1
-        or not isinstance(cursors[0], str)
-        or not cursors[0]
-        or len(cursors[0]) > 2048
-    ):
-        raise massive.MassiveError("splits next_url has no valid cursor", code="protocol")
-    return cursors[0]
+            break
+    if not failures:
+        return
+    failures.sort(key=lambda item: item[0])
+    failed = [(session.isoformat(), _failure_reason(exc)) for session, exc in failures]
+    # The reason names what stopped the loader, not merely the earliest day.
+    stopper = next(((s, exc) for s, exc in failures if not _day_scoped(exc)), failures[0])
+    reason_session, reason_exc = stopper[0].isoformat(), stopper[1]
+    reason = _failure_reason(reason_exc)
+    more = f" and {len(failed) - 1} more session(s)" if len(failed) > 1 else ""
+    raise AllMarketDataError(
+        f"Massive grouped daily fetch failed for {reason_session} ({reason}){more}",
+        reason_code=reason,
+        failed_sessions=failed,
+    ) from reason_exc
 
 
 def _split_row(raw: Mapping[str, Any], start: date, end: date) -> tuple[Any, ...]:
@@ -458,7 +487,7 @@ def _fetch_splits(start: date, end: date) -> dict[str, Any]:
                 "content_sha256": _hash_json(ordered),
                 "provider_status": status,
             }
-        next_cursor = _split_cursor(next_url)
+        next_cursor = massive._page_cursor(next_url, path=_SPLIT_PATH)  # noqa: SLF001
         if next_cursor == cursor or next_cursor in seen:
             raise massive.MassiveError("splits pagination did not advance", code="protocol")
         seen.add(next_cursor)
@@ -569,8 +598,10 @@ def _series_from_rows(
     rows: Sequence[Mapping[str, Any]],
     *,
     splits: Sequence[tuple[date, float, float]],
+    dates: list[date] | None = None,
 ) -> SecuritySeries:
-    dates = [date.fromisoformat(str(row["session_date"])) for row in rows]
+    if dates is None:
+        dates = [date.fromisoformat(str(row["session_date"])) for row in rows]
     raw_open = np.asarray([float(row["open"]) for row in rows], dtype=float)
     raw_high = np.asarray([float(row["high"]) for row in rows], dtype=float)
     raw_low = np.asarray([float(row["low"]) for row in rows], dtype=float)
@@ -645,6 +676,11 @@ def _load_panel(
     start, end = sessions[0], sessions[-1]
     split_by_ticker = _split_map(connection, members, start, end)
     by_ticker = {str(row["ticker"]): row for row in coverage}
+    # One date object per session, and one shared list for every security with
+    # a bar on every session, instead of fresh dates for each of ~11k series.
+    # Series never mutate their date list; slicing always builds a new one.
+    window = list(sessions)
+    session_by_key = {session.isoformat(): session for session in window}
     panel: dict[str, SecuritySeries] = {}
     current_ticker: str | None = None
     current_rows: list[sqlite3.Row] = []
@@ -680,10 +716,15 @@ def _load_panel(
             short_history_count += 1
         if residual_short:
             residual_short_history_count += 1
+        days = [
+            session_by_key.get(key) or date.fromisoformat(key)
+            for key in (str(row["session_date"]) for row in current_rows)
+        ]
         panel[current_ticker] = _series_from_rows(
             members[current_ticker],
             current_rows,
             splits=split_by_ticker.get(current_ticker, ()),
+            dates=window if days == window else days,
         )
 
     for ticker in members:
@@ -791,7 +832,7 @@ def load_all_market_panel(
         _fill_missing_sessions(connection, sessions)
         split_capture = _ensure_splits(connection, sessions[0], sessions[-1])
         session_meta = _session_manifest(connection, sessions)
-        panel, coverage, _target_missing_count, short_count, residual_short_count = _load_panel(
+        panel, coverage, missing_count, short_count, residual_short_count = _load_panel(
             connection,
             members,
             coverage,
@@ -803,8 +844,9 @@ def load_all_market_panel(
     excluded_count = len(directory) - eligible_count
     no_history_count = sum(row.get("status") == "no_history" for row in coverage)
     invalid_count = sum(row.get("status") == "invalid" for row in coverage)
-    missing_count = eligible_count - len(panel)
-    if len(panel) + missing_count != eligible_count:
+    # Every eligible member lands in exactly one class. missing_session_count
+    # is only "no bar on the target session", never no history or bad bars.
+    if len(panel) + missing_count + no_history_count + invalid_count != eligible_count:
         raise AllMarketDataError("all-market coverage accounting is inconsistent")
     session_hash = _hash_json(session_meta)
     source_hash = _hash_json(
@@ -863,6 +905,7 @@ def load_all_market_panel(
 __all__ = [
     "AllMarketDataError",
     "DB_NAME",
+    "MAX_PROVIDER_CONCURRENCY",
     "HISTORY_SESSIONS",
     "RESIDUAL_HISTORY_SESSIONS",
     "RECENT_REFRESH_SESSIONS",

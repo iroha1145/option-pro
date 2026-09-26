@@ -635,6 +635,7 @@ async def expirations(ticker: str, request: Request = None):
     except HTTPException:
         raise
     except Exception as e:
+        record_fallback_failure("options_expirations_unavailable", e, symbol=symbol)
         raise HTTPException(
             status_code=503,
             detail="Yahoo options data is currently unavailable",
@@ -712,4 +713,5 @@ async def option_chain(
     except HTTPException:
         raise
     except Exception as e:
+        record_fallback_failure("options_chain_unavailable", e, symbol=symbol)
         raise HTTPException(status_code=503, detail="Yahoo options data is currently unavailable") from e

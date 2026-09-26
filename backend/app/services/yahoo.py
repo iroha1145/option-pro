@@ -404,7 +404,10 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
             t = _get_ticker(symbol)
             try:
                 price = _safe_float(t.fast_info.last_price)
-            except Exception:
+            except Exception as exc:
+                # Greeks, moneyness and ITM all need this price; the chain is
+                # still returned but no longer cached as a valid result.
+                record_fallback_failure("yahoo_option_chain_price", exc, symbol=symbol)
                 price = None
             return price, t.option_chain(expiration)
 
@@ -626,7 +629,13 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
         f"chain:{symbol}:{expiration}",
         300,
         load,
-        is_valid=lambda value: bool(value.get("calls") or value.get("puts")),
+        # A chain without its underlying price has no Greeks or moneyness:
+        # keep it on the short negative-result TTL (or serve the last complete
+        # chain) instead of pinning the degraded copy for five minutes.
+        is_valid=lambda value: (
+            bool(value.get("calls") or value.get("puts"))
+            and value.get("underlying_price") is not None
+        ),
     )
 
 
@@ -814,7 +823,8 @@ def get_last_price(ticker: str) -> float | None:
     """Get last stock price from yfinance for fallback/sector displays."""
     try:
         return _safe_float(_get_ticker(ticker).fast_info.last_price)
-    except Exception:
+    except Exception as exc:
+        record_fallback_failure("yahoo_last_price", exc, symbol=ticker)
         return None
 
 

@@ -15,7 +15,11 @@ from typing import Any, Callable, Mapping
 
 from app.services.breakouts.clock import MarketClock
 from app.services.breakouts.anchors import resolve_event_anchor
-from app.services.breakouts.config import BreakoutSettings, get_breakout_settings
+from app.services.breakouts.config import (
+    BreakoutSettings,
+    break_buffer,
+    get_breakout_settings,
+)
 from app.services.breakouts.repository import BreakoutRepository, BreakoutRepositoryError
 from app.services.breakouts.asset_policy import is_leveraged_etf
 
@@ -261,7 +265,7 @@ class BreakoutRealtimeAdapter:
         atr = _finite(features.get("atr20"))
         if resistance is None or resistance <= 0 or atr is None or atr <= 0:
             return False
-        buffer = max(price * self.settings.break_buffer_pct, atr * self.settings.break_buffer_atr)
+        buffer = break_buffer(price, atr, self.settings)
         return price > resistance + buffer
 
     async def handle_trade(self, trade: dict[str, Any]) -> list[dict[str, Any]]:

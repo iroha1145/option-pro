@@ -142,6 +142,7 @@ def score_factor_series(
     """Score one factor across the grid, then attach its seven-day changes."""
 
     spec = FACTORS_BY_ID[factor_id]
+    required_inputs = len(spec.required_series) + len(spec.required_etfs)
     dates = [point.snapshot_date for point in points]
     if spec.score_method == "direct_score":
         # The registry formula already produces a bounded 0–100 value; running a
@@ -187,7 +188,7 @@ def score_factor_series(
                 score_method=spec.score_method,
                 status=status,
                 valid_observations=valid_counts[index],
-                confidence=None,
+                confidence=factor_confidence(point, required_inputs=required_inputs),
                 data_through=point.data_through,
                 available_at=point.available_at,
                 history_basis=point.history_basis,

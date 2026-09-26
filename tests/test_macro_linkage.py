@@ -229,12 +229,24 @@ def test_structural_macro_excludes_credit_and_risk() -> None:
     again would weight one signal twice under two names.
     """
 
+    # Four distinct structural scores (M-8): identical inputs cannot tell equal
+    # weighting apart from any other weighting, since every weighted mean of
+    # four copies of 80.0 is still 80.0. A plain arithmetic mean of these four
+    # is 75.0; any other weighting of the same four values would not be.
+    structural_scores = {
+        "liquidity": 60.0,
+        "funding": 70.0,
+        "treasury": 80.0,
+        "rates": 90.0,
+    }
     modules = [
-        {"module_id": module.module_id, "score": 80.0 if module.module_id in
-         {"liquidity", "funding", "treasury", "rates"} else 10.0}
+        {
+            "module_id": module.module_id,
+            "score": structural_scores.get(module.module_id, 10.0),
+        }
         for module in MODULES
     ]
-    assert structural_macro_score(modules) == 80.0
+    assert structural_macro_score(modules) == 75.0
 
 
 def test_structural_macro_is_none_when_nothing_structural_is_scored() -> None:

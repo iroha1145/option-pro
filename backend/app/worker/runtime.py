@@ -11,7 +11,6 @@ import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any, Literal
 
 from app.access import request_owner_access_context
@@ -22,6 +21,8 @@ from .state import (
     WorkerAlreadyRunning,
     WorkerLeaseLost,
     WorkerStateRepository,
+    _iso,
+    bounded_action_detail,
     bump_action_retry,
     utc_now,
 )
@@ -30,6 +31,8 @@ from .state import (
 logger = logging.getLogger("optix.worker")
 _TASK_NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _ERROR_CODE = re.compile(r"^[a-z][a-z0-9_]{0,119}$")
+# Codes of a round skipped because its actions could not be claimed.
+_STATE_ERROR_CODES = frozenset({"worker_state_locked", "worker_state_error"})
 TaskStatus = Literal["idle", "paused", "disabled", "degraded"]
 
 
@@ -46,9 +49,10 @@ class TaskResult:
         if self.next_delay_seconds is not None and (
             not math.isfinite(self.next_delay_seconds)
             or self.next_delay_seconds < 0
-            or self.next_delay_seconds > 86_400
+            # A civil day can last 25 hours when daylight saving time ends.
+            or self.next_delay_seconds > 90_000
         ):
-            raise ValueError("task delay must be between 0 and 86400 seconds")
+            raise ValueError("task delay must be between 0 and 90000 seconds")
         if self.error_code is not None and not _ERROR_CODE.fullmatch(self.error_code):
             raise ValueError("task error code is invalid")
 
@@ -69,6 +73,9 @@ class TaskSpec:
     # 只给重负载低频任务（如全量备份）用：进程重启（部署或崩溃恢复）
     # 不应触发一次计划外的 GB 级磁盘拷贝。
     honor_persisted_schedule: bool = False
+    # Calendar tasks resume at their next wall-clock slot, including 25-hour
+    # days; ordinary interval tasks keep their configured interval and bound.
+    next_calendar_run_at: Callable[[datetime], datetime | None] | None = None
     close: Callable[[], Awaitable[None] | None] | None = None
 
     def __post_init__(self) -> None:
@@ -100,6 +107,31 @@ def _public_error_code(error: Exception) -> str:
     return "task_failed"
 
 
+def _backoff_seconds(initial: float, maximum: float, failures: int) -> float:
+    """Exponential retry delay shared by task loops and per-item retries."""
+
+    return min(maximum, initial * (2 ** min(max(failures - 1, 0), 10)))
+
+
+def _is_state_lock_error(error: BaseException) -> bool:
+    """Lock contention clears by waiting; disk, permission or schema errors do not."""
+
+    if not isinstance(error, sqlite3.OperationalError):
+        return False
+    name = str(getattr(error, "sqlite_errorname", "") or "")
+    if name.startswith(("SQLITE_BUSY", "SQLITE_LOCKED")):
+        return True
+    message = str(error).lower()
+    return any(
+        marker in message
+        for marker in (
+            "database is locked",
+            "database is busy",
+            "database table is locked",
+        )
+    )
+
+
 async def _maybe_await(value: Any) -> Any:
     if inspect.isawaitable(value):
         return await value
@@ -118,7 +150,11 @@ class WorkerSupervisor:
         lease_seconds: float = 60.0,
         shutdown_grace_seconds: float = 30.0,
         stop: asyncio.Event | None = None,
-        process_lock: ProcessFileLock | None = None,
+        # Required: _run acquires the lease with force=True because holding
+        # this lock proves the previous process is gone. A default path next
+        # to the state database would let a second supervisor take the lease
+        # from a worker that holds the production lock file.
+        process_lock: ProcessFileLock,
     ) -> None:
         names = [task.name for task in tasks]
         if len(names) != len(set(names)):
@@ -131,14 +167,14 @@ class WorkerSupervisor:
         self.lease_seconds = float(lease_seconds)
         self.shutdown_grace_seconds = float(shutdown_grace_seconds)
         self.stop = stop or asyncio.Event()
-        self.process_lock = process_lock or ProcessFileLock(
-            Path(str(repository.path) + ".lock")
-        )
+        self.process_lock = process_lock
         self._heartbeat_stop = asyncio.Event()
         self._lease_lost = asyncio.Event()
         self._token: int | None = None
         self._failures: dict[str, int] = {task.name: 0 for task in self.tasks}
         self._results: dict[str, dict[str, Any]] = {}
+        # When each scheduled loop next intends to run its task.
+        self._planned_run_at: dict[str, datetime] = {}
 
     def request_stop(self) -> None:
         """Stop accepting new task runs; in-flight paid work is drained."""
@@ -149,7 +185,8 @@ class WorkerSupervisor:
     # BEGIN IMMEDIATE 拖过 busy_timeout。状态记录是遥测不是正确性——这里失败
     # 绝不能杀死任务循环（循环死→supervisor 杀进程→重启→备份从头再来→
     # 风暴延续，2026-08-13/08-15 两次生产崩溃循环即此自馈闭环）。
-    # 租约围栏（WorkerLeaseLost）不属于锁竞争，照常上抛。
+    # 租约围栏（WorkerLeaseLost）不属于锁竞争，照常上抛。只有锁竞争值得
+    # 等待重试；磁盘满、只读库这类错误重试也不会好，立即交给调用方。
     _STATE_LOCK_RETRIES = 3
     _STATE_LOCK_RETRY_DELAY_SECONDS = 2.0
 
@@ -158,7 +195,9 @@ class WorkerSupervisor:
         while True:
             try:
                 return await asyncio.to_thread(func, *args)
-            except sqlite3.OperationalError:
+            except sqlite3.OperationalError as error:
+                if not _is_state_lock_error(error):
+                    raise
                 attempt += 1
                 if attempt > self._STATE_LOCK_RETRIES:
                     raise
@@ -194,16 +233,20 @@ class WorkerSupervisor:
         request_ids: Sequence[str],
         **values: Any,
     ) -> None:
-        def write() -> None:
-            self.repository.finish_actions(
-                self.owner_id,
-                token,
-                list(request_ids),
-                **values,
-            )
+        def finish(fields: Mapping[str, Any]) -> Callable[[], None]:
+            def write() -> None:
+                self.repository.finish_actions(
+                    self.owner_id,
+                    token,
+                    list(request_ids),
+                    **fields,
+                )
+
+            return write
 
         try:
-            await self._state_call(write)
+            await self._state_call(finish(values))
+            return
         except sqlite3.OperationalError as error:
             # 未标记完成的手动请求留给死租约回收；比让循环陪葬好。
             logger.warning(
@@ -211,6 +254,43 @@ class WorkerSupervisor:
                 task.name,
                 error,
             )
+            return
+        except ValueError as error:
+            # finish_actions checks result fields more strictly than
+            # record_task. Letting this escape kills the task loop, the
+            # process exits, and the restart claims and runs the same action
+            # again: fail the action with a truncated result instead.
+            record_fallback_failure("worker_action_result_invalid", error)
+            rejected = error
+        details = dict(values.get("details") or {})
+        minimal = {
+            key: details[key]
+            for key in ("task_status", "task_completed_at")
+            if isinstance(details.get(key), str)
+        }
+        for candidate in (bounded_action_detail(details), minimal):
+            try:
+                await self._state_call(
+                    finish(
+                        {
+                            "succeeded": False,
+                            "error_code": "action_result_invalid",
+                            "details": candidate,
+                            "now": values.get("now"),
+                        }
+                    )
+                )
+                return
+            except ValueError as error:
+                rejected = error
+            except sqlite3.OperationalError as error:
+                rejected = error
+                break
+        logger.warning(
+            "worker manual action finish dropped task=%s error=%s",
+            task.name,
+            rejected,
+        )
 
     async def _requeue_actions_guarded(
         self,
@@ -250,12 +330,27 @@ class WorkerSupervisor:
     ) -> None:
         if not request_ids:
             return
+
+        def read_details() -> list[dict[str, Any]]:
+            rows = [self.repository.action_request(item) for item in request_ids]
+            return [dict(row.get("details") or {}) if row else {} for row in rows]
+
+        try:
+            request_details = await self._state_call(read_details)
+        except sqlite3.OperationalError as error:
+            logger.warning(
+                "worker manual action retry state unreadable task=%s error=%s",
+                task.name,
+                error,
+            )
+            # Requeue without the retry count rather than leave the claims
+            # running under a live fence until the next restart.
+            await self._requeue_actions_guarded(task, token, request_ids, now=now)
+            return
         delayed: list[str] = []
         updates: dict[str, dict[str, Any]] = {}
         exhausted: list[str] = []
-        for request_id in request_ids:
-            row = self.repository.action_request(request_id)
-            details = dict(row.get("details") or {}) if row else {}
+        for request_id, details in zip(request_ids, request_details):
             merged, done, _next_at = bump_action_retry(details, now=now, reason=reason)
             if done:
                 exhausted.append(request_id)
@@ -271,7 +366,7 @@ class WorkerSupervisor:
                 error_code="retry_exhausted",
                 details={
                     "task_status": "degraded",
-                    "task_completed_at": now.isoformat().replace("+00:00", "Z"),
+                    "task_completed_at": _iso(now),
                     "result": {"reason": reason},
                 },
                 now=now,
@@ -321,7 +416,7 @@ class WorkerSupervisor:
             error_code=error_code or "task_degraded",
             details={
                 "task_status": "idle" if succeeded else "degraded",
-                "task_completed_at": completed.isoformat().replace("+00:00", "Z"),
+                "task_completed_at": _iso(completed),
                 "result": payload,
             },
             now=completed,
@@ -348,9 +443,7 @@ class WorkerSupervisor:
                 error_code=result.error_code or "task_degraded",
                 details={
                     "task_status": result.status,
-                    "task_completed_at": completed.isoformat().replace(
-                        "+00:00", "Z"
-                    ),
+                    "task_completed_at": _iso(completed),
                     "result": dict(result.details),
                 },
                 now=completed,
@@ -388,7 +481,7 @@ class WorkerSupervisor:
                 error_code=result.error_code or "invalid_parameters",
                 details={
                     "task_status": "degraded",
-                    "task_completed_at": completed.isoformat().replace("+00:00", "Z"),
+                    "task_completed_at": _iso(completed),
                 },
                 now=completed,
             )
@@ -429,7 +522,7 @@ class WorkerSupervisor:
                 error_code=interrupt_code,
                 details={
                     "task_status": "degraded",
-                    "task_completed_at": completed.isoformat().replace("+00:00", "Z"),
+                    "task_completed_at": _iso(completed),
                 },
                 now=completed,
             )
@@ -550,18 +643,40 @@ class WorkerSupervisor:
                 await asyncio.sleep(0.01)
 
     def _backoff(self, task: TaskSpec, failures: int) -> float:
-        return min(
+        return _backoff_seconds(
+            task.failure_backoff_seconds,
             task.max_backoff_seconds,
-            task.failure_backoff_seconds * (2 ** min(max(failures - 1, 0), 10)),
+            failures,
         )
 
     async def _execute(self, task: TaskSpec) -> dict[str, Any]:
         started = utc_now()
+        resume_at: datetime | None = None
+        if task.honor_persisted_schedule:
+            planned = self._planned_run_at.get(task.name)
+            # Store the next run before starting: a crash or deploy during a
+            # long run must resume this schedule instead of repeating the run
+            # the moment the process comes back. A manual action that woke
+            # the loop early leaves the planned run where it was.
+            resume_at = (
+                planned
+                if planned is not None and planned > started
+                else started + timedelta(seconds=task.interval_seconds)
+            )
+            if task.next_calendar_run_at is not None:
+                calendar_run = task.next_calendar_run_at(started)
+                if calendar_run is not None:
+                    resume_at = (
+                        min(planned, calendar_run)
+                        if planned is not None and planned > started
+                        else calendar_run
+                    )
         await self._record(
             task,
             status="running",
             consecutive_failures=self._failures[task.name],
             last_started_at=started,
+            next_run_at=resume_at,
             details={},
         )
         token = self._token
@@ -577,15 +692,37 @@ class WorkerSupervisor:
         except sqlite3.OperationalError as error:
             # 认领不到就整轮跳过：不确定手动请求是否在场时直接跑 runner
             # 会让手动动作在下一轮被再次认领、重复执行。
+            error_code = (
+                "worker_state_locked"
+                if _is_state_lock_error(error)
+                else "worker_state_error"
+            )
             logger.warning(
-                "worker task round skipped (state locked) task=%s error=%s",
+                "worker task round skipped task=%s error_code=%s error=%s",
                 task.name,
+                error_code,
                 error,
+            )
+            delay = self._backoff(task, 1)
+            skipped_at = utc_now()
+            # The round never ran: do not leave the 'running' row behind.
+            await self._record(
+                task,
+                status="degraded",
+                consecutive_failures=self._failures[task.name],
+                last_completed_at=skipped_at,
+                next_run_at=(
+                    None
+                    if task.manual_only
+                    else skipped_at + timedelta(seconds=delay)
+                ),
+                error_code=error_code,
+                details={},
             )
             payload = {
                 "status": "degraded",
-                "error_code": "worker_state_locked",
-                "next_delay_seconds": self._backoff(task, 1),
+                "error_code": error_code,
+                "next_delay_seconds": delay,
             }
             self._results[task.name] = payload
             return payload
@@ -789,9 +926,16 @@ class WorkerSupervisor:
             return 0.0
         if next_run.tzinfo is None or next_run.utcoffset() is None:
             return 0.0
-        remaining = (next_run - utc_now()).total_seconds()
-        # 上限一个周期：时钟异常或脏数据不能把任务锁死到远未来。
-        return min(max(0.0, remaining), task.interval_seconds)
+        observed = utc_now()
+        remaining = (next_run - observed).total_seconds()
+        maximum = task.interval_seconds
+        if task.next_calendar_run_at is not None:
+            calendar_run = task.next_calendar_run_at(observed)
+            if calendar_run is not None:
+                maximum = max(0.0, (calendar_run - observed).total_seconds())
+        # Bound corrupted future timestamps by the next legitimate calendar
+        # slot, or one configured interval for non-calendar tasks.
+        return min(max(0.0, remaining), maximum)
 
     async def _has_pending_actions(self, task: TaskSpec) -> bool:
         # 轮询本身每 0.5s 一次，锁竞争时当作「暂无手动请求」继续等即可。
@@ -867,7 +1011,9 @@ class WorkerSupervisor:
                         return
                     if self.stop.is_set():
                         return
-                    await self._execute(task)
+                    result = await self._execute(task)
+                    if not await self._pause_after_state_error(result):
+                        return
             except asyncio.CancelledError:
                 if not self._lease_lost.is_set():
                     try:
@@ -886,14 +1032,32 @@ class WorkerSupervisor:
         delay = 0.0
         if task.honor_persisted_schedule:
             delay = await self._persisted_initial_delay(task)
+            if delay > 0:
+                # The row may still say 'interrupted' from the restart; for a
+                # daily task that would read as degraded for up to a day while
+                # the task is only waiting for its stored run.
+                await self._record(
+                    task,
+                    status="idle",
+                    consecutive_failures=self._failures[task.name],
+                    next_run_at=utc_now() + timedelta(seconds=delay),
+                    details={"resumed_schedule": True},
+                )
         try:
             while not self.stop.is_set():
+                self._planned_run_at[task.name] = utc_now() + timedelta(
+                    seconds=delay
+                )
                 if delay > 0 and not await self._wait_for_next(task, delay):
                     return
                 if self.stop.is_set():
                     return
                 result = await self._execute(task)
                 delay = float(result["next_delay_seconds"])
+                if result["error_code"] in _STATE_ERROR_CODES:
+                    if not await self._pause_after_state_error(result):
+                        return
+                    delay = 0.0
         except asyncio.CancelledError:
             if not self._lease_lost.is_set():
                 try:
@@ -908,6 +1072,25 @@ class WorkerSupervisor:
                 except WorkerLeaseLost:
                     pass
             raise
+
+    async def _pause_after_state_error(self, result: Mapping[str, Any]) -> bool:
+        """Sit out the backoff of a round whose actions could not be claimed.
+
+        Queued actions end every wait at once, so without this pause a state
+        database that keeps failing would be claimed from in a tight loop.
+        Returns False when the worker is stopping.
+        """
+
+        if result.get("error_code") not in _STATE_ERROR_CODES:
+            return True
+        try:
+            await asyncio.wait_for(
+                self.stop.wait(),
+                timeout=float(result["next_delay_seconds"]),
+            )
+        except asyncio.TimeoutError:
+            return True
+        return False
 
     async def _close_tasks(self) -> None:
         for task in reversed(self.tasks):

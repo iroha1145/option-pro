@@ -673,8 +673,8 @@ def test_expiry_clock_uses_equity_option_early_close() -> None:
 
     expiry = yahoo.option_expiry_metrics("2026-12-24", now=now)
 
-    assert expiry["expiration_at"].endswith("13:15:00-05:00")
-    assert expiry["dte"] == pytest.approx(75 / (24 * 60), abs=0.000001)
+    assert expiry["expiration_at"].endswith("13:00:00-05:00")
+    assert expiry["dte"] == pytest.approx(60 / (24 * 60), abs=0.000001)
 
 
 def test_stock_signal_uses_atm_iv_name_without_fake_historical_rank(monkeypatch: pytest.MonkeyPatch) -> None:

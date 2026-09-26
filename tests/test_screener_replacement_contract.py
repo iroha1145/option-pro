@@ -63,20 +63,27 @@ def test_old_refresh_requests_queue_current_parameters_and_hash(tmp_path, monkey
 
 
 @pytest.mark.parametrize("algorithm", [None, "production", "a0_mid_long", "eod_limited_v1"])
-def test_worker_direct_requests_never_execute_old_math(algorithm):
+def test_worker_direct_requests_never_execute_old_math(monkeypatch, algorithm):
+    from app.services.strength import scanner as retired_scanner
+
     raw = dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS)
     if algorithm is not None:
         raw["ranking_algorithm"] = algorithm
     calls = []
 
-    def old_scanner(**kwargs):
+    def old_scan(*_args, **_kwargs):
         raise AssertionError("Retired ranking mathematics must not execute")
+
+    # Guard the real retired entry points; an injected stand-in the task never
+    # reads would pass whatever the worker executed.
+    monkeypatch.setattr(retired_scanner, "scan_strength", old_scan)
+    monkeypatch.setattr(retired_scanner, "_scan_sync", old_scan)
 
     def eod(**kwargs):
         calls.append(kwargs)
         return success()
 
-    result = asyncio.run(StrengthRefreshTask(scanner=old_scanner, eod_runner=eod)._run(raw))
+    result = asyncio.run(StrengthRefreshTask(eod_runner=eod)._run(raw))
     assert result.status == "idle"
     assert calls == [{"profile": "balanced", "horizon": "mid", "purpose": "live_eod_inference", "all_variants": True}]
     expected = strength.strength_execution_parameters(raw)

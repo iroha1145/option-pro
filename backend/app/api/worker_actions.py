@@ -166,8 +166,11 @@ def _read_health(repository: WorkerStateRepository) -> dict[str, Any]:
         }
 
 
+# These routes are sync on purpose: a worker-state write may wait up to 30 s for
+# the SQLite lock (worker/state.py), and FastAPI runs sync routes in its thread
+# pool, so that wait never stalls the event loop that serves every other request.
 @router.get("/status")
-async def worker_status() -> dict[str, Any]:
+def worker_status() -> dict[str, Any]:
     worker = _read_health(_repository())
     return {
         "healthy": bool(worker.get("healthy")),
@@ -182,7 +185,7 @@ async def worker_status() -> dict[str, Any]:
 
 
 @router.get("/actions")
-async def list_actions(
+def list_actions(
     action_type: ActionType | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 30,
 ) -> dict[str, Any]:
@@ -200,7 +203,7 @@ async def list_actions(
 
 
 @router.get("/actions/{request_id}")
-async def get_action(request_id: str) -> dict[str, Any]:
+def get_action(request_id: str) -> dict[str, Any]:
     try:
         item = _repository().action_request(request_id)
     except ValueError as exc:
@@ -251,7 +254,7 @@ def _resolve_refresh_ranking(request: Request, raw_parameters: dict[str, Any]) -
 
 
 @router.post("/actions/{action_type}", status_code=status.HTTP_202_ACCEPTED)
-async def request_action(
+def request_action(
     action_type: ActionType,
     body: ManualActionRequest,
     response: Response,

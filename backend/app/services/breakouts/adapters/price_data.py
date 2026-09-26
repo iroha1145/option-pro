@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import yfinance as yf
 
+from app.failure_diagnostics import record_fallback_failure
 from app.services import yahoo
 from app.services.breakouts.feature_engine import (
     completed_daily_session,
@@ -218,7 +219,9 @@ class YahooPriceDataAdapter:
         def download() -> pd.DataFrame:
             try:
                 massive_frame = _massive_intraday()
-            except Exception:
+            except Exception as exc:
+                # Yahoo remains the fallback; record why the primary was skipped.
+                record_fallback_failure("breakout_intraday_massive", exc)
                 massive_frame = None
             if massive_frame is not None and not massive_frame.empty:
                 return massive_frame
@@ -241,7 +244,10 @@ class YahooPriceDataAdapter:
                 )
                 frame.attrs["price_source"] = self.source
                 return frame
-            except Exception:
+            except Exception as exc:
+                # An empty frame defers the tickers; without this record the
+                # scan could not tell an outage from a quiet market.
+                record_fallback_failure("breakout_intraday_yfinance", exc)
                 frame = pd.DataFrame()
                 frame.attrs["price_source"] = self.source
                 return frame

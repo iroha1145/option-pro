@@ -154,7 +154,7 @@ function buildOption(
   ma20: (number | null)[],
   range: ChartRange,
   mode: ChartMode,
-  prevClose?: number,
+  prevClose?: number | null,
   overlay?: MeasureOverlay | null,
   extra?: { lines: object[]; points: object[]; areas: object[]; polygons?: { vertices: { x: number; y: number }[]; color: string; opacity: number }[] } | null,
   analysis?: { showMa20?: boolean; extraMa?: { name: string; data: (number | null)[] }[]; panes?: PanePlot[]; layout?: IndicatorLayout } | null,
@@ -540,7 +540,7 @@ export default function KlineChart({
   technical = null,
 }: {
   ticker: string;
-  prevClose?: number;
+  prevClose?: number | null;
   currentPrice?: number | null;
   quoteUpdatedAt?: string | null;
   height?: number;

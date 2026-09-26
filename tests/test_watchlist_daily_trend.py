@@ -73,19 +73,19 @@ def test_watchlist_response_reuses_daily_cache_and_shares_each_ticker_read(monke
     stocks._endpoint_cache["chart:NVDA:1d:raw"] = stocks._EndpointCacheEntry(now + 60, now + 300, now, chart())
     reads = []
 
-    def read(symbol, resource, **_):
-        reads.append((symbol, resource))
-        return None
+    def read(symbol, **_):
+        reads.append(symbol)
+        return {}
 
     async def upstream_forbidden(*args, **kwargs):
         pytest.fail("watchlist trend must never fetch a chart or refresh the watchlist")
 
-    monkeypatch.setattr(stocks, "read_stock_pull_resource", read)
+    monkeypatch.setattr(stocks, "read_latest_stock_summary", read)
     monkeypatch.setattr(stocks, "_load_stock_chart", upstream_forbidden)
     monkeypatch.setattr(stocks, "_build_watchlist", upstream_forbidden)
     with request_owner_access_context(False):
         result = asyncio.run(stocks.watchlist(None))
-    assert reads == [("NVDA", "daily_chart")]
+    assert reads == ["NVDA"]
     assert len(result["groups"][0]["stocks"][0]["daily_trend"]["points"]) == 30
     assert result["groups"][1]["stocks"][0]["daily_trend"] == result["groups"][0]["stocks"][0]["daily_trend"]
     assert "daily_trend" not in row

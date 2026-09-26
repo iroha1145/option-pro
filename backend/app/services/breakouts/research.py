@@ -13,7 +13,6 @@ import csv
 import hashlib
 import io
 import json
-import math
 import os
 import tempfile
 from collections import Counter
@@ -27,6 +26,7 @@ from .research_validation import (
     DEFAULT_FORWARD_HORIZONS,
     PRICE_DATA_SCHEMA_VERSION,
     RESEARCH_VALIDATION_VERSION,
+    _finite_number,
     _pearson as _raw_pearson,
     run_range_persistence_validation,
 )
@@ -292,13 +292,6 @@ def load_completed_research_bundle(
         raise
     finally:
         connection.close()
-
-
-def _finite_number(value: Any) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    result = float(value)
-    return result if math.isfinite(result) else None
 
 
 def _pearson(pairs: Sequence[tuple[float, float]]) -> float | None:

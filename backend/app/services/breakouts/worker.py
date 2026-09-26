@@ -40,10 +40,6 @@ from pydantic import ValidationError
 logger = logging.getLogger(__name__)
 
 
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
-
-
 def _json_default(value: Any) -> Any:
     if isinstance(value, Enum):
         return value.value
@@ -114,7 +110,13 @@ def _scan_event_payload(event: Mapping[str, Any]) -> dict[str, Any]:
 
 
 class BreakoutWorker:
-    """Coordinate discovery and publication without holding a database lock."""
+    """Coordinate discovery and publication without holding a database lock.
+
+    An injected ``provider`` is borrowed: every scan reuses it and the worker
+    never closes it, so its circuit breaker and stale snapshot survive across
+    workers; its owner closes it. Without one, the worker creates its own and
+    closes it in ``aclose``, which ``run_once`` calls before returning.
+    """
 
     def __init__(
         self,
@@ -288,6 +290,37 @@ class BreakoutWorker:
         result.setdefault("candidates", list(getattr(discovery, "candidates", ()) or ()))
         result.setdefault("events", [])
         return result
+
+    @staticmethod
+    def _scan_diagnostics(publication: Mapping[str, Any]) -> dict[str, Any]:
+        """Bounded, message-free summary of what a published scan degraded."""
+
+        summary: dict[str, Any] = {}
+        source_status = publication.get("source_status")
+        if isinstance(source_status, Mapping):
+            summary["source_status"] = {
+                str(key): str(getattr(value, "value", value))
+                for key, value in source_status.items()
+            }
+        source_errors = publication.get("source_errors")
+        if isinstance(source_errors, Mapping) and source_errors:
+            summary["source_errors"] = {
+                str(key): str(value)[:64] for key, value in source_errors.items()
+            }
+        errors = [
+            item for item in publication.get("per_event_errors") or ()
+            if isinstance(item, Mapping)
+        ]
+        if errors:
+            summary["per_event_error_count"] = len(errors)
+            summary["per_event_errors"] = [
+                {
+                    key: str(item.get(key) or "")[:128]
+                    for key in ("event_id", "ticker", "error_code", "error_type")
+                }
+                for item in errors[:10]
+            ]
+        return summary
 
     def _provider_health(self, provider: Any, *, error_code: str | None = None) -> dict[str, Any]:
         value = getattr(provider, "health", None)
@@ -518,7 +551,10 @@ class BreakoutWorker:
             stored = self.repository.load_t1_retry_states(
                 [retry_identity(item)[0] for item in pending]
             )
-        except Exception:
+        except Exception as exc:
+            # The store keeps attempts monotonic, so starting from an empty view
+            # cannot restart a budget; the failed read still needs a trace.
+            record_fallback_failure("breakouts_t1_retry_read", exc)
             stored = {}
         eligible: list[dict[str, Any]] = []
         blocked_delays: list[float] = []
@@ -922,7 +958,10 @@ class BreakoutWorker:
                     batch_size=self.settings.retention_batch_size,
                     now=self.clock.now(),
                 )
-            except Exception:
+            except Exception as exc:
+                # The scan is already published; retention retries next scan,
+                # but a persistent failure would otherwise stop it unnoticed.
+                record_fallback_failure("breakouts_retention", exc)
                 maintenance = None
             self._status(
                 "idle",
@@ -931,6 +970,7 @@ class BreakoutWorker:
                     "session": market.session.value,
                     "retention": maintenance,
                     "t1_persistence": t1_persistence,
+                    **self._scan_diagnostics(publication),
                 },
             )
             return {
@@ -941,13 +981,17 @@ class BreakoutWorker:
                 "t1_persistence": t1_persistence,
             }
         except LeaseLostError:
+            # Neither record may replace the lease loss the caller must see.
             if scan_id is not None:
-                self.repository.fail_scan(
-                    scan_id,
-                    "lease_lost",
-                    "LeaseLostError",
-                    now=self.clock.now(),
-                )
+                try:
+                    self.repository.fail_scan(
+                        scan_id,
+                        "lease_lost",
+                        "LeaseLostError",
+                        now=self.clock.now(),
+                    )
+                except Exception as exc:
+                    record_fallback_failure("breakouts_lease_lost_scan_record", exc)
             try:
                 self._status("lease_lost", error_code="lease_lost")
             except Exception as exc:
@@ -957,6 +1001,7 @@ class BreakoutWorker:
             error_code = str(getattr(exc, "code", "scan_failed"))[:120]
             failure_domain = _failure_domain(exc)
             provider_health_unchanged = failure_domain != "provider"
+            record_fallback_failure("breakouts_scan_failed", exc)
             try:
                 if scan_id is not None:
                     self.repository.fail_scan(
@@ -978,10 +1023,15 @@ class BreakoutWorker:
                 details["provider_warning"] = str(provider_warning)[:120]
             self._wait_status = "degraded"
             self._wait_details = details
-            try:
-                if not provider_health_unchanged and provider is not None:
+            # Separate records: a provider-health write failure must not also
+            # hide the degraded worker status.
+            if not provider_health_unchanged and provider is not None:
+                try:
                     health = self._provider_health(provider, error_code=error_code)
                     self.repository.record_provider_health(health, now=self.clock.now())
+                except Exception as secondary_exc:
+                    record_fallback_failure("breakouts_provider_health", secondary_exc)
+            try:
                 self._status(
                     "degraded",
                     error_code=error_code,

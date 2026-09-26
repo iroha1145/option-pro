@@ -11,7 +11,8 @@ from typing import Any, Mapping
 import pandas as pd
 
 from app.data_paths import get_data_paths
-from app.services.research_eod_v1.calendar_asof import last_complete_eod_session
+from app.failure_diagnostics import record_fallback_failure
+from app.services.research_eod_v1.calendar_asof import settled_eod_session
 from app.services.sectors import SECTORS
 from app.services.snapshot_read_cache import FingerprintedFileCache
 from app.services.utils import sanitize
@@ -59,7 +60,7 @@ def _parse_document(raw: bytes) -> dict[str, Any] | None:
 
 def read_context_snapshot(*, root: Path | None = None, now: datetime | None = None) -> dict[str, Any]:
     observed = now or datetime.now(timezone.utc)
-    expected = last_complete_eod_session(observed)
+    expected = settled_eod_session(observed)
     try:
         document = _documents.read(context_path(root), _parse_document, max_bytes=CONTEXT_MAX_BYTES)
     except (OSError, ValueError, TypeError, UnicodeError):
@@ -122,7 +123,7 @@ def build_context_snapshot(*, as_of: datetime) -> dict[str, Any]:
     from app.services.strength.features import _ret
     from app.services.strength.market_regime import MARKET_BENCHMARKS, compute_market_regime
 
-    target = last_complete_eod_session(as_of)
+    target = settled_eod_session(as_of)
     tickers, metadata = _theme_universe()
     symbols = list(dict.fromkeys([*tickers, *MARKET_BENCHMARKS]))
     raw = _download_history(symbols, period="2y")
@@ -172,7 +173,7 @@ def build_context_snapshot(*, as_of: datetime) -> dict[str, Any]:
 def refresh_context_snapshot(*, root: Path | None = None, now: datetime | None = None) -> dict[str, Any]:
     observed = now or datetime.now(timezone.utc)
     previous = read_context_snapshot(root=root, now=observed)
-    target = last_complete_eod_session(observed).isoformat()
+    target = settled_eod_session(observed).isoformat()
     if previous.get("served_session") == target and not previous.get("_stale"):
         return {"status": "CURRENT", "served_session": target, "published": False}
     try:
@@ -182,6 +183,8 @@ def refresh_context_snapshot(*, root: Path | None = None, now: datetime | None =
             raise ValueError("context_snapshot_too_large")
         _atomic_write(context_path(root), document)
     except Exception as exc:
+        # The previous context stays served; the reason is only in this record.
+        record_fallback_failure("eod_context_build", exc)
         return {
             "status": "UNAVAILABLE", "published": False, "error": type(exc).__name__,
             "served_session": previous.get("served_session"), "attempted_session": target,

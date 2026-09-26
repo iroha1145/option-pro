@@ -83,7 +83,6 @@ function strengthRowToDetail(env: Rec): StockDetail | null {
   const prevClose = changePct !== null && changePct > -100 ? price / (1 + changePct / 100) : null;
   const fin = asRec(row.finnhub_metrics);
   const marketCapM = pickN(fin, 'market_cap'); // Finnhub 市值单位：百万美元
-  const nullNum = null as unknown as number;
   return {
     ticker,
     // 与 strength.ts 同源行保持一致：公司名/板块名过 pickLabel，EN/JA 下不再
@@ -91,22 +90,22 @@ function strengthRowToDetail(env: Rec): StockDetail | null {
     name: pickLabel(row, 'name') ?? ticker,
     sector: pickLabel(row, 'sector_name', 'primary_sector_name') ?? '',
     price,
-    change: prevClose !== null ? price - prevClose : nullNum,
-    changePct: changePct ?? nullNum,
+    change: prevClose !== null ? price - prevClose : null,
+    changePct,
     sparkline: [],
-    strengthScore: pickN(row, 'final_score', 'strength_score', 'score') ?? nullNum,
+    strengthScore: pickN(row, 'final_score', 'strength_score', 'score'),
     signals: [],
     updatedAt: pickS(env, 'as_of') ?? '',
-    open: nullNum,
-    high: nullNum,
-    low: nullNum,
-    prevClose: prevClose ?? nullNum,
-    volume: nullNum, // 契约仅有 20 日均量，无当日成交量——不冒充
-    avgVolume: pickN(row, 'avg_volume_20d') ?? nullNum,
-    marketCap: marketCapM !== null ? marketCapM * 1e6 : nullNum,
+    open: null,
+    high: null,
+    low: null,
+    prevClose,
+    volume: null, // 契约仅有 20 日均量，无当日成交量——不冒充
+    avgVolume: pickN(row, 'avg_volume_20d'),
+    marketCap: marketCapM !== null ? marketCapM * 1e6 : null,
     pe: pickN(fin, 'pe_ttm'),
-    ivPercentile: nullNum,
-    range52w: null as unknown as [number, number],
+    ivPercentile: null,
+    range52w: null,
     priceProvider: pickS(row, 'price_provider'),
     profileProvider: null,
     snapshotScope: 'strength-row',
@@ -597,22 +596,6 @@ export function createSignalAnalysisJob(ticker: string): Promise<AiJob> {
   );
 }
 
-/**
- * 预取详情面板必然会要的两个只读快照。
- *
- * K 线自己取自己的 bars，详情对象里一个字段都不用；但它挂在 `loading` 分支之后，
- * 详情请求回来之前根本没被挂上 —— 两段互不依赖的往返被排成了串行。信号面板同理，
- * 而且 TrendBiasPanel 和 SignalList 读的是同一个 `/signals/stock/{t}`。
- *
- * 这里只是把请求**提前发出**，不是新增请求：图表和信号挂载时命中的是 marketGet 的
- * in-flight promise 或它 60 秒的缓存，所以请求总数不变，只是早了一个往返。
- *
- * 刻意不 force：强制读会消耗 owner 手动拉取后那一次性的退避豁免，把它花在预取上，
- * 真正要用它的那次读取就没得用了。
- *
- * 失败在这里吞掉。预取不是数据来源 —— 各面板自己那次调用共享的是同一个 promise，
- * 该失败照样失败，错误态仍由面板自己呈现。
- */
 /* ---------------- 技术结构（/stocks/{t}/technical） ---------------- */
 
 /** 摆动点 t（epoch 秒/毫秒）→ 与 mapBar 同一 ISO 口径，图表按同源字符串对齐 */
@@ -815,6 +798,22 @@ export function getTechnicalStructure(ticker: string, force = false): Promise<Te
   );
 }
 
+/**
+ * 预取详情面板必然会要的三个只读快照（K 线、信号、技术结构）。
+ *
+ * K 线自己取自己的 bars，详情对象里一个字段都不用；但它挂在 `loading` 分支之后，
+ * 详情请求回来之前根本没被挂上 —— 两段互不依赖的往返被排成了串行。信号面板同理，
+ * 而且 TrendBiasPanel 和 SignalList 读的是同一个 `/signals/stock/{t}`。
+ *
+ * 这里只是把请求**提前发出**，不是新增请求：图表和信号挂载时命中的是 marketGet 的
+ * in-flight promise 或它 60 秒的缓存，所以请求总数不变，只是早了一个往返。
+ *
+ * 刻意不 force：强制读会消耗 owner 手动拉取后那一次性的退避豁免，把它花在预取上，
+ * 真正要用它的那次读取就没得用了。
+ *
+ * 失败在这里吞掉。预取不是数据来源 —— 各面板自己那次调用共享的是同一个 promise，
+ * 该失败照样失败，错误态仍由面板自己呈现。
+ */
 export function prefetchStockDetailPanels(ticker: string): void {
   const symbol = quoteSymbol(ticker);
   void getDetailChart(symbol, DEFAULT_CHART_RANGE).catch(() => {});

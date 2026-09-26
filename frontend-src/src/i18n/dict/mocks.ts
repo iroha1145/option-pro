@@ -61,7 +61,7 @@ export const MOCKS: Dict = {
   '金融时报': ['Financial Times', 'フィナンシャル・タイムズ'],
   '雅虎财经': ['Yahoo Finance', 'Yahoo!ファイナンス'],
 
-  /* data.ts：HOTSPOTS 热点主题（与 fixtures2.ts THEME_DEFS.theme 复用同一字符串） */
+  /* fixtures2.ts：THEME_DEFS.theme 热点主题 */
   'AI 算力资本开支': ['AI compute capex', 'AI関連の設備投資'],
   '大型科技股财报季': ['Mega-cap tech earnings season', '大型テック決算シーズン'],
   '降息预期与利率路径': ['Rate-cut expectations & the rate path', '利下げ観測と金利パス'],

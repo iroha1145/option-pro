@@ -110,13 +110,18 @@ export function fmtNyDayKey(iso: string): string | null {
   return Number.isNaN(d.getTime()) ? null : NY_DAY_KEY_FMT.format(d);
 }
 
-export function fmtRelative(iso: string | null | undefined): string {
+/**
+ * hourDecimals：10 小时以内的小时数保留几位小数（如 2.5 小时前）；默认 0 按整小时向下取整。
+ */
+export function fmtRelative(iso: string | null | undefined, hourDecimals = 0): string {
   if (!iso) return '—'; // live 可空时间字段（如未触发事件的 triggered_at）显「—」
   const diff = Date.now() - new Date(iso).getTime();
   if (!Number.isFinite(diff)) return '—';
   const min = Math.floor(diff / 60_000);
   if (min < 1) return t('刚刚');
   if (min < 60) return t('{n} 分钟前', { n: min });
+  const hours = diff / 3_600_000;
+  if (hourDecimals > 0 && hours < 10) return t('{n} 小时前', { n: hours.toFixed(hourDecimals) });
   const h = Math.floor(min / 60);
   if (h < 24) return t('{n} 小时前', { n: h });
   const d = Math.floor(h / 24);

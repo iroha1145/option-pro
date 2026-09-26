@@ -7,6 +7,7 @@ import logging
 import math
 import re
 import time
+import weakref
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
@@ -54,12 +55,29 @@ class SignalAnalysisJobCreateRequest(StrictModel):
     force: StrictBool = False
 
 
+# 同票单飞的检查与创建之间隔着读快照、组证据包（最长约 10 秒）等多次 await；
+# 证据包含动态上下文，request_hash 每次都不同，仓库去重挡不住，并发两次点击
+# 会生成两单付费任务（2026-09-25 审计）。生产只有一个 uvicorn 进程，进程内按票
+# 加锁即可。弱引用字典让空闲的锁随用随收，不随历史票数增长。
+_SIGNAL_ANALYSIS_LOCKS: "weakref.WeakValueDictionary[str, asyncio.Lock]" = (
+    weakref.WeakValueDictionary()
+)
+
+
+def _signal_analysis_lock(symbol: str) -> asyncio.Lock:
+    lock = _SIGNAL_ANALYSIS_LOCKS.get(symbol)
+    if lock is None:
+        lock = asyncio.Lock()
+        _SIGNAL_ANALYSIS_LOCKS[symbol] = lock
+    return lock
+
+
 def today_str() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-#: 证据包（不含哈希字段）允许的最大规范化字节数。低于 runtime 的
-#: 60KB(_MAX_UNTRUSTED_JSON_BYTES) 与仓库的 64KB 上限，留出封装余量；
+#: 证据包（不含哈希字段）允许的最大规范化字节数。低于入队与提交共用的
+#: 60KB(runtime._MAX_UNTRUSTED_JSON_BYTES，按转义后计)，留出封装余量；
 #: 超限时按 CONTEXT_BLOCK_KEYS 顺序整块丢弃并在 context_status 里标注。
 _EVIDENCE_MAX_BYTES = 52_000
 
@@ -118,6 +136,10 @@ def _signal_analysis_payload(
             if key in evidence:
                 del evidence[key]
                 context_status[key] = "omitted_size"
+                if key == "recent_news":
+                    # context_tickers 只来自新闻块；块丢了还留着它，会把模型
+                    # 看不到的代码并进结果校验的 allowed_codes。
+                    evidence.pop("context_tickers", None)
     canonical = _canonical_evidence_bytes(evidence)
     return {
         **evidence,
@@ -361,10 +383,20 @@ async def stock_ai_analysis(
     _require_manual_analysis_enabled()
     _require_runtime_capability()
     symbol = _normalize_ticker(ticker)
+    async with _signal_analysis_lock(symbol):
+        return await _queue_signal_analysis(symbol, force=request.force)
+
+
+async def _queue_signal_analysis(symbol: str, *, force: bool) -> JSONResponse:
     # 证据包含动态上下文块后，同票重复提交的 request_hash 几乎必然不同，
-    # 仓库级哈希去重挡不住重复付费。非 force 提交先复用在跑任务。
-    active = _job_repository().active_for_ticker("signal_analysis", symbol)
-    if active is not None and not request.force:
+    # 仓库级哈希去重挡不住重复付费。非 force 提交先复用在跑任务。仓库调用是
+    # 同步 SQLite 事务，放到线程里跑，写锁等待不卡事件循环。
+    active = await asyncio.to_thread(
+        _job_repository().active_for_ticker,
+        "signal_analysis",
+        symbol,
+    )
+    if active is not None and not force:
         public = _job_repository().public(active, cached=False)
         return JSONResponse(
             public,
@@ -409,7 +441,8 @@ async def stock_ai_analysis(
             "evidence_stale": False,
         }
         try:
-            row, created = _create_job(
+            row, created = await asyncio.to_thread(
+                _create_job,
                 "signal_analysis",
                 _signal_analysis_payload(
                     symbol,
@@ -418,17 +451,18 @@ async def stock_ai_analysis(
                     context=context,
                     **evidence_kwargs,
                 ),
-                force_retry=request.force,
+                force_retry=force,
             )
         except ValueError as exc:
             if str(exc) != "ai_job_payload_too_large":
                 raise
             # 上下文块的兜底裁剪之后核心信号仍超限才会走到这里；退回
             # 无上下文证据，保住手动分析本身可用。
-            row, created = _create_job(
+            row, created = await asyncio.to_thread(
+                _create_job,
                 "signal_analysis",
                 _signal_analysis_payload(symbol, signals, scores, **evidence_kwargs),
-                force_retry=request.force,
+                force_retry=force,
             )
     except ValueError as exc:
         if str(exc) == "ai_job_payload_too_large":

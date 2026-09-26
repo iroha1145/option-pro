@@ -460,6 +460,242 @@ def test_massive_market_cap_fallback_serves_todays_reports_first(
     assert resolved["TODAY"]["status"] == "active"
 
 
+def test_massive_market_cap_fallback_orders_today_future_then_released(
+    tmp_path, monkeypatch
+) -> None:
+    """AI-29：修复前按 days_until 升序，已发布的负值行会排在今天之前，跟
+    “今天最紧急”的注释相反。正确顺序是：今天 → 最近的未来（升序）→ 已发布
+    （负值，离今天最近的在前）。"""
+
+    from app.services import massive
+
+    calls: list[str] = []
+
+    def detail(ticker: str) -> dict:
+        calls.append(ticker)
+        return {"market_cap": 5e9, "name": ticker}
+
+    async def no_profiles(_tickers):
+        return {"configured": False, "succeeded": False, "error": None, "profiles": {}}
+
+    monkeypatch.setattr(massive, "configured", lambda: True)
+    monkeypatch.setattr(massive, "reference_ticker_detail", detail)
+    # 故意乱序放置，且故意先放已发布的负值行，验证排序本身而不是输入顺序。
+    rows = [
+        {"ticker": "MINUS3", "market_cap": None, "days_until": -3},
+        {"ticker": "PLUS5", "market_cap": None, "days_until": 5},
+        {"ticker": "TODAY", "market_cap": None, "days_until": 0},
+        {"ticker": "MINUS1", "market_cap": None, "days_until": -1},
+        {"ticker": "PLUS1", "market_cap": None, "days_until": 1},
+    ]
+
+    async def resolve(budget: int):
+        import unittest.mock as mock
+
+        with mock.patch.object(enrich, "fetch_fmp_profiles", no_profiles):
+            return await enrich.resolve_market_caps(
+                rows,
+                cache_days=3,
+                massive_detail_budget=budget,
+                cache_path=tmp_path / "caps.json",
+            )
+
+    resolved = asyncio.run(resolve(5))
+
+    assert calls == ["TODAY", "PLUS1", "PLUS5", "MINUS1", "MINUS3"]
+    assert {entry["status"] for entry in resolved.values()} == {"active"}
+
+
+def test_massive_market_cap_fallback_budget_favors_today_and_near_future(
+    tmp_path, monkeypatch
+) -> None:
+    """预算只够覆盖一部分时，被选中的必须是今天 + 最近的未来，已发布的行
+    (负值) 完全排不到预算内。"""
+
+    from app.services import massive
+
+    calls: list[str] = []
+
+    def detail(ticker: str) -> dict:
+        calls.append(ticker)
+        return {"market_cap": 5e9, "name": ticker}
+
+    async def no_profiles(_tickers):
+        return {"configured": False, "succeeded": False, "error": None, "profiles": {}}
+
+    monkeypatch.setattr(massive, "configured", lambda: True)
+    monkeypatch.setattr(massive, "reference_ticker_detail", detail)
+    rows = [
+        {"ticker": "MINUS3", "market_cap": None, "days_until": -3},
+        {"ticker": "PLUS5", "market_cap": None, "days_until": 5},
+        {"ticker": "TODAY", "market_cap": None, "days_until": 0},
+        {"ticker": "MINUS1", "market_cap": None, "days_until": -1},
+        {"ticker": "PLUS1", "market_cap": None, "days_until": 1},
+    ]
+
+    async def resolve():
+        import unittest.mock as mock
+
+        with mock.patch.object(enrich, "fetch_fmp_profiles", no_profiles):
+            return await enrich.resolve_market_caps(
+                rows,
+                cache_days=3,
+                massive_detail_budget=3,
+                cache_path=tmp_path / "caps.json",
+            )
+
+    resolved = asyncio.run(resolve())
+
+    assert calls == ["TODAY", "PLUS1", "PLUS5"]
+    assert resolved["MINUS1"]["status"] == "unavailable"
+    assert resolved["MINUS3"]["status"] == "unavailable"
+
+
+def test_market_cap_cache_write_failure_records_diagnostic_and_does_not_raise(
+    tmp_path, monkeypatch
+) -> None:
+    from app import failure_diagnostics
+
+    failure_diagnostics._seen.clear()
+
+    def failing_store(_entries, _path=None):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(enrich, "store_market_cap_cache", failing_store)
+
+    async def no_profiles(_tickers):
+        return {"configured": False, "succeeded": False, "error": None, "profiles": {}}
+
+    rows = [{"ticker": "NEWCAP", "market_cap": 1.5e9, "days_until": 1}]
+    resolved = asyncio.run(_resolve_with(rows, tmp_path / "caps.json", no_profiles))
+
+    # 写失败不能影响本次已经解析出来的结果。
+    assert resolved["NEWCAP"]["market_cap"] == 1.5e9
+    assert resolved["NEWCAP"]["status"] == "active"
+    assert any(
+        key[0] == "earnings_market_cap_cache_write" for key in failure_diagnostics._seen
+    )
+
+
+# ── 报告期记忆：跨日历来源稳定 report_id（AI-29） ────────────
+
+
+def test_stabilize_report_periods_backfills_fmp_only_rows_later(tmp_path) -> None:
+    """先有一行给出真实 (year, quarter)（比如 Finnhub），记住；后面同一
+    ticker+日期只剩 FMP-only 行（year/quarter 为 None）时用记忆补齐，
+    report_id 才能跨来源切换保持稳定。"""
+
+    path = tmp_path / "periods.json"
+    known = [
+        {"ticker": "AAPL", "earnings_date": "2026-10-30", "year": 2026, "quarter": 4},
+    ]
+    enrich.stabilize_report_periods(known, path=path, today=date(2026, 9, 25))
+    assert known[0]["year"] == 2026
+    assert known[0]["quarter"] == 4
+
+    fmp_only = [
+        {"ticker": "AAPL", "earnings_date": "2026-10-30", "year": None, "quarter": None},
+    ]
+    enrich.stabilize_report_periods(fmp_only, path=path, today=date(2026, 9, 26))
+    assert fmp_only[0]["year"] == 2026
+    assert fmp_only[0]["quarter"] == 4
+
+
+def test_stabilize_report_periods_never_overwrites_a_rows_own_value(tmp_path) -> None:
+    path = tmp_path / "periods.json"
+    enrich.stabilize_report_periods(
+        [{"ticker": "MSFT", "earnings_date": "2026-10-28", "year": 2026, "quarter": 1}],
+        path=path,
+    )
+
+    # 这一行自己就带着 quarter=4（比如财年编号跟别的源不同）：绝不能被
+    # 记忆里的 1 覆盖。
+    own_value = {
+        "ticker": "MSFT",
+        "earnings_date": "2026-10-28",
+        "year": 2026,
+        "quarter": 4,
+    }
+    enrich.stabilize_report_periods([own_value], path=path)
+    assert own_value["quarter"] == 4
+
+    # 记忆随最新的已知值更新，后续 FMP-only 行补的是 4 不是 1。
+    fmp_only = {
+        "ticker": "MSFT",
+        "earnings_date": "2026-10-28",
+        "year": None,
+        "quarter": None,
+    }
+    enrich.stabilize_report_periods([fmp_only], path=path)
+    assert fmp_only["quarter"] == 4
+
+
+def test_stabilize_report_periods_skips_a_row_that_conflicts_with_memory(
+    tmp_path,
+) -> None:
+    path = tmp_path / "periods.json"
+    enrich.stabilize_report_periods(
+        [{"ticker": "MSFT", "earnings_date": "2026-10-28", "year": 2026, "quarter": 1}],
+        path=path,
+    )
+
+    # 这一行自带 quarter=2，跟记忆的 1 冲突：整行不补（year 也不补）。
+    conflicting = {
+        "ticker": "MSFT",
+        "earnings_date": "2026-10-28",
+        "year": None,
+        "quarter": 2,
+    }
+    enrich.stabilize_report_periods([conflicting], path=path)
+    assert conflicting["year"] is None
+    assert conflicting["quarter"] == 2
+
+
+def test_report_period_cache_treats_a_corrupt_file_as_empty(tmp_path) -> None:
+    path = tmp_path / "periods.json"
+    path.write_text("{not json", encoding="utf-8")
+    assert enrich.load_report_period_cache(path) == {}
+
+    row = {
+        "ticker": "GOOG",
+        "earnings_date": "2026-11-03",
+        "year": None,
+        "quarter": None,
+    }
+    enrich.stabilize_report_periods([row], path=path)  # 不能因为坏文件崩溃
+    assert row["year"] is None
+    assert row["quarter"] is None
+
+
+def test_report_period_cache_write_failure_records_diagnostic_and_does_not_raise(
+    tmp_path, monkeypatch
+) -> None:
+    from app import failure_diagnostics
+
+    failure_diagnostics._seen.clear()
+
+    def failing_store(_entries, _path=None):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(enrich, "store_report_period_cache", failing_store)
+
+    row = {
+        "ticker": "NFLX",
+        "earnings_date": "2026-10-15",
+        "year": 2026,
+        "quarter": 3,
+    }
+    enrich.stabilize_report_periods([row], path=tmp_path / "periods.json")
+
+    # 内存里的行仍然正确、函数不抛错；只是这次没能持久化。
+    assert row["year"] == 2026
+    assert row["quarter"] == 3
+    assert any(
+        key[0] == "earnings_report_period_cache_write"
+        for key in failure_diagnostics._seen
+    )
+
+
 # ── 预期波动 provider 链 ─────────────────────────────────────
 
 

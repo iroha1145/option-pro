@@ -8,14 +8,19 @@ from typing import Any, Sequence
 
 from app.config import get_settings
 from app.services.ai_jobs import runtime
-from app.services.ai_jobs.repository import AIJobRepository
+from app.services.ai_jobs.repository import (
+    RECOVERABLE_FAILURE_CODES,
+    AIJobRepository,
+)
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Revalidate already-paid provider results that failed only the "
-            "local schema contract. No new model request is submitted."
+            "Revalidate already-paid provider results that failed only a "
+            "local step: the schema contract, or a local write recorded as "
+            "provider_unavailable/local_storage_error after the provider "
+            "accepted the job. No new model request is submitted."
         )
     )
     parser.add_argument(
@@ -46,7 +51,7 @@ async def recover(job_ids: Sequence[str], *, apply: bool) -> list[dict[str, Any]
         response_id = str(row.get("openai_response_id") or "")
         if (
             row.get("status") != "failed"
-            or row.get("error_code") != "schema_validation_failed"
+            or row.get("error_code") not in RECOVERABLE_FAILURE_CODES
             or row.get("result_json") is not None
             or not response_id
         ):

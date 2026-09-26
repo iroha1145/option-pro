@@ -27,6 +27,7 @@ import httpx
 
 from app.config import get_settings
 from app.data_paths import get_data_paths
+from app.failure_diagnostics import record_fallback_failure
 from app.services.quote_quality import quality_mid
 
 # ── 常量 ─────────────────────────────────────────────────────
@@ -41,6 +42,9 @@ _FMP_TIMEOUT_SECONDS = 20.0
 MARKET_CAP_CACHE_FILENAME = "earnings-market-caps-v1.json"
 _MARKET_CAP_SOURCES = ("yahoo_info", "fmp_profile", "massive_reference")
 _MASSIVE_DETAIL_BUDGET = 40
+
+REPORT_PERIOD_CACHE_FILENAME = "earnings-report-periods-v1.json"
+_REPORT_PERIOD_CACHE_MAX_ENTRIES = 4_000
 
 EXPECTED_MOVE_METHOD = "atm_straddle_mid"
 _EXPECTED_MOVE_MAX_EXPIRY_GAP_DAYS = 14
@@ -325,6 +329,20 @@ def _cache_entry_fresh(entry: Mapping[str, Any], *, now: datetime, days: int) ->
     return (now - observed) <= timedelta(days=days)
 
 
+def _market_cap_urgency_key(days_until: Any) -> tuple[int, int]:
+    """今天最急，其后是最近的未来；已发布（负值）排在全部未来之后，负值里
+    离今天最近的在前；缺失 days_until 排在最后。"""
+
+    if days_until is None:
+        return (3, 0)
+    value = int(days_until)
+    if value == 0:
+        return (0, 0)
+    if value > 0:
+        return (1, value)
+    return (2, -value)
+
+
 async def resolve_market_caps(
     rows: list[dict[str, Any]],
     *,
@@ -401,14 +419,15 @@ async def resolve_market_caps(
             # 只为近端仍缺失的少数代码做单只详情兜底，绝不批量扫全市场。
             by_urgency = sorted(
                 missing,
-                key=lambda ticker: next(
-                    (
-                        # A report due today (days_until 0) is the most urgent.
-                        999 if row.get("days_until") is None else int(row["days_until"])
-                        for row in rows
-                        if str(row.get("ticker") or "").upper() == ticker
-                    ),
-                    999,
+                key=lambda ticker: _market_cap_urgency_key(
+                    next(
+                        (
+                            row.get("days_until")
+                            for row in rows
+                            if str(row.get("ticker") or "").upper() == ticker
+                        ),
+                        None,
+                    )
                 ),
             )
             for ticker in by_urgency[:massive_detail_budget]:
@@ -459,9 +478,167 @@ async def resolve_market_caps(
     if cache_dirty:
         try:
             store_market_cap_cache(cache, cache_path)
+        except OSError as exc:
+            # A lost write only means the next build re-resolves from FMP/
+            # Massive; it must never turn into a request failure.
+            record_fallback_failure("earnings_market_cap_cache_write", exc)
+    return resolved
+
+
+# ── 报告期记忆：跨日历来源稳定 report_id（AI-29） ────────────
+#
+# fetch_fmp_calendar 的行永远把 quarter/year 置 None（FMP 的日历端点确实不
+# 给这两个字段）。ai_jobs/models.py 的 earnings_report_id 把它们拼进 key
+# （earnings:{ticker}:{date}:{year|na}:{q|qna}），所以同一份财报若这次只有
+# FMP 覆盖（year/quarter 为 None）、下次 Finnhub 也覆盖了（year/quarter 有
+# 值），report_id 会变——预发布分析可能因此重复付费一次，终版分析也可能因
+# report_id 对不上而找不到预发布记录去对比。
+#
+# 这里只做「记忆」，不做「推导」：只记录曾经真实出现过的 (year, quarter)
+# （目前只有 Finnhub 会给），绝不用日历日期反推季度——公司财年起止各不相
+# 同，反推值会和 Finnhub 自己的编号打架，还会让 api/earnings.py 的
+# _same_earnings_report 把同一份财报误判成 conflict。
+def _coerce_report_period(value: Any) -> int | None:
+    return value if type(value) is int else None
+
+
+def report_period_cache_path() -> Path:
+    return get_data_paths().watchlist_snapshot.parent / REPORT_PERIOD_CACHE_FILENAME
+
+
+def _report_period_key(ticker: str, earnings_date: str) -> str:
+    return f"{ticker}:{earnings_date}"
+
+
+def load_report_period_cache(path: Path | None = None) -> dict[str, dict[str, Any]]:
+    target = path or report_period_cache_path()
+    try:
+        raw = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    entries = raw.get("entries") if isinstance(raw, dict) else None
+    if not isinstance(entries, dict):
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for key, entry in entries.items():
+        if not isinstance(key, str) or not isinstance(entry, dict):
+            continue
+        ticker = str(entry.get("ticker") or "").strip().upper()
+        earnings_date = str(entry.get("earnings_date") or "").strip()
+        year = _coerce_report_period(entry.get("year"))
+        quarter = _coerce_report_period(entry.get("quarter"))
+        if (
+            _SYMBOL_RE.fullmatch(ticker) is None
+            or _coerce_date(earnings_date) is None
+            or year is None
+            or quarter is None
+        ):
+            continue
+        out[_report_period_key(ticker, earnings_date)] = {
+            "ticker": ticker,
+            "earnings_date": earnings_date,
+            "year": year,
+            "quarter": quarter,
+            "as_of": str(entry.get("as_of") or ""),
+        }
+    return out
+
+
+def store_report_period_cache(
+    entries: Mapping[str, Mapping[str, Any]],
+    path: Path | None = None,
+) -> None:
+    target = path or report_period_cache_path()
+    payload = json.dumps(
+        {"version": 1, "entries": dict(entries)},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(
+        dir=str(target.parent),
+        prefix=f".{target.name}.",
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(payload)
+        os.replace(tmp_name, target)
+    except OSError:
+        try:
+            os.unlink(tmp_name)
         except OSError:
             pass
-    return resolved
+        raise
+
+
+def stabilize_report_periods(
+    rows: list[dict[str, Any]],
+    *,
+    path: Path | None = None,
+    today: date | None = None,
+) -> None:
+    """按 (ticker, earnings_date) 记住已知的 (year, quarter)，回填缺失的行。
+
+    就地修改 ``rows``。只记录 year 与 quarter 同时给出的行（一个残缺的期次
+    记不住什么），且绝不用记忆覆盖行里已有的值；行已有的 year 或 quarter 与
+    记忆冲突时，这一行整体跳过（不做部分回填），交给上游既有的 conflict 记
+    录逻辑去处理，而不是在这里静默拼出一个不一致的结果。
+    """
+
+    observed = (today or datetime.now(timezone.utc).date()).isoformat()
+    memory = load_report_period_cache(path)
+    dirty = False
+
+    for row in rows:
+        ticker = str(row.get("ticker") or "").strip().upper()
+        earnings_date = str(row.get("earnings_date") or "").strip()
+        if not ticker or not earnings_date:
+            continue
+        key = _report_period_key(ticker, earnings_date)
+        year = _coerce_report_period(row.get("year"))
+        quarter = _coerce_report_period(row.get("quarter"))
+        if year is not None and quarter is not None:
+            previous = memory.get(key)
+            if previous is None or (previous["year"], previous["quarter"]) != (
+                year,
+                quarter,
+            ):
+                memory[key] = {
+                    "ticker": ticker,
+                    "earnings_date": earnings_date,
+                    "year": year,
+                    "quarter": quarter,
+                    "as_of": observed,
+                }
+                dirty = True
+            continue
+        remembered = memory.get(key)
+        if remembered is None:
+            continue
+        if (year is not None and year != remembered["year"]) or (
+            quarter is not None and quarter != remembered["quarter"]
+        ):
+            continue  # 记忆与行冲突：不补，交给上游的冲突记录逻辑处理
+        if year is None:
+            row["year"] = remembered["year"]
+        if quarter is None:
+            row["quarter"] = remembered["quarter"]
+
+    if not dirty:
+        return
+    if len(memory) > _REPORT_PERIOD_CACHE_MAX_ENTRIES:
+        ordered = sorted(
+            memory.items(),
+            key=lambda item: item[1].get("earnings_date") or "",
+        )
+        for stale_key, _entry in ordered[: len(memory) - _REPORT_PERIOD_CACHE_MAX_ENTRIES]:
+            del memory[stale_key]
+    try:
+        store_report_period_cache(memory, path)
+    except OSError as exc:
+        # 记忆写不进去不影响本次返回的行——它们已经在内存里补齐了；
+        # 只是下次构建要重新等 Finnhub 覆盖到同一 ticker+日期才能再学一次。
+        record_fallback_failure("earnings_report_period_cache_write", exc)
 
 
 # ── 重点公司判定（公共部分；账号自选属账号上下文，由前端合并） ──

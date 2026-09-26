@@ -1194,6 +1194,92 @@ def test_focus_projection_recovers_write_time_sources_from_linked_job() -> None:
     assert hidden["error_code"] == "legacy_output_hidden"
 
 
+def test_public_latest_focus_cycle_revalidates_with_write_time_sources(
+    tmp_path,
+) -> None:
+    """真实匿名链路：访客经公开接口读焦点周期（审计 AI-1）。
+
+    本文件的 autouse 夹具把用例放在 owner 上下文里；这里走公开路由，由访问
+    依赖按请求判成访客。本地层对访客删掉 job_id，校验上下文只能来自周期行
+    随带的写入时 payload；只剩白名单的瘦上下文会把源绑定实体误判成英文散文，
+    整条周期对访客消失。
+    """
+
+    from app.services.catalysts.local_intelligence import (
+        LocalCatalystIntelligence,
+        _json,
+    )
+
+    cache_path = tmp_path / "catalyst.db"
+    CatalystEtlRepository(cache_path).initialize()
+    engine = LocalCatalystIntelligence(
+        cache_path,
+        FakeAIRepository(),
+        mode="manual",
+        canonical_tickers=("PFE",),
+    )
+    engine.initialize()
+    input_hash = "a" * 64
+    result = _focus_result(input_hash=input_hash)
+    result["summary_zh"] = "据报道，berobenatide的月度给药数据带来减重管线关注。"
+    payload = {
+        "cycle_id": result["cycle_id"],
+        "as_of": result["as_of"],
+        "input_hash": input_hash,
+        "input_schema_version": "market-focus-input-v2",
+        "prepared_revision": 1,
+        "allowed_event_group_ids": [],
+        "allowed_tickers": [],
+        "events": [
+            {
+                "event_group_id": "evt_x",
+                "title_zh": "Pfizer obesity candidate",
+                "summary_zh": (
+                    "Pfizer's obesity candidate berobenatide showed monthly "
+                    "dosing potential in a phase 2b study."
+                ),
+            }
+        ],
+        "force": False,
+        "cycle_revision": 1,
+    }
+    with sqlite3.connect(cache_path) as connection:
+        connection.execute(
+            """INSERT INTO catalyst_local_focus_cycles(
+                   cycle_id,status,prepared_revision,snapshot_as_of,input_hash,
+                   job_id,payload_json,result_json,created_at,completed_at,
+                   updated_at)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                result["cycle_id"],
+                "completed",
+                1,
+                result["as_of"],
+                input_hash,
+                "aij_" + "f" * 32,
+                _json(payload),
+                _json(result),
+                result["as_of"],
+                "2026-07-15T04:01:00Z",
+                "2026-07-15T04:01:00Z",
+            ),
+        )
+        connection.commit()
+    service = _service("manual", engine=engine, cache_path=str(cache_path))
+
+    response = _public_api_client(service).get(
+        "/api/catalysts/market-focus-cycles/latest"
+    )
+
+    assert response.status_code == 200, response.text
+    cycle = response.json()["latest_successful_cycle"]
+    assert cycle is not None, "访客读取不得因瘦上下文把已完成周期整条藏掉"
+    assert cycle["result"]["summary_zh"] == result["summary_zh"]
+    assert "job_id" not in cycle
+    assert "_validation_payload" not in cycle
+    assert "Pfizer" not in response.text
+
+
 def test_projection_preserves_results_with_their_task_ticker_context() -> None:
     analysis = _news_result()
     analysis["title_zh"] = "NVDA发布新一代芯片"

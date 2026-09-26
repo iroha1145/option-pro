@@ -475,7 +475,7 @@ export default function Breakouts() {
       stale={Boolean(eventsQ.error && events.length > 0)}
       loading={eventsQ.loading}
       error={events.length > 0 ? null : eventsQ.error}
-      onRetry={eventsQ.refresh}
+      onRetry={() => eventsQ.refresh()}
       onOpenDetail={openFromArchive}
     />
   );

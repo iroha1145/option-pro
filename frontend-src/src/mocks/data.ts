@@ -93,13 +93,4 @@ const NEWS_TEMPLATES: { title: string; summary: string }[] = [
   { title: '监管文件显示：多家主权基金增持 {t}', summary: '最新 13F 披露显示，两家主权财富基金在上一季度合计增持 {t} 逾千万股。' },
 ];
 
-const HOTSPOTS = [
-  { theme: t('AI 算力资本开支'), tickers: ['NVDA', 'AMD', 'AVGO', 'TSM', 'MU'] },
-  { theme: t('大型科技股财报季'), tickers: ['AAPL', 'MSFT', 'META', 'GOOGL', 'AMZN'] },
-  { theme: t('降息预期与利率路径'), tickers: ['SPY', 'QQQ', 'JPM', 'V'] },
-  { theme: t('电动车价格战升级'), tickers: ['TSLA'] },
-  { theme: t('加密资产回暖'), tickers: ['COIN', 'HOOD'] },
-  { theme: t('减肥药产业链'), tickers: ['LLY', 'UNH'] },
-] as const;
-
-export { NEWS_TEMPLATES, HOTSPOTS };
+export { NEWS_TEMPLATES };

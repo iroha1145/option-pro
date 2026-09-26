@@ -298,13 +298,18 @@ def etf_from_rows(
 
 
 def _as_date(value: object) -> Optional[date]:
+    """Parse a stored ``date`` or ISO date string; anything else is ``None``.
+
+    Shared with ``service.py`` (previously two byte-identical copies) so the
+    two callers can never drift apart on what counts as a valid date.
+    """
+
     if isinstance(value, date):
         return value
     if isinstance(value, str) and value:
         try:
-            year, month, day = (int(part) for part in value.split("-"))
-            return date(year, month, day)
-        except (TypeError, ValueError):
+            return date.fromisoformat(value)
+        except ValueError:
             return None
     return None
 

@@ -10,14 +10,49 @@ from typing import Any
 from app.services import cache_metrics
 
 
-def _estimate_size(value: Any) -> int:
+# Containers longer than this are sized from an evenly spaced sample: an exact
+# dump of a multi-megabyte payload costs tens of milliseconds on the event loop,
+# while the byte budget only needs the order of magnitude.
+_SAMPLE_ABOVE_ITEMS = 256
+_SAMPLE_ITEMS = 32
+# Small dicts near the top are walked key by key so the long list they usually
+# wrap ({"earnings": [...], "as_of": ...}) gets sampled instead of dumped whole.
+_WALK_DEPTH = 2
+_WALK_MAX_KEYS = 64
+
+
+def _json_length(value: Any, depth: int = 0) -> int:
+    if isinstance(value, str):
+        return len(value) + 2
+    if value is None or value is True:
+        return 4
+    if value is False:
+        return 5
+    if isinstance(value, (int, float)):
+        return len(repr(value))
+    if isinstance(value, (dict, list, tuple)) and len(value) > _SAMPLE_ABOVE_ITEMS:
+        items = list(value.items()) if isinstance(value, dict) else value
+        step = len(items) / _SAMPLE_ITEMS
+        picked = [items[int(index * step)] for index in range(_SAMPLE_ITEMS)]
+        sample = dict(picked) if isinstance(value, dict) else picked
+        return _json_length(sample, depth) * len(value) // _SAMPLE_ITEMS
+    if isinstance(value, dict) and depth < _WALK_DEPTH and len(value) <= _WALK_MAX_KEYS:
+        # Quoted key plus the ": " and ", " separators json.dumps emits.
+        return 2 + sum(
+            len(str(key)) + 6 + _json_length(item, depth + 1)
+            for key, item in value.items()
+        )
+    return len(json.dumps(value, default=str, ensure_ascii=False))
+
+
+def estimate_size(value: Any) -> int:
     """Approximate the retained bytes of a cached value.
 
     Entry counts alone let one 4MB earnings payload weigh the same as a tiny
-    status dict; the byte budget needs a real (if approximate) size. JSON
-    encoding is exact for the JSON-ish payloads this cache mostly holds and
-    runs only on writes; DataFrame-like values report their buffer usage via
-    duck typing; everything else falls back to a shallow floor.
+    status dict; the byte budget needs a real (if approximate) size. JSON-ish
+    payloads use their JSON text length (long containers are sampled);
+    DataFrame-like values report their buffer usage via duck typing;
+    everything else falls back to a shallow floor.
     """
 
     if value is None:
@@ -32,7 +67,7 @@ def _estimate_size(value: Any) -> int:
             pass
     if isinstance(value, (dict, list, tuple, int, float, bool)):
         try:
-            return len(json.dumps(value, default=str, ensure_ascii=False)) + 64
+            return _json_length(value) + 64
         except Exception:
             pass
         if isinstance(value, dict):
@@ -159,7 +194,7 @@ class TTLCache:
         return expires_at, value
 
     def set(self, key: str, value: Any, ttl: int, *, size_hint: int | None = None) -> Any:
-        size = int(size_hint) if size_hint is not None else _estimate_size(value)
+        size = int(size_hint) if size_hint is not None else estimate_size(value)
         if size > self._MAX_ITEM_BYTES:
             # Serve the value but do not retain something this large.
             cache_metrics.incr("ttl_cache.rejected_oversize")

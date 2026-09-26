@@ -21,6 +21,11 @@ _SENSITIVE_DETAIL_KEY = re.compile(
     r"(?:authorization|cookie|credential|password|passwd|secret|token|api_key|private_key)",
     re.IGNORECASE,
 )
+_ACTION_DETAIL_MAX_DEPTH = 8
+_ACTION_DETAIL_MAX_STRING_BYTES = 1024
+_ACTION_DETAIL_MAX_FIELDS = 64
+_ACTION_DETAIL_MAX_ITEMS = 128
+_ACTION_DETAIL_MAX_KEY_LENGTH = 80
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS optix_worker_schema (
     version TEXT PRIMARY KEY,
@@ -172,7 +177,7 @@ def _details_json(details: Mapping[str, Any] | None) -> str:
 
 
 def _validate_action_detail(value: Any, *, depth: int = 0) -> None:
-    if depth > 8:
+    if depth > _ACTION_DETAIL_MAX_DEPTH:
         raise ValueError("worker action details are too deeply nested")
     if value is None or isinstance(value, (bool, int)):
         return
@@ -181,26 +186,72 @@ def _validate_action_detail(value: Any, *, depth: int = 0) -> None:
             raise ValueError("worker action details contain a non-finite number")
         return
     if isinstance(value, str):
-        if len(value.encode("utf-8")) > 1024:
+        if len(value.encode("utf-8")) > _ACTION_DETAIL_MAX_STRING_BYTES:
             raise ValueError("worker action detail string is too large")
         return
     if isinstance(value, Mapping):
-        if len(value) > 64:
+        if len(value) > _ACTION_DETAIL_MAX_FIELDS:
             raise ValueError("worker action details contain too many fields")
         for key, item in value.items():
-            if not isinstance(key, str) or not key or len(key) > 80:
+            if (
+                not isinstance(key, str)
+                or not key
+                or len(key) > _ACTION_DETAIL_MAX_KEY_LENGTH
+            ):
                 raise ValueError("worker action detail key is invalid")
             if _SENSITIVE_DETAIL_KEY.search(key):
                 raise ValueError("worker action details cannot contain sensitive fields")
             _validate_action_detail(item, depth=depth + 1)
         return
     if isinstance(value, (list, tuple)):
-        if len(value) > 128:
+        if len(value) > _ACTION_DETAIL_MAX_ITEMS:
             raise ValueError("worker action details contain too many items")
         for item in value:
             _validate_action_detail(item, depth=depth + 1)
         return
     raise ValueError("worker action details contain an unsupported value")
+
+
+def bounded_action_detail(value: Any, *, depth: int = 0) -> Any:
+    """Return the part of ``value`` that ``_validate_action_detail`` accepts.
+
+    Sensitive or malformed keys and unsupported values are dropped; strings
+    and collections are cut at the same limits the validator enforces.
+    """
+
+    if value is None or isinstance(value, (bool, int)):
+        return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, str):
+        # "replace" also absorbs lone surrogates, which cannot be encoded.
+        return value.encode("utf-8", errors="replace")[
+            :_ACTION_DETAIL_MAX_STRING_BYTES
+        ].decode("utf-8", errors="ignore")
+    if isinstance(value, Mapping):
+        bounded: dict[str, Any] = {}
+        if depth >= _ACTION_DETAIL_MAX_DEPTH:
+            return bounded
+        for key, item in value.items():
+            if len(bounded) >= _ACTION_DETAIL_MAX_FIELDS:
+                break
+            if (
+                not isinstance(key, str)
+                or not key
+                or len(key) > _ACTION_DETAIL_MAX_KEY_LENGTH
+                or _SENSITIVE_DETAIL_KEY.search(key)
+            ):
+                continue
+            bounded[key] = bounded_action_detail(item, depth=depth + 1)
+        return bounded
+    if isinstance(value, (list, tuple)):
+        if depth >= _ACTION_DETAIL_MAX_DEPTH:
+            return []
+        return [
+            bounded_action_detail(item, depth=depth + 1)
+            for item in list(value)[:_ACTION_DETAIL_MAX_ITEMS]
+        ]
+    return None
 
 
 def _action_details_json(details: Mapping[str, Any] | None) -> str:
@@ -314,10 +365,12 @@ class WorkerStateRepository:
         lease_seconds: float,
         now: datetime | None = None,
     ) -> bool:
-        observed = _as_utc(now or utc_now())
-        expires = observed + timedelta(seconds=lease_seconds)
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            # Read the clock only once the write lock is held: time spent
+            # waiting for it must not be taken out of the renewed lease.
+            observed = _as_utc(now or utc_now())
+            expires = observed + timedelta(seconds=lease_seconds)
             row = connection.execute(
                 "SELECT * FROM optix_worker_lock WHERE lock_name=?",
                 (LOCK_NAME,),
@@ -899,6 +952,8 @@ class WorkerStateRepository:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             self._assert_fence(connection, owner_id, fencing_token, observed)
+            # An interruption record keeps the planned next run: tasks that
+            # honor the persisted schedule resume from it after a restart.
             connection.execute(
                 """
                 INSERT INTO worker_task_status(
@@ -913,7 +968,11 @@ class WorkerStateRepository:
                     last_started_at=COALESCE(excluded.last_started_at,worker_task_status.last_started_at),
                     last_completed_at=COALESCE(excluded.last_completed_at,worker_task_status.last_completed_at),
                     last_success_at=COALESCE(excluded.last_success_at,worker_task_status.last_success_at),
-                    next_run_at=excluded.next_run_at,
+                    next_run_at=CASE
+                        WHEN excluded.status='interrupted'
+                        THEN COALESCE(excluded.next_run_at,worker_task_status.next_run_at)
+                        ELSE excluded.next_run_at
+                    END,
                     error_code=excluded.error_code,
                     details_json=excluded.details_json,
                     updated_at=excluded.updated_at

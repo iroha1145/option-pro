@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import socket
 import ssl
 from dataclasses import dataclass, field
@@ -89,7 +90,20 @@ class EtlProtocolError(EtlClientError):
         )
 
 
+_FRACTION_RE = re.compile(r"\.(\d+)")
+
+
 def _require_utc_text(value: str, *, field: str) -> str:
+    """Validate an ISO-8601 timestamp and return it as UTC ``Z`` text.
+
+    Downstream code compares these strings lexicographically (range filters
+    and ordering on ``available_at`` in local_intelligence, watermark equality
+    in etl_repository), so an upstream ``+08:00`` offset must not survive.
+    A ``Z`` value is returned byte-for-byte: replay detection hashes the
+    validated model, so stored rows and their hashes must not move. Offset
+    values keep their sub-second width (none, 3 or 6 digits).
+    """
+
     if not isinstance(value, str) or not value:
         raise ValueError(f"{field} must be a timestamp")
     try:
@@ -98,8 +112,16 @@ def _require_utc_text(value: str, *, field: str) -> str:
         raise ValueError(f"{field} must be an ISO-8601 timestamp") from exc
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise ValueError(f"{field} must include a timezone")
-    parsed.astimezone(timezone.utc)
-    return value
+    if value.endswith("Z"):
+        return value
+    utc = parsed.astimezone(timezone.utc)
+    base = utc.strftime("%Y-%m-%dT%H:%M:%S")
+    fraction_match = _FRACTION_RE.search(value)
+    if fraction_match is None:
+        return f"{base}Z"
+    digits = len(fraction_match.group(1))
+    fraction = f"{utc.microsecond:06d}"[:digits].ljust(digits, "0")
+    return f"{base}.{fraction}Z"
 
 
 class _WireModel(BaseModel):

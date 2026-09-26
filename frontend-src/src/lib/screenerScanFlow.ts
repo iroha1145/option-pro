@@ -1,9 +1,6 @@
 import { toQuery } from '../api/client.ts';
 import type { ScanParams, StrengthScanEnvelope } from '../api/modules/strength.ts';
 import type { StrengthRefreshParameters, WorkerAction } from '../api/modules/runtime.ts';
-import { fallbackQuoteLabel } from './liveQuotes.ts';
-
-export { fallbackQuoteLabel };
 
 export type StrengthScanPhase =
   | 'reading'

@@ -352,14 +352,14 @@ export default function Home() {
               variant="error"
               title={indicesQ.error.code === 503 ? t('数据暂不可用') : t('加载失败')}
               description={indicesQ.error.code === 503 ? t('暂无指数数据') : indicesQ.error.message}
-              action={<RetryButton onClick={indicesQ.refresh} refreshing={indicesQ.refreshing} />}
+              action={<RetryButton onClick={() => indicesQ.refresh()} refreshing={indicesQ.refreshing} />}
             />
           </div>
         ) : (
           <>
             {/* 有旧数据时刷新失败 → 明示陈旧，不清空指数卡（审计首页问题 5 补全） */}
             {indicesQ.error && (
-              <StaleStrip onRetry={indicesQ.refresh} refreshing={indicesQ.refreshing} className="mb-3" />
+              <StaleStrip onRetry={() => indicesQ.refresh()} refreshing={indicesQ.refreshing} className="mb-3" />
             )}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:[grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
             {(indicesQ.data ?? []).map((q, i) => {
@@ -404,7 +404,7 @@ export default function Home() {
           loading={statusQ.loading}
           error={statusQ.error}
           refreshing={statusQ.refreshing}
-          onRetry={statusQ.refresh}
+          onRetry={() => statusQ.refresh()}
           mean={mean}
           bias={bias}
           breadth={breadth}
@@ -426,7 +426,7 @@ export default function Home() {
             loading={breakoutsQ.loading}
             error={breakoutsQ.error}
             refreshing={breakoutsQ.refreshing}
-            onRetry={breakoutsQ.refresh}
+            onRetry={() => breakoutsQ.refresh()}
             isEmpty={breakouts.length === 0}
             emptyTitle={t('暂无突破信号')}
             skeleton={<SignalGridSkeleton cards={8} />}
@@ -447,7 +447,7 @@ export default function Home() {
             loading={earningsQ.loading}
             error={earningsQ.error}
             refreshing={earningsQ.refreshing}
-            onRetry={earningsQ.refresh}
+            onRetry={() => earningsQ.refresh()}
             isEmpty={earnings.length === 0}
             emptyTitle={t('近一个月暂无财报')}
           >
@@ -466,7 +466,7 @@ export default function Home() {
             loading={watchlistQ.loading}
             error={watchlistQ.error}
             refreshing={watchlistQ.refreshing}
-            onRetry={watchlistQ.refresh}
+            onRetry={() => watchlistQ.refresh()}
             isEmpty={movers.length === 0}
             emptyTitle={t('暂无关注标的')}
             skeleton={<MoverGridSkeleton cards={6} />}

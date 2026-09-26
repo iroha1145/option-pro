@@ -1,3 +1,4 @@
+import { clamp, finite } from './numeric.ts';
 import { selectStructuralOverlays } from './structuralOverlays.ts';
 
 /**
@@ -57,8 +58,6 @@ export const SMART_MAX_BARS = 360;
 // Preserve all bounded candidates until the user's layer/quality/status gates.
 export const SMART_MAX_PROPOSALS = 1024;
 const BROKEN = new Set(['invalidated', 'broken_up', 'broken_down', 'failed', 'expired']);
-const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
-const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
 const at = (r: Pick<Rail, 'slope' | 'intercept'>, x: number) => r.slope * x + r.intercept;
 const chartX = (bars: readonly SmartBar[], index: number) => bars[index].chartIndex ?? index;
 const atBar = (bars: readonly SmartBar[], r: Pick<Rail, 'slope' | 'intercept'>, index: number) => at(r, chartX(bars, index));
