@@ -510,8 +510,6 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
 
   return (
     <aside className={cn('card-surface self-start overflow-hidden', className)} aria-label={__t("AI 影响分析")}>
-      {/* 顶边 2px ai-600 标识条 */}
-      <div className="h-0.5 bg-ai-600" aria-hidden="true" />
       <AnimatePresence mode="wait">
         <motion.div
           key={`${ticker ?? 'none'}-${phase === 'ready' ? 'ready' : 'state'}`}
@@ -640,14 +638,14 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                     <button
                       onClick={() => void startJob()}
                       disabled={submitting}
-                      className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-ai-600 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
+                      className="btn-ai flex-1"
                     >
                       <AnalysisIcon size={13} />
                       {submitting ? __t('正在提交…') : __t('生成分析')}
                     </button>
                     <button
                       onClick={() => setConfirming(false)}
-                      className="h-8 rounded-md border border-line bg-card px-3 text-caption text-ink-500 shadow-btn transition-colors duration-fast hover:text-ink-800"
+                      className="control-button"
                     >
                       {__t('取消')}
                     </button>
@@ -656,7 +654,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               ) : (
                 <button
                   onClick={() => setConfirming(true)}
-                  className="mt-4 flex h-9 items-center gap-2 rounded-md bg-ai-600 px-4 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
+                  className="btn-ai mt-4"
                 >
                   <AnalysisIcon size={14} />
                   {__t('生成分析')}
@@ -710,7 +708,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               )}
               <button
                 onClick={() => setPhase('needs-analysis')}
-                className="mt-3 flex h-8 items-center gap-1.5 rounded-md bg-ai-600 px-3 text-caption font-medium text-on-accent shadow-btn transition-[filter] hover:brightness-105"
+                className="control-button mt-3"
               >
                 <Icon name="refresh" size={13} />
                 {__t('重试')}
@@ -732,7 +730,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                   setPhase('loading');
                   void loadImpact(ticker);
                 }}
-                className="mt-4 flex h-8 items-center gap-1.5 rounded-md bg-ai-600 px-3.5 text-caption font-medium text-on-accent shadow-btn transition-[filter] hover:brightness-105"
+                className="control-button mt-4"
               >
                 <Icon name="refresh" size={13} />
                 {__t('重试')}

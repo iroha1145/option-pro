@@ -129,6 +129,7 @@
 
 - **主按钮**：实心主操作一律用 `.btn-primary`（44 像素高）或 `.btn-primary.btn-sm`（32 像素高，粗指针设备仍为 44 像素）。二者自带按下回缩、只在可悬停设备上生效的悬停色和统一的禁用透明度。请求在途的按钮加 `aria-busy`，禁用态保持可读、指针显示为进行中。不要再手写 `bg-brand-600 … hover:brightness-105`。
 - **加载圈与刷新反馈**：统一用 `Spinner`（`on-accent` / `brand` / `muted` 三种色调）。带图标的刷新、重试按钮用 `BusyIcon`：图标与加载圈叠在同一格里交叉淡换（transitions.dev 09），按钮宽度与文字位置不变，请求在途期间持续转动。不再使用只转一圈的 `animate-spin-once`。
+- **模型相关按钮**：不再使用 `bg-ai-600` 实心青块。列表里每行都有的入口（财报列表「AI 影响」、新闻流的分析入口）用 `.control-button.ai-action`：白底发丝边、青瓷色图标，只在悬停时上浅青；该行已有分析结果可看时加 `.is-ready`，用浅青底标出。面板里单个的发起操作（生成分析、开始分析、确认弹窗）用 `.btn-ai`：浅青底、青瓷字、细边。仅图标的按钮加 `.btn-icon`。AI 结论卡片不加顶部或侧边的装饰色条；引文段落左侧的引用线属于排版，保留。
 - **模型任务在途**：状态文字用 `ThinkingLabel` 扫光（transitions.dev 15，beautifului ThinkingState 同一手法），文字作为子节点传入；只有任务确实在跑时扫光，暂停、待确认、已请求取消保持静止。
 - **状态型按钮**：加入/移出自选这类三态按钮参照 beUI button-stateful 的节奏：空闲图标 → 加载圈 → 成功勾（transitions.dev 10 描边出现），三者共用一个图标格。`IconSwap` 可以嵌套，内层靠子选择器适配保持自己的状态。
 - **收放与高度**：条件渲染的展开内容用 `CollapsePresence`（transitions.dev 21 的 grid 行 0fr↔1fr，收起播完再卸载，展开到位后放开裁剪与滤镜）；两种视图之间切换用 `AutoHeight`（transitions.dev 01）补间容器高度，新视图按 key 重挂后淡入。不要再用 `AnimatePresence mode="wait"` 加 `height: 0 ↔ auto`：它先收成 0 再撑开，帧循环被节流时还会卡在旧视图。

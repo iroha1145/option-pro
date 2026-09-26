@@ -202,15 +202,13 @@ export default function EarningsAnalysisControls() {
             onClick={() => void updateSchedule()}
             disabled={!doc || loading || running}
             className={cn(
-              'inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-caption font-medium shadow-btn transition-colors duration-fast',
-              enabled
-                ? 'bg-ai-600 text-on-accent'
-                : 'bg-paper-2 text-ink-600 hover:bg-line',
-              (!doc || loading || running) && 'cursor-wait opacity-60',
+              'control-button',
+              enabled && 'ai-action is-ready',
+              (!doc || loading || running) && 'cursor-wait',
             )}
           >
             <span
-              className={cn('size-2 rounded-full', enabled ? 'bg-white' : 'bg-ink-400')}
+              className={cn('size-2 rounded-full', enabled ? 'bg-ai-600' : 'bg-ink-300')}
               aria-hidden="true"
             />
             {t('每日自动分析')}
@@ -220,12 +218,8 @@ export default function EarningsAnalysisControls() {
             onClick={() => void runNow()}
             disabled={!taskReady || running}
             title={!taskReady ? t('财报分析服务暂不可用') : t('分析未来 5 天内尚未安排分析的财报')}
-            className={cn(
-              'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-caption font-medium shadow-btn transition-[filter]',
-              taskReady && !running
-                ? 'bg-ai-600 text-on-accent hover:brightness-105'
-                : 'cursor-not-allowed bg-paper-2 text-ink-400',
-            )}
+            aria-busy={running}
+            className="btn-ai"
           >
             <IconSwap state={running ? 'b' : 'a'} a={<AnalysisIcon size={14} />} b={<Spinner size={12} tone="muted" />} />
             {running ? t('正在检查财报…') : t('立即分析新的财报')}

@@ -136,11 +136,11 @@ export function NewsRow({
         </div>
       </div>
       {/* 右侧：独立分析入口，使用与标题相同的详情回调。 */}
-      <div className="relative z-10 flex w-8 shrink-0 items-start justify-end">
+      <div className="relative z-10 flex shrink-0 items-start justify-end">
         <button
           type="button"
           onClick={() => onOpen(item.newsId)}
-          className="flex size-8 items-center justify-center rounded-md bg-ai-600 text-on-accent shadow-btn transition-[filter] duration-fast hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai-600/40 focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+          className={cn('control-button ai-action btn-icon', a && 'is-ready')}
           title={__t("查看 / 生成 AI 分析")}
           aria-label={__t("查看 / 生成 AI 分析")}
         >

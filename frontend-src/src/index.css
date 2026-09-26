@@ -622,6 +622,63 @@
 }
 @media (prefers-reduced-motion: reduce) { .control-button { transition: none; } }
 
+/* 模型相关操作（2026-09-26 重做）。此前一律 bg-ai-600 实心青块：财报列表和新闻流
+   每行一个，整列深色压过了代码、价格这些数据本身。现在分两档，颜色只用来表达状态：
+   - .control-button.ai-action  列表里每行都有的入口：与其他次级按钮同一副白底发丝边，
+     只有图标是青瓷色，悬停才上浅青；这一行已有分析结果可看时加 .is-ready，浅青底
+     直接标出「这里有结果」。
+   - .btn-ai  面板里单个的发起操作（生成分析、开始分析、确认）：浅青底 + 青瓷字 + 细边，
+     仍一眼可认，但不再是一块深色。 */
+.control-button.ai-action svg { color: var(--ai-600); }
+.control-button.ai-action.is-ready {
+  border-color: color-mix(in srgb, var(--ai-600) 26%, transparent);
+  background: var(--ai-50);
+  color: var(--ai-600);
+}
+.control-button.btn-icon { width: 32px; padding: 0; }
+@media (pointer: coarse) {
+  .control-button.btn-icon { width: 44px; }
+}
+.btn-ai {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid color-mix(in srgb, var(--ai-600) 26%, transparent);
+  border-radius: 7px;
+  background: var(--ai-50);
+  color: var(--ai-600);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+  transition:
+    color var(--duration-quick) var(--ease-snap),
+    background-color var(--duration-quick) var(--ease-snap),
+    border-color var(--duration-quick) var(--ease-snap),
+    transform var(--duration-quick) var(--ease-snap);
+}
+.btn-ai:not(:disabled):active { transform: scale(.97); }
+.btn-ai:disabled { cursor: not-allowed; opacity: .5; }
+.btn-ai[aria-busy="true"]:disabled { cursor: progress; opacity: .8; }
+@media (hover: hover) and (pointer: fine) {
+  .control-button.ai-action:not(:disabled):hover {
+    border-color: color-mix(in srgb, var(--ai-600) 32%, transparent);
+    background: var(--ai-50);
+    color: var(--ai-600);
+  }
+  .btn-ai:not(:disabled):hover {
+    border-color: color-mix(in srgb, var(--ai-600) 42%, transparent);
+    background: color-mix(in srgb, var(--ai-600) 14%, var(--card));
+  }
+}
+@media (pointer: coarse) {
+  .btn-ai { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) { .btn-ai { transition: none; } }
+
 /* Phone selectors mirror the narrow rail and raised selection in Cloud Monitor.
    The separate scrolling viewport retains room for the full touch target/shadow. */
 .selection-viewport { display: contents; }

@@ -136,7 +136,7 @@ function AiOptionInsight({
                 ? t('使用当前期权链的 {n} 条异动记录', { n: evidence.length })
                 : t('当前期权链暂无符合条件的异动')
             }
-            className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] duration-fast hover:brightness-105 disabled:cursor-not-allowed disabled:bg-ink-300"
+            className="btn-ai"
           >
             {hasEvidence ? t('生成解读') : t('暂无异动')}
           </button>
@@ -175,13 +175,13 @@ function AiOptionInsight({
                   }),
                 );
               }}
-              className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-on-accent shadow-btn-hi hover:brightness-105"
+              className="btn-ai"
             >
               {t('生成解读')}
             </button>
             <button
               onClick={() => setConfirming(false)}
-              className="rounded-md border border-line-strong px-3 py-1.5 text-caption text-ink-600 shadow-btn hover:bg-paper-2"
+              className="control-button"
             >
               {t('取消')}
             </button>

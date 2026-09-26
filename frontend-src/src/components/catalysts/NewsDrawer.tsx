@@ -804,7 +804,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
                     {((item.analysisStatus === 'pending' && !showCancelled) || jobMissing) && (
                       <button
                         onClick={() => setConfirm('create')}
-                        className="flex items-center gap-1.5 rounded-md bg-ai-600 px-3.5 py-2 text-caption font-medium text-on-accent shadow-btn transition-[filter] hover:brightness-105"
+                        className="btn-ai"
                       >
                         <AnalysisIcon size={13} />
                         {__t('生成 AI 分析')}
@@ -813,7 +813,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
                     {(showCompleted || showFailed || showInsufficient || showCancelled) && (
                       <button
                         onClick={() => setConfirm('force')}
-                        className="flex items-center gap-1.5 rounded-md bg-ai-600 px-3.5 py-2 text-caption font-medium text-on-accent shadow-btn transition-[filter] hover:brightness-105"
+                        className="control-button ai-action"
                       >
                         <Icon name="refresh" size={13} />
                         {showFailed || showInsufficient || showCancelled ? __t('重试分析（强制）') : __t('重新分析（强制）')}
