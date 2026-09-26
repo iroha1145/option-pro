@@ -613,6 +613,7 @@ def test_manual_wake_keeps_the_planned_run_of_a_persisted_schedule(
         Refresh(),
         86_400.0,
         honor_persisted_schedule=True,
+        next_calendar_run_at=lambda _now: planned + timedelta(hours=1),
     )
 
     async def scenario() -> str:
@@ -1518,12 +1519,25 @@ def test_recent_variants_still_refresh_after_a_late_default(
     assert second.details["variant_refresh_published"] == 1
 
 
+@pytest.mark.parametrize(
+    ("started", "slot"),
+    [
+        (datetime(2026, 9, 24, 15, tzinfo=EASTERN),
+         datetime(2026, 9, 24, 22, tzinfo=EASTERN)),
+        (datetime(2026, 10, 31, 22, tzinfo=EASTERN),
+         datetime(2026, 11, 1, 22, tzinfo=EASTERN)),
+        (datetime(2026, 3, 7, 22, tzinfo=EASTERN),
+         datetime(2026, 3, 8, 22, tzinfo=EASTERN)),
+    ],
+)
 def test_owner_action_after_restart_leaves_the_default_for_its_slot(
     _no_variant_work: None,
+    started: datetime,
+    slot: datetime,
 ) -> None:
     import app.api.strength as strength_api
 
-    now = datetime(2026, 9, 24, 15, 0, tzinfo=EASTERN).timestamp()
+    now = started.timestamp()
     runs: list[str] = []
 
     def eod(*, horizon: str, **_kwargs: object) -> dict:
@@ -1546,9 +1560,8 @@ def test_owner_action_after_restart_leaves_the_default_for_its_slot(
 
     result = asyncio.run(task.run_for_actions([action]))
 
-    slot = datetime(2026, 9, 24, 22, 0, tzinfo=EASTERN).timestamp()
     assert runs == ["mid"]
-    assert result.next_delay_seconds == pytest.approx(slot - now)
+    assert result.next_delay_seconds == pytest.approx(slot.timestamp() - now)
 
 
 def test_default_runs_once_on_the_day_daylight_saving_time_ends(
@@ -1574,6 +1587,187 @@ def test_default_runs_once_on_the_day_daylight_saving_time_ends(
 
     assert len(runs) == 2
     assert early.next_delay_seconds == pytest.approx(3_600.0)
+
+
+@pytest.mark.parametrize(
+    ("start", "expected_hours"),
+    [
+        (datetime(2026, 10, 31, 22, tzinfo=EASTERN), 25),
+        (datetime(2026, 3, 7, 22, tzinfo=EASTERN), 23),
+        (datetime(2026, 9, 24, 22, tzinfo=EASTERN), 24),
+    ],
+)
+@pytest.mark.parametrize("interrupted", [False, True], ids=["completed", "in-flight"])
+def test_calendar_strength_restart_waits_for_the_absolute_slot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _no_variant_work: None,
+    start: datetime,
+    expected_hours: int,
+    interrupted: bool,
+) -> None:
+    from app.worker import runtime, state
+
+    clock = {"now": start.astimezone(timezone.utc)}
+    monkeypatch.setattr(runtime, "utc_now", lambda: clock["now"])
+    monkeypatch.setattr(state, "utc_now", lambda: clock["now"])
+    repository = WorkerStateRepository(tmp_path / "calendar-restart.db")
+    runs: list[datetime] = []
+    waits: list[float] = []
+    entered = asyncio.Event()
+
+    def supervisor(
+        owner: str, *, stop_after_run: bool, interrupt_during_run: bool = False,
+    ) -> WorkerSupervisor:
+        # Rebuild both the production task specification and runner, as a
+        # deployment does; retaining the old runner hides the 25-hour bug.
+        spec = next(
+            task
+            for task in build_default_tasks(owner, settings=_worker_config(tmp_path))
+            if task.name == "strength_refresh"
+        )
+        runner = spec.runner
+        assert isinstance(runner, StrengthRefreshTask)
+        runner._clock = lambda: clock["now"].timestamp()
+        worker = WorkerSupervisor(
+            repository,
+            (spec,),
+            owner_id=owner,
+            # Virtual waiting advances a whole day without real heartbeats.
+            lease_seconds=7 * 86_400,
+            process_lock=ProcessFileLock(tmp_path / "calendar-restart.lock"),
+        )
+
+        async def run(_parameters: dict) -> TaskResult:
+            runs.append(clock["now"].astimezone(EASTERN))
+            if interrupt_during_run:
+                entered.set()
+                await asyncio.Event().wait()
+            if stop_after_run:
+                worker.request_stop()
+            return TaskResult(status="idle", details={"published": True})
+
+        async def wait(_spec: TaskSpec, delay: float) -> bool:
+            waits.append(delay)
+            clock["now"] += timedelta(seconds=delay)
+            return True
+
+        monkeypatch.setattr(runner, "_run", run)
+        monkeypatch.setattr(worker, "_wait_for_next", wait)
+        return worker
+
+    async def interrupt_first_run() -> None:
+        first = supervisor("before", stop_after_run=False, interrupt_during_run=True)
+        running = asyncio.create_task(first.run_forever())
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        # This row was saved before the runner returned any result.
+        row = repository.task_states()[0]
+        assert row["status"] == "running"
+        assert datetime.fromisoformat(row["next_run_at"]) == start + timedelta(days=1)
+        running.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await running
+
+    if interrupted:
+        asyncio.run(interrupt_first_run())
+    else:
+        asyncio.run(supervisor("before", stop_after_run=False).run_once())
+    stored = datetime.fromisoformat(repository.task_states()[0]["next_run_at"])
+    asyncio.run(supervisor("after", stop_after_run=True).run_forever())
+
+    expected = start + timedelta(days=1)
+    assert stored == expected
+    assert waits == [expected_hours * 3_600]
+    assert runs == [start, expected]
+
+
+@pytest.mark.parametrize("interval", [600.0, 21_600.0])
+def test_noncalendar_schedule_restore_keeps_its_configured_bound(
+    tmp_path: Path, interval: float,
+) -> None:
+    repository = WorkerStateRepository(tmp_path / "bounded-schedule.db")
+    repository.initialize()
+    token = repository.acquire("seed", lease_seconds=30)
+    assert token is not None
+    repository.record_task(
+        "seed", token, "maintenance", enabled=True, status="idle",
+        next_run_at=datetime.now(timezone.utc) + timedelta(days=400),
+    )
+    repository.release("seed", token)
+    spec = TaskSpec("maintenance", lambda: TaskResult(), interval,
+                    honor_persisted_schedule=True)
+    worker = WorkerSupervisor(
+        repository, (spec,), owner_id="bounded",
+        process_lock=ProcessFileLock(tmp_path / "bounded-schedule.lock"),
+    )
+    assert asyncio.run(worker._persisted_initial_delay(spec)) == interval
+
+
+@pytest.mark.parametrize(
+    ("observed", "expected_seconds"),
+    [
+        (datetime(2026, 9, 24, 15, tzinfo=EASTERN), 7 * 3_600),
+        (datetime(2026, 10, 31, 22, tzinfo=EASTERN), 25 * 3_600),
+    ],
+)
+def test_calendar_schedule_restore_bounds_a_distant_future_timestamp(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    observed: datetime,
+    expected_seconds: int,
+) -> None:
+    from app.worker import runtime, state
+
+    now = observed.astimezone(timezone.utc)
+    monkeypatch.setattr(runtime, "utc_now", lambda: now)
+    monkeypatch.setattr(state, "utc_now", lambda: now)
+    repository = WorkerStateRepository(tmp_path / "future-schedule.db")
+    repository.initialize()
+    token = repository.acquire("seed", lease_seconds=30)
+    assert token is not None
+    repository.record_task(
+        "seed", token, "strength_refresh", enabled=True, status="idle",
+        next_run_at=now + timedelta(days=400),
+    )
+    repository.release("seed", token)
+    spec = next(
+        task
+        for task in build_default_tasks("future", settings=_worker_config(tmp_path))
+        if task.name == "strength_refresh"
+    )
+    worker = WorkerSupervisor(
+        repository, (spec,), owner_id="future",
+        process_lock=ProcessFileLock(tmp_path / "future-schedule.lock"),
+    )
+    assert asyncio.run(worker._persisted_initial_delay(spec)) == expected_seconds
+
+
+def test_noncalendar_strength_keeps_its_configured_interval(
+    monkeypatch: pytest.MonkeyPatch, _no_variant_work: None,
+) -> None:
+    clock = {"now": datetime(2026, 10, 31, 22, tzinfo=EASTERN).timestamp()}
+    runs: list[float] = []
+    task = StrengthRefreshTask(
+        clock=lambda: clock["now"], scheduled_interval_seconds=600,
+    )
+
+    async def run(_parameters: dict) -> TaskResult:
+        runs.append(clock["now"])
+        return TaskResult(status="idle", details={"published": True})
+
+    monkeypatch.setattr(task, "_run", run)
+    assert asyncio.run(task()).next_delay_seconds == 600
+    clock["now"] += 300
+    assert asyncio.run(task()).next_delay_seconds == 300
+    clock["now"] += 300
+    assert asyncio.run(task()).next_delay_seconds == 600
+    assert len(runs) == 2
+
+
+@pytest.mark.parametrize("delay", [-1, float("nan"), float("inf"), 90_001])
+def test_task_result_rejects_delays_outside_a_civil_day(delay: float) -> None:
+    with pytest.raises(ValueError, match="task delay"):
+        TaskResult(next_delay_seconds=delay)
 
 
 def test_retention_backup_copies_every_label_on_every_call(tmp_path: Path) -> None:

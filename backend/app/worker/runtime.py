@@ -49,9 +49,10 @@ class TaskResult:
         if self.next_delay_seconds is not None and (
             not math.isfinite(self.next_delay_seconds)
             or self.next_delay_seconds < 0
-            or self.next_delay_seconds > 86_400
+            # A civil day can last 25 hours when daylight saving time ends.
+            or self.next_delay_seconds > 90_000
         ):
-            raise ValueError("task delay must be between 0 and 86400 seconds")
+            raise ValueError("task delay must be between 0 and 90000 seconds")
         if self.error_code is not None and not _ERROR_CODE.fullmatch(self.error_code):
             raise ValueError("task error code is invalid")
 
@@ -72,6 +73,9 @@ class TaskSpec:
     # 只给重负载低频任务（如全量备份）用：进程重启（部署或崩溃恢复）
     # 不应触发一次计划外的 GB 级磁盘拷贝。
     honor_persisted_schedule: bool = False
+    # Calendar tasks resume at their next wall-clock slot, including 25-hour
+    # days; ordinary interval tasks keep their configured interval and bound.
+    next_calendar_run_at: Callable[[datetime], datetime | None] | None = None
     close: Callable[[], Awaitable[None] | None] | None = None
 
     def __post_init__(self) -> None:
@@ -659,6 +663,14 @@ class WorkerSupervisor:
                 if planned is not None and planned > started
                 else started + timedelta(seconds=task.interval_seconds)
             )
+            if task.next_calendar_run_at is not None:
+                calendar_run = task.next_calendar_run_at(started)
+                if calendar_run is not None:
+                    resume_at = (
+                        min(planned, calendar_run)
+                        if planned is not None and planned > started
+                        else calendar_run
+                    )
         await self._record(
             task,
             status="running",
@@ -914,9 +926,16 @@ class WorkerSupervisor:
             return 0.0
         if next_run.tzinfo is None or next_run.utcoffset() is None:
             return 0.0
-        remaining = (next_run - utc_now()).total_seconds()
-        # 上限一个周期：时钟异常或脏数据不能把任务锁死到远未来。
-        return min(max(0.0, remaining), task.interval_seconds)
+        observed = utc_now()
+        remaining = (next_run - observed).total_seconds()
+        maximum = task.interval_seconds
+        if task.next_calendar_run_at is not None:
+            calendar_run = task.next_calendar_run_at(observed)
+            if calendar_run is not None:
+                maximum = max(0.0, (calendar_run - observed).total_seconds())
+        # Bound corrupted future timestamps by the next legitimate calendar
+        # slot, or one configured interval for non-calendar tasks.
+        return min(max(0.0, remaining), maximum)
 
     async def _has_pending_actions(self, task: TaskSpec) -> bool:
         # 轮询本身每 0.5s 一次，锁竞争时当作「暂无手动请求」继续等即可。

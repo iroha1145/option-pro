@@ -2193,9 +2193,13 @@ class StrengthRefreshTask:
             due_at = self._next_slot_at(now)
             if due_at is None:
                 return 0.0
-        return min(
-            86_400.0 if self._refresh_times_et else self._scheduled_interval_seconds,
-            max(0.0, due_at - now),
+        delay = max(0.0, due_at - now)
+        # Keep the absolute slot on a 25-hour day. A capped wake persisted
+        # before a restart would make a fresh runner start an hour early.
+        return (
+            delay
+            if self._refresh_times_et
+            else min(self._scheduled_interval_seconds, delay)
         )
 
     async def _run_eod_limited(self, parameters: dict[str, Any]) -> TaskResult:
@@ -3503,6 +3507,7 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         settings=settings,
         personal_config=config,
     )
+    strength_refresh_times_et = (_strength_refresh_slot_et(),)
     return (
         TaskSpec(
             "sector_iv_refresh",
@@ -3611,7 +3616,7 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         ),
         TaskSpec(
             "strength_refresh",
-            StrengthRefreshTask(refresh_times_et=(_strength_refresh_slot_et(),)),
+            StrengthRefreshTask(refresh_times_et=strength_refresh_times_et),
             # 默认快照每天在收盘缓冲期结束的美东时刻刷新；参数化 API 动作不会
             # 重置默认快照的绝对截止时间。
             interval_seconds=86_400.0,
@@ -3622,6 +3627,9 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
             # 重启不重跑：部署或崩溃后沿用状态库里的下一个美东时刻，而不是
             # 按进程启动时间立即再跑一轮全市场作业。
             honor_persisted_schedule=True,
+            next_calendar_run_at=lambda now: next_et_slot_at(
+                now, strength_refresh_times_et,
+            ),
         ),
         TaskSpec(
             "breakout_refresh",
