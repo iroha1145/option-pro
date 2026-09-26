@@ -54,6 +54,7 @@ from app.services.market_calendar import early_close_minutes, is_trading_day
 from app.services.numeric import finite_number_or_none as _safe_number
 from app.services.symbols import quote_symbol
 from app.services.technical.indicators import rsi14
+from app.services import watchlist_six_month
 from app.services.watchlist_trend import daily_trend
 from app.services.watchlist_scope import (
     DEFAULT_WATCHLIST_TICKERS,
@@ -1569,6 +1570,10 @@ def _clean_watchlist_snapshot_payload(value: Any) -> dict[str, Any] | None:
                 or not spark
                 or len(spark) > 7
                 or not all(_is_finite_number(point, positive=True) for point in spark)
+                or (
+                    "trend_6m" in stock
+                    and not watchlist_six_month.valid_trend(stock["trend_6m"])
+                )
             ):
                 return None
             group_tickers.add(ticker)
@@ -2424,6 +2429,29 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
             )
             for ticker in delayed_tickers:
                 quotes[ticker]["quote_delayed"] = True
+            # Half-year weekly trend for the cards. Completed weeks are cached
+            # per symbol for hours, so a routine rebuild costs no extra request;
+            # a failure here only drops the optional field, never the quote.
+            try:
+                history = watchlist_six_month.cached_weekly_history(
+                    list(quotes),
+                    lambda symbols: watchlist_six_month.fetch_six_month_daily(
+                        symbols,
+                        download=yf_mod.download,
+                        market_timezone=_watchlist_market_timezone,
+                        session=session,
+                    ),
+                )
+                for ticker, weekly in history.items():
+                    trend = watchlist_six_month.compose_trend(
+                        weekly,
+                        price=quotes[ticker]["price"],
+                        quote_date=quote_market_datetimes[ticker].date(),
+                    )
+                    if trend is not None:
+                        quotes[ticker]["trend_6m"] = trend
+            except Exception as exc:
+                logger.warning("Watchlist six-month trend failed (%s)", type(exc).__name__)
             return quotes, quote_times, delayed_tickers
         except Exception as exc:
             logger.warning("Watchlist quote refresh failed (%s)", type(exc).__name__)
