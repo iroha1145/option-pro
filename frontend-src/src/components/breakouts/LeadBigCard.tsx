@@ -28,8 +28,9 @@ import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
+import Spinner from '@/components/shared/Spinner';
 import { cn } from '@/lib/utils';
-import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
+import { DUR_SECTION, DUR_UI, EASE_PAPER } from '@/lib/motion';
 import { fmtNyEventTime, fmtPrice, fmtRelative } from '@/lib/format';
 import { MACRO_TONE_LABEL, macroToneOf } from '@/lib/macroFit';
 import { baseAnimation, CH, CHART_MONO_FONT, glassTooltip, type ChartOption } from '@/lib/chart';
@@ -186,7 +187,7 @@ function LifecycleStepper({ state }: { state: string }) {
         /* 柔和入场：节点按序 60ms 错峰 scale 0.8→1（仅首次挂载播放） */
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.3, ease: EASE_PAPER, delay: order * 0.06 }}
+        transition={{ duration: DUR_UI, ease: EASE_PAPER, delay: order * 0.06 }}
         className={cn(
           'size-2.5 rounded-full',
           tone === 'current' && 'bg-brand-600 ring-4 ring-brand-100',
@@ -243,7 +244,7 @@ function LifecycleStepper({ state }: { state: string }) {
                 className="absolute inset-y-0 left-0 bg-brand-600"
                 initial={{ width: '0%' }}
                 animate={{ width: it.passed ? '100%' : '0%' }}
-                transition={{ duration: 0.4, ease: EASE_PAPER, delay: 0.24 + i * 0.06 }}
+                transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: 0.24 + i * 0.06 }}
               />
             </span>
           )}
@@ -408,14 +409,10 @@ function MiniKline({ ticker, dailyVersion, preparation, statusReadFailed }: { ti
               <button
                 onClick={() => void pullAndReload()}
                 disabled={pulling}
-                className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-2.5 py-1 text-micro font-medium text-on-accent shadow-btn-hi transition-[background-color,opacity] duration-fast hover:bg-brand-700 disabled:cursor-wait disabled:opacity-70"
+                aria-busy={pulling}
+                className="btn-primary btn-sm"
               >
-                {pulling && (
-                  <span
-                    className="size-2.5 animate-spin rounded-full border-2 border-on-accent/35 border-t-on-accent"
-                    aria-hidden="true"
-                  />
-                )}
+                {pulling && <Spinner size={10} tone="on-accent" />}
                 {pulling ? t('正在拉取') : t('拉取行情')}
               </button>
             )}
@@ -616,7 +613,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
       ref={ref}
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.56, ease: EASE_PAPER }}
+      transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
       aria-label={t('{ticker} {setup} 首要信号大卡', { ticker: e.ticker, setup: SETUP_CN[e.setup_type] ?? e.setup_type ?? '' })}
       className={cn('radar-lead-card card-surface p-5', locate && 'bk-locate')}
     >
@@ -672,7 +669,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
           <button
             onClick={() => openTicker(e.ticker)}
             aria-label={t('打开 {ticker} 个股详情抽屉', { ticker: e.ticker })}
-            className="text-brand-600 underline-offset-4 transition-colors hover:text-brand-700 hover:underline"
+            className="text-brand-600 underline-offset-4 transition-colors duration-fast hover:text-brand-700 hover:underline"
           >
             {e.ticker}
           </button>
@@ -787,7 +784,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
           </button>
           <Link
             to={`/stock/${encodeURIComponent(e.ticker)}`}
-            className="flex items-center gap-1.5 rounded-md bg-brand-600 px-3.5 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[transform,background-color] duration-fast hover:bg-brand-700 active:scale-[0.98]"
+            className="btn-primary"
           >
             {t('打开研究页')}
             <Icon name="arrow-up-right" size={13} />

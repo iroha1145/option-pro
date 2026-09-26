@@ -1,7 +1,7 @@
 import { useNow } from '@/hooks/useNow';
 import { cn } from '@/lib/utils';
 import { fmtTimeHHMMSS } from '@/lib/format';
-import Icon from '@/components/icons';
+import { BusyIcon } from '@/components/shared/IconSwap';
 import { t } from '../../i18n/core.ts';
 
 type RefreshStatus = 'refreshed' | 'cooldown' | 'failed_stale' | 'queued' | null;
@@ -44,7 +44,7 @@ export default function EarningsRefreshButton({
             : 'border-line bg-card text-ink-600 hover:border-brand-400 hover:text-brand-600',
         )}
       >
-        <Icon name="refresh" size={15} className={refreshing ? 'animate-spin-once' : ''} />
+        <BusyIcon busy={refreshing} size={15} tone="brand" />
         {refreshing ? t('刷新中') : cooldownRemain > 0 ? <span className="font-mono tnum">{cooldownRemain}s</span> : t('刷新日历')}
       </button>
     </span>

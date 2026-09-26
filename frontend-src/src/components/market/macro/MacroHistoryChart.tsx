@@ -240,7 +240,7 @@ export default function MacroHistoryChart({
               <button
                 type="button"
                 onClick={onRetry}
-                className="rounded-md border border-line bg-card px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
+                className="rounded-md border border-line bg-card px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
               >
                 {t('重试')}
               </button>

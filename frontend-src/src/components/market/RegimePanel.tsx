@@ -4,6 +4,7 @@
  * 六条 grow-bar + 数值 + 毛玻璃 tooltip 解释；live 未覆盖 → 503「快照暂不可用」
  */
 import { motion } from 'framer-motion';
+import { EASE_PAPER } from '@/lib/motion';
 import type { ApiError } from '@/api/client';
 import type { MarketRegime } from './api';
 import { cn } from '@/lib/utils';
@@ -12,6 +13,7 @@ import EmptyState from '@/components/shared/EmptyState';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS, type ScoreHint } from '@/lib/scoreHints';
 import { SkeletonCard } from '@/components/shared/Skeleton';
+import { BusyIcon } from '@/components/shared/IconSwap';
 import { t } from '../../i18n/core.ts';
 
 /*
@@ -64,9 +66,10 @@ export default function RegimePanel({
             <button
               onClick={onRetry}
               disabled={refreshing}
-              className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
+              aria-busy={refreshing}
+              className="btn-primary"
             >
-              {refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-on-accent/40 border-t-on-accent" />}
+              <BusyIcon busy={refreshing} size={14} tone="on-accent" />
               {t('重试')}
             </button>
           }
@@ -111,7 +114,7 @@ export default function RegimePanel({
                   initial={{ scaleX: 0 }}
                   whileInView={{ scaleX: 1 }}
                   viewport={{ once: true, amount: 0.4 }}
-                  transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: i * 0.045 }}
+                  transition={{ duration: 0.7, ease: EASE_PAPER, delay: i * 0.045 }}
                   style={{ width: `${Math.max(2, Math.min(100, score))}%` }}
                 />
               </div>

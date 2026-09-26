@@ -17,6 +17,8 @@ import SourceNote from '@/components/shared/SourceNote';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import MenuSelect from '@/components/shared/MenuSelect';
 import Icon from '@/components/icons';
+import { BusyIcon } from '@/components/shared/IconSwap';
+import ThinkingLabel from '@/components/shared/ThinkingLabel';
 import { cn } from '@/lib/utils';
 import { fmtPrice, fmtRelative } from '@/lib/format';
 import { OPTION_SUPPORTED_LIST, optionsSupported } from '@/mocks/fixtures2';
@@ -192,13 +194,15 @@ function AiOptionInsight({
           <div className="flex items-center justify-between text-caption text-ink-500">
             <span className="flex items-center gap-1.5">
               <span className="size-1.5 animate-led-pulse rounded-full bg-ai-600" />
-              {queryIssue === 'paused' || queryIssue === 'blocked' ? t('任务状态待确认') : job.cancelRequested
-                ? t('已请求取消')
-                : job.status === 'queued'
-                  ? t('排队中…')
-                  : job.progress === null
-                    ? t('模型分析中…')
-                    : t('解读中 {pct}%', { pct: Math.round(job.progress) })}
+              <ThinkingLabel live={!(queryIssue === 'paused' || queryIssue === 'blocked' || job.cancelRequested)}>
+                {queryIssue === 'paused' || queryIssue === 'blocked' ? t('任务状态待确认') : job.cancelRequested
+                  ? t('已请求取消')
+                  : job.status === 'queued'
+                    ? t('排队中…')
+                    : job.progress === null
+                      ? t('模型分析中…')
+                      : t('解读中 {pct}%', { pct: Math.round(job.progress) })}
+              </ThinkingLabel>
             </span>
             <button
               onClick={() => void cancel()}
@@ -433,9 +437,10 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
                 if (exp) refreshChain();
               }}
               disabled={retrySeconds > 0 || retrying}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent transition-[filter,opacity] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
+              aria-busy={retrying}
+              className="btn-primary"
             >
-              <Icon name="refresh" size={14} />
+              <BusyIcon busy={retrying} size={14} tone="on-accent" />
               {retrying ? t('正在重试') : retrySeconds > 0 ? t('{n} 秒后重试', { n: retrySeconds }) : t('重试')}
             </button>
           )
@@ -462,9 +467,10 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
                 refreshExpirations({ force: true });
               }}
               disabled={expRefreshing}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter,opacity] hover:brightness-105"
+              aria-busy={expRefreshing}
+              className="btn-primary"
             >
-              <Icon name="refresh" size={14} />
+              <BusyIcon busy={expRefreshing} size={14} tone="on-accent" />
               {expRefreshing ? t('正在重试') : t('重新获取')}
             </button>
           ) : null
@@ -523,9 +529,9 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
               type="button"
               onClick={() => refreshChain()}
               disabled={retrySeconds > 0 || chainRefreshing}
-              className="inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600 disabled:cursor-wait disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-wait disabled:opacity-60"
             >
-              <Icon name="refresh" size={13} />
+              <BusyIcon busy={chainRefreshing} size={13} tone="brand" />
               {chainRefreshing ? t('正在重试') : t('重试该到期日')}
             </button>
           </div>

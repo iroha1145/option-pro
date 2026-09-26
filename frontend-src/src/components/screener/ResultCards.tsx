@@ -7,7 +7,7 @@ import SoftBadge from '@/components/shared/SoftBadge';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ScreenerRow } from '@/api/types';
 import { cn } from '@/lib/utils';
-import { EASE_PAPER } from '@/lib/motion';
+import { DUR_SECTION, DUR_UI, EASE_PAPER } from '@/lib/motion';
 import Icon from '@/components/icons';
 import TickerLogo from '@/components/shared/TickerLogo';
 import InfoHint from '@/components/shared/InfoHint';
@@ -67,9 +67,9 @@ export default function ResultCards({
             layout="position"
             initial={page === 1 ? { opacity: 0, y: 14 } : false}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, ease: EASE_PAPER, delay: page === 1 ? Math.min(i * 0.03, 0.3) : 0, layout: { duration: 0.32, ease: EASE_PAPER } }}
+            transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: page === 1 ? Math.min(i * 0.03, 0.3) : 0, layout: { duration: DUR_UI, ease: EASE_PAPER } }}
             /* 可展开结果卡：hover 上浮 -3px/240ms（whileHover 避免入场后内联 transform 压掉 CSS 位移），阴影用 CSS */
-            whileHover={{ y: -3, transition: { duration: 0.24, ease: 'easeOut' } }}
+            whileHover={{ y: -3, transition: { duration: DUR_UI, ease: 'easeOut' } }}
             className="card-surface overflow-hidden transition-shadow duration-240 ease-out hover:shadow-sh-2"
           >
             <button
@@ -92,7 +92,7 @@ export default function ResultCards({
                 <Icon
                   name="chevron-down"
                   size={14}
-                  className={cn('text-ink-300 transition-transform duration-200', isOpen && 'rotate-180 text-brand-600')}
+                  className={cn('text-ink-300 transition-transform duration-fast', isOpen && 'rotate-180 text-brand-600')}
                 />
               </span>
               <span className="mt-3 flex items-end justify-between gap-3">
@@ -132,7 +132,7 @@ export default function ResultCards({
                   )}
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  transition={{ duration: 0.26, ease: EASE_PAPER, delay: 0.72 + i * 0.03 }}
+                  transition={{ duration: DUR_UI, ease: EASE_PAPER, delay: 0.72 + i * 0.03 }}
                   style={{ left: `calc(${strengthWidth}% - 4px)`, top: 'calc(50% - 4px)' }}
                   aria-hidden="true"
                 />
@@ -157,7 +157,7 @@ export default function ResultCards({
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.26, ease: EASE_PAPER }}
+                  transition={{ duration: DUR_UI, ease: EASE_PAPER }}
                   className="overflow-hidden"
                 >
                   <RowExpansion

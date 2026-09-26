@@ -20,6 +20,7 @@ import WatchlistToggle from '@/components/shared/WatchlistToggle';
 import MacroFitPanel from '@/components/shared/MacroFitPanel';
 import { SkeletonBlock, SkeletonText } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
+import { BusyIcon } from '@/components/shared/IconSwap';
 import { getDetail, getTechnicalStructure, prefetchStockDetailPanels } from '@/components/detail/api';
 import PriceHeader from '@/components/detail/PriceHeader';
 import SidebarEvents from '@/components/detail/SidebarEvents';
@@ -163,7 +164,7 @@ export default function StockDetail() {
             is404 ? (
               <Link
                 to="/watchlist"
-                className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi hover:brightness-105"
+                className="btn-primary"
               >
                 {__t('返回自选')}
               </Link>
@@ -171,7 +172,7 @@ export default function StockDetail() {
               <Link
                 to="/login"
                 state={{ from: `${window.location.pathname}${window.location.search}` }}
-                className="inline-flex min-h-11 items-center justify-center rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi hover:brightness-105"
+                className="btn-primary"
               >
                 {__t('重新登录')}
               </Link>
@@ -182,9 +183,10 @@ export default function StockDetail() {
                 type="button"
                 onClick={() => refresh()}
                 disabled={refreshing}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter,opacity] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
+                aria-busy={refreshing}
+                className="btn-primary"
               >
-                <Icon name="refresh" size={14} />
+                <BusyIcon busy={refreshing} size={14} tone="on-accent" />
                 {refreshing ? __t('正在重试') : __t('重试')}
               </button>
             )
@@ -223,7 +225,7 @@ export default function StockDetail() {
       {__t('技术结构读取失败，请重试')}
       <button
         onClick={() => techQ.refresh()}
-        className="ml-auto rounded-md border border-line px-2 py-0.5 text-micro text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
+        className="ml-auto rounded-md border border-line px-2 py-0.5 text-micro text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
       >
         {__t('重试')}
       </button>

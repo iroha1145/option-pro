@@ -6,6 +6,7 @@
 import { useEffect, useId, useState, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { AnimatePresence, motion } from 'framer-motion';
+import { DUR_FAST, DUR_UI, EASE_PAPER } from '@/lib/motion';
 import { cn, isNavPathActive } from '@/lib/utils';
 import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/hooks/useToast';
@@ -143,7 +144,7 @@ function MobileDockContent() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
+              transition={{ duration: DUR_FAST }}
               /* 不用 backdrop-blur：全屏背板的实时模糊在移动 GPU 上是弹出/收起
                  掉帧的最大单项，纯色遮罩视觉上足够。 */
               className="fixed inset-0 z-[64] bg-[var(--scrim)] xl:hidden"
@@ -156,11 +157,11 @@ function MobileDockContent() {
               animate={{ y: 0 }}
               /* 退场独立给 150ms（规则：退场 < 进场 220ms）：定长 tween 即使被饿死，
                  恢复的第一帧也已到终点；收起时拖沓的 sheet 会盖住新页面。 */
-              exit={{ y: '100%', transition: { duration: 0.15, ease: [0.16, 1, 0.3, 1] } }}
+              exit={{ y: '100%', transition: { duration: DUR_FAST, ease: EASE_PAPER } }}
               /* 短 tween 取代 spring：物理弹簧需要连续多帧收敛，主线程被重页面
                  挂载抢走时会长时间停在半途；定长 tween 即使被饿死，恢复的第一帧
                  也已到终点。 */
-              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: DUR_UI, ease: EASE_PAPER }}
               ref={sheetRef}
               className="fixed inset-x-0 bottom-0 z-[65] max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain rounded-t-xl border-t border-line bg-card pb-[calc(env(safe-area-inset-bottom)+16px)] shadow-sh-3 xl:hidden"
               role="dialog"

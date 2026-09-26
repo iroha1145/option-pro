@@ -1,5 +1,7 @@
+import { useState, type CSSProperties } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { DUR_UI, EASE_PAPER } from '@/lib/motion';
 import { fmtPct } from '@/lib/format';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import { useColorMode } from '@/hooks/useColorMode.ts';
@@ -11,14 +13,29 @@ import { t } from '../../i18n/core.ts';
 const GRID_CLASS =
   'grid grid-cols-2 gap-2.5 md:grid-cols-4 md:gap-3 xl:grid-cols-6';
 
+/** 与 GRID_CLASS 的断点同步（Tailwind 默认 md 768 / xl 1280）。 */
+function gridColumns(): number {
+  if (typeof window === 'undefined') return 4;
+  return window.innerWidth >= 1280 ? 6 : window.innerWidth >= 768 ? 4 : 2;
+}
+
+/**
+ * 对角波入场（beUI heat-calendar 的 (行+列)×步长；rareui github-activity 同一思路）：
+ * 从左上角向右下铺开，而不是逐块排队。步长 35ms、封顶 300ms——此前按序号
+ * index×40ms，24 块砖最后一块要等近 1 秒才出现。
+ */
+function waveDelayMs(index: number, cols: number): number {
+  return Math.min((Math.floor(index / cols) + (index % cols)) * 35, 300);
+}
+
 function HeatTile({
   sector,
-  index,
+  delayMs,
   selected,
   onToggle,
 }: {
   sector: SectorVm;
-  index: number;
+  delayMs: number;
   selected: boolean;
   onToggle: () => void;
 }) {
@@ -33,26 +50,15 @@ function HeatTile({
   const hasReturn = sector.avgReturn !== null;
   /* 缺数不能与「真实持平」同色（审计 2.1.17）：热力图的主要读法就是扫颜色，
      avgReturn 为 null 的砖底色换成中性纸面+虚线边，一眼可辨「没数据」。 */
-  const tone = hasReturn ? heatTone(value) : { bg: 'var(--card-warm, #FBFCFD)', dark: false };
+  const tone = hasReturn ? heatTone(value, sector.period) : { bg: 'var(--card-warm, #FBFCFD)', dark: false };
   const leader = sector.leaders[0] ?? null;
   const textMain = !hasReturn ? 'text-ink-800' : tone.dark ? 'text-white' : 'text-black';
   const textSub = !hasReturn ? 'text-ink-500' : tone.dark ? 'text-white' : 'text-black';
   const barFill = !hasReturn ? 'bg-ink-900/25' : tone.dark ? 'bg-white/40' : 'bg-black/25';
 
   return (
-    <motion.button
+    <button
       type="button"
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{
-        duration: 0.48,
-        ease: [0.16, 1, 0.3, 1],
-        delay: index * 0.04,
-      }}
-      whileHover={{
-        y: -3,
-        transition: { duration: 0.24, ease: 'easeOut' },
-      }}
       onClick={onToggle}
       aria-pressed={selected}
       aria-label={
@@ -61,11 +67,11 @@ function HeatTile({
           : t('{name}暂无强度聚合', { name: sector.name })
       }
       className={cn(
-        'group relative h-[92px] overflow-visible rounded-md text-left shadow-sh-1 transition-shadow duration-240 ease-out hover:shadow-sh-2 md:h-[108px]',
+        'heat-tile group relative h-[92px] overflow-visible rounded-md text-left shadow-sh-1 hover:shadow-sh-2 md:h-[108px]',
         !hasReturn && 'border border-dashed border-line-strong',
         selected && 'shadow-sh-2',
       )}
-      style={{ backgroundColor: tone.bg }}
+      style={{ backgroundColor: tone.bg, '--heat-delay': `${delayMs}ms` } as CSSProperties}
     >
       {selected && (
         <motion.span
@@ -73,7 +79,7 @@ function HeatTile({
           className="absolute left-0 top-0 z-10 h-full w-[3px] rounded-l-md bg-brand-600"
           initial={{ scaleY: 0 }}
           animate={{ scaleY: 1 }}
-          transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: DUR_UI, ease: EASE_PAPER }}
           style={{ originY: 0.5 }}
           aria-hidden="true"
         />
@@ -117,7 +123,7 @@ function HeatTile({
             className={cn('block h-full origin-left animate-grow-bar', barFill)}
             style={{
               width: `${Math.max(2, Math.min(100, sector.avgStrength))}%`,
-              animationDelay: `${index * 40 + 120}ms`,
+              animationDelay: `${delayMs + 120}ms`,
             }}
           />
         </span>
@@ -163,7 +169,7 @@ function HeatTile({
           )}
         </span>
       </span>
-    </motion.button>
+    </button>
   );
 }
 
@@ -178,13 +184,15 @@ export default function HeatMatrix({
   selectedId,
   onSelect,
 }: HeatMatrixProps) {
+  // 入场只在挂载时播一次，列数按挂载时的视口取一次就够（换周期不重挂、不重播）。
+  const [cols] = useState(gridColumns);
   return (
     <div className={GRID_CLASS} role="group" aria-label={t("板块平均收益热力矩阵")}>
       {sectors.map((sector, index) => (
         <HeatTile
           key={sector.id}
           sector={sector}
-          index={index}
+          delayMs={waveDelayMs(index, cols)}
           selected={selectedId === sector.id}
           onToggle={() => onSelect(sector.id)}
         />

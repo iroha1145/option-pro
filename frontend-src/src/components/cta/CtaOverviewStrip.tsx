@@ -5,6 +5,7 @@
  * 点卡=选中该标的（父级负责平滑滚动到主区）；选中态 brand 边/浅底。
  */
 import { motion } from 'framer-motion';
+import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import Sparkline from '@/components/charts/Sparkline';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
@@ -128,7 +129,7 @@ export default function CtaOverviewStrip({
           key={row.instrument}
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: Math.min(i * 0.07, 0.3), ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: DUR_SECTION, delay: Math.min(i * 0.07, 0.3), ease: EASE_PAPER }}
         >
           <OverviewCard row={row} selected={row.instrument === selected} onSelect={() => onSelect(row.instrument)} />
         </motion.div>

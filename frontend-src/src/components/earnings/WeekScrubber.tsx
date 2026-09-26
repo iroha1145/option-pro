@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { DUR_SECTION, DUR_UI, EASE_PAPER, SPRING_POP } from '@/lib/motion';
 import Icon from '@/components/icons';
 import type { EarningsRow } from './types';
 import { etToday, fmtMDCN, fmtMMDD, weekDays, weekdayCN } from './types';
@@ -107,7 +108,7 @@ export default function WeekScrubber({
             initial={{ x: weekDir * 44, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: weekDir * -44, opacity: 0 }}
-            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: DUR_UI, ease: EASE_PAPER }}
             className="flex snap-x snap-mandatory overflow-x-auto no-scrollbar sm:grid sm:grid-cols-7 sm:overflow-visible"
           >
             {days.map((date, di) => {
@@ -133,7 +134,7 @@ export default function WeekScrubber({
                   }}
                   initial={{ opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.48, ease: [0.16, 1, 0.3, 1], delay: di * 0.035 }}
+                  transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: di * 0.035 }}
                   className={cn(
                     'flex min-h-[148px] w-[86px] shrink-0 cursor-pointer snap-start flex-col border-r border-line px-2 py-2.5 text-left transition-colors duration-fast last:border-r-0 sm:w-auto sm:min-w-0',
                     isSelected ? 'bg-brand-50' : 'hover:bg-paper-2',
@@ -167,7 +168,7 @@ export default function WeekScrubber({
                               key={it.ticker}
                               initial={{ opacity: 0, scale: 0.9 }}
                               animate={{ opacity: 1, scale: 1 }}
-                              transition={{ type: 'spring', stiffness: 520, damping: 32, delay: di * 0.035 + ci * 0.02 }}
+                              transition={{ ...SPRING_POP, delay: di * 0.035 + ci * 0.02 }}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 onSelectTicker(it.ticker, date);

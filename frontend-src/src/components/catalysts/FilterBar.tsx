@@ -6,6 +6,7 @@ import MenuSelect from '@/components/shared/MenuSelect';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
 import Switch from '@/components/shared/Switch';
+import { SPRING_POP } from '@/lib/motion';
 import type { NewsAnalysisStatus, NewsClassification } from './api';
 import { catalystsContract } from './api';
 import { prefetchDefaultFeed } from './feedPrefetch';
@@ -196,13 +197,13 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
           }}
           aria-expanded={mobileOpen}
           className={cn(
-            'flex items-center gap-2 rounded-md border px-3 py-2 text-caption font-medium shadow-btn transition-colors',
+            'flex items-center gap-2 rounded-md border px-3 py-2 text-caption font-medium shadow-btn transition-colors duration-fast',
             activeCount > 0 ? 'border-brand-400 bg-brand-50 text-brand-700' : 'border-line bg-card text-ink-600',
           )}
         >
           <Icon name="filter-funnel" size={14} />
           {t('筛选')}{activeCount > 0 ? ` · ${activeCount}` : ''}
-          <Icon name="chevron-down" size={12} className={cn('transition-transform duration-200', mobileOpen && 'rotate-180')} />
+          <Icon name="chevron-down" size={12} className={cn('transition-transform duration-fast', mobileOpen && 'rotate-180')} />
         </button>
         <CountNote total={total} filtered={filtered} />
       </div>
@@ -222,7 +223,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', stiffness: 520, damping: 32 }}
+          transition={SPRING_POP}
           className="mt-2.5 flex items-center gap-2"
         >
           <button

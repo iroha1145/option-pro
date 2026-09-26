@@ -1,7 +1,7 @@
 /** 催化剂页共享小件：LED / 分类 chip / 分析状态 chip / 置信度·影响标注 / 代码 chip / 热度计 */
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { DUR_SECTION } from '@/lib/motion';
+import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import InfoHint from '@/components/shared/InfoHint';
 import SoftBadge, { type BadgeTone } from '@/components/shared/SoftBadge';
 import { SCORE_HINTS } from '@/lib/scoreHints';
@@ -147,7 +147,7 @@ export function HeatMeter({ level, heat, className }: { level: number; heat: num
           key={i}
           initial={{ scaleY: 0 }}
           animate={{ scaleY: 1 }}
-          transition={{ duration: DUR_SECTION, ease: [0.16, 1, 0.3, 1], delay: 0.15 + i * 0.07 }}
+          transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: 0.15 + i * 0.07 }}
           className={cn('w-[4px] origin-bottom rounded-[2px]', i < level ? (level >= 4 ? 'bg-down-600' : level === 3 ? 'bg-warn-600' : 'bg-brand-500') : 'bg-line')}
           style={{ height: 6 + i * 3 }}
         />

@@ -1,4 +1,4 @@
-import Icon from '@/components/icons';
+import { BusyIcon } from '@/components/shared/IconSwap';
 import { useRetryCountdown } from '@/hooks/useRetryCountdown';
 import { cn } from '@/lib/utils';
 import type { SectorIvRefreshState } from '@/api/modules/sectors';
@@ -65,7 +65,7 @@ export default function IvRefreshControl({
         disabled={disabled}
         className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md border border-line bg-card px-3 text-caption font-medium text-ink-600 shadow-btn transition-[border-color,color,opacity] hover:border-brand-400 hover:text-brand-600 disabled:cursor-wait disabled:opacity-60"
       >
-        <Icon name="refresh" size={13} className={cn((submitting || running) && 'animate-spin')} />
+        <BusyIcon busy={submitting || running} size={13} tone="brand" />
         {label}
       </button>
     </div>

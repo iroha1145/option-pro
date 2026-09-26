@@ -9,6 +9,7 @@ import AnalysisIcon from '@/components/shared/AnalysisIcon';
 import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { fmtCompact } from '@/lib/format';
 import Icon from '@/components/icons';
 import TickerLogo from '@/components/shared/TickerLogo';
@@ -34,7 +35,7 @@ function EpsPairBars({ est, act, index }: { est: number | null; act: number | nu
         initial={{ scaleY: 0 }}
         whileInView={{ scaleY: 1 }}
         viewport={{ once: true, amount: 0.5 }}
-        transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: index * 0.05 }}
+        transition={{ duration: 0.7, ease: EASE_PAPER, delay: index * 0.05 }}
       />
       {act != null && (
         <motion.span
@@ -43,7 +44,7 @@ function EpsPairBars({ est, act, index }: { est: number | null; act: number | nu
           initial={{ scaleY: 0 }}
           whileInView={{ scaleY: 1 }}
           viewport={{ once: true, amount: 0.5 }}
-          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: index * 0.05 + 0.08 }}
+          transition={{ duration: 0.7, ease: EASE_PAPER, delay: index * 0.05 + 0.08 }}
         />
       )}
     </span>
@@ -159,7 +160,7 @@ function ExpectedMoveCell({
           initial={{ scaleX: 0 }}
           whileInView={{ scaleX: 1 }}
           viewport={{ once: true, amount: 0.6 }}
-          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: index * 0.05 }}
+          transition={{ duration: 0.7, ease: EASE_PAPER, delay: index * 0.05 }}
           style={{ width: `${Math.min(100, (pct / 15) * 100)}%` }}
         />
       </span>
@@ -245,7 +246,7 @@ export default function EarningsList({
               onShowAll ? (
                 <button
                   onClick={onShowAll}
-                  className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
+                  className="btn-primary"
                 >
                   {t('查看全部公司')}
                   <Icon name="chevron-right" size={13} />
@@ -268,7 +269,7 @@ export default function EarningsList({
             onNextWeek ? (
               <button
                 onClick={onNextWeek}
-                className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
+                className="btn-primary"
               >
                 {t('查看下周')}
                 <Icon name="chevron-right" size={13} />
@@ -368,7 +369,7 @@ export default function EarningsList({
                     }}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: Math.min(i * 0.04, 0.6) }}
+                    transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: Math.min(i * 0.04, 0.3) }}
                     className={cn(
                       'hidden cursor-pointer items-center border-b border-line px-4 py-3 transition-colors duration-fast last:border-b-0 md:grid md:gap-3',
                       gridColumns,
@@ -422,11 +423,11 @@ export default function EarningsList({
                   <motion.button
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: Math.min(i * 0.04, 0.6) }}
+                    transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: Math.min(i * 0.04, 0.3) }}
                     onClick={() => onSelectTicker(row.ticker)}
                     aria-pressed={selected}
                     className={cn(
-                      'block w-full border-b border-line px-4 py-3 text-left transition-colors last:border-b-0 md:hidden',
+                      'block w-full border-b border-line px-4 py-3 text-left transition-colors duration-fast last:border-b-0 md:hidden',
                       selected ? 'bg-brand-50' : 'hover:bg-paper-2',
                     )}
                   >

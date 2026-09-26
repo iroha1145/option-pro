@@ -4,6 +4,7 @@
  * 明确写出「历史分位，不是预测」，不做任何进度条式的品牌装饰。
  */
 import { motion } from 'framer-motion';
+import { EASE_PAPER } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useCountUp } from '@/hooks/useCountUp';
 import { strengthBarClass } from '@/lib/strengthColor';
@@ -97,7 +98,7 @@ export default function CompositeCard({
             initial={{ scaleX: 0 }}
             whileInView={{ scaleX: 1 }}
             viewport={{ once: true, amount: 0.4 }}
-            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.7, ease: EASE_PAPER }}
             style={{ width: `${Math.max(2, Math.min(100, composite.score as number))}%` }}
           />
         )}

@@ -3,6 +3,7 @@ import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 import { useMemo, useState, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { DUR_UI, EASE_PAPER } from '@/lib/motion';
 import Icon from '@/components/icons';
 
 export interface Column<T> {
@@ -109,7 +110,7 @@ export default function DataTable<T>({
                       className="inline-flex items-center gap-1 rounded-xs transition-colors duration-fast hover:text-ink-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30"
                     >
                       {c.title}
-                      <span className={cn('inline-flex transition-transform duration-200', sort?.key === c.key && !sort.desc && 'rotate-180', sort?.key !== c.key && 'opacity-30')}>
+                      <span className={cn('inline-flex transition-[transform,opacity] duration-ui ease-paper', sort?.key === c.key && !sort.desc && 'rotate-180', sort?.key !== c.key && 'opacity-30')}>
                         <Icon name="chevron-down" size={11} />
                       </span>
                     </button>
@@ -129,7 +130,7 @@ export default function DataTable<T>({
               <motion.tr
                 key={key}
                 layout={reducedMotion ? false : 'position'}
-                transition={{ duration: reducedMotion ? 0 : 0.24, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ duration: reducedMotion ? 0 : DUR_UI, ease: EASE_PAPER }}
                 /* Preserve native table semantics; columns supply real links or
                    buttons for keyboard users. Nested controls own their clicks. */
                 onClick={onRowClick ? (event) => {

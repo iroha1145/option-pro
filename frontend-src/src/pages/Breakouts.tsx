@@ -28,6 +28,7 @@ import { DEFAULT_WATCHLIST_TICKERS } from '@/lib/personalWatchlist';
 import { useToast } from '@/hooks/useToast';
 import { useShell } from '@/hooks/useShell';
 import { cn } from '@/lib/utils';
+import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import Segmented from '@/components/shared/Segmented';
 import FilterButton from '@/components/shared/FilterButton';
 import SelectionViewport from '@/components/shared/SelectionViewport';
@@ -35,6 +36,7 @@ import { fmtTimeHHMMSS } from '@/lib/format';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonCard } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
+import { BusyIcon } from '@/components/shared/IconSwap';
 import LeadBigCard from '@/components/breakouts/LeadBigCard';
 import HistoryRail from '@/components/breakouts/HistoryRail';
 import SignalCards from '@/components/breakouts/SignalCards';
@@ -486,7 +488,7 @@ export default function Breakouts() {
       <motion.header
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.56, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
         className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-b border-line pb-5"
       >
         <div>
@@ -622,7 +624,7 @@ export default function Breakouts() {
               title={__t("立即触发一次突破扫描")}
               className="control-button"
             >
-              <Icon name="refresh" size={14} className={scanning ? 'animate-spin-once' : ''} />
+              <BusyIcon busy={scanning} size={14} tone="brand" />
               {__t('立即扫描')}
             </button>
           )}
@@ -690,7 +692,7 @@ export default function Breakouts() {
                 action={
                   <button
                     onClick={() => currentQ.refresh()}
-                    className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
+                    className="btn-primary"
                   >
                     {__t('重试')}
                   </button>
@@ -717,7 +719,7 @@ export default function Breakouts() {
                 action={
                   <button
                     onClick={() => railRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                    className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
+                    className="btn-primary"
                   >
                     <Icon name="clock-ny" size={14} />
                     {__t('看看历史事件')}
@@ -748,15 +750,6 @@ export default function Breakouts() {
               <div className="min-w-0 lg:col-span-5" ref={railRef}>
                 <div className="self-start lg:sticky lg:top-20">{historyRailEl}</div>
               </div>
-              {/* 卡片定位闪烁：左缘 brand tick-flash（点击卡片定位联动） */}
-              <style>{`
-                @keyframes bk-locate-flash {
-                  0% { box-shadow: inset 3px 0 0 var(--brand-600), 0 0 0 3px color-mix(in srgb, var(--brand-600) 25%, transparent); }
-                  100% { box-shadow: inset 3px 0 0 transparent, 0 0 0 0 transparent; }
-                }
-                .bk-locate { animation: bk-locate-flash 900ms cubic-bezier(.22,1,.36,1) 2; }
-                @media (prefers-reduced-motion: reduce) { .bk-locate { animation: none; } }
-              `}</style>
             </div>
 
             {/* 其余当日信号：V3 个股小卡网格（3 列 / 移动单列） */}

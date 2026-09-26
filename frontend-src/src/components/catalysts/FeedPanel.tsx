@@ -6,10 +6,12 @@ import { ApiError } from '@/api/client';
 import { useShell } from '@/hooks/useShell';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
+import Spinner from '@/components/shared/Spinner';
 import Icon from '@/components/icons';
 import InfoHint from '@/components/shared/InfoHint';
 import SoftBadge from '@/components/shared/SoftBadge';
 import { cn } from '@/lib/utils';
+import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { fmtLocaleDate, fmtLocaleTime, fmtRelative } from '@/lib/format';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import { catalystsContract } from './api';
@@ -64,7 +66,7 @@ export function NewsRow({
       /* 繁忙 feed 列表：stagger ≤30ms，仅第一页播放；y 写法以便 hover 上浮可组合（内联 transform 字符串会挡住 whileHover） */
       initial={animate ? { opacity: 0, y: 14 } : false}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: animate ? Math.min(index * 0.03, 0.3) : 0 }}
+      transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: animate ? Math.min(index * 0.03, 0.3) : 0 }}
       /* v8.1：行级去位移。上浮属于「卡片脱离纸面」的 elevation 隐喻——列表行无阴影无边界，
          浮起没有语义；60 行高频扫视区满屏跳也违反动效克制。背景色 + 标题下划线两重反馈已够。 */
       className="group relative flex gap-3 px-4 py-[18px] transition-colors duration-fast hover:bg-paper-2/70 sm:px-5"
@@ -103,7 +105,7 @@ export function NewsRow({
         </p>
         {/* 标题 */}
         <h3 className="mt-1.5 text-[15px] leading-[22px] font-semibold text-ink-900">
-          <span className="bg-[linear-gradient(currentColor,currentColor)] bg-[length:0%_1px] bg-left-bottom bg-no-repeat transition-[background-size] duration-200 group-hover:bg-[length:100%_1px] group-hover:text-brand-600">
+          <span className="bg-[linear-gradient(currentColor,currentColor)] bg-[length:0%_1px] bg-left-bottom bg-no-repeat transition-[background-size] duration-fast group-hover:bg-[length:100%_1px] group-hover:text-brand-600">
             {item.titleZh}
           </span>
         </h3>
@@ -276,7 +278,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
           action={
             <button
               onClick={() => void fetchFirst()}
-              className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
+              className="btn-primary"
             >
               <Icon name="refresh" size={14} />
               {__t('重试')}
@@ -308,7 +310,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
             hasFilters ? (
               <button
                 onClick={onClearFilters}
-                className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
+                className="btn-primary"
               >
                 <Icon name="x" size={13} />
                 {__t('清除过滤')}
@@ -324,7 +326,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
            新闻就永远不可达。 */
         <>
           <div
-            className={cn('divide-y divide-line transition-opacity duration-200', fading && 'opacity-0')}
+            className={cn('divide-y divide-line transition-opacity duration-fast', fading && 'opacity-0')}
             aria-live="polite"
           >
             {items.map((it, i) => (
@@ -340,7 +342,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
                 disabled={loadingMore || !q.enabled || refreshing}
                 className="inline-flex items-center gap-2 rounded-md border border-line bg-card px-4 py-2 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
               >
-                {loadingMore && <span className="size-3.5 animate-spin rounded-full border-2 border-line-strong border-t-brand-600" aria-hidden="true" />}
+                {loadingMore && <Spinner size={14} tone="muted" />}
                 {__t('加载更多')}
               </button>
             ) : (

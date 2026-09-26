@@ -5,6 +5,13 @@ const token = (name) =>
 module.exports = {
   darkMode: ["class"],
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  /* v8.3 的触屏 hover 粘滞修复此前只覆盖 index.css 里手写的几个类（.card-hover
+     等），250 多处 hover:/group-hover: 工具类照样粘：手机上点一下，按钮保持
+     悬停色、卡片保持上浮。打开后这些变体只在「可悬停的精确指针」下生成，
+     与 index.css 的 @media (hover: hover) and (pointer: fine) 同一口径。 */
+  future: {
+    hoverOnlyWhenSupported: true,
+  },
   theme: {
     extend: {
       colors: {

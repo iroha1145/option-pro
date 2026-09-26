@@ -6,6 +6,7 @@
  */
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { EASE_PAPER } from '@/lib/motion';
 import { SCORE_DEFS, riskBarClass, scoreBarClass } from './types';
 import type { BreakoutEventFull, RangePersistence } from './types';
 import { t } from '../../i18n/core.ts';
@@ -36,7 +37,7 @@ export function ScoreBarsMini({ event, className }: { event: BreakoutEventFull; 
                   initial={{ scaleX: 0 }}
                   whileInView={{ scaleX: 1 }}
                   viewport={{ once: true, amount: 0.4 }}
-                  transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: i * 0.03 }}
+                  transition={{ duration: 0.7, ease: EASE_PAPER, delay: i * 0.03 }}
                   style={{ width: `${Math.max(3, Math.min(100, v))}%` }}
                 />
               )}
@@ -62,7 +63,7 @@ export function ScoreBarsFull({ event, className }: { event: BreakoutEventFull; 
                   className={cn('h-full origin-left rounded-pill', barCls(d.key, v))}
                   initial={{ scaleX: 0 }}
                   animate={{ scaleX: 1 }}
-                  transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.1 + i * 0.045 }}
+                  transition={{ duration: 0.7, ease: EASE_PAPER, delay: 0.1 + i * 0.045 }}
                   style={{ width: `${Math.max(3, Math.min(100, v))}%` }}
                 />
               )}
@@ -109,7 +110,7 @@ export function RangePersistenceBars({ event, className }: { event: BreakoutEven
                   className={cn('h-full origin-left rounded-pill', scoreBarClass(metric.value))}
                   initial={{ scaleX: 0 }}
                   animate={{ scaleX: 1 }}
-                  transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.06 + i * 0.045 }}
+                  transition={{ duration: 0.7, ease: EASE_PAPER, delay: 0.06 + i * 0.045 }}
                   style={{ width: `${Math.max(3, Math.min(100, metric.value))}%` }}
                 />
               )}
@@ -146,7 +147,7 @@ export function RangePersistenceBars({ event, className }: { event: BreakoutEven
                 className={cn('h-full origin-left rounded-pill', scoreBarClass(v))}
                 initial={{ scaleX: 0 }}
                 animate={{ scaleX: 1 }}
-                transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.06 + i * 0.045 }}
+                transition={{ duration: 0.7, ease: EASE_PAPER, delay: 0.06 + i * 0.045 }}
                 style={{ width: `${Math.max(3, Math.min(100, v))}%` }}
               />
             </div>

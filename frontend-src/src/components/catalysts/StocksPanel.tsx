@@ -11,6 +11,7 @@ import { SCORE_HINTS } from '@/lib/scoreHints';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
+import { DUR_SECTION, EASE_PAPER, SPRING_POP } from '@/lib/motion';
 import { fmtRelative } from '@/lib/format';
 import { t } from '../../i18n/core.ts';
 
@@ -69,7 +70,7 @@ function NetImpactBar({ value, analyzed }: { value: number; analyzed: number }) 
           <motion.span
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: 'spring', stiffness: 520, damping: 32, delay: 0.15 }}
+            transition={{ ...SPRING_POP, delay: 0.15 }}
             className={cn(
               'block size-2.5 rounded-full border-2 border-card',
               value >= 0 ? 'bg-up-600' : 'bg-down-600',
@@ -133,7 +134,7 @@ export default function StocksPanel({ filters }: { filters: CatalystFilters; ref
             key={r.ticker}
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.48, ease: [0.16, 1, 0.3, 1], delay: Math.min(i * 0.035, 0.42) }}
+            transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: Math.min(i * 0.035, 0.42) }}
             onClick={() => navigate(`/stock/${r.ticker}`)}
             className="group flex w-full flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 text-left transition-colors duration-fast hover:bg-paper-2/70 sm:px-5"
             aria-label={t('查看 {ticker} 股票详情', { ticker: r.ticker })}
@@ -176,7 +177,7 @@ export default function StocksPanel({ filters }: { filters: CatalystFilters; ref
               {r.count}
               <span className="ml-0.5 text-micro font-normal text-ink-400">{t('条')}</span>
             </span>
-            <Icon name="chevron-right" size={14} className="shrink-0 text-ink-300 transition-colors group-hover:text-brand-600" />
+            <Icon name="chevron-right" size={14} className="shrink-0 text-ink-300 transition-colors duration-fast group-hover:text-brand-600" />
           </motion.button>
         ))}
       </div>

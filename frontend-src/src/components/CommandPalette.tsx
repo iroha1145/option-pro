@@ -24,6 +24,7 @@ import { pushRecent, readRecent } from '@/lib/recentTickers';
 import Icon, { type IconName } from '@/components/icons';
 import TickerLogo from '@/components/shared/TickerLogo';
 import SoftBadge from '@/components/shared/SoftBadge';
+import Spinner from '@/components/shared/Spinner';
 import { NAV_ITEMS } from '@/components/Navbar';
 import { t, t as __t } from '../i18n/core.ts';
 import { prefetchRouteOnIntent } from '../lib/prefetchRouteChunk.ts';
@@ -389,7 +390,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                 aria-label={__t("搜索股票或功能")}
               />
               {searching ? (
-                <span className="size-4 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-label={__t("搜索中")} />
+                <Spinner size={16} tone="brand" label={__t("搜索中")} />
               ) : query ? (
                 /* beautifului Search 的清除钮：fade-in 150ms 进场，点后清空并回焦 */
                 <button
@@ -425,18 +426,18 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                 style={{
                   height: 0,
                   opacity: 0,
-                  /* 走 catalog 的滑动标签时钟（--tabs-dur/--tabs-ease）与档位内的
-                     快挡时长，不再在这里写 250/160 这种近邻字面量：动效标度调一次
-                     就该同时到达标签胶囊和这里。 */
+                  /* 键盘驱动的高亮要跟得上方向键连按：beUI command-palette 专门给激活行
+                     一档比标签滑块更紧的时钟。这里从标签时钟（250ms）收到 quick 档
+                     （150ms），按住 ↓ 时高亮不再拖在光标后面。 */
                   transition:
-                    'transform var(--tabs-dur) var(--tabs-ease), height var(--tabs-dur) var(--tabs-ease), opacity var(--duration-quick)',
+                    'transform var(--duration-quick) var(--ease-smooth-out), height var(--duration-quick) var(--ease-smooth-out), opacity var(--duration-quick)',
                 }}
               >
                 <span className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-brand-600" />
               </span>
               {searching && flat.length === 0 && (
                 <div className="flex flex-col items-center py-10 text-center" role="status">
-                  <span className="size-5 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-hidden="true" />
+                  <Spinner size={20} tone="brand" />
                   <p className="mt-3 text-body-s text-ink-400">{__t('正在搜索股票目录…')}</p>
                 </div>
               )}

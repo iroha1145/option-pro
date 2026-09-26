@@ -16,6 +16,7 @@ import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { overlayVisible, useOverlayPhase } from '@/lib/transitions';
 import { isTopFocusScope } from '@/lib/focusScope';
+import { DUR_FAST, DUR_UI, EASE_PAPER, SPRING_POP } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { fmtNyHHmm, fmtPrice, fmtRelative } from '@/lib/format';
 import Icon from '@/components/icons';
@@ -236,7 +237,7 @@ export default function EventDetail({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: DUR_FAST }}
             onClick={onClose}
             className="absolute inset-0 bg-[var(--scrim)] backdrop-blur-[2px]"
             aria-hidden="true"
@@ -245,8 +246,8 @@ export default function EventDetail({
             key="panel"
             initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.16 } }}
-            transition={{ type: 'spring', stiffness: 520, damping: 32 }}
+            exit={{ opacity: 0, scale: 0.96, transition: { duration: DUR_FAST } }}
+            transition={SPRING_POP}
             className="radar-detail relative flex max-h-[88dvh] w-full max-w-[720px] flex-col overflow-hidden rounded-xl border border-line bg-card shadow-sh-3"
           >
             {detailError && (
@@ -286,7 +287,7 @@ export default function EventDetail({
               </span>
               <button
                 onClick={onClose}
-                className="rounded-sm p-1.5 text-ink-400 transition-colors hover:bg-paper-2 hover:text-ink-600"
+                className="rounded-sm p-1.5 text-ink-400 transition-colors duration-fast hover:bg-paper-2 hover:text-ink-600"
                 aria-label={__t("关闭详情")}
               >
                 <Icon name="x" size={16} />
@@ -346,7 +347,7 @@ export default function EventDetail({
                       key={i}
                       initial={{ opacity: 0, x: 8 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1], delay: 0.12 + i * 0.03 }}
+                      transition={{ duration: DUR_UI, ease: EASE_PAPER, delay: 0.12 + i * 0.03 }}
                       className="relative py-1.5"
                     >
                       <span className="absolute -left-[21px] top-[11px] size-2 rounded-full bg-brand-500 ring-2 ring-brand-100" aria-hidden="true" />
@@ -372,14 +373,14 @@ export default function EventDetail({
             <div className="flex items-center gap-2 border-t border-line bg-card-warm px-5 py-3">
               <button
                 onClick={() => onOpenTicker(event.ticker)}
-                className="flex items-center gap-1.5 rounded-md bg-brand-600 px-3.5 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
+                className="btn-primary"
               >
                 {__t('查看个股详情')}
                 <Icon name="arrow-up-right" size={13} />
               </button>
               <button
                 onClick={() => onShowTickerEvents(event.ticker)}
-                className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3.5 py-2 text-caption font-medium text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
+                className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3.5 py-2 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
               >
                 {__t('该代码全部事件')}
               </button>

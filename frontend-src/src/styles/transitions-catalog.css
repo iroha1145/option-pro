@@ -605,3 +605,226 @@
 @media (prefers-reduced-motion: reduce) {
   .t-digit-group .t-digit { animation: none !important; }
 }
+
+/* —— 09-icon-swap.md —— */
+.t-icon-swap {
+  position: relative;
+  display: inline-grid;
+}
+.t-icon-swap .t-icon {
+  grid-area: 1 / 1;
+  transition:
+    opacity   var(--icon-swap-dur) var(--icon-swap-ease),
+    filter    var(--icon-swap-dur) var(--icon-swap-ease),
+    transform var(--icon-swap-dur) var(--icon-swap-ease);
+  will-change: opacity, filter, transform;
+}
+.t-icon-swap[data-state="a"] .t-icon[data-icon="a"],
+.t-icon-swap[data-state="b"] .t-icon[data-icon="b"] {
+  opacity: 1;
+  filter: blur(0);
+  transform: scale(1);
+}
+.t-icon-swap[data-state="a"] .t-icon[data-icon="b"],
+.t-icon-swap[data-state="b"] .t-icon[data-icon="a"] {
+  opacity: 0;
+  filter: blur(var(--icon-swap-blur));
+  transform: scale(var(--icon-swap-start-scale));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-icon-swap .t-icon { transition: none !important; }
+}
+
+/* —— 10-success-check.md —— */
+.t-success-check {
+  display: inline-block;
+  transform-origin: center;
+  opacity: 0;
+  will-change: transform, opacity, filter;
+}
+.t-success-check svg { display: block; overflow: visible; }
+.t-success-check svg path {
+  stroke-dasharray: 20;
+  stroke-dashoffset: 20;
+}
+
+.t-success-check[data-state="in"] {
+  animation:
+    t-check-fade   var(--check-opacity-dur) var(--check-ease-opacity) forwards,
+    t-check-rotate var(--check-rotate-dur)  var(--check-ease-rotate)  forwards,
+    t-check-blur   var(--check-blur-dur)    var(--check-ease-out)     forwards,
+    t-check-bob    var(--check-bob-dur)     var(--check-ease-bob)     forwards;
+}
+.t-success-check[data-state="in"] svg path {
+  animation: t-check-draw var(--check-path-dur) var(--check-ease-path) var(--check-path-delay, 0ms) forwards;
+}
+
+@keyframes t-check-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes t-check-rotate {
+  from { transform: rotate(var(--check-rotate-from)); }
+  to   { transform: rotate(0deg); }
+}
+@keyframes t-check-blur {
+  from { filter: blur(var(--check-blur-from)); }
+  to   { filter: blur(0); }
+}
+@keyframes t-check-bob {
+  from { translate: 0 var(--check-y-amount); }
+  to   { translate: 0 0; }
+}
+@keyframes t-check-draw { to { stroke-dashoffset: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .t-success-check { animation: none !important; opacity: 1; }
+  .t-success-check svg path { animation: none !important; stroke-dashoffset: 0 !important; }
+}
+
+/* —— 15-shimmer-text.md —— */
+.t-shimmer {
+  position: relative;
+  display: inline-block;
+  color: var(--shimmer-base);
+}
+.t-shimmer::before {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(
+    90deg,
+    transparent          0%,
+    transparent         40%,
+    var(--shimmer-highlight) 50%,
+    transparent         60%,
+    transparent        100%
+  );
+  background-size: var(--shimmer-band) 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: t-shimmer var(--shimmer-dur) var(--shimmer-ease) infinite;
+}
+@keyframes t-shimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: 0% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-shimmer::before { animation: none !important; }
+}
+
+/* ---- 以上三段的纸面适配（运动维度照 catalog，只调几何与颜色） ---- */
+
+/* 嵌套的图标格（WatchlistToggle：外层 加载圈 ↔ 内层 加号/勾）：catalog 09 用的是
+   后代选择器，外层的状态规则会一路匹配进内层同名的 data-icon，把内层的勾一起
+   藏掉。内层用更具体的子选择器（多一个类）重申自己的状态，外层只管整组的显隐。 */
+.t-icon-swap .t-icon-swap[data-state="a"] > .t-icon[data-icon="a"],
+.t-icon-swap .t-icon-swap[data-state="b"] > .t-icon[data-icon="b"] {
+  opacity: 1;
+  filter: blur(0);
+  transform: scale(1);
+}
+.t-icon-swap .t-icon-swap[data-state="a"] > .t-icon[data-icon="b"],
+.t-icon-swap .t-icon-swap[data-state="b"] > .t-icon[data-icon="a"] {
+  opacity: 0;
+  filter: blur(var(--icon-swap-blur));
+  transform: scale(var(--icon-swap-start-scale));
+}
+
+/* 成功勾用的是 icons.tsx 的 check 路径（m4.8 12.8 4.6 4.6L19.2 6.6，
+   getTotalLength ≈ 21.1），按 catalog 的校准说明向上取整。按钮里的勾只有
+   15px，catalog 的 40px 起跳与 80° 旋转在这个尺度会飞出按钮，行程收到一半。 */
+.t-success-check svg path {
+  stroke-dasharray: 22;
+  stroke-dashoffset: 22;
+}
+.t-success-check.is-inline {
+  --check-y-amount: 12px;
+  --check-rotate-from: 45deg;
+  --check-blur-from: 4px;
+}
+
+/* 扫光文字：catalog 的 #7c7c7c / #0d0d0d 是演示色，换成墨色两档，夜间随
+   --ink-* 自动反转（夜间高光更亮）。AI 语义的扫光底色走青瓷。 */
+:root {
+  --shimmer-base: var(--ink-400);
+  --shimmer-highlight: var(--ink-900);
+}
+.t-shimmer.is-ai {
+  --shimmer-base: color-mix(in srgb, var(--ai-600) 72%, var(--ink-400));
+  --shimmer-highlight: var(--ink-900);
+}
+
+/* CollapsePresence（catalog 21 的条件渲染版）：展开到位后放开裁剪与滤镜——
+   blur(0) 仍会让 fixed 后代以此为包含块并常驻合成层，overflow:hidden 会裁掉
+   行内浮层。收起时 is-settled 与 data-open 同一帧撤下，catalog 的收起补间照常。 */
+.t-acc.is-settled .t-acc-panel-inner {
+  overflow: visible;
+  filter: none;
+  transition: none;
+}
+
+/* —— 01-card-resize.md —— */
+.t-resize {
+  transition:
+    width  var(--resize-dur) var(--resize-ease),
+    height var(--resize-dur) var(--resize-ease);
+  will-change: width, height;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-resize { transition: none !important; }
+}
+
+/* —— 31-matrix-loader.md —— */
+.t-matrix {
+  display: grid;
+  grid-template-columns: repeat(4, 2px);
+  grid-auto-rows: 2px;
+  gap: 2px;
+}
+.t-matrix i {
+  display: block;
+  background: var(--matrix-base);
+  animation: t-matrix-pulse var(--matrix-cycle) var(--matrix-ease) infinite;
+  animation-delay: calc(var(--d, 0) * 1ms);
+}
+/* Hole positions (rounded variants) render nothing. */
+.t-matrix i.is-gap { visibility: hidden; animation: none; }
+@keyframes t-matrix-pulse {
+  0%, 45%, 100% { background-color: var(--matrix-base); }
+  15%           { background-color: var(--matrix-active); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-matrix i { animation: none !important; }
+}
+
+/* 点阵加载的纸面配色：静止点用强发丝线色，扫过的点用群青，夜间随变量反转。 */
+:root {
+  --matrix-cycle: 1200ms;
+  --matrix-base: var(--line-strong);
+  --matrix-active: var(--brand-600);
+  --matrix-ease: ease-in-out;
+}
+
+/* 18-texts-reveal 的入场半边（关键帧版）：空态这类「挂载即出现」的块不需要
+   is-shown 切换，逐行按 --line 序号叠加 --stagger-stagger 延迟，数值全照 catalog。
+   关键帧只写 from：结束后回到元素自身的值，不残留 filter（不劫持 fixed 后代）。 */
+.t-reveal-line {
+  animation: t-reveal-line var(--stagger-dur) var(--stagger-ease) both;
+  animation-delay: calc(var(--stagger-stagger) * var(--line, 0));
+}
+@keyframes t-reveal-line {
+  from {
+    opacity: 0;
+    transform: translateY(var(--stagger-distance));
+    filter: blur(var(--stagger-blur));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-reveal-line { animation: none !important; }
+}

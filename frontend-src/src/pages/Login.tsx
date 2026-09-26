@@ -15,9 +15,10 @@ import { accessApi } from '@/api/modules/access';
 import { ApiError } from '@/api/client';
 import { useToast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
-import { DUR_SECTION } from '@/lib/motion';
+import { DUR_SECTION, EASE_PAPER, SPRING_INDICATOR } from '@/lib/motion';
 import { useCatalogShake } from '@/lib/transitions';
 import Icon from '@/components/icons';
+import Spinner from '@/components/shared/Spinner';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
 import SelectionViewport from '@/components/shared/SelectionViewport';
 import type { IconName } from '@/components/icons';
@@ -149,7 +150,7 @@ function CharStagger({ text, className, delayBase = 0 }: { text: string; classNa
                 className="inline-block"
                 initial={{ opacity: 0, y: 24 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: delayBase + characterIndex++ * 0.03 }}
+                transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: delayBase + characterIndex++ * 0.03 }}
               >
                 {ch}
               </motion.span>
@@ -335,7 +336,7 @@ export default function Login() {
           <div className="mt-5 flex flex-col gap-2.5">
             <button
               onClick={() => navigate(fromPath ?? '/watchlist', { replace: true })}
-              className="h-10 rounded-md bg-brand-600 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
+              className="btn-primary"
             >
               {t('继续浏览')}
             </button>
@@ -376,7 +377,7 @@ export default function Login() {
           <motion.div
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.56, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
             className="flex items-center gap-3"
           >
             <img src="/logo.svg" alt="" className="size-10 dark:brightness-0 dark:invert" />
@@ -395,7 +396,7 @@ export default function Login() {
           <motion.p
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.56, ease: [0.16, 1, 0.3, 1], delay: 0.3 }}
+            transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: 0.3 }}
             className="mt-5 max-w-[460px] text-[15px] leading-[26px] text-ink-600 max-lg:line-clamp-2"
           >
             {t('汇集行情、选股、财报与新闻，帮助你跟踪美股市场。')}
@@ -408,7 +409,7 @@ export default function Login() {
                 key={f.title}
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.48, ease: [0.16, 1, 0.3, 1], delay: 0.42 + i * 0.12 }}
+                transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: 0.42 + i * 0.12 }}
                 className="flex items-start gap-3 max-lg:min-w-[220px] max-lg:rounded-lg max-lg:border max-lg:border-line max-lg:bg-card/80 max-lg:p-3"
               >
                 <span className="mt-0.5 text-brand-600">
@@ -425,7 +426,7 @@ export default function Login() {
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ duration: 0.56, delay: 0.9 }}
+            transition={{ duration: DUR_SECTION, delay: 0.9 }}
             className="mt-10 border-t border-line pt-4 text-caption text-ink-400"
           >
             {t('内容仅供研究参考')}
@@ -437,7 +438,7 @@ export default function Login() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: DUR_SECTION, ease: [0.16, 1, 0.3, 1], delay: reduced ? 0 : 0.2 }}
+            transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: reduced ? 0 : 0.2 }}
             className="glass w-full max-w-[400px] rounded-xl border border-line p-9 shadow-sh-3 max-lg:p-6"
           >
             <div className="flex items-start gap-3">
@@ -472,7 +473,7 @@ export default function Login() {
                         data-selection-decoration=""
                         layoutId="login-mode-pill"
                         className="absolute inset-0 rounded-xs bg-brand-600 shadow-chip"
-                        transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+                        transition={SPRING_INDICATOR}
                       />
                     )}
                     <span className="relative">{value === 'login' ? t('登录') : t('注册')}</span>
@@ -598,7 +599,7 @@ export default function Login() {
               >
                 {state === 'verifying' ? (
                   <>
-                    <span className="size-4 animate-spin rounded-full border-2 border-on-accent/40 border-t-on-accent" aria-hidden="true" />
+                    <Spinner size={16} tone="on-accent" />
                     {t('验证中…')}
                   </>
                 ) : state === 'success' ? (

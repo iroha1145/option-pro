@@ -8,7 +8,6 @@ import SoftBadge from '@/components/shared/SoftBadge';
  * 轮询 1800s（契约 TTL）· 空态 / 骨架 / 503 · 响应式（<md 卡片流 + 横滑 snap）
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
 import { invalidateQueryPaths } from '@/api/queryRegistry';
 import { earningsApi, restoreUpcomingFromCache } from '@/api/modules/earnings';
 import type { EarningsReportAnalysis } from '@/api/modules/earnings';
@@ -22,6 +21,8 @@ import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonBlock, SkeletonCard, SkeletonRows } from '@/components/shared/Skeleton';
 import Segmented from '@/components/shared/Segmented';
+import AutoHeight from '@/components/shared/AutoHeight';
+import { BusyIcon } from '@/components/shared/IconSwap';
 import WeekScrubber from '@/components/earnings/WeekScrubber';
 import MonthCalendar from '@/components/earnings/MonthCalendar';
 import EarningsList from '@/components/earnings/EarningsList';
@@ -531,9 +532,10 @@ export default function Earnings() {
                 <button
                   onClick={() => q.refresh()}
                   disabled={q.refreshing}
-                  className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
+                  aria-busy={q.refreshing}
+                  className="btn-primary"
                 >
-                  {q.refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-on-accent/40 border-t-on-accent" />}
+                  <BusyIcon busy={q.refreshing} size={14} tone="on-accent" />
                   {t('重试')}
                 </button>
               }
@@ -553,16 +555,11 @@ export default function Earnings() {
                 onChange={setCalView}
               />
             </div>
-            <AnimatePresence mode="wait" initial={false}>
+            {/* 周 ↔ 月：容器高度一段补间（01-card-resize），新视图按 key 重挂后淡入；
+                不再先收成 0 再撑开（旧写法两段共 640ms，下方列表先上跳再下落）。 */}
+            <AutoHeight>
               {calView === 'week' ? (
-                <motion.div
-                  key="week"
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
-                  className="overflow-hidden"
-                >
+                <div key="week" className="anim-fade-in">
                   <WeekScrubber
                     items={items}
                     monday={monday}
@@ -574,16 +571,9 @@ export default function Earnings() {
                     onSelectTicker={onSelectTickerFromChip}
                     flashSignal={flashSignal}
                   />
-                </motion.div>
+                </div>
               ) : (
-                <motion.div
-                  key="month"
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
-                  className="overflow-hidden"
-                >
+                <div key="month" className="anim-fade-in">
                   <MonthCalendar
                     items={items}
                     selectedDay={selectedDay}
@@ -591,9 +581,9 @@ export default function Earnings() {
                     onSelectDay={onSelectDay}
                     onSelectTicker={onSelectTickerFromChip}
                   />
-                </motion.div>
+                </div>
               )}
-            </AnimatePresence>
+            </AutoHeight>
           </div>
         )}
       </div>
@@ -630,8 +620,10 @@ export default function Earnings() {
                   <button
                     onClick={() => q.refresh()}
                     disabled={q.refreshing}
-                    className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
+                    aria-busy={q.refreshing}
+                    className="btn-primary"
                   >
+                    <BusyIcon busy={q.refreshing} size={14} tone="on-accent" />
                     {t('重试')}
                   </button>
                 }

@@ -13,6 +13,7 @@
  */
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { DUR_UI, EASE_PAPER } from '@/lib/motion';
 import InfoHint from '@/components/shared/InfoHint';
 import { CTA_HINTS } from '@/lib/ctaHints';
 import { fmtPrice } from '@/lib/format';
@@ -146,7 +147,7 @@ export default function TriggerLadder({ row }: { row: CtaInstrumentEstimate }) {
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: DUR_UI, ease: EASE_PAPER }}
               className="overflow-hidden"
             >
               <div className="border-t border-line/60 bg-paper-2 px-3 py-2">

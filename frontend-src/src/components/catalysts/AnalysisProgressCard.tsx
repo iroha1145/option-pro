@@ -1,6 +1,7 @@
 import AnalysisIcon from '@/components/shared/AnalysisIcon';
 import { useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
+import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import SoftBadge, { type BadgeTone } from '@/components/shared/SoftBadge';
 import { useAccess } from '@/hooks/useAccess';
@@ -102,7 +103,7 @@ function OwnerAnalysisProgressCard() {
     <motion.section
       initial={reduceMotion ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={reduceMotion ? { duration: 0 } : { duration: 0.36, ease: [0.16, 1, 0.3, 1] }}
+      transition={reduceMotion ? { duration: 0 } : { duration: DUR_SECTION, ease: EASE_PAPER }}
       aria-label={t("新闻分析进度")}
       aria-live="polite"
       className="card-surface mt-4 px-4 py-4 sm:px-5"
@@ -144,7 +145,7 @@ function OwnerAnalysisProgressCard() {
             className="mt-1.5 h-1.5 overflow-hidden rounded-pill bg-paper-2"
           >
             <div
-              className="h-full w-full origin-left rounded-pill bg-ai-600 transition-transform duration-300 motion-reduce:transition-none"
+              className="h-full w-full origin-left rounded-pill bg-ai-600 transition-transform duration-ui motion-reduce:transition-none"
               style={{ transform: `scaleX(${progress.progressPercent / 100})` }}
             />
           </div>

@@ -5,11 +5,11 @@ import { LivePrice, LiveChange, PeriodicPriceFlash } from '@/components/shared/L
  * 行 stagger 30ms 仅第一页入场（翻页直接呈现）；排序切换 layout 重排 320ms；价格 tick-flash。
  */
 import SoftBadge from '@/components/shared/SoftBadge';
-import { Fragment, useId } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { Fragment, useId, type ReactNode } from 'react';
+import { motion } from 'framer-motion';
 import type { ScreenerRow } from '@/api/types';
 import { cn } from '@/lib/utils';
-import { EASE_PAPER } from '@/lib/motion';
+import { DUR_UI, EASE_PAPER } from '@/lib/motion';
 import { fmtCompact } from '@/lib/format';
 import Icon from '@/components/icons';
 import TickerLogo from '@/components/shared/TickerLogo';
@@ -19,6 +19,7 @@ import { macroShadowHint } from '@/lib/scoreHints';
 import { SCORE_HINTS, type ScoreHint } from '@/lib/scoreHints';
 import { rowPrimarySortScore } from '@/lib/screenerSort';
 import RowExpansion from './RowExpansion';
+import CollapsePresence from '@/components/shared/CollapsePresence';
 import { CatalystBadge, ScoreCell, SubscoreTicks } from './cells';
 import { tierOf, TIER_RANGE, type CatalystSummary, type DetailCache, type RowSignalsState } from './types';
 import { t } from '../../i18n/core.ts';
@@ -69,6 +70,33 @@ function headsFor(showMacro: boolean) {
     { label: t('宏观适配'), hint: macroShadowHint() },
     ...HEADS.slice(MACRO_HEAD_INDEX),
   ];
+}
+
+/** 行展开的外壳：收起动画播完才卸载整行，关闭态不留空 tr（否则每行下面多一道分隔线）。 */
+function ExpansionRow({
+  open,
+  colSpan,
+  panelId,
+  children,
+}: {
+  open: boolean;
+  colSpan: number;
+  panelId: string;
+  children: ReactNode;
+}) {
+  return (
+    <CollapsePresence
+      open={open}
+      id={panelId}
+      wrap={(panel) => (
+        <tr>
+          <td colSpan={colSpan} className="p-0">{panel}</td>
+        </tr>
+      )}
+    >
+      {children}
+    </CollapsePresence>
+  );
 }
 
 export default function ResultTable({
@@ -126,7 +154,7 @@ export default function ResultTable({
                   layout="position"
                   initial={page === 1 ? { opacity: 0, y: 14 } : false}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, ease: EASE_PAPER, delay: page === 1 ? Math.min(i * 0.03, 0.3) : 0, layout: { duration: 0.32, ease: EASE_PAPER } }}
+                  transition={{ duration: DUR_UI, ease: EASE_PAPER, delay: page === 1 ? Math.min(i * 0.03, 0.3) : 0, layout: { duration: DUR_UI, ease: EASE_PAPER } }}
                   onClick={(event) => {
                     // Tooltip/link controls keep their own pointer and keyboard actions.
                     if (event.target instanceof Element && event.target.closest('button, a, input, select, textarea, [role="button"], [tabindex]')) return;
@@ -205,39 +233,24 @@ export default function ResultTable({
                       aria-controls={isOpen ? panelId : undefined}
                       aria-label={t('展开或收起 {ticker} 详情', { ticker: r.ticker })}
                       className={cn(
-                        'inline-flex size-8 items-center justify-center rounded-sm border border-line text-ink-400 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11',
+                        'inline-flex size-8 items-center justify-center rounded-sm border border-line text-ink-400 transition-[color,border-color,transform] duration-fast active:scale-[.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11',
                         isOpen && 'border-brand-400 text-brand-600',
                       )}
                     >
-                      <Icon name="chevron-down" size={13} className={cn('transition-transform duration-200', isOpen && 'rotate-180')} />
+                      <Icon name="chevron-down" size={13} className={cn('transition-transform duration-ui ease-paper', isOpen && 'rotate-180')} />
                     </button>
                   </td>
                 </motion.tr>
-                {/* 行展开 accordion */}
-                <AnimatePresence>
-                  {isOpen && (
-                    <tr key={`${r.ticker}-exp`}>
-                      <td colSpan={heads.length} className="p-0">
-                        <motion.div
-                          id={panelId}
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.26, ease: EASE_PAPER }}
-                          className="overflow-hidden"
-                        >
-                          <RowExpansion
-                            row={r}
-                            weights={weights}
-                            dollarVolume={dv ?? null}
-                            signals={signals[r.ticker] ?? null}
-                            onOpenDetail={onOpenDetail}
-                          />
-                        </motion.div>
-                      </td>
-                    </tr>
-                  )}
-                </AnimatePresence>
+                {/* 行展开 accordion（transitions.dev 21：grid 行 0fr↔1fr，收起播完再卸载） */}
+                <ExpansionRow open={isOpen} colSpan={heads.length} panelId={panelId}>
+                  <RowExpansion
+                    row={r}
+                    weights={weights}
+                    dollarVolume={dv ?? null}
+                    signals={signals[r.ticker] ?? null}
+                    onOpenDetail={onOpenDetail}
+                  />
+                </ExpansionRow>
               </Fragment>
             );
           })}

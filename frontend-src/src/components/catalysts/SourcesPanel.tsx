@@ -2,6 +2,7 @@ import SoftBadge from '@/components/shared/SoftBadge';
 /** sources 面板：数据数据源状态卡（采集状态 + 数据新鲜度 + 最近抓取 + 近 24h 条数） */
 import { motion } from 'framer-motion';
 import { usePolling } from '@/hooks/usePolling';
+import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { catalystsContract } from './api';
 import { Led } from './bits';
 import EmptyState from '@/components/shared/EmptyState';
@@ -41,7 +42,7 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
           action={
             <button
               onClick={() => q.refresh()}
-              className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
+              className="btn-primary"
             >
               {t('重试')}
             </button>
@@ -64,7 +65,7 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
             key={s.source}
             variants={{
               hidden: { opacity: 0, y: 14 },
-              show: { opacity: 1, y: 0, transition: { duration: 0.48, ease: [0.16, 1, 0.3, 1] } },
+              show: { opacity: 1, y: 0, transition: { duration: DUR_SECTION, ease: EASE_PAPER } },
             }}
             className="card-surface p-5"
           >

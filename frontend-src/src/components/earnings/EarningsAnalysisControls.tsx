@@ -6,7 +6,8 @@ import { adminApi, type RuntimeDoc, type WorkerHealth } from '@/api/modules/admi
 import { runtimeApi, type WorkerAction } from '@/api/modules/runtime';
 import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/hooks/useToast';
-import Icon from '@/components/icons';
+import IconSwap from '@/components/shared/IconSwap';
+import Spinner from '@/components/shared/Spinner';
 import SoftBadge from '@/components/shared/SoftBadge';
 import { cn } from '@/lib/utils';
 import { t } from '../../i18n/core.ts';
@@ -201,7 +202,7 @@ export default function EarningsAnalysisControls() {
             onClick={() => void updateSchedule()}
             disabled={!doc || loading || running}
             className={cn(
-              'inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-caption font-medium shadow-btn transition-colors',
+              'inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-caption font-medium shadow-btn transition-colors duration-fast',
               enabled
                 ? 'bg-ai-600 text-on-accent'
                 : 'bg-paper-2 text-ink-600 hover:bg-line',
@@ -226,7 +227,7 @@ export default function EarningsAnalysisControls() {
                 : 'cursor-not-allowed bg-paper-2 text-ink-400',
             )}
           >
-            {running ? <Icon name="refresh" size={14} className="animate-spin" /> : <AnalysisIcon size={14} />}
+            <IconSwap state={running ? 'b' : 'a'} a={<AnalysisIcon size={14} />} b={<Spinner size={12} tone="muted" />} />
             {running ? t('正在检查财报…') : t('立即分析新的财报')}
           </button>
         </div>

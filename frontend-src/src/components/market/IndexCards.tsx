@@ -6,6 +6,7 @@
  */
 import { memo, useEffect, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
+import { DUR_SECTION, DUR_UI, EASE_PAPER } from '@/lib/motion';
 import { isMock, type ApiError } from '@/api/client';
 import type { IndexQuote } from '@/api/types';
 import { getIndexIntraday } from '@/mocks/marketPulse';
@@ -16,6 +17,7 @@ import { useTickFlash } from '@/hooks/useTickFlash';
 import ChangeBadge from '@/components/shared/ChangeBadge';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonCard } from '@/components/shared/Skeleton';
+import { BusyIcon } from '@/components/shared/IconSwap';
 import Sparkline from '@/components/charts/Sparkline';
 import { t } from '../../i18n/core.ts';
 
@@ -49,7 +51,7 @@ const IndexCard = memo(function IndexCard({
       ref={(el) => registerRef(quote.code, el)}
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.48, ease: [0.16, 1, 0.3, 1], delay: Math.min(index * 0.045, 0.4) }}
+      transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: Math.min(index * 0.045, 0.4) }}
       /* 点卡片开该指数的详情页——与全站「点代码开详情」一致。
          这里不做「选中」：本页四个面板都是全市场读数，没有按指数的版本可切换，
          留一个改不动数据的选中态等于承诺一个兑现不了的交互。?index= 仍然保留，
@@ -59,7 +61,7 @@ const IndexCard = memo(function IndexCard({
       /* 上浮 -3px/240ms 与自选卡、热点卡同一套手感；走 whileHover 而不是 CSS
          hover:-translate-y，因为入场动画结束后 framer 会留下内联 transform，
          把 CSS 位移压掉。 */
-      whileHover={{ y: -3, transition: { duration: 0.24, ease: 'easeOut' } }}
+      whileHover={{ y: -3, transition: { duration: DUR_UI, ease: 'easeOut' } }}
       className={cn(
         'card-surface card-glare relative block w-full overflow-hidden p-4 text-left',
         'transition-shadow duration-240 ease-out hover:shadow-sh-2',
@@ -156,9 +158,10 @@ export default function IndexCards({
             <button
               onClick={onRetry}
               disabled={refreshing}
-              className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
+              aria-busy={refreshing}
+              className="btn-primary"
             >
-              {refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-on-accent/40 border-t-on-accent" />}
+              <BusyIcon busy={refreshing} size={14} tone="on-accent" />
               {t('重试')}
             </button>
           }
@@ -179,9 +182,10 @@ export default function IndexCards({
             <button
               onClick={onRetry}
               disabled={refreshing}
-              className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
+              aria-busy={refreshing}
+              className="btn-primary"
             >
-              {refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-on-accent/40 border-t-on-accent" />}
+              <BusyIcon busy={refreshing} size={14} tone="on-accent" />
               {t('重试')}
             </button>
           }

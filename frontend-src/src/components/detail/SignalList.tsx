@@ -11,6 +11,7 @@ import SignalChip from '@/components/shared/SignalChip';
 import SignalLines from '@/components/shared/SignalLines';
 import { SkeletonText } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
+import { BusyIcon } from '@/components/shared/IconSwap';
 import { cn } from '@/lib/utils';
 import { fmtPrice, fmtRelative } from '@/lib/format';
 import { isIndexSymbol } from '@/lib/quoteSymbol';
@@ -72,9 +73,9 @@ export default function SignalList({
               signalsQ.refresh();
               eventsQ.refresh();
             }}
-            className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
+            className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
           >
-            <Icon name="refresh" size={13} />
+            <BusyIcon busy={signalsQ.refreshing || eventsQ.refreshing} size={13} tone="brand" />
             {t('重试')}
           </button>
         </div>
