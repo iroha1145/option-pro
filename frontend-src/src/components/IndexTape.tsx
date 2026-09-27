@@ -1,8 +1,9 @@
 /**
  * Index Tape（design.md §7.1）
- * 36px 指数跑马灯 marquee · hover 暂停 · 涨跌 tick-flash · 右侧固定「延迟行情」毛玻璃标签
+ * 36px 指数跑马灯 marquee · hover 与键盘焦点暂停 · 涨跌 tick-flash · 右侧固定「延迟行情」毛玻璃标签
  */
-import { memo } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
+import type { FocusEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { marketApi } from '@/api/modules/market';
 import { usePolling } from '@/hooks/usePolling';
@@ -11,6 +12,7 @@ import { MARKET_FUNDS } from '@/lib/liveQuotes';
 import { LivePrice, LiveChange } from '@/components/shared/LiveQuote';
 import { useTickFlash } from '@/hooks/useTickFlash';
 import { fmtPct, fmtPrice } from '@/lib/format';
+import { marqueeCopies, marqueeTimeAt } from '@/lib/marquee';
 import { cn } from '@/lib/utils';
 import type { IndexQuote } from '@/api/types';
 import { t } from '../i18n/core.ts';
@@ -86,18 +88,55 @@ export default function IndexTape() {
   const openMarket = (code: string) => navigate(`/market?index=${encodeURIComponent(code)}`);
 
   const items = data ?? [];
+  const innerRef = useRef<HTMLDivElement>(null);
+  const copyRef = useRef<HTMLDivElement>(null);
+  const [copies, setCopies] = useState(2);
+
+  useEffect(() => {
+    const copy = copyRef.current;
+    const track = innerRef.current?.parentElement;
+    if (!copy || !track || typeof ResizeObserver === 'undefined') return;
+    // 没有内容时单套只剩尾部间距，按 0 宽处理，免得铺出上限份数的空副本。
+    const measure = () => setCopies(marqueeCopies(track.clientWidth, copy.childElementCount > 0 ? copy.offsetWidth : 0));
+    const observer = new ResizeObserver(measure);
+    observer.observe(track);
+    observer.observe(copy);
+    return () => observer.disconnect();
+  }, []);
+
+  /* 键盘焦点进来时 CSS 让动画暂停（:has(:focus-visible)），这里再把按钮挪到轨道起点：
+     否则它可能正好停在左侧裁切区外，焦点圈看不见。浏览器为露出焦点可能已横向卷动轨道，
+     先归零，不然动画恢复后整条带着这段偏移跑。鼠标点击不挪位置；减少动态时没有动画，
+     交给浏览器自己卷动。 */
+  const revealKeyboardFocus = (event: FocusEvent<HTMLDivElement>) => {
+    const target = event.target;
+    const copy = copyRef.current;
+    const animation = innerRef.current?.getAnimations()[0];
+    if (!copy || !animation || !(target instanceof HTMLElement) || !target.matches(':focus-visible')) return;
+    event.currentTarget.scrollLeft = 0;
+    animation.currentTime = marqueeTimeAt(target.offsetLeft, copy.offsetWidth, Number(animation.effect?.getComputedTiming().duration));
+  };
+
+  const row = useFunds
+    ? MARKET_FUNDS.map(symbol => <FundTapeItem key={symbol} symbol={symbol} onOpen={() => navigate(`/stock/${symbol}`)} />)
+    : <TapeRow items={items} flashes={flashes} onOpen={openMarket} />;
 
   return (
-    <div className="marquee-track relative flex h-9 items-center overflow-hidden border-b border-line bg-paper-2/80">
-      <div className="marquee-inner flex w-max animate-marquee items-center gap-8 whitespace-nowrap pl-4" aria-hidden={!useFunds && items.length === 0}>
-        {useFunds ? MARKET_FUNDS.map(symbol => <FundTapeItem key={symbol} symbol={symbol} onOpen={() => navigate(`/stock/${symbol}`)} />) : <TapeRow items={items} flashes={flashes} onOpen={openMarket} />}
-        {/* 第二套只为无缝滚动存在：不能让键盘与读屏软件把每个指数访问两遍
-            （审计 P3-4）。aria-hidden 挡读屏，inert 挡 Tab 与点击。 */}
-        <div className="contents" aria-hidden="true" inert>
-          {useFunds ? MARKET_FUNDS.map(symbol => <FundTapeItem key={symbol} symbol={symbol} onOpen={() => navigate(`/stock/${symbol}`)} />) : <TapeRow items={items} flashes={flashes} onOpen={openMarket} />}
+    <div className="marquee-track no-scrollbar relative flex h-9 items-center overflow-hidden border-b border-line bg-paper-2/80 pl-4" onFocus={revealKeyboardFocus}>
+      <div ref={innerRef} className="marquee-inner relative flex w-max shrink-0 animate-marquee items-center">
+        <div ref={copyRef} className="flex items-center gap-8 whitespace-nowrap pr-8" aria-hidden={!useFunds && items.length === 0}>
+          {row}
         </div>
+        {/* 其余副本只为无缝滚动存在：不能让键盘与读屏软件把每个指数访问多遍
+            （审计 P3-4）。aria-hidden 挡读屏，inert 挡 Tab 与点击。副本依次绝对定位在
+            第一套之后，动画每轮正好平移一套的宽度（含尾部间距），接缝处不跳。 */}
+        {Array.from({ length: copies - 1 }, (_, index) => (
+          <div key={index} className="marquee-echo absolute inset-y-0 flex items-center gap-8 whitespace-nowrap pr-8" style={{ left: `${(index + 1) * 100}%` }} aria-hidden="true" inert>
+            {row}
+          </div>
+        ))}
       </div>
-      <span className="absolute inset-y-0 right-0 z-10 flex items-stretch">
+      <span className="marquee-label absolute inset-y-0 right-0 z-10 flex items-stretch">
         <span className="pointer-events-none w-8 bg-gradient-to-r from-transparent to-paper-2" aria-hidden="true" />
         <span className="glass flex items-center border-l border-line bg-paper-2/95 px-3 text-micro font-medium text-ink-400">
           {useFunds ? (quoteStatus.connected ? t('基金行情 · 美元') : t('行情连接中')) : t('延迟行情')}
