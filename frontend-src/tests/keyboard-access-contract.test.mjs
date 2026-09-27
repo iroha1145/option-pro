@@ -59,16 +59,18 @@ test('抽屉、命令面板与事件详情都启用了焦点圈定', async () =>
 
 /* ---------------- P3-4：跑马灯不得暴露两份按钮 ---------------- */
 
-test('跑马灯第二套副本对键盘与读屏软件不可见', async () => {
+test('跑马灯副本对键盘与读屏软件不可见', async () => {
   const tape = await source('components/IndexTape.tsx');
   const code = codeOf(tape);
-  const rows = code.match(/<TapeRow /g) ?? [];
-  assert.equal(rows.length, 2, '无缝滚动仍需要两套');
-  assert.match(code, /aria-hidden="true" inert>/);
-  // 只有第二套被屏蔽：第一套必须仍然可用
+  // 同一份内容只定义一次：第一套与副本渲染的是同一个 row
+  assert.equal((code.match(/<TapeRow /g) ?? []).length, 1);
+  assert.equal((code.match(/\{row\}/g) ?? []).length, 2);
+  // 只有副本被屏蔽：第一套必须仍然可用（没有数据时才整体隐藏）
   const [firstHalf, secondHalf] = code.split('aria-hidden="true" inert>');
-  assert.match(firstHalf, /<TapeRow /);
-  assert.match(secondHalf, /<TapeRow /);
+  assert.ok(secondHalf, '副本缺少 aria-hidden + inert');
+  assert.match(firstHalf, /ref=\{copyRef\}[^>]*aria-hidden=\{!useFunds && items\.length === 0\}>\s*\{row\}/);
+  assert.match(firstHalf, /Array\.from\(\{ length: copies - 1 \}/);
+  assert.match(secondHalf, /^\s*\{row\}/);
 });
 
 /* ---------------- P3-5：分段控件键盘导航 ---------------- */

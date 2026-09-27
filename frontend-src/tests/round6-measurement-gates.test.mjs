@@ -200,7 +200,7 @@ test('bundle shared graph unions the HTML entry and app-shell closures', async (
   const report = JSON.parse(await readFile(output, 'utf8'));
   const shared = report.first_js_gzip9.shared;
   assert.deepEqual(shared.roots, graphs.map((graph) => graph.entry));
-  assert.deepEqual(shared.files.map((file) => file.path), [...expected.keys()].sort());
+  assert.deepEqual(shared.files.map((file) => file.path), [...expected.keys()].sort((a, b) => a.localeCompare(b)));
   assert.equal(shared.script_n, expected.size);
   assert.equal(shared.raw, [...expected.values()].reduce((sum, file) => sum + file.raw, 0));
   assert.equal(shared.gzip9, [...expected.values()].reduce((sum, file) => sum + file.gzip9, 0));
