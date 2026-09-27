@@ -1,8 +1,23 @@
-"""Production switch board for the v1.7 candidates. Every default is the v1.6 behaviour.
+"""Production switch board for the v1.7 candidates.
 
-The historical replay (research/option_pro_us_eod_v1/return_pack/full_market_v1_7)
-turns these switches on one at a time through the same production functions.
-Adopting a winner means changing ``LIVE_CONFIG`` here, nothing else.
+``LiveConfig()`` with no arguments is the v1.6 behaviour (every switch off);
+``LIVE_CONFIG`` is what production runs. The historical replay
+(research/option_pro_us_eod_v1/return_pack/full_market_v1_7) turned the switches
+on one at a time through the same production functions; its ``live`` variant
+reads ``LIVE_CONFIG`` so the adopted configuration can be replayed and compared
+with the evaluated candidate lists.
+
+v1.7 adopts stage-1 set S1 (2026-09-28, 176 replay dates 2023-03 to 2026-09):
+
+* ``conservative_policy=v1.7``: the conservative list's 63-day top-20 excess over
+  SPY went from -2.90 to +0.54 points per signal (paired +3.44, Newey-West t 4.0,
+  better in both periods and all four years);
+* ``fund_scope=benchmarks``: the scored pool keeps only SPY, QQQ and the sealed
+  ``etfs`` theme funds; stock rows were identical to the full pool on every one
+  of the 176 dates and nine views, and the precompute shrinks by about half.
+
+The industry switches stay off: every G candidate (g3, g3x2, g4, full3, full4)
+was worse than v1.6 on the balanced and aggressive stock lists, worst in P1.
 """
 from __future__ import annotations
 
@@ -12,7 +27,7 @@ from typing import Any, Mapping
 from .full_market_tuning import DEFAULT_POLICY, TuningPolicy, conservative_v17_policy
 from .industry import DEFAULT_LEVEL, DEFAULT_LOOKUP_BUDGET, IndustryTag
 from .options import DEFAULT_G_PROFILES, INDUSTRY_MODES, INDUSTRY_OFF, ScoringOptions
-from .universe import FUND_SCOPES, FUND_SCOPE_ALL
+from .universe import FUND_SCOPES, FUND_SCOPE_ALL, FUND_SCOPE_BENCHMARKS
 
 CONSERVATIVE_V14 = "v1.4"
 CONSERVATIVE_V17 = "v1.7"
@@ -91,7 +106,10 @@ class LiveConfig:
         return {"label": self.label(), **{k: v for k, v in self.__dict__.items()}}
 
 
-LIVE_CONFIG = LiveConfig()
+# The v1.6 production behaviour: the control every replay baseline (``v16``) scores with.
+V16_CONFIG = LiveConfig()
+# What production runs (v1.7 = S1 of the stage-1 replay, see the module docstring).
+LIVE_CONFIG = LiveConfig(conservative_policy=CONSERVATIVE_V17, fund_scope=FUND_SCOPE_BENCHMARKS)
 
 __all__ = [
     "CONSERVATIVE_V14",
@@ -99,4 +117,5 @@ __all__ = [
     "CONSERVATIVE_V17_TILT_MULTIPLIERS",
     "LIVE_CONFIG",
     "LiveConfig",
+    "V16_CONFIG",
 ]

@@ -100,14 +100,36 @@ D 家族残差窗口改为 12 减 1 个月（231 日求和、跳过 21 日）的
 
 版本号为 `limited-all-market-v1.6` / `eod-limited-v1.6`。调参挂钩没变，仍是 `full-market-v1.5`。影子对照工具（`scripts/eod_shadow_compare.py`）读取的是加载后的全市场注册表，所以带着 v1.6 的倾斜；但它没有接入 v1.5 以后的调参挂钩，比较的仍然不是线上口径。
 
-## v1.7 候选（开关，默认关闭）
+## v1.7（保守档换口径，打分池只留基准基金）
 
-证据和规则见 `research/option_pro_us_eod_v1/return_pack/full_market_v1_7/PREREGISTRATION.md`。这一轮先把候选做成生产代码里的开关，回放跑完再决定采纳哪些；默认全部关闭时，输出与 v1.6 逐字节一致（`tests/test_eod_v16_default_identity.py`）。
+证据、预登记和取舍规则见 `research/option_pro_us_eod_v1/return_pack/full_market_v1_7/`。这一轮把候选都做成生产代码里的开关（`backend/app/services/eod_limited/live_config.py` 的 `LiveConfig`），用 v1.6 同一套生产代码回放（176 个回放日，2023-03 到 2026-09）逐个打开比较，再决定采纳哪些。回放前先用 v1.7 代码只跑 v1.6 基线，与 v1.6 阶段的输出逐行比对，27 组视图完全一致。
 
-- **开关板**：`backend/app/services/eod_limited/live_config.py` 的 `LiveConfig`（`industry_mode`、`sic_level`、`g_tilt`、`conservative_policy`、`fund_scope`）。`run_eod_limited_job` 只在全市场实时任务里读取它。
-- **行业分类**：`industry.py`。SEC 的 SIC 代码来自 Massive `/v3/reference/tickers/{ticker}`，存在 `DATA_DIR/eod-limited-v1/industry-sic-v1.json.gz`，每次运行按预算补查目录里没见过的股票，查不到不阻塞发布；`scripts/eod_industry_table.py` 负责用冻结表做种子和手工刷新。行业 = SIC 前 3 位（或 4 位），父行业留空。基金没有行业。
-- **G 因子两种接法**：`options.ScoringOptions(industry_mode="g_only")` 只算 G 并让均衡、进取两档的权重吃 G（轨道 `PRICE_SIC_INDUSTRY_DIAGNOSTIC`）；`industry_mode="full"` 把行业写进证券，按引擎原设计启用行业内分位数、两因子 D 残差和 G。这条轨道上没有分类的证券（无 SIC 的股票、基金）G 按 50 计，避免缺 G 的证券在七因子归一下占便宜。保守档在任何模式下都不吃 G（覆盖下限 0.95 会把无 SIC 的股票整批拒掉）。
-- **保守档换口径**：`full_market_tuning.conservative_v17_policy`，保守档进入 v1.5 的四个挂钩（M 混入、R 中性、EXTENDED 入场状态、ATR 倍数 2.0）并套 v1.6 的倾斜，门槛不变。
-- **基金范围**：`universe.select_all_market_universe(fund_scope="benchmarks")` 只保留 SPY、QQQ 和 `etfs` 主题成员；股票名单必须不变，由回放逐日验证。
-- 页面接口没有改；开关打开后，快照里多出 `factor_capabilities`（G 的来源）、`v17_options` 和批次的 `live_config` 三个字段。
+### 采纳的两项（生产开关板 `LIVE_CONFIG`）
 
+1. **保守档换口径**（`conservative_policy="v1.7"`，`full_market_tuning.conservative_v17_policy(2.0)`）。保守档进入 v1.5 的四个挂钩：动量混入 α=0.6、稳定性 R 中性化为 50、EXTENDED 改为入场状态、HIGH_ATR 倍数 2.0（均衡 2.5、进取 3.0、原 v1.4 保守 1.25）；同时套 v1.6 的倾斜（趋势 T×0.5、动量 M×2.0），并把 R 的倾斜从 1.5 回到 1.0（R 已是常数，倾斜只剩把每个分数往下压的常数偏移）。保守档自己的门槛不变：成交额 5,000 万美元、分数下限 78、结构下限 65、覆盖 0.95、ATR 绝对上限 5%。
+   - 只看股票名单，前 20 名 63 日补位超额从每信号 −2.90 个百分点变为 +0.54；同一天配对差 +3.44（Newey-West t 4.0），两段（+3.04、+3.92）和四个年份全部更好；20 日超额从 −1.20 变为 −0.01。
+   - 名单中位长度从 20 降到 15，换手率从 0.78 降到 0.66。
+   - 代价：v1.4 口径的保守档不再在线上作对照；以后的对照只能靠冻结回放（v1.6 代码随时可重跑，`LiveConfig()` 无参数就是 v1.6 行为）。
+2. **打分池只留基准基金**（`fund_scope="benchmarks"`，`universe.select_all_market_universe`）。只保留 SPY、QQQ 和封存注册表 `etfs` 主题的成员（共 12 只），其余约 5,900 只基金不进面板，目录覆盖记录里的状态是 `excluded:FUND_OUT_OF_SCOPE`。回放 176 天、九组视图的股票行（代码与分数）与全池逐行相同；预计算量约减半。
+
+版本号 `limited-all-market-v1.7` / `eod-limited-v1.7`。调参挂钩的默认策略仍是 `full-market-v1.5`，保守档行的 `full_market_tuning.version` 是 `full-market-v1.7-cons-atr2`。开关打开后快照多三个字段：每组视图的 `factor_capabilities`、`v17_options`，批次的 `live_config`。改了注册表倾斜，所有行的 `weight_provenance_id`（注册表哈希）都会变，这是预期。
+
+### 没有采纳的：行业因子 G
+
+`industry.py` 用 SEC 的 SIC 代码（Massive `/v3/reference/tickers/{ticker}`）给股票贴行业，两种接法都留作关闭的开关：`ScoringOptions(industry_mode="g_only")` 只算 G 并让均衡、进取两档的权重吃 G（轨道 `PRICE_SIC_INDUSTRY_DIAGNOSTIC`，缺分类的证券 G 按 50 计）；`industry_mode="full"` 把行业写进证券，按引擎原设计启用行业内分位数、两因子 D 残差和 G。回放结果（只看股票名单，63 日，与 v1.6 同日配对）：3 位 SIC 只用 G 均衡 −0.66（t −2.1）、4 位 −0.82（t −3.0）、G 倾斜乘 2 更差（−1.71）；全面启用 3 位 −0.37、4 位 −0.60（t −2.4）；两组粒度方向一致，都是 P1 更差。所以生产不启用行业；分类表、刷新脚本（`scripts/eod_industry_table.py`）和轨道代码保留，供以后再试别的行业定义。
+
+### 去掉基金后页面上会变的地方
+
+用户已决定不再要基金名单和基金界面，下面只记录现状，保证没有一处是没原因的空白：
+
+- `GET /api/strength/scan`：`track=stock`（默认，页面用的）不变；`track=etf`、`track=all` 最多只含那 12 只基金。返回里新增 `fund_scope`（`benchmarks`，旧批次为 `all`），`coverage.fund_scope` 同值，短基金名单有据可查。
+- 扫描范围计数：`universe_count`（合资格证券数）从约 11,800 降到约 5,900（股票加 12 只基金），`screened_count` 随之下降；页面上「全市场股票与基金 N」的文案仍是旧说法，数字已经是新范围，文案在前端下一次改动时再调。
+- 单票诊断 `GET /api/strength/diagnostics/{ticker}`：不在池里的基金 `data_status` 为 `out_of_scope`，目录覆盖状态显示 `excluded:FUND_OUT_OF_SCOPE`，页面按既有规则显示「本批次范围外／不属于当前扫描范围」。池内的 12 只基金照常有诊断。
+- `GET /api/strength/stocks/{ticker}`：读取的是完整名单（含基金轨道），不在池里的基金和以前未入选时一样返回 404。
+- 主题统计与 `GET /api/strength/sectors`：`etfs` 主题的成员正好是保留的 12 只基金，统计不受影响；选股页的主题选项已不列 `etfs`。24 个股票主题不变。
+- 大盘状态（`strength-context-v1.json`）自己取基准行情，不读打分池，不受影响。
+- 全目录漏斗（`family_funnels.universe`）的 `status_counts` 多出 `excluded:FUND_OUT_OF_SCOPE` 一项，约 5,900 只；`coverage_empty` 名单相应变长。
+
+### 上线前核对
+
+回放脚本有一个 `live` 方案，直接读 `LIVE_CONFIG`（注册表倾斜和打分选项都取自生产对象），与评估过的显式候选 `cons17+nofund` 在同一批日期上逐行比对，见研究包的 README；单元测试 `tests/test_eod_v17_adoption.py` 覆盖 worker 从 `LIVE_CONFIG` 到面板、注册表和打分的接线，`tests/test_eod_v16_default_identity.py` 继续用 v1.6 代码生成的黄金样本守住不带选项的打分函数。

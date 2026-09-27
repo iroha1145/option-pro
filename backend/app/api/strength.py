@@ -885,6 +885,10 @@ def _read_eod_limited_snapshot(
         payload[key] = rows
     payload["track"] = track
     payload["track_counts"] = track_counts
+    # v1.7 scores only the benchmark funds (SPY, QQQ and the sealed etfs theme), so
+    # track=etf and track=all carry at most those twelve fund rows; the scope is
+    # named here so a short fund list is never mistaken for missing data.
+    payload["fund_scope"] = str((payload.get("coverage") or {}).get("fund_scope") or "all")
     key = "composite_rows" if kind == LIST_KIND_COMPOSITE else "observation_rows"
     payload["rows"] = list(payload[key])
     top = int(parameters.get("top") or 0)

@@ -278,7 +278,7 @@ def project_strength_payload(
             "status", "directory_count", "eligible_count", "excluded_count",
             "complete_bar_count", "missing_session_count", "short_history_count",
             "residual_short_history_count", "invalid_count", "no_history_count",
-            "scored_count", "provider", "source_dates", "source_hash",
+            "scored_count", "provider", "source_dates", "source_hash", "fund_scope",
         ) if key in coverage},
         "score_version": scored.get("compute_version"),
         "feature_version": scored.get("feature_version"),

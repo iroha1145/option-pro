@@ -16,7 +16,7 @@ from app.services.eod_limited.full_market_tuning import (
 )
 from app.services.eod_limited.industry import IndustryTag, SicTable, sic_group, tag_for
 from app.services.eod_limited.inference import precompute_all_horizon_inputs, score_eod_session
-from app.services.eod_limited.live_config import CONSERVATIVE_V17, LiveConfig
+from app.services.eod_limited.live_config import CONSERVATIVE_V14, CONSERVATIVE_V17, V16_CONFIG, LiveConfig
 from app.services.eod_limited.market_registry import ALL_MARKET_STOCKS, load_market_registry
 from app.services.eod_limited.options import (
     INDUSTRY_FULL, INDUSTRY_G_ONLY, INDUSTRY_OFF, DEFAULT_OPTIONS, G_NEUTRAL_VALUE, ScoringOptions,
@@ -481,8 +481,9 @@ def test_extra_tilt_multipliers_apply_on_top_of_the_v16_lean():
         load_market_registry(extra_tilt_multipliers={"balanced": {"G": 0.0}})
 
 
-def test_live_config_defaults_to_v16_and_describes_every_switch():
+def test_live_config_dataclass_default_is_v16_and_describes_every_switch():
     default = LiveConfig()
+    assert default == V16_CONFIG
     assert default.label() == "v1.6" and default.tilt_multipliers() is None
     assert default.tuning_policy() is DEFAULT_POLICY and default.scoring_options() is None
     assert default.scoring_options(tags()) is None
@@ -552,7 +553,9 @@ def test_worker_without_a_classification_publishes_the_v16_scores_and_records_th
         return panel, [{"ticker": sid, "status": "ok", "bars": 370} for sid in panel], manifest
 
     monkeypatch.setattr(market_data, "load_all_market_panel", fake_load)
-    config = LiveConfig(industry_mode=INDUSTRY_FULL, industry_lookup_budget=0)  # no table, no lookups
+    # No table and no lookups: an industry mode on top of the v1.6 switches falls back to v1.6 scoring.
+    config = LiveConfig(industry_mode=INDUSTRY_FULL, industry_lookup_budget=0,
+                        conservative_policy=CONSERVATIVE_V14, fund_scope=FUND_SCOPE_ALL)
     result = worker.run_eod_limited_job(session=SESSION, root=tmp_path, refresh_context=False, live_config=config)
     assert result["status"] == "RAN"
     batch = read_batch(tmp_path)
@@ -563,7 +566,7 @@ def test_worker_without_a_classification_publishes_the_v16_scores_and_records_th
     assert rounded(rows) == GOLDEN["balanced/mid"]["rows"]
 
 
-def test_default_worker_batch_has_no_v17_keys(tmp_path, monkeypatch):
+def test_v16_config_worker_batch_has_no_v17_keys(tmp_path, monkeypatch):
     from app.services.eod_limited import market_data, worker
     from app.services.eod_limited.store import read_batch
 
@@ -572,7 +575,7 @@ def test_default_worker_batch_has_no_v17_keys(tmp_path, monkeypatch):
                 "source_hash": "test", "volume_session_scope": market_data.VOLUME_SCOPE}
     monkeypatch.setattr(market_data, "load_all_market_panel", lambda **kw: (
         panel, [{"ticker": sid, "status": "ok", "bars": 370} for sid in panel], manifest))
-    result = worker.run_eod_limited_job(session=SESSION, root=tmp_path, refresh_context=False)
+    result = worker.run_eod_limited_job(session=SESSION, root=tmp_path, refresh_context=False, live_config=V16_CONFIG)
     assert result["status"] == "RAN"
     batch = read_batch(tmp_path)
     assert "live_config" not in batch and "industry" not in batch["coverage"]

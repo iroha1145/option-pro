@@ -6,6 +6,11 @@ synthetic panel, compacted the way the worker stores them and projected the way
 ``/api/strength/scan`` reads them. Floats are rounded to six decimals so the file
 survives BLAS/LAPACK differences between machines. Regenerate deliberately with
 ``EOD_GOLDEN_REWRITE=1`` only when v1.6 behaviour is meant to change.
+
+``score_eod_session`` and ``precompute_all_horizon_inputs`` without options are
+the replay's ``v16`` baseline and stay this fixture. Production (``LIVE_CONFIG``)
+is v1.7 and is covered by ``tests/test_eod_v17_adoption.py``; only the version
+label in the compact payload follows the code version, so it is compared apart.
 """
 from __future__ import annotations
 
@@ -16,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from app.services.eod_limited import PURPOSE_SYNTHETIC
+from app.services.eod_limited import COMPUTE_VERSION, PURPOSE_SYNTHETIC
 from app.services.eod_limited.inference import precompute_all_horizon_inputs, score_eod_session
 from app.services.eod_limited.market_registry import ALL_MARKET_STOCKS, load_market_registry
 from app.services.eod_limited.project import project_strength_payload
@@ -28,6 +33,8 @@ from eod_v17_fixtures import SESSION, build_panel, rounded
 GOLDEN = Path(__file__).resolve().parent / "fixtures" / "eod_v16_golden.json.gz"
 THEMES = [ALL_MARKET_STOCKS, "semiconductors", "etfs"]
 VOLATILE_KEYS = {"generated_at"}
+# The label names the code version, not the scoring path; the fixture holds v1.6's.
+VERSION_KEYS = {"compute_version": "limited-all-market-v1.6"}
 
 
 def nine_views(**kwargs) -> dict[str, dict]:
@@ -63,7 +70,11 @@ def test_default_path_reproduces_the_v16_golden_views():
     for key in golden:
         assert current[key]["rows"] == golden[key]["rows"], key
         assert current[key]["factor_capabilities"] == golden[key]["factor_capabilities"], key
-        assert current[key]["compact"] == golden[key]["compact"], key
+        for version_key, golden_value in VERSION_KEYS.items():
+            assert golden[key]["compact"][version_key] == golden_value, key
+            assert current[key]["compact"][version_key] == COMPUTE_VERSION, key
+        assert {k: v for k, v in current[key]["compact"].items() if k not in VERSION_KEYS} == \
+            {k: v for k, v in golden[key]["compact"].items() if k not in VERSION_KEYS}, key
     listed = sum(len(view["rows"]) for view in golden.values())
     assert listed > 40, "the fixture must exercise non-trivial lists"
 
