@@ -58,6 +58,48 @@ async function emitEvent(page, type, data) {
 const emit = (page, symbol, value, extra = {}) => emitEvent(page, 'quotes', { quotes: [price(symbol, value, extra)] });
 const ticker = (scope, text) => scope.getByText(text, { exact: true }).locator('xpath=..');
 
+for (const width of [390, 1440]) {
+  for (const reducedMotion of [false, true]) {
+    test(`fund tape keyboard focus reveals all four funds at ${width}px with reduced motion ${reducedMotion}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ reducedMotion: reducedMotion ? 'reduce' : 'no-preference' });
+      const state = await fixture(page);
+      await page.goto('/');
+      const track = page.locator('.marquee-track');
+      const buttons = track.locator('.marquee-inner > div:first-child > button');
+      await expect(buttons).toHaveCount(4);
+
+      // Start with the browser's Tab order so :focus-visible is exercised as a real keyboard user.
+      for (let attempt = 0; attempt < 30; attempt++) {
+        await page.keyboard.press('Tab');
+        if (await buttons.first().evaluate(button => document.activeElement === button)) break;
+      }
+      await expect(buttons.first()).toBeFocused();
+      for (let index = 0; index < 4; index++) {
+        if (index > 0) await page.keyboard.press('Tab');
+        await expect(buttons.nth(index)).toBeFocused();
+        await expect.poll(() => track.evaluate(node => {
+          const button = document.activeElement;
+          const rect = button.getBoundingClientRect();
+          const viewport = node.getBoundingClientRect();
+          const label = node.querySelector('.marquee-label');
+          return {
+            focusVisible: button.matches(':focus-visible'),
+            inTrack: rect.left >= viewport.left - 1 && rect.right <= viewport.right + 1,
+            labelHidden: getComputedStyle(label).opacity === '0',
+          };
+        })).toEqual({ focusVisible: true, inTrack: true, labelHidden: true });
+        if (reducedMotion && width === 390 && index > 0) {
+          await expect.poll(() => track.evaluate(node => node.scrollLeft)).toBeGreaterThan(0);
+        }
+      }
+      await page.keyboard.press('Tab');
+      await expect.poll(() => track.locator('.marquee-label').evaluate(label => getComputedStyle(label).opacity)).toBe('1');
+      expect(state.errors).toEqual([]);
+    });
+  }
+}
+
 test('watchlist subscribes offscreen rows, pushes prices without reordering, and releases on navigation', async ({ page }) => {
   const state = await fixture(page, true, true); await page.goto('/watchlist');
   await expect.poll(() => latestSymbols(page)).toContain('S031');

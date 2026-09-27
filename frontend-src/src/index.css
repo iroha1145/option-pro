@@ -517,6 +517,10 @@
   .marquee-track:has(:focus-visible) .marquee-inner {
     animation-play-state: paused;
   }
+  .marquee-track:has(:focus-visible) > .marquee-label {
+    opacity: 0;
+    pointer-events: none;
+  }
 
   /* v8.3 tick-flash 可中断化：原 keyframes 闪烁（tailwind config 已删）→
      常驻 base 类做 600ms 回落 transition；闪烁态 transition:none 瞬时上色，

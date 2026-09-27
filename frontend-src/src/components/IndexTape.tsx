@@ -104,15 +104,17 @@ export default function IndexTape() {
     return () => observer.disconnect();
   }, []);
 
-  /* 键盘焦点进来时 CSS 让动画暂停（:has(:focus-visible)），这里再把按钮挪到轨道起点：
-     否则它可能正好停在左侧裁切区外，焦点圈看不见。浏览器为露出焦点可能已横向卷动轨道，
-     先归零，不然动画恢复后整条带着这段偏移跑。鼠标点击不挪位置；减少动态时没有动画，
-     交给浏览器自己卷动。 */
+  /* 键盘焦点进来时露出第一套里的按钮。动画模式按位置停住；减少动态时没有动画，
+     直接横向卷动轨道。标签在焦点停留期间隐藏，避免盖住较长的基金行情。 */
   const revealKeyboardFocus = (event: FocusEvent<HTMLDivElement>) => {
     const target = event.target;
     const copy = copyRef.current;
+    if (!copy || !(target instanceof HTMLElement) || !copy.contains(target) || !target.matches(':focus-visible')) return;
     const animation = innerRef.current?.getAnimations()[0];
-    if (!copy || !animation || !(target instanceof HTMLElement) || !target.matches(':focus-visible')) return;
+    if (!animation) {
+      event.currentTarget.scrollLeft = target.offsetLeft;
+      return;
+    }
     event.currentTarget.scrollLeft = 0;
     animation.currentTime = marqueeTimeAt(target.offsetLeft, copy.offsetWidth, Number(animation.effect?.getComputedTiming().duration));
   };

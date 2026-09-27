@@ -137,7 +137,7 @@
 - **悬停与按压**：Tailwind 已开启 `future.hoverOnlyWhenSupported`，所有 `hover:` / `group-hover:` 工具类只在「可悬停的精确指针」下生成，与 `index.css` 手写规则的媒体查询同一口径，触屏点按后不再粘住悬停态。`.control-button` 按下回缩到 0.97（beautifului 表格芯片、beUI 按钮的按压反馈）。桌面主导航增加悬停浅底滑块（beUI shared-layout-bg），位置由 `placeGlide` 写入。
 - **动效参数**：Framer Motion 一律引用 `lib/motion.ts` 的 `EASE_PAPER`、`DUR_FAST` / `DUR_UI` / `DUR_SECTION`、`SPRING_POP`、`SPRING_INDICATOR`，按用途而不是按最近的数字取档；0.7 秒以上的条形增长、仪表扫动保留原值。CSS 侧引用 `transitions-root.css` 的令牌。键盘驱动的高亮（命令面板）用 quick 档（150 毫秒），跟得上方向键连按。
 - **热力色阶**：`heatColor(pct, span)` 的色阶两端按展示口径定：日内涨跌 ±3%，板块 1 / 3 / 6 个月收益分别 ±6% / ±12% / ±18%。中点随冷灰纸面，夜间的半程色单独一套，从深灰逐步加深。板块砖入场改为自左上角铺开的对角波（beUI heat-calendar、rareui github-activity 的错落节奏），总时长封顶约 0.6 秒。
-- **跑马灯**（2026-09-27，参考 ObsidianUI 的 draggable-marquee）：动画元素只含第一套内容，其余副本绝对定位在它后面，每轮平移 `-100%`，正好是一套的宽度（含尾部间距），接缝不跳。副本数由 `lib/marquee.ts` 的 `marqueeCopies` 按轨道宽度计算，宽屏上一轮走到末尾也不会露白。键盘焦点进入时暂停，并把焦点项挪到轨道起点。减少动态时副本隐藏，轨道改为可横向滑动，右侧标签贴边占位。
+- **跑马灯**（2026-09-27，参考 ObsidianUI 的 draggable-marquee）：动画元素只含第一套内容，其余副本绝对定位在它后面，每轮平移 `-100%`，正好是一套的宽度（含尾部间距），接缝不跳。副本数由 `lib/marquee.ts` 的 `marqueeCopies` 按轨道宽度计算，至多六套，覆盖常见屏宽的完整循环。键盘焦点进入时暂停，并把焦点项挪到轨道起点；焦点停留期间暂时隐藏右侧标签的视觉层，保留布局占位，离开后恢复。减少动态时副本隐藏，轨道改为可横向滑动，并主动滚动到键盘焦点项，避免原生滚动只露出被标签遮住的部分。
 - **测试镜子**：沙箱编译组件的测试对未声明依赖一律报错。组件新增上述共享依赖时，在 `frontend-src/tests/helpers/shared-ui-stubs.mjs` 补桩（令牌用真实模块，展示件桩成元素类型并保留子节点文字），不要在各测试里各抄一份。
 
 ## 6. 来源维护

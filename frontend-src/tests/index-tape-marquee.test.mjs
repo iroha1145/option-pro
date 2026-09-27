@@ -61,6 +61,7 @@ test('动画元素只含第一套：每轮平移 -100%，左内边距不在周�
 test('键盘焦点进入时暂停；减少动态时藏起副本、改为可横向滑动', async () => {
   const css = await read('src/index.css');
   assert.match(css, /\.marquee-track:hover \.marquee-inner,\s*\.marquee-track:has\(:focus-visible\) \.marquee-inner \{\s*animation-play-state: paused;/);
+  assert.match(css, /\.marquee-track:has\(:focus-visible\) > \.marquee-label \{\s*opacity: 0;\s*pointer-events: none;/);
   const reduced = css.slice(css.indexOf('/* §4.2 降级：减少动态偏好 */'));
   assert.match(reduced, /\.marquee-track \{ overflow-x: auto; \}/);
   assert.match(reduced, /\.marquee-echo \{ display: none; \}/);
@@ -68,4 +69,6 @@ test('键盘焦点进入时暂停；减少动态时藏起副本、改为可横�
   // 鼠标点击不挪位置，只处理键盘焦点
   const tape = await read('src/components/IndexTape.tsx');
   assert.match(tape, /target\.matches\(':focus-visible'\)/);
+  assert.match(tape, /copy\.contains\(target\)/);
+  assert.match(tape, /if \(!animation\) \{\s*event\.currentTarget\.scrollLeft = target\.offsetLeft;/);
 });
