@@ -133,3 +133,25 @@ def test_scan_endpoint_serves_each_track_from_its_own_cache_entry(eod_snapshot):
     assert served["etf"] == ["ITEM6", "ITEM4", "ITEM2"]
     assert served["all"] == ["ITEM6", "ITEM5", "ITEM4", "ITEM3", "ITEM2"]
     assert served[None] == served["stock"]
+
+
+def test_counts_describe_the_served_track_and_list(eod_snapshot):
+    for index, row in enumerate(eod_snapshot["watch_list"], 1):
+        row["stock_or_etf_track"] = "etf" if index % 2 == 0 else "stock"
+    for index, row in enumerate(eod_snapshot["composite_results"], 1):
+        row["stock_or_etf_track"] = "etf" if index <= 4 else "stock"
+    stock = read_snapshot(track="stock")
+    assert (stock["observation_n"], stock["watch_n"], stock["composite_n"]) == (3, 3, 2)
+    assert stock["empty_eligible_reason"] == "data_qualification_unverified"
+    composite = read_snapshot(track="stock", list_kind="composite")
+    assert composite["track_counts"] == {"etf": 4, "stock": 2}
+    assert [row["ticker"] for row in composite["rows"]] == ["ITEM6", "ITEM5"]
+    everything = read_snapshot(track="all")
+    assert everything["observation_n"] == 6
+
+
+def test_screener_sector_options_leave_out_the_fund_theme():
+    from app.services.strength.scanner import profiles
+
+    ids = [sector["id"] for sector in profiles()["sectors"]]
+    assert "etfs" not in ids and "semiconductors" in ids

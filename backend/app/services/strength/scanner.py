@@ -2532,9 +2532,10 @@ async def stock_strength(ticker: str, profile: str = "balanced") -> dict[str, An
 
 
 def profiles() -> dict[str, Any]:
+    # The screener ranks stocks only (v1.6), so the fund theme would always be empty.
     return {
         "profiles": list(PROFILES),
         "timeframes": list(TIMEFRAMES),
         "universes": list(UNIVERSES),
-        "sectors": [{"id": sid, "name": sector["name"]} for sid, sector in SECTORS.items()],
+        "sectors": [{"id": sid, "name": sector["name"]} for sid, sector in SECTORS.items() if sid != "etfs"],
     }
