@@ -511,9 +511,15 @@
     animation: shimmer 1.6s linear infinite;
   }
 
-  /* marquee hover 暂停 */
-  .marquee-track:hover .marquee-inner {
+  /* marquee 在指针悬停或键盘焦点进入时暂停：键盘用户也要能停下移动的内容，
+     焦点按钮停在哪由 IndexTape 调整 */
+  .marquee-track:hover .marquee-inner,
+  .marquee-track:has(:focus-visible) .marquee-inner {
     animation-play-state: paused;
+  }
+  .marquee-track:has(:focus-visible) > .marquee-label {
+    opacity: 0;
+    pointer-events: none;
   }
 
   /* v8.3 tick-flash 可中断化：原 keyframes 闪烁（tailwind config 已删）→
@@ -992,6 +998,16 @@
   }
   *, *::before, *::after {
     transition-duration: 160ms !important;
+  }
+  /* 不动的跑马灯改成可横向滑动的一条：副本藏起来，免得同一只指数出现两次；
+     右侧标签改为贴边占位，滑到头时不再盖住最后一项。 */
+  .marquee-track { overflow-x: auto; }
+  .marquee-echo { display: none; }
+  .marquee-track > .marquee-label {
+    position: sticky;
+    align-self: stretch;
+    flex-shrink: 0;
+    margin-left: auto;
   }
 }
 

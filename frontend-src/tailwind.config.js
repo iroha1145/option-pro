@@ -234,9 +234,10 @@ module.exports = {
           from: { transform: 'translateX(-100%)' },
           to: { transform: 'translateX(100%)' },
         },
+        /* 动画元素只含第一套内容，其余副本绝对定位在它后面：每轮正好平移一套 */
         marquee: {
           from: { transform: 'translateX(0)' },
-          to: { transform: 'translateX(-50%)' },
+          to: { transform: 'translateX(-100%)' },
         },
         'nudge-shake': {
           '0%,100%': { transform: 'translateX(0)' },

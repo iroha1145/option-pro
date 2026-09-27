@@ -103,6 +103,14 @@ texts-reveal and matrix-loader recipes were copied into
 `frontend-src/src/styles/transitions-catalog.css`; the other sources were used as
 design patterns and parameters, without vendoring component source.
 
+A review on 2026-09-27 consulted [ObsidianUI](https://www.obsidianui.dev/) /
+[Atharvsinh-codez/ObsidianUI](https://gitlab.com/Atharvsinh-codez/ObsidianUI)
+at `e31cab8581ffa81d2c7e6ff6ea2aa3910f37fe50` (MIT; copyright (c) 2026
+ObsidianUI). Its draggable-marquee and text-stream blocks informed two
+behaviors of the index tape: repeating the content as many times as the track
+width requires, and falling back to a manually scrollable strip without
+duplicates under reduced motion. No ObsidianUI source was copied.
+
 ### MIT-licensed interface references
 
 The following MIT terms apply separately to the Beautiful UI, beUI, Rare UI and
