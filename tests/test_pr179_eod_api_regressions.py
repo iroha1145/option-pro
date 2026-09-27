@@ -106,4 +106,3 @@ def test_track_filter_ranks_stocks_and_funds_separately_before_top(eod_snapshot,
     assert all(track == "all" or row["stock_or_etf_track"] == track for row in payload["observation_rows"])
     assert payload["track"] == track
     assert payload["track_counts"] == {"stock": 3, "etf": 3}
-

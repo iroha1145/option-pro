@@ -220,7 +220,7 @@ def main() -> None:
                          "top": top, "holding": holding, "period": period, **summary,
                          "turnover": turnover(subset, top)})
     with (args.out / "metrics.csv").open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]), lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
     with (args.out / "label_status.json").open("w") as handle:
@@ -256,7 +256,7 @@ def main() -> None:
                 entry["median_listed"] = median_listed(variant, profile, list_type)
                 table.append(entry)
     with (args.out / "primary.csv").open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(table[0]))
+        writer = csv.DictWriter(handle, fieldnames=list(table[0]), lineterminator="\n")
         writer.writeheader()
         writer.writerows(table)
     print("\nprimary metric: top-20 slot-filled excess vs SPY, % per signal, mean of the three views")

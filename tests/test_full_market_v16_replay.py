@@ -121,4 +121,3 @@ def test_live_registry_carries_the_v16_tilts_and_matches_the_replayed_candidate(
         assert after[2:] == before[2:]
     assert live["profiles"]["conservative"] == sealed["profiles"]["conservative"]
     assert live["live_profile_tilt_multipliers"] == LIVE_PROFILE_TILT_MULTIPLIERS
-

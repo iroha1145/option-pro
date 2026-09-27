@@ -76,7 +76,7 @@ def main() -> None:
                              "share_days_positive": round(sum(d > 0 for d in diffs) / len(diffs), 3)})
     args.out.mkdir(parents=True, exist_ok=True)
     with (args.out / "paired.csv").open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]), lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
     for row in rows:
