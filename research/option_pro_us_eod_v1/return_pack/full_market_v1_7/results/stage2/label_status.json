@@ -1,0 +1,5840 @@
+{
+ "cons17+nofund+d12m1/aggressive/long|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1467,
+  "label_gap_exit": 10,
+  "label_no_entry_bar": 3
+ },
+ "cons17+nofund+d12m1/aggressive/long|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1413,
+  "label_gap_exit": 34,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/aggressive/long|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1281,
+  "label_gap_exit": 86,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/aggressive/long|mixed|20|5": {
+  "resolve_ok": 2951,
+  "label_ok": 2931,
+  "label_gap_exit": 15,
+  "label_no_entry_bar": 5
+ },
+ "cons17+nofund+d12m1/aggressive/long|mixed|20|20": {
+  "resolve_ok": 2894,
+  "label_ok": 2822,
+  "label_gap_exit": 64,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/aggressive/long|mixed|20|63": {
+  "resolve_ok": 2742,
+  "label_ok": 2570,
+  "label_gap_exit": 156,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/aggressive/long|stock|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1467,
+  "label_gap_exit": 10,
+  "label_no_entry_bar": 3
+ },
+ "cons17+nofund+d12m1/aggressive/long|stock|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1413,
+  "label_gap_exit": 34,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/aggressive/long|stock|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1281,
+  "label_gap_exit": 86,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/aggressive/long|stock|20|5": {
+  "resolve_ok": 2951,
+  "label_ok": 2931,
+  "label_gap_exit": 15,
+  "label_no_entry_bar": 5
+ },
+ "cons17+nofund+d12m1/aggressive/long|stock|20|20": {
+  "resolve_ok": 2894,
+  "label_ok": 2821,
+  "label_gap_exit": 65,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/aggressive/long|stock|20|63": {
+  "resolve_ok": 2742,
+  "label_ok": 2569,
+  "label_gap_exit": 157,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/aggressive/mid|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1467,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 9
+ },
+ "cons17+nofund+d12m1/aggressive/mid|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1413,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 33,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/aggressive/mid|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1279,
+  "label_gap_exit": 87,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/aggressive/mid|mixed|20|5": {
+  "resolve_ok": 2951,
+  "label_ok": 2931,
+  "label_gap_exit": 15,
+  "label_no_entry_bar": 5
+ },
+ "cons17+nofund+d12m1/aggressive/mid|mixed|20|20": {
+  "resolve_ok": 2894,
+  "label_ok": 2826,
+  "label_gap_exit": 60,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/aggressive/mid|mixed|20|63": {
+  "resolve_ok": 2742,
+  "label_ok": 2572,
+  "label_gap_exit": 154,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/aggressive/mid|stock|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1467,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 9
+ },
+ "cons17+nofund+d12m1/aggressive/mid|stock|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1413,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 33,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/aggressive/mid|stock|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1279,
+  "label_gap_exit": 87,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/aggressive/mid|stock|20|5": {
+  "resolve_ok": 2951,
+  "label_ok": 2931,
+  "label_gap_exit": 15,
+  "label_no_entry_bar": 5
+ },
+ "cons17+nofund+d12m1/aggressive/mid|stock|20|20": {
+  "resolve_ok": 2894,
+  "label_ok": 2826,
+  "label_gap_exit": 60,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/aggressive/mid|stock|20|63": {
+  "resolve_ok": 2742,
+  "label_ok": 2570,
+  "label_gap_exit": 156,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/aggressive/short|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1472,
+  "label_no_entry_bar": 2,
+  "label_gap_exit": 6
+ },
+ "cons17+nofund+d12m1/aggressive/short|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1420,
+  "label_gap_exit": 28,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/aggressive/short|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1291,
+  "label_gap_exit": 77,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/aggressive/short|mixed|20|5": {
+  "resolve_ok": 2959,
+  "label_ok": 2944,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 4
+ },
+ "cons17+nofund+d12m1/aggressive/short|mixed|20|20": {
+  "resolve_ok": 2902,
+  "label_ok": 2843,
+  "label_gap_exit": 52,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/aggressive/short|mixed|20|63": {
+  "resolve_ok": 2750,
+  "label_ok": 2592,
+  "label_gap_exit": 143,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/aggressive/short|stock|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1471,
+  "label_no_entry_bar": 2,
+  "label_gap_exit": 7
+ },
+ "cons17+nofund+d12m1/aggressive/short|stock|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1419,
+  "label_gap_exit": 29,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/aggressive/short|stock|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1288,
+  "label_gap_exit": 80,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/aggressive/short|stock|20|5": {
+  "resolve_ok": 2959,
+  "label_ok": 2942,
+  "label_gap_exit": 12,
+  "label_no_entry_bar": 5
+ },
+ "cons17+nofund+d12m1/aggressive/short|stock|20|20": {
+  "resolve_ok": 2902,
+  "label_ok": 2840,
+  "label_gap_exit": 54,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/aggressive/short|stock|20|63": {
+  "resolve_ok": 2750,
+  "label_ok": 2587,
+  "label_gap_exit": 147,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/balanced/long|mixed|10|5": {
+  "resolve_ok": 1479,
+  "label_ok": 1467,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 8
+ },
+ "cons17+nofund+d12m1/balanced/long|mixed|10|20": {
+  "resolve_ok": 1452,
+  "label_ok": 1414,
+  "label_gap_exit": 31,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/balanced/long|mixed|10|63": {
+  "resolve_ok": 1380,
+  "label_ok": 1278,
+  "label_gap_exit": 87,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/balanced/long|mixed|20|5": {
+  "resolve_ok": 2949,
+  "label_ok": 2929,
+  "label_no_entry_bar": 5,
+  "label_gap_exit": 15
+ },
+ "cons17+nofund+d12m1/balanced/long|mixed|20|20": {
+  "resolve_ok": 2892,
+  "label_ok": 2817,
+  "label_gap_exit": 67,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/balanced/long|mixed|20|63": {
+  "resolve_ok": 2740,
+  "label_ok": 2566,
+  "label_gap_exit": 158,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/balanced/long|stock|10|5": {
+  "resolve_ok": 1479,
+  "label_ok": 1466,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 9
+ },
+ "cons17+nofund+d12m1/balanced/long|stock|10|20": {
+  "resolve_ok": 1452,
+  "label_ok": 1413,
+  "label_gap_exit": 32,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/balanced/long|stock|10|63": {
+  "resolve_ok": 1380,
+  "label_ok": 1276,
+  "label_gap_exit": 89,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/balanced/long|stock|20|5": {
+  "resolve_ok": 2949,
+  "label_ok": 2929,
+  "label_no_entry_bar": 5,
+  "label_gap_exit": 15
+ },
+ "cons17+nofund+d12m1/balanced/long|stock|20|20": {
+  "resolve_ok": 2892,
+  "label_ok": 2816,
+  "label_gap_exit": 68,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/balanced/long|stock|20|63": {
+  "resolve_ok": 2740,
+  "label_ok": 2565,
+  "label_gap_exit": 159,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/balanced/mid|mixed|10|5": {
+  "resolve_ok": 1479,
+  "label_ok": 1467,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 8
+ },
+ "cons17+nofund+d12m1/balanced/mid|mixed|10|20": {
+  "resolve_ok": 1452,
+  "label_ok": 1413,
+  "label_gap_exit": 32,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/balanced/mid|mixed|10|63": {
+  "resolve_ok": 1380,
+  "label_ok": 1277,
+  "label_gap_exit": 88,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/balanced/mid|mixed|20|5": {
+  "resolve_ok": 2949,
+  "label_ok": 2928,
+  "label_no_entry_bar": 6,
+  "label_gap_exit": 15
+ },
+ "cons17+nofund+d12m1/balanced/mid|mixed|20|20": {
+  "resolve_ok": 2892,
+  "label_ok": 2820,
+  "label_gap_exit": 63,
+  "label_no_entry_bar": 6,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/balanced/mid|mixed|20|63": {
+  "resolve_ok": 2740,
+  "label_ok": 2567,
+  "label_gap_exit": 156,
+  "label_no_entry_bar": 6,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/balanced/mid|stock|10|5": {
+  "resolve_ok": 1479,
+  "label_ok": 1467,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 8
+ },
+ "cons17+nofund+d12m1/balanced/mid|stock|10|20": {
+  "resolve_ok": 1452,
+  "label_ok": 1413,
+  "label_gap_exit": 32,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/balanced/mid|stock|10|63": {
+  "resolve_ok": 1380,
+  "label_ok": 1276,
+  "label_gap_exit": 89,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/balanced/mid|stock|20|5": {
+  "resolve_ok": 2949,
+  "label_ok": 2928,
+  "label_no_entry_bar": 6,
+  "label_gap_exit": 15
+ },
+ "cons17+nofund+d12m1/balanced/mid|stock|20|20": {
+  "resolve_ok": 2892,
+  "label_ok": 2820,
+  "label_gap_exit": 63,
+  "label_no_entry_bar": 6,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/balanced/mid|stock|20|63": {
+  "resolve_ok": 2740,
+  "label_ok": 2564,
+  "label_gap_exit": 159,
+  "label_no_entry_bar": 6,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/balanced/short|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1470,
+  "label_no_entry_bar": 3,
+  "label_gap_exit": 7
+ },
+ "cons17+nofund+d12m1/balanced/short|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1416,
+  "label_gap_exit": 31,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/balanced/short|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1281,
+  "label_gap_exit": 86,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/balanced/short|mixed|20|5": {
+  "resolve_ok": 2949,
+  "label_ok": 2932,
+  "label_gap_exit": 12,
+  "label_no_entry_bar": 5
+ },
+ "cons17+nofund+d12m1/balanced/short|mixed|20|20": {
+  "resolve_ok": 2892,
+  "label_ok": 2834,
+  "label_gap_exit": 50,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/balanced/short|mixed|20|63": {
+  "resolve_ok": 2740,
+  "label_ok": 2586,
+  "label_gap_exit": 138,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/balanced/short|stock|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1470,
+  "label_no_entry_bar": 3,
+  "label_gap_exit": 7
+ },
+ "cons17+nofund+d12m1/balanced/short|stock|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1416,
+  "label_gap_exit": 31,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/balanced/short|stock|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1279,
+  "label_gap_exit": 88,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/balanced/short|stock|20|5": {
+  "resolve_ok": 2949,
+  "label_ok": 2932,
+  "label_gap_exit": 12,
+  "label_no_entry_bar": 5
+ },
+ "cons17+nofund+d12m1/balanced/short|stock|20|20": {
+  "resolve_ok": 2892,
+  "label_ok": 2833,
+  "label_gap_exit": 51,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/balanced/short|stock|20|63": {
+  "resolve_ok": 2740,
+  "label_ok": 2584,
+  "label_gap_exit": 140,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/conservative/long|mixed|10|5": {
+  "resolve_ok": 1423,
+  "label_ok": 1411,
+  "label_gap_exit": 10,
+  "label_no_entry_bar": 2
+ },
+ "cons17+nofund+d12m1/conservative/long|mixed|10|20": {
+  "resolve_ok": 1396,
+  "label_ok": 1354,
+  "label_gap_exit": 37,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/conservative/long|mixed|10|63": {
+  "resolve_ok": 1330,
+  "label_ok": 1246,
+  "label_gap_exit": 71,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/conservative/long|mixed|20|5": {
+  "resolve_ok": 2536,
+  "label_ok": 2523,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 2
+ },
+ "cons17+nofund+d12m1/conservative/long|mixed|20|20": {
+  "resolve_ok": 2494,
+  "label_ok": 2439,
+  "label_gap_exit": 50,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/conservative/long|mixed|20|63": {
+  "resolve_ok": 2396,
+  "label_ok": 2281,
+  "label_gap_exit": 102,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/conservative/long|stock|10|5": {
+  "resolve_ok": 1419,
+  "label_ok": 1407,
+  "label_gap_exit": 10,
+  "label_no_entry_bar": 2
+ },
+ "cons17+nofund+d12m1/conservative/long|stock|10|20": {
+  "resolve_ok": 1392,
+  "label_ok": 1349,
+  "label_gap_exit": 38,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/conservative/long|stock|10|63": {
+  "resolve_ok": 1326,
+  "label_ok": 1241,
+  "label_gap_exit": 72,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/conservative/long|stock|20|5": {
+  "resolve_ok": 2523,
+  "label_ok": 2510,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 2
+ },
+ "cons17+nofund+d12m1/conservative/long|stock|20|20": {
+  "resolve_ok": 2481,
+  "label_ok": 2426,
+  "label_gap_exit": 50,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/conservative/long|stock|20|63": {
+  "resolve_ok": 2383,
+  "label_ok": 2268,
+  "label_gap_exit": 102,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/conservative/mid|mixed|10|5": {
+  "resolve_ok": 1340,
+  "label_ok": 1330,
+  "label_gap_exit": 8,
+  "label_no_entry_bar": 2
+ },
+ "cons17+nofund+d12m1/conservative/mid|mixed|10|20": {
+  "resolve_ok": 1314,
+  "label_ok": 1275,
+  "label_gap_exit": 34,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/conservative/mid|mixed|10|63": {
+  "resolve_ok": 1257,
+  "label_ok": 1176,
+  "label_gap_exit": 68,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/conservative/mid|mixed|20|5": {
+  "resolve_ok": 2134,
+  "label_ok": 2124,
+  "label_gap_exit": 8,
+  "label_no_entry_bar": 2
+ },
+ "cons17+nofund+d12m1/conservative/mid|mixed|20|20": {
+  "resolve_ok": 2104,
+  "label_ok": 2055,
+  "label_gap_exit": 44,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/conservative/mid|mixed|20|63": {
+  "resolve_ok": 2038,
+  "label_ok": 1934,
+  "label_gap_exit": 91,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/conservative/mid|stock|10|5": {
+  "resolve_ok": 1332,
+  "label_ok": 1322,
+  "label_gap_exit": 8,
+  "label_no_entry_bar": 2
+ },
+ "cons17+nofund+d12m1/conservative/mid|stock|10|20": {
+  "resolve_ok": 1306,
+  "label_ok": 1267,
+  "label_gap_exit": 34,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/conservative/mid|stock|10|63": {
+  "resolve_ok": 1249,
+  "label_ok": 1168,
+  "label_gap_exit": 68,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/conservative/mid|stock|20|5": {
+  "resolve_ok": 2115,
+  "label_ok": 2105,
+  "label_gap_exit": 8,
+  "label_no_entry_bar": 2
+ },
+ "cons17+nofund+d12m1/conservative/mid|stock|20|20": {
+  "resolve_ok": 2085,
+  "label_ok": 2036,
+  "label_gap_exit": 44,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/conservative/mid|stock|20|63": {
+  "resolve_ok": 2019,
+  "label_ok": 1915,
+  "label_gap_exit": 91,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/conservative/short|mixed|10|5": {
+  "resolve_ok": 1122,
+  "label_ok": 1115,
+  "label_gap_exit": 6,
+  "label_no_entry_bar": 1
+ },
+ "cons17+nofund+d12m1/conservative/short|mixed|10|20": {
+  "resolve_ok": 1101,
+  "label_ok": 1068,
+  "label_gap_exit": 29,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/conservative/short|mixed|10|63": {
+  "resolve_ok": 1060,
+  "label_ok": 989,
+  "label_gap_exit": 59,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/conservative/short|mixed|20|5": {
+  "resolve_ok": 1323,
+  "label_ok": 1315,
+  "label_gap_exit": 6,
+  "label_no_entry_bar": 2
+ },
+ "cons17+nofund+d12m1/conservative/short|mixed|20|20": {
+  "resolve_ok": 1301,
+  "label_ok": 1267,
+  "label_gap_exit": 29,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/conservative/short|mixed|20|63": {
+  "resolve_ok": 1259,
+  "label_ok": 1183,
+  "label_gap_exit": 63,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/conservative/short|stock|10|5": {
+  "resolve_ok": 1106,
+  "label_ok": 1099,
+  "label_gap_exit": 6,
+  "label_no_entry_bar": 1
+ },
+ "cons17+nofund+d12m1/conservative/short|stock|10|20": {
+  "resolve_ok": 1085,
+  "label_ok": 1052,
+  "label_gap_exit": 29,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/conservative/short|stock|10|63": {
+  "resolve_ok": 1044,
+  "label_ok": 973,
+  "label_gap_exit": 59,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "cons17+nofund+d12m1/conservative/short|stock|20|5": {
+  "resolve_ok": 1303,
+  "label_ok": 1295,
+  "label_gap_exit": 6,
+  "label_no_entry_bar": 2
+ },
+ "cons17+nofund+d12m1/conservative/short|stock|20|20": {
+  "resolve_ok": 1281,
+  "label_ok": 1247,
+  "label_gap_exit": 29,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17+nofund+d12m1/conservative/short|stock|20|63": {
+  "resolve_ok": 1239,
+  "label_ok": 1163,
+  "label_gap_exit": 63,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17+nofund/aggressive/long|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1468,
+  "label_gap_exit": 9,
+  "label_no_entry_bar": 3
+ },
+ "cons17+nofund/aggressive/long|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1419,
+  "label_gap_exit": 28,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "cons17+nofund/aggressive/long|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1291,
+  "label_gap_exit": 76,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "cons17+nofund/aggressive/long|mixed|20|5": {
+  "resolve_ok": 2951,
+  "label_ok": 2933,
+  "label_no_entry_bar": 5,
+  "label_gap_exit": 13
+ },
+ "cons17+nofund/aggressive/long|mixed|20|20": {
+  "resolve_ok": 2894,
+  "label_ok": 2825,
+  "label_gap_exit": 61,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "cons17+nofund/aggressive/long|mixed|20|63": {
+  "resolve_ok": 2742,
+  "label_ok": 2580,
+  "label_gap_exit": 146,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "cons17+nofund/aggressive/long|stock|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1468,
+  "label_gap_exit": 9,
+  "label_no_entry_bar": 3
+ },
+ "cons17+nofund/aggressive/long|stock|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1418,
+  "label_gap_exit": 29,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "cons17+nofund/aggressive/long|stock|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1287,
+  "label_gap_exit": 80,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "cons17+nofund/aggressive/long|stock|20|5": {
+  "resolve_ok": 2951,
+  "label_ok": 2932,
+  "label_no_entry_bar": 5,
+  "label_gap_exit": 14
+ },
+ "cons17+nofund/aggressive/long|stock|20|20": {
+  "resolve_ok": 2894,
+  "label_ok": 2822,
+  "label_gap_exit": 64,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "cons17+nofund/aggressive/long|stock|20|63": {
+  "resolve_ok": 2742,
+  "label_ok": 2575,
+  "label_gap_exit": 151,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "cons17+nofund/aggressive/mid|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1468,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 8
+ },
+ "cons17+nofund/aggressive/mid|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1416,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 30,
+  "label_no_label": 3
+ },
+ "cons17+nofund/aggressive/mid|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1287,
+  "label_gap_exit": 79,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "cons17+nofund/aggressive/mid|mixed|20|5": {
+  "resolve_ok": 2952,
+  "label_ok": 2933,
+  "label_gap_exit": 14,
+  "label_no_entry_bar": 5
+ },
+ "cons17+nofund/aggressive/mid|mixed|20|20": {
+  "resolve_ok": 2895,
+  "label_ok": 2833,
+  "label_gap_exit": 54,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "cons17+nofund/aggressive/mid|mixed|20|63": {
+  "resolve_ok": 2743,
+  "label_ok": 2586,
+  "label_gap_exit": 141,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "cons17+nofund/aggressive/mid|stock|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1467,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 9
+ },
+ "cons17+nofund/aggressive/mid|stock|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1416,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 30,
+  "label_no_label": 3
+ },
+ "cons17+nofund/aggressive/mid|stock|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1286,
+  "label_gap_exit": 80,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "cons17+nofund/aggressive/mid|stock|20|5": {
+  "resolve_ok": 2952,
+  "label_ok": 2933,
+  "label_gap_exit": 14,
+  "label_no_entry_bar": 5
+ },
+ "cons17+nofund/aggressive/mid|stock|20|20": {
+  "resolve_ok": 2895,
+  "label_ok": 2833,
+  "label_gap_exit": 54,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "cons17+nofund/aggressive/mid|stock|20|63": {
+  "resolve_ok": 2743,
+  "label_ok": 2582,
+  "label_gap_exit": 145,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "cons17+nofund/aggressive/short|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1473,
+  "label_gap_exit": 7
+ },
+ "cons17+nofund/aggressive/short|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1423,
+  "label_gap_exit": 27,
+  "label_no_label": 3
+ },
+ "cons17+nofund/aggressive/short|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1301,
+  "label_gap_exit": 69,
+  "label_no_label": 11
+ },
+ "cons17+nofund/aggressive/short|mixed|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2945,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 4
+ },
+ "cons17+nofund/aggressive/short|mixed|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2848,
+  "label_gap_exit": 48,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "cons17+nofund/aggressive/short|mixed|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2602,
+  "label_gap_exit": 134,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "cons17+nofund/aggressive/short|stock|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1472,
+  "label_gap_exit": 7,
+  "label_no_entry_bar": 1
+ },
+ "cons17+nofund/aggressive/short|stock|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1422,
+  "label_gap_exit": 27,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "cons17+nofund/aggressive/short|stock|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1298,
+  "label_gap_exit": 71,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "cons17+nofund/aggressive/short|stock|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2945,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 4
+ },
+ "cons17+nofund/aggressive/short|stock|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2845,
+  "label_gap_exit": 51,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "cons17+nofund/aggressive/short|stock|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2600,
+  "label_gap_exit": 136,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "cons17+nofund/balanced/long|mixed|10|5": {
+  "resolve_ok": 1479,
+  "label_ok": 1465,
+  "label_no_entry_bar": 5,
+  "label_gap_exit": 9
+ },
+ "cons17+nofund/balanced/long|mixed|10|20": {
+  "resolve_ok": 1452,
+  "label_ok": 1411,
+  "label_gap_exit": 33,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "cons17+nofund/balanced/long|mixed|10|63": {
+  "resolve_ok": 1380,
+  "label_ok": 1281,
+  "label_gap_exit": 83,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "cons17+nofund/balanced/long|mixed|20|5": {
+  "resolve_ok": 2949,
+  "label_ok": 2930,
+  "label_gap_exit": 14,
+  "label_no_entry_bar": 5
+ },
+ "cons17+nofund/balanced/long|mixed|20|20": {
+  "resolve_ok": 2892,
+  "label_ok": 2818,
+  "label_gap_exit": 66,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "cons17+nofund/balanced/long|mixed|20|63": {
+  "resolve_ok": 2740,
+  "label_ok": 2572,
+  "label_gap_exit": 152,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "cons17+nofund/balanced/long|stock|10|5": {
+  "resolve_ok": 1479,
+  "label_ok": 1464,
+  "label_no_entry_bar": 5,
+  "label_gap_exit": 10
+ },
+ "cons17+nofund/balanced/long|stock|10|20": {
+  "resolve_ok": 1452,
+  "label_ok": 1411,
+  "label_gap_exit": 33,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "cons17+nofund/balanced/long|stock|10|63": {
+  "resolve_ok": 1380,
+  "label_ok": 1279,
+  "label_gap_exit": 85,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "cons17+nofund/balanced/long|stock|20|5": {
+  "resolve_ok": 2949,
+  "label_ok": 2929,
+  "label_gap_exit": 15,
+  "label_no_entry_bar": 5
+ },
+ "cons17+nofund/balanced/long|stock|20|20": {
+  "resolve_ok": 2892,
+  "label_ok": 2816,
+  "label_gap_exit": 68,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "cons17+nofund/balanced/long|stock|20|63": {
+  "resolve_ok": 2740,
+  "label_ok": 2570,
+  "label_gap_exit": 154,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "cons17+nofund/balanced/mid|mixed|10|5": {
+  "resolve_ok": 1479,
+  "label_ok": 1467,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 8
+ },
+ "cons17+nofund/balanced/mid|mixed|10|20": {
+  "resolve_ok": 1452,
+  "label_ok": 1415,
+  "label_gap_exit": 30,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "cons17+nofund/balanced/mid|mixed|10|63": {
+  "resolve_ok": 1380,
+  "label_ok": 1281,
+  "label_gap_exit": 84,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "cons17+nofund/balanced/mid|mixed|20|5": {
+  "resolve_ok": 2949,
+  "label_ok": 2928,
+  "label_gap_exit": 15,
+  "label_no_entry_bar": 6
+ },
+ "cons17+nofund/balanced/mid|mixed|20|20": {
+  "resolve_ok": 2892,
+  "label_ok": 2821,
+  "label_gap_exit": 62,
+  "label_no_entry_bar": 6,
+  "label_no_label": 3
+ },
+ "cons17+nofund/balanced/mid|mixed|20|63": {
+  "resolve_ok": 2740,
+  "label_ok": 2570,
+  "label_gap_exit": 153,
+  "label_no_entry_bar": 6,
+  "label_no_label": 11
+ },
+ "cons17+nofund/balanced/mid|stock|10|5": {
+  "resolve_ok": 1479,
+  "label_ok": 1466,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 9
+ },
+ "cons17+nofund/balanced/mid|stock|10|20": {
+  "resolve_ok": 1452,
+  "label_ok": 1415,
+  "label_gap_exit": 30,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "cons17+nofund/balanced/mid|stock|10|63": {
+  "resolve_ok": 1380,
+  "label_ok": 1279,
+  "label_gap_exit": 86,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "cons17+nofund/balanced/mid|stock|20|5": {
+  "resolve_ok": 2949,
+  "label_ok": 2928,
+  "label_gap_exit": 15,
+  "label_no_entry_bar": 6
+ },
+ "cons17+nofund/balanced/mid|stock|20|20": {
+  "resolve_ok": 2892,
+  "label_ok": 2821,
+  "label_gap_exit": 62,
+  "label_no_entry_bar": 6,
+  "label_no_label": 3
+ },
+ "cons17+nofund/balanced/mid|stock|20|63": {
+  "resolve_ok": 2740,
+  "label_ok": 2567,
+  "label_gap_exit": 156,
+  "label_no_entry_bar": 6,
+  "label_no_label": 11
+ },
+ "cons17+nofund/balanced/short|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1472,
+  "label_no_entry_bar": 1,
+  "label_gap_exit": 7
+ },
+ "cons17+nofund/balanced/short|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1422,
+  "label_gap_exit": 27,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "cons17+nofund/balanced/short|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1298,
+  "label_gap_exit": 71,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "cons17+nofund/balanced/short|mixed|20|5": {
+  "resolve_ok": 2953,
+  "label_ok": 2937,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 5
+ },
+ "cons17+nofund/balanced/short|mixed|20|20": {
+  "resolve_ok": 2896,
+  "label_ok": 2839,
+  "label_gap_exit": 49,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "cons17+nofund/balanced/short|mixed|20|63": {
+  "resolve_ok": 2744,
+  "label_ok": 2594,
+  "label_gap_exit": 134,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "cons17+nofund/balanced/short|stock|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1472,
+  "label_no_entry_bar": 1,
+  "label_gap_exit": 7
+ },
+ "cons17+nofund/balanced/short|stock|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1422,
+  "label_gap_exit": 27,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "cons17+nofund/balanced/short|stock|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1295,
+  "label_gap_exit": 74,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "cons17+nofund/balanced/short|stock|20|5": {
+  "resolve_ok": 2953,
+  "label_ok": 2937,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 5
+ },
+ "cons17+nofund/balanced/short|stock|20|20": {
+  "resolve_ok": 2896,
+  "label_ok": 2837,
+  "label_gap_exit": 51,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "cons17+nofund/balanced/short|stock|20|63": {
+  "resolve_ok": 2744,
+  "label_ok": 2591,
+  "label_gap_exit": 137,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "cons17+nofund/conservative/long|mixed|10|5": {
+  "resolve_ok": 1414,
+  "label_ok": 1402,
+  "label_gap_exit": 10,
+  "label_no_entry_bar": 2
+ },
+ "cons17+nofund/conservative/long|mixed|10|20": {
+  "resolve_ok": 1387,
+  "label_ok": 1347,
+  "label_gap_exit": 35,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17+nofund/conservative/long|mixed|10|63": {
+  "resolve_ok": 1320,
+  "label_ok": 1238,
+  "label_gap_exit": 69,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17+nofund/conservative/long|mixed|20|5": {
+  "resolve_ok": 2497,
+  "label_ok": 2485,
+  "label_gap_exit": 10,
+  "label_no_entry_bar": 2
+ },
+ "cons17+nofund/conservative/long|mixed|20|20": {
+  "resolve_ok": 2458,
+  "label_ok": 2403,
+  "label_gap_exit": 50,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17+nofund/conservative/long|mixed|20|63": {
+  "resolve_ok": 2362,
+  "label_ok": 2249,
+  "label_gap_exit": 100,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17+nofund/conservative/long|stock|10|5": {
+  "resolve_ok": 1412,
+  "label_ok": 1400,
+  "label_gap_exit": 10,
+  "label_no_entry_bar": 2
+ },
+ "cons17+nofund/conservative/long|stock|10|20": {
+  "resolve_ok": 1385,
+  "label_ok": 1343,
+  "label_gap_exit": 37,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17+nofund/conservative/long|stock|10|63": {
+  "resolve_ok": 1319,
+  "label_ok": 1236,
+  "label_gap_exit": 70,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17+nofund/conservative/long|stock|20|5": {
+  "resolve_ok": 2479,
+  "label_ok": 2467,
+  "label_gap_exit": 10,
+  "label_no_entry_bar": 2
+ },
+ "cons17+nofund/conservative/long|stock|20|20": {
+  "resolve_ok": 2442,
+  "label_ok": 2387,
+  "label_gap_exit": 50,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17+nofund/conservative/long|stock|20|63": {
+  "resolve_ok": 2350,
+  "label_ok": 2237,
+  "label_gap_exit": 100,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17+nofund/conservative/mid|mixed|10|5": {
+  "resolve_ok": 1314,
+  "label_ok": 1305,
+  "label_gap_exit": 7,
+  "label_no_entry_bar": 2
+ },
+ "cons17+nofund/conservative/mid|mixed|10|20": {
+  "resolve_ok": 1291,
+  "label_ok": 1256,
+  "label_gap_exit": 30,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17+nofund/conservative/mid|mixed|10|63": {
+  "resolve_ok": 1232,
+  "label_ok": 1154,
+  "label_gap_exit": 65,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17+nofund/conservative/mid|mixed|20|5": {
+  "resolve_ok": 2046,
+  "label_ok": 2036,
+  "label_gap_exit": 8,
+  "label_no_entry_bar": 2
+ },
+ "cons17+nofund/conservative/mid|mixed|20|20": {
+  "resolve_ok": 2020,
+  "label_ok": 1974,
+  "label_gap_exit": 41,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17+nofund/conservative/mid|mixed|20|63": {
+  "resolve_ok": 1947,
+  "label_ok": 1851,
+  "label_gap_exit": 83,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17+nofund/conservative/mid|stock|10|5": {
+  "resolve_ok": 1304,
+  "label_ok": 1294,
+  "label_gap_exit": 8,
+  "label_no_entry_bar": 2
+ },
+ "cons17+nofund/conservative/mid|stock|10|20": {
+  "resolve_ok": 1282,
+  "label_ok": 1245,
+  "label_gap_exit": 32,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17+nofund/conservative/mid|stock|10|63": {
+  "resolve_ok": 1225,
+  "label_ok": 1146,
+  "label_gap_exit": 66,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17+nofund/conservative/mid|stock|20|5": {
+  "resolve_ok": 2015,
+  "label_ok": 2005,
+  "label_gap_exit": 8,
+  "label_no_entry_bar": 2
+ },
+ "cons17+nofund/conservative/mid|stock|20|20": {
+  "resolve_ok": 1991,
+  "label_ok": 1945,
+  "label_gap_exit": 41,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17+nofund/conservative/mid|stock|20|63": {
+  "resolve_ok": 1924,
+  "label_ok": 1828,
+  "label_gap_exit": 83,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17+nofund/conservative/short|mixed|10|5": {
+  "resolve_ok": 1180,
+  "label_ok": 1173,
+  "label_gap_exit": 6,
+  "label_no_entry_bar": 1
+ },
+ "cons17+nofund/conservative/short|mixed|10|20": {
+  "resolve_ok": 1158,
+  "label_ok": 1129,
+  "label_gap_exit": 25,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "cons17+nofund/conservative/short|mixed|10|63": {
+  "resolve_ok": 1111,
+  "label_ok": 1041,
+  "label_gap_exit": 58,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "cons17+nofund/conservative/short|mixed|20|5": {
+  "resolve_ok": 1467,
+  "label_ok": 1459,
+  "label_gap_exit": 6,
+  "label_no_entry_bar": 2
+ },
+ "cons17+nofund/conservative/short|mixed|20|20": {
+  "resolve_ok": 1443,
+  "label_ok": 1410,
+  "label_gap_exit": 28,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17+nofund/conservative/short|mixed|20|63": {
+  "resolve_ok": 1390,
+  "label_ok": 1314,
+  "label_gap_exit": 63,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17+nofund/conservative/short|stock|10|5": {
+  "resolve_ok": 1166,
+  "label_ok": 1159,
+  "label_gap_exit": 6,
+  "label_no_entry_bar": 1
+ },
+ "cons17+nofund/conservative/short|stock|10|20": {
+  "resolve_ok": 1145,
+  "label_ok": 1115,
+  "label_gap_exit": 26,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "cons17+nofund/conservative/short|stock|10|63": {
+  "resolve_ok": 1101,
+  "label_ok": 1031,
+  "label_gap_exit": 58,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "cons17+nofund/conservative/short|stock|20|5": {
+  "resolve_ok": 1439,
+  "label_ok": 1431,
+  "label_gap_exit": 6,
+  "label_no_entry_bar": 2
+ },
+ "cons17+nofund/conservative/short|stock|20|20": {
+  "resolve_ok": 1416,
+  "label_ok": 1383,
+  "label_gap_exit": 28,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17+nofund/conservative/short|stock|20|63": {
+  "resolve_ok": 1369,
+  "label_ok": 1293,
+  "label_gap_exit": 63,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "v16/aggressive/long|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1471,
+  "label_gap_exit": 6,
+  "label_no_entry_bar": 3
+ },
+ "v16/aggressive/long|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1422,
+  "label_gap_exit": 25,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "v16/aggressive/long|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1299,
+  "label_gap_exit": 68,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "v16/aggressive/long|mixed|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2945,
+  "label_no_entry_bar": 5,
+  "label_gap_exit": 10
+ },
+ "v16/aggressive/long|mixed|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2843,
+  "label_gap_exit": 52,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "v16/aggressive/long|mixed|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2607,
+  "label_gap_exit": 128,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "v16/aggressive/long|stock|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1468,
+  "label_gap_exit": 9,
+  "label_no_entry_bar": 3
+ },
+ "v16/aggressive/long|stock|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1418,
+  "label_gap_exit": 29,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "v16/aggressive/long|stock|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1287,
+  "label_gap_exit": 80,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "v16/aggressive/long|stock|20|5": {
+  "resolve_ok": 2951,
+  "label_ok": 2932,
+  "label_no_entry_bar": 5,
+  "label_gap_exit": 14
+ },
+ "v16/aggressive/long|stock|20|20": {
+  "resolve_ok": 2894,
+  "label_ok": 2822,
+  "label_gap_exit": 64,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "v16/aggressive/long|stock|20|63": {
+  "resolve_ok": 2742,
+  "label_ok": 2575,
+  "label_gap_exit": 151,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "v16/aggressive/mid|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1471,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 5
+ },
+ "v16/aggressive/mid|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1421,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 25,
+  "label_no_label": 3
+ },
+ "v16/aggressive/mid|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1298,
+  "label_gap_exit": 68,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "v16/aggressive/mid|mixed|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2943,
+  "label_gap_exit": 12,
+  "label_no_entry_bar": 5
+ },
+ "v16/aggressive/mid|mixed|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2851,
+  "label_gap_exit": 44,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "v16/aggressive/mid|mixed|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2620,
+  "label_gap_exit": 115,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "v16/aggressive/mid|stock|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1467,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 9
+ },
+ "v16/aggressive/mid|stock|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1416,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 30,
+  "label_no_label": 3
+ },
+ "v16/aggressive/mid|stock|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1286,
+  "label_gap_exit": 80,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "v16/aggressive/mid|stock|20|5": {
+  "resolve_ok": 2952,
+  "label_ok": 2933,
+  "label_gap_exit": 14,
+  "label_no_entry_bar": 5
+ },
+ "v16/aggressive/mid|stock|20|20": {
+  "resolve_ok": 2895,
+  "label_ok": 2833,
+  "label_gap_exit": 54,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "v16/aggressive/mid|stock|20|63": {
+  "resolve_ok": 2743,
+  "label_ok": 2582,
+  "label_gap_exit": 145,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "v16/aggressive/short|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1474,
+  "label_gap_exit": 6
+ },
+ "v16/aggressive/short|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1429,
+  "label_gap_exit": 21,
+  "label_no_label": 3
+ },
+ "v16/aggressive/short|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1317,
+  "label_gap_exit": 53,
+  "label_no_label": 11
+ },
+ "v16/aggressive/short|mixed|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2947,
+  "label_gap_exit": 10,
+  "label_no_entry_bar": 3
+ },
+ "v16/aggressive/short|mixed|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2854,
+  "label_gap_exit": 43,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "v16/aggressive/short|mixed|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2625,
+  "label_gap_exit": 112,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "v16/aggressive/short|stock|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1472,
+  "label_gap_exit": 7,
+  "label_no_entry_bar": 1
+ },
+ "v16/aggressive/short|stock|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1422,
+  "label_gap_exit": 27,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "v16/aggressive/short|stock|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1298,
+  "label_gap_exit": 71,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "v16/aggressive/short|stock|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2945,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 4
+ },
+ "v16/aggressive/short|stock|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2845,
+  "label_gap_exit": 51,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "v16/aggressive/short|stock|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2600,
+  "label_gap_exit": 136,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "v16/balanced/long|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1471,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 5
+ },
+ "v16/balanced/long|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1419,
+  "label_gap_exit": 27,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "v16/balanced/long|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1294,
+  "label_gap_exit": 72,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "v16/balanced/long|mixed|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2942,
+  "label_gap_exit": 13,
+  "label_no_entry_bar": 5
+ },
+ "v16/balanced/long|mixed|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2841,
+  "label_gap_exit": 54,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "v16/balanced/long|mixed|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2603,
+  "label_gap_exit": 132,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "v16/balanced/long|stock|10|5": {
+  "resolve_ok": 1479,
+  "label_ok": 1464,
+  "label_no_entry_bar": 5,
+  "label_gap_exit": 10
+ },
+ "v16/balanced/long|stock|10|20": {
+  "resolve_ok": 1452,
+  "label_ok": 1411,
+  "label_gap_exit": 33,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "v16/balanced/long|stock|10|63": {
+  "resolve_ok": 1380,
+  "label_ok": 1279,
+  "label_gap_exit": 85,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "v16/balanced/long|stock|20|5": {
+  "resolve_ok": 2949,
+  "label_ok": 2929,
+  "label_gap_exit": 15,
+  "label_no_entry_bar": 5
+ },
+ "v16/balanced/long|stock|20|20": {
+  "resolve_ok": 2892,
+  "label_ok": 2816,
+  "label_gap_exit": 68,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "v16/balanced/long|stock|20|63": {
+  "resolve_ok": 2740,
+  "label_ok": 2570,
+  "label_gap_exit": 154,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "v16/balanced/mid|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1471,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 5
+ },
+ "v16/balanced/mid|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1421,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 25,
+  "label_no_label": 3
+ },
+ "v16/balanced/mid|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1297,
+  "label_gap_exit": 69,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "v16/balanced/mid|mixed|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2940,
+  "label_gap_exit": 15,
+  "label_no_entry_bar": 5
+ },
+ "v16/balanced/mid|mixed|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2842,
+  "label_gap_exit": 53,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "v16/balanced/mid|mixed|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2604,
+  "label_gap_exit": 131,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "v16/balanced/mid|stock|10|5": {
+  "resolve_ok": 1479,
+  "label_ok": 1466,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 9
+ },
+ "v16/balanced/mid|stock|10|20": {
+  "resolve_ok": 1452,
+  "label_ok": 1415,
+  "label_gap_exit": 30,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "v16/balanced/mid|stock|10|63": {
+  "resolve_ok": 1380,
+  "label_ok": 1279,
+  "label_gap_exit": 86,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "v16/balanced/mid|stock|20|5": {
+  "resolve_ok": 2949,
+  "label_ok": 2928,
+  "label_gap_exit": 15,
+  "label_no_entry_bar": 6
+ },
+ "v16/balanced/mid|stock|20|20": {
+  "resolve_ok": 2892,
+  "label_ok": 2821,
+  "label_gap_exit": 62,
+  "label_no_entry_bar": 6,
+  "label_no_label": 3
+ },
+ "v16/balanced/mid|stock|20|63": {
+  "resolve_ok": 2740,
+  "label_ok": 2567,
+  "label_gap_exit": 156,
+  "label_no_entry_bar": 6,
+  "label_no_label": 11
+ },
+ "v16/balanced/short|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1475,
+  "label_no_entry_bar": 1,
+  "label_gap_exit": 4
+ },
+ "v16/balanced/short|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1431,
+  "label_gap_exit": 18,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "v16/balanced/short|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1315,
+  "label_gap_exit": 54,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "v16/balanced/short|mixed|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2948,
+  "label_gap_exit": 9,
+  "label_no_entry_bar": 3
+ },
+ "v16/balanced/short|mixed|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2857,
+  "label_gap_exit": 40,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "v16/balanced/short|mixed|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2623,
+  "label_gap_exit": 114,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "v16/balanced/short|stock|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1472,
+  "label_no_entry_bar": 1,
+  "label_gap_exit": 7
+ },
+ "v16/balanced/short|stock|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1422,
+  "label_gap_exit": 27,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "v16/balanced/short|stock|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1295,
+  "label_gap_exit": 74,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "v16/balanced/short|stock|20|5": {
+  "resolve_ok": 2953,
+  "label_ok": 2937,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 5
+ },
+ "v16/balanced/short|stock|20|20": {
+  "resolve_ok": 2896,
+  "label_ok": 2837,
+  "label_gap_exit": 51,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "v16/balanced/short|stock|20|63": {
+  "resolve_ok": 2744,
+  "label_ok": 2591,
+  "label_gap_exit": 137,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "v16/conservative/long|mixed|10|5": {
+  "resolve_ok": 1475,
+  "label_ok": 1472,
+  "label_gap_exit": 3
+ },
+ "v16/conservative/long|mixed|10|20": {
+  "resolve_ok": 1448,
+  "label_ok": 1430,
+  "label_gap_exit": 15,
+  "label_no_label": 3
+ },
+ "v16/conservative/long|mixed|10|63": {
+  "resolve_ok": 1376,
+  "label_ok": 1332,
+  "label_gap_exit": 33,
+  "label_no_label": 11
+ },
+ "v16/conservative/long|mixed|20|5": {
+  "resolve_ok": 2892,
+  "label_ok": 2887,
+  "label_gap_exit": 5
+ },
+ "v16/conservative/long|mixed|20|20": {
+  "resolve_ok": 2835,
+  "label_ok": 2801,
+  "label_gap_exit": 31,
+  "label_no_label": 3
+ },
+ "v16/conservative/long|mixed|20|63": {
+  "resolve_ok": 2683,
+  "label_ok": 2603,
+  "label_gap_exit": 69,
+  "label_no_label": 11
+ },
+ "v16/conservative/long|stock|10|5": {
+  "resolve_ok": 1469,
+  "label_ok": 1466,
+  "label_gap_exit": 3
+ },
+ "v16/conservative/long|stock|10|20": {
+  "resolve_ok": 1442,
+  "label_ok": 1424,
+  "label_gap_exit": 15,
+  "label_no_label": 3
+ },
+ "v16/conservative/long|stock|10|63": {
+  "resolve_ok": 1370,
+  "label_ok": 1325,
+  "label_gap_exit": 34,
+  "label_no_label": 11
+ },
+ "v16/conservative/long|stock|20|5": {
+  "resolve_ok": 2871,
+  "label_ok": 2866,
+  "label_gap_exit": 5
+ },
+ "v16/conservative/long|stock|20|20": {
+  "resolve_ok": 2814,
+  "label_ok": 2778,
+  "label_gap_exit": 33,
+  "label_no_label": 3
+ },
+ "v16/conservative/long|stock|20|63": {
+  "resolve_ok": 2662,
+  "label_ok": 2578,
+  "label_gap_exit": 73,
+  "label_no_label": 11
+ },
+ "v16/conservative/mid|mixed|10|5": {
+  "resolve_ok": 1472,
+  "label_ok": 1469,
+  "label_gap_exit": 3
+ },
+ "v16/conservative/mid|mixed|10|20": {
+  "resolve_ok": 1445,
+  "label_ok": 1426,
+  "label_gap_exit": 16,
+  "label_no_label": 3
+ },
+ "v16/conservative/mid|mixed|10|63": {
+  "resolve_ok": 1373,
+  "label_ok": 1329,
+  "label_gap_exit": 33,
+  "label_no_label": 11
+ },
+ "v16/conservative/mid|mixed|20|5": {
+  "resolve_ok": 2848,
+  "label_ok": 2843,
+  "label_gap_exit": 5
+ },
+ "v16/conservative/mid|mixed|20|20": {
+  "resolve_ok": 2791,
+  "label_ok": 2761,
+  "label_gap_exit": 27,
+  "label_no_label": 3
+ },
+ "v16/conservative/mid|mixed|20|63": {
+  "resolve_ok": 2639,
+  "label_ok": 2564,
+  "label_gap_exit": 64,
+  "label_no_label": 11
+ },
+ "v16/conservative/mid|stock|10|5": {
+  "resolve_ok": 1466,
+  "label_ok": 1463,
+  "label_gap_exit": 3
+ },
+ "v16/conservative/mid|stock|10|20": {
+  "resolve_ok": 1439,
+  "label_ok": 1420,
+  "label_gap_exit": 16,
+  "label_no_label": 3
+ },
+ "v16/conservative/mid|stock|10|63": {
+  "resolve_ok": 1367,
+  "label_ok": 1323,
+  "label_gap_exit": 33,
+  "label_no_label": 11
+ },
+ "v16/conservative/mid|stock|20|5": {
+  "resolve_ok": 2815,
+  "label_ok": 2810,
+  "label_gap_exit": 5
+ },
+ "v16/conservative/mid|stock|20|20": {
+  "resolve_ok": 2758,
+  "label_ok": 2726,
+  "label_gap_exit": 29,
+  "label_no_label": 3
+ },
+ "v16/conservative/mid|stock|20|63": {
+  "resolve_ok": 2606,
+  "label_ok": 2527,
+  "label_gap_exit": 68,
+  "label_no_label": 11
+ },
+ "v16/conservative/short|mixed|10|5": {
+  "resolve_ok": 1458,
+  "label_ok": 1455,
+  "label_gap_exit": 3
+ },
+ "v16/conservative/short|mixed|10|20": {
+  "resolve_ok": 1431,
+  "label_ok": 1413,
+  "label_gap_exit": 15,
+  "label_no_label": 3
+ },
+ "v16/conservative/short|mixed|10|63": {
+  "resolve_ok": 1359,
+  "label_ok": 1319,
+  "label_gap_exit": 29,
+  "label_no_label": 11
+ },
+ "v16/conservative/short|mixed|20|5": {
+  "resolve_ok": 2748,
+  "label_ok": 2744,
+  "label_gap_exit": 4
+ },
+ "v16/conservative/short|mixed|20|20": {
+  "resolve_ok": 2691,
+  "label_ok": 2664,
+  "label_gap_exit": 24,
+  "label_no_label": 3
+ },
+ "v16/conservative/short|mixed|20|63": {
+  "resolve_ok": 2539,
+  "label_ok": 2471,
+  "label_gap_exit": 57,
+  "label_no_label": 11
+ },
+ "v16/conservative/short|stock|10|5": {
+  "resolve_ok": 1449,
+  "label_ok": 1446,
+  "label_gap_exit": 3
+ },
+ "v16/conservative/short|stock|10|20": {
+  "resolve_ok": 1422,
+  "label_ok": 1404,
+  "label_gap_exit": 15,
+  "label_no_label": 3
+ },
+ "v16/conservative/short|stock|10|63": {
+  "resolve_ok": 1350,
+  "label_ok": 1309,
+  "label_gap_exit": 30,
+  "label_no_label": 11
+ },
+ "v16/conservative/short|stock|20|5": {
+  "resolve_ok": 2691,
+  "label_ok": 2687,
+  "label_gap_exit": 4
+ },
+ "v16/conservative/short|stock|20|20": {
+  "resolve_ok": 2634,
+  "label_ok": 2606,
+  "label_gap_exit": 25,
+  "label_no_label": 3
+ },
+ "v16/conservative/short|stock|20|63": {
+  "resolve_ok": 2482,
+  "label_ok": 2413,
+  "label_gap_exit": 58,
+  "label_no_label": 11
+ },
+ "cons17/conservative/long|mixed|10|5": {
+  "resolve_ok": 1449,
+  "label_ok": 1440,
+  "label_gap_exit": 7,
+  "label_no_entry_bar": 2
+ },
+ "cons17/conservative/long|mixed|10|20": {
+  "resolve_ok": 1422,
+  "label_ok": 1388,
+  "label_gap_exit": 29,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17/conservative/long|mixed|10|63": {
+  "resolve_ok": 1350,
+  "label_ok": 1275,
+  "label_gap_exit": 62,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17/conservative/long|mixed|20|5": {
+  "resolve_ok": 2691,
+  "label_ok": 2679,
+  "label_gap_exit": 10,
+  "label_no_entry_bar": 2
+ },
+ "cons17/conservative/long|mixed|20|20": {
+  "resolve_ok": 2639,
+  "label_ok": 2590,
+  "label_gap_exit": 44,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17/conservative/long|mixed|20|63": {
+  "resolve_ok": 2514,
+  "label_ok": 2415,
+  "label_gap_exit": 86,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17/conservative/long|stock|10|5": {
+  "resolve_ok": 1412,
+  "label_ok": 1400,
+  "label_gap_exit": 10,
+  "label_no_entry_bar": 2
+ },
+ "cons17/conservative/long|stock|10|20": {
+  "resolve_ok": 1385,
+  "label_ok": 1343,
+  "label_gap_exit": 37,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17/conservative/long|stock|10|63": {
+  "resolve_ok": 1319,
+  "label_ok": 1236,
+  "label_gap_exit": 70,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17/conservative/long|stock|20|5": {
+  "resolve_ok": 2479,
+  "label_ok": 2467,
+  "label_gap_exit": 10,
+  "label_no_entry_bar": 2
+ },
+ "cons17/conservative/long|stock|20|20": {
+  "resolve_ok": 2442,
+  "label_ok": 2387,
+  "label_gap_exit": 50,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17/conservative/long|stock|20|63": {
+  "resolve_ok": 2350,
+  "label_ok": 2237,
+  "label_gap_exit": 100,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17/conservative/mid|mixed|10|5": {
+  "resolve_ok": 1388,
+  "label_ok": 1380,
+  "label_gap_exit": 6,
+  "label_no_entry_bar": 2
+ },
+ "cons17/conservative/mid|mixed|10|20": {
+  "resolve_ok": 1361,
+  "label_ok": 1331,
+  "label_gap_exit": 25,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17/conservative/mid|mixed|10|63": {
+  "resolve_ok": 1295,
+  "label_ok": 1224,
+  "label_gap_exit": 58,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17/conservative/mid|mixed|20|5": {
+  "resolve_ok": 2341,
+  "label_ok": 2331,
+  "label_gap_exit": 8,
+  "label_no_entry_bar": 2
+ },
+ "cons17/conservative/mid|mixed|20|20": {
+  "resolve_ok": 2299,
+  "label_ok": 2255,
+  "label_gap_exit": 39,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17/conservative/mid|mixed|20|63": {
+  "resolve_ok": 2204,
+  "label_ok": 2113,
+  "label_gap_exit": 78,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17/conservative/mid|stock|10|5": {
+  "resolve_ok": 1304,
+  "label_ok": 1294,
+  "label_gap_exit": 8,
+  "label_no_entry_bar": 2
+ },
+ "cons17/conservative/mid|stock|10|20": {
+  "resolve_ok": 1282,
+  "label_ok": 1245,
+  "label_gap_exit": 32,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17/conservative/mid|stock|10|63": {
+  "resolve_ok": 1225,
+  "label_ok": 1146,
+  "label_gap_exit": 66,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17/conservative/mid|stock|20|5": {
+  "resolve_ok": 2015,
+  "label_ok": 2005,
+  "label_gap_exit": 8,
+  "label_no_entry_bar": 2
+ },
+ "cons17/conservative/mid|stock|20|20": {
+  "resolve_ok": 1991,
+  "label_ok": 1945,
+  "label_gap_exit": 41,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17/conservative/mid|stock|20|63": {
+  "resolve_ok": 1924,
+  "label_ok": 1828,
+  "label_gap_exit": 83,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "cons17/conservative/short|mixed|10|5": {
+  "resolve_ok": 1293,
+  "label_ok": 1288,
+  "label_gap_exit": 5
+ },
+ "cons17/conservative/short|mixed|10|20": {
+  "resolve_ok": 1266,
+  "label_ok": 1241,
+  "label_gap_exit": 22,
+  "label_no_label": 3
+ },
+ "cons17/conservative/short|mixed|10|63": {
+  "resolve_ok": 1211,
+  "label_ok": 1150,
+  "label_gap_exit": 50,
+  "label_no_label": 11
+ },
+ "cons17/conservative/short|mixed|20|5": {
+  "resolve_ok": 1793,
+  "label_ok": 1786,
+  "label_gap_exit": 6,
+  "label_no_entry_bar": 1
+ },
+ "cons17/conservative/short|mixed|20|20": {
+  "resolve_ok": 1755,
+  "label_ok": 1723,
+  "label_gap_exit": 28,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "cons17/conservative/short|mixed|20|63": {
+  "resolve_ok": 1692,
+  "label_ok": 1617,
+  "label_gap_exit": 63,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "cons17/conservative/short|stock|10|5": {
+  "resolve_ok": 1166,
+  "label_ok": 1159,
+  "label_gap_exit": 6,
+  "label_no_entry_bar": 1
+ },
+ "cons17/conservative/short|stock|10|20": {
+  "resolve_ok": 1145,
+  "label_ok": 1115,
+  "label_gap_exit": 26,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "cons17/conservative/short|stock|10|63": {
+  "resolve_ok": 1101,
+  "label_ok": 1031,
+  "label_gap_exit": 58,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "cons17/conservative/short|stock|20|5": {
+  "resolve_ok": 1439,
+  "label_ok": 1431,
+  "label_gap_exit": 6,
+  "label_no_entry_bar": 2
+ },
+ "cons17/conservative/short|stock|20|20": {
+  "resolve_ok": 1416,
+  "label_ok": 1383,
+  "label_gap_exit": 28,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "cons17/conservative/short|stock|20|63": {
+  "resolve_ok": 1369,
+  "label_ok": 1293,
+  "label_gap_exit": 63,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "full3/aggressive/long|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1475,
+  "label_gap_exit": 3,
+  "label_no_entry_bar": 2
+ },
+ "full3/aggressive/long|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1421,
+  "label_gap_exit": 27,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "full3/aggressive/long|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1304,
+  "label_gap_exit": 64,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "full3/aggressive/long|mixed|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2948,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 8
+ },
+ "full3/aggressive/long|mixed|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2853,
+  "label_gap_exit": 43,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "full3/aggressive/long|mixed|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2611,
+  "label_gap_exit": 125,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "full3/aggressive/long|stock|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1471,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 5
+ },
+ "full3/aggressive/long|stock|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1413,
+  "label_gap_exit": 33,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "full3/aggressive/long|stock|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1289,
+  "label_gap_exit": 77,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "full3/aggressive/long|stock|20|5": {
+  "resolve_ok": 2950,
+  "label_ok": 2935,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 4
+ },
+ "full3/aggressive/long|stock|20|20": {
+  "resolve_ok": 2893,
+  "label_ok": 2829,
+  "label_gap_exit": 57,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "full3/aggressive/long|stock|20|63": {
+  "resolve_ok": 2741,
+  "label_ok": 2582,
+  "label_gap_exit": 144,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "full3/aggressive/mid|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1474,
+  "label_no_entry_bar": 3,
+  "label_gap_exit": 3
+ },
+ "full3/aggressive/mid|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1426,
+  "label_gap_exit": 21,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "full3/aggressive/mid|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1311,
+  "label_gap_exit": 56,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "full3/aggressive/mid|mixed|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2947,
+  "label_gap_exit": 9,
+  "label_no_entry_bar": 4
+ },
+ "full3/aggressive/mid|mixed|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2851,
+  "label_gap_exit": 45,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "full3/aggressive/mid|mixed|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2612,
+  "label_gap_exit": 124,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "full3/aggressive/mid|stock|10|5": {
+  "resolve_ok": 1479,
+  "label_ok": 1471,
+  "label_no_entry_bar": 3,
+  "label_gap_exit": 5
+ },
+ "full3/aggressive/mid|stock|10|20": {
+  "resolve_ok": 1452,
+  "label_ok": 1418,
+  "label_gap_exit": 28,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "full3/aggressive/mid|stock|10|63": {
+  "resolve_ok": 1380,
+  "label_ok": 1296,
+  "label_gap_exit": 70,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "full3/aggressive/mid|stock|20|5": {
+  "resolve_ok": 2949,
+  "label_ok": 2932,
+  "label_gap_exit": 13,
+  "label_no_entry_bar": 4
+ },
+ "full3/aggressive/mid|stock|20|20": {
+  "resolve_ok": 2892,
+  "label_ok": 2830,
+  "label_gap_exit": 55,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "full3/aggressive/mid|stock|20|63": {
+  "resolve_ok": 2740,
+  "label_ok": 2583,
+  "label_gap_exit": 142,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "full3/aggressive/short|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1475,
+  "label_gap_exit": 5
+ },
+ "full3/aggressive/short|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1436,
+  "label_gap_exit": 14,
+  "label_no_label": 3
+ },
+ "full3/aggressive/short|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1331,
+  "label_gap_exit": 39,
+  "label_no_label": 11
+ },
+ "full3/aggressive/short|mixed|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2951,
+  "label_gap_exit": 7,
+  "label_no_entry_bar": 2
+ },
+ "full3/aggressive/short|mixed|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2871,
+  "label_gap_exit": 27,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "full3/aggressive/short|mixed|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2652,
+  "label_gap_exit": 86,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "full3/aggressive/short|stock|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1474,
+  "label_gap_exit": 6
+ },
+ "full3/aggressive/short|stock|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1430,
+  "label_gap_exit": 20,
+  "label_no_label": 3
+ },
+ "full3/aggressive/short|stock|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1322,
+  "label_gap_exit": 48,
+  "label_no_label": 11
+ },
+ "full3/aggressive/short|stock|20|5": {
+  "resolve_ok": 2957,
+  "label_ok": 2946,
+  "label_gap_exit": 8,
+  "label_no_entry_bar": 3
+ },
+ "full3/aggressive/short|stock|20|20": {
+  "resolve_ok": 2900,
+  "label_ok": 2861,
+  "label_gap_exit": 33,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "full3/aggressive/short|stock|20|63": {
+  "resolve_ok": 2748,
+  "label_ok": 2629,
+  "label_gap_exit": 105,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "full3/balanced/long|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1474,
+  "label_no_entry_bar": 3,
+  "label_gap_exit": 3
+ },
+ "full3/balanced/long|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1423,
+  "label_gap_exit": 24,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "full3/balanced/long|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1307,
+  "label_gap_exit": 60,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "full3/balanced/long|mixed|20|5": {
+  "resolve_ok": 2955,
+  "label_ok": 2942,
+  "label_gap_exit": 9,
+  "label_no_entry_bar": 4
+ },
+ "full3/balanced/long|mixed|20|20": {
+  "resolve_ok": 2898,
+  "label_ok": 2843,
+  "label_gap_exit": 48,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "full3/balanced/long|mixed|20|63": {
+  "resolve_ok": 2746,
+  "label_ok": 2603,
+  "label_gap_exit": 128,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "full3/balanced/long|stock|10|5": {
+  "resolve_ok": 1477,
+  "label_ok": 1469,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 4
+ },
+ "full3/balanced/long|stock|10|20": {
+  "resolve_ok": 1450,
+  "label_ok": 1411,
+  "label_gap_exit": 32,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "full3/balanced/long|stock|10|63": {
+  "resolve_ok": 1378,
+  "label_ok": 1293,
+  "label_gap_exit": 70,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "full3/balanced/long|stock|20|5": {
+  "resolve_ok": 2940,
+  "label_ok": 2921,
+  "label_gap_exit": 14,
+  "label_no_entry_bar": 5
+ },
+ "full3/balanced/long|stock|20|20": {
+  "resolve_ok": 2883,
+  "label_ok": 2817,
+  "label_gap_exit": 58,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "full3/balanced/long|stock|20|63": {
+  "resolve_ok": 2731,
+  "label_ok": 2573,
+  "label_gap_exit": 142,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "full3/balanced/mid|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1475,
+  "label_no_entry_bar": 3,
+  "label_gap_exit": 2
+ },
+ "full3/balanced/mid|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1425,
+  "label_gap_exit": 22,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "full3/balanced/mid|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1313,
+  "label_gap_exit": 54,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "full3/balanced/mid|mixed|20|5": {
+  "resolve_ok": 2946,
+  "label_ok": 2930,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 5
+ },
+ "full3/balanced/mid|mixed|20|20": {
+  "resolve_ok": 2889,
+  "label_ok": 2839,
+  "label_gap_exit": 42,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "full3/balanced/mid|mixed|20|63": {
+  "resolve_ok": 2737,
+  "label_ok": 2604,
+  "label_gap_exit": 117,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "full3/balanced/mid|stock|10|5": {
+  "resolve_ok": 1477,
+  "label_ok": 1470,
+  "label_no_entry_bar": 3,
+  "label_gap_exit": 4
+ },
+ "full3/balanced/mid|stock|10|20": {
+  "resolve_ok": 1450,
+  "label_ok": 1414,
+  "label_gap_exit": 30,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "full3/balanced/mid|stock|10|63": {
+  "resolve_ok": 1378,
+  "label_ok": 1297,
+  "label_gap_exit": 67,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "full3/balanced/mid|stock|20|5": {
+  "resolve_ok": 2924,
+  "label_ok": 2905,
+  "label_gap_exit": 14,
+  "label_no_entry_bar": 5
+ },
+ "full3/balanced/mid|stock|20|20": {
+  "resolve_ok": 2867,
+  "label_ok": 2810,
+  "label_gap_exit": 49,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "full3/balanced/mid|stock|20|63": {
+  "resolve_ok": 2715,
+  "label_ok": 2567,
+  "label_gap_exit": 132,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "full3/balanced/short|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1476,
+  "label_no_entry_bar": 1,
+  "label_gap_exit": 3
+ },
+ "full3/balanced/short|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1437,
+  "label_gap_exit": 12,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "full3/balanced/short|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1334,
+  "label_gap_exit": 35,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "full3/balanced/short|mixed|20|5": {
+  "resolve_ok": 2944,
+  "label_ok": 2937,
+  "label_gap_exit": 5,
+  "label_no_entry_bar": 2
+ },
+ "full3/balanced/short|mixed|20|20": {
+  "resolve_ok": 2887,
+  "label_ok": 2858,
+  "label_gap_exit": 24,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "full3/balanced/short|mixed|20|63": {
+  "resolve_ok": 2735,
+  "label_ok": 2637,
+  "label_gap_exit": 85,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "full3/balanced/short|stock|10|5": {
+  "resolve_ok": 1476,
+  "label_ok": 1471,
+  "label_no_entry_bar": 1,
+  "label_gap_exit": 4
+ },
+ "full3/balanced/short|stock|10|20": {
+  "resolve_ok": 1449,
+  "label_ok": 1431,
+  "label_gap_exit": 14,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "full3/balanced/short|stock|10|63": {
+  "resolve_ok": 1377,
+  "label_ok": 1323,
+  "label_gap_exit": 42,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "full3/balanced/short|stock|20|5": {
+  "resolve_ok": 2930,
+  "label_ok": 2921,
+  "label_gap_exit": 6,
+  "label_no_entry_bar": 3
+ },
+ "full3/balanced/short|stock|20|20": {
+  "resolve_ok": 2873,
+  "label_ok": 2838,
+  "label_gap_exit": 29,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "full3/balanced/short|stock|20|63": {
+  "resolve_ok": 2721,
+  "label_ok": 2612,
+  "label_gap_exit": 95,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "full3/conservative/long|mixed|10|5": {
+  "resolve_ok": 1472,
+  "label_ok": 1470,
+  "label_gap_exit": 2
+ },
+ "full3/conservative/long|mixed|10|20": {
+  "resolve_ok": 1445,
+  "label_ok": 1425,
+  "label_gap_exit": 17,
+  "label_no_label": 3
+ },
+ "full3/conservative/long|mixed|10|63": {
+  "resolve_ok": 1373,
+  "label_ok": 1321,
+  "label_gap_exit": 41,
+  "label_no_label": 11
+ },
+ "full3/conservative/long|mixed|20|5": {
+  "resolve_ok": 2874,
+  "label_ok": 2868,
+  "label_gap_exit": 6
+ },
+ "full3/conservative/long|mixed|20|20": {
+  "resolve_ok": 2817,
+  "label_ok": 2779,
+  "label_gap_exit": 35,
+  "label_no_label": 3
+ },
+ "full3/conservative/long|mixed|20|63": {
+  "resolve_ok": 2665,
+  "label_ok": 2570,
+  "label_gap_exit": 84,
+  "label_no_label": 11
+ },
+ "full3/conservative/long|stock|10|5": {
+  "resolve_ok": 1466,
+  "label_ok": 1464,
+  "label_gap_exit": 2
+ },
+ "full3/conservative/long|stock|10|20": {
+  "resolve_ok": 1439,
+  "label_ok": 1418,
+  "label_gap_exit": 18,
+  "label_no_label": 3
+ },
+ "full3/conservative/long|stock|10|63": {
+  "resolve_ok": 1367,
+  "label_ok": 1314,
+  "label_gap_exit": 42,
+  "label_no_label": 11
+ },
+ "full3/conservative/long|stock|20|5": {
+  "resolve_ok": 2846,
+  "label_ok": 2840,
+  "label_gap_exit": 6
+ },
+ "full3/conservative/long|stock|20|20": {
+  "resolve_ok": 2789,
+  "label_ok": 2751,
+  "label_gap_exit": 35,
+  "label_no_label": 3
+ },
+ "full3/conservative/long|stock|20|63": {
+  "resolve_ok": 2637,
+  "label_ok": 2539,
+  "label_gap_exit": 87,
+  "label_no_label": 11
+ },
+ "full3/conservative/mid|mixed|10|5": {
+  "resolve_ok": 1470,
+  "label_ok": 1468,
+  "label_gap_exit": 2
+ },
+ "full3/conservative/mid|mixed|10|20": {
+  "resolve_ok": 1443,
+  "label_ok": 1422,
+  "label_gap_exit": 18,
+  "label_no_label": 3
+ },
+ "full3/conservative/mid|mixed|10|63": {
+  "resolve_ok": 1371,
+  "label_ok": 1319,
+  "label_gap_exit": 41,
+  "label_no_label": 11
+ },
+ "full3/conservative/mid|mixed|20|5": {
+  "resolve_ok": 2813,
+  "label_ok": 2808,
+  "label_gap_exit": 5
+ },
+ "full3/conservative/mid|mixed|20|20": {
+  "resolve_ok": 2756,
+  "label_ok": 2721,
+  "label_gap_exit": 32,
+  "label_no_label": 3
+ },
+ "full3/conservative/mid|mixed|20|63": {
+  "resolve_ok": 2604,
+  "label_ok": 2513,
+  "label_gap_exit": 80,
+  "label_no_label": 11
+ },
+ "full3/conservative/mid|stock|10|5": {
+  "resolve_ok": 1463,
+  "label_ok": 1461,
+  "label_gap_exit": 2
+ },
+ "full3/conservative/mid|stock|10|20": {
+  "resolve_ok": 1436,
+  "label_ok": 1414,
+  "label_gap_exit": 19,
+  "label_no_label": 3
+ },
+ "full3/conservative/mid|stock|10|63": {
+  "resolve_ok": 1364,
+  "label_ok": 1309,
+  "label_gap_exit": 44,
+  "label_no_label": 11
+ },
+ "full3/conservative/mid|stock|20|5": {
+  "resolve_ok": 2770,
+  "label_ok": 2765,
+  "label_gap_exit": 5
+ },
+ "full3/conservative/mid|stock|20|20": {
+  "resolve_ok": 2713,
+  "label_ok": 2678,
+  "label_gap_exit": 32,
+  "label_no_label": 3
+ },
+ "full3/conservative/mid|stock|20|63": {
+  "resolve_ok": 2561,
+  "label_ok": 2469,
+  "label_gap_exit": 81,
+  "label_no_label": 11
+ },
+ "full3/conservative/short|mixed|10|5": {
+  "resolve_ok": 1461,
+  "label_ok": 1458,
+  "label_gap_exit": 3
+ },
+ "full3/conservative/short|mixed|10|20": {
+  "resolve_ok": 1434,
+  "label_ok": 1410,
+  "label_gap_exit": 21,
+  "label_no_label": 3
+ },
+ "full3/conservative/short|mixed|10|63": {
+  "resolve_ok": 1362,
+  "label_ok": 1308,
+  "label_gap_exit": 43,
+  "label_no_label": 11
+ },
+ "full3/conservative/short|mixed|20|5": {
+  "resolve_ok": 2705,
+  "label_ok": 2700,
+  "label_gap_exit": 5
+ },
+ "full3/conservative/short|mixed|20|20": {
+  "resolve_ok": 2648,
+  "label_ok": 2617,
+  "label_gap_exit": 28,
+  "label_no_label": 3
+ },
+ "full3/conservative/short|mixed|20|63": {
+  "resolve_ok": 2498,
+  "label_ok": 2412,
+  "label_gap_exit": 75,
+  "label_no_label": 11
+ },
+ "full3/conservative/short|stock|10|5": {
+  "resolve_ok": 1449,
+  "label_ok": 1446,
+  "label_gap_exit": 3
+ },
+ "full3/conservative/short|stock|10|20": {
+  "resolve_ok": 1422,
+  "label_ok": 1398,
+  "label_gap_exit": 21,
+  "label_no_label": 3
+ },
+ "full3/conservative/short|stock|10|63": {
+  "resolve_ok": 1350,
+  "label_ok": 1294,
+  "label_gap_exit": 45,
+  "label_no_label": 11
+ },
+ "full3/conservative/short|stock|20|5": {
+  "resolve_ok": 2644,
+  "label_ok": 2639,
+  "label_gap_exit": 5
+ },
+ "full3/conservative/short|stock|20|20": {
+  "resolve_ok": 2587,
+  "label_ok": 2554,
+  "label_gap_exit": 30,
+  "label_no_label": 3
+ },
+ "full3/conservative/short|stock|20|63": {
+  "resolve_ok": 2438,
+  "label_ok": 2349,
+  "label_gap_exit": 78,
+  "label_no_label": 11
+ },
+ "full4/aggressive/long|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1472,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 4
+ },
+ "full4/aggressive/long|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1419,
+  "label_gap_exit": 27,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "full4/aggressive/long|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1301,
+  "label_gap_exit": 65,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "full4/aggressive/long|mixed|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2947,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 9
+ },
+ "full4/aggressive/long|mixed|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2845,
+  "label_gap_exit": 51,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "full4/aggressive/long|mixed|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2604,
+  "label_gap_exit": 132,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "full4/aggressive/long|stock|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1471,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 5
+ },
+ "full4/aggressive/long|stock|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1414,
+  "label_gap_exit": 32,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "full4/aggressive/long|stock|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1292,
+  "label_gap_exit": 74,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "full4/aggressive/long|stock|20|5": {
+  "resolve_ok": 2950,
+  "label_ok": 2935,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 4
+ },
+ "full4/aggressive/long|stock|20|20": {
+  "resolve_ok": 2893,
+  "label_ok": 2828,
+  "label_gap_exit": 58,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "full4/aggressive/long|stock|20|63": {
+  "resolve_ok": 2741,
+  "label_ok": 2580,
+  "label_gap_exit": 146,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "full4/aggressive/mid|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1473,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 3
+ },
+ "full4/aggressive/mid|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1423,
+  "label_gap_exit": 23,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "full4/aggressive/mid|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1306,
+  "label_gap_exit": 60,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "full4/aggressive/mid|mixed|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2946,
+  "label_gap_exit": 10,
+  "label_no_entry_bar": 4
+ },
+ "full4/aggressive/mid|mixed|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2850,
+  "label_gap_exit": 46,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "full4/aggressive/mid|mixed|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2610,
+  "label_gap_exit": 126,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "full4/aggressive/mid|stock|10|5": {
+  "resolve_ok": 1479,
+  "label_ok": 1470,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 5
+ },
+ "full4/aggressive/mid|stock|10|20": {
+  "resolve_ok": 1452,
+  "label_ok": 1414,
+  "label_gap_exit": 31,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "full4/aggressive/mid|stock|10|63": {
+  "resolve_ok": 1380,
+  "label_ok": 1292,
+  "label_gap_exit": 73,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "full4/aggressive/mid|stock|20|5": {
+  "resolve_ok": 2949,
+  "label_ok": 2930,
+  "label_gap_exit": 14,
+  "label_no_entry_bar": 5
+ },
+ "full4/aggressive/mid|stock|20|20": {
+  "resolve_ok": 2892,
+  "label_ok": 2829,
+  "label_gap_exit": 55,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "full4/aggressive/mid|stock|20|63": {
+  "resolve_ok": 2740,
+  "label_ok": 2581,
+  "label_gap_exit": 143,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "full4/aggressive/short|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1475,
+  "label_gap_exit": 4,
+  "label_no_entry_bar": 1
+ },
+ "full4/aggressive/short|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1436,
+  "label_gap_exit": 13,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "full4/aggressive/short|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1333,
+  "label_gap_exit": 36,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "full4/aggressive/short|mixed|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2949,
+  "label_gap_exit": 7,
+  "label_no_entry_bar": 4
+ },
+ "full4/aggressive/short|mixed|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2865,
+  "label_gap_exit": 31,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "full4/aggressive/short|mixed|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2643,
+  "label_gap_exit": 93,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "full4/aggressive/short|stock|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1472,
+  "label_gap_exit": 6,
+  "label_no_entry_bar": 2
+ },
+ "full4/aggressive/short|stock|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1428,
+  "label_gap_exit": 20,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "full4/aggressive/short|stock|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1320,
+  "label_gap_exit": 48,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "full4/aggressive/short|stock|20|5": {
+  "resolve_ok": 2958,
+  "label_ok": 2946,
+  "label_gap_exit": 8,
+  "label_no_entry_bar": 4
+ },
+ "full4/aggressive/short|stock|20|20": {
+  "resolve_ok": 2901,
+  "label_ok": 2858,
+  "label_gap_exit": 36,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "full4/aggressive/short|stock|20|63": {
+  "resolve_ok": 2749,
+  "label_ok": 2623,
+  "label_gap_exit": 111,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "full4/balanced/long|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1473,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 3
+ },
+ "full4/balanced/long|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1421,
+  "label_gap_exit": 25,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "full4/balanced/long|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1307,
+  "label_gap_exit": 59,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "full4/balanced/long|mixed|20|5": {
+  "resolve_ok": 2954,
+  "label_ok": 2939,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 4
+ },
+ "full4/balanced/long|mixed|20|20": {
+  "resolve_ok": 2897,
+  "label_ok": 2841,
+  "label_gap_exit": 49,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "full4/balanced/long|mixed|20|63": {
+  "resolve_ok": 2745,
+  "label_ok": 2603,
+  "label_gap_exit": 127,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "full4/balanced/long|stock|10|5": {
+  "resolve_ok": 1478,
+  "label_ok": 1469,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 5
+ },
+ "full4/balanced/long|stock|10|20": {
+  "resolve_ok": 1451,
+  "label_ok": 1412,
+  "label_gap_exit": 32,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "full4/balanced/long|stock|10|63": {
+  "resolve_ok": 1379,
+  "label_ok": 1291,
+  "label_gap_exit": 73,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "full4/balanced/long|stock|20|5": {
+  "resolve_ok": 2941,
+  "label_ok": 2922,
+  "label_gap_exit": 14,
+  "label_no_entry_bar": 5
+ },
+ "full4/balanced/long|stock|20|20": {
+  "resolve_ok": 2884,
+  "label_ok": 2820,
+  "label_gap_exit": 56,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "full4/balanced/long|stock|20|63": {
+  "resolve_ok": 2732,
+  "label_ok": 2573,
+  "label_gap_exit": 143,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "full4/balanced/mid|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1474,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 2
+ },
+ "full4/balanced/mid|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1422,
+  "label_gap_exit": 24,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "full4/balanced/mid|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1310,
+  "label_gap_exit": 56,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "full4/balanced/mid|mixed|20|5": {
+  "resolve_ok": 2946,
+  "label_ok": 2928,
+  "label_gap_exit": 13,
+  "label_no_entry_bar": 5
+ },
+ "full4/balanced/mid|mixed|20|20": {
+  "resolve_ok": 2889,
+  "label_ok": 2837,
+  "label_gap_exit": 44,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "full4/balanced/mid|mixed|20|63": {
+  "resolve_ok": 2737,
+  "label_ok": 2602,
+  "label_gap_exit": 119,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "full4/balanced/mid|stock|10|5": {
+  "resolve_ok": 1477,
+  "label_ok": 1468,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 5
+ },
+ "full4/balanced/mid|stock|10|20": {
+  "resolve_ok": 1450,
+  "label_ok": 1411,
+  "label_gap_exit": 32,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "full4/balanced/mid|stock|10|63": {
+  "resolve_ok": 1378,
+  "label_ok": 1291,
+  "label_gap_exit": 72,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "full4/balanced/mid|stock|20|5": {
+  "resolve_ok": 2925,
+  "label_ok": 2906,
+  "label_gap_exit": 14,
+  "label_no_entry_bar": 5
+ },
+ "full4/balanced/mid|stock|20|20": {
+  "resolve_ok": 2868,
+  "label_ok": 2810,
+  "label_gap_exit": 50,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "full4/balanced/mid|stock|20|63": {
+  "resolve_ok": 2716,
+  "label_ok": 2568,
+  "label_gap_exit": 132,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "full4/balanced/short|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1476,
+  "label_no_entry_bar": 1,
+  "label_gap_exit": 3
+ },
+ "full4/balanced/short|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1436,
+  "label_gap_exit": 13,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "full4/balanced/short|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1333,
+  "label_gap_exit": 36,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "full4/balanced/short|mixed|20|5": {
+  "resolve_ok": 2947,
+  "label_ok": 2937,
+  "label_gap_exit": 7,
+  "label_no_entry_bar": 3
+ },
+ "full4/balanced/short|mixed|20|20": {
+  "resolve_ok": 2890,
+  "label_ok": 2853,
+  "label_gap_exit": 31,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "full4/balanced/short|mixed|20|63": {
+  "resolve_ok": 2738,
+  "label_ok": 2629,
+  "label_gap_exit": 95,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "full4/balanced/short|stock|10|5": {
+  "resolve_ok": 1477,
+  "label_ok": 1471,
+  "label_no_entry_bar": 1,
+  "label_gap_exit": 5
+ },
+ "full4/balanced/short|stock|10|20": {
+  "resolve_ok": 1450,
+  "label_ok": 1429,
+  "label_gap_exit": 17,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "full4/balanced/short|stock|10|63": {
+  "resolve_ok": 1378,
+  "label_ok": 1314,
+  "label_gap_exit": 52,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "full4/balanced/short|stock|20|5": {
+  "resolve_ok": 2933,
+  "label_ok": 2922,
+  "label_gap_exit": 7,
+  "label_no_entry_bar": 4
+ },
+ "full4/balanced/short|stock|20|20": {
+  "resolve_ok": 2876,
+  "label_ok": 2834,
+  "label_gap_exit": 35,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "full4/balanced/short|stock|20|63": {
+  "resolve_ok": 2724,
+  "label_ok": 2604,
+  "label_gap_exit": 105,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "full4/conservative/long|mixed|10|5": {
+  "resolve_ok": 1472,
+  "label_ok": 1469,
+  "label_gap_exit": 3
+ },
+ "full4/conservative/long|mixed|10|20": {
+  "resolve_ok": 1445,
+  "label_ok": 1425,
+  "label_gap_exit": 17,
+  "label_no_label": 3
+ },
+ "full4/conservative/long|mixed|10|63": {
+  "resolve_ok": 1373,
+  "label_ok": 1322,
+  "label_gap_exit": 40,
+  "label_no_label": 11
+ },
+ "full4/conservative/long|mixed|20|5": {
+  "resolve_ok": 2872,
+  "label_ok": 2866,
+  "label_gap_exit": 6
+ },
+ "full4/conservative/long|mixed|20|20": {
+  "resolve_ok": 2815,
+  "label_ok": 2777,
+  "label_gap_exit": 35,
+  "label_no_label": 3
+ },
+ "full4/conservative/long|mixed|20|63": {
+  "resolve_ok": 2663,
+  "label_ok": 2566,
+  "label_gap_exit": 86,
+  "label_no_label": 11
+ },
+ "full4/conservative/long|stock|10|5": {
+  "resolve_ok": 1466,
+  "label_ok": 1463,
+  "label_gap_exit": 3
+ },
+ "full4/conservative/long|stock|10|20": {
+  "resolve_ok": 1439,
+  "label_ok": 1418,
+  "label_gap_exit": 18,
+  "label_no_label": 3
+ },
+ "full4/conservative/long|stock|10|63": {
+  "resolve_ok": 1367,
+  "label_ok": 1312,
+  "label_gap_exit": 44,
+  "label_no_label": 11
+ },
+ "full4/conservative/long|stock|20|5": {
+  "resolve_ok": 2842,
+  "label_ok": 2836,
+  "label_gap_exit": 6
+ },
+ "full4/conservative/long|stock|20|20": {
+  "resolve_ok": 2785,
+  "label_ok": 2746,
+  "label_gap_exit": 36,
+  "label_no_label": 3
+ },
+ "full4/conservative/long|stock|20|63": {
+  "resolve_ok": 2633,
+  "label_ok": 2533,
+  "label_gap_exit": 89,
+  "label_no_label": 11
+ },
+ "full4/conservative/mid|mixed|10|5": {
+  "resolve_ok": 1468,
+  "label_ok": 1465,
+  "label_gap_exit": 3
+ },
+ "full4/conservative/mid|mixed|10|20": {
+  "resolve_ok": 1441,
+  "label_ok": 1421,
+  "label_gap_exit": 17,
+  "label_no_label": 3
+ },
+ "full4/conservative/mid|mixed|10|63": {
+  "resolve_ok": 1369,
+  "label_ok": 1317,
+  "label_gap_exit": 41,
+  "label_no_label": 11
+ },
+ "full4/conservative/mid|mixed|20|5": {
+  "resolve_ok": 2806,
+  "label_ok": 2802,
+  "label_gap_exit": 4
+ },
+ "full4/conservative/mid|mixed|20|20": {
+  "resolve_ok": 2749,
+  "label_ok": 2716,
+  "label_gap_exit": 30,
+  "label_no_label": 3
+ },
+ "full4/conservative/mid|mixed|20|63": {
+  "resolve_ok": 2597,
+  "label_ok": 2506,
+  "label_gap_exit": 80,
+  "label_no_label": 11
+ },
+ "full4/conservative/mid|stock|10|5": {
+  "resolve_ok": 1460,
+  "label_ok": 1457,
+  "label_gap_exit": 3
+ },
+ "full4/conservative/mid|stock|10|20": {
+  "resolve_ok": 1433,
+  "label_ok": 1413,
+  "label_gap_exit": 17,
+  "label_no_label": 3
+ },
+ "full4/conservative/mid|stock|10|63": {
+  "resolve_ok": 1361,
+  "label_ok": 1307,
+  "label_gap_exit": 43,
+  "label_no_label": 11
+ },
+ "full4/conservative/mid|stock|20|5": {
+  "resolve_ok": 2763,
+  "label_ok": 2759,
+  "label_gap_exit": 4
+ },
+ "full4/conservative/mid|stock|20|20": {
+  "resolve_ok": 2706,
+  "label_ok": 2672,
+  "label_gap_exit": 31,
+  "label_no_label": 3
+ },
+ "full4/conservative/mid|stock|20|63": {
+  "resolve_ok": 2555,
+  "label_ok": 2462,
+  "label_gap_exit": 82,
+  "label_no_label": 11
+ },
+ "full4/conservative/short|mixed|10|5": {
+  "resolve_ok": 1461,
+  "label_ok": 1458,
+  "label_gap_exit": 3
+ },
+ "full4/conservative/short|mixed|10|20": {
+  "resolve_ok": 1434,
+  "label_ok": 1412,
+  "label_gap_exit": 19,
+  "label_no_label": 3
+ },
+ "full4/conservative/short|mixed|10|63": {
+  "resolve_ok": 1362,
+  "label_ok": 1310,
+  "label_gap_exit": 41,
+  "label_no_label": 11
+ },
+ "full4/conservative/short|mixed|20|5": {
+  "resolve_ok": 2675,
+  "label_ok": 2670,
+  "label_gap_exit": 5
+ },
+ "full4/conservative/short|mixed|20|20": {
+  "resolve_ok": 2618,
+  "label_ok": 2586,
+  "label_gap_exit": 29,
+  "label_no_label": 3
+ },
+ "full4/conservative/short|mixed|20|63": {
+  "resolve_ok": 2470,
+  "label_ok": 2389,
+  "label_gap_exit": 70,
+  "label_no_label": 11
+ },
+ "full4/conservative/short|stock|10|5": {
+  "resolve_ok": 1447,
+  "label_ok": 1444,
+  "label_gap_exit": 3
+ },
+ "full4/conservative/short|stock|10|20": {
+  "resolve_ok": 1420,
+  "label_ok": 1398,
+  "label_gap_exit": 19,
+  "label_no_label": 3
+ },
+ "full4/conservative/short|stock|10|63": {
+  "resolve_ok": 1348,
+  "label_ok": 1293,
+  "label_gap_exit": 44,
+  "label_no_label": 11
+ },
+ "full4/conservative/short|stock|20|5": {
+  "resolve_ok": 2609,
+  "label_ok": 2604,
+  "label_gap_exit": 5
+ },
+ "full4/conservative/short|stock|20|20": {
+  "resolve_ok": 2552,
+  "label_ok": 2519,
+  "label_gap_exit": 30,
+  "label_no_label": 3
+ },
+ "full4/conservative/short|stock|20|63": {
+  "resolve_ok": 2405,
+  "label_ok": 2322,
+  "label_gap_exit": 72,
+  "label_no_label": 11
+ },
+ "g3/aggressive/long|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1473,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 3
+ },
+ "g3/aggressive/long|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1420,
+  "label_gap_exit": 26,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g3/aggressive/long|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1300,
+  "label_gap_exit": 66,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g3/aggressive/long|mixed|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2946,
+  "label_gap_exit": 10,
+  "label_no_entry_bar": 4
+ },
+ "g3/aggressive/long|mixed|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2848,
+  "label_gap_exit": 48,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g3/aggressive/long|mixed|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2605,
+  "label_gap_exit": 131,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g3/aggressive/long|stock|10|5": {
+  "resolve_ok": 1479,
+  "label_ok": 1470,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 5
+ },
+ "g3/aggressive/long|stock|10|20": {
+  "resolve_ok": 1452,
+  "label_ok": 1413,
+  "label_gap_exit": 32,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g3/aggressive/long|stock|10|63": {
+  "resolve_ok": 1380,
+  "label_ok": 1286,
+  "label_gap_exit": 79,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g3/aggressive/long|stock|20|5": {
+  "resolve_ok": 2949,
+  "label_ok": 2934,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 4
+ },
+ "g3/aggressive/long|stock|20|20": {
+  "resolve_ok": 2892,
+  "label_ok": 2827,
+  "label_gap_exit": 58,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g3/aggressive/long|stock|20|63": {
+  "resolve_ok": 2740,
+  "label_ok": 2576,
+  "label_gap_exit": 149,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g3/aggressive/mid|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1474,
+  "label_no_entry_bar": 3,
+  "label_gap_exit": 3
+ },
+ "g3/aggressive/mid|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1424,
+  "label_gap_exit": 23,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "g3/aggressive/mid|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1304,
+  "label_gap_exit": 63,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "g3/aggressive/mid|mixed|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2945,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 4
+ },
+ "g3/aggressive/mid|mixed|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2850,
+  "label_gap_exit": 46,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g3/aggressive/mid|mixed|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2606,
+  "label_gap_exit": 130,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g3/aggressive/mid|stock|10|5": {
+  "resolve_ok": 1479,
+  "label_ok": 1471,
+  "label_no_entry_bar": 3,
+  "label_gap_exit": 5
+ },
+ "g3/aggressive/mid|stock|10|20": {
+  "resolve_ok": 1452,
+  "label_ok": 1418,
+  "label_gap_exit": 28,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "g3/aggressive/mid|stock|10|63": {
+  "resolve_ok": 1380,
+  "label_ok": 1293,
+  "label_gap_exit": 73,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "g3/aggressive/mid|stock|20|5": {
+  "resolve_ok": 2949,
+  "label_ok": 2932,
+  "label_gap_exit": 13,
+  "label_no_entry_bar": 4
+ },
+ "g3/aggressive/mid|stock|20|20": {
+  "resolve_ok": 2892,
+  "label_ok": 2829,
+  "label_gap_exit": 56,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g3/aggressive/mid|stock|20|63": {
+  "resolve_ok": 2740,
+  "label_ok": 2574,
+  "label_gap_exit": 151,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g3/aggressive/short|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1474,
+  "label_gap_exit": 5,
+  "label_no_entry_bar": 1
+ },
+ "g3/aggressive/short|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1434,
+  "label_gap_exit": 15,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "g3/aggressive/short|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1328,
+  "label_gap_exit": 41,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "g3/aggressive/short|mixed|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2952,
+  "label_gap_exit": 6,
+  "label_no_entry_bar": 2
+ },
+ "g3/aggressive/short|mixed|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2870,
+  "label_gap_exit": 28,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "g3/aggressive/short|mixed|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2645,
+  "label_gap_exit": 93,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "g3/aggressive/short|stock|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1473,
+  "label_gap_exit": 6,
+  "label_no_entry_bar": 1
+ },
+ "g3/aggressive/short|stock|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1429,
+  "label_gap_exit": 20,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "g3/aggressive/short|stock|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1317,
+  "label_gap_exit": 52,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "g3/aggressive/short|stock|20|5": {
+  "resolve_ok": 2957,
+  "label_ok": 2948,
+  "label_gap_exit": 7,
+  "label_no_entry_bar": 2
+ },
+ "g3/aggressive/short|stock|20|20": {
+  "resolve_ok": 2900,
+  "label_ok": 2862,
+  "label_gap_exit": 33,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "g3/aggressive/short|stock|20|63": {
+  "resolve_ok": 2748,
+  "label_ok": 2625,
+  "label_gap_exit": 110,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "g3/balanced/long|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1473,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 3
+ },
+ "g3/balanced/long|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1416,
+  "label_gap_exit": 30,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g3/balanced/long|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1289,
+  "label_gap_exit": 77,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g3/balanced/long|mixed|20|5": {
+  "resolve_ok": 2953,
+  "label_ok": 2938,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 4
+ },
+ "g3/balanced/long|mixed|20|20": {
+  "resolve_ok": 2896,
+  "label_ok": 2839,
+  "label_gap_exit": 50,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g3/balanced/long|mixed|20|63": {
+  "resolve_ok": 2744,
+  "label_ok": 2586,
+  "label_gap_exit": 143,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g3/balanced/long|stock|10|5": {
+  "resolve_ok": 1478,
+  "label_ok": 1469,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 5
+ },
+ "g3/balanced/long|stock|10|20": {
+  "resolve_ok": 1451,
+  "label_ok": 1408,
+  "label_gap_exit": 36,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g3/balanced/long|stock|10|63": {
+  "resolve_ok": 1379,
+  "label_ok": 1279,
+  "label_gap_exit": 85,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g3/balanced/long|stock|20|5": {
+  "resolve_ok": 2939,
+  "label_ok": 2921,
+  "label_gap_exit": 14,
+  "label_no_entry_bar": 4
+ },
+ "g3/balanced/long|stock|20|20": {
+  "resolve_ok": 2882,
+  "label_ok": 2821,
+  "label_gap_exit": 54,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g3/balanced/long|stock|20|63": {
+  "resolve_ok": 2730,
+  "label_ok": 2565,
+  "label_gap_exit": 150,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g3/balanced/mid|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1474,
+  "label_no_entry_bar": 3,
+  "label_gap_exit": 3
+ },
+ "g3/balanced/mid|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1422,
+  "label_gap_exit": 25,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "g3/balanced/mid|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1295,
+  "label_gap_exit": 72,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "g3/balanced/mid|mixed|20|5": {
+  "resolve_ok": 2947,
+  "label_ok": 2932,
+  "label_gap_exit": 10,
+  "label_no_entry_bar": 5
+ },
+ "g3/balanced/mid|mixed|20|20": {
+  "resolve_ok": 2890,
+  "label_ok": 2836,
+  "label_gap_exit": 46,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "g3/balanced/mid|mixed|20|63": {
+  "resolve_ok": 2738,
+  "label_ok": 2595,
+  "label_gap_exit": 127,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "g3/balanced/mid|stock|10|5": {
+  "resolve_ok": 1477,
+  "label_ok": 1467,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 6
+ },
+ "g3/balanced/mid|stock|10|20": {
+  "resolve_ok": 1450,
+  "label_ok": 1411,
+  "label_gap_exit": 32,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g3/balanced/mid|stock|10|63": {
+  "resolve_ok": 1378,
+  "label_ok": 1278,
+  "label_gap_exit": 85,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g3/balanced/mid|stock|20|5": {
+  "resolve_ok": 2925,
+  "label_ok": 2908,
+  "label_gap_exit": 12,
+  "label_no_entry_bar": 5
+ },
+ "g3/balanced/mid|stock|20|20": {
+  "resolve_ok": 2868,
+  "label_ok": 2809,
+  "label_gap_exit": 51,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "g3/balanced/mid|stock|20|63": {
+  "resolve_ok": 2716,
+  "label_ok": 2556,
+  "label_gap_exit": 144,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "g3/balanced/short|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1475,
+  "label_gap_exit": 4,
+  "label_no_entry_bar": 1
+ },
+ "g3/balanced/short|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1435,
+  "label_gap_exit": 14,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "g3/balanced/short|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1326,
+  "label_gap_exit": 43,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "g3/balanced/short|mixed|20|5": {
+  "resolve_ok": 2950,
+  "label_ok": 2942,
+  "label_gap_exit": 5,
+  "label_no_entry_bar": 3
+ },
+ "g3/balanced/short|mixed|20|20": {
+  "resolve_ok": 2893,
+  "label_ok": 2863,
+  "label_gap_exit": 24,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "g3/balanced/short|mixed|20|63": {
+  "resolve_ok": 2741,
+  "label_ok": 2642,
+  "label_gap_exit": 85,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "g3/balanced/short|stock|10|5": {
+  "resolve_ok": 1477,
+  "label_ok": 1471,
+  "label_gap_exit": 5,
+  "label_no_entry_bar": 1
+ },
+ "g3/balanced/short|stock|10|20": {
+  "resolve_ok": 1450,
+  "label_ok": 1430,
+  "label_gap_exit": 16,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "g3/balanced/short|stock|10|63": {
+  "resolve_ok": 1378,
+  "label_ok": 1314,
+  "label_gap_exit": 52,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "g3/balanced/short|stock|20|5": {
+  "resolve_ok": 2936,
+  "label_ok": 2926,
+  "label_gap_exit": 7,
+  "label_no_entry_bar": 3
+ },
+ "g3/balanced/short|stock|20|20": {
+  "resolve_ok": 2879,
+  "label_ok": 2843,
+  "label_gap_exit": 30,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "g3/balanced/short|stock|20|63": {
+  "resolve_ok": 2727,
+  "label_ok": 2613,
+  "label_gap_exit": 100,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "g3x2/aggressive/long|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1473,
+  "label_no_entry_bar": 3,
+  "label_gap_exit": 4
+ },
+ "g3x2/aggressive/long|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1422,
+  "label_gap_exit": 25,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "g3x2/aggressive/long|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1299,
+  "label_gap_exit": 68,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "g3x2/aggressive/long|mixed|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2948,
+  "label_gap_exit": 8,
+  "label_no_entry_bar": 4
+ },
+ "g3x2/aggressive/long|mixed|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2849,
+  "label_gap_exit": 47,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g3x2/aggressive/long|mixed|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2607,
+  "label_gap_exit": 129,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g3x2/aggressive/long|stock|10|5": {
+  "resolve_ok": 1478,
+  "label_ok": 1468,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 6
+ },
+ "g3x2/aggressive/long|stock|10|20": {
+  "resolve_ok": 1451,
+  "label_ok": 1416,
+  "label_gap_exit": 28,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g3x2/aggressive/long|stock|10|63": {
+  "resolve_ok": 1379,
+  "label_ok": 1291,
+  "label_gap_exit": 73,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g3x2/aggressive/long|stock|20|5": {
+  "resolve_ok": 2948,
+  "label_ok": 2933,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 4
+ },
+ "g3x2/aggressive/long|stock|20|20": {
+  "resolve_ok": 2891,
+  "label_ok": 2827,
+  "label_gap_exit": 57,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g3x2/aggressive/long|stock|20|63": {
+  "resolve_ok": 2739,
+  "label_ok": 2577,
+  "label_gap_exit": 147,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g3x2/aggressive/mid|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1473,
+  "label_no_entry_bar": 3,
+  "label_gap_exit": 4
+ },
+ "g3x2/aggressive/mid|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1425,
+  "label_gap_exit": 22,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "g3x2/aggressive/mid|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1302,
+  "label_gap_exit": 65,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "g3x2/aggressive/mid|mixed|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2945,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 4
+ },
+ "g3x2/aggressive/mid|mixed|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2852,
+  "label_gap_exit": 44,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g3x2/aggressive/mid|mixed|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2609,
+  "label_gap_exit": 127,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g3x2/aggressive/mid|stock|10|5": {
+  "resolve_ok": 1478,
+  "label_ok": 1469,
+  "label_no_entry_bar": 3,
+  "label_gap_exit": 6
+ },
+ "g3x2/aggressive/mid|stock|10|20": {
+  "resolve_ok": 1451,
+  "label_ok": 1419,
+  "label_gap_exit": 26,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "g3x2/aggressive/mid|stock|10|63": {
+  "resolve_ok": 1379,
+  "label_ok": 1294,
+  "label_gap_exit": 71,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "g3x2/aggressive/mid|stock|20|5": {
+  "resolve_ok": 2948,
+  "label_ok": 2932,
+  "label_gap_exit": 12,
+  "label_no_entry_bar": 4
+ },
+ "g3x2/aggressive/mid|stock|20|20": {
+  "resolve_ok": 2891,
+  "label_ok": 2834,
+  "label_gap_exit": 50,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g3x2/aggressive/mid|stock|20|63": {
+  "resolve_ok": 2739,
+  "label_ok": 2588,
+  "label_gap_exit": 136,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g3x2/aggressive/short|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1475,
+  "label_gap_exit": 4,
+  "label_no_entry_bar": 1
+ },
+ "g3x2/aggressive/short|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1439,
+  "label_gap_exit": 10,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "g3x2/aggressive/short|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1331,
+  "label_gap_exit": 38,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "g3x2/aggressive/short|mixed|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2952,
+  "label_gap_exit": 6,
+  "label_no_entry_bar": 2
+ },
+ "g3x2/aggressive/short|mixed|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2873,
+  "label_gap_exit": 25,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "g3x2/aggressive/short|mixed|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2645,
+  "label_gap_exit": 93,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "g3x2/aggressive/short|stock|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1473,
+  "label_gap_exit": 6,
+  "label_no_entry_bar": 1
+ },
+ "g3x2/aggressive/short|stock|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1436,
+  "label_gap_exit": 13,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "g3x2/aggressive/short|stock|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1326,
+  "label_gap_exit": 43,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "g3x2/aggressive/short|stock|20|5": {
+  "resolve_ok": 2951,
+  "label_ok": 2942,
+  "label_gap_exit": 7,
+  "label_no_entry_bar": 2
+ },
+ "g3x2/aggressive/short|stock|20|20": {
+  "resolve_ok": 2894,
+  "label_ok": 2861,
+  "label_gap_exit": 28,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "g3x2/aggressive/short|stock|20|63": {
+  "resolve_ok": 2742,
+  "label_ok": 2630,
+  "label_gap_exit": 99,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "g3x2/balanced/long|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1472,
+  "label_gap_exit": 5,
+  "label_no_entry_bar": 3
+ },
+ "g3x2/balanced/long|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1422,
+  "label_gap_exit": 25,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "g3x2/balanced/long|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1300,
+  "label_gap_exit": 67,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "g3x2/balanced/long|mixed|20|5": {
+  "resolve_ok": 2941,
+  "label_ok": 2928,
+  "label_gap_exit": 9,
+  "label_no_entry_bar": 4
+ },
+ "g3x2/balanced/long|mixed|20|20": {
+  "resolve_ok": 2884,
+  "label_ok": 2832,
+  "label_gap_exit": 45,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g3x2/balanced/long|mixed|20|63": {
+  "resolve_ok": 2732,
+  "label_ok": 2585,
+  "label_gap_exit": 132,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g3x2/balanced/long|stock|10|5": {
+  "resolve_ok": 1474,
+  "label_ok": 1466,
+  "label_gap_exit": 5,
+  "label_no_entry_bar": 3
+ },
+ "g3x2/balanced/long|stock|10|20": {
+  "resolve_ok": 1447,
+  "label_ok": 1413,
+  "label_gap_exit": 28,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "g3x2/balanced/long|stock|10|63": {
+  "resolve_ok": 1375,
+  "label_ok": 1286,
+  "label_gap_exit": 75,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "g3x2/balanced/long|stock|20|5": {
+  "resolve_ok": 2922,
+  "label_ok": 2908,
+  "label_gap_exit": 10,
+  "label_no_entry_bar": 4
+ },
+ "g3x2/balanced/long|stock|20|20": {
+  "resolve_ok": 2865,
+  "label_ok": 2810,
+  "label_gap_exit": 48,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g3x2/balanced/long|stock|20|63": {
+  "resolve_ok": 2713,
+  "label_ok": 2556,
+  "label_gap_exit": 142,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g3x2/balanced/mid|mixed|10|5": {
+  "resolve_ok": 1478,
+  "label_ok": 1470,
+  "label_gap_exit": 5,
+  "label_no_entry_bar": 3
+ },
+ "g3x2/balanced/mid|mixed|10|20": {
+  "resolve_ok": 1451,
+  "label_ok": 1421,
+  "label_gap_exit": 24,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "g3x2/balanced/mid|mixed|10|63": {
+  "resolve_ok": 1379,
+  "label_ok": 1300,
+  "label_gap_exit": 65,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "g3x2/balanced/mid|mixed|20|5": {
+  "resolve_ok": 2920,
+  "label_ok": 2907,
+  "label_gap_exit": 8,
+  "label_no_entry_bar": 5
+ },
+ "g3x2/balanced/mid|mixed|20|20": {
+  "resolve_ok": 2863,
+  "label_ok": 2816,
+  "label_gap_exit": 39,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "g3x2/balanced/mid|mixed|20|63": {
+  "resolve_ok": 2711,
+  "label_ok": 2575,
+  "label_gap_exit": 120,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "g3x2/balanced/mid|stock|10|5": {
+  "resolve_ok": 1468,
+  "label_ok": 1460,
+  "label_gap_exit": 5,
+  "label_no_entry_bar": 3
+ },
+ "g3x2/balanced/mid|stock|10|20": {
+  "resolve_ok": 1441,
+  "label_ok": 1410,
+  "label_gap_exit": 25,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "g3x2/balanced/mid|stock|10|63": {
+  "resolve_ok": 1369,
+  "label_ok": 1284,
+  "label_gap_exit": 71,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "g3x2/balanced/mid|stock|20|5": {
+  "resolve_ok": 2902,
+  "label_ok": 2889,
+  "label_gap_exit": 8,
+  "label_no_entry_bar": 5
+ },
+ "g3x2/balanced/mid|stock|20|20": {
+  "resolve_ok": 2845,
+  "label_ok": 2794,
+  "label_gap_exit": 43,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "g3x2/balanced/mid|stock|20|63": {
+  "resolve_ok": 2693,
+  "label_ok": 2553,
+  "label_gap_exit": 124,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "g3x2/balanced/short|mixed|10|5": {
+  "resolve_ok": 1477,
+  "label_ok": 1472,
+  "label_gap_exit": 4,
+  "label_no_entry_bar": 1
+ },
+ "g3x2/balanced/short|mixed|10|20": {
+  "resolve_ok": 1450,
+  "label_ok": 1437,
+  "label_gap_exit": 9,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "g3x2/balanced/short|mixed|10|63": {
+  "resolve_ok": 1378,
+  "label_ok": 1330,
+  "label_gap_exit": 36,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "g3x2/balanced/short|mixed|20|5": {
+  "resolve_ok": 2915,
+  "label_ok": 2906,
+  "label_gap_exit": 6,
+  "label_no_entry_bar": 3
+ },
+ "g3x2/balanced/short|mixed|20|20": {
+  "resolve_ok": 2858,
+  "label_ok": 2833,
+  "label_gap_exit": 19,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "g3x2/balanced/short|mixed|20|63": {
+  "resolve_ok": 2706,
+  "label_ok": 2612,
+  "label_gap_exit": 80,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "g3x2/balanced/short|stock|10|5": {
+  "resolve_ok": 1467,
+  "label_ok": 1462,
+  "label_gap_exit": 4,
+  "label_no_entry_bar": 1
+ },
+ "g3x2/balanced/short|stock|10|20": {
+  "resolve_ok": 1440,
+  "label_ok": 1427,
+  "label_gap_exit": 9,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "g3x2/balanced/short|stock|10|63": {
+  "resolve_ok": 1368,
+  "label_ok": 1319,
+  "label_gap_exit": 37,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "g3x2/balanced/short|stock|20|5": {
+  "resolve_ok": 2894,
+  "label_ok": 2884,
+  "label_gap_exit": 7,
+  "label_no_entry_bar": 3
+ },
+ "g3x2/balanced/short|stock|20|20": {
+  "resolve_ok": 2837,
+  "label_ok": 2808,
+  "label_gap_exit": 23,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "g3x2/balanced/short|stock|20|63": {
+  "resolve_ok": 2685,
+  "label_ok": 2582,
+  "label_gap_exit": 89,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "g4/aggressive/long|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1472,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 4
+ },
+ "g4/aggressive/long|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1420,
+  "label_gap_exit": 26,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g4/aggressive/long|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1301,
+  "label_gap_exit": 65,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g4/aggressive/long|mixed|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2945,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 4
+ },
+ "g4/aggressive/long|mixed|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2842,
+  "label_gap_exit": 54,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g4/aggressive/long|mixed|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2596,
+  "label_gap_exit": 140,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g4/aggressive/long|stock|10|5": {
+  "resolve_ok": 1479,
+  "label_ok": 1470,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 5
+ },
+ "g4/aggressive/long|stock|10|20": {
+  "resolve_ok": 1452,
+  "label_ok": 1414,
+  "label_gap_exit": 31,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g4/aggressive/long|stock|10|63": {
+  "resolve_ok": 1380,
+  "label_ok": 1288,
+  "label_gap_exit": 77,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g4/aggressive/long|stock|20|5": {
+  "resolve_ok": 2949,
+  "label_ok": 2933,
+  "label_gap_exit": 12,
+  "label_no_entry_bar": 4
+ },
+ "g4/aggressive/long|stock|20|20": {
+  "resolve_ok": 2892,
+  "label_ok": 2826,
+  "label_gap_exit": 59,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g4/aggressive/long|stock|20|63": {
+  "resolve_ok": 2740,
+  "label_ok": 2572,
+  "label_gap_exit": 153,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g4/aggressive/mid|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1472,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 4
+ },
+ "g4/aggressive/mid|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1419,
+  "label_gap_exit": 27,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g4/aggressive/mid|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1297,
+  "label_gap_exit": 69,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g4/aggressive/mid|mixed|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2944,
+  "label_gap_exit": 12,
+  "label_no_entry_bar": 4
+ },
+ "g4/aggressive/mid|mixed|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2847,
+  "label_gap_exit": 49,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g4/aggressive/mid|mixed|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2602,
+  "label_gap_exit": 134,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g4/aggressive/mid|stock|10|5": {
+  "resolve_ok": 1479,
+  "label_ok": 1470,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 5
+ },
+ "g4/aggressive/mid|stock|10|20": {
+  "resolve_ok": 1452,
+  "label_ok": 1414,
+  "label_gap_exit": 31,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g4/aggressive/mid|stock|10|63": {
+  "resolve_ok": 1380,
+  "label_ok": 1284,
+  "label_gap_exit": 81,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g4/aggressive/mid|stock|20|5": {
+  "resolve_ok": 2949,
+  "label_ok": 2933,
+  "label_gap_exit": 12,
+  "label_no_entry_bar": 4
+ },
+ "g4/aggressive/mid|stock|20|20": {
+  "resolve_ok": 2892,
+  "label_ok": 2830,
+  "label_gap_exit": 55,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g4/aggressive/mid|stock|20|63": {
+  "resolve_ok": 2740,
+  "label_ok": 2575,
+  "label_gap_exit": 150,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g4/aggressive/short|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1475,
+  "label_gap_exit": 4,
+  "label_no_entry_bar": 1
+ },
+ "g4/aggressive/short|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1433,
+  "label_gap_exit": 16,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "g4/aggressive/short|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1328,
+  "label_gap_exit": 41,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "g4/aggressive/short|mixed|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2951,
+  "label_gap_exit": 6,
+  "label_no_entry_bar": 3
+ },
+ "g4/aggressive/short|mixed|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2866,
+  "label_gap_exit": 31,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "g4/aggressive/short|mixed|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2639,
+  "label_gap_exit": 98,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "g4/aggressive/short|stock|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1474,
+  "label_gap_exit": 5,
+  "label_no_entry_bar": 1
+ },
+ "g4/aggressive/short|stock|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1427,
+  "label_gap_exit": 22,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "g4/aggressive/short|stock|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1317,
+  "label_gap_exit": 52,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "g4/aggressive/short|stock|20|5": {
+  "resolve_ok": 2958,
+  "label_ok": 2946,
+  "label_gap_exit": 8,
+  "label_no_entry_bar": 4
+ },
+ "g4/aggressive/short|stock|20|20": {
+  "resolve_ok": 2901,
+  "label_ok": 2855,
+  "label_gap_exit": 39,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g4/aggressive/short|stock|20|63": {
+  "resolve_ok": 2749,
+  "label_ok": 2616,
+  "label_gap_exit": 118,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g4/balanced/long|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1473,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 3
+ },
+ "g4/balanced/long|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1419,
+  "label_gap_exit": 27,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g4/balanced/long|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1297,
+  "label_gap_exit": 69,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g4/balanced/long|mixed|20|5": {
+  "resolve_ok": 2954,
+  "label_ok": 2939,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 4
+ },
+ "g4/balanced/long|mixed|20|20": {
+  "resolve_ok": 2897,
+  "label_ok": 2838,
+  "label_gap_exit": 52,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g4/balanced/long|mixed|20|63": {
+  "resolve_ok": 2745,
+  "label_ok": 2586,
+  "label_gap_exit": 144,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g4/balanced/long|stock|10|5": {
+  "resolve_ok": 1478,
+  "label_ok": 1468,
+  "label_gap_exit": 6,
+  "label_no_entry_bar": 4
+ },
+ "g4/balanced/long|stock|10|20": {
+  "resolve_ok": 1451,
+  "label_ok": 1411,
+  "label_gap_exit": 33,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g4/balanced/long|stock|10|63": {
+  "resolve_ok": 1379,
+  "label_ok": 1280,
+  "label_gap_exit": 84,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g4/balanced/long|stock|20|5": {
+  "resolve_ok": 2941,
+  "label_ok": 2923,
+  "label_gap_exit": 14,
+  "label_no_entry_bar": 4
+ },
+ "g4/balanced/long|stock|20|20": {
+  "resolve_ok": 2884,
+  "label_ok": 2820,
+  "label_gap_exit": 57,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g4/balanced/long|stock|20|63": {
+  "resolve_ok": 2732,
+  "label_ok": 2558,
+  "label_gap_exit": 159,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g4/balanced/mid|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1473,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 3
+ },
+ "g4/balanced/mid|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1421,
+  "label_gap_exit": 25,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g4/balanced/mid|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1294,
+  "label_gap_exit": 72,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g4/balanced/mid|mixed|20|5": {
+  "resolve_ok": 2949,
+  "label_ok": 2933,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 5
+ },
+ "g4/balanced/mid|mixed|20|20": {
+  "resolve_ok": 2892,
+  "label_ok": 2835,
+  "label_gap_exit": 49,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "g4/balanced/mid|mixed|20|63": {
+  "resolve_ok": 2740,
+  "label_ok": 2590,
+  "label_gap_exit": 134,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "g4/balanced/mid|stock|10|5": {
+  "resolve_ok": 1477,
+  "label_ok": 1465,
+  "label_gap_exit": 8,
+  "label_no_entry_bar": 4
+ },
+ "g4/balanced/mid|stock|10|20": {
+  "resolve_ok": 1450,
+  "label_ok": 1410,
+  "label_gap_exit": 33,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g4/balanced/mid|stock|10|63": {
+  "resolve_ok": 1378,
+  "label_ok": 1276,
+  "label_gap_exit": 87,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g4/balanced/mid|stock|20|5": {
+  "resolve_ok": 2928,
+  "label_ok": 2910,
+  "label_gap_exit": 13,
+  "label_no_entry_bar": 5
+ },
+ "g4/balanced/mid|stock|20|20": {
+  "resolve_ok": 2871,
+  "label_ok": 2808,
+  "label_gap_exit": 55,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "g4/balanced/mid|stock|20|63": {
+  "resolve_ok": 2719,
+  "label_ok": 2552,
+  "label_gap_exit": 151,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "g4/balanced/short|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1474,
+  "label_gap_exit": 4,
+  "label_no_entry_bar": 2
+ },
+ "g4/balanced/short|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1432,
+  "label_gap_exit": 16,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "g4/balanced/short|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1324,
+  "label_gap_exit": 44,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "g4/balanced/short|mixed|20|5": {
+  "resolve_ok": 2955,
+  "label_ok": 2946,
+  "label_gap_exit": 5,
+  "label_no_entry_bar": 4
+ },
+ "g4/balanced/short|mixed|20|20": {
+  "resolve_ok": 2898,
+  "label_ok": 2860,
+  "label_gap_exit": 31,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g4/balanced/short|mixed|20|63": {
+  "resolve_ok": 2746,
+  "label_ok": 2631,
+  "label_gap_exit": 100,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "g4/balanced/short|stock|10|5": {
+  "resolve_ok": 1477,
+  "label_ok": 1470,
+  "label_gap_exit": 5,
+  "label_no_entry_bar": 2
+ },
+ "g4/balanced/short|stock|10|20": {
+  "resolve_ok": 1450,
+  "label_ok": 1425,
+  "label_gap_exit": 20,
+  "label_no_entry_bar": 2,
+  "label_no_label": 3
+ },
+ "g4/balanced/short|stock|10|63": {
+  "resolve_ok": 1378,
+  "label_ok": 1312,
+  "label_gap_exit": 53,
+  "label_no_entry_bar": 2,
+  "label_no_label": 11
+ },
+ "g4/balanced/short|stock|20|5": {
+  "resolve_ok": 2941,
+  "label_ok": 2931,
+  "label_gap_exit": 6,
+  "label_no_entry_bar": 4
+ },
+ "g4/balanced/short|stock|20|20": {
+  "resolve_ok": 2884,
+  "label_ok": 2840,
+  "label_gap_exit": 37,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "g4/balanced/short|stock|20|63": {
+  "resolve_ok": 2732,
+  "label_ok": 2601,
+  "label_gap_exit": 116,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "nofund/aggressive/long|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1468,
+  "label_gap_exit": 9,
+  "label_no_entry_bar": 3
+ },
+ "nofund/aggressive/long|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1419,
+  "label_gap_exit": 28,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "nofund/aggressive/long|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1291,
+  "label_gap_exit": 76,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "nofund/aggressive/long|mixed|20|5": {
+  "resolve_ok": 2951,
+  "label_ok": 2933,
+  "label_no_entry_bar": 5,
+  "label_gap_exit": 13
+ },
+ "nofund/aggressive/long|mixed|20|20": {
+  "resolve_ok": 2894,
+  "label_ok": 2825,
+  "label_gap_exit": 61,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "nofund/aggressive/long|mixed|20|63": {
+  "resolve_ok": 2742,
+  "label_ok": 2580,
+  "label_gap_exit": 146,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "nofund/aggressive/long|stock|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1468,
+  "label_gap_exit": 9,
+  "label_no_entry_bar": 3
+ },
+ "nofund/aggressive/long|stock|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1418,
+  "label_gap_exit": 29,
+  "label_no_entry_bar": 3,
+  "label_no_label": 3
+ },
+ "nofund/aggressive/long|stock|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1287,
+  "label_gap_exit": 80,
+  "label_no_entry_bar": 3,
+  "label_no_label": 11
+ },
+ "nofund/aggressive/long|stock|20|5": {
+  "resolve_ok": 2951,
+  "label_ok": 2932,
+  "label_no_entry_bar": 5,
+  "label_gap_exit": 14
+ },
+ "nofund/aggressive/long|stock|20|20": {
+  "resolve_ok": 2894,
+  "label_ok": 2822,
+  "label_gap_exit": 64,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "nofund/aggressive/long|stock|20|63": {
+  "resolve_ok": 2742,
+  "label_ok": 2575,
+  "label_gap_exit": 151,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "nofund/aggressive/mid|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1468,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 8
+ },
+ "nofund/aggressive/mid|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1416,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 30,
+  "label_no_label": 3
+ },
+ "nofund/aggressive/mid|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1287,
+  "label_gap_exit": 79,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "nofund/aggressive/mid|mixed|20|5": {
+  "resolve_ok": 2952,
+  "label_ok": 2933,
+  "label_gap_exit": 14,
+  "label_no_entry_bar": 5
+ },
+ "nofund/aggressive/mid|mixed|20|20": {
+  "resolve_ok": 2895,
+  "label_ok": 2833,
+  "label_gap_exit": 54,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "nofund/aggressive/mid|mixed|20|63": {
+  "resolve_ok": 2743,
+  "label_ok": 2586,
+  "label_gap_exit": 141,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "nofund/aggressive/mid|stock|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1467,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 9
+ },
+ "nofund/aggressive/mid|stock|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1416,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 30,
+  "label_no_label": 3
+ },
+ "nofund/aggressive/mid|stock|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1286,
+  "label_gap_exit": 80,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "nofund/aggressive/mid|stock|20|5": {
+  "resolve_ok": 2952,
+  "label_ok": 2933,
+  "label_gap_exit": 14,
+  "label_no_entry_bar": 5
+ },
+ "nofund/aggressive/mid|stock|20|20": {
+  "resolve_ok": 2895,
+  "label_ok": 2833,
+  "label_gap_exit": 54,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "nofund/aggressive/mid|stock|20|63": {
+  "resolve_ok": 2743,
+  "label_ok": 2582,
+  "label_gap_exit": 145,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "nofund/aggressive/short|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1473,
+  "label_gap_exit": 7
+ },
+ "nofund/aggressive/short|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1423,
+  "label_gap_exit": 27,
+  "label_no_label": 3
+ },
+ "nofund/aggressive/short|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1301,
+  "label_gap_exit": 69,
+  "label_no_label": 11
+ },
+ "nofund/aggressive/short|mixed|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2945,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 4
+ },
+ "nofund/aggressive/short|mixed|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2848,
+  "label_gap_exit": 48,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "nofund/aggressive/short|mixed|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2602,
+  "label_gap_exit": 134,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "nofund/aggressive/short|stock|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1472,
+  "label_gap_exit": 7,
+  "label_no_entry_bar": 1
+ },
+ "nofund/aggressive/short|stock|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1422,
+  "label_gap_exit": 27,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "nofund/aggressive/short|stock|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1298,
+  "label_gap_exit": 71,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "nofund/aggressive/short|stock|20|5": {
+  "resolve_ok": 2960,
+  "label_ok": 2945,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 4
+ },
+ "nofund/aggressive/short|stock|20|20": {
+  "resolve_ok": 2903,
+  "label_ok": 2845,
+  "label_gap_exit": 51,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "nofund/aggressive/short|stock|20|63": {
+  "resolve_ok": 2751,
+  "label_ok": 2600,
+  "label_gap_exit": 136,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "nofund/balanced/long|mixed|10|5": {
+  "resolve_ok": 1479,
+  "label_ok": 1465,
+  "label_no_entry_bar": 5,
+  "label_gap_exit": 9
+ },
+ "nofund/balanced/long|mixed|10|20": {
+  "resolve_ok": 1452,
+  "label_ok": 1411,
+  "label_gap_exit": 33,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "nofund/balanced/long|mixed|10|63": {
+  "resolve_ok": 1380,
+  "label_ok": 1281,
+  "label_gap_exit": 83,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "nofund/balanced/long|mixed|20|5": {
+  "resolve_ok": 2949,
+  "label_ok": 2930,
+  "label_gap_exit": 14,
+  "label_no_entry_bar": 5
+ },
+ "nofund/balanced/long|mixed|20|20": {
+  "resolve_ok": 2892,
+  "label_ok": 2818,
+  "label_gap_exit": 66,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "nofund/balanced/long|mixed|20|63": {
+  "resolve_ok": 2740,
+  "label_ok": 2572,
+  "label_gap_exit": 152,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "nofund/balanced/long|stock|10|5": {
+  "resolve_ok": 1479,
+  "label_ok": 1464,
+  "label_no_entry_bar": 5,
+  "label_gap_exit": 10
+ },
+ "nofund/balanced/long|stock|10|20": {
+  "resolve_ok": 1452,
+  "label_ok": 1411,
+  "label_gap_exit": 33,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "nofund/balanced/long|stock|10|63": {
+  "resolve_ok": 1380,
+  "label_ok": 1279,
+  "label_gap_exit": 85,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "nofund/balanced/long|stock|20|5": {
+  "resolve_ok": 2949,
+  "label_ok": 2929,
+  "label_gap_exit": 15,
+  "label_no_entry_bar": 5
+ },
+ "nofund/balanced/long|stock|20|20": {
+  "resolve_ok": 2892,
+  "label_ok": 2816,
+  "label_gap_exit": 68,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "nofund/balanced/long|stock|20|63": {
+  "resolve_ok": 2740,
+  "label_ok": 2570,
+  "label_gap_exit": 154,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "nofund/balanced/mid|mixed|10|5": {
+  "resolve_ok": 1479,
+  "label_ok": 1467,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 8
+ },
+ "nofund/balanced/mid|mixed|10|20": {
+  "resolve_ok": 1452,
+  "label_ok": 1415,
+  "label_gap_exit": 30,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "nofund/balanced/mid|mixed|10|63": {
+  "resolve_ok": 1380,
+  "label_ok": 1281,
+  "label_gap_exit": 84,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "nofund/balanced/mid|mixed|20|5": {
+  "resolve_ok": 2949,
+  "label_ok": 2928,
+  "label_gap_exit": 15,
+  "label_no_entry_bar": 6
+ },
+ "nofund/balanced/mid|mixed|20|20": {
+  "resolve_ok": 2892,
+  "label_ok": 2821,
+  "label_gap_exit": 62,
+  "label_no_entry_bar": 6,
+  "label_no_label": 3
+ },
+ "nofund/balanced/mid|mixed|20|63": {
+  "resolve_ok": 2740,
+  "label_ok": 2570,
+  "label_gap_exit": 153,
+  "label_no_entry_bar": 6,
+  "label_no_label": 11
+ },
+ "nofund/balanced/mid|stock|10|5": {
+  "resolve_ok": 1479,
+  "label_ok": 1466,
+  "label_no_entry_bar": 4,
+  "label_gap_exit": 9
+ },
+ "nofund/balanced/mid|stock|10|20": {
+  "resolve_ok": 1452,
+  "label_ok": 1415,
+  "label_gap_exit": 30,
+  "label_no_entry_bar": 4,
+  "label_no_label": 3
+ },
+ "nofund/balanced/mid|stock|10|63": {
+  "resolve_ok": 1380,
+  "label_ok": 1279,
+  "label_gap_exit": 86,
+  "label_no_entry_bar": 4,
+  "label_no_label": 11
+ },
+ "nofund/balanced/mid|stock|20|5": {
+  "resolve_ok": 2949,
+  "label_ok": 2928,
+  "label_gap_exit": 15,
+  "label_no_entry_bar": 6
+ },
+ "nofund/balanced/mid|stock|20|20": {
+  "resolve_ok": 2892,
+  "label_ok": 2821,
+  "label_gap_exit": 62,
+  "label_no_entry_bar": 6,
+  "label_no_label": 3
+ },
+ "nofund/balanced/mid|stock|20|63": {
+  "resolve_ok": 2740,
+  "label_ok": 2567,
+  "label_gap_exit": 156,
+  "label_no_entry_bar": 6,
+  "label_no_label": 11
+ },
+ "nofund/balanced/short|mixed|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1472,
+  "label_no_entry_bar": 1,
+  "label_gap_exit": 7
+ },
+ "nofund/balanced/short|mixed|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1422,
+  "label_gap_exit": 27,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "nofund/balanced/short|mixed|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1298,
+  "label_gap_exit": 71,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "nofund/balanced/short|mixed|20|5": {
+  "resolve_ok": 2953,
+  "label_ok": 2937,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 5
+ },
+ "nofund/balanced/short|mixed|20|20": {
+  "resolve_ok": 2896,
+  "label_ok": 2839,
+  "label_gap_exit": 49,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "nofund/balanced/short|mixed|20|63": {
+  "resolve_ok": 2744,
+  "label_ok": 2594,
+  "label_gap_exit": 134,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "nofund/balanced/short|stock|10|5": {
+  "resolve_ok": 1480,
+  "label_ok": 1472,
+  "label_no_entry_bar": 1,
+  "label_gap_exit": 7
+ },
+ "nofund/balanced/short|stock|10|20": {
+  "resolve_ok": 1453,
+  "label_ok": 1422,
+  "label_gap_exit": 27,
+  "label_no_entry_bar": 1,
+  "label_no_label": 3
+ },
+ "nofund/balanced/short|stock|10|63": {
+  "resolve_ok": 1381,
+  "label_ok": 1295,
+  "label_gap_exit": 74,
+  "label_no_entry_bar": 1,
+  "label_no_label": 11
+ },
+ "nofund/balanced/short|stock|20|5": {
+  "resolve_ok": 2953,
+  "label_ok": 2937,
+  "label_gap_exit": 11,
+  "label_no_entry_bar": 5
+ },
+ "nofund/balanced/short|stock|20|20": {
+  "resolve_ok": 2896,
+  "label_ok": 2837,
+  "label_gap_exit": 51,
+  "label_no_entry_bar": 5,
+  "label_no_label": 3
+ },
+ "nofund/balanced/short|stock|20|63": {
+  "resolve_ok": 2744,
+  "label_ok": 2591,
+  "label_gap_exit": 137,
+  "label_no_entry_bar": 5,
+  "label_no_label": 11
+ },
+ "nofund/conservative/long|mixed|10|5": {
+  "resolve_ok": 1469,
+  "label_ok": 1466,
+  "label_gap_exit": 3
+ },
+ "nofund/conservative/long|mixed|10|20": {
+  "resolve_ok": 1442,
+  "label_ok": 1424,
+  "label_gap_exit": 15,
+  "label_no_label": 3
+ },
+ "nofund/conservative/long|mixed|10|63": {
+  "resolve_ok": 1370,
+  "label_ok": 1326,
+  "label_gap_exit": 33,
+  "label_no_label": 11
+ },
+ "nofund/conservative/long|mixed|20|5": {
+  "resolve_ok": 2871,
+  "label_ok": 2866,
+  "label_gap_exit": 5
+ },
+ "nofund/conservative/long|mixed|20|20": {
+  "resolve_ok": 2814,
+  "label_ok": 2778,
+  "label_gap_exit": 33,
+  "label_no_label": 3
+ },
+ "nofund/conservative/long|mixed|20|63": {
+  "resolve_ok": 2662,
+  "label_ok": 2578,
+  "label_gap_exit": 73,
+  "label_no_label": 11
+ },
+ "nofund/conservative/long|stock|10|5": {
+  "resolve_ok": 1469,
+  "label_ok": 1466,
+  "label_gap_exit": 3
+ },
+ "nofund/conservative/long|stock|10|20": {
+  "resolve_ok": 1442,
+  "label_ok": 1424,
+  "label_gap_exit": 15,
+  "label_no_label": 3
+ },
+ "nofund/conservative/long|stock|10|63": {
+  "resolve_ok": 1370,
+  "label_ok": 1325,
+  "label_gap_exit": 34,
+  "label_no_label": 11
+ },
+ "nofund/conservative/long|stock|20|5": {
+  "resolve_ok": 2871,
+  "label_ok": 2866,
+  "label_gap_exit": 5
+ },
+ "nofund/conservative/long|stock|20|20": {
+  "resolve_ok": 2814,
+  "label_ok": 2778,
+  "label_gap_exit": 33,
+  "label_no_label": 3
+ },
+ "nofund/conservative/long|stock|20|63": {
+  "resolve_ok": 2662,
+  "label_ok": 2578,
+  "label_gap_exit": 73,
+  "label_no_label": 11
+ },
+ "nofund/conservative/mid|mixed|10|5": {
+  "resolve_ok": 1466,
+  "label_ok": 1463,
+  "label_gap_exit": 3
+ },
+ "nofund/conservative/mid|mixed|10|20": {
+  "resolve_ok": 1439,
+  "label_ok": 1420,
+  "label_gap_exit": 16,
+  "label_no_label": 3
+ },
+ "nofund/conservative/mid|mixed|10|63": {
+  "resolve_ok": 1367,
+  "label_ok": 1323,
+  "label_gap_exit": 33,
+  "label_no_label": 11
+ },
+ "nofund/conservative/mid|mixed|20|5": {
+  "resolve_ok": 2816,
+  "label_ok": 2811,
+  "label_gap_exit": 5
+ },
+ "nofund/conservative/mid|mixed|20|20": {
+  "resolve_ok": 2759,
+  "label_ok": 2727,
+  "label_gap_exit": 29,
+  "label_no_label": 3
+ },
+ "nofund/conservative/mid|mixed|20|63": {
+  "resolve_ok": 2607,
+  "label_ok": 2528,
+  "label_gap_exit": 68,
+  "label_no_label": 11
+ },
+ "nofund/conservative/mid|stock|10|5": {
+  "resolve_ok": 1466,
+  "label_ok": 1463,
+  "label_gap_exit": 3
+ },
+ "nofund/conservative/mid|stock|10|20": {
+  "resolve_ok": 1439,
+  "label_ok": 1420,
+  "label_gap_exit": 16,
+  "label_no_label": 3
+ },
+ "nofund/conservative/mid|stock|10|63": {
+  "resolve_ok": 1367,
+  "label_ok": 1323,
+  "label_gap_exit": 33,
+  "label_no_label": 11
+ },
+ "nofund/conservative/mid|stock|20|5": {
+  "resolve_ok": 2815,
+  "label_ok": 2810,
+  "label_gap_exit": 5
+ },
+ "nofund/conservative/mid|stock|20|20": {
+  "resolve_ok": 2758,
+  "label_ok": 2726,
+  "label_gap_exit": 29,
+  "label_no_label": 3
+ },
+ "nofund/conservative/mid|stock|20|63": {
+  "resolve_ok": 2606,
+  "label_ok": 2527,
+  "label_gap_exit": 68,
+  "label_no_label": 11
+ },
+ "nofund/conservative/short|mixed|10|5": {
+  "resolve_ok": 1449,
+  "label_ok": 1446,
+  "label_gap_exit": 3
+ },
+ "nofund/conservative/short|mixed|10|20": {
+  "resolve_ok": 1422,
+  "label_ok": 1404,
+  "label_gap_exit": 15,
+  "label_no_label": 3
+ },
+ "nofund/conservative/short|mixed|10|63": {
+  "resolve_ok": 1350,
+  "label_ok": 1309,
+  "label_gap_exit": 30,
+  "label_no_label": 11
+ },
+ "nofund/conservative/short|mixed|20|5": {
+  "resolve_ok": 2691,
+  "label_ok": 2687,
+  "label_gap_exit": 4
+ },
+ "nofund/conservative/short|mixed|20|20": {
+  "resolve_ok": 2634,
+  "label_ok": 2607,
+  "label_gap_exit": 24,
+  "label_no_label": 3
+ },
+ "nofund/conservative/short|mixed|20|63": {
+  "resolve_ok": 2482,
+  "label_ok": 2414,
+  "label_gap_exit": 57,
+  "label_no_label": 11
+ },
+ "nofund/conservative/short|stock|10|5": {
+  "resolve_ok": 1449,
+  "label_ok": 1446,
+  "label_gap_exit": 3
+ },
+ "nofund/conservative/short|stock|10|20": {
+  "resolve_ok": 1422,
+  "label_ok": 1404,
+  "label_gap_exit": 15,
+  "label_no_label": 3
+ },
+ "nofund/conservative/short|stock|10|63": {
+  "resolve_ok": 1350,
+  "label_ok": 1309,
+  "label_gap_exit": 30,
+  "label_no_label": 11
+ },
+ "nofund/conservative/short|stock|20|5": {
+  "resolve_ok": 2691,
+  "label_ok": 2687,
+  "label_gap_exit": 4
+ },
+ "nofund/conservative/short|stock|20|20": {
+  "resolve_ok": 2634,
+  "label_ok": 2606,
+  "label_gap_exit": 25,
+  "label_no_label": 3
+ },
+ "nofund/conservative/short|stock|20|63": {
+  "resolve_ok": 2482,
+  "label_ok": 2413,
+  "label_gap_exit": 58,
+  "label_no_label": 11
+ }
+}
