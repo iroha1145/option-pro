@@ -283,17 +283,18 @@ def main() -> None:
                                              (cand["h63_P2"] or 0) - (ref["h63_P2"] or 0)), 3),
         }
 
-    verdicts: dict = {"variant_vs_v15_mixed": {}, "stock_vs_mixed": {}}
-    print("\npre-registered decision checks, variant vs v15 on the mixed list (balanced, aggressive):")
-    for variant in variants:
-        if variant == "v15":
-            continue
-        for profile in ("balanced", "aggressive"):
-            cand, ref = lookup("mixed", profile, variant), lookup("mixed", profile, "v15")
-            if cand and ref:
-                verdict = decide(cand, ref)
-                verdicts["variant_vs_v15_mixed"][f"{variant}/{profile}"] = verdict
-                print(f"  {variant} {profile}: {verdict}")
+    verdicts: dict = {"variant_vs_v15_mixed": {}, "variant_vs_v15_stock": {}, "stock_vs_mixed": {}}
+    for list_type in ("mixed", "stock"):
+        print(f"\npre-registered decision checks, variant vs v15 on the {list_type} list (balanced, aggressive):")
+        for variant in variants:
+            if variant == "v15":
+                continue
+            for profile in ("balanced", "aggressive"):
+                cand, ref = lookup(list_type, profile, variant), lookup(list_type, profile, "v15")
+                if cand and ref:
+                    verdict = decide(cand, ref)
+                    verdicts[f"variant_vs_v15_{list_type}"][f"{variant}/{profile}"] = verdict
+                    print(f"  {variant} {profile}: {verdict}")
     print("\nstock-only top 20 vs the mixed list of the same variant:")
     for variant in variants:
         for profile in ("conservative", "balanced", "aggressive"):
