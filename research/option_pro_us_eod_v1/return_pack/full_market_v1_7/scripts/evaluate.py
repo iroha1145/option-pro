@@ -13,9 +13,11 @@ fills empty top-20 slots with SPY (excess 0). See PREREGISTRATION.md for v1.7:
 * pre-registered robustness pairs (``g3``/``g4``, ``full3``/``full4``) are checked;
 * one diagnostic per list: the share of top-20 stock rows without a SIC class (they
   receive the neutral G on the industry track);
-* ``identity.json`` counts, per view, the dates on which a variant's stock rows equal
-  the baseline's (ticker and sort_score at nine decimals) - the acceptance test of
-  the fund-scope candidate ``nofund``.
+* ``identity.json`` counts, per view, the dates on which a variant's kept stock rows
+  equal the baseline's on their common prefix (ticker and sort_score at nine decimals;
+  the variant may keep more stock rows because funds no longer take slots of the
+  KEEP_ROWS-limited mixed list) - the acceptance test of the fund-scope candidate
+  ``nofund``. Differences in ``n``, which counts fund rows, are reported separately.
 
     python evaluate.py --db replay.sqlite --replay /content/replay/v17_stage1 --out results/stage1
 """
@@ -236,7 +238,14 @@ def load_records(folders: list[Path], *, dates_from: str | None = None) -> tuple
 
 
 def stock_identity(records: list[dict], baseline: str, variant: str) -> dict:
-    """Per view: dates compared and dates on which the variant's stock rows equal the baseline's."""
+    """Per view: dates compared and dates on which the variant's stock rows equal the baseline's.
+
+    The replay keeps the first KEEP_ROWS rows of the mixed list, so a variant that
+    scores fewer funds keeps more stock rows than the baseline: the comparison is on
+    the common prefix of the kept stock rows (ticker and sort_score at nine decimals),
+    and the variant may only have extra rows, never fewer. ``n`` counts fund rows as
+    well; its differences are reported separately and do not count against identity.
+    """
     out: dict = {}
     for record in records:
         for key, block in record["lists"].items():
@@ -249,12 +258,21 @@ def stock_identity(records: list[dict], baseline: str, variant: str) -> dict:
             def stock_rows(rows):
                 return [(row["ticker"], round(float(row["sort_score"]), 9)) for row in rows
                         if row.get("stock_or_etf_track") == "stock"]
-            item = out.setdefault(f"{profile}/{view}", {"dates": 0, "identical": 0, "differing_dates": []})
+            item = out.setdefault(f"{profile}/{view}", {
+                "dates": 0, "identical": 0, "differing_dates": [],
+                "compared_rows": 0, "extra_variant_rows": 0, "n_differing_dates": 0,
+            })
             item["dates"] += 1
-            if stock_rows(block["rows"]) == stock_rows(reference["rows"]):
+            candidate, base = stock_rows(block["rows"]), stock_rows(reference["rows"])
+            prefix = min(len(candidate), len(base))
+            item["compared_rows"] += prefix
+            if candidate[:prefix] == base[:prefix] and len(candidate) >= len(base):
                 item["identical"] += 1
+                item["extra_variant_rows"] += len(candidate) - len(base)
             else:
                 item["differing_dates"].append(record["session"])
+            if block.get("n") != reference.get("n"):
+                item["n_differing_dates"] += 1
     return out
 
 
@@ -397,7 +415,9 @@ def main() -> None:
             json.dump(identity, handle, indent=1)
         for variant, views in identity.items():
             for view, item in sorted(views.items()):
-                print(f"  identity {variant} {view}: {item['identical']}/{item['dates']} dates identical")
+                print(f"  identity {variant} {view}: {item['identical']}/{item['dates']} dates identical on the "
+                      f"common prefix, {item['extra_variant_rows']} extra kept stock rows, n differs on "
+                      f"{item['n_differing_dates']} dates")
     print("DONE evaluate")
 
 

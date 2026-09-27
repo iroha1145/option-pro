@@ -76,7 +76,8 @@ def replay_setup(tmp_path_factory):
     table_path = root / "ticker_sic.json.gz"
     with gzip.open(table_path, "wt") as handle:
         json.dump(sic_table(STOCKS), handle)  # the frozen research table is a bare list
-    variants = ["v16", "g3", "g3x2", "g4", "full3", "full4", "cons17", "nofund", "d12m1", "g3+cons17+d12m1"]
+    variants = ["v16", "g3", "g3x2", "g4", "full3", "full4", "cons17", "nofund", "d12m1", "g3+cons17+d12m1",
+                "cons17+nofund", "live"]
     replay._state.clear()
     replay.init_worker(str(db), str(directory_dir), "pit", str(table_path), variants)
     out = root / "out"
@@ -89,6 +90,8 @@ def replay_setup(tmp_path_factory):
 
 def test_compose_merges_switches_and_unites_profiles():
     assert replay.compose("v16") == {"profiles": replay.ALL_PROFILES}
+    assert replay.compose("cons17+nofund") == {"conservative": 2.0, "fund_scope": "benchmarks",
+                                               "profiles": replay.ALL_PROFILES}
     combo = replay.compose("g3+cons17+d12m1")
     assert combo["industry"] == "g_only" and combo["sic_level"] == 3 and combo["conservative"] == 2.0
     assert combo["residual"] == (251, 21) and combo["profiles"] == replay.ALL_PROFILES
@@ -101,6 +104,25 @@ def test_compose_merges_switches_and_unites_profiles():
     assert replay.input_key(replay.compose("full3")) == ("full", 3, "all")
     assert replay.input_key(replay.compose("full4")) != replay.input_key(replay.compose("full3"))
     assert replay.input_key(replay.compose("nofund")) == (None, None, "benchmarks")
+
+
+def test_live_variant_reads_the_production_config_and_cannot_be_composed():
+    from app.services.eod_limited.live_config import LIVE_CONFIG
+
+    spec = replay.compose("live")
+    assert spec["live"] is True and spec["profiles"] == replay.ALL_PROFILES
+    assert spec.get("conservative") == LIVE_CONFIG.conservative_atr_multiplier
+    assert spec.get("fund_scope") == LIVE_CONFIG.fund_scope == "benchmarks"
+    assert "industry" not in spec
+    # S1 as adopted: the live inputs are the cons17+nofund inputs.
+    assert replay.input_key(spec) == replay.input_key(replay.compose("cons17+nofund"))
+    assert replay.registry_for(spec) == replay.registry_for(replay.compose("cons17+nofund"))
+    options = replay.options_for("live", spec, {3: {}, 4: {}})
+    assert options.tuning.version == "full-market-v1.7-cons-atr2" and options.industry_mode == "off"
+    assert options.label == LIVE_CONFIG.label()
+    for name in ("live+g3", "cons17+live"):
+        with pytest.raises(ValueError, match="cannot be composed"):
+            replay.compose(name)
 
 
 def test_registry_and_options_follow_the_variant_spec():
@@ -146,6 +168,25 @@ def test_replay_date_scores_every_variant_on_shared_inputs(replay_setup):
     assert {key for key in timing if key.startswith("precomputed")} == {
         "precomputed:base::all", "precomputed:full:3:all", "precomputed:full:4:all", "precomputed:base::benchmarks"}
     assert all(f"scored_{name}" in timing for name in replay_setup["variants"])
+    assert record["variant_options"]["live"]["label"] == record["variant_options"]["cons17+nofund"]["label"].replace(
+        "cons17+nofund", record["variant_options"]["live"]["label"])  # labels differ, nothing else below does
+
+
+def _rows(record, key):
+    return [(row["ticker"], round(row["sort_score"], 9), row["stock_or_etf_track"]) for row in record["lists"][key]["rows"]]
+
+
+def test_live_lists_equal_the_evaluated_s1_candidate_on_every_view(replay_setup):
+    record = replay_setup["record"]
+    for profile in replay.ALL_PROFILES:
+        for view in ("short", "mid", "long"):
+            assert _rows(record, f"live/{profile}/{view}") == _rows(record, f"cons17+nofund/{profile}/{view}")
+            assert record["lists"][f"live/{profile}/{view}"]["n"] == record["lists"][f"cons17+nofund/{profile}/{view}"]["n"]
+    # S1 keeps the balanced and aggressive stock rows of v1.6 and changes the conservative ones.
+    for profile in ("balanced", "aggressive"):
+        assert _stock_rows(record, f"live/{profile}/mid") == _stock_rows(record, f"v16/{profile}/mid")
+    assert _stock_rows(record, "live/conservative/mid") == _stock_rows(record, "cons17/conservative/mid")
+    assert _stock_rows(record, "live/conservative/mid") != _stock_rows(record, "v16/conservative/mid")
 
 
 def _stock_rows(record, key):
@@ -224,6 +265,7 @@ def test_evaluate_and_paired_produce_v17_tables(replay_setup, monkeypatch, tmp_p
     identity = json.loads((out / "identity.json").read_text())
     assert set(identity) == {"nofund"} and len(identity["nofund"]) == 9
     assert all(item["identical"] == item["dates"] == 1 for item in identity["nofund"].values())
+    assert all({"compared_rows", "extra_variant_rows", "n_differing_dates"} <= set(item) for item in identity["nofund"].values())
     monkeypatch.setattr(sys, "argv", ["paired.py", "--db", str(replay_setup["db"]), "--replay",
                                       str(replay_setup["out"]), "--out", str(out)])
     paired.main()
@@ -290,4 +332,26 @@ def test_replay_main_runs_a_spawned_pool_and_resumes(replay_setup):
     with pytest.raises(subprocess.CalledProcessError):
         subprocess.run(command[:-4] + ["--variants", "g3", "--workers", "1"], capture_output=True, check=True,
                        env=env)
+
+
+def test_stock_identity_compares_the_common_prefix_and_reports_fund_counts_apart():
+    def row(ticker, score, track="stock"):
+        return {"ticker": ticker, "sort_score": score, "stock_or_etf_track": track}
+
+    base = [row("AAA", 90.0), row("FUND", 85.0, "etf"), row("BBB", 80.0), row("CCC", 70.0)]
+    # The variant scores no funds, keeps one more stock row and reports a smaller n.
+    more = [row("AAA", 90.0), row("BBB", 80.0), row("CCC", 70.0), row("DDD", 60.0)]
+    records = [{"session": "2026-09-14", "lists": {"v16/balanced/mid": {"n": 40, "rows": base},
+                                                    "nofund/balanced/mid": {"n": 31, "rows": more}}},
+               {"session": "2026-09-21", "lists": {"v16/balanced/mid": {"n": 40, "rows": base},
+                                                    "nofund/balanced/mid": {"n": 40, "rows": [row("AAA", 90.0), row("BBB", 79.0)]}}},
+               {"session": "2026-09-28", "lists": {"v16/balanced/mid": {"n": 40, "rows": base},
+                                                    "nofund/balanced/mid": {"n": 40, "rows": [row("AAA", 90.0), row("BBB", 80.0)]}}}]
+    out = evaluate.stock_identity(records, "v16", "nofund")
+    item = out["balanced/mid"]
+    assert item["dates"] == 3 and item["identical"] == 1
+    assert item["differing_dates"] == ["2026-09-21", "2026-09-28"]  # a changed score; fewer stock rows
+    assert item["extra_variant_rows"] == 1 and item["compared_rows"] == 3 + 2 + 2
+    assert item["n_differing_dates"] == 1
+    assert set(item) == {"dates", "identical", "differing_dates", "compared_rows", "extra_variant_rows", "n_differing_dates"}
 

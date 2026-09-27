@@ -14,7 +14,9 @@ Candidates are the production switches, not re-implementations (see PREREGISTRAT
 * ``conservative`` - ``conservative_v17_policy`` plus the conservative registry tilt of ``live_config``;
 * ``fund_scope`` - ``select_all_market_universe(fund_scope="benchmarks")``;
 * ``residual`` - the family-D residual window swap of v1.6 stage 2 (506-session panel), which
-  now honours the industry tags of the variant it is combined with.
+  now honours the industry tags of the variant it is combined with;
+* ``live`` - production as configured in ``live_config.LIVE_CONFIG`` (registry tilts and
+  scoring options come from that object); cannot be composed with other parts.
 
 Variants are composed with ``+`` (``g3+cons17``, ``full3+d12m1``): specs merge, profiles unite.
 Precomputed inputs are shared by every variant with the same panel and industry tagging, and
@@ -66,13 +68,37 @@ VARIANTS: dict[str, dict] = {
     "cons17": {"conservative": 2.0, "profiles": ("conservative",)},
     "nofund": {"fund_scope": "benchmarks", "profiles": ALL_PROFILES},
     "d12m1": {"residual": (251, 21), "profiles": TILTED_PROFILES},
+    # Production as configured in live_config.LIVE_CONFIG: registry tilts and scoring
+    # options come from that object, so the adopted set can be replayed and compared
+    # with the explicit candidate it was evaluated as (compare_records --map).
+    "live": {"live": True, "profiles": ALL_PROFILES},
 }
 
 _state: dict = {}
 
 
+def live_spec() -> dict:
+    """The switches ``LIVE_CONFIG`` implies, in the shape of a base spec (for input sharing)."""
+    from app.services.eod_limited.live_config import CONSERVATIVE_V17, LIVE_CONFIG
+
+    spec: dict = {"live": True, "profiles": ALL_PROFILES}
+    if LIVE_CONFIG.wants_industry:
+        spec.update(industry=LIVE_CONFIG.industry_mode, sic_level=LIVE_CONFIG.sic_level)
+    if LIVE_CONFIG.g_tilt is not None:
+        spec["tilt"] = {"G": LIVE_CONFIG.g_tilt}
+    if LIVE_CONFIG.conservative_policy == CONSERVATIVE_V17:
+        spec["conservative"] = LIVE_CONFIG.conservative_atr_multiplier
+    if LIVE_CONFIG.fund_scope != "all":
+        spec["fund_scope"] = LIVE_CONFIG.fund_scope
+    return spec
+
+
 def compose(name: str) -> dict:
     """Merge ``a+b+c`` base specs; a switch may be set by one part only."""
+    if name == "live":
+        return live_spec()
+    if "live" in name.split("+"):
+        raise ValueError("live is production as configured and cannot be composed with other parts")
     spec: dict = {"profiles": ()}
     for part in name.split("+"):
         if part not in VARIANTS:
@@ -96,9 +122,11 @@ def input_key(spec: dict) -> tuple:
 
 
 def registry_for(spec: dict) -> dict:
-    from app.services.eod_limited.live_config import CONSERVATIVE_V17_TILT_MULTIPLIERS
+    from app.services.eod_limited.live_config import CONSERVATIVE_V17_TILT_MULTIPLIERS, LIVE_CONFIG
     from app.services.eod_limited.market_registry import load_market_registry
 
+    if spec.get("live"):
+        return load_market_registry(extra_tilt_multipliers=LIVE_CONFIG.tilt_multipliers())
     tilts: dict[str, dict[str, float]] = {}
     for factor, multiplier in (spec.get("tilt") or {}).items():
         for profile in TILTED_PROFILES:
@@ -110,8 +138,12 @@ def registry_for(spec: dict) -> dict:
 
 def options_for(name: str, spec: dict, tags_by_level: dict[int, dict]):
     from app.services.eod_limited.full_market_tuning import DEFAULT_POLICY, conservative_v17_policy
+    from app.services.eod_limited.live_config import LIVE_CONFIG
     from app.services.eod_limited.options import ScoringOptions
 
+    if spec.get("live"):
+        tags = tags_by_level[LIVE_CONFIG.sic_level] if LIVE_CONFIG.wants_industry else None
+        return LIVE_CONFIG.scoring_options(tags)
     policy = DEFAULT_POLICY if spec.get("conservative") is None else conservative_v17_policy(spec["conservative"])
     mode = spec.get("industry") or "off"
     industry = tags_by_level[spec["sic_level"]] if mode != "off" else {}
@@ -359,8 +391,14 @@ def main() -> None:
         dates = replay_dates(date.fromisoformat(args.start), date.fromisoformat(args.end), args.every)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+    live_config = None
+    if "live" in specs:
+        from app.services.eod_limited.live_config import LIVE_CONFIG
+
+        live_config = LIVE_CONFIG.describe()
     (out / "run.json").write_text(json.dumps({
         "variants": {name: {**spec, "profiles": list(spec["profiles"])} for name, spec in specs.items()},
+        "live_config": live_config,
         "dates": dates, "directory_mode": args.directory_mode, "db": args.db, "industry_table": args.industry_table,
         "min_price": MIN_PRICE, "keep_rows": KEEP_ROWS, "diagnostic_sic_level": DIAGNOSTIC_SIC_LEVEL,
     }, indent=1, default=list))

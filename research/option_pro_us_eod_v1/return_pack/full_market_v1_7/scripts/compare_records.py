@@ -7,6 +7,8 @@ differs, so the check can gate a longer run.
 
     python compare_records.py --left /content/replay/verify_v16 --right /content/replay/v17_verify \\
         --map v15=v16 --top 20
+    python compare_records.py --left /content/replay/s1_verify --right /content/replay/s1_verify \\
+        --variants cons17+nofund --map cons17+nofund=live
 """
 from __future__ import annotations
 
@@ -35,10 +37,12 @@ def main() -> None:
     parser.add_argument("--left", required=True, type=Path)
     parser.add_argument("--right", required=True, type=Path)
     parser.add_argument("--map", action="append", default=[], help="left_variant=right_variant (repeatable)")
+    parser.add_argument("--variants", help="comma-separated left variants to compare (default: every shared view)")
     parser.add_argument("--top", type=int, default=20)
     parser.add_argument("--decimals", type=int, default=9)
     args = parser.parse_args()
     mapping = dict(item.split("=", 1) for item in args.map)
+    only = None if not args.variants else {name.strip() for name in args.variants.split(",") if name.strip()}
     left, right = load(args.left), load(args.right)
     shared_dates = sorted(set(left) & set(right))
     compared = identical = 0
@@ -46,6 +50,8 @@ def main() -> None:
     for day in shared_dates:
         for key, block in left[day]["lists"].items():
             variant, profile, view = key.split("/")
+            if only is not None and variant not in only:
+                continue
             right_key = f"{mapping.get(variant, variant)}/{profile}/{view}"
             other = right[day]["lists"].get(right_key)
             if other is None:
