@@ -228,32 +228,33 @@ def main() -> None:
     print(f"dates used {len(records)}, skipped {dict(skipped)}, first {records[0]['session']}, "
           f"last {records[-1]['session']}; metrics rows {len(rows)}")
 
-    def primary(variant: str, profile: str, period: str, holding: int = 63, list_type: str = "mixed") -> float | None:
+    def primary(variant: str, profile: str, period: str, list_type: str, holding: int = 63) -> float | None:
         values = [row["mean_slot_pct"] for row in rows
                   if row["variant"] == variant and row["profile"] == profile and row["period"] == period
                   and row["holding"] == holding and row["top"] == 20 and row["list_type"] == list_type]
         return round(statistics.fmean(values), 3) if len(values) == len(VIEWS) else None
 
-    def median_listed(variant: str, profile: str) -> float | None:
+    def median_listed(variant: str, profile: str, list_type: str) -> float | None:
         values = [row["median_listed"] for row in rows
                   if row["variant"] == variant and row["profile"] == profile and row["period"] == "ALL"
-                  and row["holding"] == 20 and row["top"] == 20 and row["list_type"] == "mixed"]
+                  and row["holding"] == 20 and row["top"] == 20 and row["list_type"] == list_type]
         return statistics.fmean(values) if values else None
 
     variants = sorted({row["variant"] for row in rows}, key=lambda name: (name != "v15", name))
     years = sorted({row["period"] for row in rows if row["period"].isdigit()})
     table = []
-    for profile in ("conservative", "balanced", "aggressive"):
-        for variant in variants:
-            if primary(variant, profile, "ALL") is None:
-                continue
-            entry = {"profile": profile, "variant": variant}
-            for period in ("ALL", "P1", "P2", *years):
-                entry[f"h63_{period}"] = primary(variant, profile, period)
-            entry["h20_ALL"] = primary(variant, profile, "ALL", holding=20)
-            entry["h5_ALL"] = primary(variant, profile, "ALL", holding=5)
-            entry["median_listed"] = median_listed(variant, profile)
-            table.append(entry)
+    for list_type in ("mixed", "stock"):
+        for profile in ("conservative", "balanced", "aggressive"):
+            for variant in variants:
+                if primary(variant, profile, "ALL", list_type) is None:
+                    continue
+                entry = {"list_type": list_type, "profile": profile, "variant": variant}
+                for period in ("ALL", "P1", "P2", *years):
+                    entry[f"h63_{period}"] = primary(variant, profile, period, list_type)
+                entry["h20_ALL"] = primary(variant, profile, "ALL", list_type, holding=20)
+                entry["h5_ALL"] = primary(variant, profile, "ALL", list_type, holding=5)
+                entry["median_listed"] = median_listed(variant, profile, list_type)
+                table.append(entry)
     with (args.out / "primary.csv").open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(table[0]))
         writer.writeheader()
@@ -262,32 +263,47 @@ def main() -> None:
     for entry in table:
         print("  " + ", ".join(f"{k} {v}" for k, v in entry.items()))
 
-    base = {entry["profile"]: entry for entry in table if entry["variant"] == "v15"}
-    print("\npre-registered decision checks (balanced and aggressive):")
-    verdicts = {}
+    def lookup(list_type: str, profile: str, variant: str) -> dict | None:
+        return next((e for e in table if (e["list_type"], e["profile"], e["variant"]) == (list_type, profile, variant)),
+                    None)
+
+    def decide(cand: dict, ref: dict) -> dict:
+        def up(key: str) -> bool:
+            return cand.get(key) is not None and ref.get(key) is not None and cand[key] > ref[key]
+        compared = [y for y in years if cand.get(f"h63_{y}") is not None and ref.get(f"h63_{y}") is not None]
+        return {
+            "P1_up": up("h63_P1"),
+            "P2_up": up("h63_P2"),
+            "years_better": sum(1 for y in compared if cand[f"h63_{y}"] > ref[f"h63_{y}"]),
+            "years_compared": len(compared),
+            "h20_within_1pp": cand["h20_ALL"] is not None and ref["h20_ALL"] is not None
+            and cand["h20_ALL"] >= ref["h20_ALL"] - 1.0,
+            "length_ok": (cand["median_listed"] or 0) >= 0.5 * (ref["median_listed"] or 0),
+            "smaller_period_gain": round(min((cand["h63_P1"] or 0) - (ref["h63_P1"] or 0),
+                                             (cand["h63_P2"] or 0) - (ref["h63_P2"] or 0)), 3),
+        }
+
+    verdicts: dict = {"variant_vs_v15_mixed": {}, "stock_vs_mixed": {}}
+    print("\npre-registered decision checks, variant vs v15 on the mixed list (balanced, aggressive):")
     for variant in variants:
         if variant == "v15":
             continue
-        checks = []
         for profile in ("balanced", "aggressive"):
-            cand = next((e for e in table if e["variant"] == variant and e["profile"] == profile), None)
-            ref = base.get(profile)
-            if cand is None or ref is None:
-                continue
-            p1 = cand["h63_P1"] is not None and ref["h63_P1"] is not None and cand["h63_P1"] > ref["h63_P1"]
-            p2 = cand["h63_P2"] is not None and ref["h63_P2"] is not None and cand["h63_P2"] > ref["h63_P2"]
-            year_wins = sum(1 for y in years if cand.get(f"h63_{y}") is not None and ref.get(f"h63_{y}") is not None
-                            and cand[f"h63_{y}"] > ref[f"h63_{y}"])
-            year_total = sum(1 for y in years if cand.get(f"h63_{y}") is not None and ref.get(f"h63_{y}") is not None)
-            h20_ok = cand["h20_ALL"] is not None and ref["h20_ALL"] is not None and cand["h20_ALL"] >= ref["h20_ALL"] - 1.0
-            length_ok = (cand["median_listed"] or 0) >= 0.5 * (ref["median_listed"] or 0)
-            checks.append((profile, p1, p2, year_wins, year_total, h20_ok, length_ok,
-                           min((cand["h63_P1"] or 0) - (ref["h63_P1"] or 0), (cand["h63_P2"] or 0) - (ref["h63_P2"] or 0))))
-            print(f"  {variant} {profile}: P1 {'up' if p1 else 'not up'}, P2 {'up' if p2 else 'not up'}, "
-                  f"years better {year_wins}/{year_total}, h20 within 1pp {h20_ok}, list length ok {length_ok}")
-        verdicts[variant] = checks
+            cand, ref = lookup("mixed", profile, variant), lookup("mixed", profile, "v15")
+            if cand and ref:
+                verdict = decide(cand, ref)
+                verdicts["variant_vs_v15_mixed"][f"{variant}/{profile}"] = verdict
+                print(f"  {variant} {profile}: {verdict}")
+    print("\nstock-only top 20 vs the mixed list of the same variant:")
+    for variant in variants:
+        for profile in ("conservative", "balanced", "aggressive"):
+            cand, ref = lookup("stock", profile, variant), lookup("mixed", profile, variant)
+            if cand and ref:
+                verdict = decide(cand, ref)
+                verdicts["stock_vs_mixed"][f"{variant}/{profile}"] = verdict
+                print(f"  {variant} {profile}: {verdict}")
     with (args.out / "decision.json").open("w") as handle:
-        json.dump({name: [list(check) for check in checks] for name, checks in verdicts.items()}, handle, indent=1)
+        json.dump(verdicts, handle, indent=1)
     print("DONE evaluate")
 
 
