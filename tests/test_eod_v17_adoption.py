@@ -18,7 +18,6 @@ from app.services.eod_limited.full_market_tuning import DEFAULT_POLICY, R_NEUTRA
 from app.services.eod_limited.live_config import (
     CONSERVATIVE_V17, CONSERVATIVE_V17_TILT_MULTIPLIERS, LIVE_CONFIG, V16_CONFIG, LiveConfig,
 )
-from app.services.eod_limited.market_registry import load_market_registry
 from app.services.eod_limited.options import INDUSTRY_OFF
 from app.services.eod_limited.project import project_strength_payload
 from app.services.eod_limited import store as eod_store
@@ -76,7 +75,7 @@ def test_default_worker_publishes_s1(tmp_path, monkeypatch):
     assert batch["live_config"]["label"] == LIVE_CONFIG.label()
     assert batch["coverage"]["fund_scope"] == FUND_SCOPE_BENCHMARKS
     assert "industry" not in batch["coverage"]
-    registry = load_market_registry(extra_tilt_multipliers=LIVE_CONFIG.tilt_multipliers())
+    checked = {profile: 0 for profile in PROFILES}
     for horizon in HORIZONS:
         for profile in PROFILES:
             variant = batch["variants"][f"{profile}|{horizon}"]
@@ -88,19 +87,36 @@ def test_default_worker_publishes_s1(tmp_path, monkeypatch):
             assert payload["coverage"]["fund_scope"] == FUND_SCOPE_BENCHMARKS
             golden = GOLDEN[f"{profile}/{horizon}"]["rows"]
             rows = rounded(payload["rows"])
+            # Unverified volume leaves no eligible rows: the scored rows the batch keeps are the watch rows.
+            stock_rows = [row for row in variant["watch_list"] if row["stock_or_etf_track"] == "stock"]
+            checked[profile] += len(stock_rows)
             if profile == "conservative":
                 assert {row["ticker"] for row in rows} != {row["ticker"] for row in golden} or \
                     [row["sort_score"] for row in rows] != [row["sort_score"] for row in golden]
-                for block in variant["family_results"]:
-                    for row in block["rows"]:
-                        if row["stock_or_etf_track"] == "stock":
-                            assert row["factors"]["R"] == R_NEUTRAL_VALUE
-                            assert row["full_market_tuning"]["version"] == "full-market-v1.7-cons-atr2"
+                for row in stock_rows:
+                    assert row["factors"]["R"] == R_NEUTRAL_VALUE and row["full_market_tuning"]["R_neutralized"]
+                    assert row["full_market_tuning"]["version"] == "full-market-v1.7-cons-atr2"
+                    assert row["full_market_tuning"]["atr_multiplier"] == 2.0
+                    assert row["atr_multiplier_source"] == "full-market-v1.7-cons-atr2_override"
+                    assert row["entry_state"] in {"ok", "extended"}
             else:
                 # Balanced and aggressive are v1.6; only the provenance id (a hash of the
                 # registry, which now carries the conservative tilt) differs.
                 assert without_provenance(rows) == without_provenance(golden), (profile, horizon)
-    assert registry["profiles"]["conservative"]["factor_tilt"][6] == pytest.approx(1.0)
+                for row in stock_rows:  # the compact variant keeps row-level tuning records only
+                    assert row["full_market_tuning"]["version"] == "full-market-v1.5"
+                    assert row["atr_multiplier_source"] == "v1.5_override"
+    assert all(checked[profile] > 0 for profile in PROFILES), checked  # every profile's checks ran on real rows
+    # The registry the worker scored with carries the conservative tilt (R back to 1.0): read it
+    # from the published weight provenance rather than from a registry built here.
+    ticker = next(row["security_id"] for row in batch["variants"]["conservative|mid"]["watch_list"]
+                  if row["stock_or_etf_track"] == "stock")
+    diagnostics = read_security_diagnostics(batch, ticker, "conservative", "mid", root=tmp_path)
+    sources = list(diagnostics["weight_provenance_sources"].values())
+    assert sources and all(source["profile_factor_tilt"][6] == pytest.approx(1.0) for source in sources)
+    assert all(source["profile_factor_tilt"][1] == pytest.approx(0.9 * 2.0) for source in sources)
+    balanced = read_security_diagnostics(batch, ticker, "balanced", "mid", root=tmp_path)
+    assert all(source["profile_factor_tilt"][6] == 1 for source in balanced["weight_provenance_sources"].values())
 
 
 def test_v16_config_is_still_available_as_the_control(tmp_path, monkeypatch):
@@ -141,3 +157,42 @@ def test_scan_reader_names_the_fund_scope_and_diagnostics_explain_an_excluded_fu
     assert {row["ticker"] for row in served["etf"]["rows"]} <= benchmark_fund_tickers()
     assert [row["ticker"] for row in served["stock"]["rows"]] == \
         [row["ticker"] for row in served["all"]["rows"] if row["stock_or_etf_track"] == "stock"]
+
+
+def test_fund_theme_strength_is_withheld_under_the_benchmark_scope(tmp_path, monkeypatch):
+    from app.services.eod_limited.context_snapshot import sector_rows_with_scores
+    from app.services.eod_limited.diagnostics import FUND_SCOPE_REASON, FUND_THEME_ID
+
+    batch, _ = _publish(tmp_path, monkeypatch)
+    control, _ = _publish(tmp_path / "control", monkeypatch, config=V16_CONFIG)
+    statistics, reference = batch["theme_statistics"], control["theme_statistics"]
+    assert statistics["fund_scope"] == FUND_SCOPE_BENCHMARKS and reference["fund_scope"] == "all"
+    funds = next(row for row in statistics["sectors"] if row["sector_id"] == FUND_THEME_ID)
+    funds_before = next(row for row in reference["sectors"] if row["sector_id"] == FUND_THEME_ID)
+    assert funds_before["avg_strength"] is not None  # the full pool ranks funds among ~all funds
+    assert funds["avg_strength"] is None and funds["leaders"] == [] and funds["scored_count"] == 0
+    assert funds["score_source_status"] == "unavailable" and funds["fund_scope"] == FUND_SCOPE_BENCHMARKS
+    assert funds["missing_reasons"] == {FUND_SCOPE_REASON: funds["member_count"]}
+    for suffix in ("1mo", "3mo", "6mo"):  # returns do not depend on the pool and stay
+        assert funds[f"avg_return_{suffix}"] == funds_before[f"avg_return_{suffix}"]
+    for row, before in zip(statistics["sectors"], reference["sectors"]):
+        if row["sector_id"] != FUND_THEME_ID:
+            assert {k: v for k, v in row.items() if k != "fund_scope"} == before, row["sector_id"]
+
+    context = {"sectors": [], "_stale": False, "source_status": "active"}
+
+    def sector_rows(published):
+        selection = project_strength_payload(eod_store.variant_from_batch(published, "balanced", "mid"), parameters={})
+        return sector_rows_with_scores(context, selection, period="3mo")
+
+    rows, control_rows = sector_rows(batch), sector_rows(control)
+    fund_row = next(row for row in rows if row["sector_id"] == FUND_THEME_ID)
+    fund_row_before = next(row for row in control_rows if row["sector_id"] == FUND_THEME_ID)
+    assert fund_row_before["avg_strength"] is not None and fund_row_before["leaders"]
+    assert fund_row["avg_strength"] is None and fund_row["leaders"] == []
+    assert fund_row["score_missing_reasons"] == {FUND_SCOPE_REASON: 12} and fund_row["fund_scope"] == FUND_SCOPE_BENCHMARKS
+    assert fund_row["avg_return"] == fund_row_before["avg_return"] == funds["avg_return_3mo"]
+    stock_rows = [row for row in rows if row["sector_id"] != FUND_THEME_ID]
+    assert len(stock_rows) == 23 and all("fund_scope" not in row for row in stock_rows)
+    assert stock_rows == [row for row in control_rows if row["sector_id"] != FUND_THEME_ID]
+

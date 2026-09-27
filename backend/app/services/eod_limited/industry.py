@@ -141,6 +141,21 @@ class SicTable:
     def has_ticker(self, ticker: Any) -> bool:
         return _text(ticker) in self._by_ticker
 
+    def has_pair(self, ticker: Any, cik: Any = None) -> bool:
+        """True when ``sic_for(ticker, cik)`` is answered by a record (with or without a code).
+
+        A reused ticker with a new CIK is unknown even when the old issuer is on
+        file, so it is looked up again; a CIK-less record answers for any CIK.
+        """
+        symbol = _text(ticker)
+        if symbol is None:
+            return False
+        records = self._by_ticker.get(symbol) or []
+        cik_text = _text(cik)
+        if cik_text is None:
+            return bool(records)
+        return (symbol, cik_text) in self._by_pair or any(record["cik"] is None for record in records)
+
     def classify(
         self,
         directory: Sequence[Mapping[str, Any]],
@@ -202,19 +217,38 @@ def _massive_detail(ticker: str) -> Mapping[str, Any]:
     return massive.reference_ticker_detail(ticker)
 
 
+def directory_pairs(directory: Sequence[Mapping[str, Any]], tickers: Iterable[str] | None = None) -> list[tuple[str, str | None]]:
+    """(ticker, cik) of every stock-type directory row, optionally limited to ``tickers``."""
+    wanted = None if tickers is None else {str(item) for item in tickers}
+    pairs = []
+    for row in directory:
+        ticker = _text(row.get("ticker"))
+        if ticker is None or (wanted is not None and ticker not in wanted):
+            continue
+        if str(row.get("type") or "").strip().upper() in STOCK_PROVIDER_TYPES:
+            pairs.append((ticker, _text(row.get("cik"))))
+    return pairs
+
+
 def refresh_missing(
     table: SicTable,
-    tickers: Iterable[str],
+    pairs: Iterable[tuple[str, str | None] | str],
     *,
     budget: int = DEFAULT_LOOKUP_BUDGET,
     as_of: date | None = None,
     fetch: Callable[[str], Mapping[str, Any]] = _massive_detail,
 ) -> dict[str, int]:
-    """Look up at most ``budget`` tickers the table has never seen; failures are retried next run."""
+    """Look up at most ``budget`` (ticker, cik) pairs the table cannot answer; failures retry next run.
+
+    The record is stored under the directory's CIK, so a reused ticker gets one
+    record per issuer; a bare ticker string means "no CIK known".
+    """
     counts: Counter = Counter()
     stamp = (as_of or date.today()).isoformat()
-    for ticker in sorted({str(item) for item in tickers}):
-        if table.has_ticker(ticker):
+    normalized = sorted({(str(item), None) if isinstance(item, str) else (str(item[0]), _text(item[1]))
+                         for item in pairs}, key=lambda pair: (pair[0], pair[1] or ""))
+    for ticker, cik in normalized:
+        if table.has_pair(ticker, cik):
             continue
         if counts["looked_up"] >= budget:
             counts["deferred"] += 1
@@ -225,7 +259,7 @@ def refresh_missing(
         except Exception:  # noqa: BLE001 - provider trouble must not stop the worker
             counts["failed"] += 1
             continue
-        table.extend([{"ticker": ticker, "cik": detail.get("cik"), "as_of": stamp,
+        table.extend([{"ticker": ticker, "cik": cik or detail.get("cik"), "as_of": stamp,
                        "sic_code": detail.get("sic_code"), "sic_description": detail.get("sic_description")}])
         counts["classified" if _text(detail.get("sic_code")) else "no_sic"] += 1
     return dict(counts)
@@ -244,12 +278,8 @@ def ensure_industry_tags(
     """Production entry: persistent table, bounded refresh of unseen stock tickers, then classify."""
     table = load_table(root)
     wanted = None if tickers is None else {str(item) for item in tickers}
-    stock_tickers = [
-        str(row.get("ticker")) for row in directory
-        if str(row.get("type") or "").strip().upper() in STOCK_PROVIDER_TYPES
-        and (wanted is None or str(row.get("ticker")) in wanted)
-    ]
-    refresh = refresh_missing(table, stock_tickers, budget=budget, fetch=fetch) if budget > 0 else {}
+    pairs = directory_pairs(directory, wanted)
+    refresh = refresh_missing(table, pairs, budget=budget, fetch=fetch) if budget > 0 else {}
     if refresh.get("looked_up"):
         table.save(table_path(root))
     tags = table.classify(directory, level=level, parent_level=parent_level, tickers=wanted)
@@ -258,7 +288,7 @@ def ensure_industry_tags(
         "table_records": len(table),
         "level": level,
         "parent_level": parent_level,
-        "stock_tickers": len(stock_tickers),
+        "stock_tickers": len({ticker for ticker, _cik in pairs}),
         "classified": len(tags),
         "groups": len({tag.industry_id for tag in tags.values()}),
         "refresh": refresh,
@@ -272,6 +302,7 @@ __all__ = [
     "IndustryTag",
     "SicTable",
     "TABLE_NAME",
+    "directory_pairs",
     "ensure_industry_tags",
     "load_table",
     "refresh_missing",

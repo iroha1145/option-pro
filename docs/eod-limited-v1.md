@@ -110,9 +110,9 @@ D 家族残差窗口改为 12 减 1 个月（231 日求和、跳过 21 日）的
    - 只看股票名单，前 20 名 63 日补位超额从每信号 −2.90 个百分点变为 +0.54；同一天配对差 +3.44（Newey-West t 4.0），两段（+3.04、+3.92）和四个年份全部更好；20 日超额从 −1.20 变为 −0.01。
    - 名单中位长度从 20 降到 15，换手率从 0.78 降到 0.66。
    - 代价：v1.4 口径的保守档不再在线上作对照；以后的对照只能靠冻结回放（v1.6 代码随时可重跑，`LiveConfig()` 无参数就是 v1.6 行为）。
-2. **打分池只留基准基金**（`fund_scope="benchmarks"`，`universe.select_all_market_universe`）。只保留 SPY、QQQ 和封存注册表 `etfs` 主题的成员（共 12 只），其余约 5,900 只基金不进面板，目录覆盖记录里的状态是 `excluded:FUND_OUT_OF_SCOPE`。回放 176 天、九组视图的股票行（代码与分数）与全池逐行相同；预计算量约减半。
+2. **打分池只留基准基金**（`fund_scope="benchmarks"`，`universe.select_all_market_universe`）。只保留 SPY、QQQ 和封存注册表 `etfs` 主题的成员（共 12 只），其余约 5,900 只基金不进面板，目录覆盖记录里的状态是 `excluded:FUND_OUT_OF_SCOPE`。回放 176 天、九组视图的股票行（代码与分数）与全池逐行相同；按回放实测，每个回放日一核的预计算从 461 秒降到 264 秒、打分从 128 秒降到 75 秒，约减少四成。
 
-版本号 `limited-all-market-v1.7` / `eod-limited-v1.7`。调参挂钩的默认策略仍是 `full-market-v1.5`，保守档行的 `full_market_tuning.version` 是 `full-market-v1.7-cons-atr2`。开关打开后快照多三个字段：每组视图的 `factor_capabilities`、`v17_options`，批次的 `live_config`。改了注册表倾斜，所有行的 `weight_provenance_id`（注册表哈希）都会变，这是预期。
+版本号 `limited-all-market-v1.7` / `eod-limited-v1.7`。调参挂钩的默认策略仍是 `full-market-v1.5`；标签按档位记：保守档行和保守档视图的 `full_market_tuning.version` 是 `full-market-v1.7-cons-atr2`、`atr_multiplier_source` 是 `full-market-v1.7-cons-atr2_override`，均衡、进取两档的行仍是 `full-market-v1.5` / `v1.5_override`（它们的挂钩没变）。开关打开后快照多三个字段：每组视图的 `factor_capabilities`、`v17_options`，全市场实时批次的 `live_config`（合成、历史种子批次不写）。改了注册表倾斜，所有行的 `weight_provenance_id`（注册表哈希）都会变，这是预期。
 
 ### 没有采纳的：行业因子 G
 
@@ -126,9 +126,14 @@ D 家族残差窗口改为 12 减 1 个月（231 日求和、跳过 21 日）的
 - 扫描范围计数：`universe_count`（合资格证券数）从约 11,800 降到约 5,900（股票加 12 只基金），`screened_count` 随之下降；页面上「全市场股票与基金 N」的文案仍是旧说法，数字已经是新范围，文案在前端下一次改动时再调。
 - 单票诊断 `GET /api/strength/diagnostics/{ticker}`：不在池里的基金 `data_status` 为 `out_of_scope`，目录覆盖状态显示 `excluded:FUND_OUT_OF_SCOPE`，页面按既有规则显示「本批次范围外／不属于当前扫描范围」。池内的 12 只基金照常有诊断。
 - `GET /api/strength/stocks/{ticker}`：读取的是完整名单（含基金轨道），不在池里的基金和以前未入选时一样返回 404。
-- 主题统计与 `GET /api/strength/sectors`：`etfs` 主题的成员正好是保留的 12 只基金，统计不受影响；选股页的主题选项已不列 `etfs`。24 个股票主题不变。
+- 主题统计与 `GET /api/strength/sectors`：基金轨道的分位数是在打分池里的基金之间排的，池里只剩 12 只时，它们的分数是「12 只内部的名次」，均值按构造约为 50，与股票主题的全市场强度不可比。所以 `etfs` 主题的强度不再发布：`theme_statistics` 里该行 `avg_strength` 为空、`leaders` 为空、`scored_count` 为 0、`missing_reasons` 为 `{"FUND_SCOPE_BENCHMARKS": 12}`，并带 `fund_scope`；它的 1、3、6 个月平均收益仍照常算（收益不依赖打分池）。`/api/strength/sectors` 的返回多一个 `fund_scope`，`etfs` 行同样带 `fund_scope` 和缺失原因，页面按既有规则显示「—」和缺失原因。23 个股票主题的统计逐字段不变。选股页的主题选项已不列 `etfs`。
 - 大盘状态（`strength-context-v1.json`）自己取基准行情，不读打分池，不受影响。
 - 全目录漏斗（`family_funnels.universe`）的 `status_counts` 多出 `excluded:FUND_OUT_OF_SCOPE` 一项，约 5,900 只；`coverage_empty` 名单相应变长。
+
+### 部署时会看到的两件事
+
+- 部署新代码之后、第一批 v1.7 快照发布之前，仍在服务的旧批次会被投影时打上 `algorithm_version: eod-limited-v1.7`（这个标签取自代码常量，不存在批次里；`score_version` / `compute_version` 来自批次，仍是 v1.6）。这是原有行为，下一批发布即消失。
+- 第一批 v1.7 快照的 `universe_count` 会从约 11,800 掉到约 5,900，是预期的。
 
 ### 上线前核对
 

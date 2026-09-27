@@ -309,6 +309,7 @@ def run_eod_limited_job(
             reference_diagnostics, panel=panel, coverage_records=coverage,
             served_session=target.isoformat(), compute_version=COMPUTE_VERSION,
             feature_version=FEATURE_VERSION, source_hash=manifest.get("source_hash"),
+            fund_scope=config.fund_scope if market_input else "all",
         )
         diagnostic_manifest = writer.finish()
         batch = {
@@ -330,7 +331,7 @@ def run_eod_limited_job(
             "variants": variants,
             "diagnostics": diagnostic_manifest,
             "theme_statistics": theme_statistics,
-            **({"live_config": config.describe()} if config.label() != "v1.6" else {}),
+            **({"live_config": config.describe()} if market_input and config.label() != "v1.6" else {}),
         }
         published = publish_batch(batch, root=root)
         if not published.get("ok"):

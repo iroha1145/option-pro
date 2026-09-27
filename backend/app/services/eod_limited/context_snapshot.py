@@ -258,6 +258,8 @@ def sector_rows_with_scores(
             "score_data_through": statistics.get("served_session") if matched else None,
             "score_source_status": scored.get("score_source_status") if matched and scored else "unavailable",
         })
+        if matched and scored.get("fund_scope"):
+            row["fund_scope"] = scored["fund_scope"]
         rows.append(row)
     rows.sort(key=lambda row: (row.get("avg_return") is not None, row.get("avg_return") or 0, row.get("avg_strength") or 0), reverse=True)
     return rows

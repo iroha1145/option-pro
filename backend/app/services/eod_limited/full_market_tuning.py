@@ -80,6 +80,19 @@ class TuningPolicy:
     r_neutral_profiles: frozenset[str] = R_NEUTRAL_PROFILES
     extended_state_profiles: frozenset[str] = EXTENDED_STATE_PROFILES
 
+    def profile_is_default(self, profile: str) -> bool:
+        """True when this profile's hooks are exactly the v1.5 ones."""
+        return (
+            self.m_alpha.get(profile) == M_ALPHA.get(profile)
+            and self.atr_multiplier.get(profile) == ATR_MULTIPLIER.get(profile)
+            and (profile in self.r_neutral_profiles) == (profile in R_NEUTRAL_PROFILES)
+            and (profile in self.extended_state_profiles) == (profile in EXTENDED_STATE_PROFILES)
+        )
+
+    def profile_version(self, profile: str) -> str:
+        """The label a row of ``profile`` carries: the policy's only where the policy changed it."""
+        return TUNING_VERSION if self.profile_is_default(profile) else self.version
+
 
 DEFAULT_POLICY = TuningPolicy()
 
@@ -137,10 +150,10 @@ class TuningContext:
     benchmark_status: str
     digest: str
 
-    def summary(self, policy: TuningPolicy | None = None) -> dict[str, Any]:
+    def summary(self, policy: TuningPolicy | None = None, profile: str | None = None) -> dict[str, Any]:
         policy = policy or DEFAULT_POLICY
         return {
-            "version": policy.version,
+            "version": policy.version if profile is None else policy.profile_version(profile),
             "session": self.session.isoformat(),
             "horizon": self.horizon,
             "reference_scope": "all_eligible_stocks_in_input_no_theme_filter",
@@ -377,7 +390,10 @@ def atr_threshold(
         raise ValueError("finite positive existing ATR policy required")
     override = policy.atr_multiplier.get(profile)
     multiplier = float(override) if override is not None else registry_multiplier
-    source = ("v1.5_override" if policy is DEFAULT_POLICY else f"{policy.version}_override") if override is not None else "registry"
+    if override is None:
+        source = "registry"
+    else:
+        source = "v1.5_override" if policy.profile_is_default(profile) else f"{policy.version}_override"
     if median_atr_pct is None:
         return None, multiplier, source
     return min(cap, multiplier * median_atr_pct), multiplier, source
@@ -399,6 +415,7 @@ def tune_snapshot(
         raise ValueError("tuning context/profile mismatch")
     if payload.get("session_date") != context.session.isoformat():
         raise ValueError("snapshot/context session mismatch")
+    version = policy.profile_version(profile)
     threshold, multiplier, multiplier_source = atr_threshold(registry, profile, context.median_atr_pct, policy)
     rows = []
     for source in payload.get("rows", ()):
@@ -411,7 +428,7 @@ def tune_snapshot(
         previous = source.get("full_market_tuning")
         if previous is not None:
             if (previous.get("version"), previous.get("context_hash"), previous.get("profile")) != (
-                policy.version, context.digest, profile,
+                version, context.digest, profile,
             ):
                 raise ValueError("refusing to stack different tuning policies")
             rows.append(dict(source))
@@ -471,7 +488,7 @@ def tune_snapshot(
         if new_factors != factors:
             row["factors"] = new_factors
         row["full_market_tuning"] = {
-            "version": policy.version, "context_hash": context.digest,
+            "version": version, "context_hash": context.digest,
             "profile": profile, "horizon": horizon,
             "M_original": old_m, "M_window_target": target, "M_final": new_m,
             "alpha": alpha, "M_delta": delta, "M_delta_cap": M_DELTA_CAP,
@@ -484,7 +501,7 @@ def tune_snapshot(
             "empirically_optimized_m_blend": False,
         }
         rows.append(row)
-    return {**payload, "rows": rows, "full_market_tuning": context.summary(policy)}
+    return {**payload, "rows": rows, "full_market_tuning": context.summary(policy, profile)}
 
 
 def apply_entry_states(payload: Mapping[str, Any]) -> dict[str, Any]:

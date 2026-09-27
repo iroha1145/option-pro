@@ -168,8 +168,11 @@ def test_replay_date_scores_every_variant_on_shared_inputs(replay_setup):
     assert {key for key in timing if key.startswith("precomputed")} == {
         "precomputed:base::all", "precomputed:full:3:all", "precomputed:full:4:all", "precomputed:base::benchmarks"}
     assert all(f"scored_{name}" in timing for name in replay_setup["variants"])
-    assert record["variant_options"]["live"]["label"] == record["variant_options"]["cons17+nofund"]["label"].replace(
-        "cons17+nofund", record["variant_options"]["live"]["label"])  # labels differ, nothing else below does
+    from app.services.eod_limited.live_config import LIVE_CONFIG
+
+    live, explicit = record["variant_options"]["live"], record["variant_options"]["cons17+nofund"]
+    assert live["label"] == LIVE_CONFIG.label() and explicit["label"] == "cons17+nofund"
+    assert {k: v for k, v in live.items() if k != "label"} == {k: v for k, v in explicit.items() if k != "label"}
 
 
 def _rows(record, key):

@@ -400,7 +400,7 @@ def score_eod_session(
         "feature_version": FEATURE_VERSION,
         "profile": profile,
         "horizon": horizon,
-        "full_market_tuning": tuning_context.summary(options.tuning),
+        "full_market_tuning": tuning_context.summary(options.tuning, profile),
         "capability_track": track,
         "capability_flags": flags,
         "volume_scope": VOLUME_SCOPE,

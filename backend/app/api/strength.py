@@ -1293,6 +1293,7 @@ async def sectors(period: str = Query("3mo", pattern="^(1mo|3mo|6mo)$")) -> dict
     )
     return sanitize({
         "as_of": context.get("as_of"), "period": period, "sectors": rows, "count": len(rows),
+        "fund_scope": str(((selection or {}).get("coverage") or {}).get("fund_scope") or "all"),
         "_cached": True, "snapshot_source": "strength_context_worker",
         "_stale": stale, "source_status": "stale" if stale else context.get("source_status", "active"),
         "stale_reason": reason, "context_source_status": context.get("source_status"),

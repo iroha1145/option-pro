@@ -6,9 +6,9 @@
     eod_industry_table.py show                                  # counts
 
 ``import`` needs no network. ``refresh`` fetches the Massive directory and asks
-``/v3/reference/tickers/{ticker}`` for at most ``--budget`` tickers the table has never
-seen, through the same client the worker uses (four concurrent requests, retries on
-429). Both write the table atomically. Nothing here changes what production scores:
+``/v3/reference/tickers/{ticker}`` for at most ``--budget`` (ticker, CIK) pairs the table
+cannot answer (a reused ticker with a new issuer counts as unseen), through the same client
+the worker uses (four concurrent requests, retries on 429). Both write the table atomically. Nothing here changes what production scores:
 the table is read only when ``live_config.LIVE_CONFIG`` turns an industry mode on.
 """
 from __future__ import annotations
@@ -22,8 +22,9 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
-from app.services.eod_limited.industry import SicTable, load_table, refresh_missing, table_path  # noqa: E402
-from app.services.eod_limited.universe import STOCK_PROVIDER_TYPES  # noqa: E402
+from app.services.eod_limited.industry import (  # noqa: E402
+    SicTable, directory_pairs, load_table, refresh_missing, table_path,
+)
 
 
 def _read_records(path: Path) -> list[dict]:
@@ -61,11 +62,11 @@ def main() -> None:
         from app.services.eod_limited.market_data import _fetch_directory
 
         directory = _fetch_directory()
-        stocks = [row["ticker"] for row in directory if str(row.get("type") or "").upper() in STOCK_PROVIDER_TYPES]
-        counts = refresh_missing(table, stocks, budget=args.budget)
+        pairs = directory_pairs(directory)
+        counts = refresh_missing(table, pairs, budget=args.budget)
         if counts.get("looked_up"):
             table.save(path)
-        print(f"directory stocks {len(stocks)}, refresh {counts}, table {path}")
+        print(f"directory stocks {len(pairs)}, refresh {counts}, table {path}")
     _show(table)
 
 

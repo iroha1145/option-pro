@@ -14,7 +14,10 @@ v1.7 adopts stage-1 set S1 (2026-09-28, 176 replay dates 2023-03 to 2026-09):
   better in both periods and all four years);
 * ``fund_scope=benchmarks``: the scored pool keeps only SPY, QQQ and the sealed
   ``etfs`` theme funds; stock rows were identical to the full pool on every one
-  of the 176 dates and nine views, and the precompute shrinks by about half.
+  of the 176 dates and nine views. Per replay date and worker the precompute
+  took 264 s instead of 461 s and scoring 75 s instead of 128 s (about two
+  fifths less). Fund scores become a within-twelve ranking, so the fund theme's
+  strength is withheld (``diagnostics.build_theme_statistics``).
 
 The industry switches stay off: every G candidate (g3, g3x2, g4, full3, full4)
 was worse than v1.6 on the balanced and aggressive stock lists, worst in P1.
