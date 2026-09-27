@@ -28,6 +28,7 @@ def eod_snapshot(monkeypatch):
 
 def read_snapshot(**overrides):
     list_kind = overrides.pop("list_kind", "observation")
+    track = overrides.pop("track", "all")
     parameters = {
         **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS,
         "ranking_algorithm": "eod_limited_v1",
@@ -37,7 +38,7 @@ def read_snapshot(**overrides):
         **overrides,
     }
     payload, _, _ = strength._read_eod_limited_snapshot(
-        parameters=parameters, list_kind=list_kind, resolution=None,
+        parameters=parameters, list_kind=list_kind, resolution=None, track=track,
     )
     return payload
 
@@ -56,7 +57,7 @@ def test_price_filter_precedes_top_and_preserves_available_rows(eod_snapshot, se
     assert payload["count"] == 2
     assert payload["rows"] == payload["results"]
     assert all(row["price"] >= 5 for row in payload["observation_rows"])
-    assert payload["filter_support"] == {"min_price": True, "min_avg_dollar_volume": False}
+    assert payload["filter_support"] == {"min_price": True, "min_avg_dollar_volume": False, "track": True}
 
 
 def test_support_is_not_used_as_close_price():
@@ -90,3 +91,19 @@ def test_concurrent_publication_cannot_pair_old_rows_with_new_clock(monkeypatch)
     assert payload["rows"][0]["price"] == 120.5
     assert payload["snapshot_saved_at"] == "2027-01-15T08:00:00+00:00"
     assert len(reads) == 1
+
+
+@pytest.mark.parametrize(
+    ("track", "expected"),
+    [("stock", ["ITEM5", "ITEM3", "ITEM1"]), ("etf", ["ITEM6", "ITEM4", "ITEM2"]),
+     ("all", ["ITEM6", "ITEM5", "ITEM4"])],
+)
+def test_track_filter_ranks_stocks_and_funds_separately_before_top(eod_snapshot, track, expected):
+    for index, row in enumerate(eod_snapshot["watch_list"], 1):
+        row["stock_or_etf_track"] = "etf" if index % 2 == 0 else "stock"
+    payload = read_snapshot(track=track, top=3)
+    assert [row["ticker"] for row in payload["rows"]] == expected
+    assert all(track == "all" or row["stock_or_etf_track"] == track for row in payload["observation_rows"])
+    assert payload["track"] == track
+    assert payload["track_counts"] == {"stock": 3, "etf": 3}
+

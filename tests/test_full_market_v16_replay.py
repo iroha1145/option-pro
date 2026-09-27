@@ -99,10 +99,26 @@ def test_tilted_registry_changes_only_balanced_and_aggressive_trend_momentum_and
         assert after[6] == 0.0
         assert after[2:6] == before[2:6] and after[7] == before[7]
     assert tilted["profiles"]["conservative"] == base["profiles"]["conservative"]
-    assert base["profiles"]["balanced"]["factor_tilt"][1] == 1  # the base registry is not mutated
+    assert base == load_market_registry()  # the base registry is not mutated
 
 
 def test_replay_dates_step_through_trading_sessions_only():
     dates = replay.replay_dates(date(2026, 9, 3), date(2026, 9, 18), 5)
     assert dates == ["2026-09-03", "2026-09-11", "2026-09-18"]  # 2026-09-07 is Labor Day
+
+
+def test_live_registry_carries_the_v16_tilts_and_matches_the_replayed_candidate():
+    from app.services.eod_limited.market_registry import LIVE_PROFILE_TILT_MULTIPLIERS
+    from app.services.research_eod_v1.config_load import load_registry
+
+    sealed, live = load_registry(), load_market_registry()
+    assert LIVE_PROFILE_TILT_MULTIPLIERS == {"balanced": replay.VARIANTS["tilt_b"],
+                                             "aggressive": replay.VARIANTS["tilt_b"]}
+    for profile in ("balanced", "aggressive"):
+        before, after = sealed["profiles"][profile]["factor_tilt"], live["profiles"][profile]["factor_tilt"]
+        assert after[0] == pytest.approx(before[0] * 0.5)
+        assert after[1] == pytest.approx(before[1] * 2.0)
+        assert after[2:] == before[2:]
+    assert live["profiles"]["conservative"] == sealed["profiles"]["conservative"]
+    assert live["live_profile_tilt_multipliers"] == LIVE_PROFILE_TILT_MULTIPLIERS
 

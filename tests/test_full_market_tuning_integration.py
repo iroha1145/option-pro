@@ -64,7 +64,7 @@ def test_default_scorer_preserves_score_budget_and_fund_rows_in_all_nine_views(m
     residuals = {sid: deepcopy(raw.residual) for sid, raw in raws.items()}
     result = score(market, profile=profile, horizon=horizon)
     assert result["mode"] == MODE_ID == "eod_limited_v1"
-    assert result["compute_version"] == COMPUTE_VERSION == "limited-all-market-v1.5"
+    assert result["compute_version"] == COMPUTE_VERSION == "limited-all-market-v1.6"
     assert result["scored_security_count"] == 42
     summary = result["full_market_tuning"]
     assert summary["stock_input_n"] == summary["atr_reference_n"] == 40

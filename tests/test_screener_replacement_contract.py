@@ -24,7 +24,8 @@ from tests.test_worker_actions_api import _client, _live_repository
 def test_old_scan_requests_execute_only_new_engine(monkeypatch, algorithm, timeframe, expected):
     calls = []
 
-    def eod_snapshot(*, parameters, list_kind, resolution):
+    def eod_snapshot(*, parameters, list_kind, resolution, track):
+        assert track == "stock"  # v1.6 ranks stocks and funds on separate lists
         calls.append(parameters)
         return strength._overlay_algorithm_metadata({"rows": [], "count": 0}, resolution), 1_800_000_000.0, False
 
