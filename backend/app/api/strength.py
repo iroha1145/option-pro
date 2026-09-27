@@ -1142,7 +1142,7 @@ async def scan(
                 else ()
             ),
             *(
-                (list_kind, payload.get("served_session"), payload.get("purpose"))
+                (list_kind, track, payload.get("served_session"), payload.get("purpose"))
                 if resolution.effective == EOD_LIMITED_V1
                 else ()
             ),

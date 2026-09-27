@@ -106,3 +106,30 @@ def test_track_filter_ranks_stocks_and_funds_separately_before_top(eod_snapshot,
     assert all(track == "all" or row["stock_or_etf_track"] == track for row in payload["observation_rows"])
     assert payload["track"] == track
     assert payload["track_counts"] == {"stock": 3, "etf": 3}
+
+
+def test_scan_endpoint_serves_each_track_from_its_own_cache_entry(eod_snapshot):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.services.http_read_cache import reset_serialized_response_cache
+
+    for index, row in enumerate(eod_snapshot["watch_list"], 1):
+        row["stock_or_etf_track"] = "etf" if index % 2 == 0 else "stock"
+    reset_serialized_response_cache()
+    app = FastAPI()
+    app.include_router(strength.router)
+    client = TestClient(app)
+    query = {"timeframe": "mid", "profile": "balanced", "min_price": 0, "top": 5}
+    served = {}
+    for track in ("stock", "etf", "all", None):
+        params = dict(query, **({"track": track} if track else {}))
+        response = client.get("/api/strength/scan", params=params)
+        assert response.status_code == 200
+        body = response.json()
+        served[track] = [row["ticker"] for row in body["rows"]]
+        assert body["track"] == (track or "stock")
+    assert served["stock"] == ["ITEM5", "ITEM3", "ITEM1"]
+    assert served["etf"] == ["ITEM6", "ITEM4", "ITEM2"]
+    assert served["all"] == ["ITEM6", "ITEM5", "ITEM4", "ITEM3", "ITEM2"]
+    assert served[None] == served["stock"]
