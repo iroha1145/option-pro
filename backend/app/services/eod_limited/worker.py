@@ -217,8 +217,8 @@ def run_eod_limited_job(
         if config.wants_industry:
             from .industry import ensure_industry_tags
 
-            members = {str(row.get("ticker")) for row in coverage
-                       if not str(row.get("status") or "").startswith("excluded:")}
+            # Only securities with a complete panel are scored, so only they need a lookup.
+            members = {str(row.get("ticker")) for row in coverage if row.get("status") == "ok"}
             try:
                 industry_tags, manifest["industry"] = ensure_industry_tags(
                     directory_rows, root=root, level=config.sic_level,

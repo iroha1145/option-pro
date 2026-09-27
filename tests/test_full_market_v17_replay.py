@@ -83,7 +83,8 @@ def replay_setup(tmp_path_factory):
     out.mkdir()
     result = replay.replay_date((SIGNAL.isoformat(), str(out)))
     record = json.load(gzip.open(out / f"{SIGNAL.isoformat()}.json.gz"))
-    return {"db": db, "out": out, "result": result, "record": record, "variants": variants}
+    return {"db": db, "out": out, "result": result, "record": record, "variants": variants,
+            "directory": directory_dir, "table": table_path, "root": root}
 
 
 def test_compose_merges_switches_and_unites_profiles():
@@ -266,3 +267,27 @@ def test_compare_records_maps_variant_names_and_flags_differences(replay_setup, 
     with pytest.raises(SystemExit):
         compare.main()
     assert "differs:" in capsys.readouterr().out
+
+
+def test_replay_main_runs_a_spawned_pool_and_resumes(replay_setup):
+    """The Colab entry point: argument parsing, run.json, spawn workers, cached dates."""
+    import subprocess
+
+    out = replay_setup["root"] / "pool_out"
+    command = [sys.executable, str(SCRIPTS / "replay.py"), "--db", str(replay_setup["db"]),
+               "--directory", str(replay_setup["directory"]), "--industry-table", str(replay_setup["table"]),
+               "--out", str(out), "--dates", SIGNAL.isoformat(), "--variants", "v16,g3", "--workers", "2"]
+    env = {**__import__("os").environ, "PYTHONDONTWRITEBYTECODE": "1"}
+    first = subprocess.run(command, capture_output=True, text=True, timeout=600, check=True, env=env)
+    assert "DONE replay" in first.stdout and '"status": "scored"' in first.stdout
+    run = json.loads((out / "run.json").read_text())
+    assert set(run["variants"]) == {"v16", "g3"} and run["variants"]["g3"]["industry"] == "g_only"
+    record = json.load(gzip.open(out / f"{SIGNAL.isoformat()}.json.gz"))
+    assert {key.split("/")[0] for key in record["lists"]} == {"v16", "g3"}
+    assert _stock_rows(record, "v16/balanced/mid") == _stock_rows(replay_setup["record"], "v16/balanced/mid")
+    second = subprocess.run(command, capture_output=True, text=True, timeout=600, check=True, env=env)
+    assert '"status": "cached"' in second.stdout
+    with pytest.raises(subprocess.CalledProcessError):
+        subprocess.run(command[:-4] + ["--variants", "g3", "--workers", "1"], capture_output=True, check=True,
+                       env=env)
+

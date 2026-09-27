@@ -306,7 +306,7 @@ def replay_date(job: tuple[str, str]) -> dict:
                         lists[f"{name}/{profile}/{horizon}"] = {"n": len(rows), "watch_n": payload.get("watch_n"),
                                                                  "rows": kept}
                 clock[f"scored_{name}"] = time.perf_counter()
-                variant_inputs = None
+                variant_inputs = raws = clipped = themed = None
             del inputs
         record.update(status="scored", lists=lists)
     marks = list(clock.items())
