@@ -70,5 +70,6 @@ test('键盘焦点进入时暂停；减少动态时藏起副本、改为可横�
   const tape = await read('src/components/IndexTape.tsx');
   assert.match(tape, /target\.matches\(':focus-visible'\)/);
   assert.match(tape, /copy\.contains\(target\)/);
-  assert.match(tape, /if \(!animation\) \{\s*event\.currentTarget\.scrollLeft = target\.offsetLeft;/);
+  assert.match(tape, /item instanceof CSSAnimation && item\.animationName === 'marquee'/);
+  assert.match(tape, /if \(!animation\) \{\s*track\.scrollTo\(\{ left: target\.offsetLeft, behavior: 'instant' \}\);/);
 });

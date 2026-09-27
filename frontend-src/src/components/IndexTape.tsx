@@ -2,8 +2,7 @@
  * Index Tape（design.md §7.1）
  * 36px 指数跑马灯 marquee · hover 与键盘焦点暂停 · 涨跌 tick-flash · 右侧固定「延迟行情」毛玻璃标签
  */
-import { memo, useEffect, useRef, useState } from 'react';
-import type { FocusEvent } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { marketApi } from '@/api/modules/market';
 import { usePolling } from '@/hooks/usePolling';
@@ -11,6 +10,7 @@ import { useLiveQuote, useQuoteStatus, useQuoteSymbols } from '@/hooks/useLiveQu
 import { MARKET_FUNDS } from '@/lib/liveQuotes';
 import { LivePrice, LiveChange } from '@/components/shared/LiveQuote';
 import { useTickFlash } from '@/hooks/useTickFlash';
+import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 import { fmtPct, fmtPrice } from '@/lib/format';
 import { marqueeCopies, marqueeTimeAt } from '@/lib/marquee';
 import { cn } from '@/lib/utils';
@@ -91,40 +91,52 @@ export default function IndexTape() {
   const innerRef = useRef<HTMLDivElement>(null);
   const copyRef = useRef<HTMLDivElement>(null);
   const [copies, setCopies] = useState(2);
+  const reducedMotion = usePrefersReducedMotion();
+
+  /* 键盘焦点进来时露出第一套里的按钮。动画模式按位置停住；减少动态时没有动画，
+     直接横向卷动轨道。标签在焦点停留期间隐藏，避免盖住较长的基金行情。 */
+  const revealKeyboardFocus = useCallback((target: EventTarget | null) => {
+    const inner = innerRef.current;
+    const track = inner?.parentElement;
+    const copy = copyRef.current;
+    if (!inner || !track || !copy || !(target instanceof HTMLElement) || !copy.contains(target) || !target.matches(':focus-visible')) return;
+    const animation = inner.getAnimations().find(item => item instanceof CSSAnimation && item.animationName === 'marquee');
+    if (!animation) {
+      track.scrollTo({ left: target.offsetLeft, behavior: 'instant' });
+      return;
+    }
+    track.scrollTo({ left: 0, behavior: 'instant' });
+    animation.currentTime = marqueeTimeAt(target.offsetLeft, copy.offsetWidth, Number(animation.effect?.getComputedTiming().duration));
+  }, []);
 
   useEffect(() => {
     const copy = copyRef.current;
     const track = innerRef.current?.parentElement;
     if (!copy || !track || typeof ResizeObserver === 'undefined') return;
     // 没有内容时单套只剩尾部间距，按 0 宽处理，免得铺出上限份数的空副本。
-    const measure = () => setCopies(marqueeCopies(track.clientWidth, copy.childElementCount > 0 ? copy.offsetWidth : 0));
+    const measure = () => {
+      setCopies(marqueeCopies(track.clientWidth, copy.childElementCount > 0 ? copy.offsetWidth : 0));
+      revealKeyboardFocus(document.activeElement);
+    };
     const observer = new ResizeObserver(measure);
     observer.observe(track);
     observer.observe(copy);
     return () => observer.disconnect();
-  }, []);
+  }, [revealKeyboardFocus]);
 
-  /* 键盘焦点进来时露出第一套里的按钮。动画模式按位置停住；减少动态时没有动画，
-     直接横向卷动轨道。标签在焦点停留期间隐藏，避免盖住较长的基金行情。 */
-  const revealKeyboardFocus = (event: FocusEvent<HTMLDivElement>) => {
-    const target = event.target;
-    const copy = copyRef.current;
-    if (!copy || !(target instanceof HTMLElement) || !copy.contains(target) || !target.matches(':focus-visible')) return;
-    const animation = innerRef.current?.getAnimations()[0];
-    if (!animation) {
-      event.currentTarget.scrollLeft = target.offsetLeft;
-      return;
-    }
-    event.currentTarget.scrollLeft = 0;
-    animation.currentTime = marqueeTimeAt(target.offsetLeft, copy.offsetWidth, Number(animation.effect?.getComputedTiming().duration));
-  };
+  useEffect(() => {
+    // 恢复动画前清除手动滚动偏移，否则固定标签也会被卷出轨道。
+    const track = innerRef.current?.parentElement;
+    track?.scrollTo({ left: 0, behavior: 'instant' });
+    revealKeyboardFocus(document.activeElement);
+  }, [reducedMotion, revealKeyboardFocus]);
 
   const row = useFunds
     ? MARKET_FUNDS.map(symbol => <FundTapeItem key={symbol} symbol={symbol} onOpen={() => navigate(`/stock/${symbol}`)} />)
     : <TapeRow items={items} flashes={flashes} onOpen={openMarket} />;
 
   return (
-    <div className="marquee-track no-scrollbar relative flex h-9 items-center overflow-hidden border-b border-line bg-paper-2/80 pl-4" onFocus={revealKeyboardFocus}>
+    <div className="marquee-track no-scrollbar relative flex h-9 items-center overflow-hidden border-b border-line bg-paper-2/80 pl-4" onFocus={(event) => revealKeyboardFocus(event.target)}>
       <div ref={innerRef} className="marquee-inner relative flex w-max shrink-0 animate-marquee items-center">
         <div ref={copyRef} className="flex items-center gap-8 whitespace-nowrap pr-8" aria-hidden={!useFunds && items.length === 0}>
           {row}
