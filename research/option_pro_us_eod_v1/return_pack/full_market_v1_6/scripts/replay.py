@@ -27,6 +27,7 @@ import multiprocessing as mp
 import sqlite3
 import sys
 import time
+from collections import Counter
 from datetime import date
 from pathlib import Path
 
@@ -41,25 +42,69 @@ ROW_FIELDS = ("ticker", "name", "price", "sort_score", "algorithm_id", "stock_or
               "avg_dollar_volume_20d")
 FACTOR_INDEX = {"T": 0, "M": 1, "R": 6}
 # Multipliers on the balanced and aggressive factor_tilt; conservative stays v1.4 as the control.
+# "residual" swaps the family-D residual window (sum_start, sum_end) and needs a longer history.
 VARIANTS = {
     "v15": {},
     "tilt_a": {"T": 0.6, "M": 1.6},
     "tilt_b": {"T": 0.5, "M": 2.0},
     "r0": {"R": 0.0},
     "tilt_a_r0": {"T": 0.6, "M": 1.6, "R": 0.0},
+    "d12m1": {"residual": (251, 21)},
 }
 TILTED_PROFILES = ("balanced", "aggressive")
+LONG_HISTORY = 506  # 12-1 residual: 231 summed sessions, 21 skipped, 252-session fit, one return lag
 
 _state: dict = {}
 
 
-def tilted_registry(base: dict, multipliers: dict[str, float]) -> dict:
+def tilted_registry(base: dict, multipliers: dict) -> dict:
     registry = copy.deepcopy(base)
     for profile in TILTED_PROFILES:
         tilt = registry["profiles"][profile]["factor_tilt"]
         for factor, multiplier in multipliers.items():
-            tilt[FACTOR_INDEX[factor]] = tilt[FACTOR_INDEX[factor]] * multiplier
+            if factor in FACTOR_INDEX:
+                tilt[FACTOR_INDEX[factor]] = tilt[FACTOR_INDEX[factor]] * multiplier
     return registry
+
+
+def long_window_residuals(connection, directory: list[dict], session: date, sum_window: tuple[int, int],
+                          securities) -> dict | None:
+    """Family-D residuals from a LONG_HISTORY panel; None when the window predates the freeze."""
+    from app.services.eod_limited import market_data as md
+    from app.services.eod_limited.panel import prepare_limited_panel
+    from app.services.eod_limited.universe import select_all_market_universe
+    from app.services.market_calendar import prior_trading_sessions
+    from app.services.research_eod_v1.residual import ResidualMomentum, residual_raw_momentum
+
+    sessions = [*prior_trading_sessions(session, LONG_HISTORY - 1), session]
+    if sessions[0] < FREEZE_START:
+        return None
+    md._session_manifest(connection, sessions)
+    members, coverage = select_all_market_universe(directory)
+    long_panel = prepare_limited_panel(md._load_panel(connection, members, coverage, sessions)[0])
+    market = long_panel.get("SPY")
+    sum_start, sum_end = sum_window
+    out = {}
+    for sid in securities:
+        series = long_panel.get(sid)
+        if series is None:
+            out[sid] = ResidualMomentum(None, "LONG_WINDOW_UNAVAILABLE")
+            continue
+        out[sid] = residual_raw_momentum(series, market or series, long_panel, spy_residual_allowed=True,
+                                         sum_start=sum_start, sum_end=sum_end,
+                                         history_min=sum_start + 252 + 2)
+    return out
+
+
+def with_residuals(inputs: dict, residuals: dict) -> dict:
+    from dataclasses import replace
+
+    def swap(values: dict) -> dict:
+        return {sid: replace(raw, residual=residuals[sid]) if sid in residuals else raw
+                for sid, raw in values.items()}
+
+    return {horizon: (swap(raws), clipped, {theme: swap(values) for theme, values in themed.items()})
+            for horizon, (raws, clipped, themed) in inputs.items()}
 
 
 def directory_labels(folder: Path) -> list[str]:
@@ -137,10 +182,21 @@ def replay_date(job: tuple[str, str]) -> dict:
                                                horizons=list(HORIZONS), geometry_workers=1)
         clock["precomputed"] = time.perf_counter()
         lists = {}
+        record["unavailable_variants"] = {}
         for name, registry in _state["registries"].items():
+            variant_inputs = inputs
+            if VARIANTS[name].get("residual"):
+                residuals = long_window_residuals(_state["connection"], directory, session,
+                                                  VARIANTS[name]["residual"], list(panel))
+                if residuals is None:
+                    record["unavailable_variants"][name] = "long_window_before_freeze"
+                    continue
+                record.setdefault("residual_status", {})[name] = dict(
+                    Counter(value.status for value in residuals.values()))
+                variant_inputs = with_residuals(inputs, residuals)
             cache: dict = {}
             for horizon in HORIZONS:
-                raws, clipped, themed = inputs[horizon]
+                raws, clipped, themed = variant_inputs[horizon]
                 for profile in PROFILES:
                     if name != "v15" and profile not in TILTED_PROFILES:
                         continue
