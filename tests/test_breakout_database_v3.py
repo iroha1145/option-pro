@@ -666,7 +666,9 @@ def test_retention_keeps_latest_completed_reference_across_multiple_batches(
             ORDER BY run.published_at,run.scan_run_id
             """
         ).fetchall()
-        assert references == [(scan_ids[-1],)]
+        # The first snapshot already carries the trigger, so research needs it
+        # alongside the latest reference; every scan in between is pruned.
+        assert references == [(scan_ids[0],), (scan_ids[-1],)]
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     assert repo.get_event("event-long-lived") is not None
     assert repo.events_for_ticker("AAPL")[0]["event_id"] == "event-long-lived"
@@ -679,6 +681,66 @@ def test_retention_keeps_latest_completed_reference_across_multiple_batches(
     assert "event-long-lived" in {
         str(event["event_id"]) for event in carryover.events
     }
+
+
+def test_retention_keeps_the_first_and_first_triggered_snapshots_research_reads(
+    tmp_path,
+) -> None:
+    # Rechecks overwrite event_price and feature_cutoff_at with the latest scan's
+    # values, so only the scan that first carried the trigger passes the research
+    # point-in-time check. Retention must not delete it (or the first sighting)
+    # just because a newer scan still references the event.
+    repo = BreakoutRepository(tmp_path / "retention-research.db")
+    repo.initialize()
+    first_seen = START - timedelta(days=70)
+    watching = {
+        **_event("event-research", "NVDA", first_seen, first_seen),
+        "lifecycle_state": "WATCHING",
+        "previous_state": None,
+        "transition_reason": "discovered",
+        "triggered_at": None,
+    }
+    scan_ids = [_publish(repo, first_seen, [watching], cache_key="bucket-watch")]
+    triggered_at = first_seen + timedelta(days=1)
+    for offset in range(1, 6):
+        observed = first_seen + timedelta(days=offset)
+        event = {
+            **_event("event-research", "NVDA", first_seen, observed),
+            "triggered_at": triggered_at,
+            "state_changed_at": triggered_at,
+        }
+        scan_ids.append(_publish(repo, observed, [event], cache_key=f"bucket-{offset}"))
+    recent = _publish(
+        repo,
+        START - timedelta(days=1),
+        [{**_event("event-research", "NVDA", first_seen, START - timedelta(days=1)),
+          "triggered_at": triggered_at}],
+        cache_key="bucket-recent",
+    )
+    token = repo.acquire_lock("breakout-worker", "retention-research", 120, START)
+    for _ in range(10):
+        counts = repo.prune_retention(
+            owner_id="retention-research",
+            lease_token=token,
+            raw_payload_hours=24,
+            scan_days=30,
+            batch_size=2,
+            now=START + timedelta(seconds=1),
+        )
+        if not counts["scan_attachments"]:
+            break
+    else:  # pragma: no cover - protects against retention making no progress
+        pytest.fail("retention did not converge")
+
+    with sqlite3.connect(repo.path) as connection:
+        kept = [
+            row[0]
+            for row in connection.execute(
+                "SELECT scan_run_id FROM breakout_scan_events WHERE event_id='event-research' "
+                "ORDER BY created_at, scan_run_id"
+            )
+        ]
+    assert kept == [scan_ids[0], scan_ids[1], recent]
 
 
 def test_snapshot_id_formula_is_deterministic() -> None:

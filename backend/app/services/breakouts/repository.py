@@ -212,6 +212,52 @@ def _database_snapshot_id(
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _earlier_completed_snapshot_sql(event: str, run: str, *, triggered: bool) -> str:
+    """SQL: a completed scan published before ``run`` also holds a snapshot of ``event``."""
+
+    trigger = (
+        "AND json_extract(earlier.event_snapshot_json,'$.triggered_at') IS NOT NULL"
+        if triggered
+        else ""
+    )
+    return f"""
+        EXISTS(
+          SELECT 1
+          FROM breakout_scan_events AS earlier
+          JOIN breakout_scan_runs AS earlier_run
+            ON earlier_run.scan_run_id=earlier.scan_run_id
+           AND earlier_run.status='completed'
+          WHERE earlier.event_id={event}.event_id {trigger}
+            AND (
+              COALESCE(earlier_run.published_at,earlier_run.completed_at,earlier_run.updated_at,'')
+                < COALESCE({run}.published_at,{run}.completed_at,{run}.updated_at,'')
+              OR (
+                COALESCE(earlier_run.published_at,earlier_run.completed_at,earlier_run.updated_at,'')
+                  = COALESCE({run}.published_at,{run}.completed_at,{run}.updated_at,'')
+                AND earlier_run.scan_run_id<{run}.scan_run_id
+              )
+            )
+        )"""
+
+
+def _research_snapshot_superseded_sql(event: str, run: str) -> str:
+    """SQL: research never reads this scan-event row, so retention may delete it.
+
+    Rechecks overwrite ``event_price`` and ``feature_cutoff_at`` with each scan's
+    values while ``triggered_at`` stays fixed, so only the first snapshot that
+    carried the trigger passes the research point-in-time check; research also
+    starts from the first sighting of each event. Both rows are kept for good.
+    """
+
+    return f"""(
+        {_earlier_completed_snapshot_sql(event, run, triggered=False)}
+        AND (
+          json_extract({event}.event_snapshot_json,'$.triggered_at') IS NULL
+          OR {_earlier_completed_snapshot_sql(event, run, triggered=True)}
+        )
+    )"""
+
+
 def _safe_db_path(path: str | Path) -> Path:
     text = str(path)
     candidate = Path(path)
@@ -4085,7 +4131,9 @@ class BreakoutRepository:
 
         Event rows, transitions and shadow research records are retained. Old
         scan attachments are removed only when a newer completed scan still
-        references the same event. For T1, only superseded evaluation versions
+        references the same event; the first snapshot of each event and the
+        first one carrying its trigger are never removed, because they are the
+        rows research validation reads. For T1, only superseded evaluation versions
         and retry rows older than the scan window are removed; the current
         evaluation of every event stays readable.
         """
@@ -4136,7 +4184,7 @@ class BreakoutRepository:
             old_ids = [
                 str(row["scan_run_id"])
                 for row in connection.execute(
-                    """
+                    f"""
                     SELECT run.scan_run_id FROM breakout_scan_runs AS run
                     WHERE run.status<>'running' AND run.updated_at<?
                       AND run.scan_run_id<>COALESCE(
@@ -4161,6 +4209,7 @@ class BreakoutRepository:
                         OR EXISTS(
                           SELECT 1 FROM breakout_scan_events old_event
                           WHERE old_event.scan_run_id=run.scan_run_id
+                            AND {_research_snapshot_superseded_sql("old_event", "run")}
                             AND EXISTS(
                               SELECT 1
                               FROM breakout_scan_events newer_event
@@ -4198,6 +4247,7 @@ class BreakoutRepository:
                       AND EXISTS(
                         SELECT 1 FROM breakout_scan_runs old_run
                         WHERE old_run.scan_run_id=old.scan_run_id
+                          AND {_research_snapshot_superseded_sql("old", "old_run")}
                           AND EXISTS(
                             SELECT 1
                             FROM breakout_scan_events newer
