@@ -1105,13 +1105,23 @@ def run_range_persistence_validation(
     labeled = attach_forward_return_labels(
         merged["observations"], price_dataset, horizons=normalized_horizons
     )
+    # Purging drops the rows whose label ends past the next window's start, which
+    # with daily scans is the last `horizon` dates of the train and validation
+    # windows. Adding those dates back keeps the configured number of usable
+    # dates; otherwise any horizon as long as the validation window never forms one.
+    raw_windows = {
+        horizon: {
+            "train_dates": train_dates + horizon,
+            "validation_dates": validation_dates + horizon,
+            "test_dates": test_dates,
+        }
+        for horizon in normalized_horizons
+    }
     horizon_reports = {
         str(horizon): build_walk_forward_ablation(
             labeled["observations"],
             horizon=horizon,
-            train_dates=train_dates,
-            validation_dates=validation_dates,
-            test_dates=test_dates,
+            **raw_windows[horizon],
             step_dates=step_dates,
             embargo_dates=embargo_dates,
             minimum_rows_per_split=minimum_rows_per_split,
@@ -1133,6 +1143,10 @@ def run_range_persistence_validation(
         "top_k": top_k,
         "partition_unit": "trading_date",
         "random_split": False,
+        "window_dates_basis": "usable_train_and_validation_dates_after_purge",
+        "raw_window_dates_by_horizon": {
+            str(horizon): dict(window) for horizon, window in raw_windows.items()
+        },
     }
     research_fingerprint = {
         **configuration,

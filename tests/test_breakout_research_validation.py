@@ -457,3 +457,69 @@ def test_research_documentation_states_leakage_and_shadow_boundaries():
     assert "external_unverified" in content
     assert "production_mode_recommendation" in content
     assert "shadow" in content
+
+
+def test_each_horizon_keeps_the_configured_usable_dates_after_purging():
+    # With daily scans, a horizon at least as long as the validation window used to
+    # purge every validation row (label ends reach past the test start), so the
+    # default 20/63-session horizons could never form a window however long the
+    # history grew. Train and validation windows now add the horizon's sessions.
+    dates = _business_dates(date(2026, 1, 2), 60)
+    tickers = {"AAA": 1.01, "BBB": 1.0, "CCC": 0.99}
+    events, shadows = [], []
+    for day in dates[:36]:
+        event_at = f"{day.isoformat()}T15:00:00Z"
+        for rank, (ticker, _) in enumerate(tickers.items(), 1):
+            scan = f"scan-{day.isoformat()}"
+            event_id = f"event-{day.isoformat()}-{ticker}"
+            events.append({
+                "scan_run_id": scan,
+                "published_at": f"{day.isoformat()}T15:01:00Z",
+                "event_id": event_id,
+                "ticker": ticker,
+                "event_at": event_at,
+                "event_snapshot": {
+                    "event_id": event_id,
+                    "ticker": ticker,
+                    "trading_date": day.isoformat(),
+                    "event_at": event_at,
+                    "event_price": 100,
+                    "source_snapshot_id": "source-1",
+                    "features": {"raw_as_of": event_at, "feature_cutoff_at": event_at},
+                },
+            })
+            shadows.append({
+                "scan_run_id": scan,
+                "event_id": event_id,
+                "ticker": ticker,
+                "production_score": float(4 - rank),
+                "hypothetical_score": float(rank),
+                "version": "range-v1",
+                "shadow": {"feature": {"status": "active", "range_persistence": 70, "version": "range-v1"}},
+            })
+    prices = {
+        ticker: [{"date": day.isoformat(), "close": round(100 * growth ** index, 6)} for index, day in enumerate(dates)]
+        for ticker, growth in tickers.items()
+    }
+
+    report = run_range_persistence_validation(
+        events,
+        shadows,
+        _price_dataset(prices),
+        horizons=(4,),
+        train_dates=6,
+        validation_dates=4,
+        test_dates=4,
+        embargo_dates=1,
+        minimum_rows_per_split=2,
+        top_k=1,
+    )
+
+    horizon = report["horizons"]["4"]
+    assert horizon["status"] == "active"
+    window = horizon["windows"][0]
+    assert window["audit"]["used_rows"]["validation"] == 4 * 3
+    assert window["audit"]["used_rows"]["train"] == 7 * 3
+    assert report["configuration"]["raw_window_dates_by_horizon"]["4"] == {
+        "train_dates": 10, "validation_dates": 8, "test_dates": 4,
+    }
