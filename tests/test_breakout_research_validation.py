@@ -523,3 +523,10 @@ def test_each_horizon_keeps_the_configured_usable_dates_after_purging():
     assert report["configuration"]["raw_window_dates_by_horizon"]["4"] == {
         "train_dates": 10, "validation_dates": 8, "test_dates": 4,
     }
+
+
+@pytest.mark.parametrize("window", ["train_dates", "validation_dates", "test_dates"])
+def test_windows_must_be_positive_before_the_purge_allowance(window):
+    arguments = {"train_dates": 6, "validation_dates": 4, "test_dates": 4, window: 0}
+    with pytest.raises(ValueError, match="window sizes must be positive"):
+        run_range_persistence_validation([], [], _price_dataset({}), horizons=(4,), **arguments)

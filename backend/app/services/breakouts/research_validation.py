@@ -17,7 +17,7 @@ from typing import Any, Iterable, Mapping, Sequence
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
-RESEARCH_VALIDATION_VERSION = "breakout-research-validation-v1"
+RESEARCH_VALIDATION_VERSION = "breakout-research-validation-v2"
 PRICE_DATA_SCHEMA_VERSION = "breakout-forward-prices-v1"
 DEFAULT_FORWARD_HORIZONS = (1, 5, 20, 63)
 
@@ -1100,6 +1100,8 @@ def run_range_persistence_validation(
 ) -> dict[str, Any]:
     """Build labels and purged walk-forward ablations for completed snapshots."""
 
+    if min(train_dates, validation_dates, test_dates) < 1:
+        raise ValueError("window sizes must be positive")
     normalized_horizons = _normalize_horizons(horizons)
     merged = merge_completed_research_observations(events, shadows)
     labeled = attach_forward_return_labels(

@@ -845,7 +845,24 @@ def _read_eod_limited_snapshot(
             source_status = "unknown"
     sector_id = parameters.get("sector_id")
     min_price = float(parameters.get("min_price") or 0)
+    served_key = "composite_rows" if kind == LIST_KIND_COMPOSITE else "observation_rows"
     track_counts: dict[str, int] = {}
+    if track != "all":
+        # The page shows these as the size of the list it browses; count only the served track.
+        observed = [row for row in payload.get("observation_rows") or [] if row.get("stock_or_etf_track") == track]
+        statuses = Counter(str(row.get("status") or "") for row in observed)
+        payload["observation_n"] = len(observed)
+        payload["eligible_n"] = statuses.get("eligible", 0)
+        payload["watch_n"] = statuses.get("watch", 0)
+        payload["composite_n"] = sum(
+            1 for row in payload.get("composite_rows") or [] if row.get("stock_or_etf_track") == track
+        )
+        payload["empty_eligible_reason"] = (
+            "consensus_insufficient" if payload["eligible_n"] and not payload["composite_n"]
+            else "data_qualification_unverified" if payload["watch_n"]
+            else "technical_threshold" if payload.get("rejected_n")
+            else "no_complete_candidates"
+        )
     for key in ("observation_rows", "composite_rows"):
         rows = [
             row for row in payload.get(key) or []
@@ -855,7 +872,7 @@ def _read_eod_limited_snapshot(
                 or (not row.get("price_unknown") and float(row.get("price") or 0) >= min_price)
             )
         ]
-        if key == "observation_rows":
+        if key == served_key:
             track_counts = dict(Counter(str(row.get("stock_or_etf_track") or "unknown") for row in rows))
         # Funds ranked among stocks crowded the v1.5 list with low-volatility credit ETFs
         # that trailed SPY; v1.6 ranks each track on its own (research full_market_v1_6).
