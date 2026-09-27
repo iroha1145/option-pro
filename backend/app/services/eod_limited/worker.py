@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from datetime import date, datetime, timezone
-from typing import Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from app.failure_diagnostics import record_fallback_failure
 from app.services.research_eod_v1.calendar_asof import settled_eod_session
@@ -30,6 +30,9 @@ from .diagnostic_store import DiagnosticWriter, prune_old_generations
 from .inference import precompute_session_raws, precompute_theme_raws, score_eod_session
 from .panel import bars_to_panel, prepare_limited_panel, select_universe_tickers
 from .store import publish_batch, read_batch, variant_key
+
+if TYPE_CHECKING:
+    from .live_config import LiveConfig
 
 
 def resolve_inference_session(now: datetime | None = None, *, source_finalized_through: date | None = None) -> date:
@@ -79,6 +82,10 @@ def _compact_variant(scored: Mapping[str, Any]) -> dict[str, Any]:
         "family_funnels",
     )
     compact = {key: scored.get(key) for key in keep}
+    # v1.7 candidate metadata exists only when a candidate switch is on.
+    for key in ("factor_capabilities", "v17_options"):
+        if key in scored:
+            compact[key] = scored[key]
     # The public projection reads only eligible rows here. Watch rows already
     # live in watch_list; rejected rows contribute only the retained counts and
     # reason summaries. Their full platform histories need not be persisted.
@@ -108,8 +115,12 @@ def run_eod_limited_job(
     tickers: Sequence[str] | None = None,
     synthetic_input: bool = False,
     refresh_context: bool | None = None,
+    live_config: "LiveConfig | None" = None,
 ) -> dict[str, Any]:
+    from .live_config import LIVE_CONFIG
+
     started = time.perf_counter()
+    config = LIVE_CONFIG if live_config is None else live_config
     live_input = purpose == PURPOSE_LIVE and not synthetic_input
     context_requested = panel is None and live_input if refresh_context is None else refresh_context
     market_input = live_input and panel is None
@@ -121,13 +132,16 @@ def run_eod_limited_job(
         raise ValueError("all_market_volume_qualification_is_unverified")
     if market_input or any("all_market_stocks" in getattr(series, "theme_ids", ()) for series in (panel or {}).values()):
         from .market_registry import load_market_registry
-        registry = load_market_registry()
+        # v1.7 registry-level switches apply to the live all-market run only.
+        registry = load_market_registry(extra_tilt_multipliers=config.tilt_multipliers() if market_input else None)
     else:
         registry = load_registry()
     target = session
     attempted_session = session
     coverage: list[dict[str, Any]] = []
     manifest: dict[str, Any] = {}
+    directory_rows: list[dict[str, Any]] = []
+    scoring_options = None
     if panel is None:
         if purpose == PURPOSE_SYNTHETIC:
             panel = build_synthetic_panel(end=target)
@@ -136,7 +150,10 @@ def run_eod_limited_job(
             from .market_data import load_all_market_panel
             target = target or resolve_inference_session(now)
             attempted_session = target
-            panel, coverage, manifest = load_all_market_panel(end=target, root=root, tickers=tickers)
+            panel, coverage, manifest = load_all_market_panel(
+                end=target, root=root, tickers=tickers, fund_scope=config.fund_scope,
+                on_directory=directory_rows.extend,
+            )
         else:
             target = target or resolve_inference_session(now)
             attempted_session = target
@@ -195,6 +212,24 @@ def run_eod_limited_job(
                 "attempted_session": attempted_session.isoformat(),
             },
         }
+    if market_input:
+        industry_tags = None
+        if config.wants_industry:
+            from .industry import ensure_industry_tags
+
+            members = {str(row.get("ticker")) for row in coverage
+                       if not str(row.get("status") or "").startswith("excluded:")}
+            try:
+                industry_tags, manifest["industry"] = ensure_industry_tags(
+                    directory_rows, root=root, level=config.sic_level,
+                    budget=config.industry_lookup_budget, tickers=members,
+                )
+            except Exception as exc:  # noqa: BLE001 - the classification is optional input
+                record_fallback_failure("eod_industry_classification", exc)
+                industry_tags, manifest["industry"] = None, {"status": "unavailable", "error": type(exc).__name__}
+            if not industry_tags:
+                manifest["industry"] = {**(manifest.get("industry") or {}), "status": "unavailable_scored_without_industry"}
+        scoring_options = config.scoring_options(industry_tags)
     panel = prepare_limited_panel(panel)
     wanted = [(profile, horizon)]
     if all_variants or market_input:
@@ -214,6 +249,7 @@ def run_eod_limited_job(
             horizons=list(dict.fromkeys(item_horizon for _, item_horizon in wanted)),
             themes=themes,
             geometry_workers=4,
+            **({} if scoring_options is None else {"options": scoring_options}),
         )
     writer = DiagnosticWriter(
         root=root, served_session=target.isoformat(), compute_version=COMPUTE_VERSION,
@@ -256,6 +292,7 @@ def run_eod_limited_job(
                 algorithms=algorithms,
                 on_family_rows=retain_block,
                 **({"compact": True, "snapshot_cache": snapshot_cache} if market_input else {}),
+                **({} if scoring_options is None else {"options": scoring_options}),
             )
             if synthetic_input:
                 scored["synthetic"] = True
@@ -293,6 +330,7 @@ def run_eod_limited_job(
             "variants": variants,
             "diagnostics": diagnostic_manifest,
             "theme_statistics": theme_statistics,
+            **({"live_config": config.describe()} if config.label() != "v1.6" else {}),
         }
         published = publish_batch(batch, root=root)
         if not published.get("ok"):

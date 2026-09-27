@@ -99,3 +99,15 @@
 D 家族残差窗口改为 12 减 1 个月（231 日求和、跳过 21 日）的候选也回放过。它在只看股票名单上提升很小（均衡 +0.06、进取 +0.16 个百分点），并且需要 506 日行情缓存，这一版不上线，理由见研究包的修订 2。残差函数已经可以传入窗口参数，默认值不变。
 
 版本号为 `limited-all-market-v1.6` / `eod-limited-v1.6`。调参挂钩没变，仍是 `full-market-v1.5`。影子对照工具（`scripts/eod_shadow_compare.py`）仍比较调参挂钩之前的口径，没有接入 v1.5 以后的挂钩和 v1.6 的倾斜。
+
+## v1.7 候选（开关，默认关闭）
+
+证据和规则见 `research/option_pro_us_eod_v1/return_pack/full_market_v1_7/PREREGISTRATION.md`。这一轮先把候选做成生产代码里的开关，回放跑完再决定采纳哪些；默认全部关闭时，输出与 v1.6 逐字节一致（`tests/test_eod_v16_default_identity.py`）。
+
+- **开关板**：`backend/app/services/eod_limited/live_config.py` 的 `LiveConfig`（`industry_mode`、`sic_level`、`g_tilt`、`conservative_policy`、`fund_scope`）。`run_eod_limited_job` 只在全市场实时任务里读取它。
+- **行业分类**：`industry.py`。SEC 的 SIC 代码来自 Massive `/v3/reference/tickers/{ticker}`，存在 `DATA_DIR/eod-limited-v1/industry-sic-v1.json.gz`，每次运行按预算补查目录里没见过的股票，查不到不阻塞发布；`scripts/eod_industry_table.py` 负责用冻结表做种子和手工刷新。行业 = SIC 前 3 位（或 4 位），父行业留空。基金没有行业。
+- **G 因子两种接法**：`options.ScoringOptions(industry_mode="g_only")` 只算 G 并让均衡、进取两档的权重吃 G（轨道 `PRICE_SIC_INDUSTRY_DIAGNOSTIC`）；`industry_mode="full"` 把行业写进证券，按引擎原设计启用行业内分位数、两因子 D 残差和 G。这条轨道上没有分类的证券（无 SIC 的股票、基金）G 按 50 计，避免缺 G 的证券在七因子归一下占便宜。保守档在任何模式下都不吃 G（覆盖下限 0.95 会把无 SIC 的股票整批拒掉）。
+- **保守档换口径**：`full_market_tuning.conservative_v17_policy`，保守档进入 v1.5 的四个挂钩（M 混入、R 中性、EXTENDED 入场状态、ATR 倍数 2.0）并套 v1.6 的倾斜，门槛不变。
+- **基金范围**：`universe.select_all_market_universe(fund_scope="benchmarks")` 只保留 SPY、QQQ 和 `etfs` 主题成员；股票名单必须不变，由回放逐日验证。
+- 页面接口没有改；开关打开后，快照里多出 `factor_capabilities`（G 的来源）、`v17_options` 和批次的 `live_config` 三个字段。
+

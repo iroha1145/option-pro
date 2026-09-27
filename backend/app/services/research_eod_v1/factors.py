@@ -589,6 +589,7 @@ def extract_raw(
     spy_residual_allowed: bool = True,
     matched_market: SecuritySeries | None = None,
     include_setup: bool = True,
+    basket_cache: dict | None = None,
 ) -> RawComponents:
     t = len(series.dates) - 1
     session = series.dates[t]
@@ -654,6 +655,7 @@ def extract_raw(
         panel,
         spy_residual_allowed=spy_residual_allowed,
         matched_market=matched_market,
+        basket_cache=basket_cache,
     )
     highs, lows = find_confirmed_pivots(high, low, series.dates, span=SWING_SPAN, as_of_index=t)
     structure_score, structure_label = structure_anchor(highs, lows)

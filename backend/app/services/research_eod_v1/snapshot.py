@@ -85,6 +85,46 @@ def _atr_references(raws: Mapping[str, RawComponents], policy: str) -> dict[str,
     return result
 
 
+def industry_g_inputs(
+    xref: Mapping[str, RawComponents],
+    *,
+    industries: Mapping[str, str | None],
+    parents: Mapping[str, str | None],
+    tracks: Mapping[str, str],
+    spy_m63: float | None,
+) -> tuple[dict[str, float | None], dict[str, float | None]]:
+    """Per member: the quantile of its peers' mean m63 over SPY, and peer breadth above SMA50.
+
+    Peers are the other members of the same industry (five or more), else of the
+    same parent industry (five or more); fewer leaves both inputs None.
+    """
+    industry_ret: dict[str, float | None] = {}
+    breadth: dict[str, float | None] = {}
+    industry_members: dict[str, list[str]] = defaultdict(list)
+    parent_members: dict[str, list[str]] = defaultdict(list)
+    for sid in xref:
+        if industries.get(sid):
+            industry_members[industries[sid]].append(sid)  # type: ignore[index]
+        if parents.get(sid):
+            parent_members[parents[sid]].append(sid)  # type: ignore[index]
+    for sid in xref:
+        peers = [other for other in industry_members.get(industries.get(sid) or "", ()) if other != sid]
+        if len(peers) < 5:
+            peers = [other for other in parent_members.get(parents.get(sid) or "", ()) if other != sid]
+        if len(peers) < 5:
+            industry_ret[sid] = None
+            breadth[sid] = None
+            continue
+        rets = [xref[p].m63 for p in peers if xref[p].m63 is not None]
+        if not rets or spy_m63 is None:
+            industry_ret[sid] = None
+        else:
+            industry_ret[sid] = float(sum(rets) / len(rets) - spy_m63)
+        flags = [xref[p].above_sma50 for p in peers if xref[p].above_sma50 is not None]
+        breadth[sid] = None if len(flags) < 5 else sum(1 for flag in flags if flag) / len(flags)
+    return q_star(industry_ret, industry=dict(parents), parent=dict(parents), tracks=dict(tracks)), breadth
+
+
 def _common_gate_checks(raw, registry, sector, profile, algorithm, scored, venue, median):
     """Independent pass/fail facts, including inputs the combined gate cannot assess.
 
@@ -336,11 +376,18 @@ def compute_snapshot(
     already_session_clipped: bool = False,
     snapshot_cache: dict | None = None,
     atr_reference_policy: str = "legacy",
+    industry_overlay: Mapping[str, tuple[str | None, str | None]] | None = None,
+    industry_overlay_key: Any = None,
 ) -> dict[str, Any]:
     """Deterministic snapshot. Adding bars after ``as_of`` must not change T.
 
     ``snapshot_cache`` belongs to one job with an immutable panel and registry.
     Only theme/horizon-independent reference statistics are shared in that job.
+
+    ``industry_overlay`` maps security ids to ``(industry_id, parent_industry_id)``
+    for the G factor only: the other factors keep the industries carried by the
+    raw components (none, in the all-market panel). ``industry_overlay_key``
+    names the overlay inside ``snapshot_cache``; it defaults to the object's id.
     """
 
     require_aware(as_of)
@@ -471,10 +518,13 @@ def compute_snapshot(
             if has_complete_session_bar(series, session)
         }
     xref = {sid: raw for sid, raw in raws.items() if sid in reference_ids}
-    job_key = (session, target_track, universe_version)
+    overlay_key = None
+    if industry_overlay is not None:
+        overlay_key = ("g_overlay", id(industry_overlay) if industry_overlay_key is None else industry_overlay_key)
+    job_key = (session, target_track, universe_version) + ((overlay_key,) if overlay_key else ())
     cached_cs = None if snapshot_cache is None else snapshot_cache.get(job_key)
     cs_key = None
-    if cached_cs is None and snapshot_cache is None:
+    if cached_cs is None and snapshot_cache is None and industry_overlay is None:
         cs_key = (
             session,
             tuple(
@@ -514,37 +564,20 @@ def compute_snapshot(
             "q_ng": q_star({s: r.gap_tail252 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks, invert=True),
             "q_nd": q_star({s: r.max_drawdown63 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks, invert=True),
         }
-        industry_ret: dict[str, float | None] = {}
-        breadth: dict[str, float | None] = {}
+        g_industries, g_parents = industries, parents
+        if industry_overlay is not None:
+            tags = {sid: industry_overlay.get(sid) or (None, None) for sid in xref}
+            g_industries = {sid: tag[0] or None for sid, tag in tags.items()}
+            g_parents = {sid: tag[1] or None for sid, tag in tags.items()}
         spy_m63 = raws["SPY"].m63 if "SPY" in raws else None
-        industry_members: dict[str, list[str]] = defaultdict(list)
-        parent_members: dict[str, list[str]] = defaultdict(list)
-        for sid, raw in xref.items():
-            if raw.industry_id:
-                industry_members[raw.industry_id].append(sid)
-            if raw.parent_industry_id:
-                parent_members[raw.parent_industry_id].append(sid)
-        for sid, raw in xref.items():
-            peers = [other for other in industry_members.get(raw.industry_id, ()) if other != sid]
-            if len(peers) < 5:
-                peers = [other for other in parent_members.get(raw.parent_industry_id, ()) if other != sid]
-            if len(peers) < 5:
-                industry_ret[sid] = None
-                breadth[sid] = None
-                continue
-            rets = [xref[p].m63 for p in peers if xref[p].m63 is not None]
-            if not rets or spy_m63 is None:
-                industry_ret[sid] = None
-            else:
-                industry_ret[sid] = float(sum(rets) / len(rets) - spy_m63)
-            flags = [xref[p].above_sma50 for p in peers if xref[p].above_sma50 is not None]
-            breadth[sid] = None if len(flags) < 5 else sum(1 for flag in flags if flag) / len(flags)
-        cached_cs["q_g"] = q_star(industry_ret, industry=parents, parent=parents, tracks=tracks)
-        cached_cs["breadth"] = breadth
+        cached_cs["q_g"], cached_cs["breadth"] = industry_g_inputs(
+            xref, industries=g_industries, parents=g_parents, tracks=tracks, spy_m63=spy_m63,
+        )
         if snapshot_cache is None:
-            if len(_CS_MEMO) >= 8:
-                _CS_MEMO.clear()
-            _CS_MEMO[cs_key] = cached_cs
+            if cs_key is not None:
+                if len(_CS_MEMO) >= 8:
+                    _CS_MEMO.clear()
+                _CS_MEMO[cs_key] = cached_cs
         else:
             snapshot_cache[job_key] = cached_cs
     q_slope = cached_cs["q_slope"]

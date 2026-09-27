@@ -13,7 +13,7 @@ import random
 import re
 import sqlite3
 import time
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -24,7 +24,7 @@ from app.services.market_calendar import is_trading_day, prior_trading_sessions
 from app.services.research_eod_v1.series import SecuritySeries
 
 from . import VOLUME_SCOPE
-from .universe import UniverseMember, select_all_market_universe
+from .universe import FUND_SCOPE_ALL, UniverseMember, select_all_market_universe
 
 
 HISTORY_SESSIONS = 370
@@ -237,6 +237,8 @@ def _fetch_directory() -> list[dict[str, Any]]:
                 "locale": str(raw.get("locale") or "").strip(),
                 "currency_symbol": str(raw.get("currency_symbol") or "").strip(),
                 "active": raw.get("active"),
+                # Distinguishes reused tickers when a SIC classification is joined (v1.7).
+                "cik": str(raw.get("cik") or "").strip(),
             }
         next_url = payload.get("next_url")
         if next_url is None or next_url == "":
@@ -785,12 +787,15 @@ def load_all_market_panel(
     end: date,
     root: Path | str | None = None,
     tickers: Iterable[str] | None = None,
+    fund_scope: str = FUND_SCOPE_ALL,
+    on_directory: Callable[[list[dict[str, Any]]], None] | None = None,
 ) -> tuple[dict[str, SecuritySeries], list[dict[str, Any]], dict[str, Any]]:
     """Load a complete current all-market panel from a resumable raw-bar cache.
 
     Provider failures propagate after any independently completed day has been
     committed. A retry requests only missing days; no partial capture receives a
-    complete manifest.
+    complete manifest. ``on_directory`` receives the directory rows (with CIKs)
+    so the caller can classify securities without a second directory fetch.
     """
 
     sessions = _required_sessions(end)
@@ -802,9 +807,11 @@ def load_all_market_panel(
     directory = _fetch_directory()
     if not directory:
         raise AllMarketDataError("Massive reference directory is empty")
-    members, coverage = select_all_market_universe(directory, tickers=requested_tickers)
+    members, coverage = select_all_market_universe(directory, tickers=requested_tickers, fund_scope=fund_scope)
     if not members:
         raise AllMarketDataError("all-market universe has no eligible securities")
+    if on_directory is not None:
+        on_directory(directory)
     directory_projection = [
         {
             "ticker": str(row.get("ticker") or ""),
@@ -881,6 +888,7 @@ def load_all_market_panel(
         "directory_hash": directory_hash,
         "eligible_member_hash": member_hash,
         "requested_subset": requested_tickers,
+        **({"fund_scope": fund_scope} if fund_scope != FUND_SCOPE_ALL else {}),
         "bar_content_hash": session_hash,
         "split_content_hash": str(split_capture["content_sha256"]),
         "split_count": int(split_capture["result_count"]),

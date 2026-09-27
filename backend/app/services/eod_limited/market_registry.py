@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any
+from typing import Any, Mapping
 
 from app.services.research_eod_v1.config_load import load_registry
 from app.services.research_eod_v1.constants import FACTORS
@@ -19,8 +19,13 @@ LIVE_PROFILE_TILT_MULTIPLIERS = {
 }
 
 
-def load_market_registry() -> dict[str, Any]:
-    """Validate the research registry first, then add the declared generic context."""
+def load_market_registry(*, extra_tilt_multipliers: Mapping[str, Mapping[str, float]] | None = None) -> dict[str, Any]:
+    """Validate the research registry first, then add the declared generic context.
+
+    ``extra_tilt_multipliers`` (``{profile: {factor: multiplier}}``) multiplies the
+    profile tilts on top of the live v1.6 multipliers; v1.7 candidates use it for
+    a G tilt and for the conservative redefinition. Omitted, the registry is v1.6.
+    """
     registry = deepcopy(load_registry())
     registry["sectors"][ALL_MARKET_STOCKS] = {
         "name": "全市场通用股票",
@@ -50,4 +55,14 @@ def load_market_registry() -> dict[str, Any]:
         for factor, multiplier in multipliers.items():
             tilt[FACTORS.index(factor)] *= multiplier
     registry["live_profile_tilt_multipliers"] = deepcopy(LIVE_PROFILE_TILT_MULTIPLIERS)
+    if extra_tilt_multipliers:
+        applied: dict[str, dict[str, float]] = {}
+        for profile, multipliers in extra_tilt_multipliers.items():
+            tilt = registry["profiles"][profile]["factor_tilt"]
+            for factor, multiplier in multipliers.items():
+                if factor not in FACTORS or not float(multiplier) > 0:
+                    raise ValueError(f"tilt multiplier for {profile}/{factor} must be a positive factor multiplier")
+                tilt[FACTORS.index(factor)] *= float(multiplier)
+                applied.setdefault(profile, {})[factor] = float(multiplier)
+        registry["v17_tilt_multipliers"] = applied
     return registry

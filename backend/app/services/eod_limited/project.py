@@ -247,7 +247,8 @@ def project_strength_payload(
         "algorithm_version": ALGORITHM_VERSION,
         "score_basis": SCORE_BASIS,
         "score_aggregation": "m1_consensus" if list_kind == LIST_KIND_COMPOSITE else "best_family_theme_path",
-        "factor_capabilities": {"R": "stability_risk_quality", "G": "disabled_unverified_industry"},
+        "factor_capabilities": dict(scored.get("factor_capabilities")
+                                    or {"R": "stability_risk_quality", "G": "disabled_unverified_industry"}),
         "theme_statistics": scored.get("theme_statistics"),
         "family_funnels": scored.get("family_funnels"),
         "fallback_reason": None,

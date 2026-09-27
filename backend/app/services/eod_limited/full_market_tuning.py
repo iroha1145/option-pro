@@ -71,6 +71,40 @@ ATR_REFERENCE_UNAVAILABLE = "REFERENCE_UNIVERSE_INSUFFICIENT"
 
 
 @dataclass(frozen=True)
+class TuningPolicy:
+    """Which hooks apply to which profile. The default is the v1.5/v1.6 production policy."""
+
+    version: str = TUNING_VERSION
+    m_alpha: Mapping[str, float] = M_ALPHA
+    atr_multiplier: Mapping[str, float | None] = ATR_MULTIPLIER
+    r_neutral_profiles: frozenset[str] = R_NEUTRAL_PROFILES
+    extended_state_profiles: frozenset[str] = EXTENDED_STATE_PROFILES
+
+
+DEFAULT_POLICY = TuningPolicy()
+
+
+def conservative_v17_policy(atr_multiplier: float = 2.0) -> TuningPolicy:
+    """v1.7 candidate: conservative keeps its registry gates but ranks like balanced.
+
+    The v1.4 conservative list trailed SPY in every replayed year
+    (research full_market_v1_6). The hooks it lacked are the ones the v1.5 study
+    found harmful to leave out: R as a ranking reward, no momentum blend, a 1.25x
+    ATR cut and a strict EXTENDED rejection. Its own gates (ADV, score floor,
+    structure floor, coverage, absolute ATR cap) are registry values and stay.
+    """
+    if not (finite_number(atr_multiplier) or 0) > 0:
+        raise ValueError("conservative ATR multiplier must be a positive number")
+    return TuningPolicy(
+        version=f"full-market-v1.7-cons-atr{float(atr_multiplier):g}",
+        m_alpha=MappingProxyType({**M_ALPHA, "conservative": M_ALPHA["balanced"]}),
+        atr_multiplier=MappingProxyType({**ATR_MULTIPLIER, "conservative": float(atr_multiplier)}),
+        r_neutral_profiles=R_NEUTRAL_PROFILES | {"conservative"},
+        extended_state_profiles=EXTENDED_STATE_PROFILES | {"conservative"},
+    )
+
+
+@dataclass(frozen=True)
 class StockInput:
     security_id: str
     session: date
@@ -103,9 +137,10 @@ class TuningContext:
     benchmark_status: str
     digest: str
 
-    def summary(self) -> dict[str, Any]:
+    def summary(self, policy: TuningPolicy | None = None) -> dict[str, Any]:
+        policy = policy or DEFAULT_POLICY
         return {
-            "version": TUNING_VERSION,
+            "version": policy.version,
             "session": self.session.isoformat(),
             "horizon": self.horizon,
             "reference_scope": "all_eligible_stocks_in_input_no_theme_filter",
@@ -120,9 +155,9 @@ class TuningContext:
             "benchmark": "SPY",
             "benchmark_status": self.benchmark_status,
             "context_hash": self.digest,
-            "atr_multiplier_overrides": {k: v for k, v in ATR_MULTIPLIER.items()},
-            "r_neutral_profiles": sorted(R_NEUTRAL_PROFILES),
-            "extended_state_profiles": sorted(EXTENDED_STATE_PROFILES),
+            "atr_multiplier_overrides": {k: v for k, v in policy.atr_multiplier.items()},
+            "r_neutral_profiles": sorted(policy.r_neutral_profiles),
+            "extended_state_profiles": sorted(policy.extended_state_profiles),
             "extended_is_entry_state": True,
             "empirically_optimized_m_blend": False,
         }
@@ -329,16 +364,20 @@ def _with_new_common_reasons(row: Mapping[str, Any], common: Sequence[str]) -> d
             "rejection_reasons": list(dict.fromkeys(reasons))}
 
 
-def atr_threshold(registry: Mapping[str, Any], profile: str, median_atr_pct: float | None) -> tuple[float | None, float, str]:
+def atr_threshold(
+    registry: Mapping[str, Any], profile: str, median_atr_pct: float | None,
+    policy: TuningPolicy | None = None,
+) -> tuple[float | None, float, str]:
     """(threshold in percent points or None, multiplier used, multiplier source)."""
+    policy = policy or DEFAULT_POLICY
     profile_cfg = registry["profiles"][profile]
     cap = finite_number(profile_cfg["atr_absolute_cap_pct"])
     registry_multiplier = finite_number(profile_cfg["atr_sector_median_multiplier"])
     if cap is None or cap <= 0 or registry_multiplier is None or registry_multiplier <= 0:
         raise ValueError("finite positive existing ATR policy required")
-    override = ATR_MULTIPLIER.get(profile)
+    override = policy.atr_multiplier.get(profile)
     multiplier = float(override) if override is not None else registry_multiplier
-    source = "v1.5_override" if override is not None else "registry"
+    source = ("v1.5_override" if policy is DEFAULT_POLICY else f"{policy.version}_override") if override is not None else "registry"
     if median_atr_pct is None:
         return None, multiplier, source
     return min(cap, multiplier * median_atr_pct), multiplier, source
@@ -346,7 +385,7 @@ def atr_threshold(registry: Mapping[str, Any], profile: str, median_atr_pct: flo
 
 def tune_snapshot(
     payload: Mapping[str, Any], context: TuningContext, *, registry: Mapping[str, Any],
-    profile: str, horizon: str,
+    profile: str, horizon: str, policy: TuningPolicy | None = None,
 ) -> dict[str, Any]:
     """Adjust raw snapshot factors/gates, then let the existing scorer decide.
 
@@ -355,11 +394,12 @@ def tune_snapshot(
     the common gate list to ``entry_state`` so the row is scored and visible;
     ``apply_entry_states`` keeps it out of the strict (eligible) list.
     """
-    if profile not in M_ALPHA or horizon != context.horizon:
+    policy = policy or DEFAULT_POLICY
+    if profile not in policy.m_alpha or horizon != context.horizon:
         raise ValueError("tuning context/profile mismatch")
     if payload.get("session_date") != context.session.isoformat():
         raise ValueError("snapshot/context session mismatch")
-    threshold, multiplier, multiplier_source = atr_threshold(registry, profile, context.median_atr_pct)
+    threshold, multiplier, multiplier_source = atr_threshold(registry, profile, context.median_atr_pct, policy)
     rows = []
     for source in payload.get("rows", ()):
         if not isinstance(source, Mapping):
@@ -371,7 +411,7 @@ def tune_snapshot(
         previous = source.get("full_market_tuning")
         if previous is not None:
             if (previous.get("version"), previous.get("context_hash"), previous.get("profile")) != (
-                TUNING_VERSION, context.digest, profile,
+                policy.version, context.digest, profile,
             ):
                 raise ValueError("refusing to stack different tuning policies")
             rows.append(dict(source))
@@ -384,7 +424,7 @@ def tune_snapshot(
             rows.append(row)
             continue
         atr = finite_number(source.get("atr_pct"))
-        relax_extended = profile in EXTENDED_STATE_PROFILES
+        relax_extended = profile in policy.extended_state_profiles
         dropped = {"HIGH_ATR", ATR_REFERENCE_UNAVAILABLE} | ({EXTENDED_REASON} if relax_extended else set())
         new_common = [reason for reason in gates["common"] if reason not in dropped]
         entry_state = EXTENDED_STATE if relax_extended and EXTENDED_REASON in gates["common"] else "ok"
@@ -410,11 +450,11 @@ def tune_snapshot(
         new_factors = dict(factors)
         old_r = finite_number(factors.get("R"))
         r_neutralized = False
-        if profile in R_NEUTRAL_PROFILES and old_r is not None:
+        if profile in policy.r_neutral_profiles and old_r is not None:
             new_factors["R"] = R_NEUTRAL_VALUE
             r_neutralized = True
         old_m = finite_number(factors.get("M"))
-        alpha = M_ALPHA[profile] if source.get("algorithm_id") in TUNED_FAMILIES else 0.0
+        alpha = policy.m_alpha[profile] if source.get("algorithm_id") in TUNED_FAMILIES else 0.0
         target = context.momentum_percentiles.get(sid)
         new_m, delta = old_m, 0.0
         reason = "profile_or_family_unchanged"
@@ -431,7 +471,7 @@ def tune_snapshot(
         if new_factors != factors:
             row["factors"] = new_factors
         row["full_market_tuning"] = {
-            "version": TUNING_VERSION, "context_hash": context.digest,
+            "version": policy.version, "context_hash": context.digest,
             "profile": profile, "horizon": horizon,
             "M_original": old_m, "M_window_target": target, "M_final": new_m,
             "alpha": alpha, "M_delta": delta, "M_delta_cap": M_DELTA_CAP,
@@ -444,7 +484,7 @@ def tune_snapshot(
             "empirically_optimized_m_blend": False,
         }
         rows.append(row)
-    return {**payload, "rows": rows, "full_market_tuning": context.summary()}
+    return {**payload, "rows": rows, "full_market_tuning": context.summary(policy)}
 
 
 def apply_entry_states(payload: Mapping[str, Any]) -> dict[str, Any]:

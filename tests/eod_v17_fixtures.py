@@ -45,10 +45,14 @@ def build_panel(session: date = SESSION, count: int = STOCK_COUNT) -> dict[str, 
 
 
 def sic_table(count: int = STOCK_COUNT) -> list[dict[str, Any]]:
-    """Frozen-table style records: every fifth stock is left unclassified (an ADR, say)."""
+    """Frozen-table style records: every sixth stock is left unclassified (an ADR, say).
+
+    Codes cycle through five four-digit SICs whose three-digit groups are only
+    four (2834 and 2836 share 283), so SIC3 and SIC4 tags differ.
+    """
     rows = []
     for index, sid in enumerate(stock_ids(count)):
-        code = None if index % 5 == 4 else SIC_CODES[index % len(SIC_CODES)]
+        code = None if index % 6 == 5 else SIC_CODES[index % len(SIC_CODES)]
         rows.append({"ticker": sid, "cik": f"{index:010d}", "as_of": "2026-09-25", "sic_code": code,
                      "sic_description": None if code is None else f"GROUP {code}"})
     rows.append({"ticker": "SPY", "cik": None, "as_of": "2026-09-25", "sic_code": None, "sic_description": None})
@@ -60,11 +64,11 @@ def directory_rows(count: int = STOCK_COUNT) -> list[dict[str, Any]]:
     rows = [
         {"ticker": name, "name": name, "market": "stocks", "locale": "us", "type": "ETF",
          "primary_exchange": "ARCX", "active": True, "cik": None}
-        for name in ("SPY", "QQQ", "XLE", "TLT")
+        for name in ("SPY", "QQQ", "XLE", "TLT", "IWM", "GLD")
     ]
     for index, sid in enumerate(stock_ids(count)):
         rows.append({"ticker": sid, "name": f"New {index}", "market": "stocks", "locale": "us",
-                     "type": "ADRC" if index % 5 == 4 else "CS", "primary_exchange": "XNAS", "active": True,
+                     "type": "ADRC" if index % 6 == 5 else "CS", "primary_exchange": "XNAS", "active": True,
                      "cik": f"{index:010d}"})
     return rows
 
