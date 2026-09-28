@@ -7,6 +7,7 @@ from typing import Any, Mapping
 
 from app.services.research_eod_v1.capability import (
     PRICE_ONLY_DIAGNOSTIC,
+    PRICE_SIC_INDUSTRY_DIAGNOSTIC,
     SCORE_DERIVED_REASONS,
     diagnostic_weights,
     family_required,
@@ -48,7 +49,11 @@ def apply_price_only_track(
     volume_verified: bool = False,
     dollar_liquidity_verified: bool | None = None,
     volume_session_verified: bool | None = None,
+    track: str = PRICE_ONLY_DIAGNOSTIC,
 ) -> dict[str, Any]:
+    """Rescore every row on ``track``: PRICE_ONLY drops G; PRICE_SIC_INDUSTRY keeps it (v1.7)."""
+    if track not in {PRICE_ONLY_DIAGNOSTIC, PRICE_SIC_INDUSTRY_DIAGNOSTIC}:
+        raise ValueError(f"unsupported capability track for the product scorer: {track}")
     flags = resolve_capability_flags(
         volume_verified=volume_verified,
         dollar_liquidity_verified=dollar_liquidity_verified,
@@ -57,7 +62,6 @@ def apply_price_only_track(
     dollar_ok = flags["dollar_liquidity_verified"]
     session_ok = flags["volume_session_verified"]
     weights = resolve_weights(registry, theme_id, family, profile, horizon)
-    track = PRICE_ONLY_DIAGNOSTIC
     diag = diagnostic_weights(weights, track=track, family=family)
     provenance = weight_provenance(
         registry, theme_id=theme_id, family=family, profile=profile, horizon=horizon, track=track,

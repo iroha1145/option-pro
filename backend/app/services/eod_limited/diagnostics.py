@@ -16,6 +16,12 @@ from .full_market_tuning import finite_number
 REFERENCE_PROFILE = "balanced"
 REFERENCE_HORIZON = "mid"
 REFERENCE_FAMILY = "A_trend_quality"
+# The one authored fund theme. Fund quantiles are ranked within the scored fund
+# pool, so with only the benchmark funds in that pool (v1.7 fund_scope
+# "benchmarks") their scores are a within-twelve ranking, not a market strength,
+# and the theme's strength is withheld with this reason.
+FUND_THEME_ID = "etfs"
+FUND_SCOPE_REASON = "FUND_SCOPE_BENCHMARKS"
 
 # These are data/coverage failures, even when another feature produced a score.
 DATA_REASONS = frozenset({
@@ -161,8 +167,13 @@ def build_theme_statistics(
     compute_version: str,
     feature_version: str,
     source_hash: str | None,
+    fund_scope: str = "all",
 ) -> dict[str, Any]:
-    """Score all 24 authored themes from one fixed profile/family, never Top-K."""
+    """Score all 24 authored themes from one fixed profile/family, never Top-K.
+
+    ``fund_scope`` other than ``all`` withholds the fund theme's strength (its
+    returns stay: they do not depend on the pool) and names the reason.
+    """
     records = {str(row.get("ticker") or ""): row for row in coverage_records}
     benchmark = panel.get("SPY")
     spy_returns = {days: _return_pct(benchmark, days, served_session) for days in (20, 63, 126)}
@@ -196,6 +207,9 @@ def build_theme_statistics(
                     (reference.theme_missing.get(theme_id, {}).get(ticker, "SCORE_UNAVAILABLE") if reference else "SCORE_UNAVAILABLE")
                 )
                 missing[reason] += 1
+        if theme_id == FUND_THEME_ID and fund_scope != "all":
+            scores = {}
+            missing = Counter({FUND_SCOPE_REASON: len(members)})
         valid_scores = [scores[ticker] for ticker in members if ticker in scores]
         row: dict[str, Any] = {
             "sector_id": theme_id, "reference_profile": REFERENCE_PROFILE,
@@ -218,6 +232,8 @@ def build_theme_statistics(
                 else "active" if len(valid_scores) == len(members) else "degraded"
             ),
         }
+        if theme_id == FUND_THEME_ID and fund_scope != "all":
+            row["fund_scope"] = fund_scope
         for days, suffix in ((20, "1mo"), (63, "3mo"), (126, "6mo")):
             returns = [_return_pct(panel[ticker], days, served_session) for ticker in members if ticker in panel]
             valid_returns = [value for value in returns if value is not None]
@@ -239,6 +255,7 @@ def build_theme_statistics(
         "compute_version": compute_version,
         "feature_version": feature_version,
         "source_hash": source_hash,
+        "fund_scope": fund_scope,
         "reference_profile": REFERENCE_PROFILE,
         "reference_horizon": REFERENCE_HORIZON,
         "reference_family": REFERENCE_FAMILY,

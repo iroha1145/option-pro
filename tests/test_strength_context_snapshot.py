@@ -154,10 +154,23 @@ def test_eod_context_hook_defaults_to_real_capture_only(tmp_path: Path, monkeypa
     params = dict(session=NOW.date(), themes=["semiconductors"], algorithms=["A_trend_quality"])
     worker.run_eod_limited_job(**params, panel=panel, root=tmp_path / "injected")
     assert calls == []
-    frame = pd.DataFrame({"Open": [100], "High": [101], "Low": [99], "Close": [100], "Volume": [1_000_000]}, index=pd.to_datetime([NOW.date()]))
-    loaded_panel, coverage = worker.bars_to_panel({"NVDA": _frame_to_bars("NVDA", frame)}, {"NVDA": ["semiconductors"]}, end=NOW.date())
+    seed = worker.build_synthetic_panel(end=NOW.date())
+    # A live all-market batch is only published when SPY covers the window the
+    # scorers read (``benchmark_window``), not just the session bar.
+    frames = {
+        ticker: pd.DataFrame(
+            {"Open": seed[ticker].open, "High": seed[ticker].high, "Low": seed[ticker].low,
+             "Close": seed[ticker].close, "Volume": seed[ticker].volume},
+            index=pd.to_datetime(seed[ticker].dates),
+        )
+        for ticker in ("NVDA", "SPY")
+    }
+    loaded_panel, coverage = worker.bars_to_panel(
+        {ticker: _frame_to_bars(ticker, frame) for ticker, frame in frames.items()},
+        {"NVDA": ["semiconductors"], "SPY": []}, end=NOW.date(),
+    )
     monkeypatch.setattr(market_data, "load_all_market_panel", lambda **kwargs: (loaded_panel, coverage, {
-        "status": "complete", "eligible_count": 1, "complete_bar_count": 1,
+        "status": "complete", "eligible_count": 2, "complete_bar_count": 2,
         "volume_session_scope": market_data.VOLUME_SCOPE,
     }))
     outcome = worker.run_eod_limited_job(session=NOW.date(), root=tmp_path / "real")

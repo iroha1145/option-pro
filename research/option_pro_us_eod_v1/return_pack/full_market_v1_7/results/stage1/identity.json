@@ -1,0 +1,76 @@
+{
+ "nofund": {
+  "aggressive/long": {
+   "dates": 176,
+   "identical": 176,
+   "differing_dates": [],
+   "compared_rows": 8372,
+   "extra_variant_rows": 1931,
+   "n_differing_dates": 176
+  },
+  "aggressive/mid": {
+   "dates": 176,
+   "identical": 176,
+   "differing_dates": [],
+   "compared_rows": 8383,
+   "extra_variant_rows": 1918,
+   "n_differing_dates": 176
+  },
+  "aggressive/short": {
+   "dates": 176,
+   "identical": 176,
+   "differing_dates": [],
+   "compared_rows": 8895,
+   "extra_variant_rows": 1516,
+   "n_differing_dates": 176
+  },
+  "balanced/long": {
+   "dates": 176,
+   "identical": 176,
+   "differing_dates": [],
+   "compared_rows": 8667,
+   "extra_variant_rows": 1447,
+   "n_differing_dates": 174
+  },
+  "balanced/mid": {
+   "dates": 176,
+   "identical": 176,
+   "differing_dates": [],
+   "compared_rows": 8539,
+   "extra_variant_rows": 1400,
+   "n_differing_dates": 173
+  },
+  "balanced/short": {
+   "dates": 176,
+   "identical": 176,
+   "differing_dates": [],
+   "compared_rows": 8814,
+   "extra_variant_rows": 1178,
+   "n_differing_dates": 171
+  },
+  "conservative/long": {
+   "dates": 176,
+   "identical": 176,
+   "differing_dates": [],
+   "compared_rows": 6534,
+   "extra_variant_rows": 151,
+   "n_differing_dates": 127
+  },
+  "conservative/mid": {
+   "dates": 176,
+   "identical": 176,
+   "differing_dates": [],
+   "compared_rows": 5517,
+   "extra_variant_rows": 98,
+   "n_differing_dates": 125
+  },
+  "conservative/short": {
+   "dates": 176,
+   "identical": 176,
+   "differing_dates": [],
+   "compared_rows": 4665,
+   "extra_variant_rows": 58,
+   "n_differing_dates": 118
+  }
+ }
+}

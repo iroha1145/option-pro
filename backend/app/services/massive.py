@@ -638,6 +638,10 @@ def reference_ticker_detail(ticker: str) -> dict[str, Any]:
         "ticker": symbol,
         "market_cap": _finite(results.get("market_cap")),
         "name": str(results.get("name") or "").strip() or None,
+        # SEC identifiers for the EOD industry classification (v1.7).
+        "cik": str(results.get("cik") or "").strip() or None,
+        "sic_code": str(results.get("sic_code") or "").strip() or None,
+        "sic_description": str(results.get("sic_description") or "").strip() or None,
     }
 
 

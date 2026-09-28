@@ -265,7 +265,8 @@ def project_strength_payload(
         "algorithm_version": served_algorithm_version(scored.get("compute_version")),
         "score_basis": SCORE_BASIS,
         "score_aggregation": "m1_consensus" if list_kind == LIST_KIND_COMPOSITE else "best_family_theme_path",
-        "factor_capabilities": {"R": "stability_risk_quality", "G": "disabled_unverified_industry"},
+        "factor_capabilities": dict(scored.get("factor_capabilities")
+                                    or {"R": "stability_risk_quality", "G": "disabled_unverified_industry"}),
         "theme_statistics": scored.get("theme_statistics"),
         "family_funnels": scored.get("family_funnels"),
         "fallback_reason": None,
@@ -295,7 +296,7 @@ def project_strength_payload(
             "status", "directory_count", "eligible_count", "excluded_count",
             "complete_bar_count", "missing_session_count", "short_history_count",
             "residual_short_history_count", "invalid_count", "no_history_count",
-            "scored_count", "provider", "source_dates", "source_hash",
+            "scored_count", "provider", "source_dates", "source_hash", "fund_scope",
         ) if key in coverage},
         "score_version": scored.get("compute_version"),
         "feature_version": scored.get("feature_version"),

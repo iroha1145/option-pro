@@ -15,6 +15,13 @@ ELIGIBLE_PRIMARY_EXCHANGES = frozenset({"XNYS", "XNAS", "ARCX", "BATS", "XASE"})
 STOCK_PROVIDER_TYPES = frozenset({"CS", "ADRC"})
 FUND_PROVIDER_TYPES = frozenset({"ETF", "ETS", "ETV", "ETN", "FUND"})
 ELIGIBLE_PROVIDER_TYPES = STOCK_PROVIDER_TYPES | FUND_PROVIDER_TYPES
+# v1.7 candidate: funds are no longer ranked (the served list is stock-only since
+# v1.6), so the scored pool can drop every fund except the benchmarks the stock
+# scores read (SPY, QQQ) and the sealed ``etfs`` theme members. Stock ranks must
+# be unchanged; the replay proves that, this module only defines the scope.
+FUND_SCOPE_ALL = "all"
+FUND_SCOPE_BENCHMARKS = "benchmarks"
+FUND_SCOPES = (FUND_SCOPE_ALL, FUND_SCOPE_BENCHMARKS)
 
 
 @dataclass(frozen=True)
@@ -47,6 +54,12 @@ def _theme_ids(ticker: str, *, asset_track: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(str(value) for value in known)) or ("all_market_stocks",)
 
 
+def benchmark_fund_tickers() -> frozenset[str]:
+    """SPY, QQQ and the sealed ``etfs`` theme members: the funds a stock-only pool keeps."""
+    themed = {ticker for ticker, themes in current_universe_tickers().items() if "etfs" in themes}
+    return frozenset({"SPY", "QQQ"} | themed)
+
+
 def _excluded_reason(raw: Mapping[str, Any], requested: set[str] | None) -> str | None:
     ticker = _text(raw.get("ticker"))
     if not ticker:
@@ -72,14 +85,19 @@ def select_all_market_universe(
     directory: Sequence[Mapping[str, Any]],
     *,
     tickers: Iterable[str] | None = None,
+    fund_scope: str = FUND_SCOPE_ALL,
 ) -> tuple[dict[str, UniverseMember], list[dict[str, Any]]]:
     """Return eligible members and one deterministic coverage row per ticker.
 
     ``tickers`` is an explicit diagnostic subset. It never intersects the
     checked-in theme catalogue; directory rows outside the subset remain in the
-    coverage ledger as ``excluded:NOT_REQUESTED``.
+    coverage ledger as ``excluded:NOT_REQUESTED``. ``fund_scope`` ``benchmarks``
+    keeps only the benchmark funds (``excluded:FUND_OUT_OF_SCOPE`` otherwise).
     """
 
+    if fund_scope not in FUND_SCOPES:
+        raise ValueError(f"fund_scope must be one of {FUND_SCOPES}")
+    kept_funds = benchmark_fund_tickers() if fund_scope == FUND_SCOPE_BENCHMARKS else None
     requested = None
     if tickers is not None:
         requested = {str(value).strip().upper() for value in tickers if str(value).strip()}
@@ -105,6 +123,9 @@ def select_all_market_universe(
             continue
 
         asset_track = "stock" if provider_type in STOCK_PROVIDER_TYPES else "etf"
+        if kept_funds is not None and asset_track == "etf" and ticker not in kept_funds:
+            coverage.append({**base, "status": "excluded:FUND_OUT_OF_SCOPE", "bars": 0})
+            continue
         themes = _theme_ids(ticker, asset_track=asset_track)
         venue = {
             "listing_country": "US",
@@ -153,7 +174,11 @@ __all__ = [
     "ELIGIBLE_PRIMARY_EXCHANGES",
     "ELIGIBLE_PROVIDER_TYPES",
     "FUND_PROVIDER_TYPES",
+    "FUND_SCOPES",
+    "FUND_SCOPE_ALL",
+    "FUND_SCOPE_BENCHMARKS",
     "STOCK_PROVIDER_TYPES",
     "UniverseMember",
+    "benchmark_fund_tickers",
     "select_all_market_universe",
 ]

@@ -7,6 +7,7 @@ from datetime import date
 
 import numpy as np
 
+from app.services.market_calendar import is_trading_day, prior_trading_sessions
 from app.services.research_eod_v1.constants import (
     RESIDUAL_FIT_WINDOW,
     RESIDUAL_HISTORY_MIN,
@@ -96,6 +97,34 @@ def _residual_window(
     return price_from, start, end
 
 
+def residual_benchmark_sessions(
+    session: date,
+    *,
+    sum_start: int = RESIDUAL_SUM_START,
+    sum_end: int = RESIDUAL_SUM_END,
+    history_min: int = RESIDUAL_HISTORY_MIN,
+) -> tuple[tuple[date, ...], tuple[date, ...]]:
+    """Exchange sessions on which ``residual_raw_momentum`` reads its benchmark.
+
+    The window is the one ``_residual_window`` places on the grid of a stock
+    with a bar on every session. ``priced`` is ``need_dates``: the benchmark
+    ``tri`` must be positive on each, from the extra prior day the first
+    return needs to the last summed session. ``trailing`` are the skipped
+    sessions through ``session``. No price is read on them, but the grid holds
+    only the dates both series have, and the window is counted back from the
+    grid's last date: without a benchmark bar there, every window starts one
+    session earlier.
+    """
+    if not is_trading_day(session):
+        raise ValueError("the residual window ends on an exchange session")
+    grid = [*prior_trading_sessions(session, history_min - 1), session]
+    window = _residual_window(len(grid), sum_start, sum_end)
+    if window is None:
+        raise ValueError("the residual window does not fit in its minimum history")
+    price_from, _start, end = window
+    return tuple(grid[price_from : end + 1]), tuple(grid[end + 1 :])
+
+
 def _adjacent_legal_sessions(grid: list[date], lo: int, hi: int) -> bool:
     """True only when every consecutive pair in [lo, hi] is the next legal session."""
 
@@ -116,6 +145,17 @@ def _finite_returns(values: np.ndarray, lo: int, hi: int) -> bool:
     return bool(window.size) and bool(np.isfinite(window).all())
 
 
+def _basket_member(item: SecuritySeries, target: SecuritySeries, industry_id: str) -> bool:
+    return item.industry_id == industry_id and item.asset_track == target.asset_track
+
+
+def _mean_of_stacked(filled: np.ndarray, counts: np.ndarray) -> np.ndarray:
+    out = np.full(filled.shape[0], np.nan)
+    mask = counts > 0
+    out[mask] = filled[mask] / counts[mask]
+    return out
+
+
 def _industry_basket_returns(
     panel: dict[str, SecuritySeries],
     security_id: str,
@@ -126,36 +166,67 @@ def _industry_basket_returns(
     need_dates: list[date],
     return_lo: int,
     return_hi: int,
+    cache: dict | None = None,
 ) -> np.ndarray | None:
+    """Equal-weight mean return of the target's same-industry, same-track peers.
+
+    Without ``cache`` every call aligns every peer again, which is quadratic in
+    the industry size. With a ``cache`` (one dict per panel) the qualifying
+    members of each (industry, track, grid, window) are aligned once and the
+    target is removed from the shared sum, which is the same leave-one-out mean
+    up to floating-point summation order.
+    """
     if not industry_id:
         return None
     exclude_id = target.security_id or security_id
-    peers: list[np.ndarray] = []
-    for sid, item in panel.items():
-        if sid == exclude_id:
-            continue
-        if item.industry_id != industry_id:
-            continue
-        if item.asset_track != target.asset_track:
-            continue
-        if not _series_complete_on_grid(item, need_dates):
-            continue
-        aligned = _session_returns_on_grid(item, grid)
-        if not _finite_returns(aligned, return_lo, return_hi):
-            continue
-        peers.append(aligned)
-    if len(peers) < 2:
+    if cache is None:
+        peers: list[np.ndarray] = []
+        for sid, item in panel.items():
+            if sid == exclude_id or not _basket_member(item, target, industry_id):
+                continue
+            if not _series_complete_on_grid(item, need_dates):
+                continue
+            aligned = _session_returns_on_grid(item, grid)
+            if not _finite_returns(aligned, return_lo, return_hi):
+                continue
+            peers.append(aligned)
+        if len(peers) < 2:
+            return None
+        stacked = np.vstack(peers)
+        with np.errstate(all="ignore"):
+            valid = np.isfinite(stacked)
+            counts = valid.sum(axis=0)
+            if not np.any(counts):
+                return np.full(stacked.shape[1], np.nan)
+            return _mean_of_stacked(np.where(valid, stacked, 0.0).sum(axis=0), counts)
+    key = (industry_id, target.asset_track, tuple(grid), return_lo, return_hi)
+    entry = cache.get(key)
+    if entry is None:
+        members: dict[str, np.ndarray] = {}
+        for sid, item in panel.items():
+            if not _basket_member(item, target, industry_id) or not _series_complete_on_grid(item, need_dates):
+                continue
+            aligned = _session_returns_on_grid(item, grid)
+            if _finite_returns(aligned, return_lo, return_hi):
+                members[sid] = aligned
+        filled = np.zeros(len(grid))
+        counts = np.zeros(len(grid), dtype=int)
+        for aligned in members.values():
+            valid = np.isfinite(aligned)
+            filled += np.where(valid, aligned, 0.0)
+            counts += valid
+        entry = cache[key] = (members, filled, counts)
+    members, filled, counts = entry
+    own = members.get(exclude_id)
+    if own is not None:
+        valid = np.isfinite(own)
+        filled = filled - np.where(valid, own, 0.0)
+        counts = counts - valid
+    if len(members) - (own is not None) < 2:
         return None
-    stacked = np.vstack(peers)
-    with np.errstate(all="ignore"):
-        valid = np.isfinite(stacked)
-        out = np.full(stacked.shape[1], np.nan)
-        counts = valid.sum(axis=0)
-        if np.any(counts):
-            filled = np.where(valid, stacked, 0.0).sum(axis=0)
-            mask = counts > 0
-            out[mask] = filled[mask] / counts[mask]
-        return out
+    if not np.any(counts):
+        return np.full(len(grid), np.nan)
+    return _mean_of_stacked(filled, counts)
 
 
 def residual_raw_momentum(
@@ -168,8 +239,13 @@ def residual_raw_momentum(
     sum_start: int = RESIDUAL_SUM_START,
     sum_end: int = RESIDUAL_SUM_END,
     history_min: int = RESIDUAL_HISTORY_MIN,
+    basket_cache: dict | None = None,
 ) -> ResidualMomentum:
-    """Sum of daily residuals over sessions ``t - sum_start`` .. ``t - sum_end`` as a t-statistic."""
+    """Sum of daily residuals over sessions ``t - sum_start`` .. ``t - sum_end`` as a t-statistic.
+
+    ``basket_cache`` (one dict per immutable panel) shares industry basket
+    returns between the securities of one industry; see ``_industry_basket_returns``.
+    """
     if series.asset_track == "etf" and not spy_residual_allowed:
         return ResidualMomentum(None, "INSUFFICIENT_MATCHED_BENCHMARK")
     benchmark = matched_market or market
@@ -203,6 +279,7 @@ def residual_raw_momentum(
         need_dates=need_dates,
         return_lo=return_lo,
         return_hi=end,
+        cache=basket_cache,
     )
     residuals: list[float] = []
     for s in range(start, end + 1):

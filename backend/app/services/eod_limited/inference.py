@@ -20,11 +20,15 @@ from app.services.research_eod_v1.series import SecuritySeries, session_is_halte
 from . import COMPUTE_VERSION, MODE_ID, PURPOSE_LIVE, VOLUME_SCOPE
 from .panel import prepare_limited_panel
 from .geometry_parallel import parallel_geometry, validate_geometry_workers
+from .options import G_NEUTRAL_VALUE, INDUSTRY_OFF, ScoringOptions, resolve_options
 from .price_only import apply_price_only_track, resolve_capability_flags
 from .diagnostics import VariantDiagnostics
 from .full_market_tuning import apply_entry_states, prepare_full_market_context, tune_snapshot
 
 WARMUP_SESSIONS = 330
+# The newest bars of each series that ``session_panel`` hands the scorers: a
+# stock's residual grid never reaches further back than this.
+SESSION_PANEL_BARS = WARMUP_SESSIONS + 40
 UNIVERSE_VERSION = "u_eod_limited_v1"
 
 
@@ -80,12 +84,11 @@ def session_panel(panel: Mapping[str, Any], session: date) -> dict[str, Any]:
     """
 
     cutoff = min(session, last_completed_session(eod_evaluation_as_of(session)))
-    keep = WARMUP_SESSIONS + 40
     clipped: dict[str, Any] = {}
     for sid, series in panel.items():
         through = _through(series, cutoff)
         if through is not None and has_complete_session_bar(through, session):
-            clipped[sid] = through.last_n(keep)
+            clipped[sid] = through.last_n(SESSION_PANEL_BARS)
     return clipped
 
 
@@ -103,6 +106,9 @@ def precompute_session_raws(
     blend = tuple(registry["horizons"][horizon]["momentum_blend"])
     market = clipped.get("SPY")
     raws = {}
+    # Industry baskets for the D residual are shared inside this one immutable
+    # panel; without industry tags the cache is never consulted.
+    basket_cache: dict = {}
     for sid, series in clipped.items():
         raws[sid] = extract_raw(
             series,
@@ -113,6 +119,7 @@ def precompute_session_raws(
             sector_gates=gates,
             spy_residual_allowed=True,
             include_setup=include_setup,
+            basket_cache=basket_cache,
         )
     return raws, clipped
 
@@ -179,14 +186,19 @@ def derive_horizon_raws(
 def precompute_all_horizon_inputs(
     panel: Mapping[str, Any], session: date, *, registry: Mapping[str, Any],
     horizons: Sequence[str], themes: Sequence[str] | None = None,
-    geometry_workers: int = 1,
+    geometry_workers: int = 1, options: ScoringOptions | None = None,
 ) -> dict[str, tuple[dict, dict, dict]]:
-    """One immutable session panel, one raw extraction, one geometry pass per job."""
+    """One immutable session panel, one raw extraction, one geometry pass per job.
+
+    ``options`` with ``industry_mode="full"`` tags the series first, which changes
+    the D residual (industry basket) and the industry fields the scorer reads.
+    Inputs built with different options must not be mixed in one job.
+    """
     validate_geometry_workers(geometry_workers)
     wanted = list(dict.fromkeys(horizons))
     if not wanted:
         return {}
-    panel = prepare_limited_panel(panel)
+    panel = prepare_limited_panel(panel, industry=resolve_options(options).panel_industry())
     seed = wanted[0]
     raws, clipped = precompute_session_raws(
         panel, session, registry=registry, horizon=seed, include_setup=False,
@@ -215,6 +227,24 @@ def _compact_row(row: Mapping[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in row.items() if key not in {"pivots", "frozen_setup"}}
 
 
+def _with_g(payload: Mapping[str, Any], missing: float | None) -> dict[str, Any]:
+    """G on every scored row of an industry-mode view.
+
+    ``missing=None`` strips G for a profile whose weights do not take it (as in
+    v1.6); a number fills a missing G on the industry track (``G_NEUTRAL_VALUE``).
+    """
+    rows = []
+    for row in payload.get("rows") or ():
+        factors = row.get("factors")
+        if isinstance(factors, Mapping) and factors:
+            if missing is None and factors.get("G") is not None:
+                row = {**row, "factors": {**factors, "G": None}}
+            elif missing is not None and factors.get("G") is None:
+                row = {**row, "factors": {**factors, "G": missing}}
+        rows.append(row)
+    return {**payload, "rows": rows}
+
+
 def score_eod_session(
     panel: Mapping[str, Any],
     session: date,
@@ -234,13 +264,21 @@ def score_eod_session(
     compact: bool = False,
     snapshot_cache: dict | None = None,
     on_family_rows: Callable[[str, str, Sequence[Mapping[str, Any]], Mapping[str, Any]], None] | None = None,
+    options: ScoringOptions | None = None,
 ) -> dict[str, Any]:
+    """Score one view. ``options`` (default: v1.6 behaviour) selects the v1.7 candidate paths.
+
+    Precomputed inputs must come from ``precompute_all_horizon_inputs`` called
+    with the same ``options``; a ``snapshot_cache`` belongs to one options value.
+    """
+    options = resolve_options(options)
     flags = resolve_capability_flags(
         volume_verified=volume_verified,
         dollar_liquidity_verified=dollar_liquidity_verified,
         volume_session_verified=volume_session_verified,
     )
-    panel = prepare_limited_panel(panel)
+    panel = prepare_limited_panel(panel, industry=options.panel_industry())
+    track = options.track_for(profile)
     as_of = eod_evaluation_as_of(session)
     theme_ids = list(themes or registry["sectors"])
     families = list(algorithms or ALGORITHMS)
@@ -256,6 +294,7 @@ def score_eod_session(
         raws, clipped = dict(precomputed_raws), dict(clipped_panel)
     # A single market-wide context for this view, before any theme/score filters.
     tuning_context = prepare_full_market_context(raws, clipped, session=session, horizon=horizon)
+    overlay = options.g_overlay()
     for theme_id in theme_ids:
         theme_raws = None if precomputed_theme_raws is None else precomputed_theme_raws.get(theme_id)
         for algorithm in families:
@@ -273,9 +312,13 @@ def score_eod_session(
                 reapply_theme_gates=theme_raws is None,
                 already_session_clipped=True,
                 snapshot_cache=snapshot_cache,
+                **({} if overlay is None else {"industry_overlay": overlay}),
             )
+            if options.industry_mode != INDUSTRY_OFF:
+                raw = _with_g(raw, None if track == PRICE_ONLY_DIAGNOSTIC else G_NEUTRAL_VALUE)
             raw = tune_snapshot(
                 raw, tuning_context, registry=registry, profile=profile, horizon=horizon,
+                policy=options.tuning,
             )
             scored = apply_price_only_track(
                 raw,
@@ -287,6 +330,7 @@ def score_eod_session(
                 volume_verified=volume_verified,
                 dollar_liquidity_verified=dollar_liquidity_verified,
                 volume_session_verified=volume_session_verified,
+                track=track,
             )
             # v1.5: an extended row is visible in the observation list but never eligible.
             scored = apply_entry_states(scored)
@@ -323,7 +367,7 @@ def score_eod_session(
                 "session_date": session.isoformat(),
                 "profile": profile,
                 "horizon": horizon,
-                "track": PRICE_ONLY_DIAGNOSTIC,
+                "track": track,
                 "eligible": counts.get("eligible", 0),
                 "watch": counts.get("watch", 0),
                 "rejected": counts.get("rejected", 0),
@@ -358,8 +402,8 @@ def score_eod_session(
         "feature_version": FEATURE_VERSION,
         "profile": profile,
         "horizon": horizon,
-        "full_market_tuning": tuning_context.summary(),
-        "capability_track": PRICE_ONLY_DIAGNOSTIC,
+        "full_market_tuning": tuning_context.summary(options.tuning, profile),
+        "capability_track": track,
         "capability_flags": flags,
         "volume_scope": VOLUME_SCOPE,
         "panel_n": len(panel),
@@ -388,4 +432,8 @@ def score_eod_session(
         "synthetic": purpose == "synthetic",
     }
     result["family_funnels"] = funnel_diagnostics.funnel(result)
+    if options.active:
+        # Only a switched-on candidate adds keys; the v1.6 payload stays as it was.
+        result["factor_capabilities"] = options.factor_capabilities()
+        result["v17_options"] = options.describe()
     return result

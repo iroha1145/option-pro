@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date
 from typing import Any, Mapping, Sequence
 
@@ -46,12 +47,25 @@ def select_universe_tickers(tickers: Sequence[str] | None = None) -> dict[str, l
     return {key: appearances[key] for key in wanted if key in appearances}
 
 
-def prepare_limited_panel(panel: Mapping[str, Any]) -> dict[str, Any]:
+def prepare_limited_panel(panel: Mapping[str, Any], *, industry: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """Close-price-return view of every series with the industry fields set from ``industry``.
+
+    Without ``industry`` the fields are cleared in place, as the all-market
+    panel has always been served. With a classification (v1.7 ``industry_mode``
+    ``full``) each tagged series is a copy sharing the input's arrays, so a panel
+    prepared without tags and one prepared with them never see each other.
+    """
     prepared = {}
     for sid, series in panel.items():
         viewed = series.with_close_price_return() if hasattr(series, "with_close_price_return") else series
-        viewed.industry_id = None
-        viewed.parent_industry_id = None
+        if industry is None:
+            viewed.industry_id = None
+            viewed.parent_industry_id = None
+        else:
+            tag = industry.get(sid)
+            wanted = (None, None) if tag is None else (tag.industry_id, tag.parent_industry_id)
+            if (viewed.industry_id, viewed.parent_industry_id) != wanted:
+                viewed = replace(viewed, industry_id=wanted[0], parent_industry_id=wanted[1])
         prepared[sid] = viewed
     return prepared
 

@@ -8,6 +8,10 @@ from app.services.research_eod_v1.config_load import load_registry
 from app.services.research_eod_v1.registry_scoring import FACTORS, resolve_weights, score_features
 
 PRICE_ONLY_DIAGNOSTIC = "PRICE_ONLY_DIAGNOSTIC"
+# Price data plus an SIC-based industry classification: the eight-factor score
+# with G computed from that classification (v1.7 candidates). Not a claim that
+# the classification is point-in-time verified.
+PRICE_SIC_INDUSTRY_DIAGNOSTIC = "PRICE_SIC_INDUSTRY_DIAGNOSTIC"
 D_MARKET_RESIDUAL_DIAGNOSTIC = "D_MARKET_RESIDUAL_DIAGNOSTIC"
 FULL_EIGHT_FACTOR = "FULL_EIGHT_FACTOR"
 HARD_REJECTIONS = {
@@ -116,7 +120,7 @@ def diagnostic_weights(
     track: str,
     family: str,
 ) -> dict[str, float]:
-    if track == FULL_EIGHT_FACTOR:
+    if track in {FULL_EIGHT_FACTOR, PRICE_SIC_INDUSTRY_DIAGNOSTIC}:
         return dict(weights)
     if track == PRICE_ONLY_DIAGNOSTIC:
         return renormalize(weights, {"G"})

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from datetime import date, datetime, timezone
-from typing import Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from app.failure_diagnostics import record_fallback_failure
 from app.services.research_eod_v1.calendar_asof import settled_eod_session
@@ -22,6 +22,7 @@ from . import (
     RESEARCH_SEALED_SESSION,
 )
 from .bars import fetch_current_universe_bars, last_bar_session
+from .benchmark_window import benchmark_window, window_problems
 from .diagnostics import (
     VariantDiagnostics, build_theme_statistics, build_universe_funnel,
     REFERENCE_PROFILE, REFERENCE_HORIZON,
@@ -30,6 +31,23 @@ from .diagnostic_store import DiagnosticWriter, prune_old_generations
 from .inference import precompute_session_raws, precompute_theme_raws, score_eod_session
 from .panel import bars_to_panel, prepare_limited_panel, select_universe_tickers
 from .store import publish_batch, read_batch, variant_key
+
+if TYPE_CHECKING:
+    from .live_config import LiveConfig
+
+# A live all-market batch is not published without these benchmarks' session bars.
+# Every stock score reads SPY: it is the market series of the D-family residual
+# (inference.precompute_session_raws, research snapshot ``market``), the benchmark
+# of the tuned M hook (full_market_tuning.prepare_full_market_context) and of the
+# theme returns (diagnostics.build_theme_statistics). Without it every stock loses
+# its residual and relative momentum at once, however high the overall coverage.
+# The session bar is not enough: those scorers read SPY over a window, and one
+# missing or unusable bar in it degrades every stock just the same. The sessions
+# are derived from the scorers themselves (``benchmark_window``); a failure there
+# is refused as ``all_market_benchmark_window_incomplete``.
+# QQQ and the ``etfs`` theme funds are ranked only among funds (q_star keeps the
+# tracks apart), so they count toward coverage like any other member.
+REQUIRED_BENCHMARKS = ("SPY",)
 
 
 def resolve_inference_session(now: datetime | None = None, *, source_finalized_through: date | None = None) -> date:
@@ -79,6 +97,10 @@ def _compact_variant(scored: Mapping[str, Any]) -> dict[str, Any]:
         "family_funnels",
     )
     compact = {key: scored.get(key) for key in keep}
+    # v1.7 candidate metadata exists only when a candidate switch is on.
+    for key in ("factor_capabilities", "v17_options"):
+        if key in scored:
+            compact[key] = scored[key]
     # The public projection reads only eligible rows here. Watch rows already
     # live in watch_list; rejected rows contribute only the retained counts and
     # reason summaries. Their full platform histories need not be persisted.
@@ -108,8 +130,12 @@ def run_eod_limited_job(
     tickers: Sequence[str] | None = None,
     synthetic_input: bool = False,
     refresh_context: bool | None = None,
+    live_config: "LiveConfig | None" = None,
 ) -> dict[str, Any]:
+    from .live_config import LIVE_CONFIG
+
     started = time.perf_counter()
+    config = LIVE_CONFIG if live_config is None else live_config
     live_input = purpose == PURPOSE_LIVE and not synthetic_input
     context_requested = panel is None and live_input if refresh_context is None else refresh_context
     market_input = live_input and panel is None
@@ -121,13 +147,16 @@ def run_eod_limited_job(
         raise ValueError("all_market_volume_qualification_is_unverified")
     if market_input or any("all_market_stocks" in getattr(series, "theme_ids", ()) for series in (panel or {}).values()):
         from .market_registry import load_market_registry
-        registry = load_market_registry()
+        # v1.7 registry-level switches apply to the live all-market run only.
+        registry = load_market_registry(extra_tilt_multipliers=config.tilt_multipliers() if market_input else None)
     else:
         registry = load_registry()
     target = session
     attempted_session = session
     coverage: list[dict[str, Any]] = []
     manifest: dict[str, Any] = {}
+    directory_rows: list[dict[str, Any]] = []
+    scoring_options = None
     if panel is None:
         if purpose == PURPOSE_SYNTHETIC:
             panel = build_synthetic_panel(end=target)
@@ -136,7 +165,10 @@ def run_eod_limited_job(
             from .market_data import load_all_market_panel
             target = target or resolve_inference_session(now)
             attempted_session = target
-            panel, coverage, manifest = load_all_market_panel(end=target, root=root, tickers=tickers)
+            panel, coverage, manifest = load_all_market_panel(
+                end=target, root=root, tickers=tickers, fund_scope=config.fund_scope,
+                on_directory=directory_rows.extend,
+            )
         else:
             target = target or resolve_inference_session(now)
             attempted_session = target
@@ -161,6 +193,16 @@ def run_eod_limited_job(
     except ValueError:
         previous_session = None
     failure_reason = None
+    missing_benchmarks = [
+        sid for sid in REQUIRED_BENCHMARKS
+        if sid not in panel or not has_complete_session_bar(panel[sid], target)
+    ] if market_input else []
+    window = benchmark_window(target, horizons=HORIZONS, policy=config.tuning_policy()) if market_input else None
+    benchmark_problems = [
+        problem
+        for sid in REQUIRED_BENCHMARKS if sid not in missing_benchmarks
+        for problem in window_problems(sid, panel[sid], window)
+    ] if window is not None else []
     if (
         live_input
         and previous.get("purpose") == PURPOSE_LIVE
@@ -177,6 +219,10 @@ def run_eod_limited_job(
         or int(manifest.get("complete_bar_count") or 0) < 0.90 * int(manifest["eligible_count"])
     ):
         failure_reason = "all_market_coverage_incomplete"
+    elif missing_benchmarks:
+        failure_reason = "all_market_benchmark_missing"
+    elif benchmark_problems:
+        failure_reason = "all_market_benchmark_window_incomplete"
     if failure_reason:
         return {
             "status": "DATA_UNAVAILABLE",
@@ -193,8 +239,31 @@ def run_eod_limited_job(
                 "integrity": "stale_previous_retained" if previous else "unavailable",
                 "served_session": previous.get("served_session"),
                 "attempted_session": attempted_session.isoformat(),
+                **({"missing_benchmarks": missing_benchmarks} if missing_benchmarks else {}),
+                **({
+                    "benchmark_problems": benchmark_problems,
+                    "benchmark_window": window.describe(),
+                } if benchmark_problems and window is not None else {}),
             },
         }
+    if market_input:
+        industry_tags = None
+        if config.wants_industry:
+            from .industry import ensure_industry_tags
+
+            # Only securities with a complete panel are scored, so only they need a lookup.
+            members = {str(row.get("ticker")) for row in coverage if row.get("status") == "ok"}
+            try:
+                industry_tags, manifest["industry"] = ensure_industry_tags(
+                    directory_rows, root=root, level=config.sic_level,
+                    budget=config.industry_lookup_budget, tickers=members,
+                )
+            except Exception as exc:  # noqa: BLE001 - the classification is optional input
+                record_fallback_failure("eod_industry_classification", exc)
+                industry_tags, manifest["industry"] = None, {"status": "unavailable", "error": type(exc).__name__}
+            if not industry_tags:
+                manifest["industry"] = {**(manifest.get("industry") or {}), "status": "unavailable_scored_without_industry"}
+        scoring_options = config.scoring_options(industry_tags)
     panel = prepare_limited_panel(panel)
     wanted = [(profile, horizon)]
     if all_variants or market_input:
@@ -214,6 +283,7 @@ def run_eod_limited_job(
             horizons=list(dict.fromkeys(item_horizon for _, item_horizon in wanted)),
             themes=themes,
             geometry_workers=4,
+            **({} if scoring_options is None else {"options": scoring_options}),
         )
     writer = DiagnosticWriter(
         root=root, served_session=target.isoformat(), compute_version=COMPUTE_VERSION,
@@ -256,6 +326,7 @@ def run_eod_limited_job(
                 algorithms=algorithms,
                 on_family_rows=retain_block,
                 **({"compact": True, "snapshot_cache": snapshot_cache} if market_input else {}),
+                **({} if scoring_options is None else {"options": scoring_options}),
             )
             if synthetic_input:
                 scored["synthetic"] = True
@@ -272,6 +343,7 @@ def run_eod_limited_job(
             reference_diagnostics, panel=panel, coverage_records=coverage,
             served_session=target.isoformat(), compute_version=COMPUTE_VERSION,
             feature_version=FEATURE_VERSION, source_hash=manifest.get("source_hash"),
+            fund_scope=config.fund_scope if market_input else "all",
         )
         diagnostic_manifest = writer.finish()
         batch = {
@@ -293,6 +365,7 @@ def run_eod_limited_job(
             "variants": variants,
             "diagnostics": diagnostic_manifest,
             "theme_statistics": theme_statistics,
+            **({"live_config": config.describe()} if market_input and config.label() != "v1.6" else {}),
         }
         published = publish_batch(batch, root=root)
         if not published.get("ok"):

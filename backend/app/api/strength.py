@@ -885,6 +885,10 @@ def _read_eod_limited_snapshot(
         payload[key] = rows
     payload["track"] = track
     payload["track_counts"] = track_counts
+    # v1.7 scores only the benchmark funds (SPY, QQQ and the sealed etfs theme), so
+    # track=etf and track=all carry at most those twelve fund rows; the scope is
+    # named here so a short fund list is never mistaken for missing data.
+    payload["fund_scope"] = str((payload.get("coverage") or {}).get("fund_scope") or "all")
     key = "composite_rows" if kind == LIST_KIND_COMPOSITE else "observation_rows"
     payload["rows"] = list(payload[key])
     top = int(parameters.get("top") or 0)
@@ -1289,6 +1293,7 @@ async def sectors(period: str = Query("3mo", pattern="^(1mo|3mo|6mo)$")) -> dict
     )
     return sanitize({
         "as_of": context.get("as_of"), "period": period, "sectors": rows, "count": len(rows),
+        "fund_scope": str(((selection or {}).get("coverage") or {}).get("fund_scope") or "all"),
         "_cached": True, "snapshot_source": "strength_context_worker",
         "_stale": stale, "source_status": "stale" if stale else context.get("source_status", "active"),
         "stale_reason": reason, "context_source_status": context.get("source_status"),
