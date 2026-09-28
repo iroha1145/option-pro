@@ -10,7 +10,8 @@ v1.7 PREREGISTRATION.md 修订 3 for the rules. v1.7 adds:
 * decisions are made per profile a variant scored, so a conservative-only candidate
   is compared with the baseline's conservative view;
 * pre-registered robustness pairs (``g3``/``g4``, ``full3``/``full4``) are checked;
-* one diagnostic per list: the share of top-20 stock rows without a SIC class;
+* diagnostics per list: the share of top-20 stock rows without a SIC class, the share entered
+  while extended, and the tail of the daily primary metric (worst 5% mean, worst day);
 * ``identity.json`` counts, per view, the dates on which a variant's kept stock rows
   equal the baseline's on their common prefix (ticker and sort_score at nine decimals;
   the variant may keep more stock rows because funds no longer take slots of the
@@ -49,15 +50,18 @@ PAIRS = (("g3", "g4"), ("full3", "full4"))
 IDENTITY_VARIANTS = ("nofund",)
 
 
-def _unclassified_share(rows: list[dict]) -> dict:
+def _row_metrics(rows: list[dict]) -> dict:
+    """Per-date diagnostics on the listed stock rows: no SIC class, and entered while extended (v1.5 entry state)."""
     stocks = [row for row in rows if row.get("stock_or_etf_track") == "stock"]
-    share = sum(1 for row in stocks if row.get("industry_id") is None) / len(stocks) if stocks else None
-    return {"unclassified": share}
+    if not stocks:
+        return {"unclassified": None, "extended_share": None}
+    return {"unclassified": sum(1 for row in stocks if row.get("industry_id") is None) / len(stocks),
+            "extended_share": sum(1 for row in stocks if row.get("entry_state") == "extended") / len(stocks)}
 
 
 def evaluate(records: list[dict], prices: "Prices") -> tuple[dict, dict]:
-    """The v1.6 evaluation plus the unclassified-share diagnostic on every point."""
-    return v16.evaluate(records, prices, row_metrics=_unclassified_share)
+    """The v1.6 evaluation plus the unclassified-share and extended-share diagnostics on every point."""
+    return v16.evaluate(records, prices, row_metrics=_row_metrics)
 
 
 def stock_identity(records: list[dict], baseline: str, variant: str) -> dict:
@@ -127,8 +131,9 @@ def main() -> None:
                 continue
             summary = summarize(subset, holding)
             summary["days_short"] = sum(1 for point in subset if point["listed"] < top)
-            unclassified = [point["unclassified"] for point in subset if point.get("unclassified") is not None]
-            summary["unclassified_share"] = round(statistics.fmean(unclassified), 3) if unclassified else None
+            for name in ("unclassified", "extended_share"):
+                values = [point[name] for point in subset if point.get(name) is not None]
+                summary["unclassified_share" if name == "unclassified" else name] = round(statistics.fmean(values), 3) if values else None
             rows.append({"variant": variant, "profile": profile, "view": view, "list_type": list_type,
                          "top": top, "holding": holding, "period": period, **summary,
                          "turnover": turnover(subset, top)})
@@ -180,7 +185,10 @@ def main() -> None:
                 entry["median_listed"] = secondary(variant, profile, list_type, "median_listed")
                 entry["turnover"] = secondary(variant, profile, list_type, "turnover")
                 entry["observable_share_h63"] = primary(variant, profile, "ALL", list_type, field_name="observable_share")
+                entry["tail_5pct_h63"] = primary(variant, profile, "ALL", list_type, field_name="tail_5pct_mean_pct")
+                entry["worst_day_h63"] = primary(variant, profile, "ALL", list_type, field_name="worst_day_pct")
                 entry["unclassified_share"] = secondary(variant, profile, list_type, "unclassified_share")
+                entry["extended_share"] = secondary(variant, profile, list_type, "extended_share")
                 table.append(entry)
     write_csv(args.out / "primary.csv", table)
     print("\nprimary metric: top-20 slot-filled excess vs SPY on observable names, % per signal, mean of the three views")

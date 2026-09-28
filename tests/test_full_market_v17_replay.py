@@ -295,7 +295,11 @@ def test_evaluate_and_paired_produce_v17_tables(replay_setup, monkeypatch, tmp_p
     assert rows == []
     assert (out / "paired.csv").read_text().startswith("comparison,metric,variant,profile,holding,period,days,days_removed")
     # The v1.7 tables carry the observation coverage, the bounds and the unfilled means of the fixed evaluator.
-    assert {"h63_ALL_legacy", "h63_ALL_zero", "h63_ALL_loss", "h63_unfilled_P1", "observable_share_h63"} <= set(primary[0])
+    assert {"h63_ALL_legacy", "h63_ALL_zero", "h63_ALL_loss", "h63_unfilled_P1", "observable_share_h63",
+            "tail_5pct_h63", "worst_day_h63", "extended_share"} <= set(primary[0])
+    cons = next(row for row in primary if row["variant"] == "cons17" and row["profile"] == "conservative" and row["list_type"] == "stock")
+    assert cons["extended_share"] != "" and 0.0 <= float(cons["extended_share"]) <= 1.0
+    assert float(cons["worst_day_h63"]) <= float(cons["tail_5pct_h63"]) <= float(cons["h63_ALL"])
     v16_row = next(row for row in primary if row["variant"] == "v16" and row["profile"] == "balanced" and row["list_type"] == "stock")
     assert v16_row["observable_share_h63"] == "1.0"  # every synthetic name trades on every session
     verdict = decision["variant_vs_baseline"]["cons17/conservative/stock"]
