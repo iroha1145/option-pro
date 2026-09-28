@@ -387,6 +387,45 @@ def test_export_backtest_writes_legacy_and_ledger_curves_with_stated_assumptions
     assert point["slot_excess_pct"] != point["slot_legacy_pct"]
 
 
+def test_result_pack_reads_legacy_and_fixed_results_and_lists_unverifiable_data(tmp_path, monkeypatch):
+    pack_module = _load("result_pack")
+    legacy, fixed = tmp_path / "stage1", tmp_path / "stage1_reeval"
+    legacy.mkdir(); fixed.mkdir()
+    header = "list_type,profile,variant,h63_ALL,h63_P1,h63_P2,h20_ALL,h5_ALL,median_listed\n"
+    (legacy / "primary.csv").write_text(header + "stock,balanced,v15,0.5,0.4,0.6,0.1,0.0,20\nstock,balanced,tilt_b,0.9,0.8,1.0,0.1,0.0,20\n")
+    (fixed / "primary.csv").write_text(
+        "list_type,profile,variant,h63_ALL,h63_P1,h63_P2,h63_ALL_legacy,h63_ALL_zero,h63_ALL_loss,h20_ALL,h5_ALL,median_listed,observable_share_h63\n"
+        "stock,balanced,v15,0.3,0.2,0.4,0.5,0.25,-0.1,0.1,0.0,20,0.95\nstock,balanced,tilt_b,0.7,0.6,0.8,0.9,0.6,0.2,0.1,0.0,20,0.94\n")
+    (fixed / "coverage.csv").write_text("variant,profile,list_type,top,holding,days,observable_share\nv15,balanced,stock,20,63,165,0.95\n")
+    (fixed / "paired.csv").write_text(
+        "comparison,metric,variant,profile,holding,period,days,days_removed,mean_diff_pct,nw_t,share_days_positive\n"
+        "variant_minus_baseline_stock,slot,tilt_b,balanced,63,ALL,160,5,0.4,1.3,0.55\n"
+        "level_stock,slot,tilt_b,balanced,63,ALL,160,5,0.7,0.5,0.52\n"
+        "level_stock,slot,v15,balanced,63,ALL,160,5,0.3,0.2,0.5\n"
+        "variant_minus_baseline_stock,slot,tilt_b,balanced,20,ALL,165,0,0.1,0.4,0.5\n")
+    (fixed / "rules.json").write_text(json.dumps({"exit_lag_sessions": 5}))
+    backtest = tmp_path / "backtest"
+    backtest.mkdir()
+    (backtest / "ledger_end_values.json").write_text(json.dumps({"cost_bps": 10, "rules": {"empty_slot": "SPY"},
+                                                                 "identity_verification": True, "end_values": [{"relative": 1.1}]}))
+    out = tmp_path / "pack.json"
+    monkeypatch.setattr(sys, "argv", ["result_pack.py", "--stage", f"stage1={fixed}:{legacy}", "--compare", "tilt_b=v15:tilt_b:balanced",
+                                      "--backtest", str(backtest), "--out", str(out), "--note", "synthetic"])
+    pack_module.main()
+    pack = json.loads(out.read_text())
+    stage = pack["stages"][0]
+    tilt = next(v for v in stage["variants"] if v["variant"] == "tilt_b")
+    assert tilt["h63_pre_fix"] == 0.9 and tilt["h63_primary"] == 0.7 and tilt["h63_fix_delta"] == pytest.approx(-0.2)
+    assert tilt["h63_bound_loss"] == 0.2 and tilt["observable_share_h63"] == 0.94
+    assert stage["rules"] == {"exit_lag_sessions": 5} and stage["coverage"][0]["observable_share"] == 0.95
+    assert len(stage["paired_h63"]) == 3  # the 20-session row is left out
+    rows = pack["comparisons"]["tilt_b"]["rows"]
+    assert {row["what"] for row in rows} == {"tilt_b minus v15, stock list", "tilt_b own excess over SPY, stock list",
+                                             "v15 own excess over SPY, stock list"}
+    assert pack["ledgers"][0]["cost_bps"] == 10 and pack["ledgers"][0]["end_values"] == [{"relative": 1.1}]
+    assert pack["notes"] == ["synthetic"] and len(pack["unverifiable_execution_data"]) >= 5
+
+
 # ---------------------------------------------------------------- replay helpers (unchanged)
 
 
