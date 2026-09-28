@@ -1,0 +1,629 @@
+"""Frozen-data stores: 5-minute bars, split-adjusted daily bars, FRED, shares, metadata.
+
+Loading and validation call production's own helpers where they exist
+(``market_data._valid_ohlc``, ``market_data._series_from_rows``); the rest is file I/O.
+"""
+
+from __future__ import annotations
+
+import gzip
+import json
+import math
+import sqlite3
+from bisect import bisect_right
+from collections import OrderedDict, defaultdict
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, Iterable, Mapping
+from zoneinfo import ZoneInfo
+
+import numpy as np
+import pandas as pd
+
+from app.services.eod_limited import market_data as md
+from app.services.eod_limited.universe import UniverseMember
+
+NY = ZoneInfo("America/New_York")
+BAR_COLUMNS = ("Open", "High", "Low", "Close", "Volume")
+_SLOT_MINUTES = 5
+_FIRST_SLOT_MINUTE = 4 * 60  # 04:00 ET
+SLOTS_PER_DAY = (20 * 60 - _FIRST_SLOT_MINUTE) // _SLOT_MINUTES  # 192
+
+
+def _finite(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+# --------------------------------------------------------------------------- minute bars
+
+
+def parse_aggregate_page(payload: Mapping[str, Any]) -> list[tuple[int, float, float, float, float, float]]:
+    """Rows (t, o, h, l, c, v) with the same acceptance rule as ``massive.ticker_range``.
+
+    A bar without a finite close or timestamp is skipped; later pages overwrite
+    earlier bars with the same timestamp (``ticker_range`` keeps a dict by ``t``).
+    """
+
+    rows = payload.get("results") or []
+    out: list[tuple[int, float, float, float, float, float]] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        close = _finite(row.get("c"))
+        stamp = _finite(row.get("t"))
+        if close is None or stamp is None or not stamp.is_integer():
+            continue
+        volume = _finite(row.get("v"))
+        out.append(
+            (
+                int(stamp),
+                _finite(row.get("o")) if _finite(row.get("o")) is not None else float("nan"),
+                _finite(row.get("h")) if _finite(row.get("h")) is not None else float("nan"),
+                _finite(row.get("l")) if _finite(row.get("l")) is not None else float("nan"),
+                close,
+                volume if volume is not None else float("nan"),
+            )
+        )
+    return out
+
+
+def build_minute_store(manifest_path: Path, raw_root: Path, out_dir: Path) -> dict[str, Any]:
+    """Turn frozen Massive pages into one parquet per ticker plus a day-coverage table."""
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    by_ticker: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    with open(manifest_path, "rt", encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            entry = json.loads(line)
+            if not entry.get("complete", True) or int(entry.get("http") or 200) != 200:
+                continue
+            by_ticker[str(entry["ticker"]).upper()].append(entry)
+    coverage_rows: list[tuple[str, str]] = []
+    summary = {"tickers": 0, "bars": 0, "pages": 0, "skipped_tickers": []}
+    for ticker in sorted(by_ticker):
+        bars: dict[int, tuple[float, float, float, float, float]] = {}
+        for entry in sorted(by_ticker[ticker], key=lambda item: (str(item.get("from")), int(item.get("part") or 0))):
+            path = raw_root / str(entry["file"])
+            with gzip.open(path, "rt", encoding="utf-8") as handle:
+                payload = json.load(handle)
+            for t, o, h, l, c, v in parse_aggregate_page(payload):
+                bars[t] = (o, h, l, c, v)
+            summary["pages"] += 1
+        if not bars:
+            summary["skipped_tickers"].append(ticker)
+            continue
+        stamps = np.array(sorted(bars), dtype=np.int64)
+        values = np.array([bars[t] for t in stamps], dtype=np.float64)
+        frame = pd.DataFrame(
+            {
+                "t": stamps,
+                "open": values[:, 0],
+                "high": values[:, 1],
+                "low": values[:, 2],
+                "close": values[:, 3],
+                "volume": values[:, 4],
+            }
+        )
+        frame.to_parquet(out_dir / f"{ticker}.parquet", index=False)
+        days = pd.to_datetime(stamps, unit="ms", utc=True).tz_convert(NY).date
+        for day in sorted(set(days)):
+            coverage_rows.append((ticker, day.isoformat()))
+        summary["tickers"] += 1
+        summary["bars"] += int(len(stamps))
+    pd.DataFrame(coverage_rows, columns=["ticker", "day"]).to_parquet(
+        out_dir / "coverage.parquet", index=False
+    )
+    (out_dir / "store_manifest.json").write_text(json.dumps(summary, indent=1))
+    return summary
+
+
+class MinuteStore:
+    """Read-side of the derived store; frames look like ``scanner._slice_ticker`` output."""
+
+    def __init__(self, root: Path | str, cache_tickers: int = 800) -> None:
+        self.root = Path(root)
+        self._cache: OrderedDict[str, pd.DataFrame] = OrderedDict()
+        self._cache_size = cache_tickers
+        coverage = pd.read_parquet(self.root / "coverage.parquet")
+        self._days_by_ticker: dict[str, list[str]] = {
+            ticker: sorted(group["day"].tolist())
+            for ticker, group in coverage.groupby("ticker")
+        }
+        self._tickers_by_day: dict[str, set[str]] = defaultdict(set)
+        for ticker, days in self._days_by_ticker.items():
+            for day in days:
+                self._tickers_by_day[day].add(ticker)
+
+    @property
+    def tickers(self) -> list[str]:
+        return sorted(self._days_by_ticker)
+
+    def tickers_with_bars_on(self, day: date) -> set[str]:
+        return set(self._tickers_by_day.get(day.isoformat(), ()))
+
+    def _load(self, ticker: str) -> pd.DataFrame:
+        cached = self._cache.get(ticker)
+        if cached is not None:
+            self._cache.move_to_end(ticker)
+            return cached
+        path = self.root / f"{ticker}.parquet"
+        if not path.exists():
+            frame = pd.DataFrame(columns=list(BAR_COLUMNS))
+            frame.index = pd.DatetimeIndex([], tz="UTC")
+        else:
+            raw = pd.read_parquet(path)
+            index = pd.DatetimeIndex(pd.to_datetime(raw["t"].to_numpy(), unit="ms", utc=True))
+            frame = pd.DataFrame(
+                {
+                    "Open": raw["open"].to_numpy(),
+                    "High": raw["high"].to_numpy(),
+                    "Low": raw["low"].to_numpy(),
+                    "Close": raw["close"].to_numpy(),
+                    "Volume": raw["volume"].to_numpy(),
+                },
+                index=index,
+            )
+            frame["_day"] = index.tz_convert(NY).date
+        self._cache[ticker] = frame
+        while len(self._cache) > self._cache_size:
+            self._cache.popitem(last=False)
+        return frame
+
+    def bars(self, ticker: str, start_day: date, end_day: date) -> pd.DataFrame:
+        """UTC-indexed OHLCV for ET calendar days ``start_day`` through ``end_day``."""
+
+        frame = self._load(ticker)
+        if frame.empty:
+            return frame.drop(columns=["_day"], errors="ignore")
+        mask = (frame["_day"] >= start_day) & (frame["_day"] <= end_day)
+        return frame.loc[mask, list(BAR_COLUMNS)]
+
+    def day_slots(self, ticker: str, day: date) -> tuple[np.ndarray, np.ndarray] | None:
+        """(close, volume) arrays over the 192 five-minute slots from 04:00 ET, NaN when no bar."""
+
+        frame = self._load(ticker)
+        if frame.empty:
+            return None
+        rows = frame.loc[frame["_day"] == day]
+        if rows.empty:
+            return None
+        local = rows.index.tz_convert(NY)
+        minutes = local.hour * 60 + local.minute
+        slots = (minutes - _FIRST_SLOT_MINUTE) // _SLOT_MINUTES
+        valid = (slots >= 0) & (slots < SLOTS_PER_DAY) & ((minutes - _FIRST_SLOT_MINUTE) % _SLOT_MINUTES == 0)
+        close = np.full(SLOTS_PER_DAY, np.nan)
+        volume = np.full(SLOTS_PER_DAY, np.nan)
+        close[slots[valid]] = rows["Close"].to_numpy()[valid]
+        volume[slots[valid]] = rows["Volume"].to_numpy()[valid]
+        return close, volume
+
+
+# --------------------------------------------------------------------------- daily bars
+
+
+def _member(ticker: str) -> UniverseMember:
+    return UniverseMember(
+        ticker=ticker, name=ticker, provider_type="", primary_exchange="",
+        asset_track="stock", theme_ids=(), venue_metadata={},
+    )
+
+
+class DailyStore:
+    """Split-adjusted daily frames as production's Massive path would have seen them on a day.
+
+    ``frame(ticker, through, as_of_day)`` returns bars with session <= ``through``,
+    adjusted for the splits executed on or before ``as_of_day`` (what ``adjusted=true``
+    bars fetched on that day contain), as a tz-naive normalized DatetimeIndex with
+    Open/High/Low/Close/Volume, the shape ``scanner._slice_ticker`` yields.
+    """
+
+    def __init__(self, db_path: Path | str) -> None:
+        self.db_path = Path(db_path)
+        self._connection = sqlite3.connect(f"file:{self.db_path}?mode=ro", uri=True)
+        self._connection.row_factory = sqlite3.Row
+        self._rows: dict[str, list[dict[str, Any]]] = {}
+        self._splits: dict[str, list[tuple[date, float, float]]] = defaultdict(list)
+        for row in self._connection.execute(
+            "SELECT ticker, execution_date, split_from, split_to FROM splits ORDER BY execution_date"
+        ):
+            self._splits[str(row["ticker"])].append(
+                (date.fromisoformat(str(row["execution_date"])), float(row["split_from"]), float(row["split_to"]))
+            )
+        self._frame_cache: dict[tuple[str, date, date], pd.DataFrame] = {}
+        self.sessions: list[date] = [
+            date.fromisoformat(str(row[0]))
+            for row in self._connection.execute("SELECT session_date FROM market_sessions ORDER BY session_date")
+        ]
+
+    def _ticker_rows(self, ticker: str) -> list[dict[str, Any]]:
+        rows = self._rows.get(ticker)
+        if rows is None:
+            rows = [
+                dict(row)
+                for row in self._connection.execute(
+                    "SELECT session_date, open, high, low, close, volume FROM raw_daily_bars "
+                    "WHERE ticker = ? ORDER BY session_date",
+                    (ticker,),
+                )
+            ]
+            # Production's Massive validator drops crossed or non-positive bars and
+            # negative volume (scanner._validated_massive_history); mirror that.
+            rows = [
+                row for row in rows
+                if md._valid_ohlc(row) and (row["volume"] is None or float(row["volume"]) >= 0)
+            ]
+            self._rows[ticker] = rows
+        return rows
+
+    def splits_between(self, ticker: str, after: date, through: date) -> list[tuple[date, float, float]]:
+        return [item for item in self._splits.get(ticker, ()) if after < item[0] <= through]
+
+    def clear_cache(self) -> None:
+        self._frame_cache.clear()
+
+    def frame(self, ticker: str, *, through: date, as_of_day: date) -> pd.DataFrame:
+        key = (ticker, through, as_of_day)
+        cached = self._frame_cache.get(key)
+        if cached is not None:
+            return cached
+        rows = [row for row in self._ticker_rows(ticker) if str(row["session_date"]) <= through.isoformat()]
+        if not rows:
+            frame = pd.DataFrame(columns=list(BAR_COLUMNS), index=pd.DatetimeIndex([]))
+        else:
+            splits = [item for item in self._splits.get(ticker, ()) if item[0] <= as_of_day]
+            dates = [date.fromisoformat(str(row["session_date"])) for row in rows]
+            series = md._series_from_rows(_member(ticker), rows, splits=splits, dates=dates)
+            frame = pd.DataFrame(
+                {
+                    "Open": series.open,
+                    "High": series.high,
+                    "Low": series.low,
+                    "Close": series.close,
+                    "Volume": series.volume,
+                },
+                index=pd.DatetimeIndex(pd.to_datetime(dates)),
+            )
+        self._frame_cache[key] = frame
+        return frame
+
+    def previous_close(self, ticker: str, day: date) -> float | None:
+        frame = self.frame(ticker, through=day - timedelta(days=1), as_of_day=day)
+        if frame.empty:
+            return None
+        return _finite(frame["Close"].iloc[-1])
+
+    def mean_volume(self, ticker: str, day: date, sessions: int = 10) -> float | None:
+        frame = self.frame(ticker, through=day - timedelta(days=1), as_of_day=day)
+        if len(frame) < sessions:
+            return None
+        values = pd.to_numeric(frame["Volume"].tail(sessions), errors="coerce").dropna()
+        if len(values) < sessions:
+            return None
+        mean = _finite(values.mean())
+        return mean if mean is not None and mean > 0 else None
+
+
+# --------------------------------------------------------------------------- FRED
+
+
+class FredStore:
+    """VIXCLS as ^VIX and DGS10 x 10 as ^TNX, Close-only frames (DATA_SPEC 11.4)."""
+
+    def __init__(self, folder: Path | str) -> None:
+        folder = Path(folder)
+        self.frames: dict[str, pd.DataFrame] = {
+            "^VIX": self._load(folder / "VIXCLS.csv", 1.0),
+            "^TNX": self._load(folder / "DGS10.csv", 10.0),
+        }
+
+    @staticmethod
+    def _load(path: Path, scale: float) -> pd.DataFrame:
+        if not path.exists():
+            return pd.DataFrame(columns=["Close"])
+        raw = pd.read_csv(path)
+        date_column = raw.columns[0]
+        value_column = raw.columns[1]
+        values = pd.to_numeric(raw[value_column], errors="coerce") * scale
+        frame = pd.DataFrame({"Close": values.to_numpy()}, index=pd.DatetimeIndex(pd.to_datetime(raw[date_column])))
+        return frame.dropna()
+
+    def frame(self, symbol: str, *, through: date) -> pd.DataFrame:
+        frame = self.frames.get(symbol)
+        if frame is None or frame.empty:
+            return pd.DataFrame(columns=["Close"])
+        return frame.loc[frame.index.date <= through] if len(frame) else frame
+
+
+# --------------------------------------------------------------------------- shares
+
+
+class SharesStore:
+    """Point-in-time shares from ``/v3/reference/tickers/{T}?date=`` samples (JSONL)."""
+
+    def __init__(self, path: Path | str | None, daily: DailyStore | None = None) -> None:
+        self._samples: dict[str, list[tuple[date, float | None, float | None]]] = defaultdict(list)
+        self._daily = daily
+        if path is None:
+            return
+        with open(path, "rt", encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                row = json.loads(line)
+                results = row.get("results") if isinstance(row.get("results"), Mapping) else row
+                ticker = str(row.get("ticker") or results.get("ticker") or "").upper()
+                sample_date = row.get("date") or row.get("as_of")
+                if not ticker or not sample_date:
+                    continue
+                shares = _finite(results.get("weighted_shares_outstanding"))
+                cap = _finite(results.get("market_cap"))
+                self._samples[ticker].append((date.fromisoformat(str(sample_date)[:10]), shares, cap))
+        for ticker in self._samples:
+            self._samples[ticker].sort()
+
+    def shares(self, ticker: str, day: date) -> float | None:
+        samples = self._samples.get(ticker)
+        if not samples:
+            return None
+        dates = [item[0] for item in samples]
+        position = bisect_right(dates, day) - 1
+        if position < 0:
+            return None
+        sample_date, shares, _cap = samples[position]
+        if shares is None:
+            return None
+        if self._daily is not None:
+            for _execution, split_from, split_to in self._daily.splits_between(ticker, sample_date, day):
+                shares *= split_to / split_from
+        return shares
+
+
+# --------------------------------------------------------------------------- metadata
+
+
+@dataclass(frozen=True)
+class TickerMeta:
+    ticker: str
+    name: str
+    exchange: str
+    tv_type: str
+    typespecs: tuple[str, ...]
+    sector: str | None
+    is_fund: bool
+
+
+# Massive reference ``type`` -> TradingView ``type``/``typespecs`` (DATA_SPEC appendix B).
+_TYPE_TO_TV: dict[str, tuple[str, tuple[str, ...], bool]] = {
+    "CS": ("stock", ("common",), False),
+    "OS": ("stock", ("common",), False),
+    "ADRC": ("dr", ("adr",), False),
+    "ADRP": ("dr", ("adr",), False),
+    "GDR": ("dr", ("gdr",), False),
+    "ETF": ("fund", ("etf",), True),
+    "ETV": ("fund", ("etf",), True),
+    "ETS": ("fund", ("etf",), True),
+    "ETN": ("structured", ("etn",), True),
+    "PFD": ("stock", ("preferred",), False),
+    "WARRANT": ("warrant", (), False),
+    "RIGHT": ("right", (), False),
+    "UNIT": ("stock", ("unit",), False),
+    "FUND": ("fund", ("closed-end",), True),
+}
+_EXCHANGE_TO_TV = {"XNAS": "NASDAQ", "XNYS": "NYSE", "XASE": "AMEX", "ARCX": "AMEX", "BATS": "CBOE"}
+
+# SIC major groups -> the TradingView sector strings production's candidates carry.
+_SIC_SECTORS: tuple[tuple[int, int, str], ...] = (
+    (100, 999, "Process Industries"),
+    (1000, 1099, "Non-Energy Minerals"),
+    (1300, 1399, "Energy Minerals"),
+    (1400, 1499, "Non-Energy Minerals"),
+    (1500, 1799, "Industrial Services"),
+    (2000, 2199, "Consumer Non-Durables"),
+    (2200, 2399, "Consumer Non-Durables"),
+    (2400, 2599, "Consumer Durables"),
+    (2600, 2699, "Process Industries"),
+    (2700, 2799, "Consumer Services"),
+    (2800, 2829, "Process Industries"),
+    (2830, 2836, "Health Technology"),
+    (2840, 2844, "Consumer Non-Durables"),
+    (2850, 2899, "Process Industries"),
+    (2900, 2999, "Energy Minerals"),
+    (3000, 3099, "Process Industries"),
+    (3100, 3199, "Consumer Non-Durables"),
+    (3200, 3299, "Non-Energy Minerals"),
+    (3300, 3399, "Non-Energy Minerals"),
+    (3400, 3499, "Producer Manufacturing"),
+    (3500, 3569, "Producer Manufacturing"),
+    (3570, 3579, "Electronic Technology"),
+    (3580, 3599, "Producer Manufacturing"),
+    (3600, 3659, "Producer Manufacturing"),
+    (3660, 3699, "Electronic Technology"),
+    (3700, 3719, "Consumer Durables"),
+    (3720, 3799, "Electronic Technology"),
+    (3800, 3839, "Electronic Technology"),
+    (3840, 3851, "Health Technology"),
+    (3860, 3899, "Electronic Technology"),
+    (3900, 3999, "Consumer Durables"),
+    (4000, 4799, "Transportation"),
+    (4800, 4899, "Communications"),
+    (4900, 4999, "Utilities"),
+    (5000, 5199, "Distribution Services"),
+    (5200, 5999, "Retail Trade"),
+    (6000, 6499, "Finance"),
+    (6500, 6599, "Finance"),
+    (6600, 6799, "Finance"),
+    (6800, 6999, "Finance"),
+    (7000, 7299, "Consumer Services"),
+    (7300, 7369, "Commercial Services"),
+    (7370, 7379, "Technology Services"),
+    (7380, 7399, "Commercial Services"),
+    (7500, 7999, "Consumer Services"),
+    (8000, 8099, "Health Services"),
+    (8100, 8999, "Commercial Services"),
+)
+
+
+def sic_to_sector(sic: Any) -> str | None:
+    try:
+        code = int(str(sic).strip())
+    except (TypeError, ValueError):
+        return None
+    for low, high, sector in _SIC_SECTORS:
+        if low <= code <= high:
+            return sector
+    return None
+
+
+class DirectoryMetadata:
+    """Weekly point-in-time directory snapshots plus the frozen SIC table."""
+
+    def __init__(self, folder: Path | str, sic_path: Path | str | None = None) -> None:
+        self.folder = Path(folder)
+        self.labels = sorted(path.name[:-8] for path in self.folder.glob("20*.json.gz"))
+        if not self.labels:
+            raise ValueError(f"no directory snapshots under {self.folder}")
+        self._rows: dict[str, dict[str, dict[str, Any]]] = {}
+        self._sic: dict[tuple[str, str], str] = {}
+        if sic_path is not None and Path(sic_path).exists():
+            with gzip.open(sic_path, "rt", encoding="utf-8") as handle:
+                payload = json.load(handle)
+            items = payload if isinstance(payload, list) else payload.get("results") or payload.get("rows") or []
+            for item in items:
+                if not isinstance(item, Mapping):
+                    continue
+                ticker = str(item.get("ticker") or "").upper()
+                cik = str(item.get("cik") or "")
+                sic = item.get("sic_code", item.get("sic"))
+                if ticker and sic not in (None, ""):
+                    self._sic[(ticker, cik)] = str(sic)
+                    self._sic.setdefault((ticker, ""), str(sic))
+
+    def label_for(self, day: date) -> str | None:
+        eligible = [label for label in self.labels if label <= day.isoformat()]
+        return eligible[-1] if eligible else None
+
+    def rows(self, label: str) -> dict[str, dict[str, Any]]:
+        if label not in self._rows:
+            with gzip.open(self.folder / f"{label}.json.gz", "rt", encoding="utf-8") as handle:
+                payload = json.load(handle)
+            self._rows[label] = {str(row.get("ticker") or "").upper(): row for row in payload["results"]}
+        return self._rows[label]
+
+    def meta(self, ticker: str, day: date) -> TickerMeta | None:
+        label = self.label_for(day)
+        if label is None:
+            return None
+        row = self.rows(label).get(ticker)
+        if row is None:
+            return None
+        provider_type = str(row.get("type") or "").upper()
+        tv_type, specs, is_fund = _TYPE_TO_TV.get(provider_type, ("structured", (), False))
+        sic = self._sic.get((ticker, str(row.get("cik") or ""))) or self._sic.get((ticker, ""))
+        sector = "Miscellaneous" if is_fund else sic_to_sector(sic)
+        return TickerMeta(
+            ticker=ticker,
+            name=str(row.get("name") or ticker),
+            exchange=_EXCHANGE_TO_TV.get(str(row.get("primary_exchange") or ""), str(row.get("primary_exchange") or "")),
+            tv_type=tv_type,
+            typespecs=specs,
+            sector=sector,
+            is_fund=is_fund,
+        )
+
+
+class ProductionCandidateMetadata:
+    """Smoke-test metadata taken from production's own candidate rows (TradingView values).
+
+    Isolates the price/volume proxy from the classification proxy: type, exchange,
+    sector, name and market cap are TradingView's, per scan where available.
+    """
+
+    _ASSET_TO_TV = {
+        "common_stock": ("stock", ("common",), False),
+        "adr": ("dr", ("adr",), False),
+        "etf": ("fund", ("etf",), True),
+    }
+
+    def __init__(self, export_path: Path | str) -> None:
+        self._latest: dict[str, dict[str, Any]] = {}
+        self._cap_by_scan: dict[str, dict[str, float | None]] = defaultdict(dict)
+        self._otc_by_scan: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        self._scan_as_of: dict[str, datetime] = {}
+        columns: dict[str, list[str]] = {}
+        current = None
+        with gzip.open(export_path, "rt", encoding="utf-8") as handle:
+            for line in handle:
+                obj = json.loads(line)
+                if isinstance(obj, dict) and "table" in obj:
+                    current = obj["table"]
+                    columns[current] = obj["columns"]
+                    continue
+                if isinstance(obj, dict) and obj.get("end"):
+                    break
+                if current == "breakout_scan_runs":
+                    row = dict(zip(columns[current], obj))
+                    if row.get("status") == "completed":
+                        self._scan_as_of[row["scan_run_id"]] = datetime.fromisoformat(
+                            str(row["scheduled_at"]).replace("Z", "+00:00")
+                        )
+                elif current == "breakout_candidates":
+                    row = dict(zip(columns[current], obj))
+                    scan_id = row["scan_run_id"]
+                    body = json.loads(row["candidate_json"])
+                    ticker = str(row["ticker"]).upper()
+                    self._cap_by_scan[scan_id][ticker] = _finite(body.get("provider_market_cap"))
+                    if str(body.get("exchange") or "").upper() == "OTC":
+                        self._otc_by_scan[scan_id].append(body)
+                        continue
+                    stamp = str(body.get("provider_timestamp") or "")
+                    previous = self._latest.get(ticker)
+                    if previous is None or stamp >= str(previous.get("provider_timestamp") or ""):
+                        self._latest[ticker] = body
+        self._scan_by_as_of = {value.astimezone(timezone.utc): key for key, value in self._scan_as_of.items()}
+
+    def scan_id_for(self, as_of: datetime) -> str | None:
+        return self._scan_by_as_of.get(as_of.astimezone(timezone.utc))
+
+    def meta(self, ticker: str, day: date) -> TickerMeta | None:
+        body = self._latest.get(ticker)
+        if body is None:
+            return None
+        tv_type, specs, is_fund = self._ASSET_TO_TV.get(str(body.get("asset_type")), ("structured", (), False))
+        sector = body.get("sector")
+        return TickerMeta(
+            ticker=ticker,
+            name=str(body.get("name") or ticker),
+            exchange=str(body.get("exchange") or ""),
+            tv_type=tv_type,
+            typespecs=specs,
+            sector=str(sector) if sector else None,
+            is_fund=is_fund,
+        )
+
+    def market_cap(self, ticker: str, as_of: datetime) -> float | None:
+        scan_id = self.scan_id_for(as_of)
+        if scan_id is not None and ticker in self._cap_by_scan.get(scan_id, {}):
+            return self._cap_by_scan[scan_id][ticker]
+        body = self._latest.get(ticker)
+        return _finite(body.get("provider_market_cap")) if body else None
+
+    def otc_rows(self, as_of: datetime) -> list[dict[str, Any]]:
+        scan_id = self.scan_id_for(as_of)
+        return list(self._otc_by_scan.get(scan_id, ())) if scan_id else []
+
+
+def iter_trading_days(start: date, end: date, is_trading_day) -> Iterable[date]:
+    day = start
+    while day <= end:
+        if is_trading_day(day):
+            yield day
+        day += timedelta(days=1)
