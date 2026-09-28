@@ -184,6 +184,10 @@ class TradingViewDiscoveryProvider:
                 },
             ]
             sort = {"sortBy": "change", "sortOrder": "desc"}
+        if not self.settings.allow_otc:
+            # The result window below is cut by TradingView before normalization
+            # runs, so OTC rows must leave the ranking here, not only afterwards.
+            filters.append({"left": "exchange", "operation": "nequal", "right": "OTC"})
         return {
             "filter": filters,
             "options": {"lang": "en"},

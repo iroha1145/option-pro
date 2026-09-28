@@ -3,6 +3,8 @@
 ## 三阶段流水线
 
 1. Discovery：最多 150 个粗候选，只做校验、资产过滤、成交额过滤和去重。
+   OTC 代码默认在查询里就排除（`BREAKOUT_ALLOW_OTC` 打开才保留）：TradingView 的
+   150 行窗口在规范化之前截断，OTC 曾占去六成席位而几乎不产生事件。
 2. Daily Enrichment：最多 60 个候选，读取完整日线、SPY、行业 ETF、强势、
    大盘快照、基底和区间强势持续度。
 3. Intraday Refinement：最多 30 个候选，读取 5 分钟 K 线、VWAP、开盘区间、

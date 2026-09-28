@@ -83,6 +83,11 @@ class BreakoutSettings(BaseSettings):
         alias="BREAKOUT_PROVIDER_MIN_MARKET_CAP",
     )
     allow_etf: bool = Field(default=True, alias="BREAKOUT_ALLOW_ETF")
+    # TradingView's "america" market includes OTC tickers. They took most of the
+    # 150 discovery rows (62% in the September 2026 candidate rows) and almost
+    # none survive the daily stage, so they are excluded in the query and again
+    # in normalization unless a deployment opts back in.
+    allow_otc: bool = Field(default=False, alias="BREAKOUT_ALLOW_OTC")
 
     daily_enrich_limit: int = Field(
         default=60, ge=1, le=60, alias="BREAKOUT_DAILY_ENRICH_LIMIT"
