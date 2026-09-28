@@ -44,7 +44,7 @@ from app.services.research_eod_v1.fixtures import trading_days_ending
 from app.services.research_eod_v1.membership import has_complete_session_bar
 from app.services.research_eod_v1.residual import residual_benchmark_sessions, residual_raw_momentum
 from app.services.research_eod_v1.snapshot import industry_g_inputs
-from app.worker.state import WorkerStateRepository, _validate_action_detail
+from app.worker.state import WorkerStateRepository, _details_json, _validate_action_detail
 from app.worker.tasks import StrengthRefreshTask
 from eod_v17_fixtures import build_panel
 from tests.test_eod_all_market_data import END, _install_provider
@@ -377,15 +377,31 @@ def no_variant_work(monkeypatch):
     monkeypatch.setattr(strength_api, "list_recent_strength_variant_parameters", lambda *_args, **_kwargs: [])
 
 
-def _gap_runner(monkeypatch, tmp_path, *days):
+def _live_runner(monkeypatch, tmp_path, spy):
+    """The task's EOD runner on a fully covered live panel with this SPY series."""
     panel = build_panel()
-    panel["SPY"] = _without(panel["SPY"], *days)
+    panel["SPY"] = spy
     _serve_market(monkeypatch, panel, eligible=len(panel), complete=len(panel))
 
     def runner(**kwargs):
         return worker.run_eod_limited_job(**kwargs, session=SESSION, root=tmp_path, refresh_context=False)
 
     return runner
+
+
+def _gap_runner(monkeypatch, tmp_path, *days):
+    return _live_runner(monkeypatch, tmp_path, _without(build_panel()["SPY"], *days))
+
+
+def _worst_spy():
+    """Every problem at once, each on more sessions than the task details list."""
+    spy = build_panel()["SPY"].last_n(200)  # 121 required sessions before its first bar
+    gaps = spy.dates[10:40]
+    spy = _without(spy, *gaps)
+    unusable = spy.dates[50:80]
+    for day in unusable:
+        spy = _repriced(spy, day, 0.0)
+    return spy, gaps, unusable
 
 
 def test_the_refusal_reaches_the_task_details_and_the_status_api(monkeypatch, tmp_path, no_variant_work):
@@ -423,13 +439,46 @@ def test_the_refusal_reaches_the_task_details_and_the_status_api(monkeypatch, tm
 
 def test_many_failing_sessions_are_cut_with_their_count(monkeypatch, tmp_path, no_variant_work):
     _publish_previous(tmp_path)
-    days = WINDOW.sessions[10:40]
-    task = StrengthRefreshTask(eod_runner=_gap_runner(monkeypatch, tmp_path, *days), clock=lambda: 1_800_000_000.0)
+    spy, gaps, unusable = _worst_spy()
+    task = StrengthRefreshTask(eod_runner=_live_runner(monkeypatch, tmp_path, spy), clock=lambda: 1_800_000_000.0)
     details = asyncio.run(task()).details
-    (problem,) = details["benchmark_problems"]
-    assert problem["session_count"] == len(days) == 30
-    assert problem["sessions"] == [day.isoformat() for day in days[:20]]
+    before_history = [day.isoformat() for day in WINDOW.sessions[:-200]]
+    assert details["benchmark_problems"] == [
+        {"benchmark": "SPY", "problem": "missing_bar", "session_count": 30,
+         "sessions": [day.isoformat() for day in gaps[:20]]},
+        {"benchmark": "SPY", "problem": "invalid_price", "session_count": 30,
+         "sessions": [day.isoformat() for day in unusable[:20]], "fields": ["close", "tri"]},
+        {"benchmark": "SPY", "problem": "insufficient_history", "session_count": len(before_history),
+         "sessions": before_history[:20], "history": 170, "min_history": RESIDUAL_HISTORY_MIN},
+    ]
     _validate_action_detail(dict(details))
+    assert len(_details_json(details).encode()) < 2_500  # the status row holds 16 KiB
+
+
+def test_a_refused_action_round_fits_the_status_row(monkeypatch, tmp_path, no_variant_work):
+    """The round's details repeat the refusal in each action completion.
+
+    A second request while one is queued joins it (``already_running``), so one
+    round settles one API action: the worst refusal twice must fit the 16 KiB row.
+    """
+    _publish_previous(tmp_path)
+    runner = _live_runner(monkeypatch, tmp_path, _worst_spy()[0])
+    repository, token = _worker_repository(tmp_path, monkeypatch)
+    with TestClient(_worker_app()) as client:
+        for top in (10, 40):
+            posted = client.post("/api/worker/actions/strength_refresh", json={
+                "parameters": {**strength_api.DEFAULT_STRENGTH_SCAN_PARAMETERS, "top": top, "include_options": False},
+                "idempotency_key": f"benchmark-window-top-{top}",
+            })
+            assert posted.json()["reason"] == ("queued" if top == 10 else "already_running")
+    claimed = repository.claim_actions("test-worker", token, "strength_refresh")
+    result = asyncio.run(StrengthRefreshTask(eod_runner=runner).run_for_actions(claimed))
+    (completion,) = result.details["action_completions"]
+    assert completion["result"]["reason"] == result.details["reason"] == WINDOW_REASON
+    assert len(completion["result"]["benchmark_problems"]) == 3
+    assert len(_details_json(result.details).encode()) < 16 * 1024 // 2
+    repository.record_task("test-worker", token, "strength_refresh", enabled=True, status=result.status,
+                           error_code=result.error_code, details=result.details)
 
 
 def test_a_manual_refresh_action_carries_the_refusal(monkeypatch, tmp_path, no_variant_work):
