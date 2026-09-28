@@ -106,6 +106,24 @@ def test_compose_merges_switches_and_unites_profiles():
     assert replay.input_key(replay.compose("nofund")) == (None, None, "benchmarks")
 
 
+def test_v2_candidate_differs_from_cons17_only_in_the_conservative_atr_multiple():
+    v1, v2 = replay.compose("cons17+nofund"), replay.compose("cons17_atr125+nofund")
+    assert {k: v for k, v in v2.items() if k != "conservative"} == {k: v for k, v in v1.items() if k != "conservative"}
+    assert (v1["conservative"], v2["conservative"]) == (2.0, 1.25)
+    assert replay.input_key(v2) == replay.input_key(v1)  # same inputs, one shared precompute
+    assert replay.registry_for(v2) == replay.registry_for(v1)  # same registry tilts
+    p1 = replay.options_for("cons17+nofund", v1, {}).tuning
+    p2 = replay.options_for("cons17_atr125+nofund", v2, {}).tuning
+    assert (p1.atr_multiplier["conservative"], p2.atr_multiplier["conservative"]) == (2.0, 1.25)
+    assert p2.version == "full-market-v1.7-cons-atr1.25"
+    for field in ("m_alpha", "r_neutral_profiles", "extended_state_profiles"):
+        assert getattr(p2, field) == getattr(p1, field), field
+    assert {k: v for k, v in p2.atr_multiplier.items() if k != "conservative"} == \
+        {k: v for k, v in p1.atr_multiplier.items() if k != "conservative"}
+    with pytest.raises(ValueError, match="set twice"):
+        replay.compose("cons17+cons17_atr125")
+
+
 def test_live_variant_reads_the_production_config_and_cannot_be_composed():
     from app.services.eod_limited.live_config import LIVE_CONFIG
 

@@ -66,6 +66,9 @@ VARIANTS: dict[str, dict] = {
     "full3": {"industry": "full", "sic_level": 3, "profiles": ALL_PROFILES},
     "full4": {"industry": "full", "sic_level": 4, "profiles": ALL_PROFILES},
     "cons17": {"conservative": 2.0, "profiles": ("conservative",)},
+    # V2 (review of 2026-09-28): cons17 with the v1.4 conservative ATR multiple, to separate
+    # how much of the cons17 gain comes from relaxing the volatility gate. One value, no sweep.
+    "cons17_atr125": {"conservative": 1.25, "profiles": ("conservative",)},
     "nofund": {"fund_scope": "benchmarks", "profiles": ALL_PROFILES},
     "d12m1": {"residual": (251, 21), "profiles": TILTED_PROFILES},
     # Production as configured in live_config.LIVE_CONFIG: registry tilts and scoring
