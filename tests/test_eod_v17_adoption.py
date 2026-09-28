@@ -195,4 +195,3 @@ def test_fund_theme_strength_is_withheld_under_the_benchmark_scope(tmp_path, mon
     stock_rows = [row for row in rows if row["sector_id"] != FUND_THEME_ID]
     assert len(stock_rows) == 23 and all("fund_scope" not in row for row in stock_rows)
     assert stock_rows == [row for row in control_rows if row["sector_id"] != FUND_THEME_ID]
-

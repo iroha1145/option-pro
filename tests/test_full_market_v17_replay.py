@@ -375,4 +375,3 @@ def test_stock_identity_compares_the_common_prefix_and_reports_fund_counts_apart
     assert item["extra_variant_rows"] == 1 and item["compared_rows"] == 3 + 2 + 2
     assert item["n_differing_dates"] == 1
     assert set(item) == {"dates", "identical", "differing_dates", "compared_rows", "extra_variant_rows", "n_differing_dates"}
-
