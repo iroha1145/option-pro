@@ -13,15 +13,30 @@ Ledger rules (v1.7 PREREGISTRATION.md 修订 3):
 * A cohort buys at T+1 open and sells exactly at the T+h close; the same sleeve's next
   cohort buys at (T+65)+1 open, so its cash idles for the sessions in between. A signal
   date without a scored record leaves its sleeve idle for that cycle.
+* Every scored signal whose name has a bar at T+1 enters, including the signals near the
+  data end whose holding is not complete (the evaluator's ``no_label``): the order state is
+  separate from the label state, and the ledger has no stop-entry date. A position still
+  open on the last session is marked at its last available close and reported in
+  ``open_at_end`` (second review, 2026-09-28).
 * Twenty equal slots per cohort. A pre-decided empty slot buys SPY (as in the slot-filled
   metric); a name with no bar at T+1 or an uncertain identity stays in cash.
 * Daily marks at the close, so overnight moves and the entry day's open-to-close move are
-  in the curve. Shares multiply by split_to/split_from once per split execution date after
-  the entry session (the entry open already sits on the post-split scale).
+  in the curve. On a split execution date after the entry session the shares multiply by
+  split_to/split_from and the carried mark by split_from/split_to, so a split on a day
+  without a bar keeps the position's value and the next real bar is used as quoted (the
+  entry open already sits on the post-split scale).
+* Corporate actions are tracked per security across a rename with the window
+  ``evaluate.Prices._renamed`` uses: the old ticker's splits up to its last bar, the
+  successor's from that bar on. A split filed under the successor on a gap day is applied
+  at the switch; a reused symbol inherits nothing from its earlier holder; a censored
+  position keeps the shares it had at its first missing bar.
 * Exit follows evaluate.py's observation rules: a missing bar at T+h sells at the first
   close within EXIT_LAG_SESSIONS; a renamed security is followed; a censored position is
-  valued under the stated bound (``legacy``: flat at its last close, ``zero``: last close
-  moving with SPY, ``loss``: worthless) and settles to cash at the planned exit.
+  valued under the stated sensitivity scenario (``legacy``: flat at its last close,
+  ``zero``: last close moving with SPY, ``loss``: worthless) and settles to cash at the
+  planned exit. The scenarios are not verified bounds.
+* Price returns only (``price_only``): raw opens and closes for the lists and for SPY, no
+  dividends on either side.
 * A per-side cost in basis points is charged on the traded notional at entry and exit;
   curves are produced at 0 and at the stated cost. SPY is the benchmark under the very
   same sleeve, slot, exit and cost rules (``spy``, ``relative``); ``spy_passive`` is SPY
@@ -60,20 +75,32 @@ LEDGER_HOLDINGS = {"ledger_h63": 63, "ledger_weekly": 5}
 LEDGER_RULES = {
     "sleeves": "ceil(holding / spacing) equal sleeves; signal date T uses sleeve ((T - first signal) / spacing) mod n; "
                "sleeves do not rebalance each other",
-    "entry": "T+1 open", "exit": "T+holding close; missing bar -> first close within evaluate.EXIT_LAG_SESSIONS",
+    "entry": "T+1 open for every scored signal whose name has a bar at T+1, including signals whose holding runs past "
+             "the data end (evaluate no_label): the order state is separate from the label state and there is no "
+             "stop-entry date",
+    "exit": "T+holding close; missing bar -> first close within evaluate.EXIT_LAG_SESSIONS",
+    "open_at_end": "a position still open on the last session is marked at its last available close; end values "
+                   "report the open positions, the unlabelled ones, those whose last bar is not the final session, "
+                   "the invested sleeves and the cash share",
     "late_exit_cash": "a sale after the sleeve's next entry leaves its proceeds idle until the following entry",
     "empty_slot": "SPY", "no_entry_or_identity_uncertain": "cash at 0%", "idle_cash": "0%",
     "missing_signal_record": "sleeve idle for that cycle",
-    "splits": "shares x split_to/split_from once per execution date after the entry session (the entry open is "
-              "already post-split); a censored position keeps its shares from its first missing bar on; a successor "
-              "ticker's splits between the old last bar and its first bar are applied at the switch",
+    "splits": "shares x split_to/split_from and the carried mark x split_from/split_to, once per execution date after "
+              "the entry session (the entry open is already post-split), so a split on a day without a bar keeps the "
+              "value and the next bar is used as quoted; a censored position keeps its shares from its first missing "
+              "bar on; across a rename the old ticker's splits count up to its last bar and the successor's from that "
+              "bar on (the window evaluate._renamed uses), so a split filed under the successor on a gap day is "
+              "applied at the switch and a reused symbol inherits nothing",
     "passive_spy": "SPY bought at the first entry open and held to the ledger's end, no costs, no idle cash: "
                    "the investor's alternative, reported next to the same-rule SPY sleeves",
-    "censored": {"legacy": "flat at the last observed close, settled at the planned exit",
-                 "zero": "last observed close moving with SPY, settled at the planned exit",
-                 "loss": "worthless from the first missing bar"},
+    "censored": {"legacy": "scenario: flat at the last observed close, settled at the planned exit",
+                 "zero": "scenario: last observed close moving with SPY, settled at the planned exit",
+                 "loss": "scenario: worthless from the first missing bar"},
+    "scenarios": "legacy, zero and loss are sensitivity scenarios, not verified bounds: the last close is no "
+                 "guaranteed ceiling for merger or delisting proceeds, and zero need not lie between the other two",
+    "returns": "price_only: raw opens and closes for the lists and for SPY, no dividends on either side",
     "costs": "per side, basis points of traded notional, at entry and exit",
-    "benchmark": "SPY bought in every slot under the same sleeve, exit and cost rules",
+    "benchmark": "SPY bought in every slot under the same sleeve, entry, exit and cost rules",
     "ledger_weekly": "one sleeve, buy T+1 open, sell T+5 close, rebuy T+6 open, flat overnight",
 }
 
@@ -82,8 +109,8 @@ def write_csv(path: Path, rows: list[dict]) -> None:
     evaluate.write_csv(path, rows)
 
 
-def load_records(folder: Path, wanted: set[str]) -> list[dict]:
-    records, _ = evaluate.load_records([folder])
+def load_records(folders: list[Path], wanted: set[str]) -> list[dict]:
+    records, _ = evaluate.load_records(folders)
     for record in records:
         record["lists"] = {key: value for key, value in record["lists"].items() if key.split("/")[0] in wanted}
     return [record for record in records if record["lists"]]
@@ -94,6 +121,17 @@ def ranked_names(block: dict, list_type: str, top: int) -> list[str | None]:
     rows = [row for row in block["rows"] if list_type == "mixed" or row.get("stock_or_etf_track") == "stock"]
     names: list[str | None] = [evaluate.resolve(row)[0] for row in rows[:top]]
     return names + [""] * (top - len(names))
+
+
+def _apply_splits(prices: "evaluate.Prices", position: dict, ticker: str, through: str) -> None:
+    """Apply ``ticker``'s splits executed in (splits_through, through]: the shares and the carried mark move
+    together, so a split on a day without a bar keeps the value; the next real bar replaces the mark as quoted."""
+    for execution, split_from, split_to in prices.splits.get(ticker, ()):
+        if position["splits_through"] < execution <= through:
+            position["shares"] *= split_to / split_from
+            position["last_close"] *= split_from / split_to
+    if through > position["splits_through"]:
+        position["splits_through"] = through
 
 
 def ledger_curve(records: list[dict], prices: "evaluate.Prices", key: str, list_type: str, *,
@@ -133,12 +171,15 @@ def ledger_curve(records: list[dict], prices: "evaluate.Prices", key: str, list_
                 if ticker is None:  # identity uncertain: stays in cash
                     continue
                 outcome = prices.observe(ticker, signal_day, holding)
-                if outcome.status in {"no_entry_bar", "no_label"}:
+                bar = prices.series(ticker).get(day)
+                # The order fills when T+1 has a bar. An incomplete label (no_label: the holding runs past the
+                # data end) is a fact about the future, not a reason to skip an entry that could be made.
+                if outcome.status == "no_entry_bar" or not bar or not bar[0]:
                     continue
-                open_ = prices.series(ticker)[day][0]
+                open_ = bar[0]
                 sleeve["cash"] -= slot_cash
                 sleeve["positions"].append({
-                    "ticker": ticker, "shares": slot_cash * (1 - cost) / open_, "outcome": outcome,
+                    "ticker": ticker, "held": ticker, "shares": slot_cash * (1 - cost) / open_, "outcome": outcome,
                     "exit_i": index[outcome.exit_day] if outcome.observable else index[signal_day] + holding,
                     "last_close": open_, "last_close_i": day_i, "spy_at_last": spy[day][1],
                     # Splits are applied once per execution date strictly after this day: the entry open
@@ -146,31 +187,33 @@ def ledger_curve(records: list[dict], prices: "evaluate.Prices", key: str, list_
                     "splits_through": day,
                 })
         total_positions = 0.0
+        open_positions = unlabelled = stale = 0
         for sleeve in sleeves:
             kept = []
             for position in sleeve["positions"]:
                 outcome = position["outcome"]
-                ticker = position["ticker"]
-                if outcome.followed_ticker and day >= outcome.detail["first_new_day"]:
-                    ticker = outcome.followed_ticker
+                held = position["held"]
+                if outcome.followed_ticker and held != outcome.followed_ticker and day >= outcome.detail["first_new_day"]:
+                    # Switch legs: the successor's corporate actions count from the old ticker's last bar on,
+                    # the window evaluate._renamed uses, whatever the old leg's check point had reached.
+                    position["held"] = held = outcome.followed_ticker
+                    position["splits_through"] = outcome.last_day
                 # A censored position keeps the shares it had at its first missing bar: later splits under
                 # the same ticker may belong to whoever holds the symbol next.
-                frozen = not outcome.observable and outcome.first_gap_day is not None and day >= outcome.first_gap_day
+                frozen = outcome.censored and outcome.first_gap_day is not None and day >= outcome.first_gap_day
                 if not frozen:
-                    for execution, split_from, split_to in prices.splits.get(ticker, ()):
-                        # Covers a split filed under a successor ticker between the old last bar and its first bar.
-                        if position["splits_through"] < execution <= day:
-                            position["shares"] *= split_to / split_from
-                    position["splits_through"] = day
-                bar = prices.series(ticker).get(day)
-                if not outcome.observable and outcome.first_gap_day and day >= outcome.first_gap_day:
-                    bar = None  # a censored position is not marked with bars after its first missing session
+                    # The old leg of a renamed position stops at its last bar: a split filed under the old
+                    # symbol after that belongs to the symbol's next holder, and the evaluator ignores it too.
+                    old_leg = outcome.followed_ticker is not None and held != outcome.followed_ticker
+                    _apply_splits(prices, position, held, min(day, outcome.last_day) if old_leg else day)
+                bar = None if frozen else prices.series(held).get(day)  # no marks after a censored position's first gap
                 if bar and bar[1]:
                     position["last_close"], position["last_close_i"] = bar[1], day_i
                     position["spy_at_last"] = spy[day][1]
                     value = position["shares"] * bar[1]
-                elif outcome.observable:
-                    value = position["shares"] * position["last_close"]  # held through an interior gap
+                elif outcome.observable or outcome.status == "no_label":
+                    # Held through an interior gap, or open at the data end: carried at the last available close.
+                    value = position["shares"] * position["last_close"]
                 elif bound == "legacy":
                     value = position["shares"] * position["last_close"]
                 elif bound == "zero":
@@ -182,12 +225,18 @@ def ledger_curve(records: list[dict], prices: "evaluate.Prices", key: str, list_
                     continue
                 kept.append(position)
                 total_positions += value
+                open_positions += 1
+                unlabelled += outcome.status == "no_label"
+                stale += position["last_close_i"] != day_i
             sleeve["positions"] = kept
         invested = sum(1 for sleeve in sleeves if sleeve["positions"])
         if first_full is None and invested == n_sleeves:
             first_full = day
-        curve.append({"date": day, "value": round(sum(sleeve["cash"] for sleeve in sleeves) + total_positions, 8),
-                      "invested_sleeves": invested, "first_fully_invested": first_full,
+        cash = sum(sleeve["cash"] for sleeve in sleeves)
+        value = cash + total_positions
+        curve.append({"date": day, "value": round(value, 8), "invested_sleeves": invested, "first_fully_invested": first_full,
+                      "open_positions": open_positions, "unlabelled_positions": unlabelled, "stale_marks": stale,
+                      "cash_share": round(cash / value, 8) if value else None,
                       "spy_passive": round(spy[day][1] / passive_base, 8) if day in spy else None})
     return curve
 
@@ -241,7 +290,8 @@ def legacy_overlap_curve(days: list[str], ranked: dict, key: str, list_type: str
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--db", required=True)
-    parser.add_argument("--replay", required=True, type=Path)
+    parser.add_argument("--replay", required=True, type=Path, action="append",
+                        help="replay directory; repeat to merge the date halves of two machines")
     parser.add_argument("--directory", type=Path)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--variants", default="v15")
@@ -342,14 +392,19 @@ def main() -> None:
                                            "spy_passive": "" if passive is None else round(passive, 6),
                                            "relative_passive": "" if passive is None else round(point["value"] / passive, 6)})
                         if curve:
-                            last = curve[-1]
+                            first, last = curve[0], curve[-1]
                             end_values.append({**base, "holding": holding_name, "sessions": len(curve),
                                                "first_fully_invested": last["first_fully_invested"],
                                                "portfolio": round(last["value"], 6), "spy": round(spy_by_day[last["date"]], 6),
                                                "relative": round(last["value"] / spy_by_day[last["date"]], 6),
                                                "spy_passive": None if last["spy_passive"] is None else round(last["spy_passive"], 6),
                                                "relative_passive": None if last["spy_passive"] is None else round(last["value"] / last["spy_passive"], 6),
-                                               "start_date": curve[0]["date"], "end_date": last["date"]})
+                                               "start_date": first["date"], "end_date": last["date"],
+                                               "start": {"open_positions": first["open_positions"], "invested_sleeves": first["invested_sleeves"],
+                                                         "cash_share": first["cash_share"]},
+                                               "open_at_end": {"positions": last["open_positions"], "unlabelled_positions": last["unlabelled_positions"],
+                                                               "positions_without_final_bar": last["stale_marks"],
+                                                               "invested_sleeves": last["invested_sleeves"], "cash_share": last["cash_share"]}})
     write_csv(args.out / "equity_curves.csv", curves)
     with (args.out / "ledger_end_values.json").open("w") as handle:
         json.dump({"rules": LEDGER_RULES, "observation_rules": evaluate.RULES, "cost_bps": args.cost_bps,

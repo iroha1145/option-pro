@@ -1,0 +1,38 @@
+{
+  "repo": "claude/eod-v1.7",
+  "tests": [
+    {
+      "name": "unmatured_positions_and_prefix_invariance",
+      "pass": false,
+      "short_dataset_nav": 1.0,
+      "extended_dataset_nav_at_same_date": 1.05,
+      "expected_both": 1.05,
+      "short_dataset_invested_sleeves": 0
+    },
+    {
+      "name": "successor_split_between_old_last_and_new_first_bar",
+      "pass": false,
+      "outcome_status": "renamed",
+      "label_return": 0.0,
+      "actual_final_nav": 0.25,
+      "expected_final_nav": 1.0
+    },
+    {
+      "name": "split_adjusts_carried_mark_during_missing_bar",
+      "pass": false,
+      "outcome_status": "ok_bridged",
+      "label_return": 0.0,
+      "actual_first_three_navs": [
+        1.0,
+        4.0,
+        1.0
+      ],
+      "expected_first_three_navs": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    }
+  ],
+  "all_passed": false
+}
