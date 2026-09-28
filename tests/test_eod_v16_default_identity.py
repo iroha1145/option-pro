@@ -4,7 +4,11 @@
 (commit 3de252f9) before any v1.7 switch existed: nine views of a deterministic
 synthetic panel, compacted the way the worker stores them and projected the way
 ``/api/strength/scan`` reads them. Floats are rounded to six decimals so the file
-survives BLAS/LAPACK differences between machines. Regenerate deliberately with
+survives BLAS/LAPACK differences between machines. The tuning ``context_hash`` is
+left out of the comparison for the same reason: it hashes the full-precision ATR
+and return references, whose last bits differ between macOS arm64 (where the
+fixture was written) and Linux x86_64 (CI). With v1.6 code the two platforms
+disagree on that hash alone. Regenerate deliberately with
 ``EOD_GOLDEN_REWRITE=1`` only when v1.6 behaviour is meant to change.
 
 ``score_eod_session`` and ``precompute_all_horizon_inputs`` without options are
@@ -35,6 +39,16 @@ THEMES = [ALL_MARKET_STOCKS, "semiconductors", "etfs"]
 VOLATILE_KEYS = {"generated_at"}
 # The label names the code version, not the scoring path; the fixture holds v1.6's.
 VERSION_KEYS = {"compute_version": "limited-all-market-v1.6"}
+PLATFORM_KEYS = {"context_hash"}
+
+
+def without_platform_keys(value):
+    """Drop hashes of full-precision floats, which differ between CPU architectures."""
+    if isinstance(value, dict):
+        return {key: without_platform_keys(item) for key, item in value.items() if key not in PLATFORM_KEYS}
+    if isinstance(value, list):
+        return [without_platform_keys(item) for item in value]
+    return value
 
 
 def nine_views(**kwargs) -> dict[str, dict]:
@@ -73,8 +87,8 @@ def test_default_path_reproduces_the_v16_golden_views():
         for version_key, golden_value in VERSION_KEYS.items():
             assert golden[key]["compact"][version_key] == golden_value, key
             assert current[key]["compact"][version_key] == COMPUTE_VERSION, key
-        assert {k: v for k, v in current[key]["compact"].items() if k not in VERSION_KEYS} == \
-            {k: v for k, v in golden[key]["compact"].items() if k not in VERSION_KEYS}, key
+        assert without_platform_keys({k: v for k, v in current[key]["compact"].items() if k not in VERSION_KEYS}) == \
+            without_platform_keys({k: v for k, v in golden[key]["compact"].items() if k not in VERSION_KEYS}), key
     listed = sum(len(view["rows"]) for view in golden.values())
     assert listed > 40, "the fixture must exercise non-trivial lists"
 
