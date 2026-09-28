@@ -77,9 +77,11 @@ def stage_pack(name: str, reeval: Path, legacy: Path | None) -> dict[str, Any]:
     decision_path = reeval / "decision.json"
     identity_path = reeval / "identity.json"
     rules_path = reeval / "rules.json"
+    decision = json.loads(decision_path.read_text()) if decision_path.exists() else None
     return {
         "stage": name,
         "results_dir": str(reeval), "legacy_results_dir": None if legacy is None else str(legacy),
+        "baseline": None if decision is None else decision.get("baseline"),
         "rules": json.loads(rules_path.read_text()) if rules_path.exists() else None,
         "variants": variants,
         "coverage": [{**row, **{k: number(v) for k, v in row.items() if k not in {"variant", "profile", "list_type"}}}
@@ -90,21 +92,29 @@ def stage_pack(name: str, reeval: Path, legacy: Path | None) -> dict[str, Any]:
                         "nw_t": number(row.get("nw_t")), "share_days_positive": number(row.get("share_days_positive")),
                         "holding": number(row.get("holding"))}
                        for row in paired if row.get("holding") == "63"],
-        "decision": json.loads(decision_path.read_text()) if decision_path.exists() else None,
+        "decision": decision,
         "identity": json.loads(identity_path.read_text()) if identity_path.exists() else None,
     }
 
 
 def comparison(pack_stage: dict[str, Any], baseline: str, candidate: str, profile: str | None) -> list[dict[str, Any]]:
-    """The candidate's paired difference against the baseline and its own level, per metric, stock list, 63 sessions."""
-    out = []
-    for row in pack_stage["paired_h63"]:
-        if profile and row["profile"] != profile:
-            continue
-        if row["period"] != "ALL":
-            continue
-        if row["comparison"] == "variant_minus_baseline_stock" and row["variant"] == candidate:
-            out.append({"what": f"{candidate} minus {baseline}, stock list", **row})
+    """The candidate's paired difference against the baseline and both levels, per metric, stock list, 63 sessions.
+
+    Empty unless the stage was evaluated against ``baseline`` (its decision.json says so)
+    and holds the candidate's difference rows; a baseline's own level rows never satisfy
+    a comparison. ``baseline == candidate`` asks for that variant's stock-minus-mixed rows.
+    """
+    rows = [row for row in pack_stage["paired_h63"] if row["period"] == "ALL" and (not profile or row["profile"] == profile)]
+    if baseline == candidate:
+        return [{"what": f"{candidate} stock list minus mixed list", **row}
+                for row in rows if row["comparison"] == "stock_minus_mixed" and row["variant"] == candidate]
+    if pack_stage.get("baseline") not in (None, baseline):
+        return []
+    differences = [row for row in rows if row["comparison"] == "variant_minus_baseline_stock" and row["variant"] == candidate]
+    if not differences:
+        return []
+    out = [{"what": f"{candidate} minus {baseline}, stock list", **row} for row in differences]
+    for row in rows:
         if row["comparison"] == "level_stock" and row["variant"] in {baseline, candidate}:
             out.append({"what": f"{row['variant']} own excess over SPY, stock list", **row})
     return out
@@ -113,7 +123,9 @@ def comparison(pack_stage: dict[str, Any], baseline: str, candidate: str, profil
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--stage", action="append", required=True, help="name=reeval_dir[:legacy_dir]")
-    parser.add_argument("--compare", action="append", default=[], help="label=baseline:candidate[:profile] (uses the first stage that has both)")
+    parser.add_argument("--compare", action="append", default=[],
+                        help="label=baseline:candidate[:profile]; resolved in the first stage evaluated against that "
+                             "baseline that holds the candidate (baseline == candidate: stock minus mixed)")
     parser.add_argument("--backtest", type=Path, action="append", default=[], help="backtest directory with ledger_end_values.json")
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--note", action="append", default=[])
@@ -133,7 +145,9 @@ def main() -> None:
             rows = comparison(stage, baseline, candidate, profile)
             if rows:
                 comparisons[label] = {"stage": stage["stage"], "baseline": baseline, "candidate": candidate,
-                                      "profile": profile, "rows": rows}
+                                      "profile": profile, "rows": rows,
+                                      # False when the stage's decision.json is missing: the baseline is then assumed.
+                                      "baseline_verified": stage.get("baseline") == baseline or baseline == candidate}
                 break
     ledgers = []
     for folder in args.backtest:

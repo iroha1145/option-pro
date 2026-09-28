@@ -5,7 +5,9 @@ prices from the replay cache, split-adjusted with the same frozen split table. E
 against SPY over the identical window. The primary metric fills pre-decided empty top-20
 slots with SPY (excess 0), so a variant cannot win by listing fewer names.
 
-Observation rules (v1.7 PREREGISTRATION.md 修订 2 and 修订 3; the 2026-09-28 review):
+Observation rules (the 2026-09-28 review; written down before any re-evaluation in this
+pack's README, section 外部审查后的重算 / 规则, and identically in the v1.7 pack's
+PREREGISTRATION.md 修订 3):
 
 * A name is *observable* when its exit can be verified from the data: a bar on T+h
   (``ok``; interior missing bars are held through when the weekly point-in-time
@@ -448,12 +450,15 @@ def evaluate(records: list[dict], prices: Prices,
                         empty = top - len(names)
                         unobservable = len(names) - observable
                         primary = None if (observable == 0 and names) else sum(excesses) / (observable + empty)
+                        # The bounds are the full-sample sensitivity: every censored name has a value under them,
+                        # so they exist on days the primary metric cannot observe.
+                        bound_n = len(bound_zero) + empty
                         point = {
                             "day": day,
                             "slot": primary,
                             "slot_legacy": sum(legacy_excesses) / top,
-                            "slot_zero": None if (observable == 0 and names) else sum(bound_zero) / (len(bound_zero) + empty),
-                            "slot_loss": None if (observable == 0 and names) else sum(bound_loss) / (len(bound_loss) + empty),
+                            "slot_zero": sum(bound_zero) / bound_n if bound_n else None,
+                            "slot_loss": sum(bound_loss) / bound_n if bound_n else None,
                             "unfilled": sum(excesses) / observable if observable else None,
                             "hit": hits / observable if observable else None,
                             "listed": len(names),
