@@ -290,6 +290,31 @@ def test_discovery_proxy_reads_a_delayed_view_with_yesterdays_values_before_the_
     assert "TD" not in rows(delayed, MarketSession.PREMARKET, datetime(2026, 7, 10, 7, 30, tzinfo=NY))
 
 
+def test_day_files_reproduce_the_ticker_file_slots_and_the_window_keeps_bars(frozen: dict) -> None:
+    from harness.stores import MinuteStore
+
+    store = MinuteStore(frozen["minute"])
+    assert store.has_day_files and (frozen["minute"] / "days").is_dir()
+    checked = 0
+    for ticker in store.tickers:
+        for day in (DAY1, DAY2, DAY3):
+            fast = store.day_slots(ticker, day)
+            slow = store.day_slots_from_ticker_file(ticker, day)
+            assert (fast is None) == (slow is None)
+            if fast is not None:
+                np.testing.assert_array_equal(fast[0], slow[0])
+                np.testing.assert_array_equal(fast[1], slow[1])
+                checked += 1
+    assert checked >= 3 * len(STOCKS)
+    # A windowed store keeps only the segment's bars (padded by a day for the UTC boundary)
+    # in memory, and the same bars inside the window.
+    windowed = MinuteStore(frozen["minute"], cache_tickers=4, window=(DAY3, DAY3))
+    full = store.bars("TA", DAY1, DAY3)
+    part = windowed.bars("TA", DAY1, DAY3)
+    assert len(part) < len(full) and part.equals(full.loc[part.index])
+    assert windowed.bars("TA", DAY3, DAY3).equals(store.bars("TA", DAY3, DAY3))
+
+
 def test_memo_off_is_byte_identical_to_memo_on(frozen: dict) -> None:
     on = run_segment(_config(frozen, "memo_on", start=DAY2, end=DAY3, warmup=1, variants=["baseline"], memo=True))
     off = run_segment(_config(frozen, "memo_off", start=DAY2, end=DAY3, warmup=1, variants=["baseline"], memo=False))

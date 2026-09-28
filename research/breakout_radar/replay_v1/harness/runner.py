@@ -67,6 +67,7 @@ class RunConfig:
     trim_sessions: bool = True
     bar_delay_seconds: int = 563  # production-realized: bars visible 600 s after close minus the 37 s request offset
     tv_delay_minutes: int = 15  # production-realized: the screener fields lagged about 15 minutes
+    minute_cache_tickers: int = 800  # per-ticker frames kept in memory (each holds only the segment's window)
     on_degraded: str = "raise"  # or "continue"
     full_snapshots: bool = False
     label: str = ""
@@ -291,6 +292,11 @@ class _VariantRun:
         self.day_snapshots: list[dict[str, Any]] = []
         self.degraded: list[dict[str, Any]] = []
         self.truncated_days: set[str] = set()
+        self.truncated_live_days: set[str] = set()
+        # worker.py:223-228: the expiry lane takes min(40, intraday_enrich_limit, expired_due_limit) rows.
+        self.expiry_lane_limit = min(
+            40, int(getattr(self.settings, "intraday_enrich_limit", 40)), int(getattr(self.settings, "expired_due_limit", 40))
+        )
         self.scan_count = 0
 
     def heartbeat(self, now: datetime) -> None:
@@ -320,8 +326,20 @@ class _VariantRun:
         truncated = str(source_status.get("carryover")) == "truncated" or "carryover_truncated" in list(
             (publication or {}).get("warnings") or []
         )
+        # The carry-over batch is split in two lanes. When the expiry lane alone was full
+        # (the first scan after a weekend expires Friday's leftovers, 30 per scan under
+        # 35ab1395) the surplus only expires one scan later; only a full live lane can
+        # change what the day computes (PREREGISTRATION 修订 3).
+        truncation_kind = None
         if truncated:
+            expired_here = sum(
+                1 for t in (publication or {}).get("transitions") or []
+                if str(_value(t.get("to_state") if isinstance(t, dict) else getattr(t, "to_state", None))) == "EXPIRED"
+            )
+            truncation_kind = "expiry_lane" if expired_here >= self.expiry_lane_limit else "live_lane"
             self.truncated_days.add(as_of.astimezone(NY).date().isoformat())
+            if truncation_kind == "live_lane":
+                self.truncated_live_days.add(as_of.astimezone(NY).date().isoformat())
         record = {
             "variant": self.name,
             "as_of": as_of.astimezone(timezone.utc).isoformat(),
@@ -334,6 +352,7 @@ class _VariantRun:
             "elapsed_ms": round(elapsed_ms, 1),
             "prefilter_count": self.provider.last_prefilter_count,
             "truncated": truncated,
+            "truncation_kind": truncation_kind,
         }
         if kind == "t1":
             record["t1_completion"] = result.get("t1_completion")
@@ -434,7 +453,11 @@ def variant_spec_parts(name: str) -> set[str]:
 
 def build_shared(config: RunConfig) -> dict[str, Any]:
     daily_store = DailyStore(config.daily_db)
-    minute_store = MinuteStore(config.minute_store)
+    # A segment reads bars from 30 calendar days before its warm-up day to its last day.
+    minute_store = MinuteStore(
+        config.minute_store, cache_tickers=config.minute_cache_tickers,
+        window=(config.start - timedelta(days=30 + 7 * max(1, config.warmup_days) + 7), config.end),
+    )
     fred_store = FredStore(config.fred)
     if config.metadata_mode == "production":
         if config.export is None:
@@ -567,6 +590,7 @@ def run_segment(config: RunConfig) -> dict[str, Any]:
         market_shape.uninstall()
     summary["scans"] = sum(run.scan_count for run in runs)
     summary["truncated_days"] = {run.name: sorted(run.truncated_days) for run in runs}
+    summary["truncated_live_lane_days"] = {run.name: sorted(run.truncated_live_days) for run in runs}
     summary["research_rows"] = {run.name: run.export_research() for run in runs}
     summary["memo_stats"] = memo.stats
     summary["strength_cache"] = {"hits": sum(run.strength.hits for run in runs), "misses": sum(run.strength.misses for run in runs)}

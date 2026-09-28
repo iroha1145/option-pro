@@ -23,10 +23,12 @@
 
 ```
 $PY $P/scripts/build_minute_store.py --manifest /content/minute_manifest.jsonl \
-    --raw-root /content/minute_raw --out /content/minute_store
+    --raw-root /content/minute_raw --out /content/minute_store --chunk-months 3
 ```
 
-每个代码一个 parquet 加 `coverage.parquet`（代码 × 有 K 线的日子）。全量约 12.5 千个代码，预计几十分钟；可以在抓取进行中先建近两年的部分，之后重跑覆盖。烟雾周用 `--tar smoke_minute.tar`（本机已建：1,306 个代码、380 万根 K 线）。
+两层：每个代码一个 parquet（盘中阶段按代码取 30 天的 K 线）加 `coverage.parquet`（代码 × 有 K 线的日子）；再按美东日期各一个 `days/<日期>.parquet`（代码、槽位、收盘、成交量），发现代理每天只读今天和前一交易日两个文件，不再逐代码打开 12.5 千个文件。第二遍按 `--chunk-months` 个月一批重读代码文件，内存约每批的 K 线量（3 个月约 1 到 2 GB），全量再加几十分钟。烟雾库上两条路径的输出逐字节相同（README「一致性检查」）。
+
+每个回放进程只把本段窗口（预热日前 37 天到段末）的 K 线留在内存：`--minute-cache-tickers`（默认 800）个代码的窗口切片约每个 1 MB，加两天的槽位表约 50 MB。全量约 12.5 千个代码，预计几十分钟；可以在抓取进行中先建近两年的部分，之后重跑覆盖。烟雾周用 `--tar smoke_minute.tar`（本机已建：1,306 个代码、380 万根 K 线、39 个日文件共 37 MB）。
 
 ## 1. 烟雾周（2026-09-08 到 09-25）
 
@@ -98,7 +100,7 @@ FULL=(--daily-db /content/data/replay.sqlite --minute-store /content/minute_stor
   --directory /content/data/massive_directory_2026-09-27 --sic /content/data/industry/ticker_sic.json.gz
   --shares /content/data/pit_shares.jsonl --metadata directory --market-cap shares
   --warmup 1 --on-degraded continue
-  --variants baseline,confirm3,chase15,orb15,orb60,disc5,adv25,basemin15,rvol2,lookback10)
+  --variants baseline,confirm3,chase15,orb15,orb60,disc5,adv25,basemin15)
 $PY - <<'EOF' > /content/segments.txt
 import sys; sys.path.insert(0, "/content/option-pro/backend")
 from datetime import date, timedelta
@@ -110,13 +112,13 @@ EOF
 cat /content/segments.txt | xargs -P 40 -L 1 bash -c '$PY $P/scripts/replay.py "${FULL[@]}" --start $0 --end $1 --out /content/replay/full/seg_$0 --db-dir /content/db/full/seg_$0 --label seg_$0 > /content/replay/full/seg_$0.log 2>&1'
 ```
 
-「实时数据」敏感性运行只跑基线，同样分段：`--variants baseline --bar-delay-seconds 0 --tv-delay-minutes 0 --out /content/replay/realtime/seg_$0`。
+「实时数据」敏感性运行同样分段，跑基线和只有在实时数据下才可测的两个相对量候选（预登记修订 3）：`--variants baseline,rvol2,lookback10 --bar-delay-seconds 0 --tv-delay-minutes 0 --out /content/replay/realtime/seg_$0`。
 
 第一段（2021-10-04 起）的预热日落在分钟线可取范围之前，预热为空，该段第一天的遗留状态为空，与生产上线首日相同；结果里标注。
 
-完成后检查每段 `run.json`：`degraded` 必须为空（`continue` 只是为了不让一段中途停下，任何降级都要查明原因并重跑该段）；`truncated_days` 非空的段按预登记第 3 节重跑预热 2 天比对（烟雾周里 09-14 与 09-21 两天被标为截断：生产当天的遗留池超过 150 或到期复查超过 40，属于预登记第 3 节说的情形）。把 `/content/replay/full/` 同步到 Drive。
+完成后检查每段 `run.json`：`degraded` 必须为空（`continue` 只是为了不让一段中途停下，任何降级都要查明原因并重跑该段）；`truncated_live_lane_days` 非空的段按预登记第 3 节重跑预热 2 天比对。`truncated_days` 里只有到期通道满的日子（每个周一的第一次扫描都会：周五留下的事件周末没人处理，到期通道一次只放 30 条，多出的下一次扫描到期）不用重跑，账本里每次扫描的 `truncation_kind` 分 `expiry_lane` 与 `live_lane`（预登记修订 3）。把 `/content/replay/full/` 同步到 Drive。
 
-预估：按烟雾周的 1.5 秒一次扫描、每天约 109 次扫描、10 个配置共享发现与日线阶段，每天全部配置约 10 到 15 分钟单核；1,250 天 40 进程约 6 到 8 小时；「实时数据」基线再加约 1.5 小时。
+预估：按烟雾周的 1.5 秒一次扫描、每天约 109 次扫描、8 个配置共享发现与日线阶段，每天全部配置约 8 到 12 分钟单核；1,250 天 40 进程约 5 到 7 小时；「实时数据」的三个配置再加约 2 小时。这个数没有量过全量库上日上下文的构建时间（每天读两个日文件，烟雾库上一天不到 1 秒），第一段跑完后按 `run.json` 的 `elapsed_s` 校准。
 
 ## 4. 输出
 

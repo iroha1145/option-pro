@@ -15,7 +15,7 @@ from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -72,8 +72,78 @@ def parse_aggregate_page(payload: Mapping[str, Any]) -> list[tuple[int, float, f
     return out
 
 
-def build_minute_store(manifest_path: Path, raw_root: Path, out_dir: Path) -> dict[str, Any]:
-    """Turn frozen Massive pages into one parquet per ticker plus a day-coverage table."""
+def _slot_index(stamps_ms: np.ndarray) -> np.ndarray:
+    """Five-minute slot from 04:00 ET for each bar start, -1 for bars outside or misaligned."""
+
+    local = pd.to_datetime(stamps_ms, unit="ms", utc=True).tz_convert(NY)
+    minutes = np.asarray(local.hour * 60 + local.minute)
+    slots = (minutes - _FIRST_SLOT_MINUTE) // _SLOT_MINUTES
+    valid = (slots >= 0) & (slots < SLOTS_PER_DAY) & ((minutes - _FIRST_SLOT_MINUTE) % _SLOT_MINUTES == 0)
+    return np.where(valid, slots, -1)
+
+
+def build_day_files(out_dir: Path, tickers: Sequence[str], days: Sequence[str], *, chunk_months: int = 3) -> int:
+    """Second pass: one parquet per ET day (ticker, slot, close, volume) for the discovery proxy.
+
+    ``build_day_context`` needs every ticker's slots for one day; reading 12,500 per-ticker
+    files per day would thrash any cache, so the store also holds the same bars grouped by
+    day. Ticker files are read once per ``chunk_months`` so memory stays bounded.
+    """
+
+    day_dir = out_dir / "days"
+    day_dir.mkdir(parents=True, exist_ok=True)
+    months = sorted({day[:7] for day in days})
+    written = 0
+    for start in range(0, len(months), chunk_months):
+        chunk = months[start:start + chunk_months]
+        first = date.fromisoformat(chunk[0] + "-01")
+        last_month = date.fromisoformat(chunk[-1] + "-01")
+        after = (last_month.replace(day=28) + timedelta(days=4)).replace(day=1)  # first day of the next month
+        # Bars are keyed by ET day; widen the UTC range by a day on each side and filter exactly below.
+        low_ms = int(datetime(first.year, first.month, first.day, tzinfo=timezone.utc).timestamp() * 1000) - 86_400_000
+        high_ms = int(datetime(after.year, after.month, after.day, tzinfo=timezone.utc).timestamp() * 1000) + 86_400_000
+        rows: dict[str, list[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]] = defaultdict(list)
+        for ticker in tickers:
+            path = out_dir / f"{ticker}.parquet"
+            if not path.exists():
+                continue
+            raw = pd.read_parquet(path, columns=["t", "close", "volume"], filters=[("t", ">=", low_ms), ("t", "<", high_ms)])
+            if raw.empty:
+                continue
+            stamps = raw["t"].to_numpy(dtype=np.int64)
+            slots = _slot_index(stamps)
+            local_days = pd.to_datetime(stamps, unit="ms", utc=True).tz_convert(NY).strftime("%Y-%m-%d").to_numpy()
+            keep = slots >= 0
+            for day in np.unique(local_days[keep]):
+                if day[:7] not in chunk:
+                    continue
+                mask = keep & (local_days == day)
+                rows[day].append((
+                    np.full(int(mask.sum()), ticker, dtype=object), slots[mask].astype(np.int16),
+                    raw["close"].to_numpy(dtype=np.float64)[mask], raw["volume"].to_numpy(dtype=np.float64)[mask],
+                ))
+        for day, parts in rows.items():
+            frame = pd.DataFrame(
+                {
+                    "ticker": np.concatenate([p[0] for p in parts]),
+                    "slot": np.concatenate([p[1] for p in parts]),
+                    "close": np.concatenate([p[2] for p in parts]),
+                    "volume": np.concatenate([p[3] for p in parts]),
+                }
+            )
+            frame.sort_values(["ticker", "slot"], kind="stable").to_parquet(day_dir / f"{day}.parquet", index=False)
+            written += 1
+    return written
+
+
+def build_minute_store(
+    manifest_path: Path, raw_root: Path, out_dir: Path, *, day_files: bool = True, chunk_months: int = 3
+) -> dict[str, Any]:
+    """Turn frozen Massive pages into one parquet per ticker plus a day-coverage table.
+
+    With ``day_files`` the same bars are also written per ET day (``days/<day>.parquet``),
+    which is what the discovery proxy reads; the per-ticker files serve the intraday stage.
+    """
 
     out_dir.mkdir(parents=True, exist_ok=True)
     by_ticker: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -121,17 +191,37 @@ def build_minute_store(manifest_path: Path, raw_root: Path, out_dir: Path) -> di
     pd.DataFrame(coverage_rows, columns=["ticker", "day"]).to_parquet(
         out_dir / "coverage.parquet", index=False
     )
+    if day_files:
+        summary["day_files"] = build_day_files(
+            out_dir, sorted({ticker for ticker, _day in coverage_rows}), sorted({day for _ticker, day in coverage_rows}),
+            chunk_months=chunk_months,
+        )
     (out_dir / "store_manifest.json").write_text(json.dumps(summary, indent=1))
     return summary
 
 
 class MinuteStore:
-    """Read-side of the derived store; frames look like ``scanner._slice_ticker`` output."""
+    """Read-side of the derived store; frames look like ``scanner._slice_ticker`` output.
 
-    def __init__(self, root: Path | str, cache_tickers: int = 800) -> None:
+    ``window`` (first day, last day) bounds what a per-ticker load keeps in memory: a
+    segment only ever asks for bars from 30 calendar days before its warm-up day to its
+    last day, so a 5-year file shrinks to that slice. Day slots come from ``days/`` when
+    the store has them (one file per day, every ticker), otherwise from the ticker files.
+    """
+
+    def __init__(
+        self,
+        root: Path | str,
+        cache_tickers: int = 800,
+        window: tuple[date, date] | None = None,
+    ) -> None:
         self.root = Path(root)
         self._cache: OrderedDict[str, pd.DataFrame] = OrderedDict()
         self._cache_size = cache_tickers
+        self.window = window
+        self._day_dir = self.root / "days"
+        self.has_day_files = self._day_dir.is_dir()
+        self._day_cache: OrderedDict[date, tuple[dict[str, int], np.ndarray, np.ndarray]] = OrderedDict()
         coverage = pd.read_parquet(self.root / "coverage.parquet")
         self._days_by_ticker: dict[str, list[str]] = {
             ticker: sorted(group["day"].tolist())
@@ -159,7 +249,13 @@ class MinuteStore:
             frame = pd.DataFrame(columns=list(BAR_COLUMNS))
             frame.index = pd.DatetimeIndex([], tz="UTC")
         else:
-            raw = pd.read_parquet(path)
+            if self.window is not None:
+                first, last = self.window
+                low_ms = int(datetime(first.year, first.month, first.day, tzinfo=timezone.utc).timestamp() * 1000) - 86_400_000
+                high_ms = int(datetime(last.year, last.month, last.day, tzinfo=timezone.utc).timestamp() * 1000) + 2 * 86_400_000
+                raw = pd.read_parquet(path, filters=[("t", ">=", low_ms), ("t", "<", high_ms)])
+            else:
+                raw = pd.read_parquet(path)
             index = pd.DatetimeIndex(pd.to_datetime(raw["t"].to_numpy(), unit="ms", utc=True))
             frame = pd.DataFrame(
                 {
@@ -186,8 +282,34 @@ class MinuteStore:
         mask = (frame["_day"] >= start_day) & (frame["_day"] <= end_day)
         return frame.loc[mask, list(BAR_COLUMNS)]
 
-    def day_slots(self, ticker: str, day: date) -> tuple[np.ndarray, np.ndarray] | None:
-        """(close, volume) arrays over the 192 five-minute slots from 04:00 ET, NaN when no bar."""
+    def day_table(self, day: date) -> tuple[dict[str, int], np.ndarray, np.ndarray]:
+        """Every ticker's (close, volume) slot rows for one day from ``days/<day>.parquet``."""
+
+        cached = self._day_cache.get(day)
+        if cached is not None:
+            self._day_cache.move_to_end(day)
+            return cached
+        path = self._day_dir / f"{day.isoformat()}.parquet"
+        if not path.exists():
+            table: tuple[dict[str, int], np.ndarray, np.ndarray] = ({}, np.zeros((0, SLOTS_PER_DAY)), np.zeros((0, SLOTS_PER_DAY)))
+        else:
+            raw = pd.read_parquet(path)
+            tickers = sorted(set(raw["ticker"].astype(str)))
+            index = {ticker: position for position, ticker in enumerate(tickers)}
+            row = raw["ticker"].astype(str).map(index).to_numpy(dtype=np.int64)
+            slot = raw["slot"].to_numpy(dtype=np.int64)
+            close = np.full((len(tickers), SLOTS_PER_DAY), np.nan)
+            volume = np.full((len(tickers), SLOTS_PER_DAY), np.nan)
+            close[row, slot] = raw["close"].to_numpy(dtype=np.float64)
+            volume[row, slot] = raw["volume"].to_numpy(dtype=np.float64)
+            table = (index, close, volume)
+        self._day_cache[day] = table
+        while len(self._day_cache) > 4:
+            self._day_cache.popitem(last=False)
+        return table
+
+    def day_slots_from_ticker_file(self, ticker: str, day: date) -> tuple[np.ndarray, np.ndarray] | None:
+        """(close, volume) slot arrays computed from the ticker's own file (the reference path)."""
 
         frame = self._load(ticker)
         if frame.empty:
@@ -204,6 +326,17 @@ class MinuteStore:
         close[slots[valid]] = rows["Close"].to_numpy()[valid]
         volume[slots[valid]] = rows["Volume"].to_numpy()[valid]
         return close, volume
+
+    def day_slots(self, ticker: str, day: date) -> tuple[np.ndarray, np.ndarray] | None:
+        """(close, volume) arrays over the 192 five-minute slots from 04:00 ET, NaN when no bar."""
+
+        if not self.has_day_files:
+            return self.day_slots_from_ticker_file(ticker, day)
+        index, close, volume = self.day_table(day)
+        position = index.get(ticker)
+        if position is None:
+            return None
+        return close[position].copy(), volume[position].copy()
 
 
 # --------------------------------------------------------------------------- daily bars

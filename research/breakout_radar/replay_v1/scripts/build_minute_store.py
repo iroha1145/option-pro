@@ -32,7 +32,11 @@ def main() -> None:
     parser.add_argument("--raw-root", type=Path)
     parser.add_argument("--tar", type=Path, help="a tar holding the pages and a *manifest.jsonl (smoke data)")
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--no-day-files", action="store_true", help="skip the per-day slot files (ticker files only)")
+    parser.add_argument("--chunk-months", type=int, default=3,
+                        help="months of bars held in memory per pass while writing the per-day files")
     args = parser.parse_args()
+    options = {"day_files": not args.no_day_files, "chunk_months": args.chunk_months}
     if args.tar is not None:
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -41,11 +45,11 @@ def main() -> None:
             manifests = sorted(root.rglob("*manifest.jsonl"))
             if not manifests:
                 raise SystemExit("no manifest inside the tar")
-            summary = build_minute_store(manifests[0], manifests[0].parent, args.out)
+            summary = build_minute_store(manifests[0], manifests[0].parent, args.out, **options)
     else:
         if args.manifest is None or args.raw_root is None:
             raise SystemExit("--manifest and --raw-root are required without --tar")
-        summary = build_minute_store(args.manifest, args.raw_root, args.out)
+        summary = build_minute_store(args.manifest, args.raw_root, args.out, **options)
     print(summary)
     print("DONE build_minute_store")
 
