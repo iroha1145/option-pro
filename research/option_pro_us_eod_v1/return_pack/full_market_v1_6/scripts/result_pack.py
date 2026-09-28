@@ -5,7 +5,7 @@ number in the pack is traceable to a CSV in the repository. ``--stage`` may be r
 ``name=reeval_dir[:legacy_dir]``; when a legacy directory (the pre-fix evaluation) is given,
 the pack lists per variant, profile and list type the primary metric under the old rule,
 the fixed rule and the three bounds, so the movement of every prior conclusion is a number.
-``--compare`` rows (``label=baseline:candidate[:profile]``) pull the paired differences the
+``--compare`` rows (``label=baseline:candidate[:profile][@stage]``) pull the paired differences the
 comparisons rest on. ``unverifiable_execution_data`` is written on every pack.
 
     python result_pack.py --stage stage1=results/stage1_reeval:results/stage1 \\
@@ -124,8 +124,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--stage", action="append", required=True, help="name=reeval_dir[:legacy_dir]")
     parser.add_argument("--compare", action="append", default=[],
-                        help="label=baseline:candidate[:profile]; resolved in the first stage evaluated against that "
-                             "baseline that holds the candidate (baseline == candidate: stock minus mixed)")
+                        help="label=baseline:candidate[:profile][@stage]; resolved in the first stage evaluated against "
+                             "that baseline that holds the candidate, or only in @stage when several qualify "
+                             "(baseline == candidate: stock minus mixed)")
     parser.add_argument("--backtest", type=Path, action="append", default=[], help="backtest directory with ledger_end_values.json")
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--note", action="append", default=[])
@@ -138,10 +139,13 @@ def main() -> None:
     comparisons = {}
     for item in args.compare:
         label, _, spec = item.partition("=")
+        spec, _, only_stage = spec.partition("@")
         parts = spec.split(":")
         baseline, candidate = parts[0], parts[1]
         profile = parts[2] if len(parts) > 2 else None
         for stage in stages:
+            if only_stage and stage["stage"] != only_stage:
+                continue
             rows = comparison(stage, baseline, candidate, profile)
             if rows:
                 comparisons[label] = {"stage": stage["stage"], "baseline": baseline, "candidate": candidate,
