@@ -34,6 +34,16 @@ from .store import publish_batch, read_batch, variant_key
 if TYPE_CHECKING:
     from .live_config import LiveConfig
 
+# A live all-market batch is not published without these benchmarks' session bars.
+# Every stock score reads SPY: it is the market series of the D-family residual
+# (inference.precompute_session_raws, research snapshot ``market``), the benchmark
+# of the tuned M hook (full_market_tuning.prepare_full_market_context) and of the
+# theme returns (diagnostics.build_theme_statistics). Without it every stock loses
+# its residual and relative momentum at once, however high the overall coverage.
+# QQQ and the ``etfs`` theme funds are ranked only among funds (q_star keeps the
+# tracks apart), so they count toward coverage like any other member.
+REQUIRED_BENCHMARKS = ("SPY",)
+
 
 def resolve_inference_session(now: datetime | None = None, *, source_finalized_through: date | None = None) -> date:
     """The session a live run may publish: its close must be past the settle buffer."""
@@ -178,6 +188,10 @@ def run_eod_limited_job(
     except ValueError:
         previous_session = None
     failure_reason = None
+    missing_benchmarks = [
+        sid for sid in REQUIRED_BENCHMARKS
+        if sid not in panel or not has_complete_session_bar(panel[sid], target)
+    ] if market_input else []
     if (
         live_input
         and previous.get("purpose") == PURPOSE_LIVE
@@ -194,6 +208,8 @@ def run_eod_limited_job(
         or int(manifest.get("complete_bar_count") or 0) < 0.90 * int(manifest["eligible_count"])
     ):
         failure_reason = "all_market_coverage_incomplete"
+    elif missing_benchmarks:
+        failure_reason = "all_market_benchmark_missing"
     if failure_reason:
         return {
             "status": "DATA_UNAVAILABLE",
@@ -210,6 +226,7 @@ def run_eod_limited_job(
                 "integrity": "stale_previous_retained" if previous else "unavailable",
                 "served_session": previous.get("served_session"),
                 "attempted_session": attempted_session.isoformat(),
+                **({"missing_benchmarks": missing_benchmarks} if missing_benchmarks else {}),
             },
         }
     if market_input:
