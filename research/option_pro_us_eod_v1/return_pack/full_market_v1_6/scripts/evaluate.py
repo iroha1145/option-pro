@@ -485,11 +485,15 @@ def summarize(points: list[dict], holding: int) -> dict:
     selected = sum(listed)
     observable = sum(point["observable"] for point in points)
     t_value = newey_west_t(slot, max(0, holding // 5 - 1))
+    worst = sorted(slot)[:max(1, math.ceil(0.05 * len(slot)))] if slot else []
     summary = {
         "days": len(points),
         "days_observable": len(slot),
         "mean_slot_pct": round(100 * statistics.fmean(slot), 3) if slot else None,
         "t_slot": round(t_value, 2) if t_value is not None else None,
+        # Tail of the daily primary metric: the mean of the worst 5% of days and the worst day.
+        "tail_5pct_mean_pct": round(100 * statistics.fmean(worst), 3) if worst else None,
+        "worst_day_pct": round(100 * min(slot), 3) if slot else None,
         "mean_slot_legacy_pct": _mean_pct([point["slot_legacy"] for point in points]),
         "mean_slot_zero_pct": _mean_pct([point["slot_zero"] for point in points]),
         "mean_slot_loss_pct": _mean_pct([point["slot_loss"] for point in points]),

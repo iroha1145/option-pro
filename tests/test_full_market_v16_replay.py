@@ -225,6 +225,7 @@ def test_slot_metric_removes_unobservable_names_and_reports_bounds_and_empty_slo
     assert counts[("v15/balanced/mid", "mixed", 20, 20)]["label_identity_uncertain"] == 1
     summary = evaluate.summarize(series[("v15/balanced/mid", "mixed", 20, 20)], 20)
     assert summary["observable_share"] == pytest.approx(1 / 3, abs=1e-4) and summary["empty_slots"] == 17
+    assert summary["tail_5pct_mean_pct"] == summary["worst_day_pct"] == pytest.approx(100 * hold_excess / 18, abs=1e-3)
     assert summary["n_censored_terminal"] == 1 and summary["n_ok"] == 1 and summary["n_identity_uncertain"] == 1
     coverage = evaluate.coverage_rows(series, top=20, holding=20)
     assert [row["list_type"] for row in coverage] == ["mixed", "stock"]
