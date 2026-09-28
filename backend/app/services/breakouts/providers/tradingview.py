@@ -188,6 +188,10 @@ class TradingViewDiscoveryProvider:
             # The result window below is cut by TradingView before normalization
             # runs, so OTC rows must leave the ranking here, not only afterwards.
             filters.append({"left": "exchange", "operation": "nequal", "right": "OTC"})
+        if not self.settings.allow_etf:
+            # Same reason as OTC: funds must not take rows of the result window.
+            # TradingView types stocks as "stock" and depositary receipts as "dr".
+            filters.append({"left": "type", "operation": "in_range", "right": ["stock", "dr"]})
         return {
             "filter": filters,
             "options": {"lang": "en"},
