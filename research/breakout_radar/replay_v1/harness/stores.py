@@ -310,6 +310,38 @@ class DailyStore:
         mean = _finite(values.mean())
         return mean if mean is not None and mean > 0 else None
 
+    def prior_session_stats(self, ticker: str, day: date, sessions: int = 10) -> "PriorSessionStats | None":
+        """Everything the discovery proxy needs from the daily bars before ``day``, one frame read.
+
+        TradingView's fields show the previous session's values until they roll
+        (DATA_SPEC 20.3): yesterday's close and change, yesterday's volume and its
+        relative volume against the 10 sessions before it. After the roll the day's
+        cumulative volume is compared with the 10 sessions before today.
+        """
+
+        frame = self.frame(ticker, through=day - timedelta(days=1), as_of_day=day)
+        if frame.empty:
+            return None
+        closes = pd.to_numeric(frame["Close"], errors="coerce")
+        volumes = pd.to_numeric(frame["Volume"], errors="coerce")
+        prev_close = _finite(closes.iloc[-1])
+        prev_prev_close = _finite(closes.iloc[-2]) if len(closes) >= 2 else None
+        prev_volume = _finite(volumes.iloc[-1])
+        history = volumes.dropna()
+        mean = _finite(history.tail(sessions).mean()) if len(history) else None
+        before_previous = history.iloc[:-1].tail(sessions)
+        mean_before = _finite(before_previous.mean()) if len(before_previous) else None
+        prev_relvol = None
+        if prev_volume is not None and mean_before is not None and mean_before > 0:
+            prev_relvol = prev_volume / mean_before
+        return PriorSessionStats(
+            prev_close=prev_close,
+            prev_prev_close=prev_prev_close,
+            prev_volume=prev_volume,
+            mean_volume=mean if mean is not None and mean > 0 else None,
+            prev_relvol=prev_relvol,
+        )
+
     def previous_session_relvol(self, ticker: str, day: date, sessions: int = 10) -> float | None:
         """The prior session's full-day volume over the 10-session average before it.
 
@@ -638,6 +670,27 @@ class ProductionCandidateMetadata:
     def otc_rows(self, as_of: datetime) -> list[dict[str, Any]]:
         scan_id = self.scan_id_for(as_of)
         return list(self._otc_by_scan.get(scan_id, ())) if scan_id else []
+
+
+@dataclass(frozen=True)
+class PriorSessionStats:
+    prev_close: float | None
+    prev_prev_close: float | None
+    prev_volume: float | None
+    mean_volume: float | None  # over the 10 sessions before the day (fewer when young)
+    prev_relvol: float | None  # yesterday's volume over the 10 sessions before it
+
+
+def previous_trading_day(day: date) -> date | None:
+    """The trading day before ``day`` by the production market calendar."""
+
+    from app.services.market_calendar import is_trading_day
+
+    for back in range(1, 8):
+        candidate = day - timedelta(days=back)
+        if is_trading_day(candidate):
+            return candidate
+    return None
 
 
 def iter_trading_days(start: date, end: date, is_trading_day) -> Iterable[date]:

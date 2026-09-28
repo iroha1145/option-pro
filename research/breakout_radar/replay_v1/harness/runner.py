@@ -65,7 +65,8 @@ class RunConfig:
     relvol_scale: float = 1.0
     memo: bool = True
     trim_sessions: bool = True
-    bar_delay_seconds: int = 0  # 600 reproduces production's delayed Massive feed
+    bar_delay_seconds: int = 563  # production-realized: bars visible 600 s after close minus the 37 s request offset
+    tv_delay_minutes: int = 15  # production-realized: the screener fields lagged about 15 minutes
     on_degraded: str = "raise"  # or "continue"
     full_snapshots: bool = False
     label: str = ""
@@ -247,6 +248,7 @@ class _VariantRun:
             inject_production_otc=inject,
             day_contexts=shared["day_contexts"],
             universe=set(config.universe) if config.universe else None,
+            tv_delay_minutes=config.tv_delay_minutes,
         )
         self.strength = MemoStrengthAdapter(cache=shared["strength_cache"])
         self.service = BreakoutRadarService(

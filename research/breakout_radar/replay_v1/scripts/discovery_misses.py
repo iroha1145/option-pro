@@ -11,7 +11,8 @@ one reason, the first that applies:
 
     no_metadata            production never listed the ticker outside OTC (no TradingView row to copy)
     no_bars_today          the minute store has no bar for the ticker that day
-    no_bar_yet             bars exist that day but none had completed at the scan
+    no_bar_yet             no completed bar of the session in the delayed view and no
+                           previous-session value to fall back on
     no_previous_close      the daily store has no prior close (change undefined)
     price_filter           last close below the minimum price
     change_filter          change below the profile's minimum
@@ -145,7 +146,8 @@ def main() -> None:
                 "as_of": as_of.isoformat(), "session": run["session"], "minute": minute, "ticker": ticker,
                 "prod_price": body.get("price"), "prod_change": body.get("provider_change_pct"),
                 "prod_relvol": body.get("provider_relative_volume"), "prod_asset_type": body.get("asset_type"),
-                "replay_price": None, "replay_change": None, "replay_relvol": None, "replay_cumulative_volume": None,
+                "replay_rolled": None, "replay_price": None, "replay_change": None, "replay_relvol": None,
+                "replay_volume": None,
             }
             if metadata.meta(ticker, day) is None:
                 reason = "no_metadata"
@@ -153,19 +155,20 @@ def main() -> None:
                 reason = "no_bars_today" if minute_store.day_slots(ticker, day) is None else "no_bar_yet"
             else:
                 i = index_of[ticker]
-                price = float(arrays["last_close"][i])
+                price = float(arrays["price"][i])
                 change = float(arrays["change"][i])
                 relvol = float(arrays["relvol"][i])
-                cumulative = float(arrays["cumulative"][i])
+                volume = float(arrays["volume"][i])
                 record.update(
+                    replay_rolled=bool(arrays["rolled"][i]),
                     replay_price=None if not np.isfinite(price) else round(price, 4),
                     replay_change=None if not np.isfinite(change) else round(change, 4),
                     replay_relvol=None if not np.isfinite(relvol) else round(relvol, 4),
-                    replay_cumulative_volume=None if not np.isfinite(cumulative) else cumulative,
+                    replay_volume=None if not np.isfinite(volume) else volume,
                 )
                 if not np.isfinite(price):
                     reason = "no_bar_yet"
-                elif not np.isfinite(context.previous_close[i]):
+                elif not np.isfinite(change):
                     reason = "no_previous_close"
                 elif price < settings.min_price:
                     reason = "price_filter"
@@ -173,7 +176,7 @@ def main() -> None:
                     reason = "change_filter"
                 elif session is MarketSession.REGULAR and change < settings.regular_min_change_pct:
                     reason = "change_filter"
-                elif session is MarketSession.PREMARKET and not cumulative > 0:
+                elif session is MarketSession.PREMARKET and not volume > 0:
                     reason = "no_premarket_volume"
                 elif session is MarketSession.REGULAR and not np.isfinite(relvol):
                     reason = "relvol_unavailable"
@@ -214,7 +217,7 @@ def main() -> None:
                 extra_values["relvol"].append(float(candidate["relvol"]))
 
     fields = ["as_of", "session", "minute", "ticker", "reason", "prod_price", "prod_change", "prod_relvol",
-              "prod_asset_type", "replay_price", "replay_change", "replay_relvol", "replay_cumulative_volume"]
+              "prod_asset_type", "replay_rolled", "replay_price", "replay_change", "replay_relvol", "replay_volume"]
     with open(args.out / "misses.csv", "w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()

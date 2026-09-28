@@ -28,7 +28,7 @@ import sqlite3
 import statistics
 import sys
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -95,11 +95,17 @@ def main() -> None:
         help="drop ETF candidates and events on both sides: the historical replay universe holds no funds "
              "(PREREGISTRATION 修订 2)",
     )
+    parser.add_argument("--start", type=date.fromisoformat, help="first replay day to compare (ET)")
+    parser.add_argument("--end", type=date.fromisoformat, help="last replay day to compare (ET)")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
     tables = read_export(args.export)
     ledgers = [r for r in read_ledgers(args.replay / args.variant / "ledger") if r["kind"] != "t1" and not r.get("warmup")]
+    if args.start is not None:
+        ledgers = [r for r in ledgers if ts(r["as_of"]).astimezone(NY).date() >= args.start]
+    if args.end is not None:
+        ledgers = [r for r in ledgers if ts(r["as_of"]).astimezone(NY).date() <= args.end]
     replay_days = {ts(r["as_of"]).astimezone(NY).date().isoformat() for r in ledgers}
     runs = {r["scan_run_id"]: r for r in tables["breakout_scan_runs"]}
     # Only completed production scans on the replayed days take part.

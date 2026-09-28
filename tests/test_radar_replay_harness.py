@@ -78,6 +78,8 @@ def _write_daily_db(path: Path, sessions: list[date], rng: np.random.Generator, 
                 high = close + 0.6
                 low = close - 0.6
                 volume = 3_000_000.0 if ticker in BENCHMARKS else 1_000_000.0
+                if event is not None and day == event[0]:
+                    volume = 2_500_000.0  # a breakout day trades 2.5x its average: yesterday's relative volume passes 1.5
                 connection.execute(
                     "INSERT INTO raw_daily_bars VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (ticker, day.isoformat(), 0, close - 0.1, high, low, close, volume, close, 100),
@@ -248,28 +250,44 @@ def test_one_warmup_day_reproduces_the_contiguous_run_byte_for_byte(frozen: dict
     assert reference and json.dumps(reference, sort_keys=True) == json.dumps(warmed, sort_keys=True)
 
 
-def test_relative_volume_is_stale_before_0945_and_live_after_1000(frozen: dict) -> None:
+def test_discovery_proxy_reads_a_delayed_view_with_yesterdays_values_before_the_roll(frozen: dict) -> None:
     from datetime import datetime
+
+    from app.services.breakouts.models import MarketSession
 
     from harness.discovery import ReplayDiscoveryProvider
     from harness.stores import DailyStore, DirectoryMetadata, MinuteStore
 
     settings = build_settings("baseline", frozen["root"] / "stale.sqlite")
-    provider = ReplayDiscoveryProvider(
-        settings, minute_store=MinuteStore(frozen["minute"]), daily_store=DailyStore(frozen["daily"]),
-        metadata=DirectoryMetadata(frozen["directory"]), market_cap_source="none",
-    )
-    context = provider.day_context(DAY1)
+    stores = dict(minute_store=MinuteStore(frozen["minute"]), daily_store=DailyStore(frozen["daily"]),
+                  metadata=DirectoryMetadata(frozen["directory"]), market_cap_source="none")
+    delayed = ReplayDiscoveryProvider(settings, **stores)  # production's 15-minute view
+    live = ReplayDiscoveryProvider(settings, tv_delay_minutes=0, **stores)  # real-time sensitivity run
+    context = delayed.day_context(DAY1)
     index = context.tickers.index("TA")
     assert np.isfinite(context.previous_relvol[index]) and abs(context.previous_relvol[index] - 1.0) < 0.05
-    from app.services.breakouts.models import MarketSession
 
-    early = {row[0]: row for row in provider._tradingview_rows(MarketSession.REGULAR, datetime(2026, 7, 8, 9, 40, tzinfo=NY))}
-    late = {row[0]: row for row in provider._tradingview_rows(MarketSession.REGULAR, datetime(2026, 7, 8, 10, 35, tzinfo=NY))}
-    # TA jumps 6% at the seventh regular bar (10:00): at 09:40 it is not a mover yet; at 10:35 it is,
-    # and its relative volume is the live cumulative ratio, well above yesterday's 1.0.
-    assert "TA" not in early and "TA" in late
-    assert late["TA"][8] > 1.5
+    def rows(provider, session, stamp):
+        return {row[0]: row for row in provider._tradingview_rows(session, stamp)}
+
+    # TA jumps 6% at the seventh regular bar (10:00-10:05) on 2.2x volume. Real time lists it
+    # at 10:20 (cumulative relative volume 1.9); the delayed view (bars complete by 10:05) has
+    # only one heavy bar and does not; by 10:35 it does, well above yesterday's 1.0.
+    assert "TA" in rows(live, MarketSession.REGULAR, datetime(2026, 7, 8, 10, 20, tzinfo=NY))
+    assert "TA" not in rows(delayed, MarketSession.REGULAR, datetime(2026, 7, 8, 10, 20, tzinfo=NY))
+    late = rows(delayed, MarketSession.REGULAR, datetime(2026, 7, 8, 10, 35, tzinfo=NY))
+    assert "TA" in late and late["TA"][8] > 1.5
+    # TB jumped on DAY2. On DAY3 at 09:40 the view (09:25) has no regular bar yet, so TB is
+    # still listed with yesterday's close and change; by 10:35 today's flat prices took over.
+    stale = rows(delayed, MarketSession.REGULAR, datetime(2026, 7, 10, 9, 40, tzinfo=NY))
+    assert "TB" in stale and abs(stale["TB"][5] - 106.0) < 1e-6 and stale["TB"][6] > 3.0
+    assert "TB" not in rows(delayed, MarketSession.REGULAR, datetime(2026, 7, 10, 10, 35, tzinfo=NY))
+    assert "TB" not in rows(live, MarketSession.REGULAR, datetime(2026, 7, 10, 9, 40, tzinfo=NY))
+    # TD gapped 8% in DAY2's pre-market. On DAY3 at 04:10 the view (03:55) has no pre-market bar
+    # yet, so TD carries yesterday's pre-market close and change; by 07:30 it is a non-mover.
+    gap = rows(delayed, MarketSession.PREMARKET, datetime(2026, 7, 10, 4, 10, tzinfo=NY))
+    assert "TD" in gap and gap["TD"][7] > 5.0 and gap["TD"][8] > 0
+    assert "TD" not in rows(delayed, MarketSession.PREMARKET, datetime(2026, 7, 10, 7, 30, tzinfo=NY))
 
 
 def test_memo_off_is_byte_identical_to_memo_on(frozen: dict) -> None:

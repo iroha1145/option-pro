@@ -5,12 +5,20 @@ by change, the 150-row window); everything production does afterwards is product
 code (``normalize_provider_row``, ``filter_and_deduplicate``). Output is labelled
 ``replay_proxy`` in the snapshot provider, its schema version, the candidate source
 and the cache key.
+
+The screener data production read was a delayed view (DATA_SPEC 20, PREREGISTRATION
+修订 2): the fields lagged about 15 minutes, and until a symbol's first bar of the
+session appeared in that view they still showed the previous session's values. The
+proxy therefore evaluates a scan at ``t`` on the bars complete at ``t - tv_delay``,
+and falls back to yesterday's close, change, volume and relative volume (regular
+profile) or yesterday's pre-market close, change and volume (pre-market profile) for
+symbols without a completed bar of the session in the view.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Mapping
 from zoneinfo import ZoneInfo
 
@@ -34,31 +42,39 @@ from .stores import (
     ProductionCandidateMetadata,
     SharesStore,
     TickerMeta,
+    previous_trading_day,
 )
 
 NY = ZoneInfo("America/New_York")
 PROVIDER = "replay_proxy"
-SCHEMA_VERSION = "replay-proxy-discovery-v1"
-_PREMARKET_LAST_SLOT = (9 * 60 + 30 - 4 * 60) // 5 - 1  # bar starting 09:25 ET
+SCHEMA_VERSION = "replay-proxy-discovery-v2"
+TV_DELAY_MINUTES = 15  # DATA_SPEC 20.2: 10 to 15 minutes fit production's rows best, 15 slightly better
+_REGULAR_FIRST_SLOT = (9 * 60 + 30 - 4 * 60) // 5  # bar starting 09:30 ET
+_PREMARKET_LAST_SLOT = _REGULAR_FIRST_SLOT - 1  # bar starting 09:25 ET
 
 
 @dataclass
 class DayContext:
     day: date
+    prev_day: date | None
     tickers: list[str]
     meta: list[TickerMeta]
-    close_ffill: np.ndarray  # tickers x slots, last close known at each slot
-    cumulative_volume: np.ndarray  # tickers x slots
-    previous_close: np.ndarray
-    mean_volume_10: np.ndarray
-    previous_relvol: np.ndarray  # yesterday's full-day volume over its 10-day average
+    close_ffill: np.ndarray  # tickers x slots, last close known at each slot (any session)
+    close_ffill_regular: np.ndarray  # same over regular-session bars only (TradingView's ``close``)
+    cumulative_volume: np.ndarray  # tickers x slots, from 04:00 ET (TradingView's ``volume`` includes pre-market)
+    previous_close: np.ndarray  # yesterday's regular close
+    prev_prev_close: np.ndarray  # the close before that (yesterday's change)
+    previous_volume: np.ndarray  # yesterday's full-day volume
+    mean_volume_10: np.ndarray  # mean daily volume over the 10 sessions before the day
+    previous_relvol: np.ndarray  # yesterday's volume over the 10 sessions before it
+    prev_premarket_close: np.ndarray  # yesterday's last pre-market bar close
+    prev_premarket_volume: np.ndarray  # yesterday's pre-market volume
 
 
-# TradingView's volume-derived fields roll to the new session per symbol during the
-# first minutes: at 09:37 and 09:43 ET every production candidate still carried the
-# previous session's relative volume, by 09:56 most had rolled (smoke day 1).
-STALE_RELVOL_UNTIL_MINUTE = 9 * 60 + 45
-ROLLING_RELVOL_UNTIL_MINUTE = 10 * 60
+def _empty_context(day: date, prev_day: date | None) -> DayContext:
+    empty = np.zeros((0, SLOTS_PER_DAY))
+    none = np.zeros(0)
+    return DayContext(day, prev_day, [], [], empty, empty, empty, none, none, none, none, none, none, none)
 
 
 def build_day_context(
@@ -69,43 +85,77 @@ def build_day_context(
     metadata: Any,
     universe: set[str] | None = None,
 ) -> DayContext:
+    """Per-ticker arrays for one day, for every ticker with bars today or yesterday.
+
+    Yesterday's tickers are needed because the delayed view still lists yesterday's
+    movers before their first bar of today appears (DATA_SPEC 20.3, 20.5).
+    """
+
+    prev_day = previous_trading_day(day)
+    candidates = set(minute_store.tickers_with_bars_on(day))
+    if prev_day is not None:
+        candidates |= minute_store.tickers_with_bars_on(prev_day)
+    if universe is not None:
+        candidates &= universe
     tickers: list[str] = []
     metas: list[TickerMeta] = []
     closes: list[np.ndarray] = []
     volumes: list[np.ndarray] = []
-    candidates = minute_store.tickers_with_bars_on(day)
-    if universe is not None:
-        candidates &= universe
+    prev_pm_close: list[float] = []
+    prev_pm_volume: list[float] = []
     for ticker in sorted(candidates):
         meta = metadata.meta(ticker, day)
         if meta is None or meta.exchange.upper() == "OTC":
             continue
         slots = minute_store.day_slots(ticker, day)
         if slots is None:
-            continue
-        close, volume = slots
+            close, volume = np.full(SLOTS_PER_DAY, np.nan), np.full(SLOTS_PER_DAY, np.nan)
+        else:
+            close, volume = slots
+        prior = minute_store.day_slots(ticker, prev_day) if prev_day is not None else None
+        if prior is None:
+            pm_close, pm_volume = np.nan, np.nan
+        else:
+            premarket = prior[0][:_REGULAR_FIRST_SLOT]
+            finite = np.flatnonzero(np.isfinite(premarket))
+            pm_close = float(premarket[finite[-1]]) if len(finite) else np.nan
+            pm_volume = float(np.nansum(prior[1][:_REGULAR_FIRST_SLOT]))
         tickers.append(ticker)
         metas.append(meta)
         closes.append(close)
         volumes.append(volume)
+        prev_pm_close.append(pm_close)
+        prev_pm_volume.append(pm_volume)
     if not tickers:
-        empty = np.zeros((0, SLOTS_PER_DAY))
-        return DayContext(day, [], [], empty, empty, np.zeros(0), np.zeros(0), np.zeros(0))
+        return _empty_context(day, prev_day)
     close_matrix = np.vstack(closes)
     close_ffill = pd.DataFrame(close_matrix).ffill(axis=1).to_numpy()
+    regular_only = close_matrix.copy()
+    regular_only[:, :_REGULAR_FIRST_SLOT] = np.nan
+    close_ffill_regular = pd.DataFrame(regular_only).ffill(axis=1).to_numpy()
     cumulative = np.nancumsum(np.vstack(volumes), axis=1)
-    previous = np.array([daily_store.previous_close(t, day) or np.nan for t in tickers], dtype=float)
-    mean10 = np.array([daily_store.mean_volume(t, day, 10) or np.nan for t in tickers], dtype=float)
-    previous_relvol = np.array(
-        [daily_store.previous_session_relvol(t, day, 10) or np.nan for t in tickers], dtype=float
+    stats = [daily_store.prior_session_stats(ticker, day) for ticker in tickers]
+
+    def column(name: str) -> np.ndarray:
+        values = [getattr(item, name) if item is not None else None for item in stats]
+        return np.array([np.nan if value is None else value for value in values], dtype=float)
+
+    return DayContext(
+        day, prev_day, tickers, metas, close_ffill, close_ffill_regular, cumulative,
+        column("prev_close"), column("prev_prev_close"), column("prev_volume"),
+        column("mean_volume"), column("prev_relvol"),
+        np.array(prev_pm_close, dtype=float), np.array(prev_pm_volume, dtype=float),
     )
-    return DayContext(day, tickers, metas, close_ffill, cumulative, previous, mean10, previous_relvol)
 
 
 def last_complete_slot(as_of: datetime) -> int:
     local = as_of.astimezone(NY)
     minutes = local.hour * 60 + local.minute
     return (minutes - (4 * 60 + 5)) // 5
+
+
+def _finite_or_none(value: float) -> float | None:
+    return float(value) if np.isfinite(value) else None
 
 
 class ReplayDiscoveryProvider:
@@ -124,6 +174,7 @@ class ReplayDiscoveryProvider:
         inject_production_otc: bool = False,
         day_contexts: dict[date, DayContext] | None = None,
         universe: set[str] | None = None,
+        tv_delay_minutes: int = TV_DELAY_MINUTES,
     ) -> None:
         if market_cap_source not in {"shares", "production", "none"}:
             raise ValueError("market_cap_source must be shares, production or none")
@@ -141,6 +192,9 @@ class ReplayDiscoveryProvider:
         self.inject_production_otc = inject_production_otc
         self._day_contexts = day_contexts if day_contexts is not None else {}
         self._universe = universe
+        if tv_delay_minutes < 0:
+            raise ValueError("tv_delay_minutes must not be negative")
+        self.tv_delay = timedelta(minutes=int(tv_delay_minutes))
         self.last_prefilter_count = 0
 
     @property
@@ -216,52 +270,69 @@ class ReplayDiscoveryProvider:
         return rows
 
     def prefilter_arrays(self, session: MarketSession, as_of: datetime) -> dict[str, Any] | None:
-        """TradingView's three filters recomputed for every ticker with bars that day.
+        """TradingView's fields and filters in the delayed view, for every ticker of the day.
 
-        Returns the day context, the slot and the per-ticker arrays (last close,
-        cumulative volume, change, relative volume, passing mask); ``None`` when no
-        bar has completed yet. ``scripts/discovery_misses.py`` reads the same arrays
-        to explain misses, so the filter logic lives here only.
+        Returns the day context, the view's slot and per-ticker arrays: ``rolled`` (a
+        completed bar of this session exists in the view), ``price``, ``change``,
+        ``volume``, ``relvol`` and the ``passing`` mask; ``None`` when the day has no
+        tickers. ``scripts/discovery_misses.py`` reads the same arrays to explain misses,
+        so the field and filter logic lives here only.
         """
 
         day = as_of.astimezone(NY).date()
         context = self.day_context(day)
         settings = self.settings
-        slot = last_complete_slot(as_of)
-        if session is MarketSession.PREMARKET:
-            slot = min(slot, _PREMARKET_LAST_SLOT)
-        if not context.tickers or slot < 0:
+        if not context.tickers:
             return None
+        count = len(context.tickers)
+        view = as_of - self.tv_delay
+        slot = last_complete_slot(view) if view.astimezone(NY).date() == day else -1
         slot = min(slot, SLOTS_PER_DAY - 1)
-        last_close = context.close_ffill[:, slot]
-        cumulative = context.cumulative_volume[:, slot]
-        minute = as_of.astimezone(NY).hour * 60 + as_of.astimezone(NY).minute
+        nothing = np.full(count, np.nan)
         with np.errstate(invalid="ignore", divide="ignore"):
-            change = (last_close / context.previous_close - 1.0) * 100.0
-            today_relvol = cumulative / context.mean_volume_10 * self.relvol_scale
-        stale = context.previous_relvol
-        if session is MarketSession.PREMARKET or minute < STALE_RELVOL_UNTIL_MINUTE:
-            relvol = stale
-        elif minute < ROLLING_RELVOL_UNTIL_MINUTE:
-            relvol = np.fmax(stale, today_relvol)
-        else:
-            relvol = today_relvol
-        if session is MarketSession.PREMARKET:
-            passing = (
-                (last_close >= settings.min_price)
-                & (change >= settings.premarket_min_change_pct)
-                & (cumulative > 0)
-            )
-        else:
-            passing = (
-                (last_close >= settings.min_price)
-                & (change >= settings.regular_min_change_pct)
-                & (relvol >= settings.regular_min_relative_volume)
-            )
-        passing = passing & np.isfinite(change)
+            if session is MarketSession.PREMARKET:
+                slot = min(slot, _PREMARKET_LAST_SLOT)
+                today_price = context.close_ffill[:, slot] if slot >= 0 else nothing
+                today_volume = context.cumulative_volume[:, slot] if slot >= 0 else np.zeros(count)
+                rolled = np.isfinite(today_price)
+                price = np.where(rolled, today_price, context.prev_premarket_close)
+                change = np.where(
+                    rolled,
+                    (today_price / context.previous_close - 1.0) * 100.0,
+                    (context.prev_premarket_close / context.prev_prev_close - 1.0) * 100.0,
+                )
+                volume = np.where(rolled, today_volume, context.prev_premarket_volume)
+                relvol = context.previous_relvol
+                passing = (
+                    (price >= settings.min_price)
+                    & (change >= settings.premarket_min_change_pct)
+                    & (volume > 0)
+                )
+            else:
+                today_price = context.close_ffill_regular[:, slot] if slot >= _REGULAR_FIRST_SLOT else nothing
+                today_volume = context.cumulative_volume[:, slot] if slot >= 0 else np.zeros(count)
+                rolled = np.isfinite(today_price)
+                price = np.where(rolled, today_price, context.previous_close)
+                change = np.where(
+                    rolled,
+                    (today_price / context.previous_close - 1.0) * 100.0,
+                    (context.previous_close / context.prev_prev_close - 1.0) * 100.0,
+                )
+                volume = np.where(rolled, today_volume, context.previous_volume)
+                relvol = np.where(
+                    rolled,
+                    today_volume / context.mean_volume_10 * self.relvol_scale,
+                    context.previous_relvol,
+                )
+                passing = (
+                    (price >= settings.min_price)
+                    & (change >= settings.regular_min_change_pct)
+                    & (relvol >= settings.regular_min_relative_volume)
+                )
+        passing = passing & np.isfinite(change) & np.isfinite(price)
         return {
-            "context": context, "slot": slot, "last_close": last_close, "cumulative": cumulative,
-            "change": change, "relvol": relvol, "passing": passing,
+            "context": context, "slot": slot, "rolled": rolled, "price": price, "change": change,
+            "volume": volume, "relvol": relvol, "passing": passing,
         }
 
     def _tradingview_rows(self, session: MarketSession, as_of: datetime) -> list[list[Any]]:
@@ -271,28 +342,30 @@ class ReplayDiscoveryProvider:
         arrays = self.prefilter_arrays(session, as_of)
         if arrays is not None:
             context = arrays["context"]
-            last_close, cumulative = arrays["last_close"], arrays["cumulative"]
-            change, relvol, passing = arrays["change"], arrays["relvol"], arrays["passing"]
+            price, change, volume, relvol, passing = (
+                arrays["price"], arrays["change"], arrays["volume"], arrays["relvol"], arrays["passing"]
+            )
             for index in np.flatnonzero(passing):
                 ticker = context.tickers[index]
                 meta = context.meta[index]
-                price = float(last_close[index])
-                cap = self._market_cap(ticker, meta, price, day, as_of)
-                relative = float(relvol[index]) if np.isfinite(relvol[index]) else None
+                price_value = float(price[index])
+                cap = self._market_cap(ticker, meta, price_value, day, as_of)
+                relative = _finite_or_none(relvol[index])
+                volume_value = _finite_or_none(volume[index])
                 common = [ticker, meta.exchange, meta.name, meta.tv_type, list(meta.typespecs)]
                 if session is MarketSession.PREMARKET:
                     row = common + [
-                        float(context.previous_close[index]),
-                        price,
+                        _finite_or_none(context.previous_close[index]),
+                        price_value,
                         float(change[index]),
-                        float(cumulative[index]),
-                        float(cumulative[index]),
+                        volume_value,
+                        volume_value,
                         relative,
                         cap,
                         meta.sector,
                     ]
                 else:
-                    row = common + [price, float(change[index]), float(cumulative[index]), relative, cap, meta.sector]
+                    row = common + [price_value, float(change[index]), volume_value, relative, cap, meta.sector]
                 ranked.append((float(change[index]), ticker, row))
         ranked.extend(self._otc_rows(session, as_of))
         self.last_prefilter_count = len(ranked)
