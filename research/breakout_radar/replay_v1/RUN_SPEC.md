@@ -118,6 +118,8 @@ cat /content/segments.txt | xargs -P 40 -L 1 bash -c '$PY $P/scripts/replay.py "
 
 第一段（2021-10-04 起）的预热日落在分钟线可取范围之前，预热为空，该段第一天的遗留状态为空，与生产上线首日相同；结果里标注。
 
+段进程因 `RuntimeError: minute store returned no bars ... despite coverage` 停下时，是分钟库或磁盘的读故障（本机在磁盘只剩 9 GB、四条回放并行时见过一次盘中 K 线读空），重跑该段即可；不要用 `--on-degraded continue` 绕过。
+
 完成后检查每段 `run.json`：`degraded` 必须为空（`continue` 只是为了不让一段中途停下，任何降级都要查明原因并重跑该段）；`truncated_live_lane_days` 非空的段按预登记第 3 节重跑预热 2 天比对。`truncated_days` 里只有到期通道满的日子（每个周一的第一次扫描都会：周五留下的事件周末没人处理，到期通道一次只放 30 条，多出的下一次扫描到期）不用重跑，账本里每次扫描的 `truncation_kind` 分 `expiry_lane` 与 `live_lane`（预登记修订 3）。把 `/content/replay/full/` 同步到 Drive。
 
 预估：按烟雾周的 1.5 秒一次扫描、每天约 109 次扫描、8 个配置共享发现与日线阶段，每天全部配置约 8 到 12 分钟单核；1,250 天 40 进程约 5 到 7 小时；「实时数据」的三个配置再加约 2 小时。这个数没有量过全量库上日上下文的构建时间（每天读两个日文件，烟雾库上一天不到 1 秒），第一段跑完后按 `run.json` 的 `elapsed_s` 校准。
