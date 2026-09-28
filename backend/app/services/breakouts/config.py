@@ -26,6 +26,11 @@ _PERSONAL_RANGE_PERSISTENCE_MODE = {
 
 class BreakoutSettings(BaseSettings):
     _db_path_override: Path | None = PrivateAttr(default=None)
+    # Research-only switches. They live in a private attribute so that
+    # ``model_dump`` and the published scan ``config_hash`` are identical to a
+    # plain settings object; production never sets one, a replay records them
+    # separately next to the hash.
+    _research_overrides: dict[str, Any] = PrivateAttr(default_factory=dict)
 
     enabled: bool = Field(
         default=_PERSONAL_CONFIG.features.breakout_enabled,
@@ -297,6 +302,22 @@ class BreakoutSettings(BaseSettings):
     @property
     def db_path(self) -> Path:
         return self._db_path_override or get_data_paths().optix_db
+
+    def research_override(self, name: str, default: Any) -> Any:
+        """Return a research switch, or ``default`` when none is set (production)."""
+
+        return self._research_overrides.get(name, default)
+
+    @property
+    def research_overrides(self) -> dict[str, Any]:
+        return dict(self._research_overrides)
+
+    def with_research_overrides(self, **overrides: Any) -> "BreakoutSettings":
+        """Copy these settings with research switches; the copy hashes the same."""
+
+        copy = self.model_copy()
+        copy._research_overrides = {**self._research_overrides, **overrides}
+        return copy
 
     @model_validator(mode="after")
     def validate_limits(self) -> "BreakoutSettings":
