@@ -184,7 +184,10 @@ def test_funds_outside_the_scope_cannot_make_up_for_missing_stocks(monkeypatch, 
     assert coverage["source_dates"]["end"] == END.isoformat()
 
     all_funds = dataclasses.replace(LIVE_CONFIG, fund_scope=FUND_SCOPE_ALL)
-    assert _run_to_gate(monkeypatch, tmp_path / "all", session=END, live_config=all_funds) is None
+    refusal = _run_to_gate(monkeypatch, tmp_path / "all", session=END, live_config=all_funds)
+    # 58 of 62 passes coverage; the loader double's three sessions then fall short
+    # of the SPY window the scorers read, the check that follows coverage.
+    assert refusal is not None and refusal["publish"]["reason"] == "all_market_benchmark_window_incomplete"
 
 
 @pytest.mark.parametrize(

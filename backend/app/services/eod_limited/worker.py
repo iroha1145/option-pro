@@ -22,6 +22,7 @@ from . import (
     RESEARCH_SEALED_SESSION,
 )
 from .bars import fetch_current_universe_bars, last_bar_session
+from .benchmark_window import benchmark_window, window_problems
 from .diagnostics import (
     VariantDiagnostics, build_theme_statistics, build_universe_funnel,
     REFERENCE_PROFILE, REFERENCE_HORIZON,
@@ -40,6 +41,10 @@ if TYPE_CHECKING:
 # of the tuned M hook (full_market_tuning.prepare_full_market_context) and of the
 # theme returns (diagnostics.build_theme_statistics). Without it every stock loses
 # its residual and relative momentum at once, however high the overall coverage.
+# The session bar is not enough: those scorers read SPY over a window, and one
+# missing or unusable bar in it degrades every stock just the same. The sessions
+# are derived from the scorers themselves (``benchmark_window``); a failure there
+# is refused as ``all_market_benchmark_window_incomplete``.
 # QQQ and the ``etfs`` theme funds are ranked only among funds (q_star keeps the
 # tracks apart), so they count toward coverage like any other member.
 REQUIRED_BENCHMARKS = ("SPY",)
@@ -192,6 +197,12 @@ def run_eod_limited_job(
         sid for sid in REQUIRED_BENCHMARKS
         if sid not in panel or not has_complete_session_bar(panel[sid], target)
     ] if market_input else []
+    window = benchmark_window(target, horizons=HORIZONS, policy=config.tuning_policy()) if market_input else None
+    benchmark_problems = [
+        problem
+        for sid in REQUIRED_BENCHMARKS if sid not in missing_benchmarks
+        for problem in window_problems(sid, panel[sid], window)
+    ] if window is not None else []
     if (
         live_input
         and previous.get("purpose") == PURPOSE_LIVE
@@ -210,6 +221,8 @@ def run_eod_limited_job(
         failure_reason = "all_market_coverage_incomplete"
     elif missing_benchmarks:
         failure_reason = "all_market_benchmark_missing"
+    elif benchmark_problems:
+        failure_reason = "all_market_benchmark_window_incomplete"
     if failure_reason:
         return {
             "status": "DATA_UNAVAILABLE",
@@ -227,6 +240,10 @@ def run_eod_limited_job(
                 "served_session": previous.get("served_session"),
                 "attempted_session": attempted_session.isoformat(),
                 **({"missing_benchmarks": missing_benchmarks} if missing_benchmarks else {}),
+                **({
+                    "benchmark_problems": benchmark_problems,
+                    "benchmark_window": window.describe(),
+                } if benchmark_problems and window is not None else {}),
             },
         }
     if market_input:

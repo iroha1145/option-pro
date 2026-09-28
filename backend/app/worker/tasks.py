@@ -114,6 +114,53 @@ def _timestamp_text(value: float) -> str:
     return _iso(datetime.fromtimestamp(value, timezone.utc))
 
 
+def _publication_refusal(publication: Mapping[str, Any]) -> dict[str, Any]:
+    """Why a full-market run kept the served snapshot, as the status API shows it.
+
+    Session lists are cut to ``_FAILED_SESSIONS_SHOWN`` beside their full count,
+    for the 16 KiB status row and the 128-item action detail lists.
+    """
+    details: dict[str, Any] = {}
+    reason = publication.get("reason")
+    if isinstance(reason, str) and reason:
+        details["reason"] = reason[:120]
+    for key in ("attempted_session", "served_session"):
+        if key in publication:
+            value = publication[key]
+            details[key] = None if value is None else str(value)[:32]
+    missing = publication.get("missing_benchmarks")
+    if missing:
+        details["missing_benchmarks"] = [str(item)[:32] for item in list(missing)[:_FAILED_SESSIONS_SHOWN]]
+    problems: list[dict[str, Any]] = []
+    for item in list(publication.get("benchmark_problems") or ())[:_FAILED_SESSIONS_SHOWN]:
+        if not isinstance(item, Mapping):
+            continue
+        sessions = [str(day)[:32] for day in item.get("sessions") or ()]
+        entry: dict[str, Any] = {
+            "benchmark": str(item.get("benchmark") or "")[:32],
+            "problem": str(item.get("problem") or "")[:64],
+            "session_count": len(sessions),
+            "sessions": sessions[:_FAILED_SESSIONS_SHOWN],
+        }
+        if item.get("fields"):
+            entry["fields"] = [str(field)[:32] for field in list(item["fields"])[:8]]
+        for key in ("history", "min_history"):
+            value = item.get(key)
+            if isinstance(value, int) and not isinstance(value, bool):
+                entry[key] = value
+        problems.append(entry)
+    if problems:
+        details["benchmark_problems"] = problems
+        window = publication.get("benchmark_window")
+        if isinstance(window, Mapping):
+            details["benchmark_window"] = {
+                key: window[key]
+                for key in ("first_session", "last_session", "session_count", "min_history")
+                if key in window
+            }
+    return details
+
+
 def _succeeded(result: TaskResult) -> bool:
     return result.status == "idle" and not result.error_code
 
@@ -2307,6 +2354,7 @@ class StrengthRefreshTask:
                     "score_data_through": through,
                     "purpose": outcome.get("purpose"),
                     "published": False,
+                    **_publication_refusal(publication),
                 },
             )
         if batch is not None and {
