@@ -65,6 +65,7 @@ class RunConfig:
     relvol_scale: float = 1.0
     memo: bool = True
     trim_sessions: bool = True
+    bar_delay_seconds: int = 0  # 600 reproduces production's delayed Massive feed
     on_degraded: str = "raise"  # or "continue"
     full_snapshots: bool = False
     label: str = ""
@@ -148,6 +149,8 @@ def _compact_event(event: dict[str, Any]) -> dict[str, Any]:
     return {
         "event_id": event.get("event_id"),
         "ticker": event.get("ticker"),
+        "asset_type": _value(event.get("asset_type")),
+        "exchange": event.get("exchange"),
         "setup_type": _value(event.get("setup_type")),
         "origin_setup_type": _value(event.get("origin_setup_type")),
         "lifecycle_state": _value(event.get("lifecycle_state")),
@@ -163,6 +166,8 @@ def _compact_event(event: dict[str, Any]) -> dict[str, Any]:
         "pivot_id": event.get("pivot_id"),
         "carryover": bool(quality.get("carryover")),
         "discovery_source": quality.get("discovery_source"),
+        "intraday_completeness": provenance.get("completeness"),
+        "intraday_data_through": _iso(provenance.get("data_through")),
         "scores": {
             key: scores.get(key)
             for key in (
@@ -247,7 +252,8 @@ class _VariantRun:
         self.service = BreakoutRadarService(
             self.settings,
             price_data=ReplayPriceDataAdapter(
-                shared["daily_store"], shared["minute_store"], trim_sessions=config.trim_sessions
+                shared["daily_store"], shared["minute_store"], trim_sessions=config.trim_sessions,
+                bar_delay_seconds=config.bar_delay_seconds,
             ),
             strength=self.strength,
             market_shape=ExistingMarketShapeAdapter(),

@@ -215,42 +215,64 @@ class ReplayDiscoveryProvider:
             rows.append((change, ticker, row))
         return rows
 
-    def _tradingview_rows(self, session: MarketSession, as_of: datetime) -> list[list[Any]]:
+    def prefilter_arrays(self, session: MarketSession, as_of: datetime) -> dict[str, Any] | None:
+        """TradingView's three filters recomputed for every ticker with bars that day.
+
+        Returns the day context, the slot and the per-ticker arrays (last close,
+        cumulative volume, change, relative volume, passing mask); ``None`` when no
+        bar has completed yet. ``scripts/discovery_misses.py`` reads the same arrays
+        to explain misses, so the filter logic lives here only.
+        """
+
         day = as_of.astimezone(NY).date()
         context = self.day_context(day)
         settings = self.settings
         slot = last_complete_slot(as_of)
         if session is MarketSession.PREMARKET:
             slot = min(slot, _PREMARKET_LAST_SLOT)
+        if not context.tickers or slot < 0:
+            return None
+        slot = min(slot, SLOTS_PER_DAY - 1)
+        last_close = context.close_ffill[:, slot]
+        cumulative = context.cumulative_volume[:, slot]
+        minute = as_of.astimezone(NY).hour * 60 + as_of.astimezone(NY).minute
+        with np.errstate(invalid="ignore", divide="ignore"):
+            change = (last_close / context.previous_close - 1.0) * 100.0
+            today_relvol = cumulative / context.mean_volume_10 * self.relvol_scale
+        stale = context.previous_relvol
+        if session is MarketSession.PREMARKET or minute < STALE_RELVOL_UNTIL_MINUTE:
+            relvol = stale
+        elif minute < ROLLING_RELVOL_UNTIL_MINUTE:
+            relvol = np.fmax(stale, today_relvol)
+        else:
+            relvol = today_relvol
+        if session is MarketSession.PREMARKET:
+            passing = (
+                (last_close >= settings.min_price)
+                & (change >= settings.premarket_min_change_pct)
+                & (cumulative > 0)
+            )
+        else:
+            passing = (
+                (last_close >= settings.min_price)
+                & (change >= settings.regular_min_change_pct)
+                & (relvol >= settings.regular_min_relative_volume)
+            )
+        passing = passing & np.isfinite(change)
+        return {
+            "context": context, "slot": slot, "last_close": last_close, "cumulative": cumulative,
+            "change": change, "relvol": relvol, "passing": passing,
+        }
+
+    def _tradingview_rows(self, session: MarketSession, as_of: datetime) -> list[list[Any]]:
+        day = as_of.astimezone(NY).date()
+        settings = self.settings
         ranked: list[tuple[float, str, list[Any]]] = []
-        if context.tickers and slot >= 0:
-            slot = min(slot, SLOTS_PER_DAY - 1)
-            last_close = context.close_ffill[:, slot]
-            cumulative = context.cumulative_volume[:, slot]
-            minute = as_of.astimezone(NY).hour * 60 + as_of.astimezone(NY).minute
-            with np.errstate(invalid="ignore", divide="ignore"):
-                change = (last_close / context.previous_close - 1.0) * 100.0
-                today_relvol = cumulative / context.mean_volume_10 * self.relvol_scale
-            stale = context.previous_relvol
-            if session is MarketSession.PREMARKET or minute < STALE_RELVOL_UNTIL_MINUTE:
-                relvol = stale
-            elif minute < ROLLING_RELVOL_UNTIL_MINUTE:
-                relvol = np.fmax(stale, today_relvol)
-            else:
-                relvol = today_relvol
-            if session is MarketSession.PREMARKET:
-                passing = (
-                    (last_close >= settings.min_price)
-                    & (change >= settings.premarket_min_change_pct)
-                    & (cumulative > 0)
-                )
-            else:
-                passing = (
-                    (last_close >= settings.min_price)
-                    & (change >= settings.regular_min_change_pct)
-                    & (relvol >= settings.regular_min_relative_volume)
-                )
-            passing = passing & np.isfinite(change)
+        arrays = self.prefilter_arrays(session, as_of)
+        if arrays is not None:
+            context = arrays["context"]
+            last_close, cumulative = arrays["last_close"], arrays["cumulative"]
+            change, relvol, passing = arrays["change"], arrays["relvol"], arrays["passing"]
             for index in np.flatnonzero(passing):
                 ticker = context.tickers[index]
                 meta = context.meta[index]

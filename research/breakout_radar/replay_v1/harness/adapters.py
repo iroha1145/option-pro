@@ -78,10 +78,20 @@ class ReplayPriceDataAdapter:
         minute_store: MinuteStore,
         *,
         trim_sessions: bool = True,
+        bar_delay_seconds: int = 0,
     ) -> None:
+        """``bar_delay_seconds``: a bar becomes visible that long after it closes.
+
+        Production's Massive feed delivered 5-minute bars about 10 minutes after
+        their close (2026-09 export: the last bar ended 9.8 to 14.0 minutes before
+        the scan on 19,818 Massive-sourced rows), so 600 reproduces production as it
+        ran; 0 is the algorithm with bars available at their close.
+        """
+
         self.daily_store = daily_store
         self.minute_store = minute_store
         self.trim_sessions = trim_sessions
+        self.bar_delay = timedelta(seconds=int(bar_delay_seconds))
         self.source = SOURCE
 
     async def daily(self, tickers: Sequence[str], *, cutoff, period: str = "2y") -> dict[str, PriceDataSnapshot]:
@@ -144,7 +154,8 @@ class ReplayPriceDataAdapter:
             frame = self.minute_store.bars(symbol, day - timedelta(days=INTRADAY_CALENDAR_DAYS), day)
             if frame.empty:
                 continue
-            frame = frame.loc[frame.index < stamp]
+            # A bar is visible once it has closed and the feed delay has elapsed.
+            frame = frame.loc[frame.index + pd.Timedelta(minutes=5) + self.bar_delay <= stamp]
             if self.trim_sessions:
                 frame = frame.loc[self._session_mask(frame, cutoff, day).to_numpy()]
             if frame.empty:

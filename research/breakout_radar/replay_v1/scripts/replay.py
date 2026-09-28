@@ -57,6 +57,8 @@ def main() -> None:
     parser.add_argument("--relvol-scale", type=float, default=1.0)
     parser.add_argument("--memo", choices=("on", "off"), default="on")
     parser.add_argument("--trim", choices=("on", "off"), default="on", help="session trimming of intraday input frames")
+    parser.add_argument("--bar-delay-seconds", type=int, default=0,
+                        help="minute bars become visible this long after they close; 600 reproduces production's delayed feed")
     parser.add_argument("--on-degraded", choices=("raise", "continue"), default="raise")
     parser.add_argument("--full-snapshots", action="store_true", help="also write every event snapshot (byte-identity checks)")
     parser.add_argument("--label", default="")
@@ -74,6 +76,7 @@ def main() -> None:
         warmup_days=args.warmup, grid=args.grid, export=args.export, directory=args.directory, sic=args.sic,
         shares=args.shares, metadata_mode=args.metadata, market_cap_source=args.market_cap,
         relvol_scale=args.relvol_scale, memo=args.memo == "on", trim_sessions=args.trim == "on",
+        bar_delay_seconds=args.bar_delay_seconds,
         on_degraded=args.on_degraded, full_snapshots=args.full_snapshots, label=args.label, universe=universe,
     )
     summary = run_segment(config)

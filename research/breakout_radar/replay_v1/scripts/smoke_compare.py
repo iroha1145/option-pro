@@ -10,8 +10,9 @@ Layers (DATA_SPEC 7.2, thresholds in PREREGISTRATION.md):
 2. daily stage: pivot_id equality on tickers both sides detected a base for;
 3. events: production first TRIGGERED transitions against replay first triggered scans,
    matched on (ticker, trading date, origin setup); state at the day's last scan;
-4. intraday features: rvol_time_of_day relative error and comparison_sessions on scans
-   whose production bars came from Massive;
+4. intraday features and scores on events both sides hold at the same scan: rvol
+   availability and relative error by production data source (only Yahoo-sourced
+   production scans carry rvol values), intraday completeness pairs, score differences;
 5. T1: current status per event id.
 Only completed production scans are compared; replay scans at times production failed
 are listed separately.
@@ -23,6 +24,7 @@ import argparse
 import csv
 import gzip
 import json
+import sqlite3
 import statistics
 import sys
 from collections import Counter, defaultdict
@@ -81,10 +83,17 @@ def main() -> None:
     parser.add_argument("--replay", type=Path, required=True, help="replay output directory (holds <variant>/ledger)")
     parser.add_argument("--variant", default="hybrid_otc")
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--daily-db", type=Path, help="replay daily DB, to tell Yahoo-sourced young tickers apart")
+    parser.add_argument("--minute-store", type=Path, help="minute store, to split misses into no-bars and filtered")
     parser.add_argument(
         "--exclude-current-leveraged", action="store_true",
         help="drop production candidates and events that today's asset_policy.is_leveraged_etf flags "
              "(production only excluded them from 2026-09-17 09:00 ET)",
+    )
+    parser.add_argument(
+        "--exclude-etf", action="store_true",
+        help="drop ETF candidates and events on both sides: the historical replay universe holds no funds "
+             "(PREREGISTRATION 修订 2)",
     )
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
@@ -108,13 +117,20 @@ def main() -> None:
         def is_leveraged_etf(*_args: Any, **_kwargs: Any) -> bool:
             return False
 
+    def dropped(body: dict[str, Any]) -> bool:
+        """Rows outside the compared universe: current leveraged-fund policy, or every fund."""
+
+        if is_leveraged_etf(body.get("asset_type"), body.get("name"), {}):
+            return True
+        return args.exclude_etf and str(body.get("asset_type") or "") == "etf"
+
     # ---- production tables reshaped
     prod_candidates: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in tables["breakout_candidates"]:
         if row["scan_run_id"] in completed:
             body = json.loads(row["candidate_json"])
             body["ticker"] = str(row["ticker"]).upper()
-            if is_leveraged_etf(body.get("asset_type"), body.get("name"), {}):
+            if dropped(body):
                 continue
             prod_candidates[row["scan_run_id"]].append(body)
     prod_structures: dict[str, dict[str, str]] = defaultdict(dict)
@@ -126,7 +142,7 @@ def main() -> None:
         if row["scan_run_id"] not in completed:
             continue
         body = json.loads(row["event_snapshot_json"])
-        if str(body.get("exchange") or "").upper() == "OTC" or is_leveraged_etf(body.get("asset_type"), body.get("name"), {}):
+        if str(body.get("exchange") or "").upper() == "OTC" or dropped(body):
             continue
         if str(body.get("trading_date")) not in replay_days:
             continue
@@ -151,16 +167,25 @@ def main() -> None:
     relvol_ratio: list[float] = []
     cap_ratio: list[float] = []
     missing_bars: Counter[str] = Counter()
+    missing_no_bars: Counter[str] = Counter()
+    missing_filtered: Counter[str] = Counter()
+    store_days: dict[str, set[str]] | None = None
+    if args.minute_store is not None:
+        import pandas as pd
+
+        coverage = pd.read_parquet(args.minute_store / "coverage.parquet")
+        store_days = {ticker: set(group["day"]) for ticker, group in coverage.groupby("ticker")}
     for as_of in matched:
         scan_id = by_as_of[as_of]
         replay = replay_by_as_of[as_of]
         session = completed[scan_id]["session"]
         prod_rows = prod_candidates.get(scan_id, [])
+        rep_rows = [c for c in replay["candidates"] if not (args.exclude_etf and str(c.get("asset_type") or "") == "etf")]
         prod_listed = {c["ticker"]: c for c in prod_rows if str(c.get("exchange") or "").upper() != "OTC"}
-        rep_listed = {c["ticker"]: c for c in replay["candidates"] if str(c.get("exchange") or "").upper() != "OTC"}
+        rep_listed = {c["ticker"]: c for c in rep_rows if str(c.get("exchange") or "").upper() != "OTC"}
         prod_top60 = {c["ticker"] for c in sorted(prod_rows, key=lambda c: (-(c.get("provider_change_pct") or 0), c["ticker"]))[:60]
                       if str(c.get("exchange") or "").upper() != "OTC"}
-        rep_top60 = {c["ticker"] for c in sorted(replay["candidates"], key=lambda c: (-(c.get("change") or 0), c["ticker"]))[:60]
+        rep_top60 = {c["ticker"] for c in sorted(rep_rows, key=lambda c: (-(c.get("change") or 0), c["ticker"]))[:60]
                      if str(c.get("exchange") or "").upper() != "OTC"}
         union = set(prod_listed) | set(rep_listed)
         common = set(prod_listed) & set(rep_listed)
@@ -174,6 +199,9 @@ def main() -> None:
                 cap_ratio.append(float(r["market_cap"]) / float(p["provider_market_cap"]))
         for ticker in set(prod_listed) - set(rep_listed):
             missing_bars[ticker] += 1
+            if store_days is not None:
+                day = as_of.astimezone(NY).date().isoformat()
+                (missing_no_bars if day not in store_days.get(ticker, set()) else missing_filtered)[ticker] += 1
         discovery_rows.append(
             {
                 "as_of": as_of.isoformat(), "session": session, "prod_listed": len(prod_listed), "replay_listed": len(rep_listed),
@@ -188,12 +216,28 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(discovery_rows)
 
-    # ---- layer 2: structures
+    # ---- layer 2: structures. Production fetches daily bars from Massive only for
+    # tickers with >= 380 sessions (scanner._validated_massive_history); younger tickers
+    # came from Yahoo, whose bars differ, so their pivot ids are reported apart.
     pivot_equal = pivot_total = 0
+    young_equal = young_total = 0
+    young_tickers: set[str] = set()
+    if args.daily_db is not None:
+        connection = sqlite3.connect(f"file:{args.daily_db}?mode=ro", uri=True)
+        for ticker, count in connection.execute(
+            "SELECT ticker, COUNT(*) FROM raw_daily_bars WHERE session_date < ? GROUP BY ticker", (min(replay_days),)
+        ):
+            if count < 380:
+                young_tickers.add(str(ticker).upper())
+        connection.close()
     for as_of in matched:
         prod = prod_structures.get(by_as_of[as_of], {})
         rep = {s["ticker"]: s["pivot_id"] for s in replay_by_as_of[as_of]["structures"]}
         for ticker in set(prod) & set(rep):
+            if ticker in young_tickers:
+                young_total += 1
+                young_equal += prod[ticker] == rep[ticker]
+                continue
             pivot_total += 1
             pivot_equal += prod[ticker] == rep[ticker]
 
@@ -215,9 +259,18 @@ def main() -> None:
     replay_events: dict[tuple, dict[str, Any]] = {}
     replay_last_state: dict[tuple, str] = {}
     prod_last_state: dict[tuple, str] = {}
+    # Older ledgers carry no asset_type on events; the candidates of the same run do.
+    replay_asset_type: dict[str, str] = {}
+    for record in ledgers:
+        for candidate in record.get("candidates") or []:
+            if candidate.get("asset_type"):
+                replay_asset_type[str(candidate["ticker"]).upper()] = str(candidate["asset_type"])
     for record in sorted(ledgers, key=lambda r: r["as_of"]):
         for event in record["events"]:
             if event["trading_date"] not in replay_days:
+                continue
+            asset_type = str(event.get("asset_type") or replay_asset_type.get(event["ticker"], ""))
+            if args.exclude_etf and asset_type == "etf":
                 continue
             key = (event["ticker"], event["trading_date"], event["origin_setup_type"] or event["setup_type"])
             replay_last_state[key] = event["lifecycle_state"]
@@ -248,26 +301,51 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(extra)
 
-    # ---- layer 4: rvol on Massive-sourced production scans
-    rvol_errors: list[float] = []
+    # ---- layer 4: intraday features and scores on events both sides hold at the same scan.
+    # Production's Massive bars became visible about 10 minutes after their close
+    # (DATA_SPEC 20), so on Massive-sourced scans production never had rvol_time_of_day;
+    # the value check is possible only against Yahoo-sourced production scans, the
+    # availability check on every scan (a lag replay should reproduce the missing values).
+    rvol_errors: dict[str, list[float]] = defaultdict(list)
+    rvol_availability: dict[str, Counter[str]] = defaultdict(Counter)
     prod_sessions: Counter[int] = Counter()
     replay_sessions: Counter[int] = Counter()
+    completeness_pairs: Counter[str] = Counter()
+    score_diff: dict[str, list[float]] = defaultdict(list)
     for as_of in matched:
         scan_id = by_as_of[as_of]
-        rep_events = {e["ticker"]: e for e in replay_by_as_of[as_of]["events"]}
+        rep_events = {(e["ticker"], e["trading_date"], e["origin_setup_type"] or e["setup_type"]): e
+                      for e in replay_by_as_of[as_of]["events"]}
         for event_id, body in prod_snapshots.get(scan_id, {}).items():
+            rep = rep_events.get(key_of(body))
+            if rep is None:
+                continue
             features = body.get("features") or {}
-            source = ((features.get("price_data_provenance") or {}).get("intraday") or {}).get("source")
-            if source != "Massive" or features.get("rvol_time_of_day") is None:
-                continue
-            rep = rep_events.get(str(body.get("ticker")).upper())
-            if rep is None or rep["features"].get("rvol_time_of_day") is None:
-                continue
-            rvol_errors.append(abs(rep["features"]["rvol_time_of_day"] / features["rvol_time_of_day"] - 1))
-            if features.get("comparison_sessions") is not None:
-                prod_sessions[int(features["comparison_sessions"])] += 1
-            if rep["features"].get("comparison_sessions") is not None:
-                replay_sessions[int(rep["features"]["comparison_sessions"])] += 1
+            provenance = (features.get("price_data_provenance") or {}).get("intraday") or {}
+            source = str(provenance.get("source") or "none")
+            prod_rvol = features.get("rvol_time_of_day")
+            rep_rvol = rep["features"].get("rvol_time_of_day")
+            if prod_rvol is not None and rep_rvol is not None:
+                rvol_availability[source]["both"] += 1
+                if prod_rvol:
+                    rvol_errors[source].append(abs(float(rep_rvol) / float(prod_rvol) - 1))
+                if features.get("comparison_sessions") is not None:
+                    prod_sessions[int(features["comparison_sessions"])] += 1
+                if rep["features"].get("comparison_sessions") is not None:
+                    replay_sessions[int(rep["features"]["comparison_sessions"])] += 1
+            elif prod_rvol is not None:
+                rvol_availability[source]["prod_only"] += 1
+            elif rep_rvol is not None:
+                rvol_availability[source]["replay_only"] += 1
+            else:
+                rvol_availability[source]["neither"] += 1
+            if "intraday_completeness" in rep:
+                completeness_pairs[f"{provenance.get('completeness')}|{rep.get('intraday_completeness')}"] += 1
+            for name in ("alert_priority_score", "breakout_quality_score", "data_confidence_score"):
+                prod_score = (body.get("scores") or {}).get(name)
+                rep_score = (rep.get("scores") or {}).get(name)
+                if prod_score is not None and rep_score is not None:
+                    score_diff[name].append(float(rep_score) - float(prod_score))
 
     # ---- layer 5: T1
     bundle_path = args.replay / args.variant / "research_bundle.json.gz"
@@ -300,12 +378,30 @@ def main() -> None:
         }
         for day, b in sorted(by_day.items())
     }
+    # The open's roll window (PREREGISTRATION 修订 2 limitation): overlap by 15-minute bucket.
+    by_bucket: dict[str, list[float]] = defaultdict(list)
+    for row in discovery_rows:
+        if row["top60_overlap"] is None:
+            continue
+        local = ts(row["as_of"]).astimezone(NY)
+        minute = local.hour * 60 + local.minute
+        if row["session"] == "premarket":
+            label = "premarket_0400_0430" if minute < 4 * 60 + 30 else "premarket_after_0430"
+        elif minute < 10 * 60 + 15:
+            start = (minute // 15) * 15
+            label = f"regular_{start // 60:02d}{start % 60:02d}"
+        else:
+            label = "regular_after_1015"
+        by_bucket[label].append(row["top60_overlap"])
+    top60_by_bucket = {label: quantiles(values) for label, values in sorted(by_bucket.items())}
 
     summary = {
         "variant": args.variant,
         "exclude_current_leveraged": args.exclude_current_leveraged,
+        "exclude_etf": args.exclude_etf,
         "replay_days": sorted(replay_days),
         "per_day": per_day,
+        "top60_overlap_by_bucket": top60_by_bucket,
         "matched_scans": len(matched),
         "production_completed_scans": len(completed),
         "replay_scans_without_production_match": len(unmatched_replay),
@@ -317,10 +413,16 @@ def main() -> None:
             "market_cap_ratio_replay_over_prod": quantiles(cap_ratio),
             "production_listed_candidates_missing_in_replay": sum(missing_bars.values()),
             "distinct_missing_tickers": len(missing_bars),
+            "missing_without_bars_in_store": sum(missing_no_bars.values()),
+            "missing_with_bars_but_filtered": sum(missing_filtered.values()),
             "missing_examples": [t for t, _ in missing_bars.most_common(15)],
         },
-        "structures": {"common": pivot_total, "pivot_id_equal": pivot_equal,
-                       "equal_rate": round(pivot_equal / pivot_total, 4) if pivot_total else None},
+        "structures": {
+            "common_massive_sourced": pivot_total, "pivot_id_equal": pivot_equal,
+            "equal_rate": round(pivot_equal / pivot_total, 4) if pivot_total else None,
+            "young_tickers_common": young_total, "young_tickers_equal": young_equal,
+            "young_note": "tickers with < 380 daily sessions were Yahoo-sourced in production",
+        },
         "events": {
             "production_triggered": len(prod_events), "matched": hits,
             "recall": round(hits / len(prod_events), 4) if prod_events else None,
@@ -331,8 +433,17 @@ def main() -> None:
                 sum(1 for r in recall_rows if r["replay_last_state"] and r["prod_last_state"] == r["replay_last_state"])
                 / max(1, sum(1 for r in recall_rows if r["replay_last_state"])), 4),
         },
-        "rvol": {"relative_error": quantiles(rvol_errors), "prod_comparison_sessions": dict(prod_sessions.most_common(6)),
-                 "replay_comparison_sessions": dict(replay_sessions.most_common(6))},
+        "rvol": {
+            "relative_error_by_prod_source": {source: quantiles(values) for source, values in sorted(rvol_errors.items())},
+            "availability_by_prod_source": {source: dict(counter) for source, counter in sorted(rvol_availability.items())},
+            "prod_comparison_sessions": dict(prod_sessions.most_common(6)),
+            "replay_comparison_sessions": dict(replay_sessions.most_common(6)),
+        },
+        "intraday_completeness_prod_vs_replay": dict(completeness_pairs.most_common(8)),
+        "scores_replay_minus_prod": {
+            name: {**quantiles(values), "within_1pt": round(sum(abs(v) <= 1.0 for v in values) / len(values), 4)}
+            for name, values in sorted(score_diff.items())
+        },
         "t1": {"common": t1_total, "agree": t1_agree},
     }
     (args.out / "summary.json").write_text(json.dumps(summary, indent=1, default=str))
