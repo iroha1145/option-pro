@@ -9,11 +9,11 @@
 | `DATA_SPEC.md` | 数据与算法规格。第 1 到 9 节是设计，第 10 到 19 节是核实过的生产事实、预算方案与取数规则，第 20 节是生产数据延迟的测量与烟雾测试结果 |
 | `PREREGISTRATION.md` | 预登记：数据、回放口径、事件定义、指标、候选、取舍规则、烟雾门槛；修订 1 与修订 2 记录看过什么之后改了什么 |
 | `RUN_SPEC.md` | 在 Colab 上怎么跑：建库、烟雾周、点时股数、五年全量、输出 |
-| `harness/` | 回放骨架：`settings.py`（生产字段集与配置哈希、候选变体）、`stores.py`（分钟库、日线库、FRED、股数、目录元数据、生产候选元数据）、`discovery.py`（发现代理）、`adapters.py`（时钟、价格、强度、市场形态适配器）、`memo.py`（记忆化）、`runner.py`（逐次扫描驱动生产 worker） |
-| `scripts/` | `build_minute_store.py`、`replay.py`、`smoke_compare.py`（与生产逐层比对）、`discovery_misses.py`（发现层缺失归因）、`pit_shares_requests.py`（点时股数请求清单） |
+| `harness/` | 回放骨架：`settings.py`（生产字段集与配置哈希、候选变体）、`stores.py`（分钟库、日线库、FRED、股数、目录元数据、生产候选元数据）、`discovery.py`（发现代理）、`adapters.py`（时钟、价格、强度、市场形态适配器）、`memo.py`（记忆化）、`runner.py`（逐次扫描驱动生产 worker）、`evaluation.py`（预登记的评估：触发、入场、退出、删失、视图、取舍） |
+| `scripts/` | `build_minute_store.py`、`replay.py`、`smoke_compare.py`（与生产逐层比对）、`discovery_misses.py`（发现层缺失归因）、`pit_shares_requests.py`（点时股数请求清单）、`evaluate.py`（第三阶段评估，RUN_SPEC 第 5 节） |
 | `results/` | 烟雾比对输出（在 Colab 上跑后落这里；本机的结果在会话临时目录） |
 
-对应的测试在仓库 `tests/test_radar_replay_harness.py`（合成冻结数据上的骨架、哈希、逐字节一致性、延迟视图）与 `tests/test_radar_pit_shares_requests.py`；生产改动的测试在 `tests/test_breakout_otc_exclusion.py`、`tests/test_breakout_research_overrides.py`、`tests/test_breakout_provider_contract.py`。
+对应的测试在仓库 `tests/test_radar_replay_harness.py`（合成冻结数据上的骨架、哈希、逐字节一致性、延迟视图）、`tests/test_radar_pit_shares_requests.py` 与 `tests/test_radar_evaluate.py`（合成账本上的触发提取、拆股与删失、日内聚合、视图、漏斗与取舍规则）；生产改动的测试在 `tests/test_breakout_otc_exclusion.py`、`tests/test_breakout_research_overrides.py`、`tests/test_breakout_provider_contract.py`。
 
 ## 回放让算法看到什么数据
 

@@ -14,7 +14,7 @@
 /content/data/fred/VIXCLS.csv, DGS10.csv         # FRED
 /content/minute_raw/YYYY-MM/<TICKER>_<from>_<to>_p<n>.json.gz  # 原始分钟页
 /content/minute_manifest.jsonl                   # 页清单
-/content/data/pit_shares.jsonl                   # 点时股数样本（每行一个 /v3/reference/tickers/{T}?date= 结果，附 ticker 与 date）
+/content/data/pit_shares.jsonl.gz                # 点时股数样本（每行 {"ticker","date","reason","http","status","results":{...}}，可 gz；5 轮共 101,255 行）
 /content/minute_store/                           # 派生库（第 1 步生成）
 /content/replay/<run>/                           # 输出
 ```
@@ -80,7 +80,7 @@ $PY $P/scripts/discovery_misses.py --export ... --replay /content/replay/smoke_l
 
 ### 1c. 分类层（目录与 SIC 表到位后）
 
-同 1b，但 `--metadata directory --directory /content/data/massive_directory_2026-09-27 --sic /content/data/industry/ticker_sic.json.gz --market-cap shares --shares /content/data/pit_shares.jsonl`。`smoke_compare` 里的市值比值、行业与类型一致率是这一步的判定。烟雾库里有 ETF（那是按生产候选名单抓的），目录元数据下它们会被当作基金进入宇宙；比对时仍加 `--exclude-etf`。
+同 1b，但 `--metadata directory --directory /content/data/massive_directory_2026-09-27 --sic /content/data/industry/ticker_sic.json.gz --market-cap shares --shares /content/data/pit_shares.jsonl.gz`。股数取 `weighted_shares_outstanding`，缺时取 `share_class_shares_outstanding`；404 的样本记为该日期起无值。`smoke_compare` 里的市值比值、行业与类型一致率是这一步的判定。烟雾库里有 ETF（那是按生产候选名单抓的），目录元数据下它们会被当作基金进入宇宙；比对时仍加 `--exclude-etf`。
 
 ## 2. 点时股数（可与 1 并行）
 
@@ -100,7 +100,7 @@ $PY $P/scripts/pit_shares_requests.py ... --samples /content/data/pit_shares.jso
 ```
 FULL=(--daily-db /content/data/replay.sqlite --minute-store /content/minute_store --fred /content/data/fred
   --directory /content/data/massive_directory_2026-09-27 --sic /content/data/industry/ticker_sic.json.gz
-  --shares /content/data/pit_shares.jsonl --metadata directory --market-cap shares
+  --shares /content/data/pit_shares.jsonl.gz --metadata directory --market-cap shares
   --warmup 1 --on-degraded continue
   --variants baseline,confirm3,chase15,orb15,orb60,disc5,adv25,basemin15)
 $PY - <<'EOF' > /content/segments.txt
@@ -126,4 +126,22 @@ cat /content/segments.txt | xargs -P 40 -L 1 bash -c '$PY $P/scripts/replay.py "
 
 ## 4. 输出
 
-每段每个配置：`ledger/<day>.jsonl.gz`（每次扫描的候选、结构、事件、转换的紧凑记录，预热日带 `warmup: true`）、`research_bundle.json.gz`（生产研究加载器读出的事件与影子行、转换、事件头、T1）、`run.json`（哈希、配置差异、延迟设置、降级、截断、缓存命中）。评估脚本（第三阶段）读这些文件，退出与删失规则沿用 v1.6 研究包的 `evaluate.py`。
+每段每个配置：`ledger/<day>.jsonl.gz`（每次扫描的候选、结构、事件、转换的紧凑记录，预热日带 `warmup: true`；当次触发的事件带 `next_bar_open`，记录带 `benchmark_next_bar_open`，都是扫描之后那根 5 分钟 K 线的开盘价，只供评估）、`research_bundle.json.gz`（生产研究加载器读出的事件与影子行、转换、事件头、T1）、`run.json`（哈希、配置差异、延迟设置、降级、截断、缓存命中）。
+
+## 5. 评估（第三阶段）
+
+```
+$PY $P/scripts/evaluate.py --db /content/data/replay.sqlite --replay '/content/replay/full/seg_*' \
+    --variants baseline,confirm3,chase15,orb15,orb60,disc5,adv25,basemin15 --baseline baseline \
+    --directory /content/data/massive_directory_2026-09-27 --out /content/eval/full \
+    --stage2 S1=<第一阶段通过者，加号连接> --stage2 S2=<S1+noorb 时另跑的组合名>
+$PY $P/scripts/evaluate.py --db ... --replay '/content/replay/realtime/seg_*' --variants baseline,rvol2,lookback10 --out /content/eval/realtime
+```
+
+规则在 `harness/evaluation.py` 开头与 `result_pack.json` 的 `rules`：事件是每个 `event_id` 第一条 TRIGGERED 转换，记在扫描的美东日期上；入场是账本里的 `next_bar_open`（旧账本没有这一字段时传 `--minute-store` 现查），对照入场是触发价；退出是触发日之后第 1、5、20、63 个交易日的收盘（拆股复权），观察规则与 legacy、zero、loss 三个情景沿用 v1.6 研究包的 `evaluate.py`（`--directory` 给点时目录才能核身份，不给时缺口一律记 `censored_unverified`）；SPY 在同一根 K 线入场，账本里没有 SPY 的 K 线时按触发日收盘入场并在结果里计数（`benchmark_close_fallback`）。日内等权、按日平均，Newey-West t 的滞后 0 / 0 / 3 / 11。
+
+输出：`metrics.csv`（每个配置 × 视图 × 入场 × 持有期 × 分段）、`events_h20.csv`（每个触发一行，`--no-events` 可省）、`result_pack.json`（规则、覆盖、漏斗、全部指标、取舍）、`README_tables.md`（主指标、次指标、基线切分、漏斗、取舍五张表）、`decision.json`。视图：`all`、`dedup`（代码 × 日去重）、`top10`（每日告警优先级前 10）、`noorb`、`mkt_gate`、`tod`、`alert60`、`strength60`、`t1`（T1 满足的子集，次日开盘入场）、按起源 / 时段 / 市场形态分组。取舍按预登记第 9 节与基线按共同日配对（规则 1 到 6，组合看 `stage2`）。
+
+**SPY 的 5 分钟 K 线**：SPY 不会进「涨幅 ≥ 3%」的抓取名单，分钟库里没有它，`benchmark_next_bar_open` 会全空、评估退到收盘入场。请把 SPY 五年的 5 分钟 K 线也抓下来放进 `minute_raw`（一个代码约 65 页），建库时就会带上。
+
+本机在 13 天烟雾输出上跑过一遍（370 个触发；1 日超额 +1.65 个百分点、5 日 +2.43，20 日与 63 日窗口超出数据、不出数），只是通路验证，不是结果。

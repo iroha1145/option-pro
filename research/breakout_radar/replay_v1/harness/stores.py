@@ -298,6 +298,32 @@ class MinuteStore:
             return True
         return position + 1 < len(days) and days[position + 1] <= high
 
+    def next_bar_open(self, ticker: str, as_of: datetime) -> float | None:
+        """Open of the 5-minute bar that starts at the first slot boundary at or after ``as_of``.
+
+        This is the earliest price a user who sees an event at ``as_of`` can trade at
+        (PREREGISTRATION section 5). The value is for evaluation only; the algorithm
+        never sees it. ``None`` when that bar does not exist (no trade, or after 20:00 ET).
+        """
+
+        local = as_of.astimezone(NY)
+        minute = local.hour * 60 + local.minute
+        rounded = minute if local.second == 0 and local.microsecond == 0 and minute % _SLOT_MINUTES == 0 else (minute // _SLOT_MINUTES + 1) * _SLOT_MINUTES
+        if rounded >= 20 * 60:
+            return None
+        start = local.replace(hour=rounded // 60, minute=rounded % 60, second=0, microsecond=0)
+        day = start.date()
+        if not self.has_bars_between(ticker, day, day):
+            return None
+        bars = self.bars(ticker, day, day)
+        if bars.empty:
+            return None
+        stamp = pd.Timestamp(start).tz_convert("UTC")
+        if stamp not in bars.index:
+            return None
+        value = bars.at[stamp, "Open"]
+        return float(value) if value == value else None
+
     def day_table(self, day: date) -> tuple[dict[str, int], np.ndarray, np.ndarray]:
         """Every ticker's (close, volume) slot rows for one day from ``days/<day>.parquet``."""
 
@@ -570,7 +596,8 @@ class SharesStore:
         self._daily = daily
         if path is None:
             return
-        with open(path, "rt", encoding="utf-8") as handle:
+        opener = gzip.open if str(path).endswith(".gz") else open
+        with opener(path, "rt", encoding="utf-8") as handle:
             for line in handle:
                 line = line.strip()
                 if not line:
@@ -581,7 +608,11 @@ class SharesStore:
                 sample_date = row.get("date") or row.get("as_of")
                 if not ticker or not sample_date:
                     continue
+                # A 404 sample (delisted by then) keeps its date with no value, so the
+                # lookup stops using the previous sample from that date on.
                 shares = _finite(results.get("weighted_shares_outstanding"))
+                if shares is None:
+                    shares = _finite(results.get("share_class_shares_outstanding"))
                 cap = _finite(results.get("market_cap"))
                 self._samples[ticker].append((date.fromisoformat(str(sample_date)[:10]), shares, cap))
         for ticker in self._samples:

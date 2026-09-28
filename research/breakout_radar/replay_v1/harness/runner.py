@@ -253,6 +253,7 @@ class _VariantRun:
             tv_delay_minutes=config.tv_delay_minutes,
         )
         self.strength = MemoStrengthAdapter(cache=shared["strength_cache"])
+        self.minute_store = shared["minute_store"]
         self.service = BreakoutRadarService(
             self.settings,
             price_data=ReplayPriceDataAdapter(
@@ -359,6 +360,22 @@ class _VariantRun:
             record["t1_completion"] = result.get("t1_completion")
         if publication is not None:
             events = [e if isinstance(e, dict) else e.model_dump(mode="python") for e in publication.get("events") or []]
+            compact_events = [_compact_event(e) for e in events]
+            # Evaluation-only prices (PREREGISTRATION section 5): the open of the 5-minute bar
+            # after the scan for events triggered at this scan, and SPY's for the same bar.
+            # The algorithm never sees them; they are looked up after the scan has run.
+            triggered_ids = {
+                str(t.get("event_id") if isinstance(t, dict) else getattr(t, "event_id", None))
+                for t in publication.get("transitions") or []
+                if str(_value(t.get("to_state") if isinstance(t, dict) else getattr(t, "to_state", None))) == "TRIGGERED"
+            }
+            benchmark_open = None
+            if triggered_ids:
+                benchmark_open = self.minute_store.next_bar_open("SPY", as_of)
+                for compact in compact_events:
+                    if compact.get("event_id") in triggered_ids and compact.get("ticker"):
+                        compact["next_bar_open"] = self.minute_store.next_bar_open(str(compact["ticker"]), as_of)
+            record["benchmark_next_bar_open"] = benchmark_open
             record.update(
                 {
                     "candidate_count": len(publication.get("candidates") or []),
@@ -385,7 +402,7 @@ class _VariantRun:
                         }
                         for s in publication.get("structures") or []
                     ],
-                    "events": [_compact_event(e) for e in events],
+                    "events": compact_events,
                     "transitions": [
                         {
                             "event_id": t.get("event_id"), "from_state": _value(t.get("from_state")),
