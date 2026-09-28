@@ -132,7 +132,7 @@ D 家族残差窗口改为 12 减 1 个月（231 日求和、跳过 21 日）的
 
 ### 部署时会看到的两件事
 
-- 部署新代码之后、第一批 v1.7 快照发布之前，仍在服务的旧批次会被投影时打上 `algorithm_version: eod-limited-v1.7`（这个标签取自代码常量，不存在批次里；`score_version` / `compute_version` 来自批次，仍是 v1.6）。这是原有行为，下一批发布即消失。
+- 部署新代码之后、第一批 v1.7 快照发布之前，接口返回的仍是 v1.6 批次。`algorithm_version` 按批次自己的 `compute_version` 推出（`project.served_algorithm_version`），这段时间如实显示 `eod-limited-v1.6`，与 `score_version` 一致。
 - 第一批 v1.7 快照的 `universe_count` 会从约 11,800 掉到约 5,900，是预期的。
 
 ### 上线前核对
