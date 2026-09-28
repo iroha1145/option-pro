@@ -61,6 +61,10 @@ def main() -> None:
                         help="minute bars become visible this long after they close (default: production's 563 s; 0 = real time)")
     parser.add_argument("--tv-delay-minutes", type=int, default=15,
                         help="the discovery proxy reads bars complete this long before the scan (default: production's 15; 0 = real time)")
+    parser.add_argument("--minute-cache-tickers", type=int, default=800,
+                        help="per-ticker minute frames kept in memory (the segment's window only)")
+    parser.add_argument("--daily-cache-tickers", type=int, default=2000,
+                        help="per-ticker daily row lists kept in memory (about 0.25 MB each for five years)")
     parser.add_argument("--on-degraded", choices=("raise", "continue"), default="raise")
     parser.add_argument("--full-snapshots", action="store_true", help="also write every event snapshot (byte-identity checks)")
     parser.add_argument("--label", default="")
@@ -79,6 +83,7 @@ def main() -> None:
         shares=args.shares, metadata_mode=args.metadata, market_cap_source=args.market_cap,
         relvol_scale=args.relvol_scale, memo=args.memo == "on", trim_sessions=args.trim == "on",
         bar_delay_seconds=args.bar_delay_seconds, tv_delay_minutes=args.tv_delay_minutes,
+        minute_cache_tickers=args.minute_cache_tickers, daily_cache_tickers=args.daily_cache_tickers,
         on_degraded=args.on_degraded, full_snapshots=args.full_snapshots, label=args.label, universe=universe,
     )
     summary = run_segment(config)

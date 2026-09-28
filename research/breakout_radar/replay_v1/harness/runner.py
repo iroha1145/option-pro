@@ -68,6 +68,7 @@ class RunConfig:
     bar_delay_seconds: int = 563  # production-realized: bars visible 600 s after close minus the 37 s request offset
     tv_delay_minutes: int = 15  # production-realized: the screener fields lagged about 15 minutes
     minute_cache_tickers: int = 800  # per-ticker frames kept in memory (each holds only the segment's window)
+    daily_cache_tickers: int = 2000  # per-ticker daily rows kept in memory (about 0.25 MB each for five years)
     on_degraded: str = "raise"  # or "continue"
     full_snapshots: bool = False
     label: str = ""
@@ -452,7 +453,7 @@ def variant_spec_parts(name: str) -> set[str]:
 
 
 def build_shared(config: RunConfig) -> dict[str, Any]:
-    daily_store = DailyStore(config.daily_db)
+    daily_store = DailyStore(config.daily_db, cache_tickers=config.daily_cache_tickers)
     # A segment reads bars from 30 calendar days before its warm-up day to its last day.
     minute_store = MinuteStore(
         config.minute_store, cache_tickers=config.minute_cache_tickers,

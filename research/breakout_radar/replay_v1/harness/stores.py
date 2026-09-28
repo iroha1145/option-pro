@@ -278,9 +278,25 @@ class MinuteStore:
 
         frame = self._load(ticker)
         if frame.empty:
-            return frame.drop(columns=["_day"], errors="ignore")
-        mask = (frame["_day"] >= start_day) & (frame["_day"] <= end_day)
-        return frame.loc[mask, list(BAR_COLUMNS)]
+            result = frame.drop(columns=["_day"], errors="ignore")
+        else:
+            mask = (frame["_day"] >= start_day) & (frame["_day"] <= end_day)
+            result = frame.loc[mask, list(BAR_COLUMNS)]
+        if result.empty and self.has_bars_between(ticker, start_day, end_day):
+            # Coverage says bars exist: an empty read is a store or I/O fault, and a
+            # silent miss would turn into a wrong "no intraday data" verdict downstream.
+            raise RuntimeError(f"minute store returned no bars for {ticker} in {start_day}..{end_day} despite coverage")
+        return result
+
+    def has_bars_between(self, ticker: str, start_day: date, end_day: date) -> bool:
+        days = self._days_by_ticker.get(ticker)
+        if not days:
+            return False
+        low, high = start_day.isoformat(), end_day.isoformat()
+        position = bisect_right(days, low) - 1
+        if position >= 0 and days[position] == low:
+            return True
+        return position + 1 < len(days) and days[position + 1] <= high
 
     def day_table(self, day: date) -> tuple[dict[str, int], np.ndarray, np.ndarray]:
         """Every ticker's (close, volume) slot rows for one day from ``days/<day>.parquet``."""
@@ -330,13 +346,16 @@ class MinuteStore:
     def day_slots(self, ticker: str, day: date) -> tuple[np.ndarray, np.ndarray] | None:
         """(close, volume) arrays over the 192 five-minute slots from 04:00 ET, NaN when no bar."""
 
+        covered = day.isoformat() in self._tickers_by_day and ticker in self._tickers_by_day[day.isoformat()]
         if not self.has_day_files:
-            return self.day_slots_from_ticker_file(ticker, day)
-        index, close, volume = self.day_table(day)
-        position = index.get(ticker)
-        if position is None:
-            return None
-        return close[position].copy(), volume[position].copy()
+            slots = self.day_slots_from_ticker_file(ticker, day)
+        else:
+            index, close, volume = self.day_table(day)
+            position = index.get(ticker)
+            slots = None if position is None else (close[position].copy(), volume[position].copy())
+        if slots is None and covered:
+            raise RuntimeError(f"minute store has no slots for {ticker} on {day} despite coverage")
+        return slots
 
 
 # --------------------------------------------------------------------------- daily bars
@@ -358,11 +377,16 @@ class DailyStore:
     Open/High/Low/Close/Volume, the shape ``scanner._slice_ticker`` yields.
     """
 
-    def __init__(self, db_path: Path | str) -> None:
+    def __init__(self, db_path: Path | str, cache_tickers: int = 2000) -> None:
+        """``cache_tickers`` bounds the per-ticker row cache (each ticker's rows are about
+        0.25 MB for five years); the day-context build touches every ticker once a day and
+        re-reads evicted ones from SQLite, which costs seconds, not memory."""
+
         self.db_path = Path(db_path)
         self._connection = sqlite3.connect(f"file:{self.db_path}?mode=ro", uri=True)
         self._connection.row_factory = sqlite3.Row
-        self._rows: dict[str, list[dict[str, Any]]] = {}
+        self._rows: OrderedDict[str, list[dict[str, Any]]] = OrderedDict()
+        self._rows_limit = max(1, int(cache_tickers))
         self._splits: dict[str, list[tuple[date, float, float]]] = defaultdict(list)
         for row in self._connection.execute(
             "SELECT ticker, execution_date, split_from, split_to FROM splits ORDER BY execution_date"
@@ -378,6 +402,8 @@ class DailyStore:
 
     def _ticker_rows(self, ticker: str) -> list[dict[str, Any]]:
         rows = self._rows.get(ticker)
+        if rows is not None:
+            self._rows.move_to_end(ticker)
         if rows is None:
             rows = [
                 dict(row)
@@ -394,6 +420,8 @@ class DailyStore:
                 if md._valid_ohlc(row) and (row["volume"] is None or float(row["volume"]) >= 0)
             ]
             self._rows[ticker] = rows
+            while len(self._rows) > self._rows_limit:
+                self._rows.popitem(last=False)
         return rows
 
     def splits_between(self, ticker: str, after: date, through: date) -> list[tuple[date, float, float]]:
@@ -402,7 +430,11 @@ class DailyStore:
     def clear_cache(self) -> None:
         self._frame_cache.clear()
 
-    def frame(self, ticker: str, *, through: date, as_of_day: date) -> pd.DataFrame:
+    def frame(self, ticker: str, *, through: date, as_of_day: date, cache: bool = True) -> pd.DataFrame:
+        """The adjusted frame; ``cache=False`` for one-off reads (the day-context build
+        asks once per ticker per day, and caching those frames costs ~40 MB a day per
+        thousand tickers until the runner clears the cache at the end of the day)."""
+
         key = (ticker, through, as_of_day)
         cached = self._frame_cache.get(key)
         if cached is not None:
@@ -424,7 +456,8 @@ class DailyStore:
                 },
                 index=pd.DatetimeIndex(pd.to_datetime(dates)),
             )
-        self._frame_cache[key] = frame
+        if cache:
+            self._frame_cache[key] = frame
         return frame
 
     def previous_close(self, ticker: str, day: date) -> float | None:
@@ -452,7 +485,7 @@ class DailyStore:
         cumulative volume is compared with the 10 sessions before today.
         """
 
-        frame = self.frame(ticker, through=day - timedelta(days=1), as_of_day=day)
+        frame = self.frame(ticker, through=day - timedelta(days=1), as_of_day=day, cache=False)
         if frame.empty:
             return None
         closes = pd.to_numeric(frame["Close"], errors="coerce")
