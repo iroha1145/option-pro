@@ -241,9 +241,16 @@ def test_a_date_with_nothing_observable_is_none_not_zero(long_market):
     record = {"session": LONG[0], "lists": {"v15/balanced/mid": {"rows": [_row("GONE"), _row("TEMP")]}}}
     series, _ = evaluate.evaluate([record], prices)
     point = series[("v15/balanced/mid", "mixed", 20, 20)][0]
-    assert point["slot"] is None and point["slot_zero"] is None and point["slot_loss"] is None
+    assert point["slot"] is None  # nothing observable: no primary value, not zero
+    # The bounds are the full-sample sensitivity and value every censored name: they exist on such a day.
+    spy = prices.forward_to("SPY", LONG[0], LONG[20])
+    assert point["slot_zero"] == pytest.approx(0.0) and point["slot_loss"] == pytest.approx(2 * (-1.0 - spy) / 20)
     assert point["slot_legacy"] is not None  # the pre-fix number still exists, labelled legacy
-    assert evaluate.summarize([point], 20)["mean_slot_pct"] is None
+    summary = evaluate.summarize([point], 20)
+    assert summary["mean_slot_pct"] is None and summary["mean_slot_loss_pct"] is not None
+    only_failed_entries = {"session": LONG[0], "lists": {"v15/balanced/mid": {"rows": [_row("BCPC", sources=["BCPC", "BCpC"])]}}}
+    point = evaluate.evaluate([only_failed_entries], prices)[0][("v15/balanced/mid", "mixed", 20, 20)][0]
+    assert point["slot"] is None and point["slot_zero"] == 0.0  # 19 empty slots at SPY, the collision removed
     empty = {"session": LONG[0], "lists": {"v15/balanced/mid": {"rows": []}}}
     series, _ = evaluate.evaluate([empty], prices)
     assert series[("v15/balanced/mid", "mixed", 20, 20)][0]["slot"] == 0.0  # twenty pre-decided empty slots
@@ -317,14 +324,72 @@ def test_ledger_applies_splits_costs_empty_slots_and_the_spy_benchmark(tmp_path)
     benchmark = backtest.ledger_curve(records, prices, "v15/balanced/mid", "mixed", holding=5, spacing=5, top=2,
                                       benchmark=True, cost_bps=100.0)
     assert benchmark[-1]["value"] == pytest.approx(0.99 * 0.99)  # SPY pays the same costs under the same rules
-    # A name with no bar at T+1 stays in cash; an identity collision too.
+    # A name with no bar at T+1 stays in cash; an identity collision too. SPY rises, so buying it would show.
     records = [{"session": sessions[0], "lists": {"v15/balanced/mid": {"rows": [
         _row("FLAT"), {"ticker": "BCPC", "sort_score": 1.0, "stock_or_etf_track": "stock", "source_tickers": ["BCPC", "BCpC"]},
         _row("LATER")]}}}]
     bars["LATER"] = {day: (10.0, 10.0) for day in sessions[2:]}
+    bars["SPY"] = {day: (100.0 + 5 * i, 100.0 + 5 * i) for i, day in enumerate(sessions)}
     prices = evaluate.Prices(_cache(tmp_path / "c", bars, sessions=sessions), sessions[0])
     curve = backtest.ledger_curve(records, prices, "v15/balanced/mid", "mixed", holding=5, spacing=5, top=3)
     assert all(point["value"] == pytest.approx(1.0) for point in curve)
+    with_empty = backtest.ledger_curve(_records([sessions[0]], ["FLAT"]), prices, "v15/balanced/mid", "mixed",
+                                       holding=5, spacing=5, top=2)
+    assert with_empty[-1]["value"] > 1.0  # the pre-decided empty slot did buy the rising SPY
+
+
+def test_ledger_applies_a_split_on_the_entry_session_once(tmp_path):
+    """The entry open is already post-split; the valuation loop must not multiply the shares again."""
+    sessions = LONG[:8]
+    spy = _flat(sessions, 100.0)
+    for name, before, after, split in (("FWD", 20.0, 10.0, (1.0, 2.0)), ("REV", 1.0, 10.0, (10.0, 1.0))):
+        bars = {"SPY": spy, name: {**{sessions[0]: (before, before)}, **{day: (after, after) for day in sessions[1:]}}}
+        prices = evaluate.Prices(_cache(tmp_path / name, bars, [(name, sessions[1], *split)], sessions=sessions), sessions[0])
+        assert prices.observe(name, sessions[0], 5).ret == pytest.approx(0.0)
+        curve = backtest.ledger_curve(_records([sessions[0]], [name]), prices, "v15/balanced/mid", "mixed",
+                                      holding=5, spacing=5, top=1)
+        assert all(point["value"] == pytest.approx(1.0) for point in curve), name
+    # A split on the day after entry is applied once and the value is unchanged.
+    bars = {"SPY": spy, "MID": {**{day: (20.0, 20.0) for day in sessions[:2]}, **{day: (10.0, 10.0) for day in sessions[2:]}}}
+    prices = evaluate.Prices(_cache(tmp_path / "mid", bars, [("MID", sessions[2], 1.0, 2.0)], sessions=sessions), sessions[0])
+    curve = backtest.ledger_curve(_records([sessions[0]], ["MID"]), prices, "v15/balanced/mid", "mixed", holding=5, spacing=5, top=1)
+    assert all(point["value"] == pytest.approx(1.0) for point in curve)
+
+
+def test_ledger_keeps_censored_shares_and_applies_a_successor_split_at_the_switch(tmp_path):
+    sessions = LONG[:30]
+    spy = _flat(sessions, 100.0)
+    # GONE stops at index 3; a later "split" under the reused symbol must not touch the frozen position.
+    bars = {"SPY": spy, "GONE": {day: (10.0, 10.0) for day in sessions[1:4]}}
+    prices = evaluate.Prices(_cache(tmp_path / "a", bars, [("GONE", sessions[6], 1.0, 4.0)], sessions=sessions), sessions[0])
+    curve = backtest.ledger_curve(_records([sessions[0]], ["GONE"]), prices, "v15/balanced/mid", "mixed", holding=8, spacing=5, top=1)
+    by_day = {point["date"]: point["value"] for point in curve}
+    assert by_day[sessions[7]] == pytest.approx(0.5 + 0.5)  # two sleeves; the censored slot stays at its last close
+    # OLD becomes NEW with a 4-for-1 split filed under NEW on its first day (price 40 -> 10): the ledger applies it once.
+    bars = {"SPY": spy, "OLD": {day: (40.0, 40.0) for i, day in enumerate(sessions) if 1 <= i <= 15},
+            "NEW": {day: (10.0, 10.0) for i, day in enumerate(sessions) if i >= 17}}
+    company = lambda ticker, cik: {"ticker": ticker, "cik": cik, "composite_figi": None, "type": "CS", "active": True}
+    directory = _directory(tmp_path, {sessions[0]: [company("OLD", "1")], sessions[16]: [company("NEW", "1")]})
+    prices = evaluate.Prices(_cache(tmp_path / "b", bars, [("NEW", sessions[17], 1.0, 4.0)], sessions=sessions), sessions[0], directory)
+    outcome = prices.observe("OLD", sessions[0], 20)
+    assert outcome.status == "renamed" and outcome.ret == pytest.approx(0.0)
+    curve = backtest.ledger_curve(_records([sessions[0]], ["OLD"]), prices, "v15/balanced/mid", "mixed", holding=20, spacing=5, top=1)
+    by_day = {point["date"]: point["value"] for point in curve}
+    assert by_day[sessions[16]] == pytest.approx(1.0) and by_day[sessions[17]] == pytest.approx(1.0)
+    assert by_day[sessions[20]] == pytest.approx(1.0)  # 4 sleeves; only the first holds anything
+
+
+def test_ledger_sleeves_follow_the_calendar_and_report_passive_spy(tmp_path):
+    sessions = LONG[:25]
+    bars = {"SPY": {day: (100.0 + i, 100.0 + i) for i, day in enumerate(sessions)}, "UP": {day: (10.0 + i, 10.0 + i) for i, day in enumerate(sessions)}}
+    prices = evaluate.Prices(_cache(tmp_path, bars, sessions=sessions), sessions[0])
+    # Signals at index 0 and 10; the date at index 5 has no record, so its sleeve stays idle.
+    curve = backtest.ledger_curve(_records([sessions[0], sessions[10]], ["UP"]), prices, "v15/balanced/mid", "mixed", holding=10, spacing=5, top=1)
+    by_day = {point["date"]: point for point in curve}
+    assert by_day[sessions[6]]["invested_sleeves"] == 1  # sleeve 0 holds UP; sleeve 1 idle (no record at index 5)
+    assert by_day[sessions[11]]["invested_sleeves"] == 1  # index 10 maps back to sleeve 0, re-entered after its exit at 10
+    assert by_day[sessions[11]]["value"] == pytest.approx(0.5 * (20.0 / 11.0) * (21.0 / 21.0) + 0.5)
+    assert curve[0]["spy_passive"] == pytest.approx(1.0) and by_day[sessions[20]]["spy_passive"] == pytest.approx(120.0 / 101.0)
 
 
 def test_ledger_values_censored_positions_under_the_three_bounds(tmp_path):
@@ -376,10 +441,16 @@ def test_export_backtest_writes_legacy_and_ledger_curves_with_stated_assumptions
     assert kinds == {"legacy_weekly", "legacy_overlap13w", "ledger_h63", "ledger_weekly"}
     assert {row["cost_bps"] for row in curves if row["holding"].startswith("ledger")} == {"0.0", "10.0"}
     assert {row["bound"] for row in curves if row["holding"] == "ledger_h63"} == {"legacy", "zero", "loss"}
+    assert {row["bound"] for row in curves if row["holding"] == "ledger_weekly"} == {"legacy", "zero", "loss"}
+    ledger_rows = [row for row in curves if row["holding"].startswith("ledger")]
+    assert all(row["spy_passive"] != "" and row["relative_passive"] != "" for row in ledger_rows)
     assert all(row["bound"] == "legacy" and row["cost_bps"] == "0" for row in curves if row["holding"].startswith("legacy"))
     end = json.loads((out / "ledger_end_values.json").read_text())
     assert end["cost_bps"] == 10 and end["rules"]["empty_slot"] == "SPY" and end["identity_verification"] is False
     assert {item["holding"] for item in end["end_values"]} == {"ledger_h63", "ledger_weekly"}
+    weekly = [item for item in end["end_values"] if item["holding"] == "ledger_weekly"]
+    assert {item["bound"] for item in weekly} == {"legacy", "zero", "loss"}
+    assert all(item["spy_passive"] and item["relative_passive"] and item["start_date"] < item["end_date"] for item in end["end_values"])
     daily = list(__import__("csv").DictReader((out / "daily_series.csv").open()))
     assert {"slot_excess_pct", "slot_legacy_pct", "slot_loss_pct", "observable", "unobservable", "empty_slots"} <= set(daily[0])
     # GONE is censored without a directory: the primary excess leaves it out, the legacy column keeps the back-fill.
@@ -423,8 +494,57 @@ def test_result_pack_reads_legacy_and_fixed_results_and_lists_unverifiable_data(
     rows = pack["comparisons"]["tilt_b"]["rows"]
     assert {row["what"] for row in rows} == {"tilt_b minus v15, stock list", "tilt_b own excess over SPY, stock list",
                                              "v15 own excess over SPY, stock list"}
+    assert pack["comparisons"]["tilt_b"]["baseline_verified"] is False  # no decision.json in this synthetic stage
     assert pack["ledgers"][0]["cost_bps"] == 10 and pack["ledgers"][0]["end_values"] == [{"relative": 1.1}]
     assert pack["notes"] == ["synthetic"] and len(pack["unverifiable_execution_data"]) >= 5
+
+
+def test_result_pack_resolves_a_comparison_in_the_stage_evaluated_against_its_baseline(tmp_path, monkeypatch):
+    pack_module = _load("result_pack")
+    header = "comparison,metric,variant,profile,holding,period,days,days_removed,mean_diff_pct,nw_t,share_days_positive\n"
+    stage1, stage2 = tmp_path / "stage1", tmp_path / "stage2"
+    for folder in (stage1, stage2):
+        folder.mkdir()
+        (folder / "primary.csv").write_text("list_type,profile,variant,h63_ALL\nstock,conservative,v16,-2.9\n")
+    # Stage 1 was evaluated against v16 and holds v16's own level, plus cons17's difference.
+    (stage1 / "decision.json").write_text(json.dumps({"baseline": "v16"}))
+    (stage1 / "paired.csv").write_text(header +
+        "level_stock,slot,v16,conservative,63,ALL,165,0,-2.908,-2.98,0.3\n"
+        "variant_minus_baseline_stock,slot,cons17,conservative,63,ALL,163,2,3.519,3.95,0.7\n"
+        "stock_minus_mixed,slot,v16,conservative,63,ALL,165,0,0.343,2.69,0.6\n")
+    # Stage 2 was evaluated against v16 too and holds S1's difference.
+    (stage2 / "decision.json").write_text(json.dumps({"baseline": "v16"}))
+    (stage2 / "paired.csv").write_text(header +
+        "level_stock,slot,v16,conservative,63,ALL,137,0,-2.884,-2.48,0.3\n"
+        "variant_minus_baseline_stock,slot,cons17+nofund,conservative,63,ALL,136,1,3.748,3.59,0.7\n"
+        "level_stock,slot,cons17+nofund,conservative,63,ALL,136,1,0.86,0.75,0.5\n")
+    # A third directory evaluated against V1 for the V2 rule.
+    vs_v1 = tmp_path / "vs_v1"
+    vs_v1.mkdir()
+    (vs_v1 / "primary.csv").write_text("list_type,profile,variant,h63_ALL\nstock,conservative,cons17+nofund,0.86\n")
+    (vs_v1 / "decision.json").write_text(json.dumps({"baseline": "cons17+nofund"}))
+    (vs_v1 / "paired.csv").write_text(header +
+        "variant_minus_baseline_stock,slot,cons17_atr125+nofund,conservative,63,ALL,160,3,-0.5,-1.1,0.45\n"
+        "level_stock,slot,cons17+nofund,conservative,63,ALL,160,3,0.86,0.75,0.5\n")
+    out = tmp_path / "pack.json"
+    monkeypatch.setattr(sys, "argv", ["result_pack.py", "--stage", f"stage1={stage1}", "--stage", f"stage2={stage2}",
+                                      "--stage", f"v2_vs_v1={vs_v1}",
+                                      "--compare", "S1=v16:cons17+nofund:conservative",
+                                      "--compare", "cons17=v16:cons17:conservative",
+                                      "--compare", "stock_only=v16:v16:conservative",
+                                      "--compare", "V2=cons17+nofund:cons17_atr125+nofund:conservative",
+                                      "--compare", "missing=v16:nobody:conservative", "--out", str(out)])
+    pack_module.main()
+    pack = json.loads(out.read_text())
+    assert pack["stages"][0]["baseline"] == "v16" and pack["stages"][2]["baseline"] == "cons17+nofund"
+    s1 = pack["comparisons"]["S1"]
+    assert s1["stage"] == "stage2"  # not stage1, whose only matching rows were the baseline's own level
+    assert [row["mean_diff_pct"] for row in s1["rows"] if row["comparison"] == "variant_minus_baseline_stock"] == [3.748]
+    assert pack["comparisons"]["cons17"]["stage"] == "stage1" and pack["comparisons"]["cons17"]["baseline_verified"] is True
+    assert [row["comparison"] for row in pack["comparisons"]["stock_only"]["rows"]] == ["stock_minus_mixed"]
+    v2 = pack["comparisons"]["V2"]
+    assert v2["stage"] == "v2_vs_v1" and v2["rows"][0]["mean_diff_pct"] == -0.5
+    assert "missing" not in pack["comparisons"]
 
 
 # ---------------------------------------------------------------- replay helpers (unchanged)
