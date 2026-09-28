@@ -293,7 +293,16 @@ def test_evaluate_and_paired_produce_v17_tables(replay_setup, monkeypatch, tmp_p
     rows = list(__import__("csv").DictReader((out / "paired.csv").open()))
     # One date only: fewer than three points, so no paired row can be formed - the file still has its header.
     assert rows == []
-    assert (out / "paired.csv").read_text().startswith("comparison,variant,profile")
+    assert (out / "paired.csv").read_text().startswith("comparison,metric,variant,profile,holding,period,days,days_removed")
+    # The v1.7 tables carry the observation coverage, the bounds and the unfilled means of the fixed evaluator.
+    assert {"h63_ALL_legacy", "h63_ALL_zero", "h63_ALL_loss", "h63_unfilled_P1", "observable_share_h63"} <= set(primary[0])
+    v16_row = next(row for row in primary if row["variant"] == "v16" and row["profile"] == "balanced" and row["list_type"] == "stock")
+    assert v16_row["observable_share_h63"] == "1.0"  # every synthetic name trades on every session
+    verdict = decision["variant_vs_baseline"]["cons17/conservative/stock"]
+    assert {"rules_1_2_4_5", "unfilled_P1_up", "unfilled_P2_up", "length_ok_80pct"} <= set(verdict)
+    assert (out / "coverage.csv").exists() and (out / "rules.json").exists()
+    rules = json.loads((out / "rules.json").read_text())
+    assert rules["exit_lag_sessions"] == 5 and rules["identity_verification"] is False
 
 
 def test_replay_directories_merge_by_date_and_shared_views_must_agree(replay_setup, tmp_path):
