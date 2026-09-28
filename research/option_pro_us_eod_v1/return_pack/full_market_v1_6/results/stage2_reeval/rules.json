@@ -1,0 +1,29 @@
+{
+ "exit_lag_sessions": 5,
+ "lookahead_sessions": 63,
+ "rename_lag_sessions": 5,
+ "rename_price_ratio": [
+  0.5,
+  2.0
+ ],
+ "observable_statuses": [
+  "ok",
+  "ok_bridged",
+  "ok_late_exit",
+  "renamed"
+ ],
+ "censored_statuses": [
+  "censored_temporary",
+  "censored_terminal",
+  "censored_unknown",
+  "censored_unverified"
+ ],
+ "primary": "sum(observable excess) / (observable + pre-decided empty slots); unobservable names removed",
+ "bounds": {
+  "legacy": "censored at the last observed close over the shortened window (pre-fix behaviour)",
+  "zero": "censored at zero excess, kept in the denominator",
+  "loss": "censored as a total loss (return -1) against SPY over the full window"
+ },
+ "directory": "/private/tmp/claude-501/-Users-admin-Downloads-Claude/99ab3c9e-6f66-4900-9bd7-3b470a45eea9/scratchpad/data/data/massive_directory_2026-09-27",
+ "identity_verification": true
+}
