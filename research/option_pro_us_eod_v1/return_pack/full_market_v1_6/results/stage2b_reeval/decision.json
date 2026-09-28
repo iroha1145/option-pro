@@ -1,0 +1,117 @@
+{
+ "baseline": "v15",
+ "rules": {
+  "exit_lag_sessions": 5,
+  "lookahead_sessions": 63,
+  "rename_lag_sessions": 5,
+  "rename_price_ratio": [
+   0.5,
+   2.0
+  ],
+  "observable_statuses": [
+   "ok",
+   "ok_bridged",
+   "ok_late_exit",
+   "renamed"
+  ],
+  "censored_statuses": [
+   "censored_temporary",
+   "censored_terminal",
+   "censored_unknown",
+   "censored_unverified"
+  ],
+  "primary": "sum(observable excess) / (observable + pre-decided empty slots); unobservable names removed",
+  "bounds": {
+   "legacy": "censored at the last observed close over the shortened window (pre-fix behaviour)",
+   "zero": "censored at zero excess, kept in the denominator",
+   "loss": "censored as a total loss (return -1) against SPY over the full window"
+  }
+ },
+ "variant_vs_v15_mixed": {
+  "d12m1/balanced": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 3,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 1.059
+  },
+  "d12m1/aggressive": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.942
+  }
+ },
+ "variant_vs_v15_stock": {
+  "d12m1/balanced": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.283
+  },
+  "d12m1/aggressive": {
+   "P1_up": false,
+   "P2_up": true,
+   "years_better": 3,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": -0.032
+  }
+ },
+ "stock_vs_mixed": {
+  "v15/conservative": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.173
+  },
+  "v15/balanced": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.833
+  },
+  "v15/aggressive": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 1.142
+  },
+  "d12m1/balanced": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 3,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.038
+  },
+  "d12m1/aggressive": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.061
+  }
+ }
+}

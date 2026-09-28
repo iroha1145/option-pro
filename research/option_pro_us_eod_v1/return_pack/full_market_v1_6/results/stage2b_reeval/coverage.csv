@@ -1,0 +1,11 @@
+variant,profile,list_type,top,holding,days,days_observable,selected_names,observable_names,observable_share,empty_slots,n_ok,n_ok_bridged,n_ok_late_exit,n_renamed,n_censored_temporary,n_censored_terminal,n_censored_unknown,n_censored_unverified,n_no_entry_bar,n_identity_uncertain
+d12m1,aggressive,mixed,20,63,411,411,8220,7824,0.9518,0,7794,0,0,30,0,379,3,0,14,0
+d12m1,aggressive,stock,20,63,411,411,8201,7756,0.9457,19,7726,0,0,30,0,426,4,0,15,0
+d12m1,balanced,mixed,20,63,411,411,8212,7804,0.9503,8,7777,0,0,27,0,385,7,1,15,0
+d12m1,balanced,stock,20,63,411,411,8187,7743,0.9458,33,7713,0,1,29,0,420,7,1,16,0
+v15,aggressive,mixed,20,63,411,411,8220,7879,0.9585,0,7852,0,0,27,0,324,4,0,13,0
+v15,aggressive,stock,20,63,411,411,8203,7788,0.9494,17,7757,0,0,31,0,397,4,0,14,0
+v15,balanced,mixed,20,63,411,411,8220,7859,0.9561,0,7830,0,0,29,0,343,5,0,13,0
+v15,balanced,stock,20,63,411,411,8191,7758,0.9471,29,7728,0,0,30,0,411,6,0,16,0
+v15,conservative,mixed,20,63,411,411,7828,7642,0.9762,392,7638,0,0,4,0,175,11,0,0,0
+v15,conservative,stock,20,63,411,411,7717,7522,0.9747,503,7518,0,0,4,0,184,11,0,0,0
