@@ -517,7 +517,8 @@ def test_result_pack_resolves_a_comparison_in_the_stage_evaluated_against_its_ba
     (stage2 / "paired.csv").write_text(header +
         "level_stock,slot,v16,conservative,63,ALL,137,0,-2.884,-2.48,0.3\n"
         "variant_minus_baseline_stock,slot,cons17+nofund,conservative,63,ALL,136,1,3.748,3.59,0.7\n"
-        "level_stock,slot,cons17+nofund,conservative,63,ALL,136,1,0.86,0.75,0.5\n")
+        "level_stock,slot,cons17+nofund,conservative,63,ALL,136,1,0.86,0.75,0.5\n"
+        "variant_minus_baseline_stock,slot,cons17,conservative,63,ALL,136,1,3.9,3.7,0.7\n")
     # A third directory evaluated against V1 for the V2 rule.
     vs_v1 = tmp_path / "vs_v1"
     vs_v1.mkdir()
@@ -531,6 +532,8 @@ def test_result_pack_resolves_a_comparison_in_the_stage_evaluated_against_its_ba
                                       "--stage", f"v2_vs_v1={vs_v1}",
                                       "--compare", "S1=v16:cons17+nofund:conservative",
                                       "--compare", "cons17=v16:cons17:conservative",
+                                      "--compare", "cons17_stage2=v16:cons17:conservative@stage2",
+                                      "--compare", "cons17_elsewhere=v16:cons17:conservative@v2_vs_v1",
                                       "--compare", "stock_only=v16:v16:conservative",
                                       "--compare", "V2=cons17+nofund:cons17_atr125+nofund:conservative",
                                       "--compare", "missing=v16:nobody:conservative", "--out", str(out)])
@@ -541,6 +544,11 @@ def test_result_pack_resolves_a_comparison_in_the_stage_evaluated_against_its_ba
     assert s1["stage"] == "stage2"  # not stage1, whose only matching rows were the baseline's own level
     assert [row["mean_diff_pct"] for row in s1["rows"] if row["comparison"] == "variant_minus_baseline_stock"] == [3.748]
     assert pack["comparisons"]["cons17"]["stage"] == "stage1" and pack["comparisons"]["cons17"]["baseline_verified"] is True
+    # The same candidate appears in two stages: the first wins unless @stage pins the comparison.
+    pinned = pack["comparisons"]["cons17_stage2"]
+    assert pinned["stage"] == "stage2"
+    assert [row["mean_diff_pct"] for row in pinned["rows"] if row["comparison"] == "variant_minus_baseline_stock"] == [3.9]
+    assert "cons17_elsewhere" not in pack["comparisons"]  # pinned to a stage evaluated against another baseline
     assert [row["comparison"] for row in pack["comparisons"]["stock_only"]["rows"]] == ["stock_minus_mixed"]
     v2 = pack["comparisons"]["V2"]
     assert v2["stage"] == "v2_vs_v1" and v2["rows"][0]["mean_diff_pct"] == -0.5
