@@ -58,6 +58,8 @@ $PY $P/scripts/smoke_compare.py --export ... --replay /content/replay/smoke --va
 
 `hybrid_otc` 对生产，按 PREREGISTRATION 第 8 节的门槛判定；`baseline` 对生产给出去掉 OTC 的效果（每日事件数之比）。`summary.json` 的 `discovery.relvol_ratio_prod_over_replay.p50` 是相对量比例系数，填到下面。
 
+比对分两段（PREREGISTRATION 修订 1）：主段 09-18 到 09-25，直接比；副段 09-08 到 09-15，加 `--exclude-current-leveraged`，把今天会剔除的杠杆基金从生产侧去掉再比；09-16、09-17 不比。`smoke_compare.py` 只取回放里出现过的交易日，所以分段只要把 `--replay` 指向对应日期的输出目录（或分两次回放）。
+
 - 相对量比例系数：待填（写入正式回放的 `--relvol-scale`）。
 - 每次扫描单核用时（`run.json` 的 `elapsed_s` 除以扫描数）：待填。
 

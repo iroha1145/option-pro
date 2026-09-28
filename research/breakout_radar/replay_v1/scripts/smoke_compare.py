@@ -81,15 +81,32 @@ def main() -> None:
     parser.add_argument("--replay", type=Path, required=True, help="replay output directory (holds <variant>/ledger)")
     parser.add_argument("--variant", default="hybrid_otc")
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument(
+        "--exclude-current-leveraged", action="store_true",
+        help="drop production candidates and events that today's asset_policy.is_leveraged_etf flags "
+             "(production only excluded them from 2026-09-17 09:00 ET)",
+    )
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
     tables = read_export(args.export)
+    ledgers = [r for r in read_ledgers(args.replay / args.variant / "ledger") if r["kind"] != "t1" and not r.get("warmup")]
+    replay_days = {ts(r["as_of"]).astimezone(NY).date().isoformat() for r in ledgers}
     runs = {r["scan_run_id"]: r for r in tables["breakout_scan_runs"]}
-    completed = {k: v for k, v in runs.items() if v["status"] == "completed"}
+    # Only completed production scans on the replayed days take part.
+    completed = {
+        k: v for k, v in runs.items()
+        if v["status"] == "completed" and ts(v["scheduled_at"]).astimezone(NY).date().isoformat() in replay_days
+    }
     by_as_of = {ts(r["scheduled_at"]): k for k, r in completed.items()}
-    ledgers = [r for r in read_ledgers(args.replay / args.variant / "ledger") if r["kind"] != "t1"]
     replay_by_as_of = {ts(r["as_of"]): r for r in ledgers}
+
+    if args.exclude_current_leveraged:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "backend"))
+        from app.services.breakouts.asset_policy import is_leveraged_etf
+    else:
+        def is_leveraged_etf(*_args: Any, **_kwargs: Any) -> bool:
+            return False
 
     # ---- production tables reshaped
     prod_candidates: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -97,6 +114,8 @@ def main() -> None:
         if row["scan_run_id"] in completed:
             body = json.loads(row["candidate_json"])
             body["ticker"] = str(row["ticker"]).upper()
+            if is_leveraged_etf(body.get("asset_type"), body.get("name"), {}):
+                continue
             prod_candidates[row["scan_run_id"]].append(body)
     prod_structures: dict[str, dict[str, str]] = defaultdict(dict)
     for row in tables["breakout_structures"]:
@@ -107,6 +126,10 @@ def main() -> None:
         if row["scan_run_id"] not in completed:
             continue
         body = json.loads(row["event_snapshot_json"])
+        if str(body.get("exchange") or "").upper() == "OTC" or is_leveraged_etf(body.get("asset_type"), body.get("name"), {}):
+            continue
+        if str(body.get("trading_date")) not in replay_days:
+            continue
         prod_snapshots[row["scan_run_id"]][row["event_id"]] = body
         first = prod_first.get(row["event_id"])
         if first is None or ts(completed[row["scan_run_id"]]["scheduled_at"]) < first["_as_of"]:
@@ -194,6 +217,8 @@ def main() -> None:
     prod_last_state: dict[tuple, str] = {}
     for record in sorted(ledgers, key=lambda r: r["as_of"]):
         for event in record["events"]:
+            if event["trading_date"] not in replay_days:
+                continue
             key = (event["ticker"], event["trading_date"], event["origin_setup_type"] or event["setup_type"])
             replay_last_state[key] = event["lifecycle_state"]
             if event["lifecycle_state"] in TRIGGERED_STATES and key not in replay_events:
@@ -255,8 +280,32 @@ def main() -> None:
                 t1_total += 1
                 t1_agree += prod_t1[row["event_id"]] == row["status"]
 
+    by_day: dict[str, dict[str, Any]] = {}
+    for row in discovery_rows:
+        day = ts(row["as_of"]).astimezone(NY).date().isoformat()
+        bucket = by_day.setdefault(day, {"scans": 0, "jaccard": [], "top60": [], "prod_listed": 0, "replay_listed": 0})
+        bucket["scans"] += 1
+        bucket["prod_listed"] += row["prod_listed"]
+        bucket["replay_listed"] += row["replay_listed"]
+        if row["jaccard"] is not None:
+            bucket["jaccard"].append(row["jaccard"])
+        if row["top60_overlap"] is not None:
+            bucket["top60"].append(row["top60_overlap"])
+    per_day = {
+        day: {
+            "scans": b["scans"], "prod_listed_per_scan": round(b["prod_listed"] / b["scans"], 1),
+            "replay_listed_per_scan": round(b["replay_listed"] / b["scans"], 1),
+            "jaccard_p50": statistics.median(b["jaccard"]) if b["jaccard"] else None,
+            "top60_overlap_p50": statistics.median(b["top60"]) if b["top60"] else None,
+        }
+        for day, b in sorted(by_day.items())
+    }
+
     summary = {
         "variant": args.variant,
+        "exclude_current_leveraged": args.exclude_current_leveraged,
+        "replay_days": sorted(replay_days),
+        "per_day": per_day,
         "matched_scans": len(matched),
         "production_completed_scans": len(completed),
         "replay_scans_without_production_match": len(unmatched_replay),

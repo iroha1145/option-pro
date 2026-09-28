@@ -51,6 +51,14 @@ class DayContext:
     cumulative_volume: np.ndarray  # tickers x slots
     previous_close: np.ndarray
     mean_volume_10: np.ndarray
+    previous_relvol: np.ndarray  # yesterday's full-day volume over its 10-day average
+
+
+# TradingView's volume-derived fields roll to the new session per symbol during the
+# first minutes: at 09:37 and 09:43 ET every production candidate still carried the
+# previous session's relative volume, by 09:56 most had rolled (smoke day 1).
+STALE_RELVOL_UNTIL_MINUTE = 9 * 60 + 45
+ROLLING_RELVOL_UNTIL_MINUTE = 10 * 60
 
 
 def build_day_context(
@@ -82,13 +90,16 @@ def build_day_context(
         volumes.append(volume)
     if not tickers:
         empty = np.zeros((0, SLOTS_PER_DAY))
-        return DayContext(day, [], [], empty, empty, np.zeros(0), np.zeros(0))
+        return DayContext(day, [], [], empty, empty, np.zeros(0), np.zeros(0), np.zeros(0))
     close_matrix = np.vstack(closes)
     close_ffill = pd.DataFrame(close_matrix).ffill(axis=1).to_numpy()
     cumulative = np.nancumsum(np.vstack(volumes), axis=1)
     previous = np.array([daily_store.previous_close(t, day) or np.nan for t in tickers], dtype=float)
     mean10 = np.array([daily_store.mean_volume(t, day, 10) or np.nan for t in tickers], dtype=float)
-    return DayContext(day, tickers, metas, close_ffill, cumulative, previous, mean10)
+    previous_relvol = np.array(
+        [daily_store.previous_session_relvol(t, day, 10) or np.nan for t in tickers], dtype=float
+    )
+    return DayContext(day, tickers, metas, close_ffill, cumulative, previous, mean10, previous_relvol)
 
 
 def last_complete_slot(as_of: datetime) -> int:
@@ -216,9 +227,17 @@ class ReplayDiscoveryProvider:
             slot = min(slot, SLOTS_PER_DAY - 1)
             last_close = context.close_ffill[:, slot]
             cumulative = context.cumulative_volume[:, slot]
+            minute = as_of.astimezone(NY).hour * 60 + as_of.astimezone(NY).minute
             with np.errstate(invalid="ignore", divide="ignore"):
                 change = (last_close / context.previous_close - 1.0) * 100.0
-                relvol = cumulative / context.mean_volume_10 * self.relvol_scale
+                today_relvol = cumulative / context.mean_volume_10 * self.relvol_scale
+            stale = context.previous_relvol
+            if session is MarketSession.PREMARKET or minute < STALE_RELVOL_UNTIL_MINUTE:
+                relvol = stale
+            elif minute < ROLLING_RELVOL_UNTIL_MINUTE:
+                relvol = np.fmax(stale, today_relvol)
+            else:
+                relvol = today_relvol
             if session is MarketSession.PREMARKET:
                 passing = (
                     (last_close >= settings.min_price)

@@ -300,15 +300,34 @@ class DailyStore:
             return None
         return _finite(frame["Close"].iloc[-1])
 
-    def mean_volume(self, ticker: str, day: date, sessions: int = 10) -> float | None:
+    def mean_volume(self, ticker: str, day: date, sessions: int = 10, *, min_sessions: int = 1) -> float | None:
+        """Average volume of the last ``sessions`` sessions before ``day`` (fewer when young)."""
+
         frame = self.frame(ticker, through=day - timedelta(days=1), as_of_day=day)
-        if len(frame) < sessions:
-            return None
-        values = pd.to_numeric(frame["Volume"].tail(sessions), errors="coerce").dropna()
-        if len(values) < sessions:
+        values = pd.to_numeric(frame["Volume"], errors="coerce").dropna().tail(sessions)
+        if len(values) < min_sessions:
             return None
         mean = _finite(values.mean())
         return mean if mean is not None and mean > 0 else None
+
+    def previous_session_relvol(self, ticker: str, day: date, sessions: int = 10) -> float | None:
+        """The prior session's full-day volume over the 10-session average before it.
+
+        TradingView's ``relative_volume_10d_calc`` still shows this value in the first
+        minutes of the regular session and throughout pre-market (smoke day 1: the ratio
+        to it was exactly 1.00 at 09:37 and 09:43 ET).
+        """
+
+        frame = self.frame(ticker, through=day - timedelta(days=1), as_of_day=day)
+        values = pd.to_numeric(frame["Volume"], errors="coerce").dropna()
+        if len(values) < 2:
+            return None
+        history = values.iloc[:-1].tail(sessions)
+        mean = _finite(history.mean())
+        last = _finite(values.iloc[-1])
+        if mean is None or mean <= 0 or last is None:
+            return None
+        return last / mean
 
 
 # --------------------------------------------------------------------------- FRED

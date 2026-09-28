@@ -248,6 +248,30 @@ def test_one_warmup_day_reproduces_the_contiguous_run_byte_for_byte(frozen: dict
     assert reference and json.dumps(reference, sort_keys=True) == json.dumps(warmed, sort_keys=True)
 
 
+def test_relative_volume_is_stale_before_0945_and_live_after_1000(frozen: dict) -> None:
+    from datetime import datetime
+
+    from harness.discovery import ReplayDiscoveryProvider
+    from harness.stores import DailyStore, DirectoryMetadata, MinuteStore
+
+    settings = build_settings("baseline", frozen["root"] / "stale.sqlite")
+    provider = ReplayDiscoveryProvider(
+        settings, minute_store=MinuteStore(frozen["minute"]), daily_store=DailyStore(frozen["daily"]),
+        metadata=DirectoryMetadata(frozen["directory"]), market_cap_source="none",
+    )
+    context = provider.day_context(DAY1)
+    index = context.tickers.index("TA")
+    assert np.isfinite(context.previous_relvol[index]) and abs(context.previous_relvol[index] - 1.0) < 0.05
+    from app.services.breakouts.models import MarketSession
+
+    early = {row[0]: row for row in provider._tradingview_rows(MarketSession.REGULAR, datetime(2026, 7, 8, 9, 40, tzinfo=NY))}
+    late = {row[0]: row for row in provider._tradingview_rows(MarketSession.REGULAR, datetime(2026, 7, 8, 10, 35, tzinfo=NY))}
+    # TA jumps 6% at the seventh regular bar (10:00): at 09:40 it is not a mover yet; at 10:35 it is,
+    # and its relative volume is the live cumulative ratio, well above yesterday's 1.0.
+    assert "TA" not in early and "TA" in late
+    assert late["TA"][8] > 1.5
+
+
 def test_memo_off_is_byte_identical_to_memo_on(frozen: dict) -> None:
     on = run_segment(_config(frozen, "memo_on", start=DAY2, end=DAY3, warmup=1, variants=["baseline"], memo=True))
     off = run_segment(_config(frozen, "memo_off", start=DAY2, end=DAY3, warmup=1, variants=["baseline"], memo=False))
