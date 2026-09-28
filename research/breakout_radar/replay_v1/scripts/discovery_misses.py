@@ -81,7 +81,8 @@ def main() -> None:
             return False
 
     tables = read_export(args.export)
-    ledgers = [r for r in read_ledgers(args.replay / args.variant / "ledger") if r["kind"] != "t1" and not r.get("warmup")]
+    variant_dir = args.replay / args.variant.replace("+", "_")  # the runner names combined variants this way
+    ledgers = [r for r in read_ledgers(variant_dir / "ledger") if r["kind"] != "t1" and not r.get("warmup")]
     if args.start is not None:
         ledgers = [r for r in ledgers if ts(r["as_of"]).astimezone(NY).date() >= args.start]
     if args.end is not None:

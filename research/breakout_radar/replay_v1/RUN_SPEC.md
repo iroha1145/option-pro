@@ -50,7 +50,7 @@ cmp <(zcat /content/replay/id_ref/baseline/snapshots/2026-09-22.jsonl.gz) <(zcat
 cmp <(zcat /content/replay/id_ref/baseline/snapshots/2026-09-22.jsonl.gz) <(zcat /content/replay/id_trim_off/baseline/snapshots/2026-09-22.jsonl.gz)
 ```
 
-两个 `cmp` 都必须无输出（zsh 里数组要写成 `"${COMMON[@]}"`，不加引号的 `$COMMON` 不会拆词）。`run.json` 里 `variants.baseline.production_field_hash` 必须等于 `cc09185b…`（不等时脚本在启动时就报错）。
+两个 `cmp` 都必须无输出（zsh 里数组要写成 `"${COMMON[@]}"`，不加引号的 `$COMMON` 不会拆词）。`run.json` 里 `variants.baseline.production_field_hash` 必须等于 `cc09185b…`（不等时脚本在启动时就报错）：它对九月生产的 61 个字段计算、并把 `allow_etf` 换回九月的值（真）。`variants.baseline.full_hash` 是全部字段实际值（两个开关都为假）的哈希，等于部署两处修复之后生产会发布的 `config_hash`，部署后从 `breakout_scan_runs.config_hash` 核对一次。与九月导出比对的变体是 `hybrid_otc+hybrid_etf`（复现当时含 OTC、含 ETF 的宇宙）。
 
 ### 1b. 与生产比对（13 天）
 
@@ -59,12 +59,12 @@ BASE=(--daily-db /content/data/replay_smoke_subset.sqlite --minute-store /conten
   --fred /content/data/fred --export /content/data/radar_export_2026-09-08_2026-09-25.jsonl.gz
   --metadata production --market-cap production --grid production --on-degraded raise
   --start 2026-09-08 --end 2026-09-25 --warmup 0)
-$PY $P/scripts/replay.py "${BASE[@]}" --variants hybrid_otc --out /content/replay/smoke_lag --db-dir /content/db/smoke_lag
+$PY $P/scripts/replay.py "${BASE[@]}" --variants hybrid_otc+hybrid_etf --out /content/replay/smoke_lag --db-dir /content/db/smoke_lag
 $PY $P/scripts/replay.py "${BASE[@]}" --variants baseline   --out /content/replay/smoke_lag_baseline --db-dir /content/db/smoke_lag_baseline
-$PY $P/scripts/replay.py "${BASE[@]}" --variants hybrid_otc --bar-delay-seconds 0 --tv-delay-minutes 0 \
+$PY $P/scripts/replay.py "${BASE[@]}" --variants hybrid_otc+hybrid_etf --bar-delay-seconds 0 --tv-delay-minutes 0 \
     --out /content/replay/smoke_realtime --db-dir /content/db/smoke_realtime
 CMP=($PY $P/scripts/smoke_compare.py --export /content/data/radar_export_2026-09-08_2026-09-25.jsonl.gz
-  --daily-db /content/data/replay_smoke_subset.sqlite --minute-store /content/minute_store_smoke --variant hybrid_otc)
+  --daily-db /content/data/replay_smoke_subset.sqlite --minute-store /content/minute_store_smoke --variant hybrid_otc+hybrid_etf)
 "${CMP[@]}" --replay /content/replay/smoke_lag --start 2026-09-18 --end 2026-09-25 --exclude-etf --out $P/results/smoke/primary_noetf
 "${CMP[@]}" --replay /content/replay/smoke_lag --start 2026-09-18 --end 2026-09-25               --out $P/results/smoke/primary
 "${CMP[@]}" --replay /content/replay/smoke_lag --start 2026-09-08 --end 2026-09-15 --exclude-current-leveraged --exclude-etf --out $P/results/smoke/secondary_noetf

@@ -230,7 +230,7 @@ class ReplayDiscoveryProvider:
         if meta.is_fund:
             return None
         if self.market_cap_source == "production":
-            return self.metadata.market_cap(ticker, as_of)
+            return self.metadata.market_cap(ticker, as_of, price)
         if self.market_cap_source == "shares" and self.shares is not None:
             shares = self.shares.shares(ticker, day)
             return price * shares if shares else None

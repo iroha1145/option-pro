@@ -734,6 +734,14 @@ OTC 占位的代价（同一份代理与数据，`baseline` 不含 OTC 对 `hybr
 
 USDE 的 `previous_regular_close` 生产 12.60、回放 13.54：生产的日线（Yahoo 来源，USDE 上市不满 380 个交易日）与 Massive 日线的前收不同，是 20.10 说过的年轻代码日线来源差异。
 
+### 20.13 市值门槛：TradingView 的市值随价格动，烟雾比对里的市值来源有偏
+
+协调方在线核实：SRZN、GLND、DFDV 都是 NASDAQ 普通股、`update_mode` 为 delayed_streaming_900，当前市值 344.8M、202.5M、181.0M，都贴着规范化器的 2 亿门槛（`provider_min_market_cap`，normalizer.py:192）；被门槛剔掉的行不入库，所以「导出里没有」不等于「TradingView 没返回」。
+
+导出里同一代码同一天的多行：市值 ÷ 价格（隐含股数）在日内的变异系数中位数 2.4%、第 90 百分位 7.4%（155 组日内涨跌超过 5% 的代码日），也就是 `market_cap_basic` 随（延迟的）价格一起变，不是前收固定值。
+
+烟雾比对用的 `--market-cap production` 此前对生产当次没列出的代码取该代码在整个导出里最后一行的市值，涨上去之后的市值被套到之前：GLND 09-21 用了 09-25 的 205M（按当日价 3.02 与隐含股数只有 132M），DFDV 09-18 用了 09-22 的 212M（当日 183M）。改为最近一行的隐含股数乘回放价格后，这两只在那几天都低于 2 亿、会被剔除，与生产一致；SRZN 09-24 按 11.75M 股在 30 到 34 美元是 350M 到 400M，市值解释不了，仍留给协调方查停牌。主段 1,116 行「生产当天从没列过」的非 ETF 回放行里，按隐含股数乘回放价格算出低于 2 亿的有 347 行（GLND 98、DFDV 78、ARMP 53、MINE 44、AEHL 30、TONX 26、MSLE 16），正式回放用点时股数时预计这些消失；其余 769 行（SRZN 73 行在内）是市值以外的原因。这份改动没有重跑 13 天。
+
 ## 附录 A：普查查询（在 `replay.sqlite` 上跑）
 
 表结构见 `backend/app/services/eod_limited/market_data.py:89-133`。窗口函数需要 SQLite 3.25 以上，Colab 的 Python 自带版本满足。

@@ -39,7 +39,9 @@ PRODUCTION_FIELDS_35ab1395 = (
 )
 
 # Production config/personal.toml [breakout] plus the two RANGE_PERSISTENCE_* worker
-# environment variables; everything else is the code default.
+# environment variables; everything else is the code default. The two fixes this
+# branch ships are stated explicitly so the baseline is production *after* them
+# whatever the code default is at the time: no OTC rows, no ordinary ETFs.
 PRODUCTION_ALIASES: dict[str, Any] = {
     "BREAKOUT_RADAR_ENABLED": True,
     "RANGE_PERSISTENCE_MODE": "enabled",  # personal.toml "active"
@@ -48,7 +50,14 @@ PRODUCTION_ALIASES: dict[str, Any] = {
     "BREAKOUT_SCAN_INTERVAL_PREMARKET_SECONDS": 600,
     "BREAKOUT_SCAN_INTERVAL_CLOSED_SECONDS": 1800,
     "BREAKOUT_SCAN_RETENTION_DAYS": 90,
+    "BREAKOUT_ALLOW_OTC": False,
+    "BREAKOUT_ALLOW_ETF": False,
 }
+
+# Values the September 2026 production ran with for fields the fixes change. The
+# proof hash overlays them so it still equals the export's config_hash; the full
+# hash (every field, actual values) is what production publishes after deploy.
+SEPTEMBER_PRODUCTION_VALUES: dict[str, Any] = {"allow_etf": True}
 
 # Candidate switches (DATA_SPEC section 8.2 and 13). Keys are settings aliases; the
 # "research" entry holds private-attribute overrides that leave the hash unchanged.
@@ -68,6 +77,9 @@ VARIANTS: dict[str, dict[str, Any]] = {
     "lookback19": {"research": {"rvol_lookback_sessions": 19}},
     # Smoke test only: keep production's OTC rows as slot takers (DATA_SPEC 11.2).
     "hybrid_otc": {"BREAKOUT_ALLOW_OTC": True},
+    # Smoke-only: production listed ordinary ETFs until the second fix; comparisons
+    # with the September export run hybrid_otc+hybrid_etf.
+    "hybrid_etf": {"BREAKOUT_ALLOW_ETF": True},
 }
 
 
@@ -106,7 +118,15 @@ def build_settings(variant: str, db_path: Path | str) -> BreakoutSettings:
 
 
 def production_field_hash(settings: BreakoutSettings) -> str:
-    dump = settings.model_dump(mode="json")
+    """The September export's config_hash, recomputed from these settings.
+
+    Production hashed ``model_dump(mode="json")`` of the 61 fields it had at
+    35ab1395; the fields added since (allow_otc) are left out and the fields the
+    fixes flipped (allow_etf) take their September values, so the check proves
+    every other value matches production.
+    """
+
+    dump = {**settings.model_dump(mode="json"), **SEPTEMBER_PRODUCTION_VALUES}
     return _stable_hash({name: dump[name] for name in PRODUCTION_FIELDS_35ab1395})
 
 

@@ -775,6 +775,7 @@ class ProductionCandidateMetadata:
         self._cap_by_scan: dict[str, dict[str, float | None]] = defaultdict(dict)
         self._otc_by_scan: dict[str, list[dict[str, Any]]] = defaultdict(list)
         self._scan_as_of: dict[str, datetime] = {}
+        cap_points: dict[str, list[tuple[str, float, float]]] = defaultdict(list)
         columns: dict[str, list[str]] = {}
         current = None
         with gzip.open(export_path, "rt", encoding="utf-8") as handle:
@@ -798,6 +799,8 @@ class ProductionCandidateMetadata:
                     body = json.loads(row["candidate_json"])
                     ticker = str(row["ticker"]).upper()
                     self._cap_by_scan[scan_id][ticker] = _finite(body.get("provider_market_cap"))
+                    if _finite(body.get("provider_market_cap")) and _finite(body.get("price")):
+                        cap_points[ticker].append((scan_id, float(body["provider_market_cap"]), float(body["price"])))
                     if str(body.get("exchange") or "").upper() == "OTC":
                         self._otc_by_scan[scan_id].append(body)
                         continue
@@ -806,6 +809,19 @@ class ProductionCandidateMetadata:
                     if previous is None or stamp >= str(previous.get("provider_timestamp") or ""):
                         self._latest[ticker] = body
         self._scan_by_as_of = {value.astimezone(timezone.utc): key for key, value in self._scan_as_of.items()}
+        # Per ticker, production's (time, market cap, price) points: the cap at a scan
+        # where production did not list the ticker is estimated from the nearest point's
+        # implied share count times the replay's price, the way TradingView's
+        # market_cap_basic moves with price (DATA_SPEC 20.13).
+        self._cap_series: dict[str, tuple[list[float], list[tuple[float, float]]]] = {}
+        for ticker, points in cap_points.items():
+            timed = sorted(
+                (self._scan_as_of[scan_id].timestamp(), cap, price)
+                for scan_id, cap, price in points
+                if scan_id in self._scan_as_of
+            )
+            if timed:
+                self._cap_series[ticker] = ([t for t, _c, _p in timed], [(c, p) for _t, c, p in timed])
 
     def scan_id_for(self, as_of: datetime) -> str | None:
         return self._scan_by_as_of.get(as_of.astimezone(timezone.utc))
@@ -826,12 +842,25 @@ class ProductionCandidateMetadata:
             is_fund=is_fund,
         )
 
-    def market_cap(self, ticker: str, as_of: datetime) -> float | None:
+    def market_cap(self, ticker: str, as_of: datetime, price: float | None = None) -> float | None:
+        """Production's own cap at this scan; otherwise the nearest point's implied shares times ``price``."""
+
         scan_id = self.scan_id_for(as_of)
         if scan_id is not None and ticker in self._cap_by_scan.get(scan_id, {}):
             return self._cap_by_scan[scan_id][ticker]
-        body = self._latest.get(ticker)
-        return _finite(body.get("provider_market_cap")) if body else None
+        series = self._cap_series.get(ticker)
+        if series is None:
+            body = self._latest.get(ticker)
+            return _finite(body.get("provider_market_cap")) if body else None
+        times, values = series
+        stamp = as_of.astimezone(timezone.utc).timestamp()
+        position = bisect_right(times, stamp)
+        candidates = [index for index in (position - 1, position) if 0 <= index < len(times)]
+        nearest = min(candidates, key=lambda index: abs(times[index] - stamp))
+        cap, point_price = values[nearest]
+        if price is not None and price > 0 and point_price > 0:
+            return price * cap / point_price
+        return cap
 
     def otc_rows(self, as_of: datetime) -> list[dict[str, Any]]:
         scan_id = self.scan_id_for(as_of)

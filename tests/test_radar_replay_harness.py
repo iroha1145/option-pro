@@ -207,14 +207,23 @@ def test_settings_grid_matches_the_documented_cadence() -> None:
 
 
 def test_baseline_hashes_like_production_and_variants_do_not(tmp_path) -> None:
+    from app.services.breakouts.worker import _stable_hash
+
+    from harness.settings import full_hash
+
     baseline = build_settings("baseline", tmp_path / "b.sqlite")
     assert production_field_hash(baseline) == PRODUCTION_CONFIG_HASH
-    assert baseline.range_persistence_mode == "enabled" and baseline.allow_otc is False
+    # The baseline is production after the two fixes: no OTC rows, no ordinary ETFs.
+    assert baseline.range_persistence_mode == "enabled" and baseline.allow_otc is False and baseline.allow_etf is False
+    # What production publishes after deploy is the hash of every field's actual value.
+    assert full_hash(baseline) == _stable_hash(baseline.model_dump(mode="json")) != PRODUCTION_CONFIG_HASH
     assert production_field_hash(build_settings("confirm3", tmp_path / "c.sqlite")) != PRODUCTION_CONFIG_HASH
     tuned = build_settings("rvol2", tmp_path / "r.sqlite")
     assert production_field_hash(tuned) == PRODUCTION_CONFIG_HASH
     assert tuned.research_overrides == {"strong_single_rvol_min": 2.0}
     assert build_settings("hybrid_otc", tmp_path / "h.sqlite").allow_otc is True
+    september = build_settings("hybrid_otc+hybrid_etf", tmp_path / "s.sqlite")
+    assert september.allow_etf is True and production_field_hash(september) == PRODUCTION_CONFIG_HASH
 
 
 def test_contiguous_run_is_labelled_and_finds_the_designed_breakouts(frozen: dict) -> None:
