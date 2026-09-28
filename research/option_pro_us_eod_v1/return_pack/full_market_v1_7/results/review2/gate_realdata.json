@@ -1,0 +1,15 @@
+{
+  "code": "claude/eod-v1.7-spy-window 42e0f827",
+  "data": "frozen Massive grouped daily cache (replay.sqlite), point-in-time directory",
+  "sessions_checked": 885,
+  "first": "2023-03-17",
+  "last": "2026-09-25",
+  "status_counts": {
+    "ok": 885
+  },
+  "window_sizes": {
+    "321": 885
+  },
+  "refusals": [],
+  "elapsed_s": 46.9
+}

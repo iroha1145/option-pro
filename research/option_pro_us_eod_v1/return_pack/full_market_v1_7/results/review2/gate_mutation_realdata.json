@@ -1,0 +1,51 @@
+{
+  "target": "2026-09-18",
+  "window": {
+    "first_session": "2025-06-10",
+    "last_session": "2026-09-18",
+    "session_count": 321,
+    "min_history": 330
+  },
+  "cases": {
+    "inside_window": {
+      "dropped": "2026-03-02",
+      "rows_deleted": 1,
+      "status": "refused_window",
+      "problems": [
+        {
+          "benchmark": "SPY",
+          "problem": "missing_bar",
+          "sessions": [
+            "2026-03-02"
+          ]
+        }
+      ]
+    },
+    "trailing_skipped_session": {
+      "dropped": "2026-09-15",
+      "rows_deleted": 1,
+      "status": "refused_window",
+      "problems": [
+        {
+          "benchmark": "SPY",
+          "problem": "missing_bar",
+          "sessions": [
+            "2026-09-15"
+          ]
+        }
+      ]
+    },
+    "outside_window_inside_lookback": {
+      "dropped": "2025-05-01",
+      "rows_deleted": 1,
+      "status": "ok",
+      "problems": []
+    },
+    "none": {
+      "dropped": null,
+      "rows_deleted": 0,
+      "status": "ok",
+      "problems": []
+    }
+  }
+}
