@@ -8,6 +8,7 @@ import os
 import re
 import tempfile
 import time
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Any, Optional
@@ -791,6 +792,7 @@ def _read_eod_limited_snapshot(
     parameters: dict[str, Any],
     list_kind: str,
     resolution: Any | None,
+    track: str = "all",
 ) -> tuple[dict[str, Any], float, bool]:
     from app.services.eod_limited import (
         LIST_KIND_COMPOSITE,
@@ -843,6 +845,24 @@ def _read_eod_limited_snapshot(
             source_status = "unknown"
     sector_id = parameters.get("sector_id")
     min_price = float(parameters.get("min_price") or 0)
+    served_key = "composite_rows" if kind == LIST_KIND_COMPOSITE else "observation_rows"
+    track_counts: dict[str, int] = {}
+    if track != "all":
+        # The page shows these as the size of the list it browses; count only the served track.
+        observed = [row for row in payload.get("observation_rows") or [] if row.get("stock_or_etf_track") == track]
+        statuses = Counter(str(row.get("status") or "") for row in observed)
+        payload["observation_n"] = len(observed)
+        payload["eligible_n"] = statuses.get("eligible", 0)
+        payload["watch_n"] = statuses.get("watch", 0)
+        payload["composite_n"] = sum(
+            1 for row in payload.get("composite_rows") or [] if row.get("stock_or_etf_track") == track
+        )
+        payload["empty_eligible_reason"] = (
+            "consensus_insufficient" if payload["eligible_n"] and not payload["composite_n"]
+            else "data_qualification_unverified" if payload["watch_n"]
+            else "technical_threshold" if payload.get("rejected_n")
+            else "no_complete_candidates"
+        )
     for key in ("observation_rows", "composite_rows"):
         rows = [
             row for row in payload.get(key) or []
@@ -852,11 +872,19 @@ def _read_eod_limited_snapshot(
                 or (not row.get("price_unknown") and float(row.get("price") or 0) >= min_price)
             )
         ]
+        if key == served_key:
+            track_counts = dict(Counter(str(row.get("stock_or_etf_track") or "unknown") for row in rows))
+        # Funds ranked among stocks crowded the v1.5 list with low-volatility credit ETFs
+        # that trailed SPY; v1.6 ranks each track on its own (research full_market_v1_6).
+        if track != "all":
+            rows = [row for row in rows if row.get("stock_or_etf_track") == track]
         rows.sort(key=lambda row: (
             -float(row["sort_score"]) if row.get("sort_score") is not None else math.inf,
             str(row.get("ticker") or ""),
         ))
         payload[key] = rows
+    payload["track"] = track
+    payload["track_counts"] = track_counts
     key = "composite_rows" if kind == LIST_KIND_COMPOSITE else "observation_rows"
     payload["rows"] = list(payload[key])
     top = int(parameters.get("top") or 0)
@@ -864,7 +892,7 @@ def _read_eod_limited_snapshot(
         payload["rows"] = payload["rows"][:top]
     payload["results"] = payload["rows"]
     payload["count"] = len(payload["rows"])
-    payload["filter_support"] = {"min_price": True, "min_avg_dollar_volume": False}
+    payload["filter_support"] = {"min_price": True, "min_avg_dollar_volume": False, "track": True}
     saved_iso = datetime.fromtimestamp(saved_at, timezone.utc).isoformat()
     payload.update(
         {
@@ -900,6 +928,7 @@ async def _scan_snapshot_payload(
     ranking_algorithm: str | None = None,
     resolution: Any | None = None,
     list_kind: str = "observation",
+    track: str = "all",
 ) -> tuple[dict[str, Any], float, bool]:
     """Return (payload, saved_at, stale) for a matching worker snapshot."""
 
@@ -936,6 +965,7 @@ async def _scan_snapshot_payload(
             parameters=parameters,
             list_kind=list_kind,
             resolution=resolution,
+            track=track,
         )
     now = time.time()
     # 新快照版本的首次读取要同步读盘 + 解码 + 递归校验最高 4MB JSON——
@@ -1021,8 +1051,13 @@ async def scan(
     include_options: bool = True,
     ranking_algorithm: Annotated[Optional[str], Query()] = None,
     list_kind: Annotated[str, Query()] = "observation",
+    track: Annotated[str, Query(pattern="^(stock|etf|all)$")] = "stock",
 ):
-    """Read a matching Strength Radar snapshot produced by the worker."""
+    """Read a matching Strength Radar snapshot produced by the worker.
+
+    ``track`` ranks stocks and funds separately (v1.6): the default list holds
+    common stocks and ADRs only; ``etf`` returns the fund list, ``all`` both.
+    """
     requested = _unwrap_query_value(ranking_algorithm)
     raw_timeframe = _unwrap_query_value(timeframe)
     timeframe_omitted = raw_timeframe in (None, "")
@@ -1061,6 +1096,7 @@ async def scan(
             ranking_algorithm=resolution.effective,
             resolution=resolution,
             list_kind=list_kind,
+            track=track,
         )
     except HTTPException as exc:
         if exc.status_code != 503:
@@ -1123,7 +1159,7 @@ async def scan(
                 else ()
             ),
             *(
-                (list_kind, payload.get("served_session"), payload.get("purpose"))
+                (list_kind, track, payload.get("served_session"), payload.get("purpose"))
                 if resolution.effective == EOD_LIMITED_V1
                 else ()
             ),

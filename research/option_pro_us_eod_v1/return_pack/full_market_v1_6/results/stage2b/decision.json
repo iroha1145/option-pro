@@ -1,0 +1,89 @@
+{
+ "variant_vs_v15_mixed": {
+  "d12m1/balanced": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 3,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 1.016
+  },
+  "d12m1/aggressive": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.934
+  }
+ },
+ "variant_vs_v15_stock": {
+  "d12m1/balanced": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.246
+  },
+  "d12m1/aggressive": {
+   "P1_up": false,
+   "P2_up": true,
+   "years_better": 3,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": -0.066
+  }
+ },
+ "stock_vs_mixed": {
+  "v15/conservative": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.15
+  },
+  "v15/balanced": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.813
+  },
+  "v15/aggressive": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 1.126
+  },
+  "d12m1/balanced": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 3,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.052
+  },
+  "d12m1/aggressive": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.052
+  }
+ }
+}

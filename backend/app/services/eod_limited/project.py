@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import math
+import re
 from typing import Any, Mapping, Sequence
 
 from app.services.sectors import SECTORS, primary_sector_id
 
 from . import (
     ALGORITHM_VERSION,
+    COMPUTE_VERSION,
     LIST_KIND_COMPOSITE,
     LIST_KIND_OBSERVATION,
     MODE_ID,
@@ -83,6 +85,22 @@ def _factor_dims(row: Mapping[str, Any]) -> list[dict[str, Any]]:
             number = None
         dims.append({"key": f"factor_{key}", "label": labels[key], "value": number})
     return dims
+
+
+_COMPUTE_VERSION_PATTERN = re.compile(r"limited-(?:all-market|current)-(v\d+(?:\.\d+)*)")
+
+
+def served_algorithm_version(compute_version: Any) -> str:
+    """The algorithm label of the batch being served, not of the running code.
+
+    After a deploy the reader keeps serving the previous batch until the worker
+    republishes, so the label follows the batch's own compute version.
+    """
+    text = str(compute_version or "")
+    if not text or text == COMPUTE_VERSION:
+        return ALGORITHM_VERSION
+    match = _COMPUTE_VERSION_PATTERN.fullmatch(text)
+    return f"eod-limited-{match.group(1)}" if match else f"eod-limited-unknown({text})"
 
 
 def project_row(row: Mapping[str, Any], *, list_kind: str) -> dict[str, Any]:
@@ -244,7 +262,7 @@ def project_strength_payload(
         "params": dict(parameters),
         "requested_algorithm": MODE_ID,
         "effective_algorithm": MODE_ID,
-        "algorithm_version": ALGORITHM_VERSION,
+        "algorithm_version": served_algorithm_version(scored.get("compute_version")),
         "score_basis": SCORE_BASIS,
         "score_aggregation": "m1_consensus" if list_kind == LIST_KIND_COMPOSITE else "best_family_theme_path",
         "factor_capabilities": {"R": "stability_risk_quality", "G": "disabled_unverified_industry"},

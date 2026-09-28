@@ -17,7 +17,7 @@ from typing import Any, Iterable, Mapping, Sequence
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
-RESEARCH_VALIDATION_VERSION = "breakout-research-validation-v1"
+RESEARCH_VALIDATION_VERSION = "breakout-research-validation-v2"
 PRICE_DATA_SCHEMA_VERSION = "breakout-forward-prices-v1"
 DEFAULT_FORWARD_HORIZONS = (1, 5, 20, 63)
 
@@ -1100,18 +1100,32 @@ def run_range_persistence_validation(
 ) -> dict[str, Any]:
     """Build labels and purged walk-forward ablations for completed snapshots."""
 
+    if min(train_dates, validation_dates, test_dates) < 1:
+        raise ValueError("window sizes must be positive")
     normalized_horizons = _normalize_horizons(horizons)
     merged = merge_completed_research_observations(events, shadows)
     labeled = attach_forward_return_labels(
         merged["observations"], price_dataset, horizons=normalized_horizons
     )
+    # With daily scans the embargo drops the first `embargo_dates` dates of the
+    # validation and test windows, and purging then drops the rows whose label ends
+    # at or after the next window's used start: the last `horizon - embargo_dates`
+    # dates of the train and validation windows. Adding exactly those dates back
+    # keeps the configured number of usable dates; otherwise any horizon as long as
+    # the validation window never forms one.
+    raw_windows = {
+        horizon: {
+            "train_dates": train_dates + max(horizon - embargo_dates, 0),
+            "validation_dates": validation_dates + max(horizon, embargo_dates),
+            "test_dates": test_dates,
+        }
+        for horizon in normalized_horizons
+    }
     horizon_reports = {
         str(horizon): build_walk_forward_ablation(
             labeled["observations"],
             horizon=horizon,
-            train_dates=train_dates,
-            validation_dates=validation_dates,
-            test_dates=test_dates,
+            **raw_windows[horizon],
             step_dates=step_dates,
             embargo_dates=embargo_dates,
             minimum_rows_per_split=minimum_rows_per_split,
@@ -1133,6 +1147,10 @@ def run_range_persistence_validation(
         "top_k": top_k,
         "partition_unit": "trading_date",
         "random_split": False,
+        "window_dates_basis": "usable_train_and_validation_dates_after_purge",
+        "raw_window_dates_by_horizon": {
+            str(horizon): dict(window) for horizon, window in raw_windows.items()
+        },
     }
     research_fingerprint = {
         **configuration,

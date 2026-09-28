@@ -78,12 +78,16 @@ def _series_complete_on_grid(series: SecuritySeries, grid: list[date]) -> bool:
     return True
 
 
-def _residual_window(grid_len: int) -> tuple[int, int, int] | None:
+def _residual_window(
+    grid_len: int,
+    sum_start: int = RESIDUAL_SUM_START,
+    sum_end: int = RESIDUAL_SUM_END,
+) -> tuple[int, int, int] | None:
     """Return (price_from, start, end) indices on the common grid, or None if short."""
 
     t = grid_len - 1
-    start = t - RESIDUAL_SUM_START
-    end = t - RESIDUAL_SUM_END
+    start = t - sum_start
+    end = t - sum_end
     if start < RESIDUAL_FIT_WINDOW + 2 or end <= start:
         return None
     price_from = start - RESIDUAL_FIT_WINDOW - 1
@@ -161,18 +165,22 @@ def residual_raw_momentum(
     *,
     spy_residual_allowed: bool = True,
     matched_market: SecuritySeries | None = None,
+    sum_start: int = RESIDUAL_SUM_START,
+    sum_end: int = RESIDUAL_SUM_END,
+    history_min: int = RESIDUAL_HISTORY_MIN,
 ) -> ResidualMomentum:
+    """Sum of daily residuals over sessions ``t - sum_start`` .. ``t - sum_end`` as a t-statistic."""
     if series.asset_track == "etf" and not spy_residual_allowed:
         return ResidualMomentum(None, "INSUFFICIENT_MATCHED_BENCHMARK")
     benchmark = matched_market or market
     if benchmark.security_id == series.security_id:
         return ResidualMomentum(None, "INSUFFICIENT_MATCHED_BENCHMARK")
     grid = _common_session_grid(series, benchmark)
-    if len(grid) < RESIDUAL_HISTORY_MIN:
-        if len(series.dates) < RESIDUAL_HISTORY_MIN:
+    if len(grid) < history_min:
+        if len(series.dates) < history_min:
             return ResidualMomentum(None, "SHORT_HISTORY")
         return ResidualMomentum(None, "UNALIGNED_BENCHMARK")
-    window = _residual_window(len(grid))
+    window = _residual_window(len(grid), sum_start, sum_end)
     if window is None:
         return ResidualMomentum(None, "SHORT_HISTORY")
     price_from, start, end = window
@@ -224,9 +232,10 @@ def residual_raw_momentum(
         g_s_orth = r_g[s] - orth_beta[0] - orth_beta[1] * r_m[s]
         residuals.append(r_i[s] - alpha - b_m * r_m[s] - b_g * g_s_orth)
     arr = np.asarray(residuals, dtype=float)
-    if arr.size != 63 or not np.isfinite(arr).all():
+    length = sum_start - sum_end + 1
+    if arr.size != length or not np.isfinite(arr).all():
         return ResidualMomentum(None, "RESIDUAL_WINDOW_INVALID")
-    denom = float(arr.std(ddof=1) * np.sqrt(63.0))
+    denom = float(arr.std(ddof=1) * np.sqrt(float(length)))
     if denom == 0 or not np.isfinite(denom):
         return ResidualMomentum(None, "ZERO_RESIDUAL_VOL")
     return ResidualMomentum(float(arr.sum() / denom), "OK")

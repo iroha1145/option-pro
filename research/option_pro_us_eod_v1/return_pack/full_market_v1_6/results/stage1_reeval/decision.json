@@ -1,0 +1,279 @@
+{
+ "baseline": "v15",
+ "rules": {
+  "exit_lag_sessions": 5,
+  "lookahead_sessions": 63,
+  "rename_lag_sessions": 5,
+  "rename_price_ratio": [
+   0.5,
+   2.0
+  ],
+  "observable_statuses": [
+   "ok",
+   "ok_bridged",
+   "ok_late_exit",
+   "renamed"
+  ],
+  "censored_statuses": [
+   "censored_temporary",
+   "censored_terminal",
+   "censored_unknown",
+   "censored_unverified"
+  ],
+  "primary": "sum(observable excess) / (observable + pre-decided empty slots); unobservable names removed",
+  "bounds": {
+   "legacy": "censored at the last observed close over the shortened window (pre-fix behaviour)",
+   "zero": "censored at zero excess, kept in the denominator",
+   "loss": "censored as a total loss (return -1) against SPY over the full window"
+  }
+ },
+ "variant_vs_v15_mixed": {
+  "r0/balanced": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 3,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.419
+  },
+  "r0/aggressive": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 3,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.761
+  },
+  "tilt_a/balanced": {
+   "P1_up": false,
+   "P2_up": true,
+   "years_better": 3,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": -0.062
+  },
+  "tilt_a/aggressive": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.143
+  },
+  "tilt_a_r0/balanced": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.572
+  },
+  "tilt_a_r0/aggressive": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.746
+  },
+  "tilt_b/balanced": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 3,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.19
+  },
+  "tilt_b/aggressive": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.21
+  }
+ },
+ "variant_vs_v15_stock": {
+  "r0/balanced": {
+   "P1_up": false,
+   "P2_up": false,
+   "years_better": 1,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": -0.413
+  },
+  "r0/aggressive": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.165
+  },
+  "tilt_a/balanced": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 3,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.196
+  },
+  "tilt_a/aggressive": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 3,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.19
+  },
+  "tilt_a_r0/balanced": {
+   "P1_up": false,
+   "P2_up": true,
+   "years_better": 1,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": -0.192
+  },
+  "tilt_a_r0/aggressive": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.36
+  },
+  "tilt_b/balanced": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 3,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.2
+  },
+  "tilt_b/aggressive": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 3,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.173
+  }
+ },
+ "stock_vs_mixed": {
+  "v15/conservative": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.173
+  },
+  "v15/balanced": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 1.149
+  },
+  "v15/aggressive": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 1.197
+  },
+  "r0/balanced": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 3,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.075
+  },
+  "r0/aggressive": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.396
+  },
+  "tilt_a/balanced": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 1.11
+  },
+  "tilt_a/aggressive": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.992
+  },
+  "tilt_a_r0/balanced": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 3,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.342
+  },
+  "tilt_a_r0/aggressive": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.645
+  },
+  "tilt_b/balanced": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 0.833
+  },
+  "tilt_b/aggressive": {
+   "P1_up": true,
+   "P2_up": true,
+   "years_better": 4,
+   "years_compared": 4,
+   "h20_within_1pp": true,
+   "length_ok": true,
+   "smaller_period_gain": 1.142
+  }
+ }
+}

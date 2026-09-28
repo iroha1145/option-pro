@@ -12,6 +12,7 @@ from app.services.eod_limited.inference import precompute_all_horizon_inputs, sc
 from app.services.eod_limited.market_registry import load_market_registry
 from app.services.eod_limited.price_only import apply_price_only_track
 from app.services.eod_limited.project import project_strength_payload
+from app.services.research_eod_v1.config_load import load_registry
 from app.services.eod_limited.shadow import (
     _best, _entry_view, _new_branches, _relax_public_extension, etf_classification, momentum_features,
     panel_hash, run_shadow_comparison, write_shadow_report,
@@ -24,6 +25,9 @@ from app.services.research_eod_v1.snapshot import _atr_references, compute_snaps
 @pytest.fixture(scope="module")
 def inputs():
     registry = load_market_registry()
+    # The shadow tool compares the pre-tuning baseline (see docs/eod-limited-v1.md);
+    # the v1.6 profile tilts are a live-only layer, so compare on the sealed tilts.
+    registry["profiles"] = deepcopy(load_registry()["profiles"])
     session = date(2023, 7, 10)
     source = build_synthetic_panel(sessions=370, end=session)
     panel = {sid: source[sid] for sid in ("AMD", "NVDA", "SPY", "QQQ")}
