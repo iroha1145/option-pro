@@ -1,0 +1,15 @@
+New ledger tests run against the unfixed export_backtest.py (commit 61eafaaa, claude/eod-replay-v1.6), 2026-09-28:
+
+FAILED tests/test_full_market_v16_replay.py::test_ledger_enters_unlabelled_signals_and_is_prefix_invariant
+    short dataset NAV 1.0 (the unlabelled signal never entered), expected 1.05
+FAILED tests/test_full_market_v16_replay.py::test_ledger_moves_the_carried_mark_with_a_split_on_a_missing_bar_day
+    daily path 1.0, 4.0, 1.0, ... (forward split on a day without a bar), expected flat 1.0
+FAILED tests/test_full_market_v16_replay.py::test_ledger_applies_a_successor_split_registered_on_a_rename_gap_day
+    NAV 0.25 from the switch on (successor split on the gap day missed), expected 1.0
+FAILED tests/test_full_market_v16_replay.py::test_ledger_applies_several_events_on_one_position
+    NAV 0.625 after the switch, expected 1.0
+FAILED tests/test_full_market_v16_replay.py::test_ledger_does_not_let_a_reused_ticker_inherit_old_events
+    NAV 2.5 from the gap day on (a split filed under the old symbol after its last bar was applied), expected 1.0
+5 failed, 20 deselected in 1.41s
+
+After the fix (same commit's tests plus the census test): 26 passed.

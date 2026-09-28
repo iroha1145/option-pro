@@ -31,6 +31,7 @@ evaluate = _load("evaluate")
 replay = _load("replay")
 paired = _load("paired")
 backtest = _load("export_backtest")
+census = _load("ledger_census")
 
 SESSIONS = ["2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-21"]
 # A longer calendar for holdings and ledgers: 90 real trading sessions ending 2026-09-25.
@@ -412,6 +413,140 @@ def test_ledger_values_censored_positions_under_the_three_bounds(tmp_path):
     assert values["loss"][sessions[3]] == pytest.approx(1.0)  # worthless only from the first missing bar
 
 
+def _company(ticker, cik="1", figi="F1"):
+    return {"ticker": ticker, "cik": cik, "composite_figi": figi, "type": "CS", "active": True}
+
+
+def test_ledger_enters_unlabelled_signals_and_is_prefix_invariant(tmp_path):
+    """The second review: a signal whose holding runs past the data end still buys at T+1, is marked at the
+    last available close and is reported as open; appending future bars must not change the past."""
+    sessions = LONG[:20]
+    bars = {"SPY": _flat(sessions, 100.0),
+            "X": {**{day: (100.0, 100.0) for day in sessions[:6]}, **{day: (110.0, 110.0) for day in sessions[6:]}},
+            "Y": {day: (10.0, 10.0) for day in sessions[1:5]}}  # stops trading inside the unlabelled tail
+    prefix = sessions[:8]
+    short = evaluate.Prices(_cache(tmp_path / "short", {k: {d: v for d, v in s.items() if d in prefix} for k, s in bars.items()},
+                                   sessions=prefix), sessions[0])
+    full = evaluate.Prices(_cache(tmp_path / "full", bars, sessions=sessions), sessions[0])
+    assert short.observe("X", sessions[0], 10).status == "no_label"
+    records = _records([sessions[0]], ["X"])
+    a = backtest.ledger_curve(records, short, "v15/balanced/mid", "mixed", holding=10, spacing=5, top=1)
+    b = backtest.ledger_curve(records, full, "v15/balanced/mid", "mixed", holding=10, spacing=5, top=1)
+    by_day = {point["date"]: point for point in b}
+    assert a[-1]["date"] == prefix[-1] and a[-1]["value"] == pytest.approx(0.5 + 0.5 * 1.1)
+    assert [(p["date"], p["value"]) for p in a] == [(p["date"], by_day[p["date"]]["value"]) for p in a]
+    assert a[-1]["open_positions"] == 1 and a[-1]["unlabelled_positions"] == 1 and a[-1]["invested_sleeves"] == 1
+    assert a[-1]["cash_share"] == pytest.approx(0.5 / 1.05) and a[-1]["stale_marks"] == 0
+    assert by_day[sessions[10]]["open_positions"] == 0 and by_day[sessions[10]]["value"] == pytest.approx(1.05)
+    # An unlabelled position that stops trading is carried at its last close under every bound, and counted as stale.
+    for bound in evaluate.BOUNDS:
+        curve = backtest.ledger_curve(_records([sessions[0]], ["Y"]), short, "v15/balanced/mid", "mixed",
+                                      holding=10, spacing=5, top=1, bound=bound)
+        assert curve[-1]["value"] == pytest.approx(1.0) and curve[-1]["stale_marks"] == 1, bound
+    # A name with no bar at T+1 still stays in cash, labelled or not.
+    curve = backtest.ledger_curve(_records([sessions[0]], ["NOBAR"]), short, "v15/balanced/mid", "mixed", holding=10, spacing=5, top=1)
+    assert curve[-1]["value"] == pytest.approx(1.0) and curve[-1]["open_positions"] == 0
+
+
+def test_ledger_moves_the_carried_mark_with_a_split_on_a_missing_bar_day(tmp_path):
+    """Forward and reverse splits, with and without a bar on the execution day: the whole daily path stays flat."""
+    sessions = LONG[:12]
+    spy = _flat(sessions, 100.0)
+    for name, before, after, split in (("FWD", 40.0, 10.0, (1.0, 4.0)), ("REV", 1.0, 10.0, (10.0, 1.0))):
+        for missing in (True, False):
+            folder = tmp_path / f"{name}{int(missing)}"
+            bars = {"SPY": spy, name: {day: (before, before) if i < 2 else (after, after)
+                                       for i, day in enumerate(sessions) if not (missing and i == 2)}}
+            connection = _cache(folder, bars, [(name, sessions[2], *split)], sessions=sessions)
+            prices = evaluate.Prices(connection, sessions[0], _directory(folder, {sessions[0]: [_company(name)]}))
+            outcome = prices.observe(name, sessions[0], 5)
+            assert outcome.status == ("ok_bridged" if missing else "ok") and outcome.ret == pytest.approx(0.0)
+            curve = backtest.ledger_curve(_records([sessions[0]], [name]), prices, "v15/balanced/mid", "mixed",
+                                          holding=5, spacing=5, top=1)
+            assert len(curve) > 5 and [round(point["value"], 8) for point in curve] == [1.0] * len(curve), (name, missing)
+
+
+def test_ledger_applies_a_successor_split_registered_on_a_rename_gap_day(tmp_path):
+    """OLD last trades at 40; a 4-for-1 split is filed under NEW on the gap day; NEW opens at 10 the day after."""
+    sessions = LONG[:12]
+    bars = {"SPY": _flat(sessions, 100.0), "OLD": {day: (40.0, 40.0) for day in sessions[:3]},
+            "NEW": {day: (10.0, 10.0) for day in sessions[4:]}}
+    connection = _cache(tmp_path, bars, [("NEW", sessions[3], 1.0, 4.0)], sessions=sessions)
+    prices = evaluate.Prices(connection, sessions[0], _directory(tmp_path, {sessions[0]: [_company("OLD")], sessions[3]: [_company("NEW")]}))
+    outcome = prices.observe("OLD", sessions[0], 5)
+    assert outcome.status == "renamed" and outcome.ret == pytest.approx(0.0) and outcome.detail["first_new_day"] == sessions[4]
+    curve = backtest.ledger_curve(_records([sessions[0]], ["OLD"]), prices, "v15/balanced/mid", "mixed", holding=5, spacing=5, top=1)
+    assert len(curve) > 5 and [round(point["value"], 8) for point in curve] == [1.0] * len(curve)
+
+
+def test_ledger_applies_several_events_on_one_position(tmp_path):
+    """A 2-for-1 under OLD with a bar, a 4-for-1 under NEW on the gap day, a 2-for-1 under NEW with a bar."""
+    sessions = LONG[:12]
+    bars = {"SPY": _flat(sessions, 100.0),
+            "OLD": {sessions[1]: (20.0, 20.0), sessions[2]: (10.0, 10.0), sessions[3]: (10.0, 10.0)},
+            "NEW": {**{day: (2.5, 2.5) for day in sessions[5:7]}, **{day: (1.25, 1.25) for day in sessions[7:]}}}
+    splits = [("OLD", sessions[2], 1.0, 2.0), ("NEW", sessions[4], 1.0, 4.0), ("NEW", sessions[7], 1.0, 2.0)]
+    connection = _cache(tmp_path, bars, splits, sessions=sessions)
+    prices = evaluate.Prices(connection, sessions[0], _directory(tmp_path, {sessions[0]: [_company("OLD")], sessions[4]: [_company("NEW")]}))
+    outcome = prices.observe("OLD", sessions[0], 8)
+    assert outcome.status == "renamed" and outcome.ret == pytest.approx(0.0)
+    curve = backtest.ledger_curve(_records([sessions[0]], ["OLD"]), prices, "v15/balanced/mid", "mixed", holding=8, spacing=5, top=1)
+    assert len(curve) > 8 and [round(point["value"], 8) for point in curve] == [1.0] * len(curve)  # two sleeves: 0.5 held, 0.5 idle
+
+
+def test_ledger_does_not_let_a_reused_ticker_inherit_old_events(tmp_path):
+    """Splits filed under NEW before OLD's last bar, or under OLD after it, belong to other holders of the symbol."""
+    sessions = LONG[:12]
+    bars = {"SPY": _flat(sessions, 100.0), "OLD": {day: (40.0, 40.0) for day in sessions[:4]},
+            "NEW": {day: (40.0, 40.0) for day in sessions[5:]}}
+    splits = [("NEW", sessions[1], 1.0, 4.0), ("OLD", sessions[4], 1.0, 4.0)]
+    connection = _cache(tmp_path, bars, splits, sessions=sessions)
+    prices = evaluate.Prices(connection, sessions[0], _directory(tmp_path, {sessions[0]: [_company("OLD")], sessions[4]: [_company("NEW")]}))
+    outcome = prices.observe("OLD", sessions[0], 8)
+    assert outcome.status == "renamed" and outcome.ret == pytest.approx(0.0) and outcome.last_day == sessions[3]
+    curve = backtest.ledger_curve(_records([sessions[0]], ["OLD"]), prices, "v15/balanced/mid", "mixed", holding=8, spacing=5, top=1)
+    assert len(curve) > 8 and [round(point["value"], 8) for point in curve] == [1.0] * len(curve)
+
+
+def test_ledger_census_counts_the_three_review_cases_and_the_end_value_changes(tmp_path):
+    sessions = LONG[:20]
+    bars = {"SPY": _flat(sessions, 100.0),
+            # OLD -> NEW with a 4-for-1 filed under NEW on the gap day (C1); OLD also carries a bogus split after its last bar (C2 old leg).
+            "OLD": {day: (40.0, 40.0) for day in sessions[:3]}, "NEW": {day: (10.0, 10.0) for day in sessions[4:]},
+            # GAP misses the split day itself (C2 held gap).
+            "GAP": {day: (40.0, 40.0) if i < 2 else (10.0, 10.0) for i, day in enumerate(sessions) if i != 2},
+            "X": _flat(sessions, 10.0)}
+    splits = [("NEW", sessions[3], 1.0, 4.0), ("OLD", sessions[3], 1.0, 2.0), ("GAP", sessions[2], 1.0, 4.0)]
+    connection = _cache(tmp_path, bars, splits, sessions=sessions)
+    gap = _company("GAP", cik="2", figi="F2")
+    directory = _directory(tmp_path, {sessions[0]: [_company("OLD"), gap], sessions[3]: [_company("NEW"), gap]})
+    prices = evaluate.Prices(connection, sessions[0], directory)
+    # Signal at 0 is labelled for a 10-session holding; signal at 12 runs past the data end (tail): X enters, NOBAR cannot.
+    records = _records([sessions[0]], ["OLD", "GAP"]) + _records([sessions[12]], ["X", "NOBAR"])
+    groups, cases = census.census(records, prices, holdings=(10,), top=20)
+    group = groups[("v15/balanced/mid", "mixed", 10)]
+    assert group["signals"] == 2 and group["tail_signals"] == 1 and group["first_tail_signal"] == sessions[12]
+    assert group["tail_entries_skipped"] == 1 and group["tail_spy_slots_skipped"] == 18  # X, and the empty slots' SPY
+    assert group["rename_gap_splits"] == 1 and group["renamed_positions"] == 1
+    assert group["missing_bar_splits_held_gap"] == 1 and group["missing_bar_splits_old_leg_after_last_bar"] == 1
+    kinds = sorted((row["case"], row["ticker"], row["kind"]) for row in cases if row["list_type"] == "mixed")
+    assert kinds == [("B_tail_entry_skipped", "X", ""), ("C1_rename_gap_split", "OLD", "successor_split_in_gap"),
+                     ("C2_missing_bar_split", "GAP", "held_gap"), ("C2_missing_bar_split", "OLD", "old_leg_after_last_bar")]
+    c1 = next(row for row in cases if row["case"] == "C1_rename_gap_split" and row["list_type"] == "mixed")
+    assert c1["approx_nav_effect"] == pytest.approx((1 / 40) * (1 + 0.0) * (1 - 1 / 4))  # two sleeves x 20 slots
+    assert groups[("v15/balanced/mid", "stock", 10)]["rename_gap_splits"] == 1
+    # Before/after end values are diffed per ledger; the old file has no open_at_end block.
+    key = {"variant": "v15", "profile": "balanced", "view": "mid", "list_type": "stock", "cost_bps": 10.0, "bound": "legacy", "holding": "ledger_h63"}
+    before = {"end_values": [{**key, "portfolio": 1.9, "spy": 1.8, "relative": 1.0556, "relative_passive": 0.95, "end_date": "2026-09-25"}]}
+    after = {"end_values": [{**key, "portfolio": 1.95, "spy": 1.81, "relative": 1.0773, "relative_passive": 0.97, "end_date": "2026-09-25",
+                             "open_at_end": {"positions": 240, "unlabelled_positions": 240, "positions_without_final_bar": 3,
+                                             "invested_sleeves": 12, "cash_share": 0.08}}]}
+    rows = census.end_value_changes(before, after)
+    assert rows[0]["delta_relative"] == pytest.approx(0.0217) and rows[0]["after_open_positions"] == 240
+    assert rows[0]["before_portfolio"] == 1.9 and rows[0]["after_cash_share"] == 0.08
+    assert census.end_value_changes(None, after)[0]["delta_relative"] is None
+
+
 def test_legacy_weekly_curve_reads_the_legacy_slot(tmp_path):
     points = [{"day": "2026-09-14", "slot": None, "slot_legacy": 0.02}, {"day": "2026-09-21", "slot": 0.5, "slot_legacy": -0.01}]
     curve = backtest.legacy_weekly_curve(points, {"2026-09-14": 0.01, "2026-09-21": 0.0})
@@ -451,6 +586,13 @@ def test_export_backtest_writes_legacy_and_ledger_curves_with_stated_assumptions
     weekly = [item for item in end["end_values"] if item["holding"] == "ledger_weekly"]
     assert {item["bound"] for item in weekly} == {"legacy", "zero", "loss"}
     assert all(item["spy_passive"] and item["relative_passive"] and item["start_date"] < item["end_date"] for item in end["end_values"])
+    # Signals whose 63-session holding runs past the 30-session data end still enter; the open positions are reported.
+    assert end["rules"]["returns"].startswith("price_only") and "no stop-entry date" in end["rules"]["entry"]
+    h63 = next(item for item in end["end_values"] if item["holding"] == "ledger_h63" and item["list_type"] == "stock" and item["view"] == "mid")
+    # Three signals x 20 slots (UP, GONE and 18 SPY slots), minus GONE's third entry, which has no bar at T+1.
+    assert h63["open_at_end"]["positions"] == 59 and h63["open_at_end"]["unlabelled_positions"] == 59
+    assert h63["open_at_end"]["positions_without_final_bar"] == 2 and h63["open_at_end"]["invested_sleeves"] == 3  # GONE stops at index 8
+    assert h63["start"]["invested_sleeves"] == 1 and h63["start"]["open_positions"] == 20 and 0 < h63["open_at_end"]["cash_share"] < 1
     daily = list(__import__("csv").DictReader((out / "daily_series.csv").open()))
     assert {"slot_excess_pct", "slot_legacy_pct", "slot_loss_pct", "observable", "unobservable", "empty_slots"} <= set(daily[0])
     # GONE is censored without a directory: the primary excess leaves it out, the legacy column keeps the back-fill.

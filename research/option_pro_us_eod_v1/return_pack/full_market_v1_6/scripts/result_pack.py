@@ -4,7 +4,7 @@ Reads the result directories evaluate.py / paired.py / export_backtest.py wrote,
 number in the pack is traceable to a CSV in the repository. ``--stage`` may be repeated:
 ``name=reeval_dir[:legacy_dir]``; when a legacy directory (the pre-fix evaluation) is given,
 the pack lists per variant, profile and list type the primary metric under the old rule,
-the fixed rule and the three bounds, so the movement of every prior conclusion is a number.
+the fixed rule and the three sensitivity scenarios, so the movement of every prior conclusion is a number.
 ``--compare`` rows (``label=baseline:candidate[:profile][@stage]``) pull the paired differences the
 comparisons rest on. ``unverifiable_execution_data`` is written on every pack.
 
@@ -24,9 +24,13 @@ UNVERIFIABLE_EXECUTION_DATA = [
     "fills: entry at the grouped daily open and exit at the grouped daily close; no intraday prices, "
     "spreads or partial fills are available",
     "volume: Massive grouped daily volume, session hours unverified; no capacity or participation check",
-    "delisting proceeds: a censored name has no verifiable exit price; the three bounds bracket it, none is the "
-    "realised value (cash-merger consideration, bankruptcy recovery and OTC prices are not in the data)",
-    "dividends and cash distributions: price returns only, for the lists and for SPY",
+    "delisting proceeds: a censored name has no verifiable exit price; legacy, zero and loss are sensitivity "
+    "scenarios, not verified bounds (the last close is no guaranteed ceiling for merger or delisting proceeds, "
+    "and zero need not lie between the other two); cash-merger consideration, bankruptcy recovery and OTC prices "
+    "are not in the data",
+    "primary metric: a conditional estimate on the observable subsample; names missing through mergers and "
+    "delistings are not missing at random, so it is not an unbiased full-portfolio return",
+    "dividends and cash distributions: price_only, for the lists and for SPY alike; no one-sided dividend fix",
     "corporate actions other than splits (spin-offs, rights, exchange offers) are not applied",
     "renames are followed only when the directory identity and a continuous price verify them",
     "costs: a flat per-side basis-point assumption, not observed execution costs",
