@@ -155,9 +155,13 @@ def test_eod_context_hook_defaults_to_real_capture_only(tmp_path: Path, monkeypa
     worker.run_eod_limited_job(**params, panel=panel, root=tmp_path / "injected")
     assert calls == []
     frame = pd.DataFrame({"Open": [100], "High": [101], "Low": [99], "Close": [100], "Volume": [1_000_000]}, index=pd.to_datetime([NOW.date()]))
-    loaded_panel, coverage = worker.bars_to_panel({"NVDA": _frame_to_bars("NVDA", frame)}, {"NVDA": ["semiconductors"]}, end=NOW.date())
+    # A live all-market batch is only published with a SPY session bar.
+    loaded_panel, coverage = worker.bars_to_panel(
+        {ticker: _frame_to_bars(ticker, frame) for ticker in ("NVDA", "SPY")},
+        {"NVDA": ["semiconductors"], "SPY": []}, end=NOW.date(),
+    )
     monkeypatch.setattr(market_data, "load_all_market_panel", lambda **kwargs: (loaded_panel, coverage, {
-        "status": "complete", "eligible_count": 1, "complete_bar_count": 1,
+        "status": "complete", "eligible_count": 2, "complete_bar_count": 2,
         "volume_session_scope": market_data.VOLUME_SCOPE,
     }))
     outcome = worker.run_eod_limited_job(session=NOW.date(), root=tmp_path / "real")

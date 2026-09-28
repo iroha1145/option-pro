@@ -4,6 +4,8 @@ An external review (2026-09-28) asked for these properties of ``worker.run_eod_l
 
 1. the coverage denominator is the eligible list of the same directory, session and
    fund scope as the panel, never a count from another batch or scope;
+2. SPY, the benchmark every stock score reads, is required apart from overall
+   coverage: without its session bar the run is refused even above 90%;
 3. the 90% rule holds exactly on integer counts (89% refused, 90% published);
 4. a refused run keeps the previous snapshot byte for byte and says why;
 5. no partially written or mixed batch becomes the served snapshot.
@@ -21,13 +23,15 @@ from pathlib import Path
 import pytest
 
 from app.services.eod_limited import COMPUTE_VERSION, PURPOSE_LIVE, inference, market_data, worker
-from app.services.eod_limited.live_config import LIVE_CONFIG
+from app.services.eod_limited.live_config import LIVE_CONFIG, V16_CONFIG
 from app.services.eod_limited.market_data import load_all_market_panel
 from app.services.eod_limited.store import (
     publish_batch, read_batch, read_variant, snapshot_dir, snapshot_path, variant_key,
 )
 from app.services.eod_limited.universe import FUND_SCOPE_ALL, FUND_SCOPE_BENCHMARKS, benchmark_fund_tickers
 from app.services.research_eod_v1.constants import HORIZONS, PROFILES
+from app.services.research_eod_v1.membership import has_complete_session_bar
+from eod_v17_fixtures import build_panel
 from tests.test_eod_all_market_data import END, _bar, _directory_row, _install_provider
 from tests.test_eod_limited_product import _scored
 
@@ -136,10 +140,10 @@ def _market_directory() -> list[dict]:
     )
 
 
-def _grouped() -> dict[str, list[dict]]:
+def _grouped(*, late: tuple[str, ...] = tuple(LATE_STOCKS)) -> dict[str, list[dict]]:
     history = {day: [_bar(ticker, 10.0 + index) for index, ticker in enumerate(EVERYONE)]
                for day in ("2026-09-14", "2026-09-15")}
-    target = [_bar(ticker, 11.0 + index) for index, ticker in enumerate(EVERYONE) if ticker not in LATE_STOCKS]
+    target = [_bar(ticker, 11.0 + index) for index, ticker in enumerate(EVERYONE) if ticker not in late]
     return {**history, END.isoformat(): target}
 
 
@@ -200,6 +204,70 @@ def test_the_gate_counts_this_run_not_the_served_batch(monkeypatch, tmp_path, pr
     assert (refusal and refusal["publish"]["reason"]) == expected
     # One loader call for this session and the configured scope, with no ticker subset.
     assert seen["end"] == SESSION and seen["fund_scope"] == LIVE_CONFIG.fund_scope and seen["tickers"] is None
+
+
+# ── 2. SPY is required apart from overall coverage ───────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("spy", "config"),
+    [("absent", LIVE_CONFIG), ("stale", LIVE_CONFIG), ("absent", V16_CONFIG)],
+    ids=["absent", "stale", "absent-v1.6-scope"],
+)
+def test_spy_without_a_session_bar_blocks_publication_above_ninety_percent(monkeypatch, tmp_path, spy, config):
+    before = _publish_previous(tmp_path)
+    panel = build_panel()  # SPY, QQQ, four more funds and 60 stocks
+    eligible = len(panel)
+    if spy == "absent":
+        del panel["SPY"]
+    else:  # still delivered, but its last bar is the session before
+        panel["SPY"] = panel["SPY"].slice_through(date.fromisoformat(PREVIOUS))
+    complete = sum(has_complete_session_bar(series, SESSION) for series in panel.values())
+    assert (complete, eligible) == (65, 66) and 10 * complete >= 9 * eligible  # the 90% rule alone publishes
+    _serve_market(monkeypatch, panel, eligible=eligible, complete=complete)
+    outcome = worker.run_eod_limited_job(session=SESSION, root=tmp_path, refresh_context=False, live_config=config)
+    assert outcome["status"] == "DATA_UNAVAILABLE"
+    assert outcome["publish"] == {
+        "ok": False, "reason": "all_market_benchmark_missing", "integrity": "stale_previous_retained",
+        "served_session": PREVIOUS, "attempted_session": SESSION.isoformat(), "missing_benchmarks": ["SPY"],
+    }
+    assert outcome["served_session"] == PREVIOUS
+    assert snapshot_path(tmp_path).read_bytes() == before
+    assert _listing(tmp_path) == ["batch.json"]
+
+
+@pytest.mark.parametrize("case", ["no_session_bar", "not_in_directory"])
+def test_the_real_loader_without_spy_is_refused_at_full_coverage_of_the_rest(monkeypatch, tmp_path, case):
+    directory = _market_directory()
+    if case == "no_session_bar":  # 31 of 32 eligible (96.9%)
+        _install_provider(monkeypatch, directory, _grouped(late=("SPY",)))
+    else:  # SPY is not on the list at all: 31 of 31
+        _install_provider(monkeypatch, [row for row in directory if row["ticker"] != "SPY"], _grouped(late=()))
+    refusal = _run_to_gate(monkeypatch, tmp_path, session=END)
+    assert refusal is not None, "published without SPY"
+    assert refusal["publish"]["reason"] == "all_market_benchmark_missing"
+    assert refusal["publish"]["missing_benchmarks"] == ["SPY"]
+    coverage = refusal["coverage"]
+    assert (coverage["complete_bar_count"], coverage["eligible_count"]) == ((31, 32) if case == "no_session_bar" else (31, 31))
+
+
+@pytest.mark.parametrize("fund", ["QQQ", "XLE"])
+def test_other_benchmark_funds_count_toward_coverage_like_any_member(monkeypatch, tmp_path, fund):
+    # QQQ and the ``etfs`` theme funds are ranked only among funds; no stock score reads them.
+    panel = build_panel()
+    eligible = len(panel)
+    del panel[fund]
+    _serve_market(monkeypatch, panel, eligible=eligible, complete=len(panel))
+    assert _run_to_gate(monkeypatch, tmp_path) is None
+
+
+def test_a_coverage_refusal_also_names_a_missing_spy(monkeypatch, tmp_path):
+    panel = worker.build_synthetic_panel(end=SESSION)
+    del panel["SPY"]
+    _serve_market(monkeypatch, panel, eligible=100, complete=len(panel))
+    refusal = _run_to_gate(monkeypatch, tmp_path)
+    assert refusal["publish"]["reason"] == "all_market_coverage_incomplete"
+    assert refusal["publish"]["missing_benchmarks"] == ["SPY"]
 
 
 # ── 3. The 90% boundary on integer counts ────────────────────────────────────
