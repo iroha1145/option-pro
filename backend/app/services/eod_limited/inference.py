@@ -26,6 +26,9 @@ from .diagnostics import VariantDiagnostics
 from .full_market_tuning import apply_entry_states, prepare_full_market_context, tune_snapshot
 
 WARMUP_SESSIONS = 330
+# The newest bars of each series that ``session_panel`` hands the scorers: a
+# stock's residual grid never reaches further back than this.
+SESSION_PANEL_BARS = WARMUP_SESSIONS + 40
 UNIVERSE_VERSION = "u_eod_limited_v1"
 
 
@@ -81,12 +84,11 @@ def session_panel(panel: Mapping[str, Any], session: date) -> dict[str, Any]:
     """
 
     cutoff = min(session, last_completed_session(eod_evaluation_as_of(session)))
-    keep = WARMUP_SESSIONS + 40
     clipped: dict[str, Any] = {}
     for sid, series in panel.items():
         through = _through(series, cutoff)
         if through is not None and has_complete_session_bar(through, session):
-            clipped[sid] = through.last_n(keep)
+            clipped[sid] = through.last_n(SESSION_PANEL_BARS)
     return clipped
 
 

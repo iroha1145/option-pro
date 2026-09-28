@@ -310,6 +310,17 @@ def _exchange_grid(session: date, maximum_window: int) -> tuple[date, ...]:
     return tuple(reversed(reverse))
 
 
+def momentum_grid(session: date, horizon: str) -> tuple[date, ...]:
+    """Exchange sessions through ``session`` spanned by the longest window of ``horizon``.
+
+    ``prepare_full_market_context`` reads every close of the benchmark (and of
+    each reference stock) on exactly these sessions.
+    """
+    if horizon not in WINDOWS:
+        raise ValueError(f"unknown horizon: {horizon}")
+    return _exchange_grid(session, max(n for n, _skip in WINDOWS[horizon]))
+
+
 def prepare_full_market_context(
     raws: Mapping[str, Any], panel: Mapping[str, Any], *, session: date, horizon: str,
 ) -> TuningContext:
@@ -323,9 +334,7 @@ def prepare_full_market_context(
     from app.services.research_eod_v1.membership import has_complete_session_bar, source_is_available
     from app.services.research_eod_v1.venue import classify_venue
 
-    if horizon not in WINDOWS:
-        raise ValueError(f"unknown horizon: {horizon}")
-    grid = _exchange_grid(session, max(n for n, _skip in WINDOWS[horizon]))
+    grid = momentum_grid(session, horizon)
     wanted = frozenset(grid)
     as_of = eod_evaluation_as_of(session)
 

@@ -7,6 +7,7 @@ from datetime import date
 
 import numpy as np
 
+from app.services.market_calendar import is_trading_day, prior_trading_sessions
 from app.services.research_eod_v1.constants import (
     RESIDUAL_FIT_WINDOW,
     RESIDUAL_HISTORY_MIN,
@@ -94,6 +95,34 @@ def _residual_window(
     if price_from < 0:
         return None
     return price_from, start, end
+
+
+def residual_benchmark_sessions(
+    session: date,
+    *,
+    sum_start: int = RESIDUAL_SUM_START,
+    sum_end: int = RESIDUAL_SUM_END,
+    history_min: int = RESIDUAL_HISTORY_MIN,
+) -> tuple[tuple[date, ...], tuple[date, ...]]:
+    """Exchange sessions on which ``residual_raw_momentum`` reads its benchmark.
+
+    The window is the one ``_residual_window`` places on the grid of a stock
+    with a bar on every session. ``priced`` is ``need_dates``: the benchmark
+    ``tri`` must be positive on each, from the extra prior day the first
+    return needs to the last summed session. ``trailing`` are the skipped
+    sessions through ``session``. No price is read on them, but the grid holds
+    only the dates both series have, and the window is counted back from the
+    grid's last date: without a benchmark bar there, every window starts one
+    session earlier.
+    """
+    if not is_trading_day(session):
+        raise ValueError("the residual window ends on an exchange session")
+    grid = [*prior_trading_sessions(session, history_min - 1), session]
+    window = _residual_window(len(grid), sum_start, sum_end)
+    if window is None:
+        raise ValueError("the residual window does not fit in its minimum history")
+    price_from, _start, end = window
+    return tuple(grid[price_from : end + 1]), tuple(grid[end + 1 :])
 
 
 def _adjacent_legal_sessions(grid: list[date], lo: int, hi: int) -> bool:
