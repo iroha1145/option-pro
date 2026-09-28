@@ -129,6 +129,14 @@ class ReplayPriceDataAdapter:
         return results
 
     def _session_mask(self, frame: pd.DataFrame, cutoff, day: date) -> pd.Series:
+        """The same session window production's ``_intraday_session_mask`` keeps, on every day.
+
+        Trimming here only shrinks the frames the production helpers receive; the
+        pre-market window deliberately keeps earlier days' pre-market bars too, because
+        production does, and a same-day restriction changed the data-availability
+        warnings on carry-over events (2026-09-22 identity check).
+        """
+
         local = frame.index.tz_convert(NY)
         minutes = pd.Series(local.hour * 60 + local.minute, index=frame.index)
         if cutoff.session is MarketSession.REGULAR:
@@ -136,8 +144,7 @@ class ReplayPriceDataAdapter:
             closes = pd.Series([close_by_day[value] for value in local.date], index=frame.index)
             return (minutes >= 9 * 60 + 30) & (minutes < closes)
         if cutoff.session is MarketSession.PREMARKET:
-            same_day = pd.Series(local.date == day, index=frame.index)
-            return same_day & (minutes >= 4 * 60) & (minutes < 9 * 60 + 30)
+            return (minutes >= 4 * 60) & (minutes < 9 * 60 + 30)
         return pd.Series(True, index=frame.index)
 
     async def intraday(self, tickers: Sequence[str], *, cutoff, interval: str = "5m") -> dict[str, PriceDataSnapshot]:
