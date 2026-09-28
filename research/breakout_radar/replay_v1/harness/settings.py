@@ -63,6 +63,9 @@ VARIANTS: dict[str, dict[str, Any]] = {
     "basemin15": {"BREAKOUT_BASE_MIN_DAYS": 15},
     "rvol2": {"research": {"strong_single_rvol_min": 2.0}},
     "lookback10": {"research": {"rvol_lookback_sessions": 10}},
+    # Smoke-only: production's Yahoo fallback fetched 20 calendar days, so its rvol history
+    # held 19 sessions; this variant checks how much of the rvol gap that window explains.
+    "lookback19": {"research": {"rvol_lookback_sessions": 19}},
     # Smoke test only: keep production's OTC rows as slot takers (DATA_SPEC 11.2).
     "hybrid_otc": {"BREAKOUT_ALLOW_OTC": True},
 }
