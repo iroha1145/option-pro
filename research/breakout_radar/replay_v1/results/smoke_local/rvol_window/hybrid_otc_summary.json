@@ -1,0 +1,223 @@
+{
+ "variant": "hybrid_otc",
+ "exclude_current_leveraged": false,
+ "exclude_etf": true,
+ "replay_days": [
+  "2026-09-21",
+  "2026-09-22"
+ ],
+ "per_day": {
+  "2026-09-21": {
+   "scans": 84,
+   "prod_listed_per_scan": 18.2,
+   "replay_listed_per_scan": 25.2,
+   "jaccard_p50": 0.7273,
+   "top60_overlap_p50": 0.9861
+  },
+  "2026-09-22": {
+   "scans": 78,
+   "prod_listed_per_scan": 11.0,
+   "replay_listed_per_scan": 17.4,
+   "jaccard_p50": 0.7646,
+   "top60_overlap_p50": 1.0
+  }
+ },
+ "top60_overlap_by_bucket": {
+  "premarket_0400_0430": {
+   "n": 6,
+   "p10": 0.8571,
+   "p50": 1.0,
+   "p90": 1.0
+  },
+  "premarket_after_0430": {
+   "n": 51,
+   "p10": 0.9,
+   "p50": 1.0,
+   "p90": 1.0
+  },
+  "regular_0930": {
+   "n": 3,
+   "p10": 1.0,
+   "p50": 1.0,
+   "p90": 1.0
+  },
+  "regular_0945": {
+   "n": 4,
+   "p10": 0.0,
+   "p50": 0.25,
+   "p90": 1.0
+  },
+  "regular_1000": {
+   "n": 3,
+   "p10": 1.0,
+   "p50": 1.0,
+   "p90": 1.0
+  },
+  "regular_after_1015": {
+   "n": 95,
+   "p10": 0.8333,
+   "p50": 1.0,
+   "p90": 1.0
+  }
+ },
+ "matched_scans": 162,
+ "production_completed_scans": 162,
+ "replay_scans_without_production_match": 0,
+ "discovery": {
+  "jaccard_listed": {
+   "n": 162,
+   "p10": 0.3929,
+   "p50": 0.75,
+   "p90": 1.0
+  },
+  "top60_overlap_listed": {
+   "n": 162,
+   "p10": 0.8636,
+   "p50": 1.0,
+   "p90": 1.0
+  },
+  "change_diff_pct_points": {
+   "n": 2286,
+   "p10": -0.3697270471464096,
+   "p50": 0.0,
+   "p90": 0.3067484662576714
+  },
+  "relvol_ratio_prod_over_replay": {
+   "n": 2265,
+   "p10": 0.9999990116279751,
+   "p50": 1.0000080627941208,
+   "p90": 1.0165539162565134
+  },
+  "market_cap_ratio_replay_over_prod": {
+   "n": 2284,
+   "p10": 1.0,
+   "p50": 1.0,
+   "p90": 1.0
+  },
+  "production_listed_candidates_missing_in_replay": 95,
+  "distinct_missing_tickers": 59,
+  "missing_without_bars_in_store": 0,
+  "missing_with_bars_but_filtered": 95,
+  "missing_examples": [
+   "AAPG",
+   "FRHC",
+   "SLGL",
+   "ETRA",
+   "GRAB",
+   "AXTI",
+   "CUE",
+   "PHAR",
+   "HBNB",
+   "VKTX",
+   "MAZE",
+   "SHOP",
+   "RCEL",
+   "TMQ",
+   "AREC"
+  ]
+ },
+ "structures": {
+  "common_massive_sourced": 802,
+  "pivot_id_equal": 795,
+  "equal_rate": 0.9913,
+  "young_tickers_common": 183,
+  "young_tickers_equal": 20,
+  "young_note": "tickers with < 380 daily sessions were Yahoo-sourced in production"
+ },
+ "events": {
+  "production_triggered": 69,
+  "matched": 64,
+  "recall": 0.9275,
+  "replay_only": 16,
+  "minutes_apart": {
+   "n": 64,
+   "p10": -7.9,
+   "p50": 0.0,
+   "p90": 6.4
+  },
+  "abs_price_diff_pct": {
+   "n": 64,
+   "p10": 0.0,
+   "p50": 0.403,
+   "p90": 1.924
+  },
+  "last_state_agreement": 0.8806
+ },
+ "rvol": {
+  "relative_error_by_prod_source": {
+   "Yahoo/yfinance": {
+    "n": 572,
+    "p10": 0.007892344544564778,
+    "p50": 0.053232511618761524,
+    "p90": 0.17393914483896078
+   }
+  },
+  "availability_by_prod_source": {
+   "Massive": {
+    "neither": 1401,
+    "replay_only": 2445
+   },
+   "Yahoo/yfinance": {
+    "both": 572,
+    "prod_only": 40,
+    "neither": 32
+   },
+   "none": {
+    "neither": 21,
+    "replay_only": 8
+   }
+  },
+  "prod_comparison_sessions": {
+   "19": 410,
+   "18": 78,
+   "17": 37,
+   "12": 15,
+   "7": 15,
+   "11": 7
+  },
+  "replay_comparison_sessions": {
+   "19": 301,
+   "20": 178,
+   "18": 49,
+   "14": 19,
+   "13": 6,
+   "7": 6
+  }
+ },
+ "intraday_completeness_prod_vs_replay": {
+  "stale_complete_bars|complete_bars_through_cutoff": 3500,
+  "complete_bars_through_cutoff|complete_bars_through_cutoff": 627,
+  "stale_complete_bars|stale_complete_bars": 309,
+  "complete_bars_through_cutoff|stale_complete_bars": 40,
+  "None|None": 17,
+  "stale_complete_bars|None": 14,
+  "None|complete_bars_through_cutoff": 12
+ },
+ "scores_replay_minus_prod": {
+  "alert_priority_score": {
+   "n": 4519,
+   "p10": -4.050899999999999,
+   "p50": 0.14459999999999695,
+   "p90": 5.381399999999999,
+   "within_1pt": 0.3335
+  },
+  "breakout_quality_score": {
+   "n": 4434,
+   "p10": -10.575399999999988,
+   "p50": 0.0,
+   "p90": 12.084800000000001,
+   "within_1pt": 0.2262
+  },
+  "data_confidence_score": {
+   "n": 4519,
+   "p10": -0.17499999999999716,
+   "p50": 4.825000000000003,
+   "p90": 4.922499999999999,
+   "within_1pt": 0.3977
+  }
+ },
+ "t1": {
+  "common": 19,
+  "agree": 17
+ }
+}

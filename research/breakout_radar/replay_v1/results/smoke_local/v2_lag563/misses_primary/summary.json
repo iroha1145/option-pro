@@ -1,0 +1,280 @@
+{
+ "variant": "hybrid_otc",
+ "exclude_current_leveraged": false,
+ "replay_days": [
+  "2026-09-18",
+  "2026-09-21",
+  "2026-09-22",
+  "2026-09-23",
+  "2026-09-24",
+  "2026-09-25"
+ ],
+ "matched_scans": 538,
+ "production_listed_missing_in_replay": 616,
+ "by_reason": {
+  "relvol_filter": 336,
+  "change_filter": 142,
+  "no_bars_today": 88,
+  "cut_by_150_window": 39,
+  "no_bar_yet": 9,
+  "price_filter": 1,
+  "no_previous_close": 1
+ },
+ "distinct_tickers_by_reason": {
+  "change_filter": 100,
+  "no_bar_yet": 9,
+  "price_filter": 1,
+  "cut_by_150_window": 38,
+  "relvol_filter": 120,
+  "no_bars_today": 2,
+  "no_previous_close": 1
+ },
+ "by_session": {
+  "premarket": {
+   "change_filter": 112,
+   "no_bar_yet": 9,
+   "cut_by_150_window": 2,
+   "price_filter": 1
+  },
+  "regular": {
+   "relvol_filter": 336,
+   "no_bars_today": 88,
+   "cut_by_150_window": 37,
+   "change_filter": 30,
+   "no_previous_close": 1
+  }
+ },
+ "value_gaps": {
+  "change_filter": {
+   "prod_change": {
+    "n": 142,
+    "p10": 3.54142160981348,
+    "p50": 5.263157894736845,
+    "p90": 9.207547169811326
+   },
+   "replay_change": {
+    "n": 142,
+    "p10": 0.0,
+    "p50": 3.5151515151515156,
+    "p90": 4.980079681274896
+   },
+   "replay_minus_prod": {
+    "n": 142,
+    "p10": -9.034907597535927,
+    "p50": -1.2737297405344772,
+    "p90": -0.09960159362551835
+   }
+  },
+  "cut_by_150_window": {
+   "change_below_cut": {
+    "n": 39,
+    "p10": 0.469650419999585,
+    "p50": 1.7590986100133161,
+    "p90": 2.5598384059291552
+   }
+  },
+  "relvol_filter": {
+   "prod_relvol": {
+    "n": 336,
+    "p10": 1.5067707616270036,
+    "p50": 1.5537074530383228,
+    "p90": 1.7050609091809448
+   },
+   "replay_relvol": {
+    "n": 336,
+    "p10": 1.2886247506965274,
+    "p50": 1.4605104992050055,
+    "p90": 1.4950518038763632
+   },
+   "replay_over_prod": {
+    "n": 336,
+    "p10": 0.8115559622901973,
+    "p50": 0.9236003787272289,
+    "p90": 0.9793268775532308
+   }
+  }
+ },
+ "top_missing_tickers": [
+  {
+   "ticker": "WSO.B",
+   "count": 64,
+   "reasons": {
+    "no_bars_today": 64
+   }
+  },
+  {
+   "ticker": "SUIS",
+   "count": 40,
+   "reasons": {
+    "no_bar_yet": 1,
+    "relvol_filter": 38,
+    "change_filter": 1
+   }
+  },
+  {
+   "ticker": "GAVA",
+   "count": 34,
+   "reasons": {
+    "relvol_filter": 34
+   }
+  },
+  {
+   "ticker": "CBXJ",
+   "count": 24,
+   "reasons": {
+    "no_bars_today": 24
+   }
+  },
+  {
+   "ticker": "GLNK",
+   "count": 17,
+   "reasons": {
+    "change_filter": 16,
+    "relvol_filter": 1
+   }
+  },
+  {
+   "ticker": "AAPG",
+   "count": 17,
+   "reasons": {
+    "relvol_filter": 16,
+    "cut_by_150_window": 1
+   }
+  },
+  {
+   "ticker": "CRDD",
+   "count": 12,
+   "reasons": {
+    "relvol_filter": 12
+   }
+  },
+  {
+   "ticker": "GDOG",
+   "count": 11,
+   "reasons": {
+    "relvol_filter": 11
+   }
+  },
+  {
+   "ticker": "BETE",
+   "count": 11,
+   "reasons": {
+    "relvol_filter": 11
+   }
+  },
+  {
+   "ticker": "COSW",
+   "count": 11,
+   "reasons": {
+    "change_filter": 1,
+    "relvol_filter": 10
+   }
+  },
+  {
+   "ticker": "METW",
+   "count": 9,
+   "reasons": {
+    "relvol_filter": 9
+   }
+  },
+  {
+   "ticker": "DIME",
+   "count": 8,
+   "reasons": {
+    "no_bar_yet": 1,
+    "relvol_filter": 7
+   }
+  },
+  {
+   "ticker": "GSUI",
+   "count": 8,
+   "reasons": {
+    "relvol_filter": 7,
+    "change_filter": 1
+   }
+  },
+  {
+   "ticker": "EZPZ",
+   "count": 7,
+   "reasons": {
+    "relvol_filter": 7
+   }
+  },
+  {
+   "ticker": "SECZ",
+   "count": 6,
+   "reasons": {
+    "change_filter": 4,
+    "relvol_filter": 2
+   }
+  },
+  {
+   "ticker": "BITW",
+   "count": 5,
+   "reasons": {
+    "relvol_filter": 5
+   }
+  },
+  {
+   "ticker": "TOXR",
+   "count": 5,
+   "reasons": {
+    "relvol_filter": 5
+   }
+  },
+  {
+   "ticker": "MTC",
+   "count": 5,
+   "reasons": {
+    "relvol_filter": 5
+   }
+  },
+  {
+   "ticker": "FRHC",
+   "count": 5,
+   "reasons": {
+    "relvol_filter": 5
+   }
+  },
+  {
+   "ticker": "SLGL",
+   "count": 5,
+   "reasons": {
+    "relvol_filter": 5
+   }
+  }
+ ],
+ "replay_listed_not_in_production": {
+  "rows": 4985,
+  "distinct_tickers": 455,
+  "change": {
+   "n": 4985,
+   "p10": 3.391113193268236,
+   "p50": 5.902777777777768,
+   "p90": 11.139760471588245
+  },
+  "relvol": {
+   "n": 4984,
+   "p10": 0.6715023418345215,
+   "p50": 1.8403884062579434,
+   "p90": 5.120762481111886
+  },
+  "top_tickers": [
+   "GLND",
+   "DFDV",
+   "SRZN",
+   "TCAN",
+   "CRPT",
+   "ARMP",
+   "MINE",
+   "AT",
+   "AAPG",
+   "XDAT",
+   "DIME",
+   "FCUS",
+   "STBQ",
+   "NKLR",
+   "AINF"
+  ]
+ }
+}

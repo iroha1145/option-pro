@@ -35,7 +35,7 @@ import csv
 import json
 import sys
 from collections import Counter, defaultdict
-from datetime import timezone
+from datetime import date, timezone
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -69,6 +69,8 @@ def main() -> None:
     parser.add_argument("--relvol-scale", type=float, default=1.0)
     parser.add_argument("--exclude-current-leveraged", action="store_true",
                         help="ignore production candidates that today's asset_policy.is_leveraged_etf flags")
+    parser.add_argument("--start", type=date.fromisoformat, help="first replay day to explain (ET)")
+    parser.add_argument("--end", type=date.fromisoformat, help="last replay day to explain (ET)")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
@@ -80,6 +82,10 @@ def main() -> None:
 
     tables = read_export(args.export)
     ledgers = [r for r in read_ledgers(args.replay / args.variant / "ledger") if r["kind"] != "t1" and not r.get("warmup")]
+    if args.start is not None:
+        ledgers = [r for r in ledgers if ts(r["as_of"]).astimezone(NY).date() >= args.start]
+    if args.end is not None:
+        ledgers = [r for r in ledgers if ts(r["as_of"]).astimezone(NY).date() <= args.end]
     replay_by_as_of = {ts(r["as_of"]): r for r in ledgers}
     replay_days = {stamp.astimezone(NY).date().isoformat() for stamp in replay_by_as_of}
     completed = {

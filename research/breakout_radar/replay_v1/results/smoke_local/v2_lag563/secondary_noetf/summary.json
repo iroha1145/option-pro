@@ -1,0 +1,229 @@
+{
+ "variant": "hybrid_otc",
+ "exclude_current_leveraged": true,
+ "exclude_etf": true,
+ "replay_days": [
+  "2026-09-08",
+  "2026-09-09",
+  "2026-09-10",
+  "2026-09-11",
+  "2026-09-14",
+  "2026-09-15"
+ ],
+ "per_day": {
+  "2026-09-08": {
+   "scans": 89,
+   "prod_listed_per_scan": 13.2,
+   "replay_listed_per_scan": 17.3,
+   "jaccard_p50": 0.675,
+   "top60_overlap_p50": 0.95
+  },
+  "2026-09-09": {
+   "scans": 89,
+   "prod_listed_per_scan": 15.0,
+   "replay_listed_per_scan": 17.2,
+   "jaccard_p50": 0.8462,
+   "top60_overlap_p50": 1.0
+  },
+  "2026-09-10": {
+   "scans": 92,
+   "prod_listed_per_scan": 10.1,
+   "replay_listed_per_scan": 13.4,
+   "jaccard_p50": 0.8,
+   "top60_overlap_p50": 1.0
+  },
+  "2026-09-11": {
+   "scans": 89,
+   "prod_listed_per_scan": 13.0,
+   "replay_listed_per_scan": 15.8,
+   "jaccard_p50": 0.8,
+   "top60_overlap_p50": 1.0
+  },
+  "2026-09-14": {
+   "scans": 89,
+   "prod_listed_per_scan": 14.0,
+   "replay_listed_per_scan": 18.2,
+   "jaccard_p50": 0.8462,
+   "top60_overlap_p50": 1.0
+  },
+  "2026-09-15": {
+   "scans": 89,
+   "prod_listed_per_scan": 12.2,
+   "replay_listed_per_scan": 15.3,
+   "jaccard_p50": 0.8333,
+   "top60_overlap_p50": 1.0
+  }
+ },
+ "top60_overlap_by_bucket": {
+  "premarket_0400_0430": {
+   "n": 10,
+   "p10": 0.0,
+   "p50": 1.0,
+   "p90": 1.0
+  },
+  "premarket_after_0430": {
+   "n": 159,
+   "p10": 0.8889,
+   "p50": 1.0,
+   "p90": 1.0
+  },
+  "regular_0930": {
+   "n": 9,
+   "p10": 1.0,
+   "p50": 1.0,
+   "p90": 1.0
+  },
+  "regular_0945": {
+   "n": 14,
+   "p10": 0.0,
+   "p50": 1.0,
+   "p90": 1.0
+  },
+  "regular_1000": {
+   "n": 13,
+   "p10": 0.8,
+   "p50": 1.0,
+   "p90": 1.0
+  },
+  "regular_after_1015": {
+   "n": 330,
+   "p10": 0.8333,
+   "p50": 1.0,
+   "p90": 1.0
+  }
+ },
+ "matched_scans": 537,
+ "production_completed_scans": 537,
+ "replay_scans_without_production_match": 0,
+ "discovery": {
+  "jaccard_listed": {
+   "n": 537,
+   "p10": 0.5238,
+   "p50": 0.8,
+   "p90": 1.0
+  },
+  "top60_overlap_listed": {
+   "n": 535,
+   "p10": 0.8333,
+   "p50": 1.0,
+   "p90": 1.0
+  },
+  "change_diff_pct_points": {
+   "n": 6558,
+   "p10": -0.3717472118959009,
+   "p50": 0.0,
+   "p90": 0.38103568929321163
+  },
+  "relvol_ratio_prod_over_replay": {
+   "n": 6548,
+   "p10": 0.9999994743625433,
+   "p50": 1.002664843000368,
+   "p90": 1.03952976391545
+  },
+  "market_cap_ratio_replay_over_prod": {
+   "n": 6558,
+   "p10": 1.0,
+   "p50": 1.0,
+   "p90": 1.0
+  },
+  "production_listed_candidates_missing_in_replay": 378,
+  "distinct_missing_tickers": 165,
+  "missing_without_bars_in_store": 0,
+  "missing_with_bars_but_filtered": 378,
+  "missing_examples": [
+   "BUUU",
+   "SIM",
+   "GDEV",
+   "YDES",
+   "TMCR",
+   "RFAI",
+   "EFSI",
+   "CYPH",
+   "TTRX",
+   "BGSI",
+   "ROMA",
+   "YB",
+   "VEON",
+   "IBEX",
+   "KMDA"
+  ]
+ },
+ "structures": {
+  "common_massive_sourced": 1642,
+  "pivot_id_equal": 1558,
+  "equal_rate": 0.9488,
+  "young_tickers_common": 345,
+  "young_tickers_equal": 8,
+  "young_note": "tickers with < 380 daily sessions were Yahoo-sourced in production"
+ },
+ "events": {
+  "production_triggered": 87,
+  "matched": 87,
+  "recall": 1.0,
+  "replay_only": 55,
+  "minutes_apart": {
+   "n": 87,
+   "p10": 0.0,
+   "p50": 0.0,
+   "p90": 6.1
+  },
+  "abs_price_diff_pct": {
+   "n": 87,
+   "p10": 0.0,
+   "p50": 0.294,
+   "p90": 1.067
+  },
+  "last_state_agreement": 0.954
+ },
+ "rvol": {
+  "relative_error_by_prod_source": {},
+  "availability_by_prod_source": {
+   "Massive": {
+    "neither": 7567
+   },
+   "Yahoo/yfinance": {
+    "prod_only": 68,
+    "neither": 5
+   },
+   "none": {
+    "neither": 67
+   }
+  },
+  "prod_comparison_sessions": {},
+  "replay_comparison_sessions": {}
+ },
+ "intraday_completeness_prod_vs_replay": {
+  "stale_complete_bars|stale_complete_bars": 7557,
+  "complete_bars_through_cutoff|stale_complete_bars": 75,
+  "None|None": 46,
+  "None|stale_complete_bars": 21,
+  "stale_complete_bars|None": 8
+ },
+ "scores_replay_minus_prod": {
+  "alert_priority_score": {
+   "n": 7707,
+   "p10": -3.2807999999999993,
+   "p50": -0.022399999999997533,
+   "p90": 2.5376000000000047,
+   "within_1pt": 0.5961
+  },
+  "breakout_quality_score": {
+   "n": 7553,
+   "p10": -8.620000000000005,
+   "p50": -0.0075999999999964984,
+   "p90": 7.017499999999998,
+   "within_1pt": 0.4635
+  },
+  "data_confidence_score": {
+   "n": 7707,
+   "p10": -0.17749999999999488,
+   "p50": -0.1075000000000017,
+   "p90": 0.45999999999999375,
+   "within_1pt": 0.9463
+  }
+ },
+ "t1": {
+  "common": 44,
+  "agree": 42
+ }
+}
