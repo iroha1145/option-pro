@@ -295,6 +295,7 @@ def _publish(
     *,
     cache_key: str = "provider-cache-bucket",
     transitions: list[dict] | None = None,
+    shadows: list[dict] | None = None,
 ) -> str:
     scan_id = repo.begin_scan(
         provider="fixture",
@@ -321,6 +322,7 @@ def _publish(
             },
             "events": events,
             "transitions": transitions or [],
+            "range_persistence_shadow": shadows or [],
         },
         now=at,
     )
@@ -741,6 +743,75 @@ def test_retention_keeps_the_first_and_first_triggered_snapshots_research_reads(
             )
         ]
     assert kept == [scan_ids[0], scan_ids[1], recent]
+
+
+def test_retention_keeps_the_first_snapshots_of_every_shadow_feature_version(
+    tmp_path,
+) -> None:
+    # Research keeps the first observation of each (event, range-persistence version)
+    # experiment. When the shadow version changes while the event is still being
+    # rechecked, the first row of the new version must survive retention even though
+    # older rows of the same event exist.
+    repo = BreakoutRepository(tmp_path / "retention-versions.db")
+    repo.initialize()
+    first_seen = START - timedelta(days=70)
+    triggered_at = first_seen + timedelta(days=1)
+
+    def shadow(version: str) -> list[dict]:
+        return [{"event_id": "event-versions", "ticker": "NVDA", "version": version}]
+
+    watching = {
+        **_event("event-versions", "NVDA", first_seen, first_seen),
+        "lifecycle_state": "WATCHING",
+        "previous_state": None,
+        "transition_reason": "discovered",
+        "triggered_at": None,
+    }
+    scan_ids = [_publish(repo, first_seen, [watching], cache_key="bucket-0", shadows=shadow("rp-v1"))]
+    for offset in range(1, 7):
+        observed = first_seen + timedelta(days=offset)
+        event = {
+            **_event("event-versions", "NVDA", first_seen, observed),
+            "triggered_at": triggered_at,
+            "state_changed_at": triggered_at,
+        }
+        version = "rp-v1" if offset < 4 else "rp-v2"
+        scan_ids.append(
+            _publish(repo, observed, [event], cache_key=f"bucket-{offset}", shadows=shadow(version))
+        )
+    recent = _publish(
+        repo,
+        START - timedelta(days=1),
+        [{**_event("event-versions", "NVDA", first_seen, START - timedelta(days=1)),
+          "triggered_at": triggered_at}],
+        cache_key="bucket-recent",
+        shadows=shadow("rp-v2"),
+    )
+    token = repo.acquire_lock("breakout-worker", "retention-versions", 120, START)
+    for _ in range(10):
+        counts = repo.prune_retention(
+            owner_id="retention-versions",
+            lease_token=token,
+            raw_payload_hours=24,
+            scan_days=30,
+            batch_size=2,
+            now=START + timedelta(seconds=1),
+        )
+        if not counts["scan_attachments"]:
+            break
+    else:  # pragma: no cover - protects against retention making no progress
+        pytest.fail("retention did not converge")
+
+    with sqlite3.connect(repo.path) as connection:
+        kept = [
+            row[0]
+            for row in connection.execute(
+                "SELECT scan_run_id FROM breakout_scan_events WHERE event_id='event-versions' "
+                "ORDER BY created_at, scan_run_id"
+            )
+        ]
+    # v1: first sighting and first trigger; v2: its first row (already triggered); the recent scan.
+    assert kept == [scan_ids[0], scan_ids[1], scan_ids[4], recent]
 
 
 def test_snapshot_id_formula_is_deterministic() -> None:
