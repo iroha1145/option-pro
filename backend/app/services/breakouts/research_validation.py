@@ -1107,14 +1107,16 @@ def run_range_persistence_validation(
     labeled = attach_forward_return_labels(
         merged["observations"], price_dataset, horizons=normalized_horizons
     )
-    # Purging drops the rows whose label ends past the next window's start, which
-    # with daily scans is the last `horizon` dates of the train and validation
-    # windows. Adding those dates back keeps the configured number of usable
-    # dates; otherwise any horizon as long as the validation window never forms one.
+    # With daily scans the embargo drops the first `embargo_dates` dates of the
+    # validation and test windows, and purging then drops the rows whose label ends
+    # at or after the next window's used start: the last `horizon - embargo_dates`
+    # dates of the train and validation windows. Adding exactly those dates back
+    # keeps the configured number of usable dates; otherwise any horizon as long as
+    # the validation window never forms one.
     raw_windows = {
         horizon: {
-            "train_dates": train_dates + horizon,
-            "validation_dates": validation_dates + horizon,
+            "train_dates": train_dates + max(horizon - embargo_dates, 0),
+            "validation_dates": validation_dates + max(horizon, embargo_dates),
             "test_dates": test_dates,
         }
         for horizon in normalized_horizons

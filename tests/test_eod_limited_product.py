@@ -11,6 +11,8 @@ from fastapi import HTTPException
 from app.api import strength
 from app.services.algorithm_modes import EOD_LIMITED_V1, PRODUCTION_ALGORITHM
 from app.services.eod_limited import (
+    ALGORITHM_VERSION,
+    COMPUTE_VERSION,
     MODE_ID,
     PURPOSE_HISTORICAL,
     PURPOSE_LIVE,
@@ -148,6 +150,21 @@ def test_project_keeps_watch_and_empty_composite() -> None:
     assert payload["rows"][0]["price"] == 120.5
     assert payload["rows"][0]["factor_dims"][0]["key"] == "factor_T"
     assert payload["capability_flags"]["volume_verified"] is False
+
+
+def test_algorithm_version_follows_the_served_batch() -> None:
+    # After a deploy the reader serves the previous batch until the worker republishes;
+    # its label must say which algorithm scored it, not which code is running.
+    current = dict(_scored(), compute_version=COMPUTE_VERSION)
+    assert project_strength_payload(current, parameters={})["algorithm_version"] == ALGORITHM_VERSION
+    previous = dict(_scored(), compute_version="limited-all-market-v1.5")
+    payload = project_strength_payload(previous, parameters={})
+    assert payload["algorithm_version"] == "eod-limited-v1.5"
+    assert payload["score_version"] == "limited-all-market-v1.5"
+    legacy = dict(_scored(), compute_version="limited-current-v1.1")
+    assert project_strength_payload(legacy, parameters={})["algorithm_version"] == "eod-limited-v1.1"
+    odd = dict(_scored(), compute_version="custom-build")
+    assert project_strength_payload(odd, parameters={})["algorithm_version"] == "eod-limited-unknown(custom-build)"
 
 
 def test_observation_rows_dedupe_same_security_across_themes() -> None:

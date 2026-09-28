@@ -212,8 +212,23 @@ def _database_snapshot_id(
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _shadow_version_sql(scan_event: str) -> str:
+    """SQL: the range-persistence shadow version stored with a scan-event row ('' if none)."""
+
+    return f"""COALESCE((
+          SELECT shadow.version
+          FROM range_persistence_shadow AS shadow
+          WHERE shadow.scan_run_id={scan_event}.scan_run_id
+            AND shadow.event_id={scan_event}.event_id
+        ),'')"""
+
+
 def _earlier_completed_snapshot_sql(event: str, run: str, *, triggered: bool) -> str:
-    """SQL: a completed scan published before ``run`` also holds a snapshot of ``event``."""
+    """SQL: a completed scan published before ``run`` also holds a snapshot of ``event``.
+
+    Only snapshots with the same range-persistence shadow version count: research
+    keeps one first observation per (event, shadow version) experiment.
+    """
 
     trigger = (
         "AND json_extract(earlier.event_snapshot_json,'$.triggered_at') IS NOT NULL"
@@ -228,6 +243,7 @@ def _earlier_completed_snapshot_sql(event: str, run: str, *, triggered: bool) ->
             ON earlier_run.scan_run_id=earlier.scan_run_id
            AND earlier_run.status='completed'
           WHERE earlier.event_id={event}.event_id {trigger}
+            AND {_shadow_version_sql('earlier')}={_shadow_version_sql(event)}
             AND (
               COALESCE(earlier_run.published_at,earlier_run.completed_at,earlier_run.updated_at,'')
                 < COALESCE({run}.published_at,{run}.completed_at,{run}.updated_at,'')
@@ -246,7 +262,9 @@ def _research_snapshot_superseded_sql(event: str, run: str) -> str:
     Rechecks overwrite ``event_price`` and ``feature_cutoff_at`` with each scan's
     values while ``triggered_at`` stays fixed, so only the first snapshot that
     carried the trigger passes the research point-in-time check; research also
-    starts from the first sighting of each event. Both rows are kept for good.
+    starts from the first sighting of each event. Both rows are kept for good,
+    once per range-persistence shadow version, because research keeps the first
+    observation of every (event, version) experiment.
     """
 
     return f"""(

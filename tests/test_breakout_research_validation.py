@@ -459,11 +459,14 @@ def test_research_documentation_states_leakage_and_shadow_boundaries():
     assert "shadow" in content
 
 
-def test_each_horizon_keeps_the_configured_usable_dates_after_purging():
+@pytest.mark.parametrize(("embargo", "raw_train", "raw_validation"), [(0, 10, 8), (1, 9, 8), (2, 8, 8)])
+def test_each_horizon_keeps_the_configured_usable_dates_after_purging(embargo, raw_train, raw_validation):
     # With daily scans, a horizon at least as long as the validation window used to
     # purge every validation row (label ends reach past the test start), so the
     # default 20/63-session horizons could never form a window however long the
-    # history grew. Train and validation windows now add the horizon's sessions.
+    # history grew. Train windows now add the dates the purge removes
+    # (horizon - embargo) and validation windows add the embargo and the purge
+    # (max(horizon, embargo)), so both keep exactly the configured usable dates.
     dates = _business_dates(date(2026, 1, 2), 60)
     tickers = {"AAA": 1.01, "BBB": 1.0, "CCC": 0.99}
     events, shadows = [], []
@@ -510,7 +513,7 @@ def test_each_horizon_keeps_the_configured_usable_dates_after_purging():
         train_dates=6,
         validation_dates=4,
         test_dates=4,
-        embargo_dates=1,
+        embargo_dates=embargo,
         minimum_rows_per_split=2,
         top_k=1,
     )
@@ -519,9 +522,9 @@ def test_each_horizon_keeps_the_configured_usable_dates_after_purging():
     assert horizon["status"] == "active"
     window = horizon["windows"][0]
     assert window["audit"]["used_rows"]["validation"] == 4 * 3
-    assert window["audit"]["used_rows"]["train"] == 7 * 3
+    assert window["audit"]["used_rows"]["train"] == 6 * 3
     assert report["configuration"]["raw_window_dates_by_horizon"]["4"] == {
-        "train_dates": 10, "validation_dates": 8, "test_dates": 4,
+        "train_dates": raw_train, "validation_dates": raw_validation, "test_dates": 4,
     }
 
 
