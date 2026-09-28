@@ -1,0 +1,51 @@
+{
+ "source": "read-only column extract of the production breakout tables (optix.db on 74.91.31.186), taken 2026-09-28; the extract is not committed",
+ "completed_published_scans": 4840,
+ "publication_dates": 53,
+ "first_publication": "2026-07-13",
+ "last_publication": "2026-09-25",
+ "scan_event_rows": 181024,
+ "events": 2737,
+ "events_with_trigger": 2566,
+ "shadow_versions": {
+  "range-persistence-v1": 181024
+ },
+ "retention_days_in_production": 90,
+ "old_rule_would_delete": {
+  "first_sighting_rows": 2663,
+  "first_trigger_rows": 2351,
+  "earliest_deletion_date": "2026-10-13",
+  "by_month": {
+   "2026-10": {
+    "first": 591,
+    "trigger": 513
+   },
+   "2026-11": {
+    "first": 1343,
+    "trigger": 1183
+   },
+   "2026-12": {
+    "first": 729,
+    "trigger": 655
+   }
+  },
+  "note": "rows that are not the event's latest completed snapshot are deleted once 90 days old under the pre-#200 rule; later rechecks can only add to these counts"
+ },
+ "research_window_readiness": {
+  "default_windows": {
+   "train": 60,
+   "validation": 20,
+   "test": 20,
+   "embargo": 1
+  },
+  "event_dates_needed": {
+   "h1": 101,
+   "h5": 109,
+   "h20": 139,
+   "h63": 225
+  },
+  "event_dates_available": 53,
+  "windows_formable": false,
+  "note": "no walk-forward window can form yet, so no radar performance claim is made; the fixes are correctness work"
+ }
+}
