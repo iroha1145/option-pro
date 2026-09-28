@@ -388,3 +388,57 @@ def test_stock_identity_compares_the_common_prefix_and_reports_fund_counts_apart
     assert item["extra_variant_rows"] == 1 and item["compared_rows"] == 3 + 2 + 2
     assert item["n_differing_dates"] == 1
     assert set(item) == {"dates", "identical", "differing_dates", "compared_rows", "extra_variant_rows", "n_differing_dates"}
+
+
+def test_atr_distribution_matches_the_production_atr_percentage(tmp_path, monkeypatch):
+    """The recomputed ATR% equals extract_raw's atr_pct on a split-adjusted series."""
+    from app.services.research_eod_v1.constants import ATR_PERIOD
+    from app.services.research_eod_v1.mathutil import atr_sma_at
+
+    atr_module = _load("atr_distribution")
+
+    def _row(ticker, track="stock", sources=None):
+        return {"ticker": ticker, "sort_score": 90.0, "stock_or_etf_track": track,
+                "source_tickers": [ticker] if sources is None else sources}
+
+    sessions = [day.isoformat() for day in SESSIONS[:40]]
+    rng = np.random.default_rng(5)
+    closes = 50 * np.cumprod(1 + rng.normal(0.0, 0.02, len(sessions)))
+    # A 2-for-1 split on the session five days before the signal: raw prices halve from there.
+    split_day = sessions[34]
+    factor = np.asarray([0.5 if day >= split_day else 1.0 for day in sessions])
+    connection = md._connect(tmp_path / "replay.sqlite")
+    with connection:
+        for day in sessions:
+            connection.execute("INSERT INTO market_sessions VALUES (?, 'x', 1, 'x', 'OK')", (day,))
+        for day, close, scale in zip(sessions, closes, factor):
+            raw = close * scale
+            connection.execute("INSERT INTO raw_daily_bars VALUES (?, ?, 1, ?, ?, ?, ?, 1000, NULL, NULL)",
+                               ("VOL", day, raw * 0.99, raw * 1.03, raw * 0.97, raw))
+            connection.execute("INSERT INTO raw_daily_bars VALUES (?, ?, 1, ?, ?, ?, ?, 1000, NULL, NULL)",
+                               ("SPY", day, 100.0, 101.0, 99.0, 100.0))
+        connection.execute("INSERT INTO splits VALUES (?, ?, ?, ?, 'x')", ("VOL", split_day, 1.0, 2.0))
+    splits = {"VOL": [(split_day, 1.0, 2.0)]}
+    index = {day: i for i, day in enumerate(sessions)}
+    signal = sessions[-1]
+    value = atr_module.atr_pct_at(connection, splits, sessions, index, "VOL", signal)
+    # Production: adjust the whole history to the post-split scale and take the 14-session mean true range.
+    adjusted = closes * 0.5
+    expected = 100.0 * atr_sma_at(adjusted * 1.03, adjusted * 0.97, adjusted, len(sessions) - 1, ATR_PERIOD) / adjusted[-1]
+    assert value == pytest.approx(expected, rel=1e-9)
+    assert atr_module.atr_pct_at(connection, splits, sessions, index, "NONE", signal) is None
+    replay_dir = tmp_path / "replay"
+    replay_dir.mkdir()
+    record = {"session": signal, "status": "scored", "gate_ok": True, "lists": {
+        "v16/conservative/mid": {"rows": [_row("VOL"), _row("SPY", track="etf")]},
+        "cons17+nofund/conservative/mid": {"rows": [_row("VOL"), _row("BCPC", sources=["BCPC", "BCpC"])]}}}
+    with gzip.open(replay_dir / f"{signal}.json.gz", "wt") as handle:
+        json.dump(record, handle)
+    out = tmp_path / "out"
+    monkeypatch.setattr(sys, "argv", ["atr_distribution.py", "--db", str(tmp_path / "replay.sqlite"), "--replay", str(replay_dir),
+                                      "--variants", "v16,cons17+nofund", "--profile", "conservative", "--out", str(out)])
+    atr_module.main()
+    rows = list(__import__("csv").DictReader((out / "atr_distribution.csv").open()))
+    pooled = {row["variant"]: row for row in rows if row["view"] == "all"}
+    assert float(pooled["v16"]["p50"]) == pytest.approx(expected, abs=1e-3) and pooled["v16"]["names"] == "1"
+    assert pooled["cons17+nofund"]["missing"] == "1"  # the identity collision is counted, not valued
