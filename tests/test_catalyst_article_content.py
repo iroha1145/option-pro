@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import http.client
 import socket
@@ -316,3 +317,208 @@ def test_html_comments_do_not_break_body_extraction(monkeypatch):
     payload = f'<title>{TITLE}</title><article><!-- publisher annotation --><h1>{TITLE}</h1><p>{BODY}</p><!-- end article --></article>'
     serve(monkeypatch, payload.encode())
     assert article.fetch_article("https://example.com", expected_title=TITLE)["status"] == "available"
+
+
+def test_fool_body_uses_page_title_instead_of_section_heading():
+    payload = f'<title>{TITLE}</title><div class="article-body"><h2>What happens next?</h2><p>{BODY}</p></div><article><h2>Other news</h2><p>Related card.</p></article>'
+    text, truncated = article._extract(payload.encode(), TITLE, source_url='https://www.fool.com/investing/story/')
+    assert 'division 7' in text
+    assert 'Related card' not in text
+    assert truncated is False
+    with pytest.raises(article._Unavailable):
+        article._extract(payload.encode(), TITLE, source_url='https://unrelated.example/story')
+
+
+def test_cnbc_public_preview_is_partial_and_does_not_use_script_body():
+    payload = page(body=BODY + '\nScript only hidden ending.').decode() + f'<div class="ArticleBody-articleBody"><div class="ArticleBody-meteredPaywallPreview"><p>{BODY}</p><p hidden>Hidden DOM ending.</p></div></div>'
+    text, truncated = article._extract(payload.encode(), TITLE, source_url='https://www.cnbc.com/story')
+    assert truncated is True
+    assert 'division 7' in text
+    assert 'ending' not in text
+
+
+@pytest.mark.parametrize('restriction', ['<meta itemprop="isAccessibleForFree" content="false">', '<p>Subscribe to continue reading.</p>', '<div class="Paywall-content"><p>Protected text.</p></div>'])
+def test_cnbc_explicit_restrictions_are_rejected(restriction):
+    payload = f'<title>{TITLE}</title><div class="ArticleBody-articleBody"><div class="ArticleBody-meteredPaywallPreview"><p>{BODY}</p>{restriction}</div></div>'
+    with pytest.raises(article._Unavailable, match='paywall'):
+        article._extract(payload.encode(), TITLE, source_url='https://www.cnbc.com/story')
+
+
+def test_short_semantic_body_accepts_list_news_without_duplicating_nested_paragraphs():
+    paragraphs = BODY.splitlines()[:2]
+    payload = f'<title>{TITLE}</title><div itemprop="articleBody"><ul><li><p>{paragraphs[0]}</p></li><li>{paragraphs[1]}</li></ul><nav><li>Navigation text</li></nav></div>'
+    text, truncated = article._extract(payload.encode(), TITLE)
+    assert text.count('division 0') == 1
+    assert text.count('division 1') == 1
+    assert 'Navigation' not in text
+    assert truncated is False
+
+
+def test_short_repeated_teaser_in_body_is_rejected():
+    payload = f'<title>{TITLE}</title><div itemprop="articleBody"><p>{"Acme reports growth. " * 15}</p><p>Another short sentence.</p></div>'
+    with pytest.raises(article._Unavailable):
+        article._extract(payload.encode(), TITLE)
+
+
+def test_ambiguous_single_article_cannot_borrow_page_identity():
+    payload = f'<title>{TITLE}</title><article><h2>What happens next?</h2><p>{BODY}</p></article>'
+    with pytest.raises(article._Unavailable, match='no_matching_article_body'):
+        article._extract(payload.encode(), TITLE)
+
+
+def test_only_article_card_cannot_replace_short_main_body():
+    payload = f'<title>{TITLE}</title><h1>{TITLE}</h1><div itemprop="articleBody"><p>Short main introduction.</p></div><article><h2><a href="/unrelated">Federal reserve announces interest rate decision</a></h2><p>{BODY}</p></article>'
+    with pytest.raises(article._Unavailable, match='no_matching_article_body'):
+        article._extract(payload.encode(), TITLE)
+
+
+def test_publisher_body_matches_visible_headline_when_browser_title_is_shortened():
+    payload = f'<title>Acme earnings</title><header id="main-article-header"><h1>{TITLE}</h1></header><div class="article-body"><!-- note --><p>{BODY}</p></div>'
+    assert article._extract(payload.encode(), TITLE, source_url='https://www.fool.com/story')[0]
+
+
+def test_google_legacy_link_fetches_original_and_revalidates_redirects(monkeypatch):
+    publisher = b'https://www.fool.com/story'
+    article_id = base64.urlsafe_b64encode(b'\x08\x13\x22' + bytes([len(publisher)]) + publisher).decode().rstrip('=')
+    payload = f'<title>{TITLE}</title><div class="article-body"><p>{BODY}</p></div>'.encode()
+    calls = serve(monkeypatch, payload)
+    result = article.fetch_article('https://news.google.com/rss/articles/' + article_id, expected_title=TITLE)
+    assert result['status'] == 'available'
+    assert result['source_url'] == publisher.decode()
+    assert calls == [publisher.decode()]
+
+
+def test_google_rpc_and_publisher_share_one_deadline(monkeypatch):
+    article_id = 'C' * 64
+    calls = []
+    metadata = f'<div data-n-a-id="{article_id}" data-n-a-ts="1790697600" data-n-a-sg="signature123"></div>'.encode()
+    rpc = (")]}'\n" + json.dumps([['wrb.fr', 'Fbv4je', json.dumps(['garturlres', 'https://www.cnbc.com/story'])]])).encode()
+    payload = f'<title>{TITLE}</title><div class="ArticleBody-articleBody"><div class="ArticleBody-meteredPaywallPreview"><p>{BODY}</p></div></div>'.encode()
+
+    def download(url, host, path, deadline, *, method='GET', body=None):
+        calls.append((url, deadline, method, body))
+        return 200, {}, (metadata, rpc, payload)[len(calls) - 1]
+
+    monkeypatch.setattr(article, '_download', download)
+    result = article.fetch_article('https://news.google.com/rss/articles/' + article_id, expected_title=TITLE)
+    assert result['status'] == 'available'
+    assert result['source_url'] == 'https://www.cnbc.com/story'
+    assert result['truncated'] is True
+    assert [call[2] for call in calls] == ['GET', 'POST', 'GET']
+    assert calls[0][0] == 'https://news.google.com/articles/' + article_id + '?hl=en-US&gl=US&ceid=US:en'
+    assert calls[1][0] == 'https://news.google.com/_/DotsSplashUi/data/batchexecute?rpcids=Fbv4je'
+    assert calls[1][3].startswith(b'f.req=')
+    assert len({call[1] for call in calls}) == 1
+
+
+def test_unresolved_google_page_is_not_treated_as_body(monkeypatch):
+    monkeypatch.setattr(article, '_download', lambda *args, **kwargs: (200, {}, page()))
+    result = article.fetch_article('https://news.google.com/articles/' + 'C' * 64, expected_title=TITLE)
+    assert result['reason'] == 'publisher_url_unavailable'
+    assert result['text'] == ''
+
+
+def test_resolved_publisher_dns_is_checked(monkeypatch):
+    monkeypatch.setattr(article, 'resolve_publisher_url', lambda *args, **kwargs: 'https://publisher.example/story')
+    monkeypatch.setattr(socket, 'getaddrinfo', lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 0, '', ('127.0.0.1', 443))])
+    result = article.fetch_article('https://news.google.com/articles/' + 'C' * 64)
+    assert result['reason'] == 'unsafe_address'
+
+
+def test_google_resolution_cannot_reset_timeout(monkeypatch):
+    def resolve(*args, **kwargs):
+        time.sleep(0.02)
+        return 'https://publisher.example/story'
+
+    monkeypatch.setattr(article, 'resolve_publisher_url', resolve)
+    monkeypatch.setattr(article, '_download', lambda *args, **kwargs: pytest.fail('expired request'))
+    assert article.fetch_article('https://news.google.com/articles/' + 'C' * 64, timeout_seconds=0.01)['reason'] == 'timeout'
+
+
+@pytest.mark.parametrize('url', [
+    'https://example.com/_/DotsSplashUi/data/batchexecute?rpcids=Fbv4je',
+    'https://news.google.com/elsewhere',
+    'https://news.google.com/_/DotsSplashUi/data/batchexecute?rpcids=another',
+])
+def test_google_callback_rejects_other_post_targets(monkeypatch, url):
+    monkeypatch.setattr(article, '_resolve', lambda *args: pytest.fail('unapproved network request'))
+    with pytest.raises(article._Unavailable, match='unsafe_request'):
+        article._google_request(url, method='POST', body=b'f.req=value', deadline=time.monotonic() + 1)
+
+
+@pytest.mark.parametrize('url', [
+    'http://www.businesswire.com:81/news/home/123',
+    'http://www.businesswire.com.evil.example/news/home/123',
+    'http://user:password@www.businesswire.com/news/home/123',
+    'http://www.businesswire.com/unrelated',
+])
+def test_http_upgrade_is_limited_to_known_public_article_route(monkeypatch, url):
+    calls = serve(monkeypatch, page())
+    assert article.fetch_article(url)['reason'] == 'unsafe_url'
+    assert calls == []
+
+
+def test_businesswire_http_url_is_upgraded_without_plaintext_request(monkeypatch):
+    calls = serve(monkeypatch, page())
+    result = article.fetch_article('http://www.businesswire.com/news/home/123', expected_title=TITLE)
+    assert result['status'] == 'available'
+    assert calls == ['https://www.businesswire.com/news/home/123']
+
+
+@pytest.mark.parametrize('host,path,method,payload,content_type,reason', [
+    ('news.google.com', '/articles/' + 'C' * 64, 'GET', b'a' * 1_100_000, 'text/html', None),
+    ('news.google.com', '/articles/' + 'C' * 64 + '?hl=en-US&gl=US&ceid=US:en', 'GET', b'a' * 1_100_000, 'text/html', None),
+    ('example.com', '/articles/' + 'C' * 64, 'GET', b'a' * 1_100_000, 'text/html', 'response_too_large'),
+    ('news.google.com', '/articles/' + 'C' * 64, 'GET', b'a' * 2_000_001, 'text/html', 'response_too_large'),
+    ('news.google.com', '/_/DotsSplashUi/data/batchexecute?rpcids=Fbv4je', 'POST', b'{}', 'application/json', None),
+    ('news.google.com', '/_/DotsSplashUi/data/batchexecute?rpcids=Fbv4je', 'POST', b'a' * 100_001, 'application/json', 'response_too_large'),
+    ('news.google.com', '/_/DotsSplashUi/data/batchexecute?rpcids=Fbv4je', 'POST', b'{}', 'text/html', 'unsupported_content_type'),
+    ('example.com', '/_/DotsSplashUi/data/batchexecute?rpcids=Fbv4je', 'POST', b'{}', 'application/json', 'unsafe_request'),
+])
+def test_google_transport_exceptions_are_bounded(monkeypatch, host, path, method, payload, content_type, reason):
+    class Socket:
+        def settimeout(self, value):
+            pass
+        def shutdown(self, how):
+            pass
+
+    class Response:
+        status = 200
+        offset = 0
+        def getheaders(self):
+            return {'Content-Type': content_type}.items()
+        def isclosed(self):
+            return self.offset >= len(payload)
+        def read1(self, size):
+            chunk = payload[self.offset:self.offset + size]
+            self.offset += len(chunk)
+            return chunk
+        def close(self):
+            pass
+
+    class Connection:
+        sock = Socket()
+        def __init__(self, *args):
+            pass
+        def connect(self):
+            pass
+        def request(self, request_method, request_path, *, headers, body=None):
+            assert request_method == method
+            assert request_path == path
+            assert not any(key.lower() in {'cookie', 'authorization', 'proxy-authorization'} for key in headers)
+            if method == 'POST':
+                assert headers['Content-Type'] == 'application/x-www-form-urlencoded'
+                assert body == b'f.req=value'
+        def getresponse(self):
+            return Response()
+        def close(self):
+            pass
+
+    monkeypatch.setattr(article, '_resolve', lambda *args: (socket.AF_INET, ('8.8.8.8', 443)))
+    monkeypatch.setattr(article, '_PinnedHTTPSConnection', Connection)
+    kwargs = {'method': method, 'body': b'f.req=value'} if method == 'POST' else {}
+    if reason:
+        with pytest.raises(article._Unavailable, match=reason):
+            article._download('https://' + host + path, host, path, time.monotonic() + 1, **kwargs)
+    else:
+        assert article._download('https://' + host + path, host, path, time.monotonic() + 1, **kwargs)[2] == payload
