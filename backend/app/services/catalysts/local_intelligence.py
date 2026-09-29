@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 import copy
+import contextvars
+import fcntl
 import hashlib
 import json
 import math
@@ -11,11 +13,12 @@ import threading
 import time
 import uuid
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterable, Iterator, Literal, Mapping, Sequence, cast
+from typing import Any, Callable, Iterable, Iterator, Literal, Mapping, Sequence, cast
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -30,6 +33,7 @@ from app.services.ai_jobs.models import (
 from app.services.ai_jobs.repository import AIJobRepository
 
 from .errors import CatalystError, InvalidCursorError
+from .news_quality import news_quality
 
 
 def macro_conditions_context() -> dict[str, Any] | None:
@@ -97,7 +101,7 @@ _FOCUS_WAITING_PLACEHOLDERS = frozenset(
 _LEGACY_PLACEHOLDER_INPUT_ERROR = "legacy_placeholder_input_hidden"
 AMBIGUOUS_TICKERS = frozenset({"AI", "ON", "CAT"})
 TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-^]{0,11}$")
-SCHEMA_VERSION = "optix-local-catalyst-v6"
+SCHEMA_VERSION = "optix-local-catalyst-v7"
 NEWS_RESULT_CONTRACT_ID = (
     "news-impact-result:"
     f"{ai_runtime.RESULT_VALIDATION_CONTRACT_VERSION}:"
@@ -151,6 +155,10 @@ _AI_JOB_SNAPSHOT_MARGIN = timedelta(days=1)
 # 已入队的正常载荷不变。
 NEWS_SUMMARY_MAX_BYTES = 40_000
 NEWS_TICKER_HINTS_MAX_BYTES = 4_000
+NEWS_ARTICLE_MAX_BYTES = 28_000
+NEWS_SUMMARY_WITH_ARTICLE_MAX_BYTES = 10_000
+ARTICLE_RETRY_SECONDS = 30 * 60
+SCHEDULED_ARTICLE_PROBE_LIMIT = 12
 # 旧库升级时给热点条目补上计划级分数列（v6）。定义与 _SCHEMA 里的建表语句一致。
 _HOTSPOT_ITEM_SCORE_COLUMNS = (
     (
@@ -186,6 +194,8 @@ CREATE TABLE IF NOT EXISTS catalyst_local_news_revisions (
     source_names_json TEXT NOT NULL,
     source_count INTEGER NOT NULL CHECK(source_count >= 1),
     ingested_at TEXT NOT NULL,
+    article_json TEXT,
+    article_checked_at TEXT,
     PRIMARY KEY(news_id,change_sequence,content_hash)
 );
 CREATE INDEX IF NOT EXISTS idx_local_news_available
@@ -202,6 +212,7 @@ CREATE TABLE IF NOT EXISTS catalyst_local_analysis_links (
     result_available_at TEXT,
     verified_at TEXT,
     created_at TEXT NOT NULL,
+    input_context_json TEXT,
     PRIMARY KEY(news_id,change_sequence,content_hash,job_id),
     FOREIGN KEY(news_id,change_sequence,content_hash)
       REFERENCES catalyst_local_news_revisions(news_id,change_sequence,content_hash)
@@ -493,6 +504,13 @@ def _revision_cache_fresh(
     *,
     as_of: datetime | None = None,
 ) -> bool:
+    observed = as_of or _utc_now()
+    if any(
+        cached["query_as_of"] < checked <= observed
+        for row in cached.get("rows", ())
+        if (checked := _parse_time(row.get("article_checked_at"))) is not None
+    ):
+        return False
     return (
         cached["cursor"] == store_cursor
         and time.monotonic() - cached["built_at"]
@@ -514,6 +532,7 @@ def _revision_store_cursor(connection: sqlite3.Connection) -> tuple[Any, ...]:
         """SELECT
                (SELECT MAX(rowid) FROM macrolens_etl_news_changes),
                (SELECT MAX(rowid) FROM catalyst_local_news_revisions),
+               (SELECT MAX(article_checked_at) FROM catalyst_local_news_revisions),
                (SELECT COUNT(*) FROM catalyst_local_analysis_links),
                (SELECT MAX(rowid) FROM catalyst_local_analysis_links),
                (SELECT MAX(COALESCE(result_available_at,''))
@@ -698,20 +717,71 @@ def _untrusted_json_bytes(value: Any) -> int:
     return len(raw.encode("utf-8")) + 5 * (raw.count("<") + raw.count(">"))
 
 
-def _bounded_news_summary(summary: Any) -> tuple[Any, bool]:
+def _bounded_news_summary(
+    summary: Any, maximum: int = NEWS_SUMMARY_MAX_BYTES,
+) -> tuple[Any, bool]:
     if (
         not isinstance(summary, str)
-        or _untrusted_json_bytes(summary) <= NEWS_SUMMARY_MAX_BYTES
+        or _untrusted_json_bytes(summary) <= maximum
     ):
         return summary, False
     low, high = 0, len(summary)
     while low < high:
         middle = (low + high + 1) // 2
-        if _untrusted_json_bytes(summary[:middle]) <= NEWS_SUMMARY_MAX_BYTES:
+        if _untrusted_json_bytes(summary[:middle]) <= maximum:
             low = middle
         else:
             high = middle - 1
     return summary[:low], True
+
+
+def _article_snapshot(
+    revision: Mapping[str, Any] | sqlite3.Row,
+    *,
+    as_of: datetime | None = None,
+) -> dict[str, Any] | None:
+    item = dict(revision)
+    article = _loads(item.get("article_json"), None)
+    if not isinstance(article, dict):
+        return None
+    fetched_at = _parse_time(article.get("fetched_at"))
+    if fetched_at is None or (as_of is not None and fetched_at > as_of):
+        return None
+    checked_at = _parse_time(item.get("article_checked_at"))
+    if as_of is not None and (checked_at is None or checked_at > as_of):
+        return None
+    return article
+
+
+def _news_quality_reason(
+    revision: Mapping[str, Any] | sqlite3.Row, *, as_of: datetime,
+) -> str | None:
+    item = dict(revision)
+    article = _article_snapshot(item, as_of=as_of) or {}
+    return news_quality(
+        str(item.get("raw_title") or ""),
+        item.get("raw_summary"),
+        article.get("text") if article.get("status") == "available" else None,
+    )
+
+
+def _news_input_context(payload: Mapping[str, Any]) -> dict[str, Any]:
+    article = payload.get("article")
+    if isinstance(article, dict) and article.get("text"):
+        return {
+            "basis": "article_body",
+            "article_status": "available",
+            "reason": None,
+            "body_characters": len(article["text"]),
+            "truncated": bool(article.get("truncated")),
+        }
+    return {
+        "basis": "title_summary",
+        "article_status": payload.get("article_status", "not_requested"),
+        "reason": payload.get("article_reason"),
+        "body_characters": 0,
+        "truncated": False,
+    }
 
 
 def _bounded_ticker_hints(hints: Any) -> tuple[Any, bool]:
@@ -737,7 +807,12 @@ def _news_request_source_fields(
     """Summary and ticker hints exactly as a paid news request carries them."""
 
     item = dict(revision)
-    summary, summary_truncated = _bounded_news_summary(item.get("raw_summary"))
+    article = _article_snapshot(item)
+    has_body = bool(article and article.get("status") == "available" and article.get("text"))
+    summary, summary_truncated = _bounded_news_summary(
+        item.get("raw_summary"),
+        NEWS_SUMMARY_WITH_ARTICLE_MAX_BYTES if has_body else NEWS_SUMMARY_MAX_BYTES,
+    )
     hints, hints_truncated = _bounded_ticker_hints(
         _loads(item.get("source_tickers_json"), [])
     )
@@ -745,6 +820,14 @@ def _news_request_source_fields(
         "summary": summary,
         "source_ticker_hints": hints,
     }
+    if has_body:
+        assert article is not None
+        text, clipped = _bounded_news_summary(article["text"], NEWS_ARTICLE_MAX_BYTES)
+        fields["article"] = {**article, "text": text, "truncated": bool(article.get("truncated") or clipped)}
+        fields["article_status"] = "available"
+    elif article is not None:
+        fields["article_status"] = "unavailable"
+        fields["article_reason"] = article.get("reason")
     truncated = [
         name
         for name, flagged in (
@@ -757,6 +840,29 @@ def _news_request_source_fields(
         # 标注给模型与审计：这两个字段只是原文的前缀，不是完整上游内容。
         fields["truncated_fields"] = truncated
     return fields
+
+
+def _news_article_matches(
+    payload: Mapping[str, Any], revision: Mapping[str, Any] | sqlite3.Row,
+) -> bool:
+    article = payload.get("article")
+    if article is None:
+        # Earlier paid requests stay bound even if a later forced request has
+        # obtained a body. They must continue to be labelled title/summary only.
+        return payload.get("article_status") in {None, "unavailable", "not_requested"}
+    stored = _article_snapshot(revision)
+    if not isinstance(article, dict) or stored is None or stored.get("status") != "available":
+        return False
+    if payload.get("article_status") != "available" or set(article) != set(stored):
+        return False
+    if any(article[key] != stored[key] for key in stored if key not in {"text", "truncated"}):
+        return False
+    text = article.get("text")
+    if not isinstance(text, str) or not text:
+        return False
+    if text == stored.get("text"):
+        return article.get("truncated") == stored.get("truncated")
+    return article.get("truncated") is True and str(stored.get("text") or "").startswith(text)
 
 
 def _news_source_fields_match(
@@ -772,6 +878,8 @@ def _news_source_fields_match(
     too; nothing outside the revision's own text can match.
     """
 
+    if not _news_article_matches(payload, revision):
+        return False
     raw_summary = revision["raw_summary"]
     raw_hints = _loads(revision["source_tickers_json"], [])
     summary = payload.get("summary")
@@ -1460,6 +1568,7 @@ class LocalCatalystIntelligence:
         reasoning: str = REASONING,
         max_queued: int = 200,
         manual_refresh_cooldown_seconds: int = 30,
+        article_fetcher: Callable[..., dict[str, Any]] | None = None,
     ) -> None:
         if mode not in {"off", "read", "manual", "scheduled"}:
             raise ValueError("invalid catalyst mode")
@@ -1473,6 +1582,7 @@ class LocalCatalystIntelligence:
         self.model = model
         self.reasoning = reasoning
         self.max_queued = max_queued
+        self._article_fetcher = article_fetcher
         if (
             isinstance(manual_refresh_cooldown_seconds, bool)
             or not 0 <= int(manual_refresh_cooldown_seconds) <= 3600
@@ -1531,6 +1641,7 @@ class LocalCatalystIntelligence:
             # the write lock serializes the check-then-ALTER column upgrade.
             connection.execute("BEGIN IMMEDIATE")
             self._ensure_hotspot_item_score_columns(connection)
+            self._ensure_news_content_columns(connection)
             connection.execute(
                 """INSERT OR IGNORE INTO catalyst_local_schema(
                        version,checksum,applied_at
@@ -1569,6 +1680,17 @@ class LocalCatalystIntelligence:
 
         if not self._local_schema_ready:
             self.initialize()
+
+    @staticmethod
+    def _ensure_news_content_columns(connection: sqlite3.Connection) -> None:
+        for table, names in (
+            ("catalyst_local_news_revisions", ("article_json", "article_checked_at")),
+            ("catalyst_local_analysis_links", ("input_context_json",)),
+        ):
+            columns = {str(row["name"]) for row in connection.execute(f"PRAGMA table_info({table})")}
+            for name in names:
+                if name not in columns:
+                    connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} TEXT")
 
     @staticmethod
     def _ensure_hotspot_item_score_columns(
@@ -2165,13 +2287,20 @@ class LocalCatalystIntelligence:
         prompt = (
             NEWS_PROMPT_VERSION if expected_type == "news_impact" else FOCUS_PROMPT_VERSION
         )
+        supported_prompts = ai_runtime.NEWS_READABLE_PROMPT_VERSIONS if expected_type == "news_impact" else {prompt}
+        schema_matches = (
+            ai_runtime.news_schema_identity_matches(
+                row.get("prompt_version"), row.get("schema_version"), row.get("schema_sha256"),
+                current_identity=(schema_version, schema_hash),
+            ) if expected_type == "news_impact" else
+            (row.get("schema_version"), row.get("schema_sha256")) == (schema_version, schema_hash)
+        )
         return not (
             row.get("model") != self.model
             or row.get("reasoning") != self.reasoning
             or row.get("execution_mode") != EXECUTION_MODE
-            or row.get("prompt_version") != prompt
-            or row.get("schema_version") != schema_version
-            or row.get("schema_sha256") != schema_hash
+            or row.get("prompt_version") not in supported_prompts
+            or not schema_matches
         )
 
     def _identity_public_job(
@@ -2487,9 +2616,9 @@ class LocalCatalystIntelligence:
         if existing is None:
             connection.execute(
                 """INSERT INTO catalyst_local_analysis_links(
-                       news_id,change_sequence,content_hash,job_id,created_at
-                   ) VALUES(?,?,?,?,?)""",
-                (*identity, str(job["job_id"]), _iso(created_at)),
+                       news_id,change_sequence,content_hash,job_id,created_at,input_context_json
+                   ) VALUES(?,?,?,?,?,?)""",
+                (*identity, str(job["job_id"]), _iso(created_at), _json(_news_input_context(payload))),
             )
             return True
         existing_identity = (
@@ -2508,12 +2637,13 @@ class LocalCatalystIntelligence:
             """UPDATE catalyst_local_analysis_links SET
                    news_id=?,change_sequence=?,content_hash=?,
                    result_json=NULL,result_available_at=NULL,verified_at=NULL,
-                   created_at=?
+                   created_at=?,input_context_json=?
                WHERE job_id=? AND news_id=? AND change_sequence=?
                  AND content_hash=?""",
             (
                 *identity,
                 _iso(created_at),
+                _json(_news_input_context(payload)),
                 str(job["job_id"]),
                 *existing_identity,
             ),
@@ -2530,7 +2660,7 @@ class LocalCatalystIntelligence:
         return connection.execute(
             """SELECT news_id,change_sequence,content_hash,source,raw_title,
                       raw_summary,url,published_at,fetched_at,source_names_json,
-                      source_count,source_tickers_json,canonical_tickers_json
+                      source_count,source_tickers_json,canonical_tickers_json,article_json
                FROM catalyst_local_news_revisions
                WHERE news_id=? AND change_sequence=? AND content_hash=?""",
             key,
@@ -2795,7 +2925,9 @@ class LocalCatalystIntelligence:
             "allowed_tickers",
             "analysis_revision",
         }
-        allowed_keys = required_keys | {"manual_force_bucket", "truncated_fields"}
+        allowed_keys = required_keys | {
+            "manual_force_bucket", "truncated_fields", "article", "article_status", "article_reason",
+        }
         if set(payload) - allowed_keys or not required_keys <= set(payload):
             return False
         if not _news_source_fields_match(payload, revision):
@@ -2837,6 +2969,8 @@ class LocalCatalystIntelligence:
     @staticmethod
     def _news_validation_payload(
         revision: Mapping[str, Any] | sqlite3.Row,
+        *,
+        as_of: datetime | None = None,
     ) -> dict[str, Any]:
         """Rebuild the source context used by the original paid request.
 
@@ -2846,6 +2980,9 @@ class LocalCatalystIntelligence:
         """
 
         item = dict(revision)
+        article = _article_snapshot(item, as_of=as_of)
+        if article is not None and article.get("status") != "available":
+            article = None
 
         def list_value(decoded_key: str, json_key: str) -> list[Any]:
             decoded = item.get(decoded_key)
@@ -2861,6 +2998,8 @@ class LocalCatalystIntelligence:
             "source": str(item.get("source") or ""),
             "title": str(item.get("raw_title") or ""),
             "summary": item.get("raw_summary"),
+            "article": article,
+            "article_status": "available" if article else None,
             "sources": list_value("source_names", "source_names_json"),
             "source_ticker_hints": list_value(
                 "source_tickers",
@@ -3178,7 +3317,7 @@ class LocalCatalystIntelligence:
                       link.result_available_at,link.verified_at,
                       revision.source,revision.raw_title,revision.raw_summary,
                       revision.source_names_json,revision.source_tickers_json,
-                      revision.canonical_tickers_json
+                      revision.canonical_tickers_json,revision.article_json
                FROM catalyst_local_analysis_links link
                JOIN catalyst_local_news_revisions revision
                  ON revision.news_id=link.news_id
@@ -3351,7 +3490,7 @@ class LocalCatalystIntelligence:
             revision = connection.execute(
                 """SELECT news_id,change_sequence,content_hash,source,raw_title,
                           raw_summary,url,published_at,fetched_at,source_names_json,
-                          source_count,source_tickers_json,canonical_tickers_json
+                          source_count,source_tickers_json,canonical_tickers_json,article_json
                    FROM catalyst_local_news_revisions
                    WHERE news_id=? AND change_sequence=? AND content_hash=?""",
                 (
@@ -3630,7 +3769,7 @@ class LocalCatalystIntelligence:
         rows, _source_cursor = self._active_revisions_tracked(
             connection, as_of=as_of, window_hours=window_hours
         )
-        return rows
+        return [row for row in rows if not _news_quality_reason(row, as_of=as_of)]
 
     def _active_revisions_tracked(
         self,
@@ -3902,6 +4041,7 @@ class LocalCatalystIntelligence:
                             analysis.result_available_at
                                 AS analysis_result_available_at,
                             analysis.job_id AS analysis_result_job_id,
+                            analysis.input_context_json AS analysis_input_context_json,
                             job_link.job_id AS analysis_job_id,
                             job_link.created_at AS analysis_job_created_at,
                             CASE WHEN audit.job_id IS NULL THEN 0 ELSE 1 END
@@ -4045,13 +4185,14 @@ class LocalCatalystIntelligence:
             raw_value = row.get("analysis_result_json")
             result_available_at = row.get("analysis_result_available_at")
             result_job_id = row.get("analysis_result_job_id")
+            input_context_json = row.get("analysis_input_context_json")
             audited = bool(row.get("analysis_result_audited"))
             if raw_value is None or result_available_at is None:
                 return None, None, False
         else:
             link = connection.execute(
                 """SELECT link.job_id AS analysis_result_job_id,
-                          link.result_json,link.result_available_at,
+                          link.result_json,link.result_available_at,link.input_context_json,
                           EXISTS(
                               SELECT 1
                               FROM catalyst_local_analysis_result_audit audit
@@ -4080,8 +4221,10 @@ class LocalCatalystIntelligence:
             raw_value = link["result_json"]
             result_available_at = link["result_available_at"]
             result_job_id = link["analysis_result_job_id"]
+            input_context_json = link["input_context_json"]
             audited = bool(link["result_audited"])
-        payload = self._news_validation_payload(row)
+        row["_analysis_input_context"] = _loads(input_context_json, _news_input_context({}))
+        payload = self._news_validation_payload(row, as_of=as_of)
         raw_result = str(raw_value)
         if audited:
             result = _loads(raw_result, None)
@@ -4452,6 +4595,9 @@ class LocalCatalystIntelligence:
             row,
             as_of=as_of,
         )
+        article = _article_snapshot(row, as_of=as_of)
+        if article is not None and article.get("status") != "available":
+            article = None
         # Published analysis determines the item status below. Its linked job
         # may be a newer attempt, but that state is only needed by detail reads.
         if result is None and current_request_is_owner():
@@ -4487,6 +4633,7 @@ class LocalCatalystIntelligence:
             "_validation_source": str(row["source"]),
             "_validation_title": str(row.get("raw_title") or ""),
             "_validation_summary": row.get("raw_summary"),
+            "_validation_article": article,
             "_validation_sources": list(row.get("source_names") or []),
             "_validation_allowed_tickers": list(
                 row.get("canonical_tickers") or []
@@ -4520,6 +4667,7 @@ class LocalCatalystIntelligence:
             "source_count": int(row.get("source_count") or 1),
             "analysis_status": status,
             "analysis": result,
+            "analysis_input": row.get("_analysis_input_context") if result is not None else None,
             # Private: False marks a previously accepted result that the public
             # boundary hides; filters and counts must not treat it as visible.
             "_analysis_current": bool(result is not None and current),
@@ -4787,6 +4935,8 @@ class LocalCatalystIntelligence:
         }
         filtered: list[dict[str, Any]] = []
         for item in items:
+            if _news_quality_reason(rows_by_news_id[int(item["news_id"])], as_of=as_of):
+                continue
             result = _published_analysis(item) or {}
             if ticker and ticker not in item.get("source_tickers", []):
                 if not any(stock.get("ticker") == ticker for stock in result.get("affected_stocks") or []):
@@ -4974,6 +5124,8 @@ class LocalCatalystIntelligence:
 
             filtered: list[dict[str, Any]] = []
             for item in items:
+                if _news_quality_reason(rows_by_news_id[int(item["news_id"])], as_of=as_of):
+                    continue
                 result = _published_analysis(item) or {}
                 affected = result.get("affected_stocks") or []
                 ticker_score = ticker_impact_score(item)
@@ -5257,6 +5409,8 @@ class LocalCatalystIntelligence:
                               r.source AS representative_source,
                               r.raw_title AS representative_source_title,
                               r.raw_summary AS representative_source_summary,
+                              r.article_json AS representative_article_json,
+                              r.article_checked_at AS representative_article_checked_at,
                               r.source_names_json
                                 AS representative_source_names_json,
                               r.canonical_tickers_json
@@ -5367,6 +5521,12 @@ class LocalCatalystIntelligence:
                 "_validation_summary": str(
                     row["representative_source_summary"] or ""
                 ),
+                "_validation_article_text": str(
+                    (_article_snapshot({
+                        "article_json": row["representative_article_json"],
+                        "article_checked_at": row["representative_article_checked_at"],
+                    }, as_of=_parse_time(prepared_at)) or {}).get("text") or ""
+                ),
                 "_validation_sources": _loads(
                     row["representative_source_names_json"],
                     [],
@@ -5402,6 +5562,8 @@ class LocalCatalystIntelligence:
                           r.source AS representative_source,
                           r.raw_title AS representative_source_title,
                           r.raw_summary AS representative_source_summary,
+                          r.article_json AS representative_article_json,
+                          r.article_checked_at AS representative_article_checked_at,
                           r.source_names_json
                             AS representative_source_names_json,
                           r.canonical_tickers_json
@@ -5624,6 +5786,40 @@ class LocalCatalystIntelligence:
         _batch_id: str | None = None,
         _batch_position: int | None = None,
     ) -> dict[str, Any]:
+        # The web process and scheduler share the volume. Serializing one news
+        # request also covers its bounded fetch: a failure and a success must
+        # not race into two paid tasks with different payload hashes. Stripes
+        # bound the number of tiny lock files; OS locks release on process exit.
+        if self.mode not in {"manual", "scheduled"}:
+            raise CatalystError("read_only_mode", "News analysis is disabled in read mode", counts_for_circuit=False)
+        lock_dir = self.db_path.with_name(self.db_path.name + ".news-locks")
+        lock_dir.mkdir(parents=True, exist_ok=True)
+        with (lock_dir / f"{news_id % 64}.lock").open("a+b") as stream:
+            fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+            try:
+                return self._request_analysis_locked(
+                    news_id, force=force, as_of=as_of,
+                    expected_change_sequence=expected_change_sequence,
+                    expected_content_hash=expected_content_hash,
+                    submission_source=submission_source, _job_snapshot=_job_snapshot,
+                    _batch_id=_batch_id, _batch_position=_batch_position,
+                )
+            finally:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+
+    def _request_analysis_locked(
+        self,
+        news_id: int,
+        *,
+        force: bool,
+        as_of: datetime | None = None,
+        expected_change_sequence: int | None = None,
+        expected_content_hash: str | None = None,
+        submission_source: SubmissionSource = "manual",
+        _job_snapshot: Mapping[str, dict[str, Any]] | None = None,
+        _batch_id: str | None = None,
+        _batch_position: int | None = None,
+    ) -> dict[str, Any]:
         if self.mode not in {"manual", "scheduled"}:
             raise CatalystError(
                 "read_only_mode",
@@ -5646,6 +5842,16 @@ class LocalCatalystIntelligence:
                 "The selected news revision changed before analysis was queued",
                 counts_for_circuit=False,
             )
+        if bool(row.get("has_analysis_links")):
+            with self._connect() as connection:
+                existing, _detail = self._linked_news_job_at(
+                    connection, row, as_of=max(observed, _utc_now()),
+                )
+            if existing is not None and (
+                existing["status"] in {"pending", "queued", "in_progress"}
+                or (not force and existing["status"] == "completed")
+            ):
+                return {**existing, "cached": existing["status"] == "completed"}
         payload = {
             "news_id": int(row["news_id"]),
             "change_sequence": int(row["change_sequence"]),
@@ -5724,6 +5930,15 @@ class LocalCatalystIntelligence:
                 if not self._link_analysis_job(row, legacy_job):
                     public["local_link_pending"] = True
                 return public
+        row = self._prepare_article(row, force=force, timeout_seconds=3.0 if submission_source == "scheduled" else 6.0)
+        # A source update arriving during the bounded fetch must not bind a
+        # newly paid request to a stale revision.
+        current = self._current_revision(news_id, now=max(observed, _utc_now())) if self._article_fetcher else row
+        if current is None or (
+            current["change_sequence"], current["content_hash"]
+        ) != (row["change_sequence"], row["content_hash"]):
+            raise CatalystError("news_revision_changed", "News changed while reading the article", counts_for_circuit=False)
+        payload.update(_news_request_source_fields(row))
         schema_version, schema_hash = ai_runtime.schema_identity("news_impact")
         job, created = self.ai_repository.create_job(
             job_type="news_impact",
@@ -5756,6 +5971,52 @@ class LocalCatalystIntelligence:
         if not self._link_analysis_job(row, job):
             public["local_link_pending"] = True
         return public
+
+    def _prepare_article(
+        self, row: dict[str, Any], *, force: bool, timeout_seconds: float = 6.0,
+    ) -> dict[str, Any]:
+        """Fetch once outside a write transaction; freeze the first usable body.
+
+        Failed reads are cached for half an hour and a forced request may try
+        again. Once a body has entered a paid request it is immutable; an
+        upstream news revision gets its own new body snapshot.
+        """
+        if self._article_fetcher is None:
+            return row
+        previous = _article_snapshot(row)
+        if previous and previous.get("status") == "available":
+            return row
+        checked = _parse_time(row.get("article_checked_at"))
+        if not force and checked is not None and (_utc_now() - checked).total_seconds() < ARTICLE_RETRY_SECONDS:
+            return row
+        article = self._article_fetcher(
+            str(row["url"]), expected_title=str(row["raw_title"]), timeout_seconds=timeout_seconds,
+        )
+        identity = (row["news_id"], row["change_sequence"], row["content_hash"])
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            stored = connection.execute(
+                """SELECT article_json,article_checked_at FROM catalyst_local_news_revisions
+                   WHERE news_id=? AND change_sequence=? AND content_hash=?""", identity,
+            ).fetchone()
+            if stored is None:
+                connection.rollback()
+                return row
+            winner = _article_snapshot(stored)
+            if winner and winner.get("status") == "available":
+                row = {**row, **dict(stored)}
+            else:
+                checked_at = _iso()
+                article_json = _json(article)
+                connection.execute(
+                    """UPDATE catalyst_local_news_revisions SET article_json=?,article_checked_at=?
+                       WHERE news_id=? AND change_sequence=? AND content_hash=?""",
+                    (article_json, checked_at, *identity),
+                )
+                row = {**row, "article_json": article_json, "article_checked_at": checked_at}
+            connection.commit()
+        _reset_revision_cache()
+        return row
 
     def analysis_job(self, job_id: str) -> dict[str, Any] | None:
         row = self._read_ai_job(job_id)
@@ -5854,20 +6115,43 @@ class LocalCatalystIntelligence:
                         _iso(now),
                         _iso(now),
                         _iso(now - timedelta(hours=SCHEDULED_NEWS_WINDOW_HOURS)),
-                        min(10_000, int(limit)),
+                        10_000,
                     ),
                 ).fetchall()
             except sqlite3.OperationalError:
                 return []
+        items = [dict(row) for row in rows]
+        # A routine-looking RSS headline can conceal a dividend increase in
+        # the body. Probe a bounded number before excluding them from automatic
+        # analysis. Prioritize never-read/oldest attempts to avoid starvation.
+        if self._article_fetcher is not None:
+            probes = sorted(
+                (item for item in items if _news_quality_reason(item, as_of=now)
+                 and (_article_snapshot(item) or {}).get("status") != "available"),
+                key=lambda item: str(item.get("article_checked_at") or ""),
+            )[:SCHEDULED_ARTICLE_PROBE_LIMIT]
+            if probes:
+                with ThreadPoolExecutor(max_workers=4, thread_name_prefix="news-body") as executor:
+                    futures = [
+                        executor.submit(contextvars.copy_context().run, self._prepare_article,
+                                        item, force=False, timeout_seconds=3.0)
+                        for item in probes
+                    ]
+                    refreshed = {int(item["news_id"]): item for item in (future.result() for future in futures)}
+                items = [refreshed.get(int(item["news_id"]), item) for item in items]
+        quality_as_of = max(now, _utc_now()) if self._article_fetcher is not None else now
         output: list[dict[str, Any]] = []
-        for row in rows:
-            item = dict(row)
+        for item in items:
+            if _news_quality_reason(item, as_of=quality_as_of):
+                continue
             item["canonical_tickers"] = _loads(
                 item["canonical_tickers_json"],
                 [],
             )
             item["source_names"] = _loads(item["source_names_json"], [])
             output.append(item)
+            if len(output) >= min(10_000, int(limit)):
+                break
         return output
 
     def _news_jobs_by_revision(
@@ -5902,7 +6186,7 @@ class LocalCatalystIntelligence:
                 """SELECT news_id,change_sequence,content_hash,source,raw_title,
                           raw_summary,url,published_at,fetched_at,source_names_json,
                           source_count,source_tickers_json,
-                          canonical_tickers_json
+                          canonical_tickers_json,article_json
                    FROM catalyst_local_news_revisions
                    WHERE news_id=? AND change_sequence=? AND content_hash=?""",
                 (
@@ -7774,7 +8058,7 @@ class LocalCatalystIntelligence:
                 metadata_matches = (
                     raw.get("model") == self.model
                     and raw.get("reasoning") == self.reasoning
-                    and raw.get("prompt_version") == NEWS_PROMPT_VERSION
+                    and raw.get("prompt_version") in ai_runtime.NEWS_READABLE_PROMPT_VERSIONS
                     and (
                         raw.get("schema_version")
                         or raw.get("analysis_schema_version")

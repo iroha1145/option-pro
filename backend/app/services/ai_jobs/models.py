@@ -2701,6 +2701,24 @@ def _validate_job_payload_identities(job_type: str, payload: dict) -> None:
         )
         if any(_TICKER_PATTERN.fullmatch(ticker) is None for ticker in tickers):
             raise ValueError("allowed_tickers_invalid")
+        article = payload.get("article")
+        if payload.get("article_status") not in {None, "available", "unavailable", "not_requested"}:
+            raise ValueError("article_status_invalid")
+        if article is not None:
+            if (
+                not isinstance(article, dict)
+                or article.get("status") != "available"
+                or payload.get("article_status") != "available"
+                or not isinstance(article.get("text"), str)
+                or not 1 <= len(article["text"]) <= 12_000
+                or not isinstance(article.get("source_url"), str)
+                or not article["source_url"].startswith("https://")
+                or type(article.get("truncated")) is not bool
+            ):
+                raise ValueError("article_content_invalid")
+            _aware_utc_instant(article.get("fetched_at"))
+        elif payload.get("article_status") == "available":
+            raise ValueError("article_content_missing")
         return
     if job_type == "market_focus":
         _require_identity_text(payload, "cycle_id", max_length=100)
@@ -2764,6 +2782,9 @@ def _validation_source_texts(job_type: str, payload: dict) -> tuple[str, ...]:
     if job_type == "news_impact":
         for field in ("title", "summary", "source", "sources"):
             collect(payload.get(field))
+        article = payload.get("article")
+        if isinstance(article, dict):
+            collect(article.get("text"))
     elif job_type == "market_focus":
         collect(payload.get("events"))
     elif job_type == "option_alerts":
