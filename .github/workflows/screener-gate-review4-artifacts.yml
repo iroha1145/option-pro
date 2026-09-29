@@ -1,0 +1,32 @@
+name: Screener gate review results
+
+on:
+  pull_request:
+    paths:
+      - scripts/research/deliverables/**
+      - .github/workflows/screener-gate-review4-artifacts.yml
+  push:
+    paths:
+      - scripts/research/deliverables/**
+      - .github/workflows/screener-gate-review4-artifacts.yml
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Upload review result archives
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: screener-gate-review4
+          path: |
+            scripts/research/deliverables/screener_gate_review4_compact.zip
+            scripts/research/deliverables/screener_gate_review5_summary.json
+          if-no-files-found: error
+          retention-days: 90
