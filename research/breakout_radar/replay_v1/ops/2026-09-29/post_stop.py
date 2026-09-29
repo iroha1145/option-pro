@@ -168,21 +168,29 @@ def unmount():
     return {"still_mounted": os.path.ismount("/content/drive")}
 
 
-os.makedirs("/content/eval", exist_ok=True)
-say("post_stop start")
-step("ensure_stopped", ensure_stopped)
-step("stop_sync_loop", stop_sync_loop)
-step("export_t1", lambda: export("t1", utc(15, 30)))
-step("drive_sync_1", drive_sync)
-step("evaluate", evaluate)
-step("completed_by_segment", completed_by_segment)
-step("pack_small", pack_small)
-step("drive_sync_2", drive_sync)
-step("export_bundles", lambda: export("bundles", min(time.time() + 3 * 3600, utc(15, 45))))
-step("drive_sync_3", drive_sync)
-step("unmount", unmount)
-summary["finished"] = datetime.now(timezone.utc).isoformat()
-with open("/content/PIPELINE_DONE", "w") as handle:
-    json.dump(summary, handle, indent=1, default=str)
-say("DONE post_stop")
-print(json.dumps({k: (v if not isinstance(v, dict) else {kk: str(vv)[:300] for kk, vv in v.items()}) for k, v in summary.items()}, default=str)[:4000])
+def main():
+    """The whole sequence; runs once (the kernel queue or the fallback watcher, whichever starts first)."""
+    os.makedirs("/content/eval", exist_ok=True)
+    say("post_stop start")
+    step("ensure_stopped", ensure_stopped)
+    step("stop_sync_loop", stop_sync_loop)
+    step("export_t1", lambda: export("t1", utc(15, 30)))
+    step("drive_sync_1", drive_sync)
+    step("evaluate", evaluate)
+    step("completed_by_segment", completed_by_segment)
+    step("pack_small", pack_small)
+    step("drive_sync_2", drive_sync)
+    step("export_bundles", lambda: export("bundles", min(time.time() + 3 * 3600, utc(15, 45))))
+    step("drive_sync_3", drive_sync)
+    step("unmount", unmount)
+    summary["finished"] = datetime.now(timezone.utc).isoformat()
+    with open("/content/PIPELINE_DONE", "w") as handle:
+        json.dump(summary, handle, indent=1, default=str)
+    say("DONE post_stop")
+    print(json.dumps({k: (v if not isinstance(v, dict) else {kk: str(vv)[:300] for kk, vv in v.items()}) for k, v in summary.items()}, default=str)[:4000])
+
+
+if os.path.exists(LOG):
+    print("post_stop already started elsewhere; skipping", flush=True)
+else:
+    main()
