@@ -80,7 +80,7 @@ $PY $P/scripts/discovery_misses.py --export ... --replay /content/replay/smoke_l
 
 ### 1c. 分类层（目录与 SIC 表到位后）
 
-同 1b，但 `--metadata directory --directory /content/data/massive_directory_2026-09-27 --sic /content/data/industry/ticker_sic.json.gz --market-cap shares --shares /content/data/pit_shares.jsonl.gz`。股数取 `weighted_shares_outstanding`，缺时取 `share_class_shares_outstanding`；404 的样本记为该日期起无值。`smoke_compare` 里的市值比值、行业与类型一致率是这一步的判定。烟雾库里有 ETF（那是按生产候选名单抓的），目录元数据下它们会被当作基金进入宇宙；比对时仍加 `--exclude-etf`。
+同 1b，但 `--metadata directory --directory /content/data/massive_directory_2026-09-27 --sic /content/data/industry/ticker_sic.json.gz --market-cap shares --shares /content/data/pit_shares.jsonl.gz`，变体用 `hybrid_etf`（`hybrid_otc` 要把生产的 OTC 行注入名单，只在 `--metadata production` 下可用，目录元数据下会报 "OTC injection needs ProductionCandidateMetadata"）。股数取 `weighted_shares_outstanding`，缺时取 `share_class_shares_outstanding`；404 的样本记为该日期起无值。结果在 DATA_SPEC 20.14。`smoke_compare` 里的市值比值、行业与类型一致率是这一步的判定。烟雾库里有 ETF（那是按生产候选名单抓的），目录元数据下它们会被当作基金进入宇宙；比对时仍加 `--exclude-etf`。
 
 ## 2. 点时股数（可与 1 并行）
 
@@ -111,8 +111,11 @@ days = [d for d in (date(2021,10,4) + timedelta(n) for n in range(0, 1900)) if d
 for i in range(0, len(days), 32):
     chunk = days[i:i+32]; print(chunk[0], chunk[-1])
 EOF
-cat /content/segments.txt | xargs -P 40 -L 1 bash -c '$PY $P/scripts/replay.py "${FULL[@]}" --start $0 --end $1 --out /content/replay/full/seg_$0 --db-dir /content/db/full/seg_$0 --label seg_$0 > /content/replay/full/seg_$0.log 2>&1'
+$PY $P/scripts/run_segments.py --segments /content/segments.txt --parallel 40 \
+    --out-root /content/replay/full --db-root /content/db/full --log-root /content/logs/full -- "${FULL[@]}"
 ```
+
+（`xargs … bash -c` 看不到外层的数组，所以用 `run_segments.py`：每段一个子进程与日志，失败重试一次，`--` 之后的参数原样传给 `replay.py`。）
 
 「实时数据」敏感性运行同样分段，跑基线和只有在实时数据下才可测的两个相对量候选（预登记修订 3）：`--variants baseline,rvol2,lookback10 --bar-delay-seconds 0 --tv-delay-minutes 0 --out /content/replay/realtime/seg_$0`。
 
@@ -145,3 +148,22 @@ $PY $P/scripts/evaluate.py --db ... --replay '/content/replay/realtime/seg_*' --
 **SPY 的 5 分钟 K 线**：SPY 不会进「涨幅 ≥ 3%」的抓取名单，分钟库里没有它，`benchmark_next_bar_open` 会全空、评估退到收盘入场。请把 SPY 五年的 5 分钟 K 线也抓下来放进 `minute_raw`（一个代码约 65 页），建库时就会带上。
 
 本机在 13 天烟雾输出上跑过一遍（370 个触发；1 日超额 +1.65 个百分点、5 日 +2.43，20 日与 63 日窗口超出数据、不出数），只是通路验证，不是结果。
+
+### 被中途停止的全量运行（预登记修订 5）
+
+```
+$PY $P/scripts/evaluate.py --db /content/data/replay.sqlite --replay '/content/replay/full/seg_*' \
+    --variants baseline,confirm3,chase15,orb15,orb60,disc5,adv25,basemin15 --baseline baseline \
+    --directory /content/data/massive_directory_2026-09-27 --db-dir /content/db/full --workers 8 \
+    --out /content/eval/full_partial
+```
+
+`--db-dir` 让没有 `research_bundle.json.gz` 的段从各自的 SQLite 读 T1 状态；`--workers 8` 让 8 个配置并行读账本。用时估计：本机读一个日文件约 0.1 秒（14 个文件 1.2 秒），800 个完成日 × 8 个配置 ÷ 8 进程约 2 分钟；退出与删失的计算约 20 万个触发 × 4 个持有期 × 2 种入场，约 3 到 5 分钟；合计 5 到 10 分钟，`--no-events` 可再省一点。规则 2 的年份只数配对天数达到 60 的年份（修订 5），其余年份在 `years_reported` 里只报告。`result_pack.json` 的 `completed_days` 与 `README_tables.md` 第一张表是覆盖的天数（每年、P1、P2）。
+
+## 6. 完成日的规则与怎么停
+
+运行器一天的全部扫描做完才写 `ledger/<day>.jsonl.gz`（3aaa04d1 之后的提交先写 `.tmp` 再改名，杀在写入中不会留下截断文件；3aaa04d1 及之前直接写目标路径，杀在那一秒会留下读不出的文件，评估把它整日作废并计数）。`run.json`、`research_bundle.json.gz` 只在段结束时写；快照（`--full-snapshots`）也是按天写。所以：
+
+- 一个配置的完成日 = 它有能完整读出的日文件的那些天；评估集 = 全部配置完成日的交集，再去掉当天有降级扫描（账本记录 `status` 为 degraded 或有 `error_code`）的日子。截断看每条记录的 `truncated`、`truncation_kind`。
+- 干净地停一段：`touch /content/replay/full/seg_<start>/STOP`，段做完当前这一天就写 `run.json` 与两个 bundle 然后退出（3aaa04d1 之后的提交才有；已经在跑的老进程只能杀）。
+- 杀老进程：先 `SIGTERM`（Python 默认立即退出，与 `SIGKILL` 对评估没有区别），等进程都退出再同步；当天在内存里的记录丢掉，评估按上面的规则自动处理。

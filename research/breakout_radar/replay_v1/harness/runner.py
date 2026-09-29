@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import gzip
 import json
+import os
 import sqlite3
 import time
 from dataclasses import asdict, dataclass, field
@@ -203,6 +204,17 @@ def _iso(item: Any) -> Any:
     if isinstance(item, datetime):
         return item.astimezone(timezone.utc).isoformat()
     return item
+
+
+def _write_gzip_lines(path: Path, records: list[dict[str, Any]]) -> None:
+    temporary = path.with_name(path.name + ".tmp")
+    with gzip.open(temporary, "wt", encoding="utf-8") as handle:
+        for record in records:
+            handle.write(_dumps(record) + "\n")
+    os.replace(temporary, path)
+
+
+STOP_FILE = "STOP"  # touch <out>/STOP: the segment finishes the current day, writes run.json and the bundles, exits
 
 
 def _json_default(value: Any) -> Any:
@@ -422,14 +434,17 @@ class _VariantRun:
         self.scan_count += 1
 
     def flush_day(self, day: date) -> None:
-        with gzip.open(self.ledger_dir / f"{day.isoformat()}.jsonl.gz", "wt", encoding="utf-8") as handle:
-            for record in self.day_records:
-                handle.write(_dumps(record) + "\n")
+        """Write the day's ledger (and snapshots) once the day is complete, atomically.
+
+        The file is written next to its final name and renamed into place, so a process
+        killed mid-write never leaves a truncated ``<day>.jsonl.gz``: a day file that
+        exists is a completed day (RUN_SPEC section 6).
+        """
+
+        _write_gzip_lines(self.ledger_dir / f"{day.isoformat()}.jsonl.gz", self.day_records)
         self.day_records = []
         if self.config.full_snapshots:
-            with gzip.open(self.snapshot_dir / f"{day.isoformat()}.jsonl.gz", "wt", encoding="utf-8") as handle:
-                for record in self.day_snapshots:
-                    handle.write(_dumps(record) + "\n")
+            _write_gzip_lines(self.snapshot_dir / f"{day.isoformat()}.jsonl.gz", self.day_snapshots)
             self.day_snapshots = []
 
     def prune(self, now: datetime) -> dict[str, int]:
@@ -564,6 +579,9 @@ def run_segment(config: RunConfig) -> dict[str, Any]:
 
     async def drive() -> None:
         for day in days:
+            if (config.out / STOP_FILE).exists():
+                summary["stopped_before_day"] = day.isoformat()
+                break
             is_warmup = day in warmup
             for as_of, kind in grid_by_day.get(day, []):
                 clock.set(as_of)

@@ -220,8 +220,9 @@ def test_adoption_rules_pair_on_common_days_and_check_the_funnel_candidate(world
     disc5 = verdicts["variants"]["disc5"]
     assert disc5["paired_days"] == 2 and disc5["rule6_ok"] is True  # SPLT (removed) earned less than GOOD (kept)
     assert disc5["rule4_ok"] is True and disc5["triggers_per_day"] == {"candidate": 1.0, "baseline": 2.0}
-    # 2024 is a complete year, so it is compared; both days fall in P1, so rule 1 (P1 and P2) cannot pass.
-    assert disc5["rule2_years_compared"] == 1 and disc5["rule1_both_periods_up"] is False and disc5["adopt"] is False
+    # 2024 has only two paired days: reported, not counted (修订 5); both days fall in P1, so rule 1 cannot pass.
+    assert disc5["rule2_years_compared"] == 0 and disc5["years_reported"]["2024"]["paired_days"] == 2
+    assert disc5["rule1_both_periods_up"] is False and disc5["adopt"] is False
     assert set(verdicts["filters"]) == set(ev.FILTER_VIEWS)
     # Synthetic paired series exercise the period rules directly.
     days = [d.isoformat() for d in SESSIONS[:8]]
@@ -236,6 +237,44 @@ def test_adoption_rules_pair_on_common_days_and_check_the_funnel_candidate(world
     assert verdict["h20_diff_pp"]["ALL"] == pytest.approx(1.0)
     combo = ev.stage2_verdict({**verdict, "h20_diff_pp": {"ALL": 1.0, "P1": 0.9, "P2": 0.95}}, {"single": {**verdict, "adopt": True}})
     assert combo["best_single"] == "single" and combo["within_0_2pp"] is True
+
+
+def test_partial_segments_keep_only_days_every_variant_completed(world: dict, tmp_path: Path) -> None:
+    """A killed segment: a truncated day file, a day only one variant finished, no bundle, T1 from SQLite."""
+
+    import shutil
+
+    root = tmp_path / "partial"
+    shutil.copytree(world["root"] / "seg1", root / "seg1")
+    d0, d1 = world["d0"], world["d1"]
+    # The baseline's second day file is truncated mid-write; disc5 finished it.
+    truncated = root / "seg1" / "baseline" / "ledger" / f"{d1.isoformat()}.jsonl.gz"
+    truncated.write_bytes(truncated.read_bytes()[:40])
+    # No research bundle (the segment never reached its end); T1 comes from the SQLite database instead.
+    (root / "seg1" / "baseline" / "research_bundle.json.gz").unlink()
+    db_dir = tmp_path / "db" / "seg1"
+    db_dir.mkdir(parents=True)
+    connection = sqlite3.connect(db_dir / "baseline.sqlite")
+    connection.execute("CREATE TABLE breakout_t1_current (event_id TEXT PRIMARY KEY, status TEXT)")
+    connection.execute("INSERT INTO breakout_t1_current VALUES ('e2', 'met')")
+    connection.commit()
+    connection.close()
+    triggers, funnel, info = ev.read_variant([root / "seg1"], "baseline", db_dir=tmp_path / "db")
+    assert info["corrupt_files"] == [str(truncated)] and info["segments_without_bundle"] == 1
+    assert sorted(funnel) == [d0.isoformat()] and {t.event_id for t in triggers} == {"e1", "e2", "e3"}
+    assert next(t for t in triggers if t.event_id == "e2").t1_status == "met"
+    loaded = {"baseline": (triggers, funnel, info), "disc5": ev.read_variant([root / "seg1"], "disc5")}
+    completion = ev.completed_days(loaded)
+    assert completion["days"] == [d0.isoformat()] and completion["dropped_not_in_every_variant"] == [d1.isoformat()]
+    assert completion["per_year"] == {"2024": 1} and completion["p1_days"] == 1 and completion["p2_days"] == 0
+    # A degraded scan drops its day for everyone.
+    degraded_dir = tmp_path / "degraded" / "seg1" / "baseline" / "ledger"
+    _write_ledger(degraded_dir, d0, [{**_scan_record(d0, 10, 2, [], []), "status": "degraded", "error_code": "x"}])
+    _t, _f, degraded_info = ev.read_variant([tmp_path / "degraded" / "seg1"], "baseline")
+    assert degraded_info["degraded_scans"] == 1 and degraded_info["degraded_days"] == [d0.isoformat()]
+    pack = ev.run([root / "seg1"], ["baseline", "disc5"], world["db"], tmp_path / "eval", db_dir=tmp_path / "db", workers=2, write_events=False)
+    assert pack["completed_days"]["days"] == [d0.isoformat()] and pack["coverage"]["baseline"]["days_evaluated"] == 1
+    assert "评估覆盖的交易日" in (tmp_path / "eval" / "README_tables.md").read_text()
 
 
 def test_run_writes_the_result_pack_and_tables(world: dict) -> None:

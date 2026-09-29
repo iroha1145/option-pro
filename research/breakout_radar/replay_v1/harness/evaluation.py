@@ -37,6 +37,7 @@ PRIMARY_HOLDING = 20
 NW_LAGS = {1: 0, 5: 0, 20: 3, 63: 11}
 P1_END = "2024-12-31"
 COMPLETE_YEARS = ("2022", "2023", "2024", "2025")
+MIN_YEAR_DAYS = 60  # PREREGISTRATION 修订 5: a year with fewer covered days is reported, not counted in rule 2
 FUNNEL_CAPS = (150, 60, 30)
 SCORE_SUBSET_MIN = 60.0
 TOP_PER_DAY = 10
@@ -81,7 +82,7 @@ RULES = {
     "top_per_day": TOP_PER_DAY,
     "adoption": {
         "1": "h20 mean higher than the baseline in P1 and in P2 (paired on common days)",
-        "2": "better in at least 3 of the 4 complete years (2022-2025)",
+        "2": "better in at least 3 of the 4 complete years (2022-2025); a year with fewer than 60 paired days is reported, not counted (修订 5)",
         "3": "h5 not below the baseline by more than 0.5 pp; h63 not by more than 1 pp",
         "4": "triggers per day at least half the baseline's",
         "5": "paired h20 difference has the same sign under the legacy, zero and loss bounds",
@@ -155,22 +156,53 @@ def _et_minute(stamp: str) -> int:
     return local.hour * 60 + local.minute
 
 
+def read_ledger_file(path: Path) -> list[dict[str, Any]] | None:
+    """Every record of one day file, or ``None`` when the file is truncated or unreadable.
+
+    The runner writes a day file only after the day completed (atomically since 3aaa04d1's
+    successor; before that a kill during the write could truncate it), so a file is either
+    a whole day or garbage: the whole file is read before any record is used.
+    """
+
+    try:
+        with gzip.open(path, "rt", encoding="utf-8") as handle:
+            return [json.loads(line) for line in handle if line.strip()]
+    except (EOFError, OSError, ValueError):
+        return None
+
+
 def read_ledger_records(folder: Path) -> Iterable[dict[str, Any]]:
     for path in sorted(folder.glob("*.jsonl.gz")):
-        with gzip.open(path, "rt", encoding="utf-8") as handle:
-            for line in handle:
-                if line.strip():
-                    yield json.loads(line)
+        records = read_ledger_file(path)
+        if records:
+            yield from records
+
+
+def read_t1_from_db(path: Path) -> dict[str, str]:
+    """``breakout_t1_current`` of a variant's SQLite database (a killed segment writes no bundle)."""
+
+    if not Path(path).exists():
+        return {}
+    connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        exists = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='breakout_t1_current'").fetchone()
+        if not exists:
+            return {}
+        return {str(event_id): str(status) for event_id, status in connection.execute("SELECT event_id, status FROM breakout_t1_current")}
+    finally:
+        connection.close()
 
 
 def read_variant(
-    replay_dirs: list[Path], variant: str, *, entry_lookup: Callable[[str, str], float | None] | None = None
+    replay_dirs: list[Path], variant: str, *, entry_lookup: Callable[[str, str], float | None] | None = None,
+    db_dir: Path | None = None,
 ) -> tuple[list[Trigger], dict[str, DayFunnel], dict[str, Any]]:
     """Triggers, per-day funnel counts and T1 statuses of one variant across segment directories.
 
-    Warm-up scans are skipped; a day present in two directories is taken from the first.
-    ``entry_lookup(ticker, as_of)`` supplies ``next_bar_open`` for ledgers written before
-    the runner recorded it.
+    Warm-up scans are skipped; a day present in two directories is taken from the first;
+    a truncated day file is skipped and counted. ``entry_lookup(ticker, as_of)`` supplies
+    ``next_bar_open`` for ledgers written before the runner recorded it. Without a research
+    bundle (a killed segment) T1 statuses come from ``db_dir/<segment>/<variant>.sqlite``.
     """
 
     folder_name = variant.replace("+", "_")
@@ -179,7 +211,9 @@ def read_variant(
     funnel: dict[str, DayFunnel] = {}
     days_by_dir: dict[str, Path] = {}
     t1_status: dict[str, str] = {}
-    info: dict[str, Any] = {"directories": [], "scans": 0, "skipped_duplicate_days": 0}
+    info: dict[str, Any] = {"directories": [], "scans": 0, "skipped_duplicate_days": 0, "corrupt_files": [],
+                            "segments_without_bundle": 0, "degraded_scans": 0, "degraded_days": []}
+    degraded_days: set[str] = set()
     for replay_dir in replay_dirs:
         variant_dir = replay_dir / folder_name
         if not variant_dir.is_dir():
@@ -191,15 +225,43 @@ def read_variant(
                 bundle = json.load(handle)
             for row in bundle.get("t1_current") or []:
                 t1_status.setdefault(str(row.get("event_id")), str(row.get("status")))
-        for record in read_ledger_records(variant_dir / "ledger"):
-            if record.get("kind") == "t1" or record.get("warmup"):
+        else:
+            info["segments_without_bundle"] += 1
+            if db_dir is not None:
+                for event_id, status in read_t1_from_db(Path(db_dir) / replay_dir.name / f"{folder_name}.sqlite").items():
+                    t1_status.setdefault(event_id, status)
+        for path in sorted((variant_dir / "ledger").glob("*.jsonl.gz")):
+            records = read_ledger_file(path)
+            if records is None:
+                info["corrupt_files"].append(str(path))
                 continue
-            day = _et_day(record["as_of"])
-            owner = days_by_dir.setdefault(day, replay_dir)
-            if owner != replay_dir:
-                info["skipped_duplicate_days"] += 1
-                continue
-            info["scans"] += 1
+            for record in records:
+                if record.get("kind") == "t1" or record.get("warmup"):
+                    continue
+                day = _et_day(record["as_of"])
+                owner = days_by_dir.setdefault(day, replay_dir)
+                if owner != replay_dir:
+                    info["skipped_duplicate_days"] += 1
+                    continue
+                if record.get("status") == "degraded" or record.get("error_code"):
+                    info["degraded_scans"] += 1
+                    degraded_days.add(day)
+                _absorb_record(record, day, triggers, failed, funnel, entry_lookup)
+                info["scans"] += 1
+    for event_id, trigger in triggers.items():
+        trigger.failed_at = failed.get(event_id)
+        trigger.t1_status = t1_status.get(event_id)
+    ordered = sorted(triggers.values(), key=lambda t: (t.as_of, t.event_id))
+    info["triggers"] = len(ordered)
+    info["days"] = len(funnel)
+    info["degraded_days"] = sorted(degraded_days)
+    return ordered, funnel, info
+
+
+def _absorb_record(record: dict[str, Any], day: str, triggers: dict[str, Trigger], failed: dict[str, str],
+                   funnel: dict[str, DayFunnel], entry_lookup: Callable[[str, str], float | None] | None) -> None:
+    if True:
+        if True:
             bucket = funnel.setdefault(day, DayFunnel(day))
             bucket.scans += 1
             prefilter = int(record.get("prefilter_count") or 0)
@@ -249,13 +311,34 @@ def read_variant(
                     bucket.triggers += 1
                 elif to_state == "FAILED" and event_id in triggers and event_id not in failed:
                     failed[event_id] = str(transition.get("evidence_at") or record["as_of"])
-    for event_id, trigger in triggers.items():
-        trigger.failed_at = failed.get(event_id)
-        trigger.t1_status = t1_status.get(event_id)
-    ordered = sorted(triggers.values(), key=lambda t: (t.as_of, t.event_id))
-    info["triggers"] = len(ordered)
-    info["days"] = len(funnel)
-    return ordered, funnel, info
+
+
+def completed_days(loaded: Mapping[str, tuple[list[Trigger], dict[str, DayFunnel], dict[str, Any]]]) -> dict[str, Any]:
+    """The days every variant completed and no variant degraded on (RUN_SPEC section 6).
+
+    A day file exists only once the runner finished the day, so the set of readable day
+    files is the set of completed days per variant; the evaluation uses their intersection
+    so paired comparisons see the same days, and drops days with a degraded scan.
+    """
+
+    per_variant = {name: set(funnel) for name, (_t, funnel, _i) in loaded.items()}
+    common = set.intersection(*per_variant.values()) if per_variant else set()
+    degraded = {day for _n, (_t, _f, info) in loaded.items() for day in info.get("degraded_days", [])}
+    kept = sorted(common - degraded)
+    return {
+        "days": kept,
+        "per_variant_days": {name: len(days) for name, days in per_variant.items()},
+        "dropped_not_in_every_variant": sorted(set.union(*per_variant.values()) - common) if per_variant else [],
+        "dropped_degraded": sorted(common & degraded),
+        "per_year": dict(Counter(day[:4] for day in kept)),
+        "p1_days": sum(1 for day in kept if day <= P1_END),
+        "p2_days": sum(1 for day in kept if day > P1_END),
+    }
+
+
+def restrict(triggers: list[Trigger], funnel: dict[str, DayFunnel], days: Iterable[str]) -> tuple[list[Trigger], dict[str, DayFunnel]]:
+    allowed = set(days)
+    return [t for t in triggers if t.day in allowed], {day: f for day, f in funnel.items() if day in allowed}
 
 
 def _float(value: Any) -> float | None:
@@ -643,9 +726,13 @@ def decide(
     h20_p1, n_p1 = period_diff(PRIMARY_HOLDING, "P1")
     h20_p2, n_p2 = period_diff(PRIMARY_HOLDING, "P2")
     years = {}
+    years_reported = {}
     for year in COMPLETE_YEARS:
         diff, n = period_diff(PRIMARY_HOLDING, year)
-        if diff is not None:
+        if diff is None:
+            continue
+        years_reported[year] = {"diff_pp": round(100 * diff, 3), "paired_days": n}
+        if n >= MIN_YEAR_DAYS:
             years[year] = round(100 * diff, 3)
     h5_all, _n5 = period_diff(5, "ALL")
     h63_all, _n63 = period_diff(63, "ALL")
@@ -657,6 +744,7 @@ def decide(
         "paired_days": n_all,
         "h20_diff_pp": {"ALL": _pct(h20_all), "P1": _pct(h20_p1), "P2": _pct(h20_p2)},
         "years_diff_pp": years,
+        "years_reported": years_reported,
         "h5_diff_pp": _pct(h5_all),
         "h63_diff_pp": _pct(h63_all),
         "bounds_diff_pp": {name: _pct(value) for name, value in bounds.items()},
@@ -834,13 +922,21 @@ def _fmt(value: Any) -> str:
     return str(value)
 
 
-def readme_tables(rows: list[dict[str, Any]], verdicts: dict[str, Any], funnels: Mapping[str, dict[str, Any]], baseline: str) -> str:
+def readme_tables(rows: list[dict[str, Any]], verdicts: dict[str, Any], funnels: Mapping[str, dict[str, Any]], baseline: str,
+                  completion: Mapping[str, Any] | None = None) -> str:
     def find(variant: str, view: str, entry: str, holding: int, period: str) -> dict[str, Any] | None:
         return next((r for r in rows if (r["variant"], r["view"], r["entry"], r["holding"], r["period"]) == (variant, view, entry, holding, period)), None)
 
     variants = sorted({r["variant"] for r in rows}, key=lambda n: (n != baseline, n))
     years = sorted({r["period"] for r in rows if r["period"].isdigit()})
-    lines = ["## 主指标：触发后 20 个交易日对 SPY 的超额（按日等权，百分点；括号内 NW t）", "",
+    lines: list[str] = []
+    if completion:
+        lines += ["## 评估覆盖的交易日", "", "| 年份 | 完成的天数 |", "|---|---|"]
+        lines += [f"| {year} | {count} |" for year, count in sorted(completion.get("per_year", {}).items())]
+        lines += [f"| P1（到 {P1_END}） | {completion.get('p1_days')} |", f"| P2 | {completion.get('p2_days')} |",
+                  f"| 合计 | {len(completion.get('days', []))} |", "",
+                  f"不是每个配置都完成的天：{len(completion.get('dropped_not_in_every_variant', []))}；有降级扫描而剔除的天：{len(completion.get('dropped_degraded', []))}。", ""]
+    lines += ["## 主指标：触发后 20 个交易日对 SPY 的超额（按日等权，百分点；括号内 NW t）", "",
              "| 配置 | 全期 | P1 | P2 | " + " | ".join(years) + " | 每日触发 | 命中率 |", "|---|---|---|---|" + "---|" * len(years) + "---|---|"]
     for variant in variants:
         cells = []
@@ -874,13 +970,8 @@ def readme_tables(rows: list[dict[str, Any]], verdicts: dict[str, Any], funnels:
     return "\n".join(lines) + "\n"
 
 
-def run(
-    replay_dirs: list[Path], variants: list[str], db_path: Path, out: Path, *, baseline: str = "baseline",
-    directory: Path | None = None, minute_store: Path | None = None, stage2: Mapping[str, str] | None = None,
-    write_events: bool = True,
-) -> dict[str, Any]:
-    out.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+def _read_variant_job(args: tuple[list[str], str, str | None, str | None]) -> tuple[str, tuple[list[Trigger], dict[str, DayFunnel], dict[str, Any]]]:
+    replay_dirs, name, minute_store, db_dir = args
     entry_lookup = None
     if minute_store is not None:
         from .stores import MinuteStore
@@ -890,11 +981,31 @@ def run(
         def entry_lookup(ticker: str, as_of: str) -> float | None:
             return store.next_bar_open(ticker, datetime.fromisoformat(as_of.replace("Z", "+00:00")).astimezone(timezone.utc))
 
-    loaded = {name: read_variant(replay_dirs, name, entry_lookup=entry_lookup) for name in variants}
-    first_day = min((t.day for _n, (triggers, _f, _i) in loaded.items() for t in triggers), default=None)
-    if first_day is None:
+    return name, read_variant([Path(p) for p in replay_dirs], name, entry_lookup=entry_lookup, db_dir=None if db_dir is None else Path(db_dir))
+
+
+def run(
+    replay_dirs: list[Path], variants: list[str], db_path: Path, out: Path, *, baseline: str = "baseline",
+    directory: Path | None = None, minute_store: Path | None = None, stage2: Mapping[str, str] | None = None,
+    write_events: bool = True, db_dir: Path | None = None, workers: int = 1,
+) -> dict[str, Any]:
+    out.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    jobs = [([str(p) for p in replay_dirs], name, None if minute_store is None else str(minute_store), None if db_dir is None else str(db_dir)) for name in variants]
+    if workers > 1 and len(variants) > 1:
+        from concurrent.futures import ProcessPoolExecutor
+
+        with ProcessPoolExecutor(max_workers=min(workers, len(variants))) as pool:
+            loaded = dict(pool.map(_read_variant_job, jobs))
+    else:
+        loaded = dict(_read_variant_job(job) for job in jobs)
+    completion = completed_days(loaded)
+    if not completion["days"]:
+        raise SystemExit("no day was completed by every variant")
+    loaded = {name: (*restrict(triggers, funnel, completion["days"]), info) for name, (triggers, funnel, info) in loaded.items()}
+    if not any(triggers for triggers, _f, _i in loaded.values()):
         raise SystemExit("no triggers in the replay outputs")
-    start = min(first_day, min(min(f) for _n, (_t, f, _i) in loaded.items() if f))
+    start = completion["days"][0]
     prices = RadarPrices(connection, start, V16.Directory(directory) if directory else None)
     evaluations = {name: evaluate_variant(name, *loaded[name], prices) for name in variants}
     rows = [row for evaluation in evaluations.values() for row in metric_rows(evaluation)]
@@ -907,8 +1018,10 @@ def run(
         "rules": RULES,
         "inputs": {"replay_dirs": [str(p) for p in replay_dirs], "variants": variants, "db": str(db_path),
                    "directory": None if directory is None else str(directory), "minute_store": None if minute_store is None else str(minute_store),
-                   "identity_verification": directory is not None},
-        "coverage": {name: {**e.info, "days_first": min(e.funnel) if e.funnel else None, "days_last": max(e.funnel) if e.funnel else None,
+                   "db_dir": None if db_dir is None else str(db_dir), "identity_verification": directory is not None},
+        "completed_days": completion,
+        "coverage": {name: {**e.info, "days_evaluated": len(e.funnel), "days_first": min(e.funnel) if e.funnel else None,
+                            "days_last": max(e.funnel) if e.funnel else None,
                             "triggers_without_next_bar_open": sum(1 for t in e.triggers if t.next_bar_open is None),
                             "triggers_without_benchmark_open": sum(1 for t in e.triggers if t.benchmark_open is None)}
                      for name, e in evaluations.items()},
@@ -917,5 +1030,5 @@ def run(
         "decisions": verdicts,
     }
     (out / "result_pack.json").write_text(json.dumps(pack, indent=1, default=str))
-    (out / "README_tables.md").write_text(readme_tables(rows, verdicts, funnels, baseline))
+    (out / "README_tables.md").write_text(readme_tables(rows, verdicts, funnels, baseline, completion))
     return pack

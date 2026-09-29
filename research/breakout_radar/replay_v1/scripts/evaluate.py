@@ -37,6 +37,8 @@ def main() -> None:
     parser.add_argument("--directory", type=Path, help="weekly point-in-time directory snapshots for identity checks")
     parser.add_argument("--minute-store", type=Path, help="only for ledgers written before the runner recorded next_bar_open")
     parser.add_argument("--stage2", action="append", default=[], help="combination name=part+part (repeatable)")
+    parser.add_argument("--db-dir", type=Path, help="the replay's --db-dir root: T1 statuses of killed segments come from <db-dir>/<segment>/<variant>.sqlite")
+    parser.add_argument("--workers", type=int, default=1, help="processes reading variants in parallel")
     parser.add_argument("--no-events", action="store_true", help="skip the per-trigger CSV")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
@@ -48,11 +50,16 @@ def main() -> None:
     pack = run(
         replay_dirs, [v.strip() for v in args.variants.split(",") if v.strip()], args.db, args.out,
         baseline=args.baseline, directory=args.directory, minute_store=args.minute_store, stage2=stage2,
-        write_events=not args.no_events,
+        write_events=not args.no_events, db_dir=args.db_dir, workers=args.workers,
     )
     (args.out / "decision.json").write_text(json.dumps(pack["decisions"], indent=1, default=str))
+    completion = pack["completed_days"]
+    print(f"completed days evaluated {len(completion['days'])} (P1 {completion['p1_days']}, P2 {completion['p2_days']}; "
+          f"per year {completion['per_year']}); not in every variant {len(completion['dropped_not_in_every_variant'])}, "
+          f"degraded {len(completion['dropped_degraded'])}")
     for name, coverage in pack["coverage"].items():
-        print(f"{name}: days {coverage.get('days')} triggers {coverage.get('triggers')} "
+        print(f"{name}: days with files {coverage.get('days')} evaluated {coverage.get('days_evaluated')} triggers {coverage.get('triggers')} "
+              f"corrupt files {len(coverage.get('corrupt_files', []))} segments without bundle {coverage.get('segments_without_bundle')} "
               f"without next_bar_open {coverage.get('triggers_without_next_bar_open')} "
               f"without SPY bar {coverage.get('triggers_without_benchmark_open')}")
     for name, verdict in pack["decisions"].get("variants", {}).items():
