@@ -367,7 +367,7 @@ def test_v2_local_database_adds_v3_result_audit_tables_without_rewriting_history
     assert versions == [
         ("optix-local-catalyst-timestamps-v1",),
         ("optix-local-catalyst-v2",),
-        ("optix-local-catalyst-v6",),
+        ("optix-local-catalyst-v7",),
     ]
     assert "catalyst_local_analysis_result_audit" in tables
     assert "catalyst_local_focus_result_audit" in tables
@@ -412,7 +412,7 @@ def test_v4_local_database_gains_audit_job_index_without_checksum_conflict(
             ).fetchall()
         }
     assert rows["optix-local-catalyst-v4"] == "legacy-checksum"
-    assert "optix-local-catalyst-v6" in rows
+    assert "optix-local-catalyst-v7" in rows
     assert "idx_local_analysis_result_audit_job" in indexes
     # INDEXED BY 的查询在升级后的库上必须可编译可执行（空结果合法）。
     payload = intelligence.feed(window_hours=72, limit=12)

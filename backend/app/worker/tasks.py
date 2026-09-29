@@ -187,12 +187,15 @@ async def _build_local_intelligence(
         get_effective_runtime_settings,
     )
 
+    content_options: dict[str, Any] = {}
     if factory is None:
+        from app.services.catalysts.article_content import fetch_article
         from app.services.catalysts.local_intelligence import (
             LocalCatalystIntelligence,
         )
 
         factory = LocalCatalystIntelligence
+        content_options["article_fetcher"] = fetch_article
     database_path = settings.macrolens_cache_db_path
     ai_repository = AIJobRepository(settings.openai_job_db_path)
     try:
@@ -239,6 +242,7 @@ async def _build_local_intelligence(
         reasoning=config.ai.reasoning,
         max_queued=settings.openai_job_max_queued,
         manual_refresh_cooldown_seconds=refresh_cooldown,
+        **content_options,
     )
     await _call_local(intelligence.initialize)
     return intelligence

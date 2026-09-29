@@ -636,13 +636,19 @@ async def process_job(
         current_schema_version, current_schema_sha256 = runtime.schema_identity(
             job["job_type"]
         )
+        schema_matches = (
+            runtime.news_schema_identity_matches(
+                job.get("prompt_version"), job["schema_version"], job["schema_sha256"],
+                current_identity=(current_schema_version, current_schema_sha256),
+            ) if job["job_type"] == "news_impact" else
+            (job["schema_version"], job["schema_sha256"]) == (current_schema_version, current_schema_sha256)
+        )
         if (
             job["model"] != runtime.OFFICIAL_OPENAI_MODEL
             or job["reasoning"] != runtime.OFFICIAL_REASONING_EFFORT
             or job["execution_mode"] != runtime.OFFICIAL_EXECUTION_MODE
             or not runtime.runtime_configuration_valid(settings)
-            or job["schema_version"] != current_schema_version
-            or job["schema_sha256"] != current_schema_sha256
+            or not schema_matches
         ):
             repository.fail(
                 job["job_id"],

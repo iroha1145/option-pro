@@ -675,6 +675,11 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
 
           {/* 标题 */}
           <h2 className="mt-3 font-display text-[22px] leading-[30px] font-semibold text-ink-900">{item.titleZh}</h2>
+          {(item.sourceTitle ?? item.title).trim() && (item.sourceTitle ?? item.title).trim() !== item.titleZh.trim() && (
+            <p className="mt-2 break-words text-micro leading-relaxed text-ink-500">
+              <span className="font-medium">{__t('原始标题：')}</span>{item.sourceTitle ?? item.title}
+            </p>
+          )}
           {detailNotice && (
             <p className="mt-3 flex flex-wrap items-center gap-2 text-caption text-ink-500" role="status">
               <span>{detailNotice}</span>
@@ -688,12 +693,12 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
           </blockquote>
 
           {/* 关联代码 */}
-          <div className="mt-4 flex flex-wrap items-center gap-1.5">
+          {item.sourceTickers.length > 0 && <div className="mt-4 flex flex-wrap items-center gap-1.5">
             <span className="shrink-0 text-micro text-ink-400">{__t('关联代码')}</span>
             {item.sourceTickers.map((t) => (
               <TickerChip key={t} ticker={t} />
             ))}
-          </div>
+          </div>}
 
           {/* ============ 模型分析区 ============ */}
           <section className="mt-6 rounded-lg border border-line bg-card-warm/50 p-4" aria-label={__t("模型分析区")}>
@@ -752,6 +757,16 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
                 transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
                 className="mt-4"
               >
+                <p className="mb-3 text-micro leading-relaxed text-ink-500">
+                  {item.analysisInput?.basis === 'article_body'
+                    ? item.analysisInput.truncated
+                      ? __t('依据新闻正文节选分析')
+                      : __t('依据新闻正文分析')
+                    : __t('仅依据标题与摘要分析')}
+                  {item.analysisInput?.basis === 'title_summary' && item.analysisInput.articleStatus === 'unavailable'
+                    ? <span className="ml-1">{__t('未能取得正文')}</span>
+                    : null}
+                </p>
                 <div className="flex flex-wrap items-center gap-2.5">
                   <ClassificationChip classification={analysis.classification} />
                   <ConfidenceLabel value={analysis.confidence} />

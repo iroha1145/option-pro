@@ -1934,7 +1934,7 @@ def test_real_local_intelligence_does_not_relabel_source_english_as_chinese(
     assert detail["item"]["analysis"] is None
     assert detail["item"]["title_zh"] == ""
     assert detail["item"]["summary_zh"] == ""
-    assert "English source" not in str(detail["item"])
+    assert detail["item"]["source_title"] == "English source headline"
     assert "等待生成" not in str(detail["item"])
 
 

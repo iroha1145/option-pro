@@ -25,6 +25,7 @@ from app.worker.state import WorkerStateRepository
 from app.services.sectors import SECTORS
 
 from .config import CatalystSettings
+from .article_content import fetch_article
 from .errors import CatalystError
 from .local_intelligence import (
     HOTSPOT_WAITING as _WAITING_HOTSPOT_TITLE,
@@ -198,6 +199,7 @@ class PersonalCatalystService:
                 model=resolved_ai_settings.openai_model,
                 reasoning=resolved_ai_settings.openai_reasoning,
                 max_queued=resolved_ai_settings.openai_job_max_queued,
+                article_fetcher=fetch_article,
                 manual_refresh_cooldown_seconds=(
                     effective_runtime.catalyst.manual_refresh_cooldown_seconds
                     if effective_runtime is not None
@@ -541,9 +543,11 @@ class PersonalCatalystService:
             row.get("model") != self.settings.model
             or row.get("reasoning") != self.settings.reasoning
             or row.get("execution_mode") != "background"
-            or row.get("prompt_version") != ai_runtime.PROMPT_VERSIONS["news_impact"]
-            or row.get("schema_version") != schema_version
-            or row.get("schema_sha256") != schema_hash
+            or row.get("prompt_version") not in ai_runtime.NEWS_READABLE_PROMPT_VERSIONS
+            or not ai_runtime.news_schema_identity_matches(
+                row.get("prompt_version"), row.get("schema_version"), row.get("schema_sha256"),
+                current_identity=(schema_version, schema_hash),
+            )
         ):
             return None
         return row
@@ -666,6 +670,8 @@ class PersonalCatalystService:
                     or item.get("source"),
                     "title": item.get("_validation_title"),
                     "summary": item.get("_validation_summary"),
+                    "article": item.get("_validation_article"),
+                    "article_status": "available" if item.get("_validation_article") else None,
                     "sources": validation_sources,
                     "allowed_tickers": validation_allowed_tickers,
                 },
@@ -727,6 +733,7 @@ class PersonalCatalystService:
             "_validation_source",
             "_validation_title",
             "_validation_summary",
+            "_validation_article",
             "_validation_sources",
             "_validation_allowed_tickers",
             "_analysis_current",
@@ -771,7 +778,9 @@ class PersonalCatalystService:
         # progress remains visible.
         item["title_zh"] = title or source_title_zh or ""
         item["summary_zh"] = summary or source_summary_zh or ""
+        item["source_title"] = source_title
         if analysis is None:
+            item["analysis_input"] = None
             item.pop("analyzed_at", None)
             item.pop("available_at", None)
             if str(item.get("analysis_status")) == "completed":
@@ -881,6 +890,7 @@ class PersonalCatalystService:
                     "_validation_source",
                     "_validation_title",
                     "_validation_summary",
+                    "_validation_article_text",
                 )
                 if isinstance((source_text := item.pop(key, None)), str)
                 and source_text.strip()

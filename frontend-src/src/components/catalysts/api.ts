@@ -56,10 +56,22 @@ export type {
 /* 以下四个类型在演示夹具的形状上补回真实后端才有的字段；字段都可选，夹具数据照常可用。 */
 
 export interface CatalystNewsItem extends FixtureNewsItem {
+  /** 来源的原始标题；与中文标题并列展示以保留公司名。 */
+  sourceTitle?: string;
+  /** 当前已完成分析实际使用的输入，不能用后来抓取的正文状态替代。 */
+  analysisInput?: NewsAnalysisInput | null;
   /** 详情信封里关联任务的原始状态（仅 owner 可见）：列表把取消归为「未分析」，抽屉要据此说明原因。 */
   analysisJobStatus?: string | null;
   /** 关联任务失败或预算受限时的原因码；运行中的推迟码不在此列。 */
   analysisErrorCode?: string | null;
+}
+
+export interface NewsAnalysisInput {
+  basis: 'article_body' | 'title_summary';
+  articleStatus: 'available' | 'unavailable' | 'not_requested';
+  reason: string | null;
+  bodyCharacters: number;
+  truncated: boolean;
 }
 
 export interface NewsAnalysisJob extends FixtureNewsAnalysisJob {
@@ -174,10 +186,29 @@ function failureCode(job: Rec): string | null {
 const WAITING_ZH = new Set(['中文标题等待生成', '中文摘要等待生成', '热点标题等待中文分析']);
 const usefulZh = (value: string | null): string | null => (value && !WAITING_ZH.has(value) ? value : null);
 
+function nAnalysisInput(value: unknown): NewsAnalysisInput | null {
+  const row = asRec(value);
+  const basis = pickS(row, 'basis');
+  const articleStatus = pickS(row, 'articleStatus', 'article_status');
+  if ((basis !== 'article_body' && basis !== 'title_summary')
+    || (articleStatus !== 'available' && articleStatus !== 'unavailable' && articleStatus !== 'not_requested')) return null;
+  const bodyCharacters = pickN(row, 'bodyCharacters', 'body_characters');
+  const truncated = pickB(row, 'truncated');
+  if (bodyCharacters === null || !Number.isInteger(bodyCharacters) || bodyCharacters < 0 || truncated === null
+    || (basis === 'article_body' && (articleStatus !== 'available' || bodyCharacters === 0))) return null;
+  return {
+    basis,
+    articleStatus,
+    reason: pickS(row, 'reason'),
+    bodyCharacters,
+    truncated,
+  };
+}
+
 function nNewsItem(r: Rec): CatalystNewsItem {
   const impact = nImpact(r.analysis);
   if (impact && !impact.generatedAt) impact.generatedAt = pickS(r, 'analyzed_at', 'available_at') ?? '';
-  const rawTitle = usefulZh(pickS(r, 'title'));
+  const rawTitle = usefulZh(pickS(r, 'sourceTitle', 'source_title', 'title'));
   const rawSummary = usefulZh(pickS(r, 'summary'));
   const titleZh = usefulZh(pickS(r, 'titleZh', 'title_zh'));
   const summaryZh = usefulZh(pickS(r, 'summaryZh', 'summary_zh'));
@@ -187,6 +218,7 @@ function nNewsItem(r: Rec): CatalystNewsItem {
     source: pickS(r, 'source') ?? '',
     sourceCount: pickN(r, 'sourceCount', 'source_count') ?? 1,
     title: rawTitle ?? titleZh ?? '',
+    sourceTitle: rawTitle ?? '',
     titleZh: titleZh ?? rawTitle ?? '',
     summary: rawSummary ?? '',
     summaryZh: summaryZh ?? rawSummary ?? '',
@@ -198,6 +230,7 @@ function nNewsItem(r: Rec): CatalystNewsItem {
     themeIds: Array.isArray(r.theme_ids) ? (r.theme_ids as string[]) : Array.isArray(r.themeIds) ? (r.themeIds as string[]) : [],
     analysisStatus: nAnalysisStatus(r.analysis_status ?? r.analysisStatus),
     analysis: impact,
+    analysisInput: nAnalysisInput(r.analysisInput ?? r.analysis_input),
     analysisJobId: pickS(r, 'analysisJobId', 'analysis_job_id') ?? pickS(linkedJob, 'job_id') ?? (typeof r.analysis_job === 'string' ? r.analysis_job : null),
     analysisJobStatus: pickS(linkedJob, 'status'),
     analysisErrorCode: failureCode(linkedJob),
