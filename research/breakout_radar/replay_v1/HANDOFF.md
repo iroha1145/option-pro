@@ -4,7 +4,7 @@
 
 ## 1. 现在到哪一步了
 
-- **选股（screener）这条线已经收尾。** v1.6、v1.7 已合并并部署到生产（74.91.31.186），对应 yayoihq8964/option-pro PR #200（782e1169）和 #201（35ab1395）。剩两件小事没做：部署后页面上的版本标签不对；前端没有显示拒绝理由。
+- **选股（screener）这条线已经收尾。** v1.6、v1.7 已合并并部署到生产（74.91.31.186），对应 iroha1145/option-pro PR #200（782e1169）和 #201（35ab1395）。剩两件小事没做：部署后页面上的版本标签不对；前端没有显示拒绝理由。
 - **突破雷达（breakout radar）这条线在研究阶段。**
   - 目标：用生产代码逐次回放五年的历史扫描，比较 8 个候选配置和基线，按预登记的规则决定采纳哪个。
   - 保真度已经验证过（第 3 节）。
@@ -16,7 +16,7 @@
 ## 2. 分支与提交
 
 - 工作树：`/Users/admin/Downloads/Claude/option-pro-radar`。
-- 分支：`claude/radar-replay-v1`，基于 `origin/main` 35ab1395，**没有推送到远端**。
+- 分支：`claude/radar-replay-v1`，基于 `origin/main` 35ab1395，已推送到 `origin`（iroha1145/option-pro），还没有开 PR。
 - 不要动 `/Users/admin/Downloads/Claude/option-pro`（用户自己在改的检出）和 `option-pro-ui`。
 
 会改变生产行为的提交：
