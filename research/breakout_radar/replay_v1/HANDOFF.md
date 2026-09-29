@@ -122,6 +122,8 @@
 | `radar_replay_2026-09-29/eval/` | 评估结果 `full_partial/`（result_pack.json、README_tables.md、decision.json、逐触发明细）和 `completed_days_by_segment.json` |
 | `radar_replay_2026-09-29/logs/` | 运行、守护、收尾、评估、导出的日志 |
 
+本机还有一个小包 `~/Downloads/Claude/radar_scratch_2026-09-29.tar.gz`（0.8 MB）：早先保真度比对的输出、运行日志和几个分析脚本，结论已写进 DATA_SPEC。下次开机器、挂上云端硬盘时，把它移到 `radar_replay_2026-09-29/`。
+
 原始行情和生产导出只放在云端硬盘，**不要提交进仓库**（仓库是公开的）。仓库里只放汇总表。
 
 ## 6. 怎么复现或接着跑
