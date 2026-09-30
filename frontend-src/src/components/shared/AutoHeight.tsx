@@ -9,21 +9,26 @@
  */
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 
 export default function AutoHeight({ children, className }: { children: ReactNode; className?: string }) {
   const inner = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState<number | null>(null);
+  const mobile = useIsMobile();
+  const reduced = usePrefersReducedMotion();
+  const naturalHeight = mobile || reduced;
 
   useLayoutEffect(() => {
     const el = inner.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
+    if (naturalHeight || !el || typeof ResizeObserver === 'undefined') return;
     const observer = new ResizeObserver(() => setHeight(el.offsetHeight));
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [naturalHeight]);
 
   return (
-    <div className={cn('t-resize overflow-hidden', className)} style={height === null ? undefined : { height }}>
+    <div className={cn('t-resize overflow-hidden', className)} style={naturalHeight || height === null ? undefined : { height }}>
       <div ref={inner}>{children}</div>
     </div>
   );

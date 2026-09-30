@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { numberGlyphs } from '@/lib/numberTicker';
 
@@ -20,11 +21,12 @@ const Digit = memo(function Digit({ char }: { char: string }) {
 /** Stable place keys and CSS transforms; no per-digit JavaScript animator. */
 const NumberTicker = memo(function NumberTicker({ text, className }: { text: string; className?: string }) {
   const reduce = usePrefersReducedMotion();
+  const mobile = useIsMobile();
   return (
     <span className={cn('inline-flex items-center align-middle tabular-nums', className)}>
       <span className="sr-only">{text}</span>
       <span aria-hidden="true" className="inline-flex items-center">
-        {reduce ? text : numberGlyphs(text).map(({ char, key }) => /\d/.test(char)
+        {reduce || mobile ? text : numberGlyphs(text).map(({ char, key }) => /\d/.test(char)
           ? <Digit key={key} char={char} />
           : <span key={key} style={{ lineHeight: '1.1em' }}>{char}</span>)}
       </span>

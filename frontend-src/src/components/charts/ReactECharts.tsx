@@ -1,6 +1,8 @@
 /** ReactECharts 包装组件：按需 echarts 实例 + ResizeObserver 自适应 */
 import { useEffect, useRef } from 'react';
 import { echarts, type ChartOption, type EChartsInstance } from '@/lib/chart';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 
 interface ReactEChartsProps {
   option: ChartOption;
@@ -18,6 +20,9 @@ export default function ReactECharts({ option, prepareOption, className, style, 
   const ref = useRef<HTMLDivElement>(null);
   const chartRef = useRef<EChartsInstance | null>(null);
   const onInitRef = useRef(onInit);
+  const mobile = useIsMobile();
+  const reduced = usePrefersReducedMotion();
+  const initialMobile = useRef(mobile);
 
   useEffect(() => {
     onInitRef.current = onInit;
@@ -25,16 +30,33 @@ export default function ReactECharts({ option, prepareOption, className, style, 
 
   useEffect(() => {
     if (!ref.current) return;
-    const chart = echarts.init(ref.current, undefined, { renderer: 'canvas' });
+    const chart = echarts.init(ref.current, undefined, {
+      renderer: 'canvas',
+      // DPR 3/4 phones otherwise rasterize 9/16 pixels per CSS pixel on every pan.
+      devicePixelRatio: initialMobile.current ? Math.min(window.devicePixelRatio || 1, 2) : undefined,
+    });
     chartRef.current = chart;
-    const ro = new ResizeObserver(() => {
-      if (chart.isDisposed()) return;
-      chart.resize();
+    let width = chart.getWidth();
+    let height = chart.getHeight();
+    let frame = 0;
+    const ro = new ResizeObserver(([entry]) => {
+      if (!entry) return;
+      const nextWidth = Math.round(entry.contentRect.width);
+      const nextHeight = Math.round(entry.contentRect.height);
+      if (!nextWidth || !nextHeight || (nextWidth === width && nextHeight === height)) return;
+      width = nextWidth;
+      height = nextHeight;
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        if (!chart.isDisposed()) chart.resize({ width, height });
+      });
     });
     ro.observe(ref.current);
     onInitRef.current?.(chart);
     return () => {
       ro.disconnect();
+      cancelAnimationFrame(frame);
       chart.dispose();
       chartRef.current = null;
     };
@@ -43,12 +65,17 @@ export default function ReactECharts({ option, prepareOption, className, style, 
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
-    chart.setOption(prepareOption ? prepareOption(option) : option, { notMerge: true });
-    if (onClick) {
-      chart.off('click');
-      chart.on('click', onClick);
-    }
-  }, [option, onClick, prepareOption]);
+    const prepared = prepareOption ? prepareOption(option) : option;
+    chart.setOption(mobile || reduced ? { ...prepared, animation: false } : prepared, { notMerge: true });
+  }, [option, prepareOption, mobile, reduced]);
+
+  // A new callback is not new chart data; rebinding must not reset zoom/series.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || !onClick) return;
+    chart.on('click', onClick);
+    return () => { if (!chart.isDisposed()) chart.off('click', onClick); };
+  }, [onClick]);
 
   return (
     <div

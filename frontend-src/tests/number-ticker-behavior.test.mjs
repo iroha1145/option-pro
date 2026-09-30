@@ -15,10 +15,12 @@ function moduleAt(path, imports = {}) {
 }
 const glyphs = moduleAt('../src/lib/numberTicker.ts');
 let reduced = false;
+let mobile = false;
 const component = moduleAt('../src/components/shared/NumberTicker.tsx', {
   '@/lib/numberTicker': glyphs,
   '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },
   '@/hooks/usePrefersReducedMotion': { usePrefersReducedMotion: () => reduced },
+  '@/hooks/use-mobile': { useIsMobile: () => mobile },
 }).default;
 
 test('decimal and place-value identity survives sign and thousands-boundary changes', () => {
@@ -28,6 +30,17 @@ test('decimal and place-value identity survives sign and thousands-boundary chan
   const negative = glyphs.numberGlyphs('−1,002.34%');
   assert.equal(negative.find(g => g.key === 'decimal-1').char, '3');
   assert.equal(new Set(negative.map(g => g.key)).size, negative.length);
+});
+
+test('mobile quotes use exact text instead of ten hidden glyphs per digit', () => {
+  mobile = true;
+  for (const text of ['$1,234.56', '−12.34%', '0.00%', '—']) {
+    const html = renderToStaticMarkup(createElement(component, { text }));
+    assert.ok(html.includes(text));
+    assert.doesNotMatch(html, /translateY|transition|width:1ch/);
+    assert.equal((html.match(/<span/g) ?? []).length, 3);
+  }
+  mobile = false;
 });
 
 test('first render displays exact decimal price without counting from zero', () => {

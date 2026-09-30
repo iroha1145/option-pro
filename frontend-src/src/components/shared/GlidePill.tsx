@@ -1,4 +1,5 @@
 import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
+import { useIsMobile } from '@/hooks/use-mobile';
 /**
  * GlidePill 滑行指示器（beui.dev components/motion/tabs）：
  * active 项之间用共享 layoutId 做布局投影，弹簧物理与 reduced-motion 归零
@@ -18,6 +19,9 @@ import { cn } from '@/lib/utils';
 
 export default function GlidePill({ layoutId, className }: { layoutId: string; className?: string }) {
   const reduce = usePrefersReducedMotion();
+  const mobile = useIsMobile();
+  // A static highlight avoids projecting from an entering/wrapping mobile header.
+  if (mobile) return <span aria-hidden="true" data-glide-pill="" className={cn('selection-indicator pointer-events-none absolute inset-0', className)} />;
   return (
     <motion.span
       layoutId={layoutId}

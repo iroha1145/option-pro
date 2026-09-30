@@ -11,7 +11,6 @@ import { useQuoteSymbols, useRadarVersion, useRadarUpdates } from '@/hooks/useLi
  * 事件详情模态保留 · status/current 30s 轮询 · 空态/骨架/503/移动端单列
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
 import { ApiError } from '@/api/client';
 import { breakoutsApi } from '@/api/modules/breakouts';
 import { runtimeApi } from '@/api/modules/runtime';
@@ -28,7 +27,6 @@ import { DEFAULT_WATCHLIST_TICKERS } from '@/lib/personalWatchlist';
 import { useToast } from '@/hooks/useToast';
 import { useShell } from '@/hooks/useShell';
 import { cn } from '@/lib/utils';
-import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import Segmented from '@/components/shared/Segmented';
 import FilterButton from '@/components/shared/FilterButton';
 import SelectionViewport from '@/components/shared/SelectionViewport';
@@ -114,6 +112,18 @@ function SessionChip({ session }: { session: BreakoutSession }) {
   );
 }
 
+function NextScanCountdown({ at }: { at?: string | null }) {
+  const now = useNow(at ? 1000 : 0);
+  const remaining = at ? new Date(at).getTime() - now : Number.NaN;
+  const ms = Math.max(0, remaining);
+  const value = Number.isFinite(ms)
+    ? `${String(Math.floor(ms / 60_000)).padStart(2, '0')}:${String(Math.floor((ms % 60_000) / 1000)).padStart(2, '0')}`
+    : '—';
+  return <span className="font-mono tnum">
+    {__t('下次扫描')} <span className="text-brand-600">{value}</span>
+  </span>;
+}
+
 /* ================= 页面主体 ================= */
 const HISTORY_PAGE_SIZE = 100;
 
@@ -125,7 +135,6 @@ export default function Breakouts() {
   const principal = `${isOwner ? 'owner' : 'visitor'}:${username ?? ''}`;
   const { openTicker } = useShell();
   const toast = useToast();
-  const now = useNow(1000);
 
   const [radarSort, setRadarSort] = useState<RadarSortChoice>(
     () => readAlgorithmPreferences(principal).radarSortAlgorithm,
@@ -446,15 +455,6 @@ export default function Breakouts() {
     }
   };
 
-  /* 下次扫描倒计时 mm:ss */
-  const nextCountdown = useMemo(() => {
-    if (!status?.next_session_at) return null;
-    const ms = Math.max(0, new Date(status.next_session_at).getTime() - now);
-    const m = Math.floor(ms / 60_000);
-    const s = Math.floor((ms % 60_000) / 1000);
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  }, [status?.next_session_at, now]);
-
   /* 快照时间取契约 as_of（数据截至时间），读取时间单独显示（审计 P2-16）：
      两者混用会把「重新读到一份旧快照」显示成「刚刚更新」。 */
   const snapshotAt = currentQ.data?.asOf
@@ -485,10 +485,7 @@ export default function Breakouts() {
   return (
     <div className="radar-page">
       {/* 页头带：§03 眉题 + 衬线大标 + 副标 · 右侧紧凑状态条 */}
-      <motion.header
-        initial={{ opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
+      <header
         className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-b border-line pb-5"
       >
         <div>
@@ -500,18 +497,18 @@ export default function Breakouts() {
           <p className="mt-1.5 text-body-s text-ink-500">{__t('发现突破机会，跟踪确认与回踩过程。')}</p>
         </div>
         {/* 紧凑状态条：启用 LED · 快照与活跃条数（副标合并至此去重）· 最近扫描 · 时段 chip · 扫描服务 · 下次扫描倒计时 · 查看范围 */}
-        <div className="radar-status flex flex-wrap items-center justify-end gap-x-4 gap-y-2 pb-1 text-caption text-ink-500">
+        <div className="radar-status grid w-full grid-cols-2 items-center gap-x-4 gap-y-2 pb-1 text-caption text-ink-500 md:flex md:w-auto md:flex-wrap md:justify-end">
           <span className="inline-flex items-center gap-1.5">
             <span className={cn('size-2 rounded-full', status?.enabled ? 'bg-up-600 animate-led-pulse' : 'bg-ink-300')} aria-hidden="true" />
             {status ? (status.enabled ? __t('扫描已启用') : __t('扫描已暂停')) : __t('状态读取中…')}
           </span>
-          <span className="font-mono tnum">
+          <span className="col-span-2 min-h-[2lh] font-mono tnum md:min-h-0">
             {__t('数据截至')} {snapshotAt} {__t('· 读取')} {readAt} · <span className="text-ink-700">{currentAll.length}</span> {__t('条活跃')}
           </span>
           <span className="font-mono tnum">
             {__t('最近扫描')} {status?.lastScanAt ? fmtTimeHHMMSS(new Date(status.lastScanAt)) : '—'}
           </span>
-          {status?.market_session && <SessionChip session={status.market_session} />}
+          <span className="min-h-6">{status?.market_session ? <SessionChip session={status.market_session} /> : '—'}</span>
           {/* 扫描服务三态：正常 / 异常 / 状态未知。healthy === null 表示后端没有报告
               worker（库不可用或 schema 不符），不能显示成正常，也不等于确认异常。 */}
           <span className="inline-flex items-center gap-1.5">
@@ -535,12 +532,8 @@ export default function Breakouts() {
                   ? __t('异常')
                   : __t('状态未知')}
           </span>
-          {nextCountdown && (
-            <span className="font-mono tnum">
-              {__t('下次扫描')} <span className="text-brand-600">{nextCountdown}</span>
-            </span>
-          )}
-          <div className="flex max-w-full flex-wrap items-center gap-1.5">
+          <NextScanCountdown at={status?.next_session_at} />
+          <div className="col-span-2 flex max-w-full flex-wrap items-center gap-1.5">
             <Segmented
               options={WATCH_SCOPE_OPTIONS}
               value={onlyWatch ? 'watchlist' : 'all'}
@@ -556,7 +549,7 @@ export default function Breakouts() {
             )}
           </div>
         </div>
-      </motion.header>
+      </header>
       <StockDataCoverage state={readiness} className="mt-4" />
 
       {/* 同一工具栏内明确区分两个筛选维度；窄屏按组换行，触控目标不互相覆盖。 */}

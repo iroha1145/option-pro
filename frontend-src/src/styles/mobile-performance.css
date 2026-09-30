@@ -1,0 +1,18 @@
+/* Keep touch feedback, but avoid rasterizing the scrolling page through glass,
+   animating large layout boxes, or projecting a route while it is being measured. */
+@media (max-width: 767px) {
+  .page-enter { animation: none; }
+  .glass {
+    background: var(--card);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .t-resize { transition: none; will-change: auto; }
+  .t-acc-panel-inner,
+  .t-skel-content,
+  .t-skel-skeleton { filter: none !important; }
+  .spark-draw {
+    animation: none !important;
+    stroke-dashoffset: 0 !important;
+  }
+}
