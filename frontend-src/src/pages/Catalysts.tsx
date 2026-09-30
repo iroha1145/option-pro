@@ -3,7 +3,7 @@
  * 状态 hero · 热点带 · 市场焦点周期 · 标签页（feed/stocks/calendar/sources，URL 同步）
  * 过滤器条（URL query）· 新闻详情抽屉（AI 分析任务状态机）· 空态/骨架/503/移动端
  */
-import { startTransition, useCallback, useMemo, useOptimistic, useState } from 'react';
+import { lazy, Suspense, startTransition, useCallback, useMemo, useOptimistic, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import PageHeader from '@/components/shared/PageHeader';
 import Segmented from '@/components/shared/Segmented';
@@ -17,14 +17,17 @@ import ManagePanel from '@/components/catalysts/ManagePanel';
 import FilterBar from '@/components/catalysts/FilterBar';
 import { DEFAULT_FILTERS, sanitizeThemeId, type CatalystFilters } from '@/components/catalysts/filters';
 import FeedPanel from '@/components/catalysts/FeedPanel';
-import StocksPanel from '@/components/catalysts/StocksPanel';
-import CalendarPanel from '@/components/catalysts/CalendarPanel';
-import SourcesPanel from '@/components/catalysts/SourcesPanel';
-import NewsDrawer from '@/components/catalysts/NewsDrawer';
+import { SkeletonRows } from '@/components/shared/Skeleton';
 import { clearCatalystReadCache } from '@/components/catalysts/api';
 import type { CatalystNewsItem, NewsAnalysisStatus, NewsClassification } from '@/components/catalysts/api';
 import { addNewsPatch, type NewsPatches } from '@/components/catalysts/feedPatches';
 import { t as __t } from '../i18n/core.ts';
+
+// The news feed can render before inactive tabs and the analysis drawer download.
+const StocksPanel = lazy(() => import('@/components/catalysts/StocksPanel'));
+const CalendarPanel = lazy(() => import('@/components/catalysts/CalendarPanel'));
+const SourcesPanel = lazy(() => import('@/components/catalysts/SourcesPanel'));
+const NewsDrawer = lazy(() => import('@/components/catalysts/NewsDrawer'));
 
 type TabId = 'feed' | 'stocks' | 'calendar' | 'sources';
 
@@ -148,7 +151,9 @@ export default function Catalysts() {
   /* 新闻详情抽屉 */
   const [selectedNewsId, setSelectedNewsId] = useState<string | null>(null);
   const [selectedSeed, setSelectedSeed] = useState<CatalystNewsItem | null>(null);
+  const [drawerMounted, setDrawerMounted] = useState(false);
   const openNews = useCallback((id: string, seed?: CatalystNewsItem) => {
+    setDrawerMounted(true);
     setSelectedNewsId(id);
     setSelectedSeed(seed?.newsId === id ? seed : null);
   }, []);
@@ -232,13 +237,17 @@ export default function Catalysts() {
             onClearFilters={clearFilters}
           />
         )}
-        {tab === 'stocks' && <StocksPanel filters={filters} refreshToken={refreshToken} />}
-        {tab === 'calendar' && <CalendarPanel refreshToken={refreshToken} />}
-        {tab === 'sources' && <SourcesPanel refreshToken={refreshToken} />}
+        <Suspense fallback={<SkeletonRows rows={6} />}>
+          {tab === 'stocks' && <StocksPanel filters={filters} refreshToken={refreshToken} />}
+          {tab === 'calendar' && <CalendarPanel refreshToken={refreshToken} />}
+          {tab === 'sources' && <SourcesPanel refreshToken={refreshToken} />}
+        </Suspense>
       </div>
 
       {/* 新闻详情抽屉 */}
-      <NewsDrawer newsId={selectedNewsId} seed={selectedSeed} onClose={closeNews} onUpdate={onNewsUpdate} />
+      {drawerMounted && <Suspense fallback={<div role="status" className="fixed bottom-24 right-4 z-[70] rounded-md border border-line bg-card px-4 py-3 shadow-overlay">{__t('加载中…')}</div>}>
+        <NewsDrawer newsId={selectedNewsId} seed={selectedSeed} onClose={closeNews} onUpdate={onNewsUpdate} />
+      </Suspense>}
     </div>
   );
 }

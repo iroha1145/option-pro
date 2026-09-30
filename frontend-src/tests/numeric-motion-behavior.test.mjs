@@ -150,7 +150,7 @@ function loadSource(relative, imports = {}, globals = {}) {
   });
   return module.exports;
 }
-function countHarness() {
+function countHarness(mobile = false) {
   const h = harness();
   let hidden = false;
   const visibilityListeners = new Set();
@@ -162,6 +162,7 @@ function countHarness() {
   const motionPreference = loadSource('hooks/usePrefersReducedMotion.ts', { react: h.React }, h.runtime);
   const { useCountUp } = loadSource('hooks/useCountUp.ts', {
     react: h.React, './usePrefersReducedMotion': motionPreference,
+    './use-mobile': { useIsMobile: () => mobile },
   }, { ...h.runtime, document });
   return { ...h, useCountUp, visibilityListeners,
     hide(value) { hidden = value; visibilityListeners.forEach((listener) => listener()); },
@@ -191,6 +192,18 @@ test('first render shows the real number and schedules no count from zero', () =
   assert.equal(h.value(), 143.72);
   assert.equal(h.frames.size, 0);
   assert.equal(h.timers.size, 0);
+});
+
+test('mobile updates show the final value without scheduling animation frames', () => {
+  const h = countHarness(true);
+  let target = 100;
+  h.mount(() => h.useCountUp(target));
+  target = 123.45;
+  h.render();
+  assert.equal(h.value(), 123.45);
+  assert.equal(h.frames.size, 0);
+  assert.equal(h.timers.size, 0);
+  h.unmount();
 });
 
 test('an interrupted update resumes at the currently displayed value', () => {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePrefersReducedMotion } from './usePrefersReducedMotion';
+import { useIsMobile } from './use-mobile';
 
 /**
  * 初次显示真实值，后续变化从当前显示位置过渡；读屏层由调用方呈现最终值。
@@ -7,12 +8,14 @@ import { usePrefersReducedMotion } from './usePrefersReducedMotion';
  */
 export function useCountUp(target: number, duration = 900): number {
   const reduced = usePrefersReducedMotion();
+  const mobile = useIsMobile();
+  const instantMotion = reduced || mobile;
   const [value, setValue] = useState(target);
   const displayedRef = useRef(target);
 
   useEffect(() => {
     const from = displayedRef.current;
-    const instant = reduced || document.hidden || !Number.isFinite(target) || !Number.isFinite(from)
+    const instant = instantMotion || document.hidden || !Number.isFinite(target) || !Number.isFinite(from)
       || !Number.isFinite(duration) || duration <= 0 || duration > 2_147_483_567 || Object.is(from, target);
     if (instant) {
       // 同步动画时钟的终点；依赖中没有 value，不会由本次更新重新触发效果。
@@ -61,7 +64,7 @@ export function useCountUp(target: number, duration = 900): number {
       window.clearTimeout(settle);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [target, duration, reduced]);
+  }, [target, duration, instantMotion]);
 
-  return reduced || !Number.isFinite(target) || !Number.isFinite(value) ? target : value;
+  return instantMotion || !Number.isFinite(target) || !Number.isFinite(value) ? target : value;
 }

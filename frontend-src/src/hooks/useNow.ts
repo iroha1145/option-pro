@@ -5,8 +5,20 @@ export function useNow(intervalMs = 1000): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!intervalMs || intervalMs <= 0) return undefined;
-    const t = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(t);
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const stop = () => { clearInterval(timer); timer = undefined; };
+    const resume = () => {
+      stop();
+      if (document.hidden) return;
+      setNow(Date.now());
+      timer = setInterval(() => setNow(Date.now()), intervalMs);
+    };
+    if (!document.hidden) timer = setInterval(() => setNow(Date.now()), intervalMs);
+    document.addEventListener('visibilitychange', resume);
+    return () => {
+      stop();
+      document.removeEventListener('visibilitychange', resume);
+    };
   }, [intervalMs]);
   return now;
 }

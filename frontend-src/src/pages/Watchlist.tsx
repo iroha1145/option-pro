@@ -25,6 +25,7 @@ import { sortWatchlistItems } from './watchlistSort';
 import { useTickFlash } from '@/hooks/useTickFlash';
 import { useAccess } from '@/hooks/useAccess';
 import { useNow } from '@/hooks/useNow';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useToast } from '@/hooks/useToast';
 import { useShell } from '@/hooks/useShell';
 import { cn } from '@/lib/utils';
@@ -415,8 +416,16 @@ function WatchCard({
   );
 }
 
+function HeaderClock() {
+  const now = useNow(1000);
+  return <span className="hidden font-mono text-data-m text-ink-600 tnum sm:inline" suppressHydrationWarning>
+    {fmtNyTime(new Date(now))}
+  </span>;
+}
+
 /* ================= 页面主体 ================= */
 export default function Watchlist() {
+  const mobile = useIsMobile();
   const { isVisitor, isOwner, canManageWatchlist, username, identityUnavailable, loading: identityLoading } = useAccess();
   const { openTicker } = useShell();
   const toast = useToast();
@@ -466,7 +475,6 @@ export default function Watchlist() {
   const signalsQ = usePolling(() => signalsApi.market(), 60_000, [], { enabled: !identityLoading && !identityUnavailable });
   const strengthQ = usePolling(() => strengthApi.market(), 60_000, [], { enabled: !identityLoading && !identityUnavailable });
   const statusQ = usePolling(() => marketApi.status(), 60_000);
-  const now = useNow(1000);
 
   const onForceRefresh = useCallback(async () => {
     if (!isOwner || forceRefreshing || identityUnavailable) {
@@ -731,9 +739,7 @@ export default function Watchlist() {
               label={statusQ.data?.label}
               loading={statusQ.loading}
             />
-            <span className="hidden font-mono text-data-m text-ink-600 tnum sm:inline" suppressHydrationWarning>
-              {fmtNyTime(new Date(now))}
-            </span>
+            <HeaderClock />
             <ForceRefreshButton
               onRefresh={() => void onForceRefresh()}
               spinning={forceRefreshing || wl.refreshing}
@@ -977,10 +983,8 @@ export default function Watchlist() {
                   ) : <Link to="/login" className="control-button">{t('登录后管理自选')}</Link>}
                 />
               </div>
-            ) : view === 'table' ? (
-              <>
-                {/* 桌面表格 */}
-                <div className="hidden md:block">
+            ) : view === 'table' && !mobile ? (
+                <div>
                   <DataTable
                     columns={columns}
                     rows={renderedRows}
@@ -990,31 +994,14 @@ export default function Watchlist() {
                     onSortChange={setSort}
                   />
                 </div>
-                {/* 移动：表格转卡片流 */}
-                <div className="grid grid-cols-1 gap-3 md:hidden">
-                  {renderedCards.map((it, i) => (
-                    <WatchCard
-                      key={it.ticker}
-                      item={it}
-                      index={i}
-                      animateIn={i < FIRST_BATCH}
-                      onClick={() => openTicker(it.ticker)}
-                      onRemove={canManageWatchlist ? () => void onRemoveTicker(it.ticker) : undefined}
-                      removing={personal.busy || !personal.enabled}
-                      showStrength={rowStrengthAvailable}
-                      showSignals={rowSignalsAvailable}
-                    />
-                  ))}
-                </div>
-              </>
             ) : (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <div className={view === 'table' ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3'}>
                 {renderedCards.map((it, i) => (
                   <WatchCard
                     key={it.ticker}
                     item={it}
                     index={i}
-                    animateIn={i < FIRST_BATCH}
+                    animateIn={!mobile && i < FIRST_BATCH}
                     onClick={() => openTicker(it.ticker)}
                     onRemove={canManageWatchlist ? () => void onRemoveTicker(it.ticker) : undefined}
                     removing={personal.busy || !personal.enabled}

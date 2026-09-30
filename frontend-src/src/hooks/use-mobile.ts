@@ -1,26 +1,23 @@
-import * as React from "react"
+import { useSyncExternalStore } from 'react';
 
-const MOBILE_BREAKPOINT = 768
+const QUERY = '(max-width: 767px)';
+let media: MediaQueryList | undefined;
+const listeners = new Set<() => void>();
+const getMedia = () => media ??= window.matchMedia(QUERY);
+const notify = () => listeners.forEach(listener => listener());
+const snapshot = () => getMedia().matches;
+const serverSnapshot = () => false;
+
+function subscribe(listener: () => void) {
+  if (listeners.size === 0) getMedia().addEventListener('change', notify);
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0) getMedia().removeEventListener('change', notify);
+  };
+}
 
 export function useIsMobile() {
-  // 同步取初值（审计 2.4.4）：以前初值是 undefined、effect 里才写真值，手机上
-  // 首帧一律按桌面渲染，K 线等按此取高的布局会在 effect 后跳一次（60px CLS）。
-  // SPA 无 SSR，直接读 matchMedia 是安全的。
-  const [isMobile, setIsMobile] = React.useState<boolean>(() =>
-    typeof window !== "undefined"
-      ? window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`).matches
-      : false,
-  )
-
-  React.useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
-    const onChange = () => {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    }
-    mql.addEventListener("change", onChange)
-    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    return () => mql.removeEventListener("change", onChange)
-  }, [])
-
-  return isMobile
+  // 首帧即使用正确断点；整张行情表共用一个原生监听器。
+  return useSyncExternalStore(subscribe, snapshot, serverSnapshot);
 }

@@ -1020,6 +1020,8 @@ test('2-E 页面刷新：写操作已清缓存时不再清第二次；页头刷�
   const runner = createReactStub();
   runner.React.useOptimistic = (value) => [value, () => {}];
   runner.React.startTransition = (fn) => fn();
+  runner.React.lazy = (load) => String(load).match(/catalysts\/(\w+)/)[1];
+  runner.React.Suspense = 'Suspense';
   let clears = 0;
   const components = Object.fromEntries([
     '@/components/shared/PageHeader', '@/components/shared/Segmented', '@/components/icons',
@@ -1034,6 +1036,7 @@ test('2-E 页面刷新：写操作已清缓存时不再清第二次；页头刷�
     'react/jsx-runtime': passthroughJsx,
     'react-router': { useSearchParams: () => [new URLSearchParams(''), () => {}] },
     ...components,
+    '@/components/shared/Skeleton': { SkeletonRows: 'SkeletonRows' },
     '@/lib/format': { fmtTimeHHMMSS: () => 't' },
     '@/components/catalysts/filters': filters,
     '@/components/catalysts/api': { clearCatalystReadCache: () => { clears += 1; } },
@@ -1050,6 +1053,7 @@ test('2-E 页面刷新：写操作已清缓存时不再清第二次；页头刷�
   findNode(read(), (node) => node.type === 'button' && /刷新/.test(textOf(node))).props.onClick({ type: 'click' });
   assert.equal(clears, 2);
 
+  findNode(read(), (node) => node.type === 'FeedPanel').props.onOpenNews('1');
   const drawer = findNode(read(), (node) => node.type === 'NewsDrawer');
   drawer.props.onUpdate({ newsId: '1', analysisStatus: 'queued' });
   const patches = findNode(read(), (node) => node.type === 'FeedPanel').props.patches;
@@ -1090,6 +1094,7 @@ function feedHarness() {
     '@/components/shared/AnalysisIcon': { default: 'AnalysisIcon' },
     '@/api/client': { ApiError: TestApiError },
     '@/hooks/useShell': { useShell: () => ({ openTicker() {} }) },
+    '@/hooks/use-mobile': { useIsMobile: () => false },
     '@/components/shared/EmptyState': { default: 'EmptyState' },
     '@/components/shared/Skeleton': { SkeletonBlock: 'SkeletonBlock' },
     '@/components/icons': { default: 'Icon' },

@@ -1,0 +1,1 @@
+import{j as s}from"./prefetchRouteChunk-CoSNQEGg.js";import{c as n}from"./app-shell-DlTvNAS4.js";function e({children:t,live:i=!0,tone:r="ai",className:a}){return i?s.jsx("span",{className:n("t-shimmer",r==="ai"&&"is-ai",a),"data-text":t,children:t}):s.jsx("span",{className:a,children:t})}export{e as T};
