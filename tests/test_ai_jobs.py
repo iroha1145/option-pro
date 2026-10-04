@@ -21,7 +21,7 @@ from app.config import Settings
 from app.services.ai_jobs import runtime, worker as ai_worker
 from app.services.ai_jobs.models import validate_result
 from app.services.ai_jobs.repository import AIJobRepository
-from app.services.ai_jobs.worker import health_payload, process_job
+from app.services.ai_jobs.worker import process_job
 from app.tools import recover_ai_schema_results as recovery_tool
 
 
@@ -1377,16 +1377,13 @@ def test_runtime_capability_rejects_non_official_configuration(tmp_path):
     assert status["status"] == "runtime_configuration_invalid"
 
 
-def test_worker_health_reports_official_responses_sdk_without_a_key(tmp_path):
-    repository = AIJobRepository(tmp_path / "ai-jobs.db")
-    repository.initialize()
-    settings = _settings(repository.path)
+def test_runtime_capability_reports_official_responses_sdk_without_a_key(tmp_path):
+    settings = _settings(tmp_path / "ai-jobs.db")
     settings.openai_api_key = SecretStr("")
 
-    status = health_payload(repository, settings)
+    status = runtime.capability_status(settings)
 
-    assert status["status"] == "disabled"
-    assert status["sdk_capability_supported"] is True
+    assert status["sdk_supported"] is True
     assert all(
         status["methods"].get(name) is True
         for name in ("create", "retrieve", "cancel")
