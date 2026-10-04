@@ -397,7 +397,6 @@ function renderSignalCard(state) {
     '@/components/icons': { default: 'Icon' },
     './api': { createSignalAnalysisJob: () => Promise.reject(new Error('unused')) },
     './useAiJob': { useAiJob: () => hookState(state) },
-    '@/api/modules/ai-jobs': { aiJobBlockedMessage: normalize.aiJobBlockedMessage, aiJobResultSummary: normalize.aiJobResultSummary },
     '@/api/aiJobNormalize': normalize,
     '@/lib/quoteSymbol': { isIndexSymbol: () => false },
   });
@@ -409,7 +408,7 @@ function renderOptionInsight(state) {
   const { sandbox } = compile('components/detail/OptionsPanel.tsx', stub.React, {
     '@/api/client': { isMock: false },
     '@/api/modules/options': { optionsApi: {} },
-    '@/api/modules/ai-jobs': { aiJobBlockedMessage: normalize.aiJobBlockedMessage, aiJobsApi: {} },
+    '@/api/modules/ai-jobs': { aiJobsApi: {} },
     '@/api/aiJobNormalize': normalize,
     '@/hooks/usePolling': { usePolling() { throw new Error('unused'); } },
     '@/hooks/useRetryCountdown': { useRetryCountdown() { throw new Error('unused'); } },

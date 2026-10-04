@@ -150,13 +150,13 @@ const AI_JOB_ERROR_TEXT = new Map<string, () => string>([
   ['runtime_configuration_invalid', () => t('AI 分析服务尚未就绪，暂时不能发起分析')],
 ]);
 
-/** 失败任务的原因说明；code 为空或认不出时给通用句。 */
 /** 共用表认识的错误码才返回文案；认不出返回 null，由调用方决定兜底句。 */
 export function aiJobKnownErrorMessage(code: string | null | undefined): string | null {
   const text = code ? AI_JOB_ERROR_TEXT.get(code.trim()) : undefined;
   return text ? text() : null;
 }
 
+/** 失败任务的原因说明；code 为空或认不出时给通用句。 */
 export function aiJobErrorMessage(code: string | null): string {
   return aiJobKnownErrorMessage(code) ?? t('分析任务失败');
 }
