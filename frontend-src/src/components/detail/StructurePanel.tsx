@@ -8,6 +8,7 @@
  * - null 一律显「—」，不折成 0（量价缺数据时假突破风险不是零）。
  * - 形态/Spring/Upthrust 是最近数根内的历史事件，带发生时点。
  */
+import type { ReactNode } from 'react';
 import InfoHint from '@/components/shared/InfoHint';
 import { STRUCTURE_HINTS } from '@/lib/structureHints';
 import { strengthBarClass } from '@/lib/strengthColor';
@@ -17,7 +18,7 @@ import type { TechBaseState, TechnicalStructure } from '@/api/types';
 import { t } from '../../i18n/core.ts';
 
 /** 价格、百分比、倍数用正文字体的等宽数字；日期区间传 mono（日期与代码保持等宽字体） */
-function StructFact({ label, value, hint, mono = false }: { label: string; value: string; hint?: typeof STRUCTURE_HINTS[string]; mono?: boolean }) {
+function StructFact({ label, value, hint, mono = false }: { label: string; value: ReactNode; hint?: typeof STRUCTURE_HINTS[string]; mono?: boolean }) {
   return (
     <div className="rounded-md bg-paper-2 px-2 py-1">
       <dt className="flex flex-wrap items-center gap-x-1 text-micro text-ink-400">
@@ -175,7 +176,12 @@ export default function StructurePanel({ technical }: { technical: TechnicalStru
           <dl className="grid grid-cols-2 gap-1.5 text-caption">
             <StructFact label={t('阻力带')} value={`${priceOr(base.resistance_low)} – ${priceOr(base.resistance_high)}`} />
             <StructFact label={t('失效位')} value={priceOr(base.invalidation_price)} />
-            <StructFact label={t('形成区间')} value={`${base.base_start ?? '—'} → ${base.base_end ?? '—'}`} mono />
+            {/* 半宽格在手机上放不下整段区间：只在箭头处换行，不把日期拆成「2026-」「08-29」 */}
+            <StructFact
+              label={t('形成区间')}
+              value={<><span className="whitespace-nowrap">{base.base_start ?? '—'}</span> → <span className="whitespace-nowrap">{base.base_end ?? '—'}</span></>}
+              mono
+            />
             <StructFact label={t('支撑下沿')} value={priceOr(base.support_low)} />
           </dl>
         )}

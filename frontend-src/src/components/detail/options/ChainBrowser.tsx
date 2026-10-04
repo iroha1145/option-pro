@@ -41,7 +41,7 @@ function ContractDetail({ contract: c, onClose }: { contract: ChainContract; onC
   return <section className="rounded-lg border border-brand-100 bg-brand-50/40 p-4" aria-label={t('合约报价明细')}>
     <div className="flex items-center justify-between gap-3">
       <h4 className="text-body-s font-semibold text-ink-900">{contractName(c)}</h4>
-      <button type="button" onClick={onClose} className="flex min-h-9 items-center gap-1 rounded-md px-2 text-caption text-ink-600 hover:bg-card" aria-label={t('收起合约明细')}>
+      <button type="button" onClick={onClose} className="touch-target flex min-h-9 items-center justify-center gap-1 rounded-md px-2 text-caption text-ink-600 hover:bg-card" aria-label={t('收起合约明细')}>
         {t('收起')}<Icon name="chevron-down" className="rotate-180" size={13} />
       </button>
     </div>
@@ -89,7 +89,7 @@ export default function ChainBrowser({ chain }: { chain: OptionChain }) {
     <section className="overflow-hidden rounded-lg border border-line" aria-label={t('成交关注')}>
       <div className="flex items-center justify-between gap-3 border-b border-line bg-paper-2/60 px-4 py-3">
         <div className="flex items-center gap-2"><Icon name="bolt" size={16} className="text-warn-700" /><h4 className="text-body-s font-semibold text-ink-900">{t('成交关注')}</h4><span className="text-caption text-ink-500 tnum">{alerts.length}</span></div>
-        {alerts.length > 0 && <button type="button" onClick={() => { setScope('alerts'); setSide('all'); setSelectedId(null); }} className="min-h-9 rounded-md px-2 text-caption font-medium text-brand-700 hover:bg-brand-50">{t('查看全部异动')}<span aria-hidden="true"> →</span></button>}
+        {alerts.length > 0 && <button type="button" onClick={() => { setScope('alerts'); setSide('all'); setSelectedId(null); }} className="touch-target min-h-9 rounded-md px-2 text-caption font-medium text-brand-700 hover:bg-brand-50">{t('查看全部异动')}<span aria-hidden="true"> →</span></button>}
       </div>
       {alerts.length > 0 ? <ul className="divide-y divide-line">
         {alerts.slice(0, 3).map((c) => <li key={c.id}>
@@ -135,13 +135,13 @@ export default function ChainBrowser({ chain }: { chain: OptionChain }) {
               <td className="min-w-28 px-3 py-3 text-right"><span className="text-ink-900 tnum">{number(c.volume)}</span><div className="mt-1.5 h-1 overflow-hidden rounded-sm bg-line" aria-hidden="true"><div className={cn('h-full', c.side === 'call' ? 'bg-brand-500/60' : 'bg-ink-400/55')} style={{ width: `${(c.volume ?? 0) / maxVolume * 100}%` }} /></div></td>
               <td className="px-3 py-3 text-right text-ink-600 tnum">{number(c.openInterest)}</td>
               <td className="px-3 py-3 text-right"><Ratio contract={c} />{c.activity.length > 0 && <span className="mt-0.5 block text-caption text-warn-700">{t('需关注')}</span>}</td>
-              <td className="px-3 py-3"><button type="button" className="min-h-9 rounded-md border border-line-strong bg-card px-2.5 text-caption text-ink-600 hover:border-brand-400 hover:text-brand-700" onClick={(event) => openDetail(c.id, event.currentTarget)} aria-expanded={selectedId === c.id} aria-label={t('查看 {contract} 明细', { contract: contractName(c) })}>{t('明细')}</button></td>
+              <td className="px-3 py-3"><button type="button" className="control-button" onClick={(event) => openDetail(c.id, event.currentTarget)} aria-expanded={selectedId === c.id} aria-label={t('查看 {contract} 明细', { contract: contractName(c) })}>{t('明细')}</button></td>
             </tr>)}</tbody>
           </table>
         </div>
         <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line md:hidden" aria-label={t('期权合约列表')}>
           {visible.map((c) => <li key={c.id} className="p-3.5">
-            <div className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><SideLabel side={c.side} /><strong className="text-body-s text-ink-900 tnum">${strikeText(c.strike)}</strong></span><button type="button" onClick={(event) => openDetail(c.id, event.currentTarget)} aria-expanded={selectedId === c.id} aria-label={t('查看 {contract} 明细', { contract: contractName(c) })} className="min-h-9 rounded-md border border-line-strong px-3 text-caption text-ink-600">{t('明细')}</button></div>
+            <div className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><SideLabel side={c.side} /><strong className="text-body-s text-ink-900 tnum">${strikeText(c.strike)}</strong></span><button type="button" onClick={(event) => openDetail(c.id, event.currentTarget)} aria-expanded={selectedId === c.id} aria-label={t('查看 {contract} 明细', { contract: contractName(c) })} className="control-button">{t('明细')}</button></div>
             <dl className="mt-3 grid grid-cols-3 gap-2">{[[t('参考价（每股）'), price(c.mid)], [t('成交量'), number(c.volume)], [t('持仓量'), number(c.openInterest)]].map(([label, value]) => <div key={label}><dt className="text-micro text-ink-500">{label}</dt><dd className="mt-1 text-caption text-ink-900 tnum">{value}</dd></div>)}</dl>
             {c.activity.length > 0 && <p className="mt-3 rounded-md bg-warn-50 px-2 py-1.5 text-caption text-warn-700">{reason(c)}</p>}
           </li>)}
