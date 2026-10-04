@@ -147,12 +147,12 @@ _HOTSPOT_PRUNE_BATCH_REVISIONS = 50
 _DEFAULT_NEWS_RETENTION_DAYS = 30
 _AI_JOB_SNAPSHOT_MARGIN = timedelta(days=1)
 # 新闻付费载荷的字节预算。上游 summary 最长 20 万字符、source_tickers 最多
-# 500 项，原样入队会撞 ai_jobs 的 64 KiB 上限（create_job 抛
-# ai_job_payload_too_large，曾让整轮定时分析与焦点铸造一起崩）；runtime 提交
-# 时还把 `<`、`>` 转成 6 字节转义后按 60000 字节把关。两个字段各自按转义后的
-# 字节数确定性截断：同一修订永远得到同一载荷，入队去重和修订绑定才对得上。
-# 两项预算加上常见的标题、链接与来源仍在 60000 以内；只有超长摘要会被截断，
-# 已入队的正常载荷不变。
+# 500 项，原样入队会超过 ai_jobs 的入队上限：create_job 与 runtime 提交同一
+# 口径，把 `<`、`>` 转成 6 字节转义后按 60000 字节把关，超限抛
+# ai_job_payload_too_large（曾让整轮定时分析与焦点铸造一起崩）。两个字段各
+# 自按转义后的字节数确定性截断：同一修订永远得到同一载荷，入队去重和修订绑定
+# 才对得上。两项预算加上常见的标题、链接与来源仍在 60000 以内；只有超长摘要
+# 会被截断，已入队的正常载荷不变。
 NEWS_SUMMARY_MAX_BYTES = 40_000
 NEWS_TICKER_HINTS_MAX_BYTES = 4_000
 NEWS_ARTICLE_MAX_BYTES = 28_000
