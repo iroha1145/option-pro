@@ -97,22 +97,24 @@ export default function StockDetail() {
     else navigate('/watchlist', { replace: true });
   };
 
-  const backButton = (
-    <button
-      type="button"
-      onClick={goBack}
-      className="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-card px-3 py-1.5 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:bg-paper-2 hover:text-ink-800"
-    >
-      <Icon name="chevron-right" size={14} className="rotate-180" />
-      {__t('返回')}
-    </button>
+  /* 页首操作行：同一行控件同高。返回用 .control-button（桌面 32、粗指针 44）；
+     WatchlistToggle 在 shared/ 里自带 min-h-11（44），精确指针下由这一行收到同一档
+     32，粗指针仍保留 44 的触控高度。 */
+  const toolbar = (
+    <div className="flex flex-wrap items-center gap-2 [@media(pointer:fine)]:[&>*]:min-h-8">
+      <button type="button" onClick={goBack} className="control-button">
+        <Icon name="chevron-right" size={14} className="rotate-180" />
+        {__t('返回')}
+      </button>
+      <WatchlistToggle ticker={symbol} />
+    </div>
   );
 
   if (loading && !detail) {
     return (
       <div className="space-y-5" aria-busy="true" {...pageRegionProps('stock', 'loading')}>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">{backButton}<WatchlistToggle ticker={symbol} /></div>
+          {toolbar}
           <span className="eyebrow">STOCK · ${symbol}</span>
         </div>
         <PriceHeader symbol={symbol} />
@@ -132,7 +134,7 @@ export default function StockDetail() {
     return (
       <div {...pageRegionProps('stock', is404 || manualRecovery ? 'empty' : 'error')}>
         <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">{backButton}<WatchlistToggle ticker={symbol} /></div>
+          {toolbar}
           <span className="eyebrow">STOCK · ${symbol}</span>
         </div>
         <PriceHeader symbol={symbol} />
@@ -237,7 +239,7 @@ export default function StockDetail() {
     <div {...pageRegionProps('stock', 'content')}>
       {/* 行0 */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">{backButton}<WatchlistToggle ticker={symbol} /></div>
+        {toolbar}
         <span className="eyebrow">STOCK · ${symbol}</span>
       </div>
       <PriceHeader detail={detail} />
