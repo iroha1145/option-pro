@@ -39,6 +39,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from app.data_paths import get_data_paths
 from app.failure_diagnostics import record_fallback_failure
 
+from .store import atomic_write_bytes
 from .universe import STOCK_PROVIDER_TYPES
 
 TABLE_NAME = "industry-sic-v1.json.gz"
@@ -193,14 +194,8 @@ class SicTable:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         ordered = sorted(self.records, key=lambda item: (item["ticker"], item["cik"] or "", item["as_of"] or ""))
-        body = json.dumps({"version": 1, "records": ordered}, sort_keys=True, ensure_ascii=False)
-        temporary = path.with_suffix(path.suffix + ".tmp")
-        if path.suffix == ".gz":
-            with gzip.open(temporary, "wt", encoding="utf-8") as handle:
-                handle.write(body)
-        else:
-            temporary.write_text(body, encoding="utf-8")
-        temporary.replace(path)
+        body = json.dumps({"version": 1, "records": ordered}, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        atomic_write_bytes(path, gzip.compress(body) if path.suffix == ".gz" else body)
 
 
 def table_path(root: Path | str | None = None) -> Path:

@@ -188,6 +188,44 @@ def test_sic_table_resolves_reused_tickers_by_cik_and_falls_back_to_the_ticker(t
     assert reloaded.sic_for("AAC", "0002128115") == "6770"
 
 
+@pytest.mark.parametrize("name", ["table.json.gz", "table.json"])
+def test_sic_table_save_writes_sorted_json_and_replaces_the_previous_file(tmp_path, name):
+    path = tmp_path / "nested" / name
+    SicTable([{"ticker": "OLD", "cik": None, "as_of": "2026-01-01", "sic_code": "1000"}]).save(path)
+    table = SicTable([
+        {"ticker": "ZED", "cik": None, "as_of": "2026-09-01", "sic_code": "7373", "sic_description": "Café software"},
+        {"ticker": "AAC", "cik": "2", "as_of": "2026-09-02", "sic_code": "6770"},
+        {"ticker": "AAC", "cik": "1", "as_of": "2026-09-03", "sic_code": "3443"},
+    ])
+    table.save(path)
+    expected = json.dumps({"version": 1, "records": sorted(
+        table.records, key=lambda item: (item["ticker"], item["cik"] or "", item["as_of"] or ""),
+    )}, sort_keys=True, ensure_ascii=False)
+    raw = path.read_bytes()
+    assert (gzip.decompress(raw) if name.endswith(".gz") else raw).decode("utf-8") == expected
+    assert [item.name for item in path.parent.iterdir()] == [name]
+
+
+def test_sic_table_save_is_fsynced_and_a_failed_rename_keeps_the_old_table(tmp_path, monkeypatch):
+    from app.services.eod_limited import store
+
+    path = tmp_path / "industry-sic-v1.json.gz"
+    synced = []
+    real_fsync = store.os.fsync
+    monkeypatch.setattr(store.os, "fsync", lambda fd: synced.append(fd) or real_fsync(fd))
+    SicTable([{"ticker": "OLD", "cik": None, "as_of": "2026-01-01", "sic_code": "1000"}]).save(path)
+    assert len(synced) == 2  # the temp file, then the directory entry of the rename
+
+    def refuse(*_args):
+        raise OSError("rename refused")
+
+    monkeypatch.setattr(store.os, "replace", refuse)
+    with pytest.raises(OSError, match="rename refused"):
+        SicTable([{"ticker": "NEW", "cik": None, "as_of": "2026-09-01", "sic_code": "2000"}]).save(path)
+    assert [item.name for item in tmp_path.iterdir()] == [path.name]
+    assert SicTable.load(path).sic_for("OLD") == "1000"
+
+
 def test_refresh_looks_up_only_unseen_tickers_within_the_budget_and_survives_failures():
     table = SicTable([{"ticker": "AAA", "cik": "1", "as_of": "2026-09-01", "sic_code": "2834"}])
     seen = []
