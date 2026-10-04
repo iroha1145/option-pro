@@ -1443,6 +1443,27 @@ test('4-C 轮询中一次读取失败：保持「正在分析」并说明在自�
   h.unmount();
 });
 
+test('4-C 轮询读取被 429 限流时等到 Retry-After 再查，读到新状态后恢复原节奏', async () => {
+  const h = impactHarness({
+    reportAnalysis: async (round) => {
+      if (round === 2) throw new TestApiError(429, 'limited', { retryAfter: 30 });
+      return reportState({ status: 'in_progress' });
+    },
+    requestReportAnalysis: async () => reportState(),
+  });
+  await h.clock.advance(0);
+  await h.clock.advance(2_000);
+  assert.equal(h.reads.length, 2);
+  assert.match(textOf(h.tree()), /暂时读不到最新状态，正在自动重试/);
+  await h.clock.advance(29_000);
+  assert.equal(h.reads.length, 2, 'Retry-After 之内不得再读');
+  await h.clock.advance(1_000);
+  assert.equal(h.reads.length, 3);
+  await h.clock.advance(5_000);
+  assert.equal(h.reads.length, 4, '读到新状态后回到原退避节奏');
+  h.unmount();
+});
+
 test('4-D 卸载后在途读取回来：不回调父组件，也不弹提示', async () => {
   const pending = deferred();
   const h = impactHarness({

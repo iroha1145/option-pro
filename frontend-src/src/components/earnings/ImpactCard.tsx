@@ -27,7 +27,7 @@ import type {
 import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/hooks/useToast';
 import { useShell } from '@/hooks/useShell';
-import { AI_JOB_POLL_WAITS_MS } from '@/lib/boundedReadRetry';
+import { AI_JOB_POLL_WAITS_MS, boundedReadRetryDelayMs } from '@/lib/boundedReadRetry';
 import { cn } from '@/lib/utils';
 import { DUR_FAST, DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import Icon from '@/components/icons';
@@ -227,6 +227,8 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
   const [pollPaused, setPollPaused] = useState(false);
   /* 轮询中的一次读取失败：保持当前阶段，只说明在自动重试（审计 4-C）。 */
   const [pollNotice, setPollNotice] = useState<string | null>(null);
+  /* 上一次后台读取被限流时服务端要求的等待（秒）；读到新状态后清零。 */
+  const pollRetryAfterRef = useRef<number | null>(null);
   /* stale-response 守卫（同 ManualStockPull.requestSequenceRef）：快速连点
      AAPL→MSFT 时若 AAPL 响应后到，没有序号校验它会把整卡写回 AAPL 的内容，
      而左侧高亮已是 MSFT，且不会自行纠正。 */
@@ -254,6 +256,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
     setAnalysis(resolvedAnalysis);
     setImpact(resolvedResult);
     setPollNotice(null);
+    pollRetryAfterRef.current = null;
     setErrorMsg(analysisErrorText(resolvedAnalysis.errorCode, normalizedStage(resolvedAnalysis.status)));
     if (ticker) onAnalyzed(ticker, resolvedAnalysis);
     if (resolvedResult) {
@@ -312,6 +315,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
         const transient = !err || err.code === 0 || err.code === 408 || err.code === 429 || err.code >= 500;
         if (options?.background && transient) {
           // 任务还在跑：一次读取失败不翻成「数据暂不可用」，下一轮按退避继续查。
+          pollRetryAfterRef.current = err?.retryAfter ?? null;
           setPollNotice(__t('暂时读不到最新状态，正在自动重试'));
           return null;
         }
@@ -408,9 +412,10 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
       return;
     }
     const serverDelay = analysis?.retryAfterSeconds;
-    const base = serverDelay != null && serverDelay > 0
+    const scheduled = serverDelay != null && serverDelay > 0
       ? Math.max(1_000, serverDelay * 1_000)
       : AI_JOB_POLL_WAITS_MS[Math.min(pollAttempt, AI_JOB_POLL_WAITS_MS.length - 1)];
+    const base = boundedReadRetryDelayMs(0, { retryAfter: pollRetryAfterRef.current }, [scheduled]);
     const delay = typeof document !== 'undefined' && document.visibilityState !== 'visible' ? base * 3 : base;
     const timer = window.setTimeout(async () => {
       const next = await loadImpact(ticker, { background: true });
