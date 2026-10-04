@@ -5453,7 +5453,7 @@ class LocalCatalystIntelligence:
         def plan_value(row: Any, plan_key: str, group_key: str) -> Any:
             # Items written before v6 carry no plan score; fall back to the
             # score stored with the event-group version.
-            value = row[plan_key] if plan_key in row.keys() else None
+            value = row[plan_key]
             return row[group_key] if value is None else value
 
         return [
@@ -5806,12 +5806,6 @@ class LocalCatalystIntelligence:
         _batch_id: str | None = None,
         _batch_position: int | None = None,
     ) -> dict[str, Any]:
-        if self.mode not in {"manual", "scheduled"}:
-            raise CatalystError(
-                "read_only_mode",
-                "News analysis is disabled in read mode",
-                counts_for_circuit=False,
-            )
         observed = as_of or _utc_now()
         row = self._current_revision(news_id, now=observed)
         if row is None:
