@@ -5,7 +5,7 @@
  * 要靠扫颜色自己排名次。现在名次、条长和颜色同时表达同一个数：条从零轴向右
  * 是涨、向左是跌，两栏共用一个零轴和比例尺；颜色仍走 heatColor 的周期色阶
  * （±6% / ±12% / ±18%）。
- * 宽屏分两栏、按列读名次；手机单栏。数量不论多少都不会留下残行。
+ * 1280 以上分两栏、按列读名次，更窄时单栏。数量不论多少都不会留下残行。
  */
 import { useMemo, type CSSProperties, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
@@ -20,13 +20,14 @@ import type { SectorVm } from './model';
 import { heatSpan, heatTone, periodLabel } from './model';
 import { t } from '../../i18n/core.ts';
 
-/* 名次 · 板块 · 发散条 · 收益 · 平均强度（≥md） */
+/* 名次 · 板块 · 发散条 · 收益 · 平均强度（≥md）。320 宽也给条留出约 44px。 */
 const ROW_GRID =
-  'grid grid-cols-[1.25rem_minmax(0,6.5rem)_minmax(0,1fr)_4.25rem] items-center gap-x-2.5 md:grid-cols-[1.5rem_minmax(0,8rem)_minmax(0,1fr)_4.5rem_6.5rem] md:gap-x-3';
+  'grid grid-cols-[1rem_minmax(0,5.5rem)_minmax(0,1fr)_4.25rem] items-center gap-x-2 sm:grid-cols-[1.25rem_minmax(0,6.5rem)_minmax(0,1fr)_4.25rem] sm:gap-x-2.5 md:grid-cols-[1.5rem_minmax(0,8rem)_minmax(0,1fr)_4.5rem_6.5rem] md:gap-x-3';
 
-/* 两栏时按列读名次：前一半在左栏，后一半在右栏，每栏顶上一行列名。 */
+/* 宽屏（≥1280）分两栏、按列读名次：前一半在左栏，后一半在右栏，每栏顶上一行
+   列名。更窄时两栏会把条挤到几十像素，保持单栏。 */
 const LIST_GRID =
-  'grid grid-cols-1 gap-y-0.5 lg:grid-flow-col lg:grid-cols-2 lg:gap-x-10 lg:[grid-template-rows:repeat(var(--heat-rows),auto)]';
+  'grid grid-cols-1 gap-y-0.5 xl:grid-flow-col xl:grid-cols-2 xl:gap-x-10 xl:[grid-template-rows:repeat(var(--heat-rows),auto)]';
 
 /** 收益从高到低；没有收益的板块排在最后，按名称稳定排序。 */
 function rankByReturn(sectors: SectorVm[]): SectorVm[] {
@@ -93,7 +94,7 @@ function HeatRow({
 }) {
   const value = sector.avgReturn;
   const hasReturn = value !== null;
-  const tone = hasReturn ? heatTone(value, sector.period) : null;
+  const tone = hasReturn ? heatTone(value, sector.period) : undefined;
   const length = hasReturn ? (Math.abs(value) / scale.extent) * 100 : 0;
   const leader = sector.leaders[0] ?? null;
 
@@ -135,7 +136,7 @@ function HeatRow({
               style={{
                 ...(value >= 0 ? { left: `${scale.axis}%` } : { right: `${100 - scale.axis}%` }),
                 width: `${Math.max(length, 0.6)}%`,
-                backgroundColor: tone?.bg,
+                backgroundColor: tone,
               }}
               variants={GROW_X}
               transition={{ duration: 0.7, ease: EASE_PAPER, delay: Math.min(rank * 0.03, 0.3) }}
@@ -262,7 +263,7 @@ function HeatRowSlot({
 }) {
   return (
     <>
-      {showHeader && <ColumnHeader period={period} className="hidden lg:grid" />}
+      {showHeader && <ColumnHeader period={period} className="hidden xl:grid" />}
       {children}
     </>
   );

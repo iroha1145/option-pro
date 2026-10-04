@@ -189,21 +189,6 @@ export function normalizeIvMeta(envelope: SectorIvRankingEnvelope | null): IvMet
 
 type Rgb = [number, number, number];
 
-function parseRgb(css: string): Rgb | null {
-  const match = css.match(/rgb\((\d+),(\d+),(\d+)\)/);
-  return match
-    ? [Number(match[1]), Number(match[2]), Number(match[3])]
-    : null;
-}
-
-function luminance([red, green, blue]: Rgb): number {
-  const linear = [red, green, blue].map(value => {
-    const channel = value / 255;
-    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
-}
-
 /* 色阶两端（%）随统计周期放宽：月度收益的量级是日内涨跌的数倍，3 个月 +4% 和
    +14% 在 ±3% 的日内色阶上是同一种最深绿，热力图就失去了「扫颜色」的读法。 */
 const HEAT_SPAN: Record<SectorPeriod, number> = { '1mo': 6, '3mo': 12, '6mo': 18 };
@@ -213,11 +198,9 @@ export function heatSpan(period: SectorPeriod): number {
   return HEAT_SPAN[period];
 }
 
-export function heatTone(avgReturn: number, period: SectorPeriod = '3mo'): { bg: string; dark: boolean } {
-  const bg = heatColor(avgReturn, HEAT_SPAN[period]);
-  const rgb = parseRgb(bg);
-  const light = rgb ? luminance(rgb) : 1;
-  return { bg, dark: 1.05 / (light + 0.05) > (light + 0.05) / 0.05 };
+/** 板块收益的热力色：按所选周期的色阶两端取色。 */
+export function heatTone(avgReturn: number, period: SectorPeriod = '3mo'): string {
+  return heatColor(avgReturn, HEAT_SPAN[period]);
 }
 
 function ivStops(): { value: number; rgb: Rgb }[] {
