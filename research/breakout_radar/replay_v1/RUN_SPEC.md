@@ -184,7 +184,7 @@ $PY $P/scripts/run_segments.py --segments /content/continuation/segments_1.txt -
 ```
 $PY $P/scripts/evaluate.py --db /content/data/replay.sqlite --replay '/content/replay/full/seg_*' --replay '/content/replay/cont/seg_*' \
     --variants baseline,confirm3,chase15,orb15,orb60,disc5,adv25,basemin15 --baseline baseline \
-    --directory /content/data/massive_directory_2026-09-27 --db-dir /content/db/full --db-dir-extra ... \
+    --directory /content/data/massive_directory_2026-09-27 \
     --minute-store /content/minute_store --workers 8 --out /content/eval/full_all
 ```
 
