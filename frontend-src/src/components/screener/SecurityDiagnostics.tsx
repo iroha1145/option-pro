@@ -146,7 +146,7 @@ function PathCard({ path, sources }: {
   const flags = safeMap(path.capability_flags);
   const theme = path.theme_id ?? path.sector_context;
   return (
-    <details className="min-w-0 rounded-md border border-line bg-paper-1 p-3 sm:p-4">
+    <details className="min-w-0 rounded-md border border-line bg-paper-2 p-3 sm:p-4">
       <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
           <span className="min-w-0 basis-full text-body-s font-semibold text-ink-800 sm:basis-0 sm:flex-1">{diagnosticTheme(theme)} · {diagnosticFamily(path.algorithm_id)}</span>
@@ -265,7 +265,7 @@ export default function SecurityDiagnostics({ profile, timeframe, publicationKey
     <section className="card-surface min-w-0 p-4 sm:p-5" aria-label={t('按代码查询选股诊断')}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-title-s font-semibold text-ink-900">{t('按代码查询选股诊断')}</h3>
+          <h3 className="text-h3 text-ink-900">{t('按代码查询选股诊断')}</h3>
           <p className="mt-1 text-body-s text-ink-500">{t('输入证券代码，查看本批次所有主题与家族的评分和筛选原因；未上榜也可查询。')}</p>
         </div>
         <span className="rounded border border-line px-2 py-1 text-micro text-ink-500">{t('偏好')}{t('：')}{profile === 'balanced' ? t('均衡') : profile === 'conservative' ? t('稳健') : t('进取')} · {t('周期')}{t('：')}{timeframe === 'short' ? t('短期') : timeframe === 'mid' ? t('中期') : t('长期')}</span>
@@ -275,7 +275,7 @@ export default function SecurityDiagnostics({ profile, timeframe, publicationKey
           <span className="mb-1 block">{t('证券代码')}</span>
           <input value={fixedTicker || input} onChange={(event) => { if (!fixedTicker) { seq.current += 1; setPending(null); setResult(null); setFailure(null); setInput(event.target.value); } }} readOnly={Boolean(fixedTicker)}
             autoComplete="off" spellCheck={false} maxLength={32} placeholder={t('例如 AAPL 或 SPY')}
-            className="w-full rounded-md border border-line bg-paper-1 px-3 py-2 font-mono text-body-s text-ink-800 outline-none focus:border-brand-500" />
+            className="h-11 w-full rounded-md border border-line-strong bg-card px-3 font-mono text-body-s text-ink-800 outline-none transition-[box-shadow,border-color] duration-fast focus:border-brand-600 focus:shadow-focus-ring" />
         </label>
         <button type="submit" disabled={loading} aria-busy={loading} className="btn-primary">{loading ? t('查询中') : t('查询诊断')}</button>
       </form>
@@ -284,11 +284,11 @@ export default function SecurityDiagnostics({ profile, timeframe, publicationKey
       {shown && <div className="mt-5 space-y-4">
         <div className="rounded-md border border-line bg-paper-2 p-3 sm:p-4">
           <div className="flex flex-wrap items-center gap-2">
-            <strong className="font-mono text-title-s text-ink-900">{shown.ticker}</strong>
+            <strong className="font-mono text-h3 text-ink-900">{shown.ticker}</strong>
             <span className="text-body-s text-ink-700">{diagnosticDataStatus(shown.data_status)}</span>
-            {shown._stale && <span className="rounded bg-paper-1 px-2 py-0.5 text-micro text-ink-700">{t('旧数据')}</span>}
-            {shown.historical_example && <span className="rounded bg-paper-1 px-2 py-0.5 text-micro text-ink-700">{t('历史示例')}</span>}
-            {shown.synthetic && <span className="rounded bg-paper-1 px-2 py-0.5 text-micro text-ink-700">{t('合成数据')}</span>}
+            {shown._stale && <span className="rounded bg-paper-2 px-2 py-0.5 text-micro text-ink-700">{t('旧数据')}</span>}
+            {shown.historical_example && <span className="rounded bg-paper-2 px-2 py-0.5 text-micro text-ink-700">{t('历史示例')}</span>}
+            {shown.synthetic && <span className="rounded bg-paper-2 px-2 py-0.5 text-micro text-ink-700">{t('合成数据')}</span>}
             {onOpenDetail && shown.data_status !== 'out_of_scope' && <button type="button" onClick={() => onOpenDetail(shown.ticker)} className="ml-auto text-body-s text-brand-600 underline">{t('查看股票详情')}</button>}
           </div>
           {Object.keys(display).length > 0 && <p className="mt-2 text-body-s text-ink-700">{t('结果归属')}{t('：')}{diagnosticDisplayReason(display.display_reason)}
