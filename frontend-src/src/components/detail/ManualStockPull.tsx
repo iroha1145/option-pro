@@ -30,6 +30,7 @@ export default function ManualStockPull({
   onPulled,
   compact = false,
   minimal = false,
+  quiet = false,
   className,
 }: {
   ticker: string;
@@ -37,6 +38,9 @@ export default function ManualStockPull({
   compact?: boolean;
   /** 卡片内嵌 CTA：只渲染按钮与错误行（成功后由 onPulled 整页刷新，无需进度明细） */
   minimal?: boolean;
+  /** 数据已齐全时的次级入口：普通控件按钮，说明与按钮同一行；进度与结果另起一行。
+      缺数据时的恢复入口仍用实心主按钮。 */
+  quiet?: boolean;
   className?: string;
 }) {
   const latestTickerRef = useRef(ticker);
@@ -142,15 +146,22 @@ export default function ManualStockPull({
   }
 
   return (
-    <div className={cn(compact ? 'space-y-2' : 'rounded-md border border-brand-100 bg-brand-50/45 p-3', className)}>
+    <div
+      className={cn(
+        quiet
+          ? 'flex flex-wrap items-center gap-x-3 gap-y-2 [&>[role]]:basis-full'
+          : compact ? 'space-y-2' : 'rounded-md border border-brand-100 bg-brand-50/45 p-3',
+        className,
+      )}
+    >
       <button
         type="button"
         onClick={() => void pull()}
         disabled={running}
         aria-busy={running}
-        className="btn-primary min-h-11 w-full whitespace-normal sm:w-auto"
+        className={quiet ? 'control-button' : 'btn-primary min-h-11 w-full whitespace-normal sm:w-auto'}
       >
-        <BusyIcon busy={running} size={13} tone="on-accent" />
+        <BusyIcon busy={running} size={13} tone={quiet ? 'brand' : 'on-accent'} />
         {running ? t('正在获取行情数据') : result ? t('重新获取') : t('获取行情数据')}
       </button>
 

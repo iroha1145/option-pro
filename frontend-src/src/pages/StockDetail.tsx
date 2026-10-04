@@ -247,7 +247,7 @@ export default function StockDetail() {
       <PriceHeader detail={detail} />
       {scopeBanner}
       {detail.snapshotScope !== 'strength-row' && (
-        <ManualStockPull ticker={detail.ticker} onPulled={handlePulled} compact className="mt-3" />
+        <ManualStockPull ticker={detail.ticker} onPulled={handlePulled} compact quiet className="mt-3" />
       )}
 
       {/* 行1: K线(8) + 右栏(4: 关键数据 / 技术指标)。两列等高：右栏随行拉伸，
