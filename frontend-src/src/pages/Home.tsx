@@ -15,7 +15,7 @@ import { useEffect, useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { motion } from 'framer-motion';
 import { isMock, type ApiError } from '@/api/client';
-import type { BreakoutSignal, EarningsItem, MarketSession, WatchlistItem } from '@/api/types';
+import type { BreakoutSignal, EarningsItem, IndexQuote, MarketSession, WatchlistItem } from '@/api/types';
 import { marketApi } from '@/api/modules/market';
 import { signalsApi } from '@/api/modules/signals';
 import { strengthApi } from '@/api/modules/strength';
@@ -26,6 +26,7 @@ import { marketPulseApi } from '@/components/market/api';
 import { regimeMean } from '@/lib/regime';
 import { getIndexIntraday } from '@/mocks/marketPulse';
 import { usePolling } from '@/hooks/usePolling';
+import { useTickFlash } from '@/hooks/useTickFlash';
 import { useStockDataStatus } from '@/hooks/useStockDataStatus';
 import type { StockDataStatus } from '@/lib/stockDataStatus';
 import { quoteSymbol } from '@/lib/quoteSymbol';
@@ -33,7 +34,7 @@ import { MARKET_LABEL, MARKET_TO_SESSION } from '@/lib/marketSession';
 import { useNow } from '@/hooks/useNow';
 import { cn } from '@/lib/utils';
 import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
-import { fmtCountdown, fmtNyTime, fmtPrice, fmtRelative, fmtTimeHHMMSS } from '@/lib/format';
+import { fmtCountdown, fmtNyTime, fmtRelative, fmtTimeHHMMSS } from '@/lib/format';
 import { instrumentName, signed } from '@/components/cta/ctaMeta';
 import EconomicCalendarCard from '@/components/catalysts/EconomicCalendarCard';
 import PageHeader from '@/components/shared/PageHeader';
@@ -43,6 +44,7 @@ import SessionLED from '@/components/shared/SessionLED';
 import StrengthBar from '@/components/shared/StrengthBar';
 import { exNum, isFeaturedRow, type EarningsRow } from '@/components/earnings/types';
 import ChangeBadge from '@/components/shared/ChangeBadge';
+import IndexCard, { IndexCardSkeleton } from '@/components/shared/IndexCard';
 import TickerLogo from '@/components/shared/TickerLogo';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonBlock, SkeletonCard, SkeletonRows } from '@/components/shared/Skeleton';
@@ -65,6 +67,11 @@ function dateAnchorParts(iso: string): { day: number; monthShort: string } | nul
   if (!month || !day) return null;
   return { day, monthShort: MONTH_SHORT_FMT.format(new Date(Number(m[1]), month - 1, 1)) };
 }
+
+/* 指数带：手机三列（两行放下五到六张），sm–lg 三列，xl 起一行排满 */
+const INDEX_GRID = 'grid grid-cols-3 gap-2 sm:gap-3 xl:[grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]';
+const indexKey = (quote: IndexQuote) => quote.code;
+const indexPrice = (quote: IndexQuote) => quote.price;
 
 /** 卡片格入场 stagger 档位：i*0.04 封顶 0.3（雷达/自选两区同一节奏） */
 function staggerDelay(i: number): number {
@@ -196,6 +203,7 @@ export default function Home() {
   /* 60s：指数 + 市场状态 */
   const indicesQ = usePolling(() => marketApi.indices(), 60_000);
   const statusQ = usePolling(() => marketPulseApi.statusDetail(), 60_000);
+  const indexFlashes = useTickFlash(indicesQ.data, indexKey, indexPrice);
   /* 300s：形态六维 / 信号 / 强度 / 雷达 / 财报 / 自选 / CTA */
   const regimeQ = usePolling(() => marketPulseApi.regime(), 300_000);
   const signalsQ = usePolling(() => signalsApi.market(), 300_000);
@@ -343,9 +351,9 @@ export default function Home() {
         )}
       >
         {indicesQ.loading ? (
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:[grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
+          <div className={INDEX_GRID}>
             {Array.from({ length: 5 }, (_, i) => (
-              <SkeletonCard key={i} className="h-24" />
+              <IndexCardSkeleton key={i} />
             ))}
           </div>
         ) : indicesQ.error && !indicesQ.data?.length ? (
@@ -363,36 +371,18 @@ export default function Home() {
             {indicesQ.error && (
               <StaleStrip onRetry={() => indicesQ.refresh()} refreshing={indicesQ.refreshing} className="mb-3" />
             )}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:[grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
-            {(indicesQ.data ?? []).map((q, i) => {
-              /* 数据纪律：无有效价（live 快照缺失）显「—」，不显 0.00 */
-              const hasPrice = Number.isFinite(q.price) && q.price > 0;
-              /* sparkline mock-only：live 无指数 K 线端点，如实留空 */
-              const spark = isMock && q.changePct !== null ? getIndexIntraday(q.code, q.changePct) : null;
-              return (
-                <motion.div
-                  key={q.code}
-                  initial={{ opacity: 0, y: 14 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: Math.min(i * 0.045, 0.4) }}
-                >
-                  <Link
-                    to={`/market?index=${q.code}`}
-                    className="card-surface card-hover card-glare flex flex-col gap-1 rounded-lg p-3"
-                    aria-label={t('{name} {code} 详情', { name: q.name, code: q.code })}
-                  >
-                    <span className="truncate text-caption text-ink-500">{q.name}</span>
-                    <span className="metric-value text-data-l text-ink-900 tnum">
-                      {hasPrice ? fmtPrice(q.price) : '—'}
-                    </span>
-                    <span className="flex items-end justify-between gap-2">
-                      <ChangeBadge value={q.changePct} size="sm" />
-                      {spark && q.changePct !== null && <Sparkline data={spark} width={64} height={20} change={q.changePct} />}
-                    </span>
-                  </Link>
-                </motion.div>
-              );
-            })}
+          <div className={INDEX_GRID}>
+            {(indicesQ.data ?? []).map((q, i) => (
+              <IndexCard
+                key={q.code}
+                quote={q}
+                index={i}
+                to={`/market?index=${q.code}`}
+                /* sparkline mock-only：live 无指数 K 线端点，如实留空 */
+                spark={isMock && q.changePct !== null ? getIndexIntraday(q.code, q.changePct) : null}
+                flash={indexFlashes[q.code]}
+              />
+            ))}
           </div>
           </>
         )}
