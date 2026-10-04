@@ -132,7 +132,8 @@ export default function ResultTable({
                 key={i}
                 style={h.width ? { width: h.width } : undefined}
                 className={cn(
-                  'border-b border-line px-3 py-2.5 text-eyebrow font-sans uppercase tracking-[0.14em] text-ink-400',
+                  // 列头多为中文：大写和 0.14em 字距只会把「催化剂 · 72H」撑成两行。
+                  'whitespace-nowrap border-b border-line px-3 py-2.5 text-caption font-medium text-ink-400',
                   h.align === 'right' ? 'text-right' : h.align === 'center' ? 'text-center' : 'text-left',
                 )}
               >
@@ -209,7 +210,7 @@ export default function ResultTable({
                       flash={flashes[r.ticker] ?? null}
                       className="tick-flash inline-block rounded-xs px-1 font-mono text-body-s text-ink-900 tnum"
                     >
-                      <LivePrice symbol={r.ticker} fallback={r.price} fallbackAt={r.priceAsOf ?? r.dailyDataThrough} fallbackKind="scan" />
+                      <LivePrice symbol={r.ticker} fallback={r.price} fallbackAt={r.priceAsOf ?? r.dailyDataThrough} fallbackKind="scan" className="flex-nowrap whitespace-nowrap" />
                     </PeriodicPriceFlash>
                     <span className="ml-1.5 align-middle">
                       <LiveChange symbol={r.ticker} fallback={r.changePct} fallbackPrice={r.price} fallbackAt={r.priceAsOf ?? r.dailyDataThrough} size="sm" />
