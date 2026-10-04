@@ -184,6 +184,14 @@ export function aiJobBlockedMessage(job: Pick<AiJob, 'status' | 'error'> | null 
   return aiJobErrorMessage(job.error);
 }
 
+/** 排队期的推迟码：任务还会自动继续，已结束的任务残留这些码时不是失败原因。 */
+export const AI_JOB_DEFERRAL_CODES: ReadonlySet<string> = new Set([
+  'global_concurrency_limit',
+  'analysis_cooldown_active',
+  'provider_poll_deferred',
+  'provider_cancel_deferred',
+]);
+
 /**
  * 排队任务被推迟的原因。只在任务仍排队时读：开始处理后后端不清 error_code，
  * 那时留下的是上一次推迟的旧码，不能当成现状显示。

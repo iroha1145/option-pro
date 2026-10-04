@@ -16,6 +16,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ApiError } from '@/api/client';
+import { AI_JOB_DEFERRAL_CODES } from '@/api/aiJobNormalize';
 import { earningsApi } from '@/api/modules/earnings';
 import type {
   EarningsImpactDirection,
@@ -26,6 +27,7 @@ import type {
 import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/hooks/useToast';
 import { useShell } from '@/hooks/useShell';
+import { AI_JOB_POLL_WAITS_MS } from '@/lib/boundedReadRetry';
 import { cn } from '@/lib/utils';
 import { DUR_FAST, DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import Icon from '@/components/icons';
@@ -41,8 +43,6 @@ import { t as __t } from '../../i18n/core.ts';
 const ACTIVE_STATUSES = new Set(['preparing', 'pending', 'queued', 'in_progress', 'processing', 'running', 'cancel_requested']);
 const FAILED_STATUSES = new Set(['failed', 'cancelled', 'canceled', 'budget_blocked']);
 const isActive = (s: string) => ACTIVE_STATUSES.has(s);
-
-const BACKOFF_MS = [2000, 3000, 5000, 8000, 10000];
 
 /**
  * 后端错误码 → 读者能看懂的说法。
@@ -67,9 +67,6 @@ const ANALYSIS_ERROR_TEXT: Record<string, string> = {
   ai_job_result_too_large: __t('分析结果过大，无法保存'),
 };
 
-/* 排队期的推迟码：任务还会自动继续。已结束的任务残留这些码时不是失败原因。 */
-const DEFERRAL_CODES = new Set(['global_concurrency_limit', 'analysis_cooldown_active', 'provider_poll_deferred']);
-
 /**
  * 按任务状态解读原因码：进行中只说明认得的推迟原因，认不出的码不能说成「没有完成」；
  * 已结束的任务不拿排队期的残留码当失败原因。
@@ -78,7 +75,7 @@ function analysisErrorText(code: string | undefined | null, status: string): str
   const key = String(code ?? '').trim();
   if (!key) return '';
   if (isActive(status)) return ANALYSIS_ERROR_TEXT[key] ?? '';
-  if (DEFERRAL_CODES.has(key)) return __t('这次分析没有完成');
+  if (AI_JOB_DEFERRAL_CODES.has(key)) return __t('这次分析没有完成');
   return ANALYSIS_ERROR_TEXT[key] ?? __t('这次分析没有完成');
 }
 const FINAL_STAGES = new Set([
@@ -413,7 +410,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
     const serverDelay = analysis?.retryAfterSeconds;
     const base = serverDelay != null && serverDelay > 0
       ? Math.max(1_000, serverDelay * 1_000)
-      : BACKOFF_MS[Math.min(pollAttempt, BACKOFF_MS.length - 1)];
+      : AI_JOB_POLL_WAITS_MS[Math.min(pollAttempt, AI_JOB_POLL_WAITS_MS.length - 1)];
     const delay = typeof document !== 'undefined' && document.visibilityState !== 'visible' ? base * 3 : base;
     const timer = window.setTimeout(async () => {
       const next = await loadImpact(ticker, { background: true });

@@ -8,7 +8,7 @@ import { useAccess } from '@/hooks/useAccess';
 import { usePolling } from '@/hooks/usePolling';
 import { remoteState } from '@/hooks/remoteState';
 import { useToast } from '@/hooks/useToast';
-import { boundedReadRetryDelayMs } from '@/lib/boundedReadRetry';
+import { AI_JOB_POLL_FAILURE_WAITS_MS, AI_JOB_POLL_WAITS_MS, boundedReadRetryDelayMs } from '@/lib/boundedReadRetry';
 import { catalystsContract } from './api';
 import type { FocusCycleJob, MarketFocusCycle, NewsClassification } from './api';
 import { focusCycleOutcome } from './analysisErrorText';
@@ -106,9 +106,6 @@ const SETTLED_FAILURE_STATUSES = new Set(['failed', 'cancelled', 'canceled', 'bu
 const LATEST_TRACK_MS = 15_000;
 /* 共享读缓存默认 30 秒；跟踪时放宽到 10 秒，才能真的按 15 秒一次看到新状态。 */
 const LATEST_MAX_AGE_MS = 10_000;
-const POLL_BACKOFF_MS = [2000, 3000, 5000, 8000, 10000];
-/* 任务状态读取失败的本地退避；实际等待取它与 Retry-After 的较大值。 */
-const POLL_FAILURE_WAITS_MS = [5_000, 10_000, 20_000, 30_000] as const;
 
 function attemptNotice(status: string): string {
   if (status === 'cancelled' || status === 'canceled') return t('最近一次更新已取消，当前展示上次成功结果');
@@ -377,15 +374,15 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
              按钮却又能点（审计 FE-6）。 */
           failures += 1;
           if (failures >= 2) setPollNotice(t('焦点周期状态暂时读不到，正在重试'));
-          const retryDelay = boundedReadRetryDelayMs(failures - 1, error, POLL_FAILURE_WAITS_MS);
+          const retryDelay = boundedReadRetryDelayMs(failures - 1, error, AI_JOB_POLL_FAILURE_WAITS_MS);
           pollRef.current = window.setTimeout(() => void tick(), retryDelay);
           return;
         }
-        const delay = POLL_BACKOFF_MS[Math.min(attempt, POLL_BACKOFF_MS.length - 1)];
+        const delay = AI_JOB_POLL_WAITS_MS[Math.min(attempt, AI_JOB_POLL_WAITS_MS.length - 1)];
         attempt += 1;
         pollRef.current = window.setTimeout(() => void tick(), delay);
       };
-      pollRef.current = window.setTimeout(() => void tick(), POLL_BACKOFF_MS[0]);
+      pollRef.current = window.setTimeout(() => void tick(), AI_JOB_POLL_WAITS_MS[0]);
     } catch (e) {
       toast.error(t('提交失败'), e instanceof Error ? e.message : undefined);
     } finally {

@@ -7,6 +7,8 @@ import { aiJobsApi } from '@/api/modules/ai-jobs';
 import { aiJobCreateErrorMessage } from '@/api/aiJobNormalize';
 import { ApiError } from '@/api/client';
 import type { AiJob } from '@/api/types';
+import { AI_JOB_POLL_WAITS_MS } from '@/lib/boundedReadRetry';
+import { retryDelayMs, type RetryLadder } from '@/lib/retryDelay';
 import { t } from '../../i18n/core.ts';
 
 const TERMINAL: ReadonlySet<string> = new Set(['succeeded', 'failed', 'cancelled']);
@@ -34,12 +36,9 @@ function jobRecordMissing(error: unknown): boolean {
     && (payload as { detail?: unknown }).detail === 'AI job not found';
 }
 
-/** 服务端给的等待秒数钳到 1–300 秒，防止异常值把轮询拖死或打成忙等。 */
-function retryAfterMs(seconds: number | null | undefined): number | null {
-  return typeof seconds === 'number' && Number.isFinite(seconds)
-    ? Math.min(300, Math.max(1, seconds)) * 1000
-    : null;
-}
+/* 服务端给的等待秒数钳到 1–300 秒，防止异常值把轮询拖死或打成忙等。 */
+const FIRST_POLL: RetryLadder = { ladderMs: [FIRST_POLL_MS], tailMs: FIRST_POLL_MS, capSeconds: 300, nonPositive: 'clamp' };
+const QUERY_RETRY: RetryLadder = { ladderMs: [2000, 5000, 10000, 30000], tailMs: 30000, capSeconds: 300, nonPositive: 'clamp' };
 
 export function useAiJob() {
   const [job, setJob] = useState<AiJob | null>(null);
@@ -140,14 +139,12 @@ export function useAiJob() {
             return;
           }
           setQueryIssue('retrying');
-          const delay = retryAfterMs(e instanceof ApiError ? e.retryAfter : undefined)
-            ?? [2000, 5000, 10000, 30000][failures - 1];
+          const delay = retryDelayMs(failures, e instanceof ApiError ? e.retryAfter : undefined, QUERY_RETRY);
           timerRef.current = setTimeout(() => void tick(), delay);
           return;
         }
         if (!aliveRef.current || generation !== generationRef.current) return;
-        const delays = [2000, 3000, 5000, 8000, 10000];
-        const delay = delays[Math.min(attempt, delays.length - 1)];
+        const delay = AI_JOB_POLL_WAITS_MS[Math.min(attempt, AI_JOB_POLL_WAITS_MS.length - 1)];
         attempt += 1;
         timerRef.current = setTimeout(() => void tick(), delay);
       };
@@ -173,7 +170,7 @@ export function useAiJob() {
         setJob(j);
         if (TERMINAL.has(j.status)) return;
         activeJobRef.current = j.id;
-        poll(j.id, retryAfterMs(j.retryAfter) ?? FIRST_POLL_MS);
+        poll(j.id, retryDelayMs(1, j.retryAfter, FIRST_POLL));
       } catch (e) {
         if (!aliveRef.current || generation !== generationRef.current) return;
         setError(aiJobCreateErrorMessage(e));

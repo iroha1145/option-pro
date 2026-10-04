@@ -15,6 +15,8 @@ import { fmtLocaleDateTime, fmtLocaleTime } from '@/lib/format';
 import { getQueryPrincipalGeneration } from '@/api/queryRegistry';
 import {
   ReadAttemptAborted,
+  AI_JOB_POLL_FAILURE_WAITS_MS,
+  AI_JOB_POLL_WAITS_MS,
   boundedReadRetryDelayMs,
   createCancellableSleep,
   runBoundedRead,
@@ -30,8 +32,6 @@ import { t as __t } from '../../i18n/core.ts';
 const TERMINAL: NewsAnalysisJob['status'][] = ['completed', 'failed', 'cancelled', 'insufficient_context'];
 const inFlight = (status: CatalystNewsItem['analysisStatus']) => status === 'queued' || status === 'in_progress';
 /* 轮询成功后的退避；失败后的等待取本地退避与 Retry-After 的较大值。 */
-const POLL_BACKOFF_MS = [2000, 3000, 5000, 8000, 10000];
-const POLL_FAILURE_WAITS_MS = [5_000, 10_000, 20_000, 30_000] as const;
 /* 一次轮询最多自动查 5 分钟（页面隐藏的时间不计入），之后交给手动重试。 */
 const POLL_BUDGET_MS = 5 * 60_000;
 const pageHidden = () => typeof document !== 'undefined' && document.visibilityState === 'hidden';
@@ -469,7 +469,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
              不能几百毫秒后就被清掉，退回一句笼统的失败文案（审计 FE-3）。 */
           return;
         }
-        const delay = POLL_BACKOFF_MS[Math.min(backoffRef.current, POLL_BACKOFF_MS.length - 1)];
+        const delay = AI_JOB_POLL_WAITS_MS[Math.min(backoffRef.current, AI_JOB_POLL_WAITS_MS.length - 1)];
         backoffRef.current += 1;
         pollRef.current = window.setTimeout(() => void tick(), delay);
       } catch (error) {
@@ -483,13 +483,13 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
         if (pollFailuresRef.current >= 2) {
           setJobNotice({ text: __t('任务状态暂时读不到，正在重试'), retryable: false });
         }
-        const delay = boundedReadRetryDelayMs(pollFailuresRef.current - 1, error, POLL_FAILURE_WAITS_MS);
+        const delay = boundedReadRetryDelayMs(pollFailuresRef.current - 1, error, AI_JOB_POLL_FAILURE_WAITS_MS);
         pollRef.current = window.setTimeout(() => void tick(), delay);
       }
     };
     backoffRef.current = 0;
     pollFailuresRef.current = 0;
-    pollRef.current = window.setTimeout(() => void tick(), POLL_BACKOFF_MS[0]);
+    pollRef.current = window.setTimeout(() => void tick(), AI_JOB_POLL_WAITS_MS[0]);
     return () => {
       stopPoll();
       dropVisibleWait();
