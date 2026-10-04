@@ -42,8 +42,6 @@ DB_NAME = "all-market-bars-v2.sqlite"
 _TICKER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,31}$")
 _REFERENCE_PATH = "/v3/reference/tickers"
 _SPLIT_PATH = "/stocks/v1/splits"
-_MAX_SPLIT_PAGES = 50
-_MAX_DIRECTORY_PAGES = 50
 _NEW_YORK = ZoneInfo("America/New_York")
 _RETRYABLE_CODES = frozenset({"rate_limited", "provider_busy", "transport"})
 # Failures confined to one day's content. Anything else (key, plan, rate
@@ -195,31 +193,32 @@ def _provider_get(path: str, params: dict[str, Any]) -> dict[str, Any]:
     raise AssertionError("unreachable: the last attempt returns or raises")
 
 
+def _require_ok_status(what: str) -> Callable[[Mapping[str, Any]], None]:
+    def check(payload: Mapping[str, Any]) -> None:
+        if payload.get("status") not in {None, "OK"}:
+            raise massive.MassiveError(f"{what} provider status was not OK", code="protocol")
+
+    return check
+
+
 def _fetch_directory() -> list[dict[str, Any]]:
     """Read the provider directory without case-folding distinct securities."""
 
     records: dict[str, dict[str, Any]] = {}
-    cursor: str | None = None
-    seen_cursors: set[str] = set()
-    for _ in range(_MAX_DIRECTORY_PAGES):
-        params: dict[str, Any]
-        if cursor is None:
-            params = {
-                "active": "true",
-                "market": "stocks",
-                "locale": "us",
-                "limit": 1000,
-                "sort": "ticker",
-                "order": "asc",
-            }
-        else:
-            params = {"cursor": cursor}
-        payload = _provider_get(_REFERENCE_PATH, params)
-        if payload.get("status") not in {None, "OK"}:
-            raise massive.MassiveError("reference directory provider status was not OK", code="protocol")
-        rows = payload.get("results")
-        if not isinstance(rows, list):
-            raise massive.MassiveError("unexpected reference directory shape", code="protocol")
+    pages = massive.result_pages(
+        _REFERENCE_PATH,
+        {
+            "active": "true",
+            "market": "stocks",
+            "locale": "us",
+            "limit": 1000,
+            "sort": "ticker",
+            "order": "asc",
+        },
+        fetch=_provider_get,
+        check=_require_ok_status("reference directory"),
+    )
+    for rows in pages:
         for raw in rows:
             if not isinstance(raw, Mapping):
                 raise massive.MassiveError("unexpected reference directory row", code="protocol")
@@ -240,15 +239,7 @@ def _fetch_directory() -> list[dict[str, Any]]:
                 # Distinguishes reused tickers when a SIC classification is joined (v1.7).
                 "cik": str(raw.get("cik") or "").strip(),
             }
-        next_url = payload.get("next_url")
-        if next_url is None or next_url == "":
-            return [records[ticker] for ticker in sorted(records)]
-        next_cursor = massive._page_cursor(next_url, path=_REFERENCE_PATH)  # noqa: SLF001
-        if next_cursor == cursor or next_cursor in seen_cursors:
-            raise massive.MassiveError("reference directory pagination did not advance", code="protocol")
-        seen_cursors.add(next_cursor)
-        cursor = next_cursor
-    raise massive.MassiveError("reference directory pagination exceeded safety limit", code="protocol")
+    return [records[ticker] for ticker in sorted(records)]
 
 
 def _raw_bar(session: date, raw: Mapping[str, Any]) -> tuple[Any, ...]:
@@ -454,47 +445,31 @@ def _split_row(raw: Mapping[str, Any], start: date, end: date) -> tuple[Any, ...
 
 def _fetch_splits(start: date, end: date) -> dict[str, Any]:
     rows: dict[tuple[str, str, float, float], tuple[Any, ...]] = {}
-    cursor: str | None = None
-    seen: set[str] = set()
-    status = "OK"
-    for _ in range(_MAX_SPLIT_PAGES):
-        params: dict[str, Any]
-        if cursor is None:
-            params = {
-                "execution_date.gte": start.isoformat(),
-                "execution_date.lte": end.isoformat(),
-                "limit": 1000,
-                "sort": "execution_date.desc",
-            }
-        else:
-            params = {"cursor": cursor}
-        payload = _provider_get(_SPLIT_PATH, params)
-        if payload.get("status") not in {None, "OK"}:
-            raise massive.MassiveError("splits provider status was not OK", code="protocol")
-        raw_rows = payload.get("results")
-        if not isinstance(raw_rows, list):
-            raise massive.MassiveError("unexpected splits payload shape", code="protocol")
-        status = str(payload.get("status") or status)
+    pages = massive.result_pages(
+        _SPLIT_PATH,
+        {
+            "execution_date.gte": start.isoformat(),
+            "execution_date.lte": end.isoformat(),
+            "limit": 1000,
+            "sort": "execution_date.desc",
+        },
+        fetch=_provider_get,
+        check=_require_ok_status("splits"),
+    )
+    for raw_rows in pages:
         for raw in raw_rows:
             if not isinstance(raw, Mapping):
                 raise massive.MassiveError("unexpected split row shape", code="protocol")
             item = _split_row(raw, start, end)
             rows[(item[0], item[1], item[2], item[3])] = item
-        next_url = payload.get("next_url")
-        if next_url is None or next_url == "":
-            ordered = [rows[key] for key in sorted(rows)]
-            return {
-                "rows": ordered,
-                "result_count": len(ordered),
-                "content_sha256": _hash_json(ordered),
-                "provider_status": status,
-            }
-        next_cursor = massive._page_cursor(next_url, path=_SPLIT_PATH)  # noqa: SLF001
-        if next_cursor == cursor or next_cursor in seen:
-            raise massive.MassiveError("splits pagination did not advance", code="protocol")
-        seen.add(next_cursor)
-        cursor = next_cursor
-    raise massive.MassiveError("splits pagination exceeded safety limit", code="protocol")
+    ordered = [rows[key] for key in sorted(rows)]
+    return {
+        "rows": ordered,
+        "result_count": len(ordered),
+        "content_sha256": _hash_json(ordered),
+        # Every page passed _require_ok_status, which admits only a missing or "OK" status.
+        "provider_status": "OK",
+    }
 
 
 def _split_capture(connection: sqlite3.Connection, start: date, end: date) -> sqlite3.Row | None:
