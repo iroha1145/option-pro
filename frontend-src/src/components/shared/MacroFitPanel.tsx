@@ -11,7 +11,6 @@ import { macroShadowHint } from '@/lib/scoreHints';
 import MacroFitBadge from '@/components/shared/MacroFitBadge';
 import {
   driverText,
-  macroMissingReason,
   type MacroFitDriver,
 } from '@/lib/macroFit';
 import { t } from '../../i18n/core.ts';
@@ -59,7 +58,8 @@ export default function MacroFitPanel({
             </span>
           )}
         </div>
-        {hasScore ? (
+        {/* 没有分数时，缺失原因已经写在上面的徽标里，这里不再重复一遍 */}
+        {hasScore && (
           <>
             {positive && (
               <p className="text-caption leading-[18px] text-ink-600">
@@ -88,10 +88,6 @@ export default function MacroFitPanel({
               </p>
             )}
           </>
-        ) : (
-          <p className="text-caption text-ink-400">
-            {t(macroMissingReason(status) ?? '暂无宏观读数')}
-          </p>
         )}
         <p className="text-micro text-ink-400">{t('宏观评分单独展示')}</p>
       </div>
