@@ -1153,7 +1153,7 @@ def _intraday_overlays(series: Mapping[str, list], data_through: str, chart_rang
         if raw_rvol is not None:
             tod_rvol = round(float(raw_rvol), 4)
     except Exception as exc:
-        # RVOL is one input among several on these overlays (M-低): a failure
+        # RVOL is one input among several on these overlays: a failure
         # here must leave tod_rvol at None, not take VWAP and the opening
         # range down with it.
         record_fallback_failure("technical_intraday_rvol", exc)

@@ -695,9 +695,9 @@ _FUNDING_FRAGMENTATION_SERIES: tuple[str, ...] = tuple(
 def _funding_fragmentation(when, index, series, etfs, *, dispersion, **_extra):
     inputs = _Inputs(when, series, etfs)
     # Attribute today's reading to each of the seven underlying series
-    # individually (M-9), the same way every other factor names its inputs.
-    # A single generic "funding_spread_panel" tag could not tell "all seven
-    # missing" from "one stale leg" apart, so confidence was overstated
+    # individually, the same way every other factor names its inputs. A
+    # single generic "funding_spread_panel" tag cannot tell "all seven
+    # missing" from "one stale leg" apart, which would overstate confidence
     # against this factor's registered required_series=7.
     for series_id in _FUNDING_FRAGMENTATION_SERIES:
         inputs.series(series_id)
@@ -708,7 +708,7 @@ def _funding_fragmentation(when, index, series, etfs, *, dispersion, **_extra):
         else ()
     )
     if today is None or len(window_points) < FUNDING_FRAGMENTATION_WINDOW:
-        # Minimum-sample discipline (M-9), matching _tga_deviation /
+        # Minimum-sample discipline, matching _tga_deviation /
         # _rate_volatility / _fx_realized_volatility / _oil_volatility_deviation:
         # fewer than the registered window of valid points -- during a backfill
         # start or right after a data gap -- must not be reported as though it

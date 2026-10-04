@@ -300,8 +300,8 @@ def etf_from_rows(
 def _as_date(value: object) -> Optional[date]:
     """Parse a stored ``date`` or ISO date string; anything else is ``None``.
 
-    Shared with ``service.py`` (previously two byte-identical copies) so the
-    two callers can never drift apart on what counts as a valid date.
+    Shared with ``service.py`` so the two callers can never drift apart on
+    what counts as a valid date.
     """
 
     if isinstance(value, date):

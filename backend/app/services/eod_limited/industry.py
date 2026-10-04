@@ -11,7 +11,8 @@ A ticker can appear several times with different CIKs (reused symbols); the
 directory row's CIK picks the right one, and rows without a CIK fall back to
 the ticker. Funds never receive an industry. Only common stocks and ADRs do.
 
-Two ways to feed production, chosen here:
+With an industry mode switched on (``LIVE_CONFIG`` keeps it off), the table
+has two sources:
 
 * the table lives in ``DATA_DIR/eod-limited-v1/industry-sic-v1.json.gz`` and is
   refreshed by ``ensure_industry_tags``: every run looks up a bounded number of

@@ -203,7 +203,7 @@ class MacroConditionsService:
                     end=cutoff,
                 )
                 for series_id, fetch in fetched.items():
-                    # Isolated per series (M-7), the same way fetch_many already
+                    # Isolated per series, the same way fetch_many already
                     # isolates fetch failures: one series' write must not lose
                     # the rows every other series already fetched successfully.
                     try:
@@ -467,8 +467,8 @@ class MacroConditionsService:
                         score_change_7d=round_score(item.score_change_7d),
                         raw_change_7d=item.raw_change_7d,
                         # score_factor_series already computed this via
-                        # factor_confidence (M-低); recomputing an equivalent
-                        # formula here let it drift from the one scoring.py owns.
+                        # factor_confidence; recomputing an equivalent formula
+                        # here would let it drift from the one scoring.py owns.
                         confidence=round_confidence(item.confidence),
                         valid_observations=item.valid_observations,
                         history_basis=item.history_basis,
