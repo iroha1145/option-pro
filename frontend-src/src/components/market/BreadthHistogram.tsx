@@ -74,7 +74,7 @@ export default function BreadthHistogram({
           style={{ left: `${Math.max(1, Math.min(99, data.avgScore))}%` }}
           aria-hidden="true"
         >
-          <span className="absolute -left-8 -top-0.5 whitespace-nowrap font-mono text-[9px] text-ink-400 tnum">
+          <span className="absolute -left-8 -top-0.5 whitespace-nowrap font-mono text-micro text-ink-400 tnum">
             {t('均值')} {data.avgScore.toFixed(1)}
           </span>
         </div>
@@ -102,7 +102,7 @@ export default function BreadthHistogram({
             );
           })}
         </motion.div>
-        <div className="mt-1.5 flex justify-between font-mono text-[9px] text-ink-400">
+        <div className="mt-1.5 flex justify-between font-mono text-micro text-ink-400">
           <span>0</span>
           <span>50</span>
           <span>100</span>

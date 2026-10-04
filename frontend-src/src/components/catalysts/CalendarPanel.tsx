@@ -115,7 +115,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
             <div className={cn('flex items-center justify-between px-5 py-2.5', isToday ? 'bg-brand-50' : 'bg-card-warm')}>
               <p className={cn('font-mono text-caption font-semibold tnum', isToday ? 'text-brand-700' : 'text-ink-600')}>
                 {fmtLocaleDate(`${date}T00:00:00`, { month: '2-digit', day: '2-digit', weekday: 'short' })}
-                {isToday && <span className="ml-2 rounded-xs bg-brand-600 px-1.5 py-0.5 text-[10px] font-medium text-on-accent">{__t('今日')}</span>}
+                {isToday && <span className="ml-2 rounded-xs bg-brand-600 px-1.5 py-0.5 text-micro font-medium text-on-accent">{__t('今日')}</span>}
               </p>
               <span className="font-mono text-micro text-ink-400 tnum">{events.length} {__t('项')}</span>
             </div>
@@ -136,7 +136,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
                       <span className="font-mono text-[11px] leading-[14px] text-ink-500 tnum">
                         {allDay ? __t('全天') : fmtLocaleTime(ev.scheduledAt)}
                       </span>
-                      <span className="mt-1 self-start break-words rounded border border-line bg-paper-2 px-1.5 py-0.5 text-[10px] leading-[14px] text-ink-500">{flatCountry(ev.country)}</span>
+                      <span className="mt-1 self-start break-words rounded border border-line bg-paper-2 px-1.5 py-0.5 text-micro leading-[14px] text-ink-500">{flatCountry(ev.country)}</span>
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">

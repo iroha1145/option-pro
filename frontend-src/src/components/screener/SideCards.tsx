@@ -94,7 +94,7 @@ export function TierHistogram({
       </div>
       <div className="mt-1.5 flex gap-2.5">
         {TIERS.map((t) => (
-          <span key={t} className={cn('flex-1 text-center font-mono text-[10px] tnum', activeTier === t ? 'text-brand-600' : 'text-ink-400')}>
+          <span key={t} className={cn('flex-1 text-center font-mono text-micro tnum', activeTier === t ? 'text-brand-600' : 'text-ink-400')}>
             {t}
           </span>
         ))}

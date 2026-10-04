@@ -72,7 +72,7 @@ function searchErrorText(error: unknown): string {
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="rounded-xs border border-line bg-card-warm px-1.5 py-0.5 font-mono text-[10px] leading-[14px] text-ink-400">
+    <kbd className="rounded-xs border border-line bg-card-warm px-1.5 py-0.5 font-mono text-micro leading-[14px] text-ink-400">
       {children}
     </kbd>
   );

@@ -179,7 +179,7 @@ function StrengthHistogram({ histogram }: { histogram: number[] }) {
           const score = i * 10 + 5;
           return (
             <div key={i} className="group relative flex-1">
-              <div className="cloud-popover pointer-events-none absolute -top-7 left-1/2 z-10 hidden -translate-x-1/2 px-1.5 py-0.5 font-mono text-[10px] text-ink-600 group-hover:block">
+              <div className="cloud-popover pointer-events-none absolute -top-7 left-1/2 z-10 hidden -translate-x-1/2 px-1.5 py-0.5 font-mono text-micro text-ink-600 group-hover:block">
                 {n}
               </div>
               <div
@@ -190,7 +190,7 @@ function StrengthHistogram({ histogram }: { histogram: number[] }) {
           );
         })}
       </div>
-      <div className="mt-1.5 flex justify-between font-mono text-[9px] text-ink-400">
+      <div className="mt-1.5 flex justify-between font-mono text-micro text-ink-400">
         <span>0</span><span>50</span><span>100</span>
       </div>
     </div>

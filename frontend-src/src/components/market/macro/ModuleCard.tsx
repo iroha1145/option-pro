@@ -32,7 +32,7 @@ export default function ModuleCard({
             {t(module.nameZh)}
             {hint && <InfoHint hint={hint} side="bottom" align="start" size={12} />}
           </p>
-          <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-ink-400">
+          <p className="mt-0.5 font-mono text-micro uppercase tracking-wider text-ink-400">
             {module.nameEn}
           </p>
         </div>

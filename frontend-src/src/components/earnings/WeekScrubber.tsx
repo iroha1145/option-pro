@@ -191,14 +191,14 @@ export default function WeekScrubber({
                           );
                         })}
                         {extra > 0 && (
-                          <span className="px-1 font-mono text-[10px] leading-4 text-ink-400">+{extra}</span>
+                          <span className="px-1 font-mono text-micro leading-4 text-ink-400">+{extra}</span>
                         )}
                       </>
                     )}
                   </div>
 
                   {/* 每日数量 */}
-                  <span className="mt-1 font-mono text-[10px] leading-4 text-ink-400 tnum">
+                  <span className="mt-1 font-mono text-micro leading-4 text-ink-400 tnum">
                     {dayItems.length > 0 ? __t('{n} 条', { n: dayItems.length }) : ''}
                   </span>
                 </motion.div>

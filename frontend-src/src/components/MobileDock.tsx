@@ -102,7 +102,7 @@ function MobileDockContent() {
           {...routeIntentHandlers(item.path)}
         >
           <Icon name={item.icon} size={19} className={active ? 'text-brand-600' : 'text-ink-400'} />
-          <span className={cn('text-[10px] leading-none', active ? 'font-medium text-brand-600' : 'text-ink-400')}>{item.label}</span>
+          <span className={cn('text-micro leading-none', active ? 'font-medium text-brand-600' : 'text-ink-400')}>{item.label}</span>
         </Link>
       </div>
     );
@@ -130,7 +130,7 @@ function MobileDockContent() {
               aria-current={moreActive ? 'page' : undefined}
             >
               <Icon name="menu" size={19} className={moreActive ? 'text-brand-600' : 'text-ink-400'} />
-              <span className={cn('text-[10px] leading-none', moreActive ? 'font-medium text-brand-600' : 'text-ink-400')}>{t('更多')}</span>
+              <span className={cn('text-micro leading-none', moreActive ? 'font-medium text-brand-600' : 'text-ink-400')}>{t('更多')}</span>
             </button>
           </div>
         </motion.div>

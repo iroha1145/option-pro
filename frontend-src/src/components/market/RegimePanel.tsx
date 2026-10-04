@@ -124,7 +124,7 @@ export default function RegimePanel({
               </motion.div>
               {/* 毛玻璃 tooltip */}
               <div className="cloud-popover pointer-events-none absolute -top-2 left-0 z-20 hidden w-56 -translate-y-full p-3 text-micro leading-relaxed text-ink-600 group-hover:block">
-                <p className="mb-1 font-mono text-[10px] uppercase tracking-wider text-ink-400">{d.key}</p>
+                <p className="mb-1 font-mono text-micro uppercase tracking-wider text-ink-400">{d.key}</p>
                 {d.tip}
               </div>
             </div>

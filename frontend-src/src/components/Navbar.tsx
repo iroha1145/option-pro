@@ -142,7 +142,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
           <img src="/logo.svg" alt="" className="size-7 md:size-8 dark:brightness-0 dark:invert" />
           <span className="hidden flex-col leading-none sm:flex">
             <span className="font-display text-[17px] font-bold text-ink-900">Optix Pro</span>
-            <span className="eyebrow mt-0.5 text-[9px]">US EQUITY DESK</span>
+            <span className="eyebrow mt-0.5 text-micro">US EQUITY DESK</span>
           </span>
         </Link>
 
@@ -201,7 +201,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
           >
             <Icon name="search" size={14} />
             <span className="flex-1 truncate text-left">{t('搜索代码或功能…')}</span>
-            <kbd className="flex items-center gap-0.5 font-mono text-[10px] text-ink-400">
+            <kbd className="flex items-center gap-0.5 font-mono text-micro text-ink-400">
               <Icon name="command" size={11} />K
             </kbd>
           </button>

@@ -245,13 +245,13 @@ export default function MonthCalendar({
                           size={11}
                           className={it.timing === 'bmo' ? 'text-warn-700' : it.timing === 'amc' ? 'text-ai-600' : 'text-ink-400'}
                         />
-                        <span className="truncate font-mono text-[10px] font-medium leading-4 text-ink-800">
+                        <span className="truncate font-mono text-micro font-medium leading-4 text-ink-800">
                           {it.ticker}
                         </span>
                       </motion.button>
                     );
                   })}
-                  {extra > 0 && <span className="px-1 font-mono text-[10px] leading-4 text-ink-400 tnum">+{extra}</span>}
+                  {extra > 0 && <span className="px-1 font-mono text-micro leading-4 text-ink-400 tnum">+{extra}</span>}
                 </div>
 
                 {/* 移动端：色点 + 计数徽章（类手机日历） */}
@@ -269,7 +269,7 @@ export default function MonthCalendar({
                           />
                         ))}
                       </span>
-                      <span className="rounded-pill bg-line/70 px-1 font-mono text-[10px] leading-4 text-ink-600 tnum">
+                      <span className="rounded-pill bg-line/70 px-1 font-mono text-micro leading-4 text-ink-600 tnum">
                         {dayItems.length}
                       </span>
                     </span>

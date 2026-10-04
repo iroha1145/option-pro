@@ -129,11 +129,11 @@ export default function ChainBrowser({ chain }: { chain: OptionChain }) {
             </tr></thead>
             <tbody className="divide-y divide-line">{visible.map((c) => <tr key={c.id} className={cn('hover:bg-paper-2/70', selectedId === c.id && 'bg-brand-50')}>
               <td className="px-3 py-3"><SideLabel side={c.side} /></td>
-              <td className="px-3 py-3 text-right"><span className="font-mono font-semibold text-ink-900">${strikeText(c.strike)}</span>{c.strike === nearest && <span className="mt-0.5 block text-[10px] text-ink-500">{t('最接近现价')}</span>}</td>
+              <td className="px-3 py-3 text-right"><span className="font-mono font-semibold text-ink-900">${strikeText(c.strike)}</span>{c.strike === nearest && <span className="mt-0.5 block text-micro text-ink-500">{t('最接近现价')}</span>}</td>
               <td className="px-3 py-3 text-right font-mono text-ink-800 tnum">{price(c.mid)}</td>
               <td className="min-w-28 px-3 py-3 text-right"><span className="font-mono text-ink-900 tnum">{number(c.volume)}</span><div className="mt-1.5 h-1 overflow-hidden rounded-sm bg-line" aria-hidden="true"><div className={cn('h-full', c.side === 'call' ? 'bg-brand-500/60' : 'bg-ai-600/55')} style={{ width: `${(c.volume ?? 0) / maxVolume * 100}%` }} /></div></td>
               <td className="px-3 py-3 text-right font-mono text-ink-600 tnum">{number(c.openInterest)}</td>
-              <td className="px-3 py-3 text-right"><Ratio contract={c} />{c.activity.length > 0 && <span className="mt-0.5 block text-[10px] text-warn-700">{t('需关注')}</span>}</td>
+              <td className="px-3 py-3 text-right"><Ratio contract={c} />{c.activity.length > 0 && <span className="mt-0.5 block text-caption text-warn-700">{t('需关注')}</span>}</td>
               <td className="px-3 py-3"><button type="button" className="min-h-9 rounded-md border border-line-strong bg-card px-2.5 text-caption text-ink-600 hover:border-brand-400 hover:text-brand-700" onClick={(event) => openDetail(c.id, event.currentTarget)} aria-expanded={selectedId === c.id} aria-label={t('查看 {contract} 明细', { contract: contractName(c) })}>{t('明细')}</button></td>
             </tr>)}</tbody>
           </table>

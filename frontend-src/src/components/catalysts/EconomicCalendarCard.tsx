@@ -40,7 +40,7 @@ export default function EconomicCalendarCard() {
           <div className="w-20 shrink-0">
             <time dateTime={event.scheduledAt} className="block font-mono text-caption font-medium text-ink-700 tnum">{fmtLocaleTime(event.scheduledAt)}</time>
             {view === 'next' && <span className="block font-mono text-micro text-ink-400">{fmtLocaleDate(event.scheduledAt, { month: '2-digit', day: '2-digit' })}</span>}
-            <span className="mt-1 inline-block max-w-full break-words rounded border border-line bg-paper-2 px-1.5 py-0.5 text-[10px] leading-4 text-ink-500">{flatCountry(event.country)}</span>
+            <span className="mt-1 inline-block max-w-full break-words rounded border border-line bg-paper-2 px-1.5 py-0.5 text-micro leading-4 text-ink-500">{flatCountry(event.country)}</span>
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-body-s font-medium leading-relaxed text-ink-800">{event.title}</p>

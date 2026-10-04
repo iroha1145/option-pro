@@ -68,7 +68,7 @@ function StageStepper({ stage }: { stage: number }) {
                   )}
                 />
               )}
-              <span className={cn('text-[10px] leading-[14px]', current ? 'font-semibold text-brand-600' : past ? 'text-ink-500' : 'text-ink-400')}>
+              <span className={cn('text-micro leading-[14px]', current ? 'font-semibold text-brand-600' : past ? 'text-ink-500' : 'text-ink-400')}>
                 {label}
               </span>
             </motion.span>

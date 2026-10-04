@@ -338,7 +338,7 @@ export default function EarningsList({
                   {fmtMDCN(g.date)} · {weekdayCN(g.date)}
                 </span>
                 {isToday && (
-                  <span className="rounded-xs bg-brand-600 px-1.5 py-px text-[10px] font-semibold leading-4 text-on-accent">{t('今天')}</span>
+                  <span className="rounded-xs bg-brand-600 px-1.5 py-px text-micro font-semibold leading-4 text-on-accent">{t('今天')}</span>
                 )}
               </p>
               <p className="font-mono text-micro text-ink-400 tnum">
@@ -464,7 +464,7 @@ export default function EarningsList({
                         </span>
                       </span>
                       <span className="ml-auto min-w-[96px] max-w-full text-right">
-                        <span className="mb-0.5 block text-[10px] font-medium leading-4 text-ink-400">
+                        <span className="mb-0.5 block text-micro font-medium leading-4 text-ink-400">
                           {t('预期波动')}
                         </span>
                         <ExpectedMoveCell pct={move} index={i} status={moveStatus} align="end" />
