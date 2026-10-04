@@ -21,8 +21,10 @@ from app.failure_diagnostics import record_fallback_failure
 from app.services.ai_jobs.models import NEWS_ARTICLE_TEXT_MAX_CHARS
 
 from .news_links import resolve_publisher_url
+from .news_quality import TITLE_STOP_WORDS
 
 _MAX_BYTES = 1024 * 1024
+_TITLE_MATCH_STOP_WORDS = TITLE_STOP_WORDS | {"news"}
 _GOOGLE_ARTICLE_PATH = re.compile(r"/articles/[A-Za-z0-9_-]{16,4096}(?:\?hl=en-US&gl=US&ceid=US:en)?\Z")
 _NOISE = re.compile(r"(?:^|[-_\s])(nav|menu|footer|header|related|recommend\w*|comment\w*|subscribe\w*|subscription|newsletter|advert\w*|social|share|paywall)(?:$|[-_\s])", re.I)
 _CHALLENGE = re.compile(r"just a moment|verify (?:that )?you are human|access denied|captcha|checking your browser|enable javascript and cookies", re.I)
@@ -207,7 +209,7 @@ def _walk(value):
 
 def _title_matches(expected: str, actual: str) -> bool:
     def tokens(text):
-        words = set(re.findall(r"[a-z0-9]{3,}", text.lower())) - {"the", "and", "for", "with", "from", "that", "this", "news"}
+        words = set(re.findall(r"[a-z0-9]{3,}", text.lower())) - _TITLE_MATCH_STOP_WORDS
         for run in re.findall(r"[\u3400-\u9fff]+", text):
             words.update(run[i:i + 2] for i in range(max(1, len(run) - 1)))
         return words

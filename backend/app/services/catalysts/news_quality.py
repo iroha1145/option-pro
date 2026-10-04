@@ -9,6 +9,10 @@ from __future__ import annotations
 import re
 
 
+# English function words that never identify a news headline; shared by the
+# event clustering and article-title matching tokenizers.
+TITLE_STOP_WORDS = frozenset({"the", "and", "for", "with", "from", "that", "this"})
+
 # A change to the dividend, or another concrete event anywhere in the source
 # text, takes precedence over a routine-looking headline.
 _SUBSTANTIVE = re.compile(

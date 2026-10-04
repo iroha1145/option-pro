@@ -33,7 +33,7 @@ from app.services.ai_jobs.models import (
 from app.services.ai_jobs.repository import AIJobRepository
 
 from .errors import CatalystError, InvalidCursorError
-from .news_quality import news_quality
+from .news_quality import TITLE_STOP_WORDS, news_quality
 
 
 def macro_conditions_context() -> dict[str, Any] | None:
@@ -1332,7 +1332,7 @@ def _title_tokens(value: str) -> frozenset[str]:
             token = token[:-2]
         elif len(token) > 3 and token.endswith("s"):
             token = token[:-1]
-        if token not in {"the", "and", "for", "with", "from", "that", "this"}:
+        if token not in TITLE_STOP_WORDS:
             tokens.add(token)
     return frozenset(tokens)
 
