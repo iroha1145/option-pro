@@ -483,7 +483,7 @@ export default function Login() {
             </SelectionViewport>
 
             {serviceDown && (
-              <p role="status" className="mt-4 flex items-center justify-between gap-2 rounded-xs border border-warn-600/30 bg-warn-50 px-2.5 py-1.5 text-caption text-warn-600">
+              <p role="status" className="mt-4 flex items-center justify-between gap-2 rounded-xs border border-warn-600/30 bg-warn-50 px-2.5 py-1.5 text-caption text-warn-700">
                 {t('无法连接服务，登录暂不可用')}
                 <button type="button" onClick={probeService} className="shrink-0 font-medium underline underline-offset-2">
                   {t('重试')}
@@ -516,7 +516,7 @@ export default function Login() {
                     }}
                     placeholder={mode === 'register' ? t('起一个用户名') : t('用户名')}
                     maxLength={32}
-                    className="h-full min-w-0 flex-1 bg-transparent text-[16px] text-ink-800 outline-none placeholder:text-ink-300 disabled:opacity-60"
+                    className="h-full min-w-0 flex-1 bg-transparent text-[16px] text-ink-800 outline-none placeholder:text-ink-400 disabled:opacity-60"
                     autoComplete="username"
                     autoCapitalize="off"
                     autoCorrect="off"
@@ -555,7 +555,7 @@ export default function Login() {
                     onKeyDown={(e) => setCapsLock(e.getModifierState?.('CapsLock') ?? false)}
                     onKeyUp={(e) => setCapsLock(e.getModifierState?.('CapsLock') ?? false)}
                     placeholder={mode === 'register' ? t('设置密码') : t('输入密码')}
-                    className="h-full min-w-0 flex-1 bg-transparent font-mono text-[16px] text-ink-800 outline-none placeholder:text-ink-300 disabled:opacity-60"
+                    className="h-full min-w-0 flex-1 bg-transparent font-mono text-[16px] text-ink-800 outline-none placeholder:text-ink-400 disabled:opacity-60"
                     autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
                     aria-label={t("密码")}
                     aria-describedby={mode === 'register' ? 'registration-password-hint' : undefined}
@@ -581,7 +581,7 @@ export default function Login() {
                 </div>
               </div>
               </div>
-              <p className={cn('mt-1.5 h-4 text-caption text-warn-600 transition-opacity', capsLock ? 'opacity-100' : 'opacity-0')}>
+              <p className={cn('mt-1.5 h-4 text-caption text-warn-700 transition-opacity', capsLock ? 'opacity-100' : 'opacity-0')}>
                 {t('Caps Lock 已开启')}
               </p>
 

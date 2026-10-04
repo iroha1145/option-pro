@@ -156,7 +156,7 @@ export default function WeekScrubber({
                   {/* 财报 chips 竖堆（前 3 个 + 折叠 +N） */}
                   <div className="mt-2 flex flex-1 flex-col gap-1">
                     {dayItems.length === 0 ? (
-                      <span className="pt-1 font-mono text-micro text-ink-300" aria-hidden="true">
+                      <span className="pt-1 font-mono text-micro text-ink-400" aria-hidden="true">
                         —
                       </span>
                     ) : (
@@ -184,7 +184,7 @@ export default function WeekScrubber({
                               <Icon
                                 name={it.timing === 'bmo' ? 'sun-bmo' : it.timing === 'amc' ? 'moon-amc' : 'clock-ny'}
                                 size={12}
-                                className={it.timing === 'bmo' ? 'text-warn-600' : it.timing === 'amc' ? 'text-ai-600' : 'text-ink-400'}
+                                className={it.timing === 'bmo' ? 'text-warn-700' : it.timing === 'amc' ? 'text-ai-600' : 'text-ink-400'}
                               />
                               <span className="font-mono text-micro font-medium text-ink-800">{it.ticker}</span>
                             </motion.button>
@@ -198,7 +198,7 @@ export default function WeekScrubber({
                   </div>
 
                   {/* 每日数量 */}
-                  <span className="mt-1 font-mono text-[10px] leading-4 text-ink-300 tnum">
+                  <span className="mt-1 font-mono text-[10px] leading-4 text-ink-400 tnum">
                     {dayItems.length > 0 ? __t('{n} 条', { n: dayItems.length }) : ''}
                   </span>
                 </motion.div>

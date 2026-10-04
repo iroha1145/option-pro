@@ -381,7 +381,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                   setActive(0);
                 }}
                 placeholder={__t("搜索股票代码、名称或功能…")}
-                className="h-full min-w-0 w-0 flex-1 bg-transparent text-body text-ink-800 outline-none placeholder:text-ink-300 focus-visible:!shadow-none"
+                className="h-full min-w-0 w-0 flex-1 bg-transparent text-body text-ink-800 outline-none placeholder:text-ink-400 focus-visible:!shadow-none"
                 role="combobox"
                 aria-expanded={open}
                 aria-autocomplete="list"
@@ -453,7 +453,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
               {!searching && !searchError && flat.length === 0 && (
                 <div className="anim-fade-in flex flex-col items-center py-10 text-center">
                   {/* beautifului Search 空态：内嵌图标砖 + 主文案 + 提示 */}
-                  <span className="flex size-9 items-center justify-center rounded-lg border border-line bg-card-warm text-ink-300 shadow-[inset_0_1px_2px_rgba(16,24,40,.05)]">
+                  <span className="flex size-9 items-center justify-center rounded-lg border border-line bg-card-warm text-ink-400 shadow-[inset_0_1px_2px_rgba(16,24,40,.05)]">
                     <Icon name="search" size={16} />
                   </span>
                   <p className="mt-3 text-body-s font-medium text-ink-700">{__t('没有匹配的结果')}</p>

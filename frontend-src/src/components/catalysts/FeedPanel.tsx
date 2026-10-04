@@ -346,7 +346,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
                 {__t('加载更多')}
               </button>
             ) : (
-              <p className="text-micro text-ink-300">{__t('已加载全部')} {items.length} {__t('条')}</p>
+              <p className="text-micro text-ink-400">{__t('已加载全部')} {items.length} {__t('条')}</p>
             )}
             {moreStale && !moreError && (
               <p className="mt-1.5 text-micro text-ink-500" role="status">{__t('列表已更新，请再试一次')}</p>

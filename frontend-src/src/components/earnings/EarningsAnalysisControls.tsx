@@ -239,7 +239,7 @@ export default function EarningsAnalysisControls() {
         </p>
         {(lastRun || lastRunNote) && (
           <p className="mt-2 border-t border-line pt-2 text-micro text-ink-500" role="status" aria-live="polite">
-            <span className="mr-2 text-ink-300">{t('最近检查')}</span>
+            <span className="mr-2 text-ink-400">{t('最近检查')}</span>
             {lastRun ? summaryText(lastRun) : lastRunNote}
           </p>
         )}

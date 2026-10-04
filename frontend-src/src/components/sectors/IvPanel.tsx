@@ -252,11 +252,11 @@ export default function IvPanel({
                     {r.rank !== null ? (
                       <IvRankBar rank={r.rank} replayKey={`${sectorId}:${r.ticker}`} />
                     ) : (
-                      <span className="font-mono text-ink-300">—</span>
+                      <span className="font-mono text-ink-400">—</span>
                     )}
                   </td>
                   <td className="px-2 py-2 text-right font-mono text-data-m text-ink-600 tnum">
-                    {r.atmIv !== null ? `${r.atmIv.toFixed(1)}%` : <span className="text-ink-300">—</span>}
+                    {r.atmIv !== null ? `${r.atmIv.toFixed(1)}%` : <span className="text-ink-400">—</span>}
                   </td>
                   <td className="py-2 pl-2">
                     <span className="inline-flex size-7 items-center justify-center rounded-xs border border-line bg-card text-ink-400 opacity-0 transition-opacity duration-fast group-hover:opacity-100">

@@ -192,7 +192,7 @@ export default function ManualStockPull({
                     'rounded-xs border px-1.5 py-0.5 text-micro',
                     ok
                       ? 'border-ok-600/20 bg-ok-50 text-ok-700'
-                      : 'border-warn-600/25 bg-warn-50 text-warn-600',
+                      : 'border-warn-600/25 bg-warn-50 text-warn-700',
                   )}
                 >
                   {label} · {resourceSummary(resource)}

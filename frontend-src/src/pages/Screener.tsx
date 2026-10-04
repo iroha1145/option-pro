@@ -1027,7 +1027,7 @@ export default function Screener() {
                     className="gap-1"
                   >
                     {c.label}
-                    <button onClick={c.onRemove} aria-label={__t('移除条件 {label}', { label: c.label })} className="text-ink-300 transition-colors duration-fast hover:text-danger-600">
+                    <button onClick={c.onRemove} aria-label={__t('移除条件 {label}', { label: c.label })} className="text-ink-400 transition-colors duration-fast hover:text-danger-600">
                       <Icon name="x" size={10} />
                     </button>
                   </SoftBadge>
@@ -1124,7 +1124,7 @@ export default function Screener() {
                               onClick={() => onPresetQuick(p.id)}
                               className="control-button"
                             >
-                              <Icon name="spark-ai" size={13} className="text-ink-300" />
+                              <Icon name="spark-ai" size={13} className="text-ink-400" />
                               {p.name}
                             </button>
                           ))}

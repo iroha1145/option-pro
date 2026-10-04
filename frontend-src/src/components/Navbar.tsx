@@ -225,7 +225,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
                 aiAvailable
                   ? 'border-ai-600/20 bg-ai-50 text-ai-600'
                   : aiEnabled
-                    ? 'border-warn-600/25 bg-warn-50 text-warn-600'
+                    ? 'border-warn-600/25 bg-warn-50 text-warn-700'
                     : 'border-line bg-card-warm text-ink-400',
               )}
               title={

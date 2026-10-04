@@ -151,7 +151,7 @@ export default function MonthCalendar({
         {WEEKDAYS.map((w, i) => (
           <span
             key={w}
-            className={cn('py-1.5 text-center font-mono text-micro', i >= 5 ? 'text-ink-300' : 'text-ink-400')}
+            className={cn('py-1.5 text-center font-mono text-micro', i >= 5 ? 'text-ink-400' : 'text-ink-400')}
           >
             {t(w)}
           </span>
@@ -214,7 +214,7 @@ export default function MonthCalendar({
                         ? 'flex h-6 min-w-6 items-center justify-center rounded-full bg-brand-600 px-1 font-semibold text-on-accent'
                         : inMonth
                           ? 'text-ink-800'
-                          : 'text-ink-300',
+                          : 'text-ink-400',
                     )}
                   >
                     {label}
@@ -243,7 +243,7 @@ export default function MonthCalendar({
                         <Icon
                           name={it.timing === 'bmo' ? 'sun-bmo' : it.timing === 'amc' ? 'moon-amc' : 'clock-ny'}
                           size={11}
-                          className={it.timing === 'bmo' ? 'text-warn-600' : it.timing === 'amc' ? 'text-ai-600' : 'text-ink-400'}
+                          className={it.timing === 'bmo' ? 'text-warn-700' : it.timing === 'amc' ? 'text-ai-600' : 'text-ink-400'}
                         />
                         <span className="truncate font-mono text-[10px] font-medium leading-4 text-ink-800">
                           {it.ticker}

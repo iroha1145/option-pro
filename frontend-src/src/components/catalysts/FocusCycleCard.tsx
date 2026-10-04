@@ -68,7 +68,7 @@ function StageStepper({ stage }: { stage: number }) {
                   )}
                 />
               )}
-              <span className={cn('text-[10px] leading-[14px]', current ? 'font-semibold text-brand-600' : past ? 'text-ink-500' : 'text-ink-300')}>
+              <span className={cn('text-[10px] leading-[14px]', current ? 'font-semibold text-brand-600' : past ? 'text-ink-500' : 'text-ink-400')}>
                 {label}
               </span>
             </motion.span>
@@ -164,7 +164,7 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
             <ul className="mt-4 space-y-2 border-t border-line pt-3">
               {cycle.uncertainties.slice(0, 4).map((u, i) => (
                 <li key={i} className="flex items-start gap-2 text-caption leading-5 text-ink-500">
-                  <Icon name="flag" size={12} className="mt-1 shrink-0 text-warn-600" />
+                  <Icon name="flag" size={12} className="mt-1 shrink-0 text-warn-700" />
                   <span>{u}</span>
                 </li>
               ))}

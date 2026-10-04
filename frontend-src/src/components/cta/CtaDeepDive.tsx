@@ -170,7 +170,7 @@ export default function CtaDeepDive({
                   </span>
                 </p>
                 <div className="mt-2"><PositionBar value={row.position_score} /></div>
-                <p className="mt-1 flex justify-between font-mono text-micro text-ink-300 tnum" aria-hidden="true">
+                <p className="mt-1 flex justify-between font-mono text-micro text-ink-400 tnum" aria-hidden="true">
                   <span>-100</span><span>0</span><span>+100</span>
                 </p>
               </div>
@@ -293,7 +293,7 @@ export default function CtaDeepDive({
                 就是最新（GPT-5.6-Pro 审计问题 3 的双状态拆分）。 */}
             {row.market_data_current === true && <span> · {t('已是最新交易日')}</span>}
             {row.market_data_current === false && (
-              <span className="text-warn-600"> · {t('尚未更新至最近交易日')}</span>
+              <span className="text-warn-700"> · {t('尚未更新至最近交易日')}</span>
             )}
             {row.intraday?.provisional && <span> · {t('盘中估算为暂定值，历史记录以收盘为准')}</span>}
             {' · '}{t('方法 {v} · 代理={p}', { v: data.method_version ?? '—', p: row.proxy_symbol })}

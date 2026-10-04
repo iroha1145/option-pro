@@ -135,7 +135,7 @@ function LifecycleTrack({ ev }: { ev: BreakoutEventFull }) {
               <span className={cn('mt-1.5 whitespace-nowrap text-[11px] leading-[15px]', last ? 'font-semibold text-ink-800' : 'text-ink-400')}>
                 {LIFECYCLE_CN[t.state] ?? t.state}
               </span>
-              <span className="whitespace-nowrap font-mono text-[11px] leading-[15px] text-ink-300 tnum">{hhmm(t.at)}</span>
+              <span className="whitespace-nowrap font-mono text-[11px] leading-[15px] text-ink-400 tnum">{hhmm(t.at)}</span>
             </div>
             {!last && <span className="mx-1 mt-[9px] h-px min-w-4 flex-1 bg-line-strong" aria-hidden="true" />}
           </li>
@@ -251,7 +251,7 @@ export default function EventDetail({
             className="radar-detail relative flex max-h-[88dvh] w-full max-w-[720px] flex-col overflow-hidden rounded-xl border border-line bg-card shadow-sh-3"
           >
             {detailError && (
-              <div className="flex flex-wrap items-center gap-2 border-b border-warn-600/25 bg-warn-50 px-5 py-2 text-caption text-warn-600">
+              <div className="flex flex-wrap items-center gap-2 border-b border-warn-600/25 bg-warn-50 px-5 py-2 text-caption text-warn-700">
                 <Icon name="flag" size={13} />
                 <span>{__t('详情加载失败，暂显示列表中的信息。')}</span>
                 {onRetryDetail && (
@@ -362,7 +362,7 @@ export default function EventDetail({
               {/* 催化剂摘要 */}
               <section>
                 <p className="eyebrow mb-2 flex items-center gap-1.5">
-                  <Icon name="bolt" size={13} className="text-warn-600" />
+                  <Icon name="bolt" size={13} className="text-warn-700" />
                   {__t('相关催化剂')}
                 </p>
                 <CatalystDigest ticker={event.ticker} />
@@ -384,7 +384,7 @@ export default function EventDetail({
               >
                 {__t('该代码全部事件')}
               </button>
-              <span className="ml-auto font-mono text-micro text-ink-300 tnum">{event.event_id}</span>
+              <span className="ml-auto font-mono text-micro text-ink-400 tnum">{event.event_id}</span>
             </div>
           </motion.div>
         </div>

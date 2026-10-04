@@ -67,7 +67,7 @@ function AdvanceDeclineBar({
     <div className="mt-2">
       <p className="flex flex-wrap items-center gap-y-1 metric-value text-data-xl tnum">
         <SoftBadge tone="up" size="md" className="metric-value text-data-l">{advancers}</SoftBadge>
-        <span className="mx-1.5 text-ink-300">/</span>
+        <span className="mx-1.5 text-ink-400">/</span>
         <SoftBadge tone="down" size="md" className="metric-value text-data-l">{decliners}</SoftBadge>
         {unchanged > 0 && (
           <span className="ml-1.5 align-middle text-caption text-ink-400">
@@ -190,7 +190,7 @@ function StrengthHistogram({ histogram }: { histogram: number[] }) {
           );
         })}
       </div>
-      <div className="mt-1.5 flex justify-between font-mono text-[9px] text-ink-300">
+      <div className="mt-1.5 flex justify-between font-mono text-[9px] text-ink-400">
         <span>0</span><span>50</span><span>100</span>
       </div>
     </div>
@@ -406,7 +406,7 @@ function WatchCard({
           /* opacity-0 不影响命中测试：必须同步 pointer-events-none，否则这颗
              压在整卡按钮之上的隐形 × 会把「点卡片开详情」变成静默删除。
              触屏没有 hover，永远进不了 group-hover —— 无 hover 环境改为常驻可见。 */
-          className="pointer-events-none absolute right-1 top-1 z-10 inline-flex size-11 cursor-pointer items-center justify-center rounded-xs text-ink-300 opacity-0 outline-none transition-[opacity,color] duration-fast hover:bg-paper-2 hover:text-danger-700 focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover/card:pointer-events-auto group-hover/card:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:text-ink-400"
+          className="pointer-events-none absolute right-1 top-1 z-10 inline-flex size-11 cursor-pointer items-center justify-center rounded-xs text-ink-400 opacity-0 outline-none transition-[opacity,color] duration-fast hover:bg-paper-2 hover:text-danger-700 focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover/card:pointer-events-auto group-hover/card:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:text-ink-400"
         >
           <Icon name="x" size={13} />
         </button>
@@ -861,7 +861,7 @@ export default function Watchlist() {
               )}
               {/* 默认池是站点的池子：拿它的规模对照「上限 50」等于把它冒充成用户自选 */}
               {canManageWatchlist && !showingDefaultPool && (
-                <span className="ml-1 text-ink-300">{t('/ 上限')} {maxTickers}</span>
+                <span className="ml-1 text-ink-400">{t('/ 上限')} {maxTickers}</span>
               )}
               {wl.lastUpdatedAt && (
                 <span className="ml-2 hidden font-mono text-micro tnum sm:inline">{t('更新')} {fmtTimeHHMMSS(wl.lastUpdatedAt)}</span>

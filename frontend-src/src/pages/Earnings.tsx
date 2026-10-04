@@ -415,7 +415,7 @@ export default function Earnings() {
         ) : aiEnabled ? (
           <>
             <span className="size-2 rounded-full bg-warn-600" aria-hidden="true" />
-            <AnalysisIcon size={15} className="text-warn-600" />
+            <AnalysisIcon size={15} className="text-warn-700" />
             <span>
               {['analysis_in_progress', 'global_concurrency_limit', 'queue_busy'].includes(aiReason ?? '')
                 ? t('AI 处理中')
@@ -434,7 +434,7 @@ export default function Earnings() {
         <span className="font-mono text-micro text-ink-400">{t('正在检查更新…')}</span>
       )}
       {!q.loading && q.error && q.data && (
-        <span className="font-mono text-micro text-warn-600">{t('刷新失败 · 显示已有数据')}</span>
+        <span className="font-mono text-micro text-warn-700">{t('刷新失败 · 显示已有数据')}</span>
       )}
       {isOwner && (
         <EarningsRefreshButton
@@ -464,12 +464,12 @@ export default function Earnings() {
           没有任何横幅，用户无从知道看到的是旧数据。 */}
       {refreshStatus !== 'failed_stale' && q.error && items.length > 0 && (
         <div className="mt-4 flex items-center justify-between gap-3 rounded-md border border-warn-600/30 bg-warn-50 px-4 py-2.5">
-          <p className="text-caption text-warn-600">
+          <p className="text-caption text-warn-700">
             {t('自动更新失败，显示上次数据。')}
           </p>
           <button
             onClick={() => q.refresh()}
-            className="shrink-0 rounded-sm border border-warn-600/40 px-2 py-1 text-caption text-warn-600 transition-colors hover:bg-warn-600 hover:text-on-accent"
+            className="shrink-0 rounded-sm border border-warn-600/40 px-2 py-1 text-caption text-warn-700 transition-colors hover:bg-warn-600 hover:text-on-accent"
           >
             {t('重试')}
           </button>
@@ -479,10 +479,10 @@ export default function Earnings() {
       {/* failed_stale：失败带缓存 → _stale 横幅 */}
       {refreshStatus === 'failed_stale' && (
         <div className="mt-4 flex items-center justify-between gap-3 rounded-md border border-warn-600/30 bg-warn-50 px-4 py-2.5">
-          <p className="text-caption text-warn-600">{t('更新失败，显示上次数据。')}</p>
+          <p className="text-caption text-warn-700">{t('更新失败，显示上次数据。')}</p>
           <button
             onClick={() => void onRefresh()}
-            className="shrink-0 rounded-sm border border-warn-600/40 px-2 py-1 text-caption text-warn-600 transition-colors hover:bg-warn-600 hover:text-on-accent"
+            className="shrink-0 rounded-sm border border-warn-600/40 px-2 py-1 text-caption text-warn-700 transition-colors hover:bg-warn-600 hover:text-on-accent"
           >
             {t('重试')}
           </button>
@@ -495,7 +495,7 @@ export default function Earnings() {
           role="status"
         >
           <div>
-            <p className="text-caption font-medium text-warn-600">{t('财报数据暂时不完整')}</p>
+            <p className="text-caption font-medium text-warn-700">{t('财报数据暂时不完整')}</p>
             <p className="mt-0.5 text-micro text-ink-500">
               {t('当前显示 {n} 家公司的财报，部分公司数据缺失。', { n: items.length })}
             </p>

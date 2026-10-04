@@ -59,12 +59,12 @@ export default function SectorList({
               )}
             >
               {fmtPct(row.avgReturn)}
-              <span className="ml-1 text-micro font-normal text-ink-300">
+              <span className="ml-1 text-micro font-normal text-ink-400">
                 {periodLabel(row.period)}
               </span>
             </span>
           ) : (
-            <span className="font-mono text-ink-300">—</span>
+            <span className="font-mono text-ink-400">—</span>
           ),
       },
       {
@@ -78,7 +78,7 @@ export default function SectorList({
             {row.avgStrength !== null ? (
               <StrengthBar score={row.avgStrength} width={72} />
             ) : (
-              <span className="font-mono text-ink-300">—</span>
+              <span className="font-mono text-ink-400">—</span>
             )}
             <span className="text-micro text-ink-400">
               {t('有评分 {scored} / {total}', { scored: row.scoredCount ?? '—', total: row.memberCount })}
@@ -143,7 +143,7 @@ export default function SectorList({
               ))}
             </span>
           ) : (
-            <span className="font-mono text-ink-300">—</span>
+            <span className="font-mono text-ink-400">—</span>
           ),
       },
     ],

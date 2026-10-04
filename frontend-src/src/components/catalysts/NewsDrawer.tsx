@@ -794,7 +794,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
             {/* 信息不足 · 未调用模型 */}
             {showInsufficient && (
               <div className="mt-4 rounded-md bg-warn-50 p-4 text-center">
-                <Icon name="doc-quote" size={22} className="mx-auto text-warn-600" />
+                <Icon name="doc-quote" size={22} className="mx-auto text-warn-700" />
                 <p className="mt-2 text-body-s font-medium text-ink-800">{__t('信息不足 · 未调用模型')}</p>
                 <p className="mt-1 text-micro text-ink-400">{__t('这条新闻信息量不足，未做 AI 分析')}</p>
               </div>

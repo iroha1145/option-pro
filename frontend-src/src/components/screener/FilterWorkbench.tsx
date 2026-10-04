@@ -103,7 +103,7 @@ function PriceInput({
   }
   return (
     <div className="relative">
-      <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 font-mono text-caption text-ink-300">$</span>
+      <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 font-mono text-caption text-ink-400">$</span>
       <input
         value={text}
         inputMode="decimal"
@@ -118,7 +118,7 @@ function PriceInput({
           const n = Number(t);
           onCommit(t === '' || !Number.isFinite(n) ? null : n);
         }}
-        className="screener-price-input h-8 w-[88px] rounded-[9px] border border-line/70 bg-paper-2/50 pl-6 pr-2 font-mono text-caption text-ink-800 tnum placeholder:text-ink-300 hover:border-line-strong focus-visible:border-brand-400"
+        className="screener-price-input h-8 w-[88px] rounded-[9px] border border-line/70 bg-paper-2/50 pl-6 pr-2 font-mono text-caption text-ink-800 tnum placeholder:text-ink-400 hover:border-line-strong focus-visible:border-brand-400"
       />
     </div>
   );

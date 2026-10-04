@@ -277,7 +277,7 @@ export default function HistoryRail({
                   {t('继续读取更早事件')}
                 </button>
               ) : (
-                <p className="font-mono text-micro text-ink-300 tnum">{t('已加载全部')} {events.length} {t('条')}</p>
+                <p className="font-mono text-micro text-ink-400 tnum">{t('已加载全部')} {events.length} {t('条')}</p>
               )}
               {serverMoreError && (
                 <p className="text-micro text-danger-700">

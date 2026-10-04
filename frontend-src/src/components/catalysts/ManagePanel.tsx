@@ -352,7 +352,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
                       <li key={t.name} className="flex items-center gap-1.5 font-mono text-micro text-ink-500 tnum">
                         <Led tone={!t.enabled ? 'muted' : t.healthy ? 'ok' : 'danger'} className="size-1.5" />
                         <span className="truncate">{TASK_CN[t.name] ?? t.name}</span>
-                        {t.lastSuccessAt && <span className="ml-auto shrink-0 text-ink-300">{fmtRelative(t.lastSuccessAt)}</span>}
+                        {t.lastSuccessAt && <span className="ml-auto shrink-0 text-ink-400">{fmtRelative(t.lastSuccessAt)}</span>}
                       </li>
                     ))}
                   </ul>

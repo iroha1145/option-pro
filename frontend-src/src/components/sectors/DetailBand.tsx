@@ -132,7 +132,7 @@ export default function DetailBand({
                       onClick={() => onOpenTicker(leader.ticker)}
                       className="group flex min-h-11 w-full items-center gap-3 py-2 text-left transition-colors duration-fast hover:bg-paper-2"
                     >
-                      <span className="w-5 shrink-0 font-mono text-micro text-ink-300 tnum">
+                      <span className="w-5 shrink-0 font-mono text-micro text-ink-400 tnum">
                         {String(index + 1).padStart(2, '0')}
                       </span>
                       <TickerLogo ticker={leader.ticker} size={26} />
@@ -148,7 +148,7 @@ export default function DetailBand({
                       <Icon
                         name="arrow-up-right"
                         size={12}
-                        className="text-ink-300 transition-colors duration-fast group-hover:text-brand-600"
+                        className="text-ink-400 transition-colors duration-fast group-hover:text-brand-600"
                       />
                     </button>
                   </li>

@@ -66,7 +66,7 @@ function ScoreLine({ label, score, hint }: { label: string; score: number | null
 /* 与 SignalList RESULT_META 同惯例：标签在定义处 t()，渲染处直接用（不二次翻译） */
 const BASE_STATE_META: Record<TechBaseState['status'], { label: string; cls: string }> = {
   in_base: { label: t('价格在结构区间内'), cls: 'bg-paper-2 text-ink-600' },
-  at_resistance: { label: t('正测试区间上沿'), cls: 'bg-warn-50 text-warn-600' },
+  at_resistance: { label: t('正测试区间上沿'), cls: 'bg-warn-50 text-warn-700' },
   breakout: { label: t('已突破区间上沿'), cls: 'bg-up-50 text-up-700' },
   below_support: { label: t('跌破支撑下沿'), cls: 'bg-down-50 text-down-700' },
   failed: { label: t('已跌破失效位'), cls: 'bg-down-50 text-down-700' },

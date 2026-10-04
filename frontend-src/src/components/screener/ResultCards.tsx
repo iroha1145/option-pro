@@ -92,7 +92,7 @@ export default function ResultCards({
                 <Icon
                   name="chevron-down"
                   size={14}
-                  className={cn('text-ink-300 transition-transform duration-fast', isOpen && 'rotate-180 text-brand-600')}
+                  className={cn('text-ink-400 transition-transform duration-fast', isOpen && 'rotate-180 text-brand-600')}
                 />
               </span>
               <span className="mt-3 flex items-end justify-between gap-3">

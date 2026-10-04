@@ -204,7 +204,7 @@ export default function SignalsReading({
           <div className="flex items-baseline justify-between gap-3">
             <p>
               <span className="text-caption text-ink-500">{t('趋势偏向')}</span>
-              <span className={cn('ml-3 font-display text-display-m font-semibold', bias ? biasColor(bias.label) : 'text-ink-300')}>
+              <span className={cn('ml-3 font-display text-display-m font-semibold', bias ? biasColor(bias.label) : 'text-ink-400')}>
                 {bias?.label ? t(bias.label) : '—'}
               </span>
             </p>

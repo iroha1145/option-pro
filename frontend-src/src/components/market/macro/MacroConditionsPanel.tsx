@@ -38,8 +38,8 @@ const STATUS_CHIP: Record<
   { label: string; tone: string } | null
 > = {
   active: null,
-  degraded: { label: t('部分数据缺失'), tone: 'border-warn-600 bg-warn-50 text-warn-600' },
-  stale: { label: t('数据陈旧'), tone: 'border-warn-600 bg-warn-50 text-warn-600' },
+  degraded: { label: t('部分数据缺失'), tone: 'border-warn-600 bg-warn-50 text-warn-700' },
+  stale: { label: t('数据陈旧'), tone: 'border-warn-600 bg-warn-50 text-warn-700' },
   unavailable: { label: t('暂无快照'), tone: 'border-line bg-paper-2 text-ink-500' },
   disabled: { label: t('未启用'), tone: 'border-line bg-paper-2 text-ink-500' },
   insufficient_history: { label: t('历史不足'), tone: 'border-line bg-paper-2 text-ink-500' },
@@ -272,7 +272,7 @@ export default function MacroConditionsPanel({
       )}
 
       {data.warnings.length > 0 && status !== 'active' && (
-        <p className="rounded-md border border-warn-600 bg-warn-50 px-3 py-2 text-micro leading-relaxed text-warn-600">
+        <p className="rounded-md border border-warn-600 bg-warn-50 px-3 py-2 text-micro leading-relaxed text-warn-700">
           {t('数据更新提示：')}{data.warnings.slice(0, 4).join('、')}
           {data.warnings.length > 4 ? t(' 等 {count} 项', { count: data.warnings.length }) : ''}{t('。当前显示上次成功更新的数据。')}
         </p>

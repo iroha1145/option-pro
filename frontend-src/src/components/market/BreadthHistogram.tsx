@@ -102,7 +102,7 @@ export default function BreadthHistogram({
             );
           })}
         </motion.div>
-        <div className="mt-1.5 flex justify-between font-mono text-[9px] text-ink-300">
+        <div className="mt-1.5 flex justify-between font-mono text-[9px] text-ink-400">
           <span>0</span>
           <span>50</span>
           <span>100</span>

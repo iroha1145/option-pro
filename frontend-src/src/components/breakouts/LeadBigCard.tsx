@@ -624,7 +624,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
       className={cn('radar-lead-card card-surface p-5', locate && 'bk-locate')}
     >
       {detailFailed && (
-        <div role="status" className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-warn-600/25 bg-warn-50 px-3 py-2 text-caption text-warn-600">
+        <div role="status" className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-warn-600/25 bg-warn-50 px-3 py-2 text-caption text-warn-700">
           <Icon name="flag" size={13} />
           <span>{t('补充详情暂时读不到，当前显示基础信号。')}</span>
           <button type="button" onClick={() => {

@@ -132,7 +132,7 @@ export default function DrawingToolbar({
       <span
         className={cn(
           'ml-1 inline-flex items-center gap-1 text-micro',
-          syncStatus === 'unsynced' || syncStatus === 'load_failed' || syncStatus === 'write_failed' || syncStatus === 'conflict' ? 'text-warn-600' : 'text-ink-400',
+          syncStatus === 'unsynced' || syncStatus === 'load_failed' || syncStatus === 'write_failed' || syncStatus === 'conflict' ? 'text-warn-700' : 'text-ink-400',
         )}
         aria-live="polite"
       >

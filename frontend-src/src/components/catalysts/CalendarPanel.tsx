@@ -153,7 +153,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
                           ) : (ev.releaseStatus === 'awaiting_source' || Date.parse(ev.scheduledAt) <= q.now.getTime()) ? (
                             <SoftBadge tone="warn">{__t('数据源未回填')}</SoftBadge>
                           ) : (
-                            <span className="text-ink-300">{__t('待公布')}</span>
+                            <span className="text-ink-400">{__t('待公布')}</span>
                           )}
                         </span>
                       </p>

@@ -447,7 +447,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
       </button>
     </div>
   ) : pollNotice ? (
-    <p className="mt-3 text-micro leading-5 text-warn-600" role="status">{pollNotice}</p>
+    <p className="mt-3 text-micro leading-5 text-warn-700" role="status">{pollNotice}</p>
   ) : null;
 
   /* 报告级 POST 的正文固定为 {confirm:true}，全部财务事实由服务端当前快照绑定。 */
@@ -551,7 +551,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
           {/* ---------- AI 关闭锁定态 ---------- */}
           {phase === 'locked-ai' && (
             <LockedPanel
-              iconClass="text-ink-300"
+              iconClass="text-ink-400"
               title={aiEnabled ? __t('AI 分析暂不可用') : __t('AI 分析未启用')}
               description={
                 aiEnabled
@@ -564,7 +564,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
           {/* ---------- 公开入口异常 ---------- */}
           {phase === 'public-unavailable' && (
             <LockedPanel
-              iconClass="text-ink-300"
+              iconClass="text-ink-400"
               title={__t("公开分析入口暂不可用")}
               description={errorMsg || __t('暂时无法为 {name} 生成分析，请稍后重试。', { name: ticker ?? __t('该标的') })}
             />
@@ -683,7 +683,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                 <JobSteps analysis={analysis} />
               </div>
               {errorMsg && (
-                <p className="mt-3 text-micro leading-5 text-warn-600">{errorMsg}</p>
+                <p className="mt-3 text-micro leading-5 text-warn-700">{errorMsg}</p>
               )}
               {pollStatusNote}
               {!pollPaused && (
@@ -812,7 +812,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               <Section>
                 <div className="flex items-baseline justify-between">
                   <p className="eyebrow">{__t('关联标的')}</p>
-                  <span className="text-micro text-ink-300">{impact.impacted.length} {__t('项')}</span>
+                  <span className="text-micro text-ink-400">{impact.impacted.length} {__t('项')}</span>
                 </div>
                 <div className="mt-2.5 space-y-2">
                   {impact.impacted.map((item) => {

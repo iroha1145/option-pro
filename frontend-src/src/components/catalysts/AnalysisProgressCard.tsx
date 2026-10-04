@@ -189,7 +189,7 @@ function OwnerAnalysisProgressCard() {
           </span>
         )}
         {progressQ.error && (
-          <span className="text-warn-600">{t('最新状态读取失败，显示上次结果')}</span>
+          <span className="text-warn-700">{t('最新状态读取失败，显示上次结果')}</span>
         )}
       </div>
     </motion.section>

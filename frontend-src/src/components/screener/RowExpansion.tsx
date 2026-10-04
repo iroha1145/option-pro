@@ -168,7 +168,7 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
         ) : closes === null ? (
           /* 接口拿不到日线：如实留空，严禁 Infinity/编造 */
           <div className="flex min-h-[96px] flex-col items-center justify-center gap-1.5 text-center">
-            <Icon name="candle" size={16} className="text-ink-300" />
+            <Icon name="candle" size={16} className="text-ink-400" />
             <p className="text-caption text-ink-400">{loadError ?? t('日线数据暂不可用')}</p>
             <ManualStockPull ticker={row.ticker} onPulled={refreshAfterPull} compact />
           </div>
@@ -232,7 +232,7 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
                 </span>
                 <span className="text-right font-mono text-caption text-ink-800 tnum">
                   {value !== null ? value : '—'}
-                  {w !== null && <span className="ml-1 text-micro text-ink-300">×{w.toFixed(1)}%</span>}
+                  {w !== null && <span className="ml-1 text-micro text-ink-400">×{w.toFixed(1)}%</span>}
                 </span>
               </div>
             );

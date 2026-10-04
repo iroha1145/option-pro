@@ -112,7 +112,7 @@ export default function DrawingInspector({
                   <span>{KIND_LABEL[item.kind]}</span>
                   {item.hidden ? <span className="ml-1 text-ink-400">{t('已隐藏')}</span> : null}
                   {item.locked ? <span className="ml-1 text-ink-400">{t('已锁定')}</span> : null}
-                  {unresolvedItem ? <span className="ml-1 text-warn-600">{t('未解析')}</span> : null}
+                  {unresolvedItem ? <span className="ml-1 text-warn-700">{t('未解析')}</span> : null}
                   <span className="ml-1 font-mono text-ink-400">{t('层级 {n}', { n: item.zOrder })}</span>
                 </button>
                 <button
@@ -138,12 +138,12 @@ export default function DrawingInspector({
       )}
       <p className="text-micro font-medium text-ink-500">{t('样式')}</p>
       {importError && (
-        <p className="rounded-xs border border-warn-600/30 bg-warn-50 px-2 py-1 text-micro text-warn-600" role="alert">
+        <p className="rounded-xs border border-warn-600/30 bg-warn-50 px-2 py-1 text-micro text-warn-700" role="alert">
           {IMPORT_ERROR[importError] ?? t('导入失败：数据无效')}
         </p>
       )}
       {unresolved && (
-        <p className="rounded-xs border border-warn-600/30 bg-warn-50 px-2 py-1 text-micro text-warn-600">
+        <p className="rounded-xs border border-warn-600/30 bg-warn-50 px-2 py-1 text-micro text-warn-700">
           {t('锚点无法解析（数据已更新）')}
         </p>
       )}

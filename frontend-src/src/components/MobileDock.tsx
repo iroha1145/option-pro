@@ -246,7 +246,7 @@ function MobileDockContent() {
                     {isNavPathActive(location.pathname, m.path) ? (
                       <span className="size-1.5 shrink-0 rounded-full bg-brand-600" aria-hidden="true" />
                     ) : (
-                      <Icon name="chevron-right" size={14} className="text-ink-300" />
+                      <Icon name="chevron-right" size={14} className="text-ink-400" />
                     )}
                   </button>
                 ))}

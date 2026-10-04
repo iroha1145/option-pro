@@ -1031,7 +1031,7 @@ export default function KlineChart({
       )}
 
       {data?._stale && (
-        <p className="mt-3 flex items-center gap-1.5 rounded-xs border border-warn-600/30 bg-warn-50 px-2.5 py-1.5 text-caption text-warn-600">
+        <p className="mt-3 flex items-center gap-1.5 rounded-xs border border-warn-600/30 bg-warn-50 px-2.5 py-1.5 text-caption text-warn-700">
           <Icon name="bell" size={13} />
           {t('数据暂未刷新 · 显示最近一次结果（延迟行情）')}
         </p>
@@ -1165,7 +1165,7 @@ export default function KlineChart({
           )}
           {measureInvalid && (
             <>
-              <span className="text-warn-600">{t('测量已失效（数据已更新）')}</span>
+              <span className="text-warn-700">{t('测量已失效（数据已更新）')}</span>
               <button
                 type="button"
                 onClick={() => setMeasure({ phase: 'selectStart' })}
@@ -1189,7 +1189,7 @@ export default function KlineChart({
         />
       )}
       {analysisDrift && (
-        <p className="mt-1 text-micro text-warn-600" role="status">
+        <p className="mt-1 text-micro text-warn-700" role="status">
           {analysisDrift.sameWindow && analysisDrift.expected != null && analysisDrift.bars === analysisDrift.expected
             ? t('分析图层与当前 K 线数值对不上（同窗口 {n} 根），已暂隐', { n: analysisDrift.bars })
             : t('分析图层与当前 K 线不同版本（图上 {n} 根 / 分析 {m} 根），已暂隐，刷新后恢复', {
@@ -1305,7 +1305,7 @@ function OverlayLegend({
 }) {
   if (inconsistent) {
     return (
-      <p className="mt-2 text-micro text-warn-600">
+      <p className="mt-2 text-micro text-warn-700">
         {t('结构分析与当前 K 线数据版本不一致，技术点位已暂隐，刷新后恢复')}
       </p>
     );
@@ -1333,7 +1333,7 @@ function OverlayLegend({
           <span className="inline-block h-0 w-4 border-t border-dotted border-down-600" aria-hidden />,
           t('失效位'),
         )}
-      {chip(<span aria-hidden className="text-warn-600" style={{ fontSize: 8 }}>▼</span>, t('确认摆动高点'))}
+      {chip(<span aria-hidden className="text-warn-700" style={{ fontSize: 8 }}>▼</span>, t('确认摆动高点'))}
       {chip(<span aria-hidden className="text-ai-600" style={{ fontSize: 8 }}>▲</span>, t('确认摆动低点'))}
       {mode === 'candle' && showMa20
         && chip(

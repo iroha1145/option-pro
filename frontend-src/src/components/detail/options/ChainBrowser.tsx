@@ -87,7 +87,7 @@ export default function ChainBrowser({ chain }: { chain: OptionChain }) {
   return <div className="mt-5 space-y-5">
     <section className="overflow-hidden rounded-lg border border-line" aria-label={t('成交关注')}>
       <div className="flex items-center justify-between gap-3 border-b border-line bg-paper-2/60 px-4 py-3">
-        <div className="flex items-center gap-2"><Icon name="bolt" size={16} className="text-warn-600" /><h4 className="text-body-s font-semibold text-ink-900">{t('成交关注')}</h4><span className="font-mono text-caption text-ink-500">{alerts.length}</span></div>
+        <div className="flex items-center gap-2"><Icon name="bolt" size={16} className="text-warn-700" /><h4 className="text-body-s font-semibold text-ink-900">{t('成交关注')}</h4><span className="font-mono text-caption text-ink-500">{alerts.length}</span></div>
         {alerts.length > 0 && <button type="button" onClick={() => { setScope('alerts'); setSide('all'); setSelectedId(null); }} className="min-h-9 rounded-md px-2 text-caption font-medium text-brand-700 hover:bg-brand-50">{t('查看全部异动')}<span aria-hidden="true"> →</span></button>}
       </div>
       {alerts.length > 0 ? <ul className="divide-y divide-line">

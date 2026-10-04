@@ -19,14 +19,14 @@ import { t } from '../../i18n/core.ts';
 
 const LABEL_STYLE: Record<StockTrendBiasView['trend_bias_label'], string> = {
   偏多: 'bg-up-50 text-up-700',
-  中性: 'bg-warn-50 text-warn-600',
+  中性: 'bg-warn-50 text-warn-700',
   偏空: 'bg-down-50 text-down-700',
   数据不足: 'bg-card-warm text-ink-500',
 };
 
 const STATUS_META: Record<StockTrendBiasView['trend_bias_status'], { text: string; cls: string } | null> = {
   ok: null,
-  degraded: { text: t('部分指标缺失'), cls: 'border-warn-600/40 bg-warn-50 text-warn-600' },
+  degraded: { text: t('部分指标缺失'), cls: 'border-warn-600/40 bg-warn-50 text-warn-700' },
   insufficient_data: { text: t('数据不足，暂不评分'), cls: 'border-line-strong bg-card-warm text-ink-500' },
 };
 

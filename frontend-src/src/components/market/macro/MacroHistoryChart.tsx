@@ -220,7 +220,7 @@ export default function MacroHistoryChart({
       {error && points.length > 0 && (
         /* 新区间读取失败、图上还是上一区间的曲线：按钮已高亮新区间，不标注
            就是同屏说谎（审计 #54）。 */
-        <p className="mt-3 flex items-center justify-between gap-2 rounded-xs border border-warn-600/30 bg-warn-50 px-2.5 py-1.5 text-caption text-warn-600">
+        <p className="mt-3 flex items-center justify-between gap-2 rounded-xs border border-warn-600/30 bg-warn-50 px-2.5 py-1.5 text-caption text-warn-700">
           {t('该区间读取失败，仍显示上一区间的曲线')}
           {onRetry && (
             <button type="button" onClick={onRetry} className="shrink-0 font-medium underline underline-offset-2">
@@ -235,7 +235,7 @@ export default function MacroHistoryChart({
           <SkeletonBlock className="h-full w-full" />
         ) : error && points.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
-            <p className="text-body-s text-warn-600">{t('历史数据读取失败：')}{error.message}</p>
+            <p className="text-body-s text-warn-700">{t('历史数据读取失败：')}{error.message}</p>
             {onRetry && (
               <button
                 type="button"

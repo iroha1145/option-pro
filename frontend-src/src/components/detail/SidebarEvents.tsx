@@ -36,7 +36,7 @@ function StockSidebarEvents({ ticker }: { ticker: string }) {
         </div>
       ) : error && !data ? (
         <p className="mt-3 flex items-center gap-2 text-body-s text-ink-400">
-          <Icon name="doc-quote" size={16} className="text-ink-300" />
+          <Icon name="doc-quote" size={16} className="text-ink-400" />
           {__t('突破事件读取失败')}
           <button
             onClick={() => refresh()}
@@ -47,7 +47,7 @@ function StockSidebarEvents({ ticker }: { ticker: string }) {
         </p>
       ) : items.length === 0 ? (
         <p className="mt-3 flex items-center gap-2 text-body-s text-ink-400">
-          <Icon name="radar" size={16} className="text-ink-300" />
+          <Icon name="radar" size={16} className="text-ink-400" />
           {__t('暂无突破事件记录')}
         </p>
       ) : (

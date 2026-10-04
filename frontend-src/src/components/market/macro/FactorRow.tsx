@@ -30,7 +30,7 @@ function StatusNote({ factor }: { factor: MacroFactor }) {
   if (!label) return null;
   const detail = [...factor.missingInputs, ...factor.staleInputs].slice(0, 4).join('、');
   return (
-    <span className="text-micro text-warn-600">
+    <span className="text-micro text-warn-700">
       {label}
       {detail ? t('（{detail}）', { detail }) : ''}
     </span>

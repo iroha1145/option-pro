@@ -524,7 +524,7 @@ export default function Breakouts() {
                 status?.worker?.healthy === true
                   ? 'text-ok-600'
                   : status?.worker?.healthy === false
-                    ? 'text-warn-600'
+                    ? 'text-warn-700'
                     : 'text-ink-400'
               }
             />

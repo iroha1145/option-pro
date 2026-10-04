@@ -200,7 +200,7 @@ export default function InfoHint({
           onFocus={() => { setDismissed(false); setFocused(true); }}
           onBlur={() => setFocused(false)}
           className={cn(
-            't-tt-trigger inline-flex cursor-help items-center rounded-full text-ink-300 outline-none transition-colors duration-fast',
+            't-tt-trigger inline-flex cursor-help items-center rounded-full text-ink-400 outline-none transition-colors duration-fast',
             'hover:text-brand-600 focus-visible:text-brand-600',
             open && 'text-brand-600',
           )}

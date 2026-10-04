@@ -200,7 +200,7 @@ export default function StockDetail() {
   /* 概览未覆盖该标的：基础行情来自强度扫描行，如实提示口径 */
   const scopeBanner = detail.snapshotScope === 'strength-row' && (
     <div className="mt-3 rounded-md border border-warn-600/25 bg-warn-50 px-3 py-2" role="status">
-      <p className="flex items-start gap-2 text-caption leading-[18px] text-warn-600">
+      <p className="flex items-start gap-2 text-caption leading-[18px] text-warn-700">
         <Icon name="flag" size={13} className="mt-px shrink-0" />
         {__t('当前只有筛选结果里的基础行情，日线与技术指标按实际情况显示')}
       </p>
@@ -221,7 +221,7 @@ export default function StockDetail() {
   const techSnapshotMissing = techError?.bizCode === 'public_snapshot_unavailable';
   const techRetryRow = (
     <p className="mt-3 flex items-center gap-2 text-body-s text-ink-400">
-      <Icon name="doc-quote" size={16} className="text-ink-300" />
+      <Icon name="doc-quote" size={16} className="text-ink-400" />
       {__t('技术结构读取失败，请重试')}
       <button
         onClick={() => techQ.refresh()}

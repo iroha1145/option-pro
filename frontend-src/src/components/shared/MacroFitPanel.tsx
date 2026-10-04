@@ -93,7 +93,7 @@ export default function MacroFitPanel({
             {t(macroMissingReason(status) ?? '暂无宏观读数')}
           </p>
         )}
-        <p className="text-micro text-ink-300">{t('宏观评分单独展示')}</p>
+        <p className="text-micro text-ink-400">{t('宏观评分单独展示')}</p>
       </div>
     </div>
   );

@@ -64,7 +64,7 @@ const DIRECTION_META: Record<
 > = {
   bullish: { label: t('偏多'), className: 'bg-up-50 text-up-700' },
   bearish: { label: t('偏空'), className: 'bg-down-50 text-down-700' },
-  mixed: { label: t('多空混合'), className: 'bg-warn-50 text-warn-600' },
+  mixed: { label: t('多空混合'), className: 'bg-warn-50 text-warn-700' },
   unknown: { label: t('方向未知'), className: 'bg-paper-2 text-ink-500' },
 };
 
@@ -271,7 +271,7 @@ function AiOptionInsight({
               ))}
             </div>
           )}
-          <p className="mt-2.5 border-t border-ai-600/15 pt-2 text-caption text-warn-600">
+          <p className="mt-2.5 border-t border-ai-600/15 pt-2 text-caption text-warn-700">
             {t('风险说明：')}{result.risk_note}
           </p>
           <p className="mt-2 text-micro text-ink-400">
