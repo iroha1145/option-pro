@@ -46,7 +46,7 @@
   align-items: baseline;
   gap: 4px;
   color: var(--ink-500);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 18px;
   white-space: nowrap;
 }
@@ -77,12 +77,10 @@
 .radar-price-key > div:last-child dt { justify-content: flex-end; }
 .radar-price-key > div:not(:first-child):not(:last-child) { text-align: center; }
 .radar-price-key > div:not(:first-child):not(:last-child) dt { justify-content: center; }
-.radar-price-key dt { display: flex; align-items: center; gap: 4px; color: var(--ink-500); font-size: 10px; line-height: 15px; }
+.radar-price-key dt { display: flex; align-items: center; gap: 4px; color: var(--ink-500); font-size: 11px; line-height: 15px; }
 .radar-price-key dd { margin: 2px 0 0; color: var(--ink-600); font-size: 11px; font-weight: 500; line-height: 16px; }
 .radar-reference-glyph { display: inline-block; flex-shrink: 0; width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .7; }
-.radar-price-scale-large .radar-price-key dt { font-size: 11px; }
 .radar-price-scale-large .radar-price-key dd { font-size: 12px; }
-.radar-price-scale-large .radar-current-readout { font-size: 11px; }
 .radar-price-scale-large .radar-current-readout strong { font-size: 13px; }
 .radar-value-cell {
   min-width: 0;
@@ -116,7 +114,7 @@
 .radar-history-list { padding-inline: 7px; }
 .radar-history-list > li { border-color: color-mix(in srgb, var(--line) 60%, transparent); }
 .radar-history-row { border-radius: 7px; padding-inline: 9px; }
-.radar-history-state { min-height: 20px; padding: 1px 6px; font-size: 10px; line-height: 16px; }
+.radar-history-state { min-height: 20px; padding: 1px 6px; font-size: 11px; line-height: 16px; }
 .radar-history-state > span { width: 4px; height: 4px; }
 .radar-detail .radar-bar-track { min-width: 30px; }
 @media (max-width: 639px) {
