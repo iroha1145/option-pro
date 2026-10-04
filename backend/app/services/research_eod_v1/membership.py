@@ -86,14 +86,6 @@ def is_theme_candidate(
     return True, "ok"
 
 
-def is_reference_name(series: SecuritySeries, *, session: date, target_track: str) -> bool:
-    if series.security_id in {"SPY", "QQQ"}:
-        return has_complete_session_bar(series, session) or bool(series.dates)
-    if series.asset_track != target_track and series.asset_track != "etf":
-        return False
-    return True
-
-
 def source_is_available(series: SecuritySeries, as_of) -> bool:
     if series.source_available_at is not None:
         return series.source_available_at <= as_of

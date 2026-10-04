@@ -23,30 +23,11 @@ ETF_SUBASSETS = (
     "long_bond",
 )
 
-STATUSES = (
-    "REGISTERED_NOT_RUN",
-    "DATA_INSUFFICIENT",
-    "INSUFFICIENT_PIT_HISTORY",
-    "STATISTICALLY_THIN",
-    "FAILED",
-    "COMPLETED_UNPROMOTED",
-    "SHADOW_ONLY",
-    "ENGINEERING_ONLY",
-    "CURRENT_UNIVERSE_DIAGNOSTIC",
-    "SHORT_WINDOW",
-    "PIT_CLASSIFICATION_MISSING",
-    "CORPORATE_ACTIONS_INCOMPLETE",
-    "EXECUTION_DATA_UNVERIFIED",
-    "AUTH_REQUIRED",
-    "INVALID_EOD_CAPTURE",
-)
 
 SWING_SPAN = 3
 ATR_PERIOD = 14
-INDUSTRY_SHRINK_K = 30
 PARENT_MIN_FOR_Q = 20
 INDUSTRY_MIN_FOR_LAMBDA = 3
-G_MIN_PEERS = 5
 RESIDUAL_FIT_WINDOW = 252
 RESIDUAL_HISTORY_MIN = 330
 RESIDUAL_SUM_START = 67
@@ -61,7 +42,6 @@ M3_CORRELATION_PENALTY = 25.0
 M3_HARD_CORR = 0.85
 
 SCORE_FLOORS = {"conservative": 78.0, "balanced": 74.0, "aggressive": 70.0}
-STRUCTURE_FLOORS = {"conservative": 65.0, "balanced": 55.0, "aggressive": 50.0}
 COMPOSITE_FLOORS = {"conservative": 82.0, "balanced": 78.0, "aggressive": 74.0}
 M4_RANK_FLOORS = {"conservative": 65.0, "balanced": 60.0, "aggressive": 55.0}
 M4_BULL_WEIGHTS = {"A_trend_quality": 0.35, "B_confirmed_base_breakout": 0.30, "C_trend_pullback": 0.20, "D_residual_momentum": 0.15}
@@ -69,7 +49,6 @@ M4_MIXED_WEIGHTS = {"A_trend_quality": 0.20, "B_confirmed_base_breakout": 0.10, 
 M4_DEFENSE_WEIGHTS = {"A_trend_quality": 0.15, "B_confirmed_base_breakout": 0.05, "C_trend_pullback": 0.25, "D_residual_momentum": 0.55}
 M2_LAMBDA_RISK = {"conservative": 0.75, "balanced": 0.50, "aggressive": 0.25}
 
-CAPITALS_USD = (25_000, 100_000, 500_000, 1_000_000)
 SLIPPAGE_BPS = (
     (100_000_000.0, 5.0),
     (20_000_000.0, 10.0),

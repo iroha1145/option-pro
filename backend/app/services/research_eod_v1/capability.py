@@ -14,19 +14,6 @@ PRICE_ONLY_DIAGNOSTIC = "PRICE_ONLY_DIAGNOSTIC"
 PRICE_SIC_INDUSTRY_DIAGNOSTIC = "PRICE_SIC_INDUSTRY_DIAGNOSTIC"
 D_MARKET_RESIDUAL_DIAGNOSTIC = "D_MARKET_RESIDUAL_DIAGNOSTIC"
 FULL_EIGHT_FACTOR = "FULL_EIGHT_FACTOR"
-HARD_REJECTIONS = {
-    "MISSING_T_BAR",
-    "LATE_SOURCE",
-    "SOURCE_UNAVAILABLE",
-    "INCOMPLETE_COMMON_INPUTS",
-    "SHORT_HISTORY",
-    "ADV_TOO_LOW",
-    "HIGH_ATR",
-    "EXTENDED",
-    "NOT_TRADABLE",
-    "HALTED_SESSION",
-    "SETUP_NOT_MET",
-}
 SCORE_DERIVED_REASONS = {
     "LOW_SCORE",
     "LOW_COVERAGE",
@@ -48,14 +35,6 @@ def renormalize(weights: Mapping[str, float], drop: set[str] | None = None) -> d
     if total <= 0:
         raise ValueError("no remaining weight mass")
     return {key: (kept[key] / total if key in kept else 0.0) for key in FACTORS}
-
-
-def coverage_without_factor(weights: Mapping[str, float], factor: str) -> dict[str, Any]:
-    weight = float(weights.get(factor) or 0.0)
-    return {
-        f"{factor}_weight": weight,
-        f"maximum_coverage_without_{factor}": 1.0 - weight,
-    }
 
 
 def coverage_row(

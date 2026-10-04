@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -101,7 +101,3 @@ def structured_close(n: int, start: float = 50.0, drift: float = 0.12, cycle: in
 
 def as_of_after_close(session: date) -> datetime:
     return datetime(session.year, session.month, session.day, 17, 0, tzinfo=ET)
-
-
-def utc_as_of_after_close(session: date) -> datetime:
-    return as_of_after_close(session).astimezone(timezone.utc)
