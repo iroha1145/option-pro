@@ -48,7 +48,6 @@ export const MACRO: Dict = {
 
   /* ============ src/components/market/macro/CompositeCard.tsx ============ */
   '历史区间按当前修订值回算': ['Historical range recomputed on latest revisions', '履歴期間は最新修正値による遡及計算'],
-  '本地点时快照': ['Local point-in-time snapshot', 'ローカル時点スナップショット'],
   '当时记录的数据': ['Data recorded at the time', '当時記録したデータ'],
   '混合：部分区间按当前修订值回算': ['Mixed: part of the range is recomputed on latest revisions', '混在：一部区間は最新修正値による遡及計算'],
   '宏观环境综合分': ['Macro conditions composite score', 'マクロ環境総合スコア'],
@@ -58,7 +57,6 @@ export const MACRO: Dict = {
   '7 日变化': ['7-day change', '7日間の変化'],
   '有效模块': ['Valid modules', '有効モジュール'],
   '数据截止': ['Data as of', 'データ基準日'],
-  '分数反映当前金融环境在过去 5 年中的相对位置；分数越高，环境越有利于风险资产。': ['The score places current financial conditions within the past 5 years. Higher scores indicate greater support for risk assets.', '現在の金融環境が過去5年間のどの水準にあるかを示します。高いほど、リスク資産に有利な環境です。'],
 
   /* ============ src/components/market/macro/FactorDetails.tsx ============ */
   '重试': ['Retry', '再試行'],
@@ -95,10 +93,6 @@ export const MACRO: Dict = {
   '宏观环境未启用': ['Macro conditions disabled', 'マクロ環境は無効です'],
   '管理员配置经济数据平台（FRED）的访问密钥后，即可开始更新宏观数据。': ['Macro data can start updating once an administrator configures a FRED access key.', '管理者が経済データサービス（FRED）のアクセスキーを設定すると、マクロデータの更新が始まります。'],
   '本功能在配置中处于关闭状态。': ['This feature is turned off in the current configuration.', 'この機能は現在の設定でオフになっています。'],
-  '配置只能在服务器端完成；页面不显示任何密钥信息。': [
-    'Configuration can only be done server-side; this page never displays key information.',
-    '設定はサーバー側でのみ行えます。本ページに鍵情報が表示されることはありません。',
-  ],
   '刷新冷却中。': ['Refresh is cooling down.', '更新はクールダウン中です。'],
   '服务器尚未配置宏观数据源密钥。': ['The server has not configured a macro data-source key yet.', 'サーバー側でマクロデータソースキーがまだ設定されていません。'],
   '后台服务暂不可用，请稍后重试。': ['The background service is unavailable. Please try again later.', 'バックグラウンド処理を利用できません。しばらくしてから再度お試しください。'],
@@ -120,10 +114,6 @@ export const MACRO: Dict = {
   '恶化最多 · DETERIORATING': ['Most deteriorated', '悪化幅トップ · DETERIORATING'],
   '7 日分数恶化最多': ['Biggest 7-day score decline', '7日間のスコア悪化幅トップ'],
   '暂无 7 日前的数据可供比较，或本期没有评分下降的指标。': ['No data from 7 days ago is available for comparison, or no indicator scores fell this period.', '7日前の比較データがないか、この期間にスコアが低下した指標がありません。'],
-  '「按当前修订值回算」的历史区间使用今天能看到的最新修订数据，不代表当时市场已知的分数； 本地部署后每次实际抓取形成的快照才具备真实的点时语义。': [
-    'Historical ranges labeled "recomputed on latest revisions" use the most recent revised data available today — they do not represent the score as known to the market at the time. Only the snapshots actually captured live after this feature launched carry true point-in-time meaning.',
-    '「最新修正値による遡及計算」とラベル表示された履歴期間は、本日時点で参照できる最新の修正済みデータを使って計算したものであり、当時市場が実際に知り得たスコアではありません。本機能の稼働後にローカルで実際に取得して作成されたスナップショットのみが、真の時点データとしての意味を持ちます。',
-  ],
 
   /* ============ src/components/market/macro/MacroHistoryChart.tsx ============ */
   '按当前修订值回算': ['Recomputed on latest revisions', '最新修正値による遡及計算'],
@@ -176,22 +166,6 @@ export const MACRO: Dict = {
   '该标的未归入板块，无暴露画像': ["This ticker isn't classified into a sector, so there's no exposure profile", 'この銘柄はセクターに分類されていないため、エクスポージャー・プロファイルがありません'],
   '该板块暴露观测不足，不给分': ["This sector's exposure observations are insufficient, so no score is given", 'このセクターのエクスポージャー観測が不足しているため、スコアを算出しません'],
   '宏观适配（0–100）': ['Macro fit (0–100)', 'マクロ適合度（0–100）'],
-  '当前宏观环境与该股票所属板块暴露画像的匹配度：把每个宏观因子的历史分位中心化后，': [
-    "How well the current macro backdrop matches the exposure profile of the stock's sector: each macro factor's historical percentile is centered,",
-    '現在のマクロ環境が、その銘柄が属するセクターのエクスポージャー・プロファイルとどれだけ一致しているかを示します。各マクロファクターのヒストリカル・パーセンタイルを中心化した上で、',
-  ],
-  '按该板块对这个因子的确定性暴露加权。65 以上记顺风，35 以下记逆风。': [
-    "then weighted by that sector's deterministic exposure to the factor. 65 or above is recorded as a tailwind, 35 or below as a headwind.",
-    'そのセクターの当該ファクターに対する確定的エクスポージャーで加重します。65以上は追い風、35以下は逆風として記録します。',
-  ],
-  '影子字段：不参与排名，不改变强度分、突破质量分或事件生命周期。覆盖度不足时不给分，': [
-    "Shadow field: it does not participate in ranking and does not change the strength score, breakout quality score, or event lifecycle. No score is given when coverage is insufficient,",
-    'シャドウフィールド：ランキングには関与せず、強度スコア・ブレイクアウトの質・イベントのライフサイクルも変更しません。カバレッジが不十分な場合はスコアを算出せず、',
-  ],
-  '也不按中性 50 计。分数是历史分位，不是预测。': [
-    'nor is it backfilled as a neutral 50. The score is a historical percentile, not a forecast.',
-    '中立の50点として扱うこともありません。スコアはヒストリカル・パーセンタイルであり、予測ではありません。',
-  ],
 
   /* ============ src/mocks/macro.ts ============ */
   '联储净流动性': ['Fed net liquidity', 'FRB純流動性'],

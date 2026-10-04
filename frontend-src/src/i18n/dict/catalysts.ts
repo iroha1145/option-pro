@@ -94,7 +94,6 @@ export const CATALYSTS: Dict = {
   '· 已过滤': ['· filtered', '· フィルター中'],
 
   /* ---------------- FocusCycleCard.tsx ---------------- */
-  '· 非胜率': ['· not a win rate', '· 勝率ではありません'],
   '萌芽': ['Emerging', '萌芽'],
   '发酵': ['Building', '醸成'],
   '主升': ['Surging', '本格上昇'],
@@ -132,7 +131,6 @@ export const CATALYSTS: Dict = {
   '市场焦点周期': ['Market focus cycle', '市場フォーカスサイクル'],
   '逐股评估': ['Stock assessments', '銘柄別評価'],
   '数据与分析说明': ['Data and analysis notes', 'データと分析について'],
-  'FOCUS CYCLE · 市场焦点周期': ['FOCUS CYCLE · Market focus cycle', 'FOCUS CYCLE · 市場フォーカスサイクル'],
   '周期计算中': ['Computing cycle', 'サイクル計算中'],
   '重试焦点周期': ['Retry focus cycle', 'フォーカスサイクルを再試行'],
   '触发新周期': ['Trigger new cycle', '新しいサイクルを実行'],
@@ -162,7 +160,6 @@ export const CATALYSTS: Dict = {
   /* ---------------- ManagePanel.tsx ---------------- */
   '新闻流': ['News feed', 'ニュースフィード'],
   '经济日历': ['Economic calendar', '経済カレンダー'],
-  '源健康': ['Source health', 'ソース健全性'],
   '焦点股票池': ['Focus stock pool', 'フォーカス銘柄プール'],
   '强势雷达': ['Strength radar', '強さレーダー'],
   '突破扫描': ['Breakout scan', 'ブレイクアウトスキャン'],
@@ -197,17 +194,10 @@ export const CATALYSTS: Dict = {
   '运行设置不可用 ·': ['Runtime settings unavailable ·', '実行設定を取得できません ·'],
   '允许手动分析': ['Allow manual analysis', '手動分析を許可'],
   '定时分析': ['Scheduled analysis', '定時分析'],
-  '选股默认算法': ['Default screener ranking', 'スクリーナーのデフォルト順位'],
   '雷达默认排序': ['Default radar sort', 'レーダーのデフォルト並び替え'],
-  '原版排序': ['Original ranking', '従来の順位'],
-  '中长期趋势（试用）': ['Mid/long trend (trial)', '中長期トレンド（試用）'],
   '收盘技术（受限）': ['EOD technical (limited)', '終値テクニカル（制限）'],
   '原雷达排序': ['Original radar sort', '従来のレーダー順'],
   '日线量价条件优先（试用）': ['Daily volume-price first (trial)', '日足の値嵩条件を優先（試用）'],
-  '只影响未指定算法或选择跟随默认的请求。用户已明确选择原版时不会被覆盖。': [
-    'This only affects requests that follow the default or omit an algorithm. An explicit original choice is never overwritten.',
-    '未指定またはデフォルトに従うリクエストにだけ影響します。従来版を明示した選択は上書きされません。',
-  ],
   '回滚上一版': ['Roll back to previous version', '前のバージョンに戻す'],
   '保存中…': ['Saving…', '保存中…'],
   '保存设置': ['Save settings', '設定を保存'],
@@ -310,7 +300,6 @@ export const CATALYSTS: Dict = {
   '新闻保留原始来源；影响分与置信度由模型估算。数据滞后时间反映来源的更新进度。': ['News retains its original source. Impact and confidence scores are model estimates. Data lag reflects source updates.', 'ニュースには元の出典を表示します。影響スコアと信頼度はモデルの推定値です。データの遅れは情報源の更新状況を示します。'],
 
   /* ---------------- StocksPanel.tsx ---------------- */
-  '· 非收益': ['· not a return', '· リターンではありません'],
   '净影响分': ['Net impact score', 'ネット・インパクトスコア'],
   '影响汇总暂不可用': ['Impact summary unavailable', 'インパクト集計を取得できません'],
   '当前窗口暂无已分析出方向性影响的股票': [

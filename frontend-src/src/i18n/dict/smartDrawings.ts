@@ -23,14 +23,6 @@ export const SMART_DRAWINGS: Dict = {
     "スマート描画"
   ],
   "根据已收盘 K 线识别支撑、阻力和形态，并合并相近线条": ["Find support, resistance and patterns in closed bars, merging similar lines", "確定足からサポート・レジスタンス・パターンを検出し、近い線をまとめます"],
-  "实线为结构边界，虚线为延伸；淡色点线为已失效结构": [
-    "Solid: fitted boundary; dashed: extension; faint dotted: broken structure",
-    "実線：構造境界、破線：延長、薄い点線：無効化された構造"
-  ],
-  "智能标注仅辅助读图，不是买卖信号": [
-    "Smart annotations assist chart reading; they are not trade signals",
-    "スマート注釈はチャート読解の補助であり、売買シグナルではありません"
-  ],
   "水平支撑": [
     "Horizontal support",
     "水平サポート"
