@@ -23,6 +23,7 @@ import { FactorCard, FactorTableRow } from './FactorRow';
 import { t } from '../../../i18n/core.ts';
 
 interface ModuleState {
+  request?: object;
   loading: boolean;
   error: string | null;
   factors: MacroFactor[];
@@ -164,25 +165,26 @@ export default function FactorDetails({
   }
 
   const load = useCallback(async (moduleId: MacroModuleId) => {
+    const request = {};
     setStates((previous) => ({
       ...previous,
-      [moduleId]: { ...(previous[moduleId] ?? EMPTY), loading: true, error: null },
+      [moduleId]: { ...(previous[moduleId] ?? EMPTY), request, loading: true, error: null },
     }));
     try {
       const detail = await macroApi.module(moduleId);
-      setStates((previous) => ({
+      setStates((previous) => previous[moduleId]?.request === request ? {
         ...previous,
         [moduleId]: { loading: false, error: null, factors: detail.factors },
-      }));
+      } : previous);
     } catch (error) {
-      setStates((previous) => ({
+      setStates((previous) => previous[moduleId]?.request === request ? {
         ...previous,
         [moduleId]: {
           loading: false,
           error: error instanceof ApiError ? error.message : t('因子详情暂不可用'),
           factors: previous[moduleId]?.factors ?? [],
         },
-      }));
+      } : previous);
     }
   }, []);
 

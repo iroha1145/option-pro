@@ -69,8 +69,8 @@ function dateAnchorParts(iso: string): { day: number; monthShort: string } | nul
   return { day, monthShort: MONTH_SHORT_FMT.format(new Date(Number(m[1]), month - 1, 1)) };
 }
 
-/* 指数带：手机三列（两行放下五到六张），sm–lg 三列，xl 起一行排满 */
-const INDEX_GRID = 'grid grid-cols-3 gap-2 sm:gap-3 xl:[grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]';
+/* 指数带：窄于 360px 时两列，其余手机与 sm–lg 三列，xl 起一行排满 */
+const INDEX_GRID = 'grid grid-cols-2 gap-2 min-[360px]:grid-cols-3 sm:gap-3 xl:[grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]';
 const indexKey = (quote: IndexQuote) => quote.code;
 const indexPrice = (quote: IndexQuote) => quote.price;
 
@@ -112,7 +112,7 @@ function SectionCard({
   return (
     <section className={cn('card-surface flex flex-col', className)} aria-label={title}>
       <div className="flex items-center justify-between gap-3 px-4 pb-1 pt-4 md:px-5 md:pt-5">
-        <h3 className="text-h3 text-ink-900">{title}</h3>
+        <h2 className="text-h3 text-ink-900">{title}</h2>
         <Link
           to={to}
           /* 文字链只有 16px 高：粗指针下用上下内边距补到 44px，负外边距抵消，版面不动 */
@@ -515,7 +515,7 @@ export default function Home() {
       <section className="mt-8" aria-label={t('CTA 趋势资金')}>
         <div className="card-surface p-4 md:p-5">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-h3 text-ink-900">{t('CTA 趋势资金')}</h3>
+            <h2 className="text-h3 text-ink-900">{t('CTA 趋势资金')}</h2>
             <Link
               to="/cta"
               className="link-learn shrink-0 text-caption font-medium text-brand-700 transition-colors duration-fast hover:text-brand-600 [@media(pointer:coarse)]:-my-3.5 [@media(pointer:coarse)]:py-3.5"
@@ -637,7 +637,7 @@ function MarketStatusPanel({
     <section className="card-surface flex h-full flex-col p-4 md:p-5" aria-label={t('市场状态')}>
       {error && <StaleStrip onRetry={onRetry} refreshing={refreshing} className="mb-3" />}
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-h3 text-ink-900">{t('市场状态')}</h3>
+        <h2 className="text-h3 text-ink-900">{t('市场状态')}</h2>
         <SessionLED
           session={session}
           label={session && status?.market ? MARKET_LABEL[status.market] : undefined}

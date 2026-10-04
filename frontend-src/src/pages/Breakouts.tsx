@@ -114,6 +114,19 @@ function SessionChip({ session }: { session: BreakoutSession }) {
   );
 }
 
+function NextScanCountdown({ nextSessionAt }: { nextSessionAt: string }) {
+  const now = useNow(1000);
+  const ms = Math.max(0, new Date(nextSessionAt).getTime() - now);
+  const m = Math.floor(ms / 60_000);
+  const s = Math.floor((ms % 60_000) / 1000);
+  const countdown = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return (
+    <span className="font-mono tnum">
+      {__t('下次扫描')} <span className="text-brand-600">{countdown}</span>
+    </span>
+  );
+}
+
 /* ================= 页面主体 ================= */
 const HISTORY_PAGE_SIZE = 100;
 
@@ -125,7 +138,6 @@ export default function Breakouts() {
   const principal = `${isOwner ? 'owner' : 'visitor'}:${username ?? ''}`;
   const { openTicker } = useShell();
   const toast = useToast();
-  const now = useNow(1000);
 
   const [radarSort, setRadarSort] = useState<RadarSortChoice>(
     () => readAlgorithmPreferences(principal).radarSortAlgorithm,
@@ -448,15 +460,6 @@ export default function Breakouts() {
     }
   };
 
-  /* 下次扫描倒计时 mm:ss */
-  const nextCountdown = useMemo(() => {
-    if (!status?.next_session_at) return null;
-    const ms = Math.max(0, new Date(status.next_session_at).getTime() - now);
-    const m = Math.floor(ms / 60_000);
-    const s = Math.floor((ms % 60_000) / 1000);
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  }, [status?.next_session_at, now]);
-
   /* 快照时间取契约 as_of（数据截至时间），读取时间单独显示（审计 P2-16）：
      两者混用会把「重新读到一份旧快照」显示成「刚刚更新」。 */
   const snapshotAt = currentQ.data?.asOf
@@ -537,11 +540,7 @@ export default function Breakouts() {
                   ? __t('异常')
                   : __t('状态未知')}
           </span>
-          {nextCountdown && (
-            <span className="font-mono tnum">
-              {__t('下次扫描')} <span className="text-brand-600">{nextCountdown}</span>
-            </span>
-          )}
+          {status?.next_session_at && <NextScanCountdown nextSessionAt={status.next_session_at} />}
           <div className="flex max-w-full flex-wrap items-center gap-1.5">
             <Segmented
               options={WATCH_SCOPE_OPTIONS}

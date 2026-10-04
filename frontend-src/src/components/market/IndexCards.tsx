@@ -13,8 +13,8 @@ import IndexCard, { IndexCardSkeleton } from '@/components/shared/IndexCard';
 import { BusyIcon } from '@/components/shared/IconSwap';
 import { t } from '../../i18n/core.ts';
 
-/* 与首页指数带同一栅格：手机三列两行放下六张，xl 起按最小 170px 自动排 */
-const INDEX_GRID = 'grid grid-cols-3 gap-2 sm:gap-3 xl:[grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]';
+/* 与首页指数带同一栅格：窄于 360px 时两列，其余手机三列，xl 起按最小 170px 自动排 */
+const INDEX_GRID = 'grid grid-cols-2 gap-2 min-[360px]:grid-cols-3 sm:gap-3 xl:[grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]';
 
 const indexKey = (quote: IndexQuote) => quote.code;
 const indexPrice = (quote: IndexQuote) => quote.price;

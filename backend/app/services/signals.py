@@ -13,7 +13,8 @@ import yfinance as yf
 
 from app.services import massive
 from app.services.daily_returns import aligned_benchmark_return
-from app.services.numeric import finite_number, rounded_number as _safe_float
+from app.services.key_locks import acquire_key_lock, release_key_lock
+from app.services.numeric import clamp_number, finite_number, rounded_number as _safe_float
 
 logger = logging.getLogger(__name__)
 
@@ -41,26 +42,11 @@ _MIN_SECTOR_BREADTH_COVERAGE = 0.60
 
 
 def _acquire_key_lock(key: str) -> threading.Lock:
-    with _cache_lock:
-        key_lock = _key_locks.get(key)
-        if key_lock is None:
-            key_lock = threading.Lock()
-            _key_locks[key] = key_lock
-        _key_lock_users[key] = _key_lock_users.get(key, 0) + 1
-    key_lock.acquire()
-    return key_lock
+    return acquire_key_lock(key, _cache_lock, _key_locks, _key_lock_users)
 
 
 def _release_key_lock(key: str, key_lock: threading.Lock) -> None:
-    key_lock.release()
-    with _cache_lock:
-        remaining = _key_lock_users.get(key, 1) - 1
-        if remaining > 0:
-            _key_lock_users[key] = remaining
-            return
-        _key_lock_users.pop(key, None)
-        if key not in _cache and _key_locks.get(key) is key_lock:
-            _key_locks.pop(key, None)
+    release_key_lock(key, key_lock, _cache_lock, _key_locks, _key_lock_users, _cache)
 
 
 def _fresh_cache_hit(key: str, now: datetime) -> tuple[datetime, Any] | None:
@@ -133,13 +119,9 @@ def _cached(key: str, ttl_seconds: int, loader: Callable[[], Any]) -> Any:
 
 
 def clamp(value: float | int | None, lo: float = 0, hi: float = 100) -> float:
-    if value is None:
-        return 0
+    # Unlike the shared helper, signals also treat invalid bounds as zero.
     try:
-        f = float(value)
-        if math.isnan(f) or math.isinf(f):
-            return 0
-        return max(lo, min(hi, f))
+        return clamp_number(value, lo, hi, default=0)
     except Exception:
         return 0
 

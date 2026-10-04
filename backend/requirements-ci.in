@@ -2,5 +2,6 @@
 
 # CI-only tools. These are locked separately so the runtime image does not carry
 # test or audit packages.
+pip==26.2.1
 pip-audit==2.10.1
 pytest==9.1.1

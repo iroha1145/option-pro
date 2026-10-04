@@ -22,6 +22,7 @@ import { ShellContext } from '@/hooks/useShell';
 import { useAccess } from '@/hooks/useAccess';
 import { isMock } from '@/api/client';
 import { afterLoadIdle } from '@/lib/afterLoadIdle';
+import { prefetchRouteOnIntent } from '@/lib/prefetchRouteChunk';
 import { t as __t } from '../i18n/core.ts';
 
 export default function Layout() {
@@ -57,9 +58,9 @@ export default function Layout() {
     if (!hasConfirmedIdentity) return;
     return afterLoadIdle(() => {
       const path = location.pathname;
-      if (path !== '/catalysts') void import('@/pages/Catalysts');
-      if (path !== '/watchlist') void import('@/pages/Watchlist');
-      if (path !== '/') void import('@/pages/Home');
+      if (path !== '/catalysts') prefetchRouteOnIntent('/catalysts');
+      if (path !== '/watchlist') prefetchRouteOnIntent('/watchlist');
+      if (path !== '/') prefetchRouteOnIntent('/');
     }, 8000);
   }, [hasConfirmedIdentity, location.pathname]);
 
