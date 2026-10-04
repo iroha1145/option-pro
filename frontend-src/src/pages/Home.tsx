@@ -367,6 +367,7 @@ export default function Home() {
             {(indicesQ.data ?? []).map((q, i) => {
               /* 数据纪律：无有效价（live 快照缺失）显「—」，不显 0.00 */
               const hasPrice = Number.isFinite(q.price) && q.price > 0;
+              const tone = q.changePct == null ? 'unknown' : q.changePct > 0 ? 'up' : q.changePct < 0 ? 'down' : 'flat';
               /* sparkline mock-only：live 无指数 K 线端点，如实留空 */
               const spark = isMock && q.changePct !== null ? getIndexIntraday(q.code, q.changePct) : null;
               return (
@@ -378,7 +379,8 @@ export default function Home() {
                 >
                   <Link
                     to={`/market?index=${q.code}`}
-                    className="card-surface card-hover card-glare flex flex-col gap-1 rounded-lg p-3"
+                    data-tone={tone}
+                    className="index-instrument card-surface card-hover card-glare flex flex-col gap-1 rounded-lg p-3"
                     aria-label={t('{name} {code} 详情', { name: q.name, code: q.code })}
                   >
                     <span className="truncate text-caption text-ink-500">{q.name}</span>
@@ -493,9 +495,12 @@ export default function Home() {
             <h3 className="text-h3 text-ink-900">{t('CTA 趋势资金')}</h3>
             <Link
               to="/cta"
-              className="shrink-0 text-caption font-medium text-brand-700 transition-colors duration-fast hover:text-brand-600"
+              className="link-learn shrink-0 text-caption font-medium text-brand-700 transition-colors duration-fast hover:text-brand-600"
             >
               {t('查看全部')}
+              <span className="link-learn-chevron" aria-hidden="true">
+                <Icon name="chevron-right" size={12} />
+              </span>
             </Link>
           </div>
           {ctaQ.loading && !ctaQ.data ? (

@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from app.services.research_eod_v1.config_load import load_registry
-from app.services.research_eod_v1.registry_scoring import FACTORS, resolve_weights, score_features
+from app.services.research_eod_v1.registry_scoring import FACTORS, score_features
 
 PRICE_ONLY_DIAGNOSTIC = "PRICE_ONLY_DIAGNOSTIC"
 # Price data plus an SIC-based industry classification: the eight-factor score
@@ -50,70 +49,6 @@ def renormalize(weights: Mapping[str, float], drop: set[str] | None = None) -> d
     return {key: (kept[key] / total if key in kept else 0.0) for key in FACTORS}
 
 
-def coverage_without_factor(weights: Mapping[str, float], factor: str) -> dict[str, Any]:
-    weight = float(weights.get(factor) or 0.0)
-    return {
-        f"{factor}_weight": weight,
-        f"maximum_coverage_without_{factor}": 1.0 - weight,
-    }
-
-
-def coverage_row(
-    theme: str,
-    family: str,
-    *,
-    registry: Mapping[str, Any] | None = None,
-    profile: str = "balanced",
-    horizon: str = "mid",
-) -> dict[str, Any]:
-    data = registry or load_registry()
-    weights = resolve_weights(data, theme, family, profile, horizon)
-    coverage_min = float(data["profiles"][profile]["coverage_min"])
-    g_weight = float(weights.get("G") or 0.0)
-    max_without_g = 1.0 - g_weight
-    features = {factor: 100.0 for factor in FACTORS if factor != "G"}
-    features["G"] = None
-    required = ("T", "M", "S", "R")
-    if family == "B_confirmed_base_breakout":
-        required = ("T", "M", "S", "R", "B", "V")
-    elif family == "C_trend_pullback":
-        required = ("T", "M", "S", "R", "P", "V")
-    scored = score_features(features, weights, coverage_min=coverage_min, required=required)
-    availability = g_availability(
-        {"score_status": scored.status, "missing": list(scored.missing), "actual_G_observed": False},
-        factors=features,
-    )
-    return {
-        "theme": theme,
-        "family": family,
-        "profile": profile,
-        "horizon": horizon,
-        "G_weight": g_weight,
-        "maximum_coverage_without_G": max_without_g,
-        "minimum_coverage": coverage_min,
-        "score_with_other_seven_factors_at_100": scored.score,
-        "score_status": scored.status,
-        "missing": list(scored.missing),
-        "actual_G_observed": availability["actual_G_observed"],
-        "can_score_without_G": availability["can_score_without_G"],
-        "g_is_available": availability["g_is_available"],
-        "track": FULL_EIGHT_FACTOR,
-        "note": "G missing is a data-capability failure, not a strategy loss",
-    }
-
-
-def build_coverage_matrix(
-    *,
-    registry: Mapping[str, Any] | None = None,
-    profile: str = "balanced",
-    horizon: str = "mid",
-) -> list[dict[str, Any]]:
-    data = registry or load_registry()
-    themes = list(data["sectors"])
-    families = list(data["base_algorithm_weights"])
-    return [coverage_row(theme, family, registry=data, profile=profile, horizon=horizon) for theme in themes for family in families]
-
-
 def diagnostic_weights(
     weights: Mapping[str, float],
     *,
@@ -129,46 +64,6 @@ def diagnostic_weights(
             raise ValueError("D_MARKET_RESIDUAL_DIAGNOSTIC is only named for family D")
         return renormalize(weights, {"G"})
     raise ValueError(f"unknown track {track}")
-
-
-def ablation_weights(weights: Mapping[str, float], dropped: str) -> dict[str, float]:
-    return renormalize(weights, {dropped})
-
-
-def neighbor_weights(weights: Mapping[str, float], factor: str, delta: float) -> dict[str, float]:
-    """Legacy raw bump: add delta then divide by 1+delta. Historical R1 only."""
-
-    updated = {key: float(weights.get(key) or 0.0) for key in FACTORS}
-    updated[factor] = updated[factor] + delta
-    if updated[factor] <= 0:
-        raise ValueError("neighbor would drop the factor entirely")
-    return renormalize(updated)
-
-
-def realloc_plus_pp(weights: Mapping[str, float], factor: str, delta: float) -> dict[str, float]:
-    """True +N pp: new_f = old_f + delta; other nonzero weights * (1-new_f)/(1-old_f).
-
-    Frozen-zero G is not resurrected. Out-of-range targets are rejected.
-    """
-
-    current = {key: float(weights.get(key) or 0.0) for key in FACTORS}
-    old_f = current.get(factor) or 0.0
-    new_f = old_f + float(delta)
-    if new_f <= 0.0 or new_f >= 1.0:
-        raise ValueError(f"neighbor {factor}={new_f} is outside (0, 1)")
-    if old_f >= 1.0:
-        raise ValueError("cannot reallocate from a one-factor weight")
-    scale = (1.0 - new_f) / (1.0 - old_f)
-    out: dict[str, float] = {}
-    for key in FACTORS:
-        value = current.get(key) or 0.0
-        if key == factor:
-            out[key] = new_f
-        elif value <= 0.0:
-            out[key] = 0.0
-        else:
-            out[key] = value * scale
-    return out
 
 
 def can_score_without_g(coverage: Mapping[str, Any]) -> bool:

@@ -84,7 +84,7 @@ export default function Layout() {
           窄屏时会把文档撑出横向滚动条。clip 只裁剪绘制，不建立滚动容器、
           不影响 sticky，也不裁剪 position:fixed 的 Dock；
           InfoHint 自身已把可见浮层收敛在视口内，因此这里裁不到真实内容。 */}
-      <div className="flex min-h-[100dvh] flex-col overflow-x-clip">
+      <div className="shell-wash flex min-h-[100dvh] flex-col overflow-x-clip">
         <a className="skip-link" href="#main-content">{__t('跳到主要内容')}</a>
         <Navbar onOpenPalette={openPalette} />
         <IndexTape />

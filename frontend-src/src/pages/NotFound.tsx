@@ -12,8 +12,11 @@ import { t } from '../i18n/core.ts';
 
 export default function NotFound() {
   const location = useLocation();
+  /* 占位是整屏高的（见 PageFallback）。这一页如果只有几百像素，页脚会从
+     折线以下反向弹上来。撑到同样高度即可。 */
   return (
-    <div {...pageRegionProps('notfound', 'empty')}>
+    <div {...pageRegionProps('notfound', 'empty')} className="flex min-h-[70vh] flex-col items-center justify-center">
+      <p className="page-folio" aria-hidden="true">404</p>
       <EmptyState
         icon="search"
         title={t("页面不存在")}
@@ -26,9 +29,7 @@ export default function NotFound() {
             {t('返回首页')}
           </Link>
         }
-        /* 占位是整屏高的（见 PageFallback）。这一页如果只有几百像素，页脚会从
-           折线以下反向弹上来 —— 换了个方向的同一种位移。撑到同样高度即可。 */
-        className="min-h-[70vh] justify-center py-16"
+        className="justify-center py-8"
       />
     </div>
   );

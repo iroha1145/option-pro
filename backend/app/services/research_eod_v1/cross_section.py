@@ -7,10 +7,6 @@ from app.services.research_eod_v1.constants import INDUSTRY_MIN_FOR_LAMBDA, PARE
 from app.services.research_eod_v1.mathutil import finite, midrank_percentiles, shrink_q
 
 
-def parent_pool(track: str, values: dict[str, float | None], tracks: dict[str, str]) -> dict[str, float | None]:
-    return {sid: values[sid] for sid in values if tracks.get(sid) == track}
-
-
 def _signed_finite(value: float | None, *, invert: bool) -> float | None:
     number = finite(value)
     if number is None:

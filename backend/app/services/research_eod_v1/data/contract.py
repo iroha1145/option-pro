@@ -6,11 +6,9 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
-from pathlib import Path
 from typing import Any, Sequence
 
 UNSUPPORTED = "UNSUPPORTED"
-
 
 @dataclass(frozen=True)
 class SecurityIdentity:
@@ -25,7 +23,6 @@ class SecurityIdentity:
     delisted_at: date | None = None
     aliases: tuple[str, ...] = ()
     identity_confidence: str = "unverified"
-
 
 @dataclass(frozen=True)
 class ResearchBar:
@@ -52,7 +49,6 @@ class ResearchBar:
     vintage_status: str = "download_time_not_pit"
     partial: bool = False
 
-
 @dataclass(frozen=True)
 class CorporateAction:
     security_id: str
@@ -69,7 +65,6 @@ class CorporateAction:
     contraname: str | None = None
     economic_status: str = "ok"
     reason: str | None = None
-
 
 @dataclass(frozen=True)
 class ProviderCapabilities:
@@ -91,7 +86,6 @@ class ProviderCapabilities:
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
-
 @dataclass
 class DatasetMeta:
     provider: str
@@ -105,13 +99,6 @@ class DatasetMeta:
 def hash_payload(payload: Any) -> str:
     blob = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
     return hashlib.sha256(blob).hexdigest()
-
-
-def hash_file_bytes(paths: Sequence[Path]) -> str:
-    digest = hashlib.sha256()
-    for path in sorted(paths, key=lambda item: str(item)):
-        digest.update(Path(path).read_bytes())
-    return digest.hexdigest()
 
 
 def validate_research_bars(bars: Sequence[ResearchBar]) -> None:

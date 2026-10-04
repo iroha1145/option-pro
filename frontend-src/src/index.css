@@ -130,7 +130,9 @@
     --ink-600: #B0B6C0;
     --ink-500: #A0A8B5;
     --ink-400: #A0A8B5;
-    --ink-300: #6B7382;
+    /* 三级墨色要在夜间纸面和卡片上都过正文对比度（约 4.5:1）。
+       过浅的 #6B7382 在 #191B20 上只有 3.6:1，页脚、轴标和时间读不清。 */
+    --ink-300: #848D9A;
     --line: #323640;
     --line-strong: #454B58;
     --line-chart: #353944;
@@ -301,7 +303,6 @@
   /* 发丝线工具类 */
   .hairline-b { border-bottom: 1px solid var(--line); }
   .hairline-t { border-top: 1px solid var(--line); }
-  .hairline-x { border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
   .hairline { border: 1px solid var(--line); }
   .hairline-strong { border: 1px solid var(--line-strong); }
 
@@ -311,6 +312,51 @@
     backdrop-filter: blur(14px) saturate(1.5);
     -webkit-backdrop-filter: blur(14px) saturate(1.5);
   }
+
+  /* 页头：章节号做成版心旁的页码，标题收紧字距，说明限制行长。 */
+  .page-folio {
+    flex: none;
+    margin-top: 0.2rem;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: clamp(1.65rem, 4.2vw, 2.35rem);
+    font-weight: 600;
+    line-height: 0.9;
+    letter-spacing: -0.06em;
+    font-variant-numeric: tabular-nums;
+    color: color-mix(in srgb, var(--brand-600) 78%, var(--ink-900));
+  }
+  .page-title {
+    letter-spacing: -0.035em;
+    text-wrap: balance;
+  }
+  .page-lede {
+    max-width: 40rem;
+    text-wrap: pretty;
+  }
+  /* 壳层顶部两团很淡的色光，玻璃顶栏能透出来。不盖住纸面点阵。 */
+  .shell-wash {
+    background:
+      radial-gradient(1100px 420px at 0% -140px, color-mix(in srgb, var(--brand-100) 70%, transparent), transparent 72%),
+      radial-gradient(760px 340px at 100% -180px, color-mix(in srgb, var(--ai-50) 75%, transparent), transparent 70%);
+  }
+
+  /* 指数卡顶上一根方向线：涨跌未知保持发丝灰，不把缺失画成上涨。 */
+  .index-instrument {
+    position: relative;
+  }
+  .index-instrument::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 2px;
+    border-radius: 12px 12px 0 0;
+    background: var(--line-strong);
+    pointer-events: none;
+  }
+  .index-instrument[data-tone="up"]::before { background: var(--up-600); }
+  .index-instrument[data-tone="down"]::before { background: var(--down-600); }
 
   /* 卡片规范：白底 + 发丝边 + sh-1（墨色 16,24,40）+ 内高光 .7 + 12px 圆角（v8 回暖） */
   .card-surface {
