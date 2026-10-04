@@ -7,7 +7,7 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { EASE_PAPER } from '@/lib/motion';
+import { EASE_PAPER, GROW_Y } from '@/lib/motion';
 import SourceNote from '@/components/shared/SourceNote';
 import type { EarningsRow } from './types';
 import { addDays, etToday, fmtMDCN, fmtMMDD, weekdayCN } from './types';
@@ -43,7 +43,14 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
       <div className="min-w-0">
         <div className="w-full min-w-0">
           <p className="eyebrow">{t('本月财报密度 · 未来 30 天')}</p>
-          <div className="mt-3 flex h-16 items-end gap-[3px]" role="list" aria-label={t("每日财报数量")}>
+          <motion.div
+            className="mt-3 flex h-16 items-end gap-[3px]"
+            role="list"
+            aria-label={t("每日财报数量")}
+            initial="hidden"
+            whileInView="shown"
+            viewport={{ once: true, amount: 0.4 }}
+          >
             {days.map((d, i) => {
               const n = d.rows.length;
               const isToday = i === 0;
@@ -95,17 +102,15 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
                       n > 0 ? 'bg-brand-400 group-hover:bg-brand-600' : 'bg-line',
                       isToday && 'ring-1 ring-brand-600 ring-offset-1 ring-offset-card',
                     )}
-                    style={{ height: n > 0 ? `${Math.max(12, (n / max) * 100)}%` : '2px' }}
-                    initial={{ scaleY: 0, transformOrigin: 'bottom' }}
-                    whileInView={{ scaleY: 1 }}
-                    viewport={{ once: true, amount: 0.4 }}
+                    style={{ height: n > 0 ? `${Math.max(12, (n / max) * 100)}%` : '2px', transformOrigin: 'bottom' }}
+                    variants={GROW_Y}
                     transition={{ duration: 0.7, ease: EASE_PAPER, delay: i * 0.02 }}
                   />
                 </button>
                 </span>
               );
             })}
-          </div>
+          </motion.div>
           <div className="mt-1.5 flex justify-between font-mono text-[9px] text-ink-300">
             <span>{t('今天')}</span>
             <span>{t('+15 天')}</span>

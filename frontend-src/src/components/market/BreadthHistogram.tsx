@@ -3,7 +3,7 @@
  * 10 桶直方图：grow-bar 错峰 + 均值标线 + ≥85 计数徽章
  */
 import { motion } from 'framer-motion';
-import { EASE_PAPER } from '@/lib/motion';
+import { EASE_PAPER, GROW_Y } from '@/lib/motion';
 import type { ApiError } from '@/api/client';
 import type { MarketStrength } from '@/api/types';
 import { cn } from '@/lib/utils';
@@ -78,7 +78,12 @@ export default function BreadthHistogram({
             {t('均值')} {data.avgScore.toFixed(1)}
           </span>
         </div>
-        <div className="flex h-28 items-end gap-1.5 pt-4">
+        <motion.div
+          className="flex h-28 items-end gap-1.5 pt-4"
+          initial="hidden"
+          whileInView="shown"
+          viewport={{ once: true, amount: 0.4 }}
+        >
           {data.histogram.map((n, i) => {
             const score = i * 10 + 5;
             return (
@@ -88,9 +93,7 @@ export default function BreadthHistogram({
                 </div>
                 <motion.div
                   className={cn('w-full origin-bottom rounded-t-[3px]', strengthBarClass(score))}
-                  initial={{ scaleY: 0 }}
-                  whileInView={{ scaleY: 1 }}
-                  viewport={{ once: true, amount: 0.4 }}
+                  variants={GROW_Y}
                   transition={{ duration: 0.7, ease: EASE_PAPER, delay: i * 0.04 }}
                   style={{ height: `${Math.max(4, (n / max) * 96)}px` }}
                   aria-label={t('强度 {lo}–{hi}：{n} 只', { lo: i * 10, hi: i === 9 ? 100 : i * 10 + 9, n })}
@@ -98,7 +101,7 @@ export default function BreadthHistogram({
               </div>
             );
           })}
-        </div>
+        </motion.div>
         <div className="mt-1.5 flex justify-between font-mono text-[9px] text-ink-300">
           <span>0</span>
           <span>50</span>

@@ -9,7 +9,7 @@ import AnalysisIcon from '@/components/shared/AnalysisIcon';
 import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
+import { DUR_SECTION, EASE_PAPER, GROW_X, GROW_Y } from '@/lib/motion';
 import { fmtCompact } from '@/lib/format';
 import Icon from '@/components/icons';
 import TickerLogo from '@/components/shared/TickerLogo';
@@ -25,29 +25,31 @@ function EpsPairBars({ est, act, index }: { est: number | null; act: number | nu
   const max = Math.max(Math.abs(est ?? 0), Math.abs(act ?? 0), 0.01);
   const h = (v: number | null) => (v == null ? 0 : Math.max(10, (Math.abs(v) / max) * 26));
   return (
-    <span className="flex h-7 w-12 items-end justify-center gap-1" aria-hidden="true">
+    <motion.span
+      className="flex h-7 w-12 items-end justify-center gap-1"
+      aria-hidden="true"
+      initial="hidden"
+      whileInView="shown"
+      viewport={{ once: true, amount: 0.5 }}
+    >
       <motion.span
-        className="w-2.5 rounded-t-[2px] border border-ink-300/70"
+        className="w-2.5 origin-bottom rounded-t-[2px] border border-ink-300/70"
         style={{
           height: h(est),
           backgroundImage: 'repeating-linear-gradient(45deg, rgba(138,148,176,.55) 0 1.2px, transparent 1.2px 4px)',
         }}
-        initial={{ scaleY: 0 }}
-        whileInView={{ scaleY: 1 }}
-        viewport={{ once: true, amount: 0.5 }}
+        variants={GROW_Y}
         transition={{ duration: 0.7, ease: EASE_PAPER, delay: index * 0.05 }}
       />
       {act != null && (
         <motion.span
           className="w-2.5 origin-bottom rounded-t-[2px] bg-brand-600"
           style={{ height: h(act) }}
-          initial={{ scaleY: 0 }}
-          whileInView={{ scaleY: 1 }}
-          viewport={{ once: true, amount: 0.5 }}
+          variants={GROW_Y}
           transition={{ duration: 0.7, ease: EASE_PAPER, delay: index * 0.05 + 0.08 }}
         />
       )}
-    </span>
+    </motion.span>
   );
 }
 
@@ -154,16 +156,20 @@ function ExpectedMoveCell({
           <InfoHint hint={{ title: t('预期波动'), body: t('按期权报价估算，部分合约未提供报价时间。') }} size={11} />
         )}
       </span>
-      <span className="mt-1 block h-1 w-16 strength-track overflow-hidden rounded-pill bg-line" aria-hidden="true">
+      <motion.span
+        className="mt-1 block h-1 w-16 strength-track overflow-hidden rounded-pill bg-line"
+        aria-hidden="true"
+        initial="hidden"
+        whileInView="shown"
+        viewport={{ once: true, amount: 0.6 }}
+      >
         <motion.span
           className="block h-full origin-left rounded-pill bg-ai-600"
-          initial={{ scaleX: 0 }}
-          whileInView={{ scaleX: 1 }}
-          viewport={{ once: true, amount: 0.6 }}
+          variants={GROW_X}
           transition={{ duration: 0.7, ease: EASE_PAPER, delay: index * 0.05 }}
           style={{ width: `${Math.min(100, (pct / 15) * 100)}%` }}
         />
-      </span>
+      </motion.span>
     </span>
   );
 }

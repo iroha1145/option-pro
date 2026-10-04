@@ -42,12 +42,13 @@ function loadEarningsListComponent(translate = stubT) {
   const module = { exports: {} };
   const stubComponent = ({ children }) => React.createElement('span', null, children);
   const motion = new Proxy({}, {
-    get: (_target, tag) => ({ children, initial, animate, transition, whileInView, viewport, ...props }) => {
+    get: (_target, tag) => ({ children, initial, animate, transition, whileInView, viewport, variants, ...props }) => {
       void initial;
       void animate;
       void transition;
       void whileInView;
       void viewport;
+      void variants;
       return React.createElement(tag, props, children);
     },
   });

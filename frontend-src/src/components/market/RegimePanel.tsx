@@ -4,7 +4,7 @@
  * 六条 grow-bar + 数值 + 毛玻璃 tooltip 解释；live 未覆盖 → 503「快照暂不可用」
  */
 import { motion } from 'framer-motion';
-import { EASE_PAPER } from '@/lib/motion';
+import { EASE_PAPER, GROW_X } from '@/lib/motion';
 import type { ApiError } from '@/api/client';
 import type { MarketRegime } from './api';
 import { cn } from '@/lib/utils';
@@ -108,16 +108,20 @@ export default function RegimePanel({
                 </span>
                 <span className="font-mono text-data-m text-ink-800 tnum">{score}</span>
               </div>
-              <div className="mt-1.5 h-1 strength-track overflow-hidden rounded-pill bg-line" role="presentation">
+              <motion.div
+                className="mt-1.5 h-1 strength-track overflow-hidden rounded-pill bg-line"
+                role="presentation"
+                initial="hidden"
+                whileInView="shown"
+                viewport={{ once: true, amount: 0.4 }}
+              >
                 <motion.div
                   className={cn('h-full origin-left rounded-pill', strengthBarClass(score))}
-                  initial={{ scaleX: 0 }}
-                  whileInView={{ scaleX: 1 }}
-                  viewport={{ once: true, amount: 0.4 }}
+                  variants={GROW_X}
                   transition={{ duration: 0.7, ease: EASE_PAPER, delay: i * 0.045 }}
                   style={{ width: `${Math.max(2, Math.min(100, score))}%` }}
                 />
-              </div>
+              </motion.div>
               {/* 毛玻璃 tooltip */}
               <div className="cloud-popover pointer-events-none absolute -top-2 left-0 z-20 hidden w-56 -translate-y-full p-3 text-micro leading-relaxed text-ink-600 group-hover:block">
                 <p className="mb-1 font-mono text-[10px] uppercase tracking-wider text-ink-400">{d.key}</p>

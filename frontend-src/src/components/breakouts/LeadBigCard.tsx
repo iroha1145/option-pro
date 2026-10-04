@@ -30,7 +30,7 @@ import { SkeletonBlock } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import Spinner from '@/components/shared/Spinner';
 import { cn } from '@/lib/utils';
-import { DUR_SECTION, DUR_UI, EASE_PAPER } from '@/lib/motion';
+import { DUR_SECTION, DUR_UI, EASE_PAPER, GROW_X } from '@/lib/motion';
 import { fmtNyEventTime, fmtPrice, fmtRelative } from '@/lib/format';
 import { MACRO_TONE_LABEL, macroToneOf } from '@/lib/macroFit';
 import { baseAnimation, CH, CHART_MONO_FONT, glassTooltip, type ChartOption } from '@/lib/chart';
@@ -450,20 +450,23 @@ function BigScoreBars({ ev }: { ev: BreakoutEventFull }) {
               {d.label}
               <InfoHint hint={d.hint} size={11} className="ml-0.5" />
             </span>
-            <div className="radar-bar-track h-[5px] overflow-hidden rounded-pill bg-line">
+            <motion.div
+              className="radar-bar-track h-[5px] overflow-hidden rounded-pill bg-line"
+              initial="hidden"
+              whileInView="shown"
+              viewport={{ once: true, amount: 0.4 }}
+            >
               {/* 缺失值保持空轨道，与 ScoreBars 的 fin(v) 口径一致（审计 2.2.15）：
                 * 3% 的实心条会被读成「有分，只是很低」，与右侧的「—」矛盾。 */}
               {raw !== null && (
                 <motion.div
                   className={cn('h-full origin-left rounded-pill', d.key === 'chase_risk_score' ? riskBarClass(raw) : scoreBarClass(raw))}
-                  initial={{ scaleX: 0 }}
-                  whileInView={{ scaleX: 1 }}
-                  viewport={{ once: true, amount: 0.4 }}
+                  variants={GROW_X}
                   transition={{ duration: 0.7, ease: EASE_PAPER, delay: 0.1 + i * 0.06 }}
                   style={{ width: `${Math.max(3, Math.min(100, raw))}%` }}
                 />
               )}
-            </div>
+            </motion.div>
             <span className="text-right font-mono text-caption text-ink-600 tnum">{raw !== null ? raw.toFixed(1) : '—'}</span>
           </div>
         );
@@ -509,19 +512,22 @@ function ContributionBar({ ev }: { ev: BreakoutEventFull }) {
 
   return (
     <div aria-label={t("评分构成")}>
-      <div className="flex radar-bar-track h-[5px] overflow-hidden rounded-pill bg-line">
+      <motion.div
+        className="flex radar-bar-track h-[5px] overflow-hidden rounded-pill bg-line"
+        initial="hidden"
+        whileInView="shown"
+        viewport={{ once: true, amount: 0.4 }}
+      >
         {parts.map((p, i) => (
           <motion.div
             key={p.d.key}
             className={cn('h-full origin-left', p.d.cls)}
-            initial={{ scaleX: 0 }}
-            whileInView={{ scaleX: 1 }}
-            viewport={{ once: true, amount: 0.4 }}
+            variants={GROW_X}
             transition={{ duration: 0.7, ease: EASE_PAPER, delay: 0.15 + i * 0.06 }}
             style={{ width: `${p.pct}%` }}
           />
         ))}
-      </div>
+      </motion.div>
       <ul className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
         {parts.map((p) => (
           <li key={p.d.key} className="inline-flex items-center gap-1.5">

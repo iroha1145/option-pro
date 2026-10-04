@@ -4,7 +4,7 @@
  * 明确写出「历史分位，不是预测」，不做任何进度条式的品牌装饰。
  */
 import { motion } from 'framer-motion';
-import { EASE_PAPER } from '@/lib/motion';
+import { EASE_PAPER, GROW_X } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useCountUp } from '@/hooks/useCountUp';
 import { strengthBarClass } from '@/lib/strengthColor';
@@ -88,21 +88,25 @@ export default function CompositeCard({
         </div>
       </div>
 
-      <div className="mt-4 h-[3px] overflow-hidden rounded-pill bg-line" role="presentation">
+      <motion.div
+        className="mt-4 h-[3px] overflow-hidden rounded-pill bg-line"
+        role="presentation"
+        initial="hidden"
+        whileInView="shown"
+        viewport={{ once: true, amount: 0.4 }}
+      >
         {hasScore && (
           <motion.div
             className={cn(
               'h-full origin-left rounded-pill',
               strengthBarClass(composite.score as number),
             )}
-            initial={{ scaleX: 0 }}
-            whileInView={{ scaleX: 1 }}
-            viewport={{ once: true, amount: 0.4 }}
+            variants={GROW_X}
             transition={{ duration: 0.7, ease: EASE_PAPER }}
             style={{ width: `${Math.max(2, Math.min(100, composite.score as number))}%` }}
           />
         )}
-      </div>
+      </motion.div>
 
       <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
         <StatLine
