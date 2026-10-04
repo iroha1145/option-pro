@@ -4,6 +4,7 @@
  * live 契约缺失字段（运行时 null）如实显「—」；52 周区间缺失时隐藏标尺（留空优于编造）
  */
 import { fmtCompact, fmtPrice } from '@/lib/format';
+import { cn } from '@/lib/utils';
 import type { StockDetail } from '@/api/types';
 import { t } from '../../i18n/core.ts';
 
@@ -11,7 +12,7 @@ const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFin
 const priceOr = (v: number | null | undefined): string => (isNum(v) ? fmtPrice(v) : '—');
 const compactOr = (v: number | null | undefined): string => (isNum(v) ? fmtCompact(v) : '—');
 
-export default function KeyStats({ detail }: { detail: StockDetail }) {
+export default function KeyStats({ detail, className }: { detail: StockDetail; className?: string }) {
   const rows: [string, string][] = [
     [t('今开'), priceOr(detail.open)],
     [t('昨收'), priceOr(detail.prevClose)],
@@ -28,10 +29,11 @@ export default function KeyStats({ detail }: { detail: StockDetail }) {
   const pos = has52 ? Math.min(100, Math.max(2, ((detail.price - r52[0]) / Math.max(1e-9, r52[1] - r52[0])) * 100)) : 0;
 
   return (
-    <div className="card-surface p-5">
+    /* 右栏随 K 线卡拉伸时由本卡吸收高度差：52 周区间贴底，与图卡底边对齐 */
+    <div className={cn('card-surface flex flex-col p-5', className)}>
       <p className="eyebrow">KEY STATS</p>
       <h3 className="mt-1.5 text-h3 text-ink-900">{t('关键数据')}</h3>
-      <dl className="mt-3 divide-y divide-line">
+      <dl className="mb-3 mt-3 divide-y divide-line">
         {rows.map(([k, v]) => (
           <div key={k} className="flex items-center justify-between py-2">
             <dt className="text-body-s text-ink-400">{k}</dt>
@@ -39,7 +41,7 @@ export default function KeyStats({ detail }: { detail: StockDetail }) {
           </div>
         ))}
       </dl>
-      <div className="mt-3 border-t border-line pt-3">
+      <div className="mt-auto border-t border-line pt-3">
         <div className="flex items-center justify-between text-micro text-ink-400">
           <span>{t('52 周区间')}</span>
           <span className="font-mono tnum">{has52 ? `${fmtPrice(r52[0])} — ${fmtPrice(r52[1])}` : '—'}</span>
