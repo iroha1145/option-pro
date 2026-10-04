@@ -48,8 +48,6 @@ from .registry import SCORING_VERSION
 #: date recompute to today" but never "what was published on that date", which
 #: is the question a walk-forward test asks.
 SCHEMA_VERSION = "macro-conditions-v2"
-#: The version this database may be upgraded *from*.
-SCHEMA_VERSION_PREVIOUS = "macro-conditions-v1"
 
 HISTORY_BASIS_BACKFILL = "latest_revised_backfill"
 HISTORY_BASIS_LOCAL = "local_point_in_time"

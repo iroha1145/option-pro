@@ -29,16 +29,6 @@ FAMILY_LABELS = {
     "D_residual_momentum": "D 残差动量",
 }
 
-_HARD_BLOCKS = {
-    "SETUP_NOT_MET",
-    "HIGH_ATR",
-    "EXTENDED",
-    "HALTED_SESSION",
-    "NOT_TRADABLE",
-    "SHORT_HISTORY",
-    "ADV_TOO_LOW",
-}
-
 
 def _name_for(ticker: str) -> str:
     sector_id = primary_sector_id(ticker)

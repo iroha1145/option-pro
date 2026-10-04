@@ -295,20 +295,6 @@ class DerivedGrid:
         resolved = self._last_valid[position]
         return None if resolved is None else self.values[resolved]
 
-    def trailing_valid(self, index: int, count: int) -> tuple[float, ...]:
-        if not 0 <= index < len(self.values) or count <= 0:
-            return ()
-        collected: list[float] = []
-        for position in range(index, -1, -1):
-            value = self.values[position]
-            if value is None:
-                continue
-            collected.append(value)
-            if len(collected) == count:
-                break
-        collected.reverse()
-        return tuple(collected)
-
     def point_as_of(self, when: date) -> Optional[DerivedPoint]:
         """The as-of value together with its provenance."""
 
@@ -323,7 +309,7 @@ class DerivedGrid:
         index: int,
         count: int,
     ) -> tuple[DerivedPoint, ...]:
-        """Same selection as ``trailing_valid``, carrying provenance.
+        """The last ``count`` non-missing points up to ``index``, oldest first, with provenance.
 
         A rolling window's visibility is the *latest* first-visible time among
         every row inside it, so the window has to be walked as points, not as

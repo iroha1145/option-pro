@@ -49,7 +49,6 @@ _REPORT_PERIOD_CACHE_MAX_ENTRIES = 4_000
 EXPECTED_MOVE_METHOD = "atm_straddle_mid"
 _EXPECTED_MOVE_MAX_EXPIRY_GAP_DAYS = 14
 _MAX_QUOTE_AGE_DAYS = 5
-_MAX_SPREAD_RATIO = 0.5
 
 
 def _finite(value: Any) -> float | None:
@@ -65,10 +64,6 @@ def _finite(value: Any) -> float | None:
 def _positive(value: Any) -> float | None:
     number = _finite(value)
     return number if number is not None and number > 0 else None
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 # ── FMP：第二财报日历来源 ────────────────────────────────────

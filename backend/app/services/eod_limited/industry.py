@@ -47,7 +47,6 @@ TABLE_NAME = "industry-sic-v1.json.gz"
 SIC_LEVELS = (2, 3, 4)
 DEFAULT_LEVEL = 3
 DEFAULT_LOOKUP_BUDGET = 400
-SOURCE_MASSIVE_DETAIL = "massive_reference_ticker_detail"
 
 
 @dataclass(frozen=True)
