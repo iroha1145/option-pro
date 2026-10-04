@@ -39,7 +39,7 @@ function StatusNote({ factor }: { factor: MacroFactor }) {
 
 function ScoreText({ value }: { value: number | null }) {
   return (
-    <span className="font-mono text-data-m text-ink-800 tnum">
+    <span className="text-data-m font-medium text-ink-800 tnum">
       {typeof value === 'number' && Number.isFinite(value) ? value.toFixed(1) : '—'}
     </span>
   );
@@ -56,11 +56,11 @@ export function FactorTableRow({ factor }: { factor: MacroFactor }) {
         </span>
       </th>
       <td className="py-2.5 pr-3 text-right">
-        <span className="font-mono text-data-m text-ink-800 tnum">
+        <span className="text-data-m text-ink-800 tnum">
           {factor.formattedValue ?? '—'}
         </span>
         {factor.formattedSignedValue && factor.formattedSignedValue !== factor.formattedValue && (
-          <span className="mt-0.5 block font-mono text-micro text-ink-400 tnum">
+          <span className="mt-0.5 block text-micro text-ink-500 tnum">
             {t('带符号')} {factor.formattedSignedValue}
           </span>
         )}
@@ -69,7 +69,7 @@ export function FactorTableRow({ factor }: { factor: MacroFactor }) {
         <ScoreText value={factor.score} />
       </td>
       <td className="py-2.5 pr-3 text-right">
-        <span className="font-mono text-micro text-ink-600 tnum">
+        <span className="text-micro text-ink-600 tnum">
           {factor.formattedRawChange7d ?? '—'}
         </span>
       </td>
@@ -96,13 +96,13 @@ export function FactorCard({ factor }: { factor: MacroFactor }) {
       <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5">
         <div className="min-w-0">
           <dt className="text-micro text-ink-400">{t('当前值')}</dt>
-          <dd className="truncate font-mono text-micro text-ink-700 tnum">
+          <dd className="truncate text-micro text-ink-700 tnum">
             {factor.formattedValue ?? '—'}
           </dd>
         </div>
         <div className="min-w-0">
           <dt className="text-micro text-ink-400">{t('7 日原值变化')}</dt>
-          <dd className="truncate font-mono text-micro text-ink-700 tnum">
+          <dd className="truncate text-micro text-ink-700 tnum">
             {factor.formattedRawChange7d ?? '—'}
           </dd>
         </div>

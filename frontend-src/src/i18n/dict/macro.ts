@@ -130,7 +130,7 @@ export const MACRO: Dict = {
   '叠加模块线': ['Overlay module lines', 'モジュール別ラインを重ねる'],
   '虚线按最新修订数据重新计算；实线为当时记录的分数。': ['Dashed lines use the latest revised data; solid lines show scores recorded at the time.', '破線は最新の改定データで再計算した値、実線は当時記録したスコアです。'],
 
-  /* ============ src/components/market/macro/ModuleCard.tsx ============ */
+  /* ============ src/components/market/macro/FactorDetails.tsx（模块摘要行） ============ */
   '有效因子 —': ['Valid factors —', '有効ファクター —'],
   '截止': ['As of', '基準日'],
   '有效因子不足': ['Fewer than', '有効ファクターが'],
@@ -138,8 +138,6 @@ export const MACRO: Dict = {
     "valid factors, so this module doesn't output a score (it is not backfilled with 50).",
     '件未満のため、このモジュールはスコアを出しません（50点で補うこともありません）。',
   ],
-
-  /* ============ src/components/market/macro/ModuleGrid.tsx ============ */
   '暂无模块分数。数据接入后这里会显示七个模块。': [
     'No module scores yet. Once data is connected, the seven modules will appear here.',
     'モジュールスコアはまだありません。データ接続後、ここに7つのモジュールが表示されます。',

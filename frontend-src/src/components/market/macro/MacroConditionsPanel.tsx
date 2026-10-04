@@ -21,7 +21,6 @@ import CompositeCard from './CompositeCard';
 import DriverList from './DriverList';
 import FactorDetails from './FactorDetails';
 import MacroHistoryChart, { HISTORY_RANGES, type HistoryRangeKey } from './MacroHistoryChart';
-import ModuleGrid from './ModuleGrid';
 import MacroTechnicalMatrix from '@/components/market/MacroTechnicalMatrix';
 import { t } from '../../../i18n/core.ts';
 
@@ -310,8 +309,8 @@ export default function MacroConditionsPanel({
         </div>
       </div>
 
-      {/* D. 七模块网格 */}
-      <ModuleGrid modules={data.modules} />
+      {/* D. 七模块分数与因子详情：模块只在这一处列出，点开一行看因子 */}
+      <FactorDetails modules={data.modules} snapshotKey={snapshotStamp ?? ''} dataThrough={data.dataThrough} />
 
       {/* D2. 技术 × 结构性宏观二维状态（增量任务 Phase 1，仅展示） */}
       <MacroTechnicalMatrix
@@ -336,10 +335,7 @@ export default function MacroConditionsPanel({
         />
       </div>
 
-      {/* F. 因子详情 */}
-      <FactorDetails modules={data.modules} snapshotKey={snapshotStamp ?? ''} />
-
-      {/* G. 来源说明 */}
+      {/* F. 来源说明 */}
       <details className="group border-t border-line pt-3">
         <summary className="cursor-pointer text-caption text-ink-500">{t('数据源')}</summary>
         <SourceNote className="border-0 pt-3" text={MACRO_SOURCE_NOTE + (data.scoringVersion ? t(' 评分版本 {version}。', { version: data.scoringVersion }) : '')} />
