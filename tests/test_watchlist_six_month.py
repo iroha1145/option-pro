@@ -357,3 +357,51 @@ def test_history_cache_waits_for_successful_refresh_after_quote_session_changes(
         {"date": "2026-09-18", "close": 50.0},
         {"date": "2026-09-25", "close": 50.0},
     ]
+
+
+@pytest.mark.parametrize(
+    ("index", "expected"),
+    [
+        # Naive stamps already name the local session, whatever the market.
+        (pd.DatetimeIndex(["2026-09-24 23:30", "2026-09-25 23:30"]), [date(2026, 9, 24), date(2026, 9, 25)]),
+        (pd.Index([date(2026, 9, 24), date(2026, 9, 25)], dtype=object), [date(2026, 9, 24), date(2026, 9, 25)]),
+        (pd.Index(["2026-09-24", "2026-09-25"], dtype=object), []),
+    ],
+)
+def test_six_month_closes_keep_naive_and_plain_date_sessions(monkeypatch, index, expected):
+    monkeypatch.setattr(scanner, "download_massive_history", lambda tickers, period: (pd.DataFrame(), list(tickers)))
+    frame = pd.DataFrame({"Close": [10.0, 11.0]}, index=index)
+    closes = six_month.fetch_six_month_daily(
+        ["^N225"],
+        download=lambda **_kwargs: frame,
+        market_timezone=stocks._watchlist_market_timezone,
+    )
+    assert [day for day, _close in closes.get("^N225", [])] == expected
+
+
+def test_watchlist_quote_reads_a_naive_intraday_stamp_in_the_market_timezone(monkeypatch):
+    def download(*, interval, period, **_kwargs):
+        if interval == "5m":
+            return pd.DataFrame({"Close": [105.0]}, index=pd.DatetimeIndex(["2026-09-24 15:55"]))
+        return pd.DataFrame({"Close": [98.0, 100.0]}, index=pd.to_datetime(["2026-09-23", "2026-09-24"]))
+
+    monkeypatch.setattr(massive, "configured", lambda: False)
+    monkeypatch.setattr(stocks.yf, "download", download)
+    row = asyncio.run(stocks._build_watchlist(["AAPL"]))["groups"][0]["stocks"][0]
+    assert row["quote_as_of"] == "2026-09-24T19:55:00+00:00"
+    assert row["spark"] == [98.0, 105.0]
+
+
+def test_watchlist_quote_ignores_plain_date_daily_bars(monkeypatch):
+    def download(*, interval, period, **_kwargs):
+        if interval == "5m":
+            return pd.DataFrame(
+                {"Close": [105.0]},
+                index=pd.DatetimeIndex(["2026-09-24 15:55"], tz="America/New_York"),
+            )
+        return pd.DataFrame({"Close": [98.0, 100.0]}, index=pd.Index([date(2026, 9, 23), date(2026, 9, 24)], dtype=object))
+
+    monkeypatch.setattr(massive, "configured", lambda: False)
+    monkeypatch.setattr(stocks.yf, "download", download)
+    with pytest.raises(RuntimeError, match=r"watchlist mostly failed \(0/1 succeeded\)"):
+        asyncio.run(stocks._build_watchlist(["AAPL"]))
