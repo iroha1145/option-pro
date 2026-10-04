@@ -818,6 +818,11 @@
   padding: 8px 0;
   line-height: 20px;
 }
+/* 行情带按钮只有 24px 高：粗指针下行情带加高到 44px，每个指数整格可点。 */
+@media (pointer: coarse) {
+  .marquee-track { height: 2.75rem; }
+  .marquee-track button { min-height: 2.75rem; }
+}
 /* 说明图标视觉只有 11-13px：粗指针下用透明伪元素把点按区域扩到约 44px，外观不变。 */
 @media (pointer: coarse) {
   .t-tt-trigger { position: relative; }
