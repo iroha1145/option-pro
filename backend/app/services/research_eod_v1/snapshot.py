@@ -259,7 +259,6 @@ def _assemble_factors(
         "G": None if g is None else float(g),
     }
 
-
 @dataclass(frozen=True)
 class SnapshotRow:
     security_id: str
@@ -751,8 +750,3 @@ def compute_snapshot(
         "rows": rows,
         "network_calls": 0,
     }
-
-
-def snapshot_fingerprint(payload: Mapping[str, Any]) -> str:
-    clone = {k: v for k, v in payload.items() if k != "as_of"}
-    return hashlib.sha256(json.dumps(clone, sort_keys=True, default=str).encode()).hexdigest()

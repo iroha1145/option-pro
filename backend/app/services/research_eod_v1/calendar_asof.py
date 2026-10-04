@@ -39,22 +39,6 @@ def last_completed_session(as_of: datetime) -> date:
     return last_completed_trading_day(require_aware(as_of))
 
 
-def last_known_finalized_session(
-    as_of: datetime,
-    *,
-    last_proven_finalized: date | None = None,
-) -> date:
-    """Calendar close is not vendor finalization. Without proof, keep the last proven day."""
-
-    calendar = last_completed_session(as_of)
-    if last_proven_finalized is None:
-        return calendar
-    proven = last_proven_finalized
-    if not is_trading_day(proven):
-        proven = previous_trading_day(proven, include_start=True)
-    return min(calendar, proven)
-
-
 def last_complete_eod_session(
     as_of: datetime,
     *,
@@ -89,31 +73,6 @@ def settled_eod_session(
         require_aware(as_of).astimezone(timezone.utc) - LIVE_SETTLE_BUFFER,
         source_finalized_through=source_finalized_through,
     )
-
-
-def capture_as_of(now: datetime) -> datetime:
-    """Research runners pass the real clock. They must not jump to a future close."""
-
-    return require_aware(now, name="now")
-
-
-def disclosed_source_finalized_through(
-    as_of: datetime,
-    *,
-    vendor_finalized_through: date | None = None,
-) -> date:
-    """Shared research finalization policy for live_capture and reconstruction.
-
-    A vendor ``finalized_at`` / ``finalized_through`` field is used when present.
-    Yahoo and similar sources have no such field. Missing that field is not a
-    permanent freeze: research uses a disclosed next-session confirmation lag.
-    The recapture clock is never treated as vendor finalization.
-    """
-
-    if vendor_finalized_through is not None:
-        return last_complete_eod_session(as_of, source_finalized_through=vendor_finalized_through)
-    calendar = last_completed_session(as_of)
-    return shift_sessions(calendar, -VENDOR_WITHOUT_FINALIZED_LAG_SESSIONS)
 
 
 def eod_evaluation_as_of(session: date) -> datetime:
@@ -173,11 +132,3 @@ def validate_information_cutoff(
         raise ValueError("completed-session data cannot be available before the session closes")
     if signal_time < source_available_at:
         raise ValueError("signal predates source availability")
-
-
-def holding_exit_session(entry_session: date, holding_sessions: int) -> date:
-    """Exit open of T+1+H: H complete sessions after the entry session."""
-
-    if type(holding_sessions) is not int or holding_sessions < 1:
-        raise ValueError("holding_sessions must be a positive integer")
-    return shift_sessions(entry_session, holding_sessions)

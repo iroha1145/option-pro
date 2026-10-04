@@ -18,7 +18,6 @@ from app.services.research_eod_v1.constants import (
     US_MAJOR_MICS,
 )
 
-
 @dataclass(frozen=True)
 class VenueDecision:
     eligible: bool
@@ -61,13 +60,6 @@ def classify_venue(metadata: Mapping[str, Any] | None) -> VenueDecision:
     if security_type:
         return VenueDecision(False, f"UNSUPPORTED_SECURITY_TYPE:{security_type}", None, "metadata")
     return VenueDecision(False, "MISSING_SECURITY_TYPE", None, "required_fields")
-
-
-def ticker_dot_is_not_a_venue_test(ticker: str) -> bool:
-    """Documented invariant: eligibility must ignore '.' in the symbol."""
-
-    return "." in str(ticker or "")
-
 
 # Current-theme membership only. These are 2026-09 static notes for U_current
 # audit, not point-in-time listings and not a permission to backfill history.

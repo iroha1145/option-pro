@@ -34,12 +34,6 @@ def has_complete_session_bar(series: SecuritySeries, session: date) -> bool:
     )
 
 
-def economic_identity(series: SecuritySeries) -> str:
-    """Theme tags do not change the economic identity of a security."""
-
-    return series.security_id
-
-
 def theme_membership(
     series: SecuritySeries,
     *,
@@ -84,14 +78,6 @@ def is_theme_candidate(
         return False, "MISSING_SESSION_BAR"
     # source_available_at is checked by the caller against as_of.
     return True, "ok"
-
-
-def is_reference_name(series: SecuritySeries, *, session: date, target_track: str) -> bool:
-    if series.security_id in {"SPY", "QQQ"}:
-        return has_complete_session_bar(series, session) or bool(series.dates)
-    if series.asset_track != target_track and series.asset_track != "etf":
-        return False
-    return True
 
 
 def source_is_available(series: SecuritySeries, as_of) -> bool:
