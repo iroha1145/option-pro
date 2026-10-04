@@ -223,7 +223,7 @@ export default function MacroConditionsPanel({
       {/* A. 标题行 */}
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
-          <p className="eyebrow">{t('宏观环境 · MACRO CONDITIONS')}</p>
+          <p className="eyebrow">{t('宏观环境')}</p>
           <p className="mt-1 text-body-s text-ink-500">
             {t('联储流动性、融资、国债、利率、信用、风险与外部冲击的 5 年历史分位。')}
           </p>

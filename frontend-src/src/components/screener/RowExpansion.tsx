@@ -212,7 +212,7 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
     <div className="grid grid-cols-1 gap-x-8 gap-y-5 border-t border-line bg-card-warm/60 px-4 py-4 md:grid-cols-3">
       {/* ① 分项强度 breakdown（与行内微条同源） */}
       <div>
-        <p className="eyebrow">{t('分项强度 · BREAKDOWN')}</p>
+        <p className="eyebrow">{t('分项强度')}</p>
         <div className="mt-3 grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-2.5">
           {dims.map(({ key, label, value }) => {
             const w = weightOf(key);

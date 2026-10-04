@@ -46,7 +46,7 @@ export default function MacroFitPanel({
     <div>
       {!bare && (
         <p className="eyebrow">
-          {t('宏观适配 · MACRO FIT')}
+          {t('宏观适配')}
           <InfoHint hint={macroShadowHint()} side="bottom" size={11} className="ml-1" />
         </p>
       )}

@@ -137,7 +137,7 @@ export const SCREENER: Dict = {
     'The gap between the average score of the high group (70+) and the low group (below 40) — the wider the gap, the more polarized market leadership is.',
     '高スコア群（70以上）と低スコア群（40未満）の平均点の差。差が大きいほど相場のスタイルが二極化していることを示します。',
   ],
-  '市场形态 · MARKET REGIME': ['Market regime', '市場形態 · MARKET REGIME'],
+  '市场形态': ['Market regime', '市場形態'],
   '6 维': ['6 factors', '6軸'],
 
   /* ---------------- ResultCards.tsx ---------------- */
@@ -163,7 +163,6 @@ export const SCREENER: Dict = {
   '近 5 日 · 点阵面积': ['Last 5 days · dot-matrix area', '直近5日 · ドットマトリクス面'],
   '日线 · 点阵面积': ['Daily · dot-matrix area', '日足 · ドットマトリクス面'],
   '日线数据暂不可用': ['Daily data unavailable', '日足データが利用できません'],
-  '分项强度 · BREAKDOWN': ['Subscores · BREAKDOWN', 'サブスコア · BREAKDOWN'],
   '权重来自当前评分方法（右侧栏）': ['Weights come from the current scoring method (sidebar, right).', 'ウェイトは現在の評価方法（右側のサイドバー）に基づきます。'],
   '操作与信号': ['Actions & signals', '操作とシグナル'],
   '打开详情': ['Open details', '詳細を開く'],

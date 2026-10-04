@@ -97,7 +97,6 @@ export const MACRO: Dict = {
   '后台服务暂不可用，请稍后重试。': ['The background service is unavailable. Please try again later.', 'バックグラウンド処理を利用できません。しばらくしてから再度お試しください。'],
   '刷新请求未成功。': ['The refresh request did not succeed.', '更新リクエストは失敗しました。'],
   '宏观环境暂不可用': ['Macro conditions unavailable', 'マクロ環境は利用できません'],
-  '宏观环境 · MACRO CONDITIONS': ['Macro conditions', 'マクロ環境 · MACRO CONDITIONS'],
   '联储流动性、融资、国债、利率、信用、风险与外部冲击的 5 年历史分位。': [
     '5-year historical percentiles for Fed liquidity, funding, Treasury, rates, credit, risk, and external shocks.',
     'FRBの流動性・ファンディング・国債・金利・クレジット・リスク・外部ショックに関する過去5年間のヒストリカル・パーセンタイル。',
@@ -213,7 +212,6 @@ export const MACRO: Dict = {
   '无读数': ['No reading', 'データなし'],
 
   /* ============ src/components/shared/MacroFitPanel.tsx ============ */
-  '宏观适配 · MACRO FIT': ['Macro fit', 'マクロ適合度 · MACRO FIT'],
   '置信度': ['Confidence', '信頼度'],
   '正面': ['Positive', 'ポジティブ'],
   '：': [': ', '：'],

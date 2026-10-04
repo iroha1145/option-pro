@@ -1312,7 +1312,7 @@ export default function Screener() {
             <MarketRegimeCard market={marketQ.data} />
           ) : marketQ.error ? (
             <div className="card-surface p-5">
-              <p className="eyebrow">{__t('市场形态 · MARKET REGIME')}</p>
+              <p className="eyebrow">{__t('市场形态')}</p>
               <p className="mt-3 text-body-s text-ink-500">{marketQ.error.code === 503 ? __t('数据暂不可用 · 稍后刷新再试') : marketQ.error.message}</p>
               <button
                 onClick={() => marketQ.refresh()}

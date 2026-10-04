@@ -260,7 +260,7 @@ test.describe("macro conditions desktop", () => {
     await stubApi(page, { conditions: conditions(), history: history() });
     await openMarket(page);
 
-    await expect(page.getByText("宏观环境 · MACRO CONDITIONS")).toBeVisible();
+    await expect(page.getByText("宏观环境", { exact: true })).toBeVisible();
     await expect(page.getByRole("region", { name: "宏观环境综合分", exact: true })).toBeVisible();
     await expect(
       page
