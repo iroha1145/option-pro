@@ -25,7 +25,7 @@ export default function PageFallback() {
       {/* transitions.dev 31 点阵扫描：分包通常几百毫秒就到，转圈在这个时长里
           只会一闪而过、显得焦躁；点阵是「纸面终端」语汇里更安静的等待信号。 */}
       <span className="flex items-center">
-        <MatrixLoader variant="scan" />
+        <MatrixLoader />
       </span>
       <span className="ml-2.5 font-mono text-caption text-ink-400">{t('加载中…')}</span>
     </div>
