@@ -3339,7 +3339,7 @@ class RetentionTask:
         settings_factory: Callable[[], Any] | None = None,
         repository_factory: Callable[[Path], Any] | None = None,
         ai_repository_factory: Callable[[], Any] | None = None,
-        ai_history_retain_days: int = 30,
+        ai_history_retain_days: int = AI_HISTORY_MIN_RETAIN_DAYS,
         now: Callable[[], datetime] | None = None,
     ) -> None:
         self.owner_id = f"{owner_id}:retention"
@@ -3536,10 +3536,7 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         owner_id,
         retention_backup,
         ai_repository_factory=ai_history_repository,
-        ai_history_retain_days=max(
-            int(config.catalyst.journal_retention_days),
-            AI_HISTORY_MIN_RETAIN_DAYS,
-        ),
+        ai_history_retain_days=config.catalyst.journal_retention_days,
     )
     from app.public_stock_data import PublicStockDataRefresh
     from app.public_option_data import PublicOptionDataRefresh

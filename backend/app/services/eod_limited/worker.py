@@ -284,7 +284,7 @@ def run_eod_limited_job(
             horizons=list(dict.fromkeys(item_horizon for _, item_horizon in wanted)),
             themes=themes,
             geometry_workers=4,
-            **({} if scoring_options is None else {"options": scoring_options}),
+            options=scoring_options,
         )
     writer = DiagnosticWriter(
         root=root, served_session=target.isoformat(), compute_version=COMPUTE_VERSION,
@@ -327,7 +327,7 @@ def run_eod_limited_job(
                 algorithms=algorithms,
                 on_family_rows=retain_block,
                 **({"compact": True, "snapshot_cache": snapshot_cache} if market_input else {}),
-                **({} if scoring_options is None else {"options": scoring_options}),
+                options=scoring_options,
             )
             if synthetic_input:
                 scored["synthetic"] = True

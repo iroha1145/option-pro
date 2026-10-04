@@ -171,9 +171,7 @@ def ensure_sector(sector_id: str) -> None:
 
 @router.get("")
 async def list_sectors():
-    return sanitize(
-        {"sectors": [{"id": id_, "name": data["name"], "tickers": data["tickers"]} for id_, data in SECTORS.items()]}
-    )
+    return {"sectors": [{"id": id_, "name": data["name"], "tickers": data["tickers"]} for id_, data in SECTORS.items()]}
 
 
 async def _sector_iv_rows(sector_id: str) -> list[dict[str, Any]]:
