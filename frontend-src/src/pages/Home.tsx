@@ -518,9 +518,12 @@ export default function Home() {
             <h3 className="text-h3 text-ink-900">{t('CTA 趋势资金')}</h3>
             <Link
               to="/cta"
-              className="shrink-0 text-caption font-medium text-brand-700 transition-colors duration-fast hover:text-brand-600"
+              className="link-learn shrink-0 text-caption font-medium text-brand-700 transition-colors duration-fast hover:text-brand-600 [@media(pointer:coarse)]:-my-3.5 [@media(pointer:coarse)]:py-3.5"
             >
               {t('查看全部')}
+              <span className="link-learn-chevron" aria-hidden="true">
+                <Icon name="chevron-right" size={12} />
+              </span>
             </Link>
           </div>
           {ctaQ.loading && !ctaQ.data ? (
