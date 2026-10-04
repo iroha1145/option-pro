@@ -19,7 +19,7 @@ import { t } from '../../i18n/core.ts';
 
 const LABEL_STYLE: Record<StockTrendBiasView['trend_bias_label'], string> = {
   偏多: 'bg-up-50 text-up-700',
-  中性: 'bg-warn-50 text-warn-700',
+  中性: 'bg-paper-2 text-ink-600',
   偏空: 'bg-down-50 text-down-700',
   数据不足: 'bg-card-warm text-ink-500',
 };
@@ -134,7 +134,7 @@ export default function TrendBiasPanel({
             type="button"
             onClick={() => refresh()}
             disabled={refreshing}
-            className="mt-2.5 inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-wait disabled:opacity-60"
+            className="control-button mt-2.5"
           >
             {refreshing ? t('正在重试') : t('重试')}
           </button>

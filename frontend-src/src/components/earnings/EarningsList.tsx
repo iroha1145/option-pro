@@ -66,7 +66,6 @@ export function TimingBadge({ timing, className }: { timing: EarningsRow['timing
   const bmo = timing === 'bmo';
   return (
     <SoftBadge
-      tone={bmo ? 'warn' : 'ai'}
       className={className}
       aria-label={bmo ? t('盘前公布') : t('盘后公布')}
     >
