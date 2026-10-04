@@ -924,31 +924,6 @@
   }
 }
 
-/* 板块热力砖：入场是自左上角铺开的对角波（延迟由 HeatMatrix 按行列算好写进
-   --heat-delay）；hover 抬起与按压回缩走独立的 translate / scale 属性，与入场
-   关键帧的 transform 互不覆盖，离开时也不再继承入场延迟。换统计周期时底色
-   平滑过渡，而不是 11 块砖同时闪一下。 */
-.heat-tile {
-  animation: heat-tile-in var(--duration-very-slow) var(--ease-smooth-out) both;
-  animation-delay: var(--heat-delay, 0ms);
-  transition:
-    translate var(--duration-fast) var(--ease-smooth-out),
-    scale var(--duration-quick) var(--ease-smooth-out),
-    box-shadow var(--duration-fast) var(--ease-smooth-out),
-    background-color var(--duration-fast) var(--ease-smooth-out);
-}
-@keyframes heat-tile-in {
-  from { opacity: 0; transform: translateY(var(--distance-medium)) scale(.98); }
-}
-@media (hover: hover) and (pointer: fine) {
-  .heat-tile:hover { translate: 0 -3px; }
-}
-.heat-tile:active { scale: .98; }
-@media (prefers-reduced-motion: reduce) {
-  .heat-tile { animation: none; }
-  .heat-tile:hover { translate: none; }
-}
-
 /* 雷达卡片定位闪烁：点击历史事件定位到当日卡时，左缘群青竖条 + 外圈光晕闪两次。
    原先写在 Breakouts.tsx 里的内联 <style>，每次渲染都重建一份样式表。 */
 @keyframes bk-locate-flash {
