@@ -1640,8 +1640,17 @@ class LocalCatalystIntelligence:
             # Several worker tasks initialize their own instance at startup;
             # the write lock serializes the check-then-ALTER column upgrade.
             connection.execute("BEGIN IMMEDIATE")
-            self._ensure_hotspot_item_score_columns(connection)
-            self._ensure_news_content_columns(connection)
+            self._add_missing_columns(
+                connection, "catalyst_local_hotspot_items", _HOTSPOT_ITEM_SCORE_COLUMNS,
+            )
+            self._add_missing_columns(
+                connection,
+                "catalyst_local_news_revisions",
+                (("article_json", "TEXT"), ("article_checked_at", "TEXT")),
+            )
+            self._add_missing_columns(
+                connection, "catalyst_local_analysis_links", (("input_context_json", "TEXT"),),
+            )
             connection.execute(
                 """INSERT OR IGNORE INTO catalyst_local_schema(
                        version,checksum,applied_at
@@ -1682,32 +1691,18 @@ class LocalCatalystIntelligence:
             self.initialize()
 
     @staticmethod
-    def _ensure_news_content_columns(connection: sqlite3.Connection) -> None:
-        for table, names in (
-            ("catalyst_local_news_revisions", ("article_json", "article_checked_at")),
-            ("catalyst_local_analysis_links", ("input_context_json",)),
-        ):
-            columns = {str(row["name"]) for row in connection.execute(f"PRAGMA table_info({table})")}
-            for name in names:
-                if name not in columns:
-                    connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} TEXT")
-
-    @staticmethod
-    def _ensure_hotspot_item_score_columns(
+    def _add_missing_columns(
         connection: sqlite3.Connection,
+        table: str,
+        columns: Iterable[tuple[str, str]],
     ) -> None:
-        columns = {
+        existing = {
             str(row["name"])
-            for row in connection.execute(
-                "PRAGMA table_info(catalyst_local_hotspot_items)"
-            ).fetchall()
+            for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
         }
-        for name, definition in _HOTSPOT_ITEM_SCORE_COLUMNS:
-            if name not in columns:
-                connection.execute(
-                    "ALTER TABLE catalyst_local_hotspot_items "
-                    f"ADD COLUMN {name} {definition}"
-                )
+        for name, definition in columns:
+            if name not in existing:
+                connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
 
     def prune_journal(
         self,

@@ -255,6 +255,43 @@ async def fetch_fmp_profiles(tickers: list[str]) -> dict[str, Any]:
     }
 
 
+def _load_cache_entries(target: Path) -> dict[Any, Any]:
+    """The raw ``entries`` map of a cache document; empty when unreadable."""
+
+    try:
+        raw = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    entries = raw.get("entries") if isinstance(raw, dict) else None
+    return entries if isinstance(entries, dict) else {}
+
+
+def _store_cache_entries(
+    entries: Mapping[str, Mapping[str, Any]],
+    target: Path,
+) -> None:
+    payload = json.dumps(
+        {"version": 1, "entries": dict(entries)},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(
+        dir=str(target.parent),
+        prefix=f".{target.name}.",
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(payload)
+        os.replace(tmp_name, target)
+    except OSError:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+
+
 # ── 市值：持久缓存 + 可信来源优先级 ──────────────────────────
 
 
@@ -263,14 +300,7 @@ def market_cap_cache_path() -> Path:
 
 
 def load_market_cap_cache(path: Path | None = None) -> dict[str, dict[str, Any]]:
-    target = path or market_cap_cache_path()
-    try:
-        raw = json.loads(target.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    entries = raw.get("entries") if isinstance(raw, dict) else None
-    if not isinstance(entries, dict):
-        return {}
+    entries = _load_cache_entries(path or market_cap_cache_path())
     out: dict[str, dict[str, Any]] = {}
     for ticker, entry in entries.items():
         if (
@@ -296,27 +326,7 @@ def store_market_cap_cache(
     entries: Mapping[str, Mapping[str, Any]],
     path: Path | None = None,
 ) -> None:
-    target = path or market_cap_cache_path()
-    payload = json.dumps(
-        {"version": 1, "entries": dict(entries)},
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
-    target.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(
-        dir=str(target.parent),
-        prefix=f".{target.name}.",
-    )
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(payload)
-        os.replace(tmp_name, target)
-    except OSError:
-        try:
-            os.unlink(tmp_name)
-        except OSError:
-            pass
-        raise
+    _store_cache_entries(entries, path or market_cap_cache_path())
 
 
 def _cache_entry_fresh(entry: Mapping[str, Any], *, now: datetime, days: int) -> bool:
@@ -511,14 +521,7 @@ def _report_period_key(ticker: str, earnings_date: str) -> str:
 
 
 def load_report_period_cache(path: Path | None = None) -> dict[str, dict[str, Any]]:
-    target = path or report_period_cache_path()
-    try:
-        raw = json.loads(target.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    entries = raw.get("entries") if isinstance(raw, dict) else None
-    if not isinstance(entries, dict):
-        return {}
+    entries = _load_cache_entries(path or report_period_cache_path())
     out: dict[str, dict[str, Any]] = {}
     for key, entry in entries.items():
         if not isinstance(key, str) or not isinstance(entry, dict):
@@ -548,27 +551,7 @@ def store_report_period_cache(
     entries: Mapping[str, Mapping[str, Any]],
     path: Path | None = None,
 ) -> None:
-    target = path or report_period_cache_path()
-    payload = json.dumps(
-        {"version": 1, "entries": dict(entries)},
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
-    target.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(
-        dir=str(target.parent),
-        prefix=f".{target.name}.",
-    )
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(payload)
-        os.replace(tmp_name, target)
-    except OSError:
-        try:
-            os.unlink(tmp_name)
-        except OSError:
-            pass
-        raise
+    _store_cache_entries(entries, path or report_period_cache_path())
 
 
 def stabilize_report_periods(
