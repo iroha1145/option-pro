@@ -441,4 +441,3 @@ export function heatColor(pct: number, span = 3): string {
   const mid = stops[2].rgb;
   return `rgb(${mid[0]},${mid[1]},${mid[2]})`;
 }
-
