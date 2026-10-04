@@ -134,6 +134,7 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
       alive = false;
       manualReadRef.current += 1;
     };
+    // 按代码重读日线；每轮轮询都会换一份 sparkline 数组，跟着它会重复请求。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [row.ticker, hasSpark]);
 

@@ -333,6 +333,7 @@ export default function Breakouts() {
   const matchWatch = (ticker: string) => !onlyWatch || !watchReady || watchSet.has(ticker);
   const current = useMemo(
     () => currentAll.filter((e) => matchFilters(e) && matchWatch(e.ticker)),
+    // matchFilters、matchWatch 每次渲染重建，这里列出的是它们实际读取的值。
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [currentAll, onlyWatch, watchSet, watchReady, statusFilter, minScore, tickerFilter],
   );
@@ -340,6 +341,7 @@ export default function Breakouts() {
      同一个开关在一个页面里有两种语义（审计 P2-17）。 */
   const filteredEvents = useMemo(
     () => events.filter((e) => matchFilters(e) && matchWatch(e.ticker)),
+    // 同上：列出的是两个过滤函数实际读取的值。
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [events, onlyWatch, watchSet, watchReady, statusFilter, minScore, tickerFilter],
   );

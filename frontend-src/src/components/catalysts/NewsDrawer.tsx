@@ -301,6 +301,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
       }
     })();
     return request.cancel;
+    // 只在换新闻或手动重读时读详情；seed 与 onUpdate 随父组件每次渲染变化。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newsId, detailEpoch]);
 
@@ -360,6 +361,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
       recoverySeqRef.current += 1;
       sleeper.cancel();
     };
+    // 恢复只跟新闻与任务身份走；job 由本效果自己写入，列进来会自我触发。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newsId, item?.newsId, item?.analysisJobId, item?.analysisStatus, recoveryEpoch]);
 
@@ -494,6 +496,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
       stopPoll();
       dropVisibleWait();
     };
+    // 轮询的生命周期只跟任务身份与状态；回调与 toast 变化不该重启计时。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newsId, job?.jobId, job?.status, pollRetryEpoch]);
 

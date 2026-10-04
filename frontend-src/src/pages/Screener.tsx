@@ -751,6 +751,7 @@ export default function Screener() {
       strengthRefreshInFlight.current = false;
       setRefreshingStrength(false);
     }
+    // universeQ、marketQ 每次渲染都是新对象，refresh 本身是稳定的。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applied, runScan, toast]);
 
