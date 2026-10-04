@@ -171,10 +171,13 @@ def test_http_failures_are_unavailable(monkeypatch, status):
 
 
 def test_unexpected_network_failure_does_not_escape(monkeypatch):
+    recorded = []
     def fail(*a):
         raise OSError("network failed")
     monkeypatch.setattr(article, "_download", fail)
+    monkeypatch.setattr(article, "record_fallback_failure", lambda stage, error: recorded.append((stage, type(error))))
     assert article.fetch_article("https://example.com")["status"] == "unavailable"
+    assert recorded == [("catalyst_article_fetch", OSError)]
 
 
 @pytest.mark.parametrize("headers,payload,reason", [

@@ -17,6 +17,7 @@ from urllib.parse import quote, urljoin, urlsplit, urlunsplit
 
 from lxml import html
 
+from app.failure_diagnostics import record_fallback_failure
 from app.services.ai_jobs.models import NEWS_ARTICLE_TEXT_MAX_CHARS
 
 from .news_links import resolve_publisher_url
@@ -386,6 +387,9 @@ def fetch_article(url: str, *, expected_title: str = "", timeout_seconds: float 
         result["reason"] = str(exc)
     except (TimeoutError, socket.timeout):
         result["reason"] = "timeout"
-    except Exception:
+    except Exception as exc:
         result["reason"] = "timeout" if deadline is not None and time.monotonic() >= deadline else "fetch_failed"
+        # Network and parser failures are expected here, but a defect in the
+        # extractor would otherwise look like an unavailable page indefinitely.
+        record_fallback_failure("catalyst_article_fetch", exc)
     return result
