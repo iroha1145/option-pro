@@ -21,12 +21,6 @@ export function overlaysConsistentWithBars(
   return position >= 0 && days.length - 1 - position <= 2;
 }
 
-export interface AnalysisAnchor {
-  time: string;
-  barKey: string;
-  price: number;
-}
-
 export interface AnalysisOverlay {
   id: string;
   sourceId: string;

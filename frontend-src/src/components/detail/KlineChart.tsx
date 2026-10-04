@@ -78,7 +78,6 @@ import type { ChartBarEx } from '@/mocks/fixtures';
 import type { TechnicalStructure } from '@/api/types';
 
 type ChartMode = 'candle' | 'area';
-export type TechOverlays = TechnicalStructure['chart_overlays'];
 
 /** 读回 ECharts 实例当前的 inside 缩放窗口（索引口径）。 */
 function readZoomWindow(chart: EChartsInstance, barCount: number): ZoomWindow | null {

@@ -11,7 +11,7 @@ export type IconName =
   | 'arrow-up-right' | 'arrow-down-right' | 'external' | 'chevron-down' | 'chevron-right'
   | 'dots-grid' | 'flame-line' | 'spark-ai' | 'shield' | 'target' | 'flag' | 'x' | 'plus'
   | 'refresh' | 'wallet-gauge' | 'doc-quote' | 'logout' | 'arrow-up' | 'arrow-down' | 'minus'
-  | 'check' | 'menu' | 'list' | 'cards' | 'languages' | 'display'
+  | 'check' | 'menu' | 'languages' | 'display'
   | 'trend-line' | 'ray-right' | 'channel' | 'rect' | 'fib' | 'text-note'
   | 'lock' | 'unlock' | 'eye' | 'eye-off' | 'undo' | 'redo' | 'expand' | 'compress';
 
@@ -190,15 +190,6 @@ const PATHS: Record<IconName, ReactElement> = {
   minus: <path d="M5 12h14" />,
   check: <path d="m4.8 12.8 4.6 4.6L19.2 6.6" />,
   menu: <path d="M4 7.2h16M4 12h16M4 16.8h10" />,
-  list: <path d="M8.4 6.4h11.2M8.4 12h11.2M8.4 17.6h11.2M4.2 6.4h.9M4.2 12h.9M4.2 17.6h.9" />,
-  cards: (
-    <>
-      <rect x="3.4" y="3.6" width="8.2" height="8.2" rx="1.6" />
-      <rect x="12.4" y="3.6" width="8.2" height="8.2" rx="1.6" />
-      <rect x="3.4" y="12.6" width="8.2" height="8.2" rx="1.6" />
-      <rect x="12.4" y="12.6" width="8.2" height="8.2" rx="1.6" />
-    </>
-  ),
   /* 地球经纬线：外圈 + 中央经线「透镜」+ 赤道横线，语言切换用 */
   languages: (
     <>

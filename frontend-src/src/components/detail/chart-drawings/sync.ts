@@ -565,13 +565,6 @@ export class DrawingOutbox {
     this.sendScopeRevision = null;
   }
 
-  hasInflight(): boolean {
-    for (const chain of this.chains.values()) {
-      if (chain.inflight) return true;
-    }
-    return false;
-  }
-
   /**
    * 范围级任务（clear / replace）与单条任务分属两侧，跨侧必须按入队顺序串行：
    * 对侧有在飞的就等，对侧排在更前面的也要等。同侧互不阻塞，所以不会死锁。
@@ -698,25 +691,6 @@ export class DrawingOutbox {
       chain.pending = chain.pending.map(patch);
     }
     this.persistCurrent();
-  }
-
-  replacePending(ops: RegeneratedOp[]): void {
-    for (const [id, chain] of this.chains) {
-      if (id === SCOPE_JOB_ID) continue;
-      chain.pending = [];
-    }
-    for (const op of ops) {
-      if (op.type === 'delete') {
-        this.enqueue({
-          drawingId: op.drawingId,
-          type: 'delete',
-          drawing: op.drawing,
-          expectedDrawingRevision: op.drawing.revision,
-        });
-      } else {
-        this.enqueue({ drawingId: op.drawingId, type: op.type, drawing: op.drawing });
-      }
-    }
   }
 
   /**

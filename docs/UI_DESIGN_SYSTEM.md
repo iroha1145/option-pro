@@ -13,7 +13,7 @@
 | 过渡样式与适配 | `frontend-src/src/styles/transitions-catalog.css` | 保留来源样式，项目适配集中书写 |
 | JavaScript 动效 | `frontend-src/src/lib/motion.ts`、`frontend-src/src/lib/transitions.ts` | 共享参数与计时读取，不在调用处随意新增时长 |
 | 选择与提示 | `FilterButton`、`Segmented`、`GlidePill`、`MenuSelect`、`InfoHint` | 复用键盘行为、定位与减少动态效果处理 |
-| 信息展示 | `DataTable`、`InsightCard`、`StatCard`、`SourceNote` | 信息结构和数据口径在页面间一致 |
+| 信息展示 | `DataTable`、`InsightFrame` / `InsightValue`、`StatCard`、`SourceNote` | 信息结构和数据口径在页面间一致 |
 | 浮层与反馈 | `Drawer`、`ConfirmDialog`、`Toast`、`CommandPalette` | 统一焦点、关闭、背景滚动与状态表达 |
 | 加载与异常 | `SkeletonReveal`、`EmptyState`、`InlineFallback`、`StaleStrip` | 加载、空结果、错误和旧数据分别呈现 |
 | 按钮与进行中反馈 | `.btn-primary`、`.btn-primary.btn-sm`、`Spinner`、`BusyIcon` / `IconSwap`、`ThinkingLabel` | 主操作不再手写样式；请求在途用同格切换的加载圈，模型任务在途用扫光文字 |
@@ -25,7 +25,7 @@
 
 ### Beautiful UI：信息层次与搜索反馈
 
-采用其洞察卡片（Insight Cards）的组织方式：标题和口径在上，图形居中，读数、变化与比较基准相邻。现有 `InsightCard`、`InsightFrame`、`InsightValue` 和 `Sparkline` 承接此规则。搜索沿用其内嵌空态、清除按钮与轻量淡入方式，对应 `CommandPalette`。
+采用其洞察卡片（Insight Cards）的组织方式：标题和口径在上，图形居中，读数、变化与比较基准相邻。现有 `InsightFrame`、`InsightValue` 和 `Sparkline` 承接此规则。搜索沿用其内嵌空态、清除按钮与轻量淡入方式，对应 `CommandPalette`。
 
 价格和涨跌必须说明比较基准；来源和时间不藏在悬停操作里。卡片布局用来解释数据，不增加虚构置信度、示例值或自动推断出的交易建议。
 
