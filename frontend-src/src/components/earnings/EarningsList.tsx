@@ -150,7 +150,7 @@ function ExpectedMoveCell({
   return (
     <span className={cn('flex flex-col items-start', align === 'end' && 'items-end text-right')}>
       <span className="inline-flex items-center gap-1">
-        <span className="font-mono text-data-m text-ink-800 tnum">±{pct.toFixed(1)}%</span>
+        <span className="text-data-m font-medium text-ink-800 tnum">±{pct.toFixed(1)}%</span>
         {unverified && (
           <InfoHint hint={{ title: t('预期波动'), body: t('按期权报价估算，部分合约未提供报价时间。') }} size={11} />
         )}
@@ -434,7 +434,7 @@ export default function EarningsList({
                     {/* EPS 预期 vs 实际 */}
                     <span className="flex items-center gap-2">
                       <EpsPairBars est={est} act={act} index={i} />
-                      <span className="font-mono text-data-m tnum">
+                      <span className="text-data-m tnum">
                         <span className="text-ink-500">{est != null ? est.toFixed(2) : '—'}</span>
                         <span className="mx-1 text-ink-400">/</span>
                         <span className={cn('whitespace-nowrap', act != null ? 'font-semibold text-ink-900' : 'text-ink-400')}>
@@ -443,11 +443,11 @@ export default function EarningsList({
                       </span>
                     </span>
                     {/* 营收预期 */}
-                    <span className="hidden font-mono text-data-m text-ink-600 tnum 2xl:block">
+                    <span className="hidden text-data-m text-ink-600 tnum 2xl:block">
                       {row.revEstimate != null ? `$${fmtCompact(row.revEstimate)}` : '—'}
                     </span>
                     {/* 市值 */}
-                    <span className="hidden font-mono text-data-m text-ink-600 tnum 2xl:block">
+                    <span className="hidden text-data-m text-ink-600 tnum 2xl:block">
                       {marketCap != null ? `$${fmtCompact(marketCap)}` : '—'}
                     </span>
                     <ExpectedMoveCell pct={move} index={i} status={moveStatus} />
@@ -487,7 +487,7 @@ export default function EarningsList({
                     <span className="mt-2.5 flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
                       <span className="flex min-w-[156px] flex-1 items-center gap-2">
                         <EpsPairBars est={est} act={act} index={i} />
-                        <span className="font-mono text-micro tnum">
+                        <span className="text-caption tnum">
                           <span className="text-ink-500">{est != null ? est.toFixed(2) : '—'}</span>
                           <span className="mx-1 text-ink-400">/</span>
                           <span className={cn('whitespace-nowrap', act != null ? 'text-ink-900' : 'text-ink-400')}>

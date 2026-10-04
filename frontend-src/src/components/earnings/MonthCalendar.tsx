@@ -148,10 +148,10 @@ export default function MonthCalendar({
 
       {/* 星期头（周一→周日，周末淡显） */}
       <div className="grid grid-cols-7 border-b border-line bg-card-warm/60">
-        {WEEKDAYS.map((w, i) => (
+        {WEEKDAYS.map((w) => (
           <span
             key={w}
-            className={cn('py-1.5 text-center font-mono text-micro', i >= 5 ? 'text-ink-400' : 'text-ink-400')}
+            className="py-1.5 text-center text-micro text-ink-500"
           >
             {t(w)}
           </span>

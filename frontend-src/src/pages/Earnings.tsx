@@ -431,10 +431,10 @@ export default function Earnings() {
         )}
       </SoftBadge>
       {q.loading && q.data && (
-        <span className="font-mono text-micro text-ink-400">{t('正在检查更新…')}</span>
+        <span className="text-micro text-ink-500">{t('正在检查更新…')}</span>
       )}
       {!q.loading && q.error && q.data && (
-        <span className="font-mono text-micro text-warn-700">{t('刷新失败 · 显示已有数据')}</span>
+        <span className="text-micro text-warn-700">{t('刷新失败 · 显示已有数据')}</span>
       )}
       {isOwner && (
         <EarningsRefreshButton
