@@ -1443,7 +1443,7 @@ function PagerButton({ label, disabled, onClick }: { label: string; disabled: bo
     <button
       onClick={onClick}
       disabled={disabled}
-      className="control-button min-h-11 min-w-11"
+      className="control-button touch-target"
     >
       {label}
     </button>
