@@ -99,11 +99,9 @@ export default function StockDetail() {
     else navigate('/watchlist', { replace: true });
   };
 
-  /* 页首操作行：同一行控件同高。返回用 .control-button（桌面 32、粗指针 44）；
-     WatchlistToggle 在 shared/ 里自带 min-h-11（44），精确指针下由这一行收到同一档
-     32，粗指针仍保留 44 的触控高度。 */
+  /* 页首操作行：返回与加入自选都是 .control-button，同一行同高（桌面 32、粗指针 44） */
   const toolbar = (
-    <div className="flex flex-wrap items-center gap-2 [@media(pointer:fine)]:[&>*]:min-h-8">
+    <div className="flex flex-wrap items-center gap-2">
       <button type="button" onClick={goBack} className="control-button">
         <Icon name="chevron-right" size={14} className="rotate-180" />
         {__t('返回')}
