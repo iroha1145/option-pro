@@ -33,7 +33,7 @@ export default function DriverList({
                   {hint && <InfoHint hint={hint} side="bottom" align="start" size={11} />}
                 </span>
                 <span className="flex shrink-0 items-center gap-2">
-                  <span className="font-mono text-data-m text-ink-800 tnum">
+                  <span className="text-data-m text-ink-800 tnum">
                     {typeof driver.score === 'number' ? driver.score.toFixed(1) : '—'}
                   </span>
                   <ChangeBadge value={driver.scoreChange7d} size="sm" format="points" />

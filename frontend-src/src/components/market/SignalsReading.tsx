@@ -96,8 +96,8 @@ function MetricRows({ data }: { data: MarketSignalsSnapshot }) {
               <InfoHint hint={MARKET_SIGNAL_HINTS[metric.key]} align="start" size={11} />
             )}
           </span>
-          <span className="text-right font-mono text-caption text-ink-800 tnum">{metric.value}</span>
-          <span className="text-right font-mono text-micro text-ink-400 tnum">
+          <span className="text-right text-caption text-ink-800 tnum">{metric.value}</span>
+          <span className="text-right text-micro text-ink-400 tnum">
             {metric.topScore !== null || metric.bottomScore !== null
               ? `${metric.topScore ?? '—'} / ${metric.bottomScore ?? '—'}`
               : t('未评分')}
@@ -177,21 +177,21 @@ export default function SignalsReading({
                 {t('顶部风险')}
                 <InfoHint hint={SCORE_HINTS.readingTop} side="bottom" align="start" size={11} className="ml-1" />
               </span>
-              <span className="mt-1 block font-mono text-data-m text-down-700 tnum">{signals.topScore ?? '—'}</span>
+              <span className="mt-1 block metric-value text-data-m text-down-700">{signals.topScore ?? '—'}</span>
             </p>
             <p className="rounded-md border border-line bg-card-warm p-3">
               <span className="block text-micro text-ink-400">
                 {t('底部修复')}
                 <InfoHint hint={SCORE_HINTS.readingBottom} side="bottom" size={11} className="ml-1" />
               </span>
-              <span className="mt-1 block font-mono text-data-m text-up-700 tnum">{signals.bottomScore ?? '—'}</span>
+              <span className="mt-1 block metric-value text-data-m text-up-700">{signals.bottomScore ?? '—'}</span>
             </p>
             <p className="rounded-md border border-line bg-card-warm p-3">
               <span className="block text-micro text-ink-400">
                 {t('数据质量')}
                 <InfoHint hint={SCORE_HINTS.readingDataQuality} side="bottom" align="end" size={11} className="ml-1" />
               </span>
-              <span className="mt-1 block font-mono text-data-m text-ink-800 tnum">{signals.dataQuality ?? '—'}</span>
+              <span className="mt-1 block metric-value text-data-m text-ink-800">{signals.dataQuality ?? '—'}</span>
             </p>
           </div>
           <div className="mt-5">

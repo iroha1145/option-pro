@@ -80,13 +80,13 @@ export default function MacroTechnicalMatrix({
           <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2">
             <div>
               <dt className="text-micro text-ink-400">{t('技术形态')}</dt>
-              <dd className="font-mono text-data-l text-ink-900 tnum">
+              <dd className="metric-value text-data-l text-ink-900">
                 {technical?.toFixed(1)}
               </dd>
             </div>
             <div>
               <dt className="text-micro text-ink-400">{t('结构性宏观')}</dt>
-              <dd className="font-mono text-data-l text-ink-900 tnum">
+              <dd className="metric-value text-data-l text-ink-900">
                 {structural?.toFixed(1)}
               </dd>
             </div>
@@ -96,7 +96,7 @@ export default function MacroTechnicalMatrix({
               {t('差值')}{' '}
               <span
                 className={cn(
-                  'font-mono tnum',
+                  'tnum',
                   gap > 20 ? 'text-warn-700' : gap < -20 ? 'text-brand-700' : 'text-ink-700',
                 )}
               >

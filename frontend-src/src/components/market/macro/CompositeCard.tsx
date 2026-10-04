@@ -1,6 +1,6 @@
 /**
  * 宏观综合卡 — 综合分 / Regime / 7 日变化 / 置信度 / 有效模块数 / 数据截止。
- * 大分数用 font-mono + text-data-xxl + tnum；分数条复用 strengthBarClass 色阶。
+ * 大分数用 metric-value + text-data-xxl；分数条复用 strengthBarClass 色阶。
  * 明确写出「历史分位，不是预测」，不做任何进度条式的品牌装饰。
  */
 import { motion } from 'framer-motion';
@@ -68,7 +68,7 @@ export default function CompositeCard({
       </div>
 
       <div className="mt-4 flex flex-wrap items-end gap-x-4 gap-y-2">
-        <span className="font-mono text-data-xxl text-ink-900 tnum">
+        <span className="metric-value text-data-xxl text-ink-900">
           <span className="sr-only">{hasScore ? (composite.score as number).toFixed(1) : '—'}</span>
           <span aria-hidden="true">{shown === null ? '—' : shown.toFixed(1)}</span>
         </span>

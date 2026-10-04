@@ -36,7 +36,7 @@ function IvRankBar({ rank, replayKey }: { rank: number; replayKey: string }) {
   useAppearance();
   return (
     <span className="inline-flex items-center gap-2">
-      <span className="w-8 text-right font-mono text-body-s font-semibold text-ink-800 tnum">{rank}</span>
+      <span className="w-8 text-right text-body-s font-semibold text-ink-800 tnum">{rank}</span>
       <span className="h-1 w-[100px] strength-track overflow-hidden rounded-pill bg-line" role="presentation">
         <span
           key={replayKey}
@@ -244,7 +244,7 @@ export default function IvPanel({
                     </span>
                   </td>
                   <td
-                    className="px-2 py-2 text-right font-mono text-data-m text-ink-800 tnum"
+                    className="px-2 py-2 text-right text-data-m text-ink-800 tnum"
                   >
                     <LivePrice symbol={r.ticker} fallback={r.price} />
                   </td>
@@ -255,7 +255,7 @@ export default function IvPanel({
                       <span className="font-mono text-ink-400">—</span>
                     )}
                   </td>
-                  <td className="px-2 py-2 text-right font-mono text-data-m text-ink-600 tnum">
+                  <td className="px-2 py-2 text-right text-data-m text-ink-600 tnum">
                     {r.atmIv !== null ? `${r.atmIv.toFixed(1)}%` : <span className="text-ink-400">—</span>}
                   </td>
                   <td className="py-2 pl-2">

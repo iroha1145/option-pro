@@ -104,7 +104,7 @@ export default function StatusCard({
         <CountdownRow label={t("距下一收盘")} at={data.next_close} now={now} />
         <div className="flex items-center justify-between border-y border-line py-2.5">
           <span className="text-caption text-ink-500">{t('节假日')}</span>
-          <span className="font-mono text-data-m text-ink-600 tnum">{data.holiday ?? '—'}</span>
+          <span className="text-data-m text-ink-600">{data.holiday ?? '—'}</span>
         </div>
       </div>
       <p className="mt-3 text-caption text-ink-500">

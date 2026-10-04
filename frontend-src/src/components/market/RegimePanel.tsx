@@ -89,7 +89,7 @@ export default function RegimePanel({
       <div className="flex items-start justify-between">
         <h3 className="text-h3 text-ink-900">{t('市场形态六维')}</h3>
         <p className="text-right">
-          <span className="font-mono text-data-l text-ink-900 tnum">{mean.toFixed(1)}</span>
+          <span className="metric-value text-data-l text-ink-900">{mean.toFixed(1)}</span>
           <span className="block text-micro text-ink-400">
             {t('综合均值')}
             <InfoHint hint={SCORE_HINTS.marketRegime} side="bottom" align="end" size={11} className="ml-1" />
@@ -106,7 +106,7 @@ export default function RegimePanel({
                   {d.label}
                   <InfoHint hint={d.hint} side="bottom" size={12} />
                 </span>
-                <span className="font-mono text-data-m text-ink-800 tnum">{score}</span>
+                <span className="text-data-m text-ink-800 tnum">{score}</span>
               </div>
               <motion.div
                 className="mt-1.5 h-1 strength-track overflow-hidden rounded-pill bg-line"

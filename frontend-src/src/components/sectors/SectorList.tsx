@@ -54,7 +54,7 @@ export default function SectorList({
           row.avgReturn !== null ? (
             <span
               className={cn(
-                'font-mono text-data-m font-semibold tnum',
+                'text-data-m font-semibold tnum',
                 row.avgReturn === 0 ? 'text-ink-500' : row.avgReturn > 0 ? 'text-up-700' : 'text-down-700',
               )}
             >
@@ -119,7 +119,7 @@ export default function SectorList({
         sortable: true,
         sortValue: (row) => row.coveredCount ?? Number.NaN,
         render: (row) => (
-          <span className="font-mono text-data-m text-ink-600 tnum">
+          <span className="text-data-m text-ink-600 tnum">
             {row.coveredCount ?? '—'} / {row.memberCount}
           </span>
         ),
