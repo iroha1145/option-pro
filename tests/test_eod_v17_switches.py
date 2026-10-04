@@ -236,11 +236,13 @@ def test_refresh_looks_up_only_unseen_tickers_within_the_budget_and_survives_fai
             raise RuntimeError("provider down")
         return {"cik": f"cik-{ticker}", "sic_code": "3674" if ticker != "BZZ" else None}
 
-    counts = industry_module.refresh_missing(table, [("AAA", "1"), "BAD", ("BBB", "cik-BBB"), "BZZ", "CCC", "DDD"],
-                                             budget=4, as_of=date(2026, 9, 28), fetch=fetch)
+    counts = industry_module.refresh_missing(
+        table, [("AAA", "1"), ("BAD", None), ("BBB", "cik-BBB"), ("BZZ", None), ("CCC", None), ("DDD", None)],
+        budget=4, as_of=date(2026, 9, 28), fetch=fetch,
+    )
     assert seen == ["BAD", "BBB", "BZZ", "CCC"]  # sorted, AAA already known, DDD deferred
     assert counts == {"looked_up": 4, "failed": 1, "classified": 2, "no_sic": 1, "deferred": 1}
-    assert table.sic_for("BBB") == "3674" and table.has_ticker("BZZ") and not table.has_ticker("BAD")
+    assert table.sic_for("BBB") == "3674" and table.has_pair("BZZ") and not table.has_pair("BAD")
     assert table.sic_for("BBB", "cik-BBB") == "3674"
     # A reused ticker: the old issuer is on file, the directory now shows a new CIK -> looked up again,
     # stored under the new CIK, and the old record keeps answering for the old CIK.
@@ -272,7 +274,7 @@ def test_ensure_industry_tags_persists_the_table_and_classifies_stock_members(tm
     assert summary["classified"] == len(tags_out) == 50 + 1  # 60 stocks, every sixth unclassified, plus FRESH
     assert summary["refresh"] == {"looked_up": 1, "classified": 1}
     assert summary["groups"] == 4  # 2834 and 2836 share sic3:283; FRESH joins 602
-    assert SicTable.load(industry_module.table_path(root)).has_ticker("FRESH")
+    assert SicTable.load(industry_module.table_path(root)).has_pair("FRESH")
     again, summary2 = industry_module.ensure_industry_tags(directory, root=root, level=3, budget=10, fetch=fetch)
     assert calls == ["FRESH"] and again == tags_out and summary2["refresh"] == {}
 

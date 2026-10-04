@@ -141,9 +141,6 @@ class SicTable:
         latest = max(candidates, key=lambda record: record["as_of"] or "")
         return latest["sic_code"]
 
-    def has_ticker(self, ticker: Any) -> bool:
-        return _text(ticker) in self._by_ticker
-
     def has_pair(self, ticker: Any, cik: Any = None) -> bool:
         """True when ``sic_for(ticker, cik)`` is answered by a record (with or without a code).
 
@@ -229,7 +226,7 @@ def directory_pairs(directory: Sequence[Mapping[str, Any]], tickers: Iterable[st
 
 def refresh_missing(
     table: SicTable,
-    pairs: Iterable[tuple[str, str | None] | str],
+    pairs: Iterable[tuple[str, str | None]],
     *,
     budget: int = DEFAULT_LOOKUP_BUDGET,
     as_of: date | None = None,
@@ -238,12 +235,11 @@ def refresh_missing(
     """Look up at most ``budget`` (ticker, cik) pairs the table cannot answer; failures retry next run.
 
     The record is stored under the directory's CIK, so a reused ticker gets one
-    record per issuer; a bare ticker string means "no CIK known".
+    record per issuer; a ``None`` CIK means "no CIK known".
     """
     counts: Counter = Counter()
     stamp = (as_of or date.today()).isoformat()
-    normalized = sorted({(str(item), None) if isinstance(item, str) else (str(item[0]), _text(item[1]))
-                         for item in pairs}, key=lambda pair: (pair[0], pair[1] or ""))
+    normalized = sorted({(str(item[0]), _text(item[1])) for item in pairs}, key=lambda pair: (pair[0], pair[1] or ""))
     for ticker, cik in normalized:
         if table.has_pair(ticker, cik):
             continue
