@@ -6111,7 +6111,18 @@ class LocalCatalystIntelligence:
                                         item, force=False, timeout_seconds=3.0)
                         for item in probes
                     ]
-                    refreshed = {int(item["news_id"]): item for item in (future.result() for future in futures)}
+                    refreshed: dict[int, dict[str, Any]] = {}
+                    for future in futures:
+                        try:
+                            probed = future.result()
+                        except sqlite3.Error as error:
+                            # A writer holding the store past busy_timeout must
+                            # not abort the whole scheduled run. The item keeps
+                            # its stored state, as if the page had been
+                            # unreadable, and is probed again on a later run.
+                            record_fallback_failure("catalyst_scheduled_article_probe", error)
+                            continue
+                        refreshed[int(probed["news_id"])] = probed
                 items = [refreshed.get(int(item["news_id"]), item) for item in items]
         quality_as_of = max(now, _utc_now()) if self._article_fetcher is not None else now
         output: list[dict[str, Any]] = []
