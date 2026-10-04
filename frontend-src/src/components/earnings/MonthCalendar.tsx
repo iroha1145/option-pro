@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
+import { DUR_SECTION, DUR_UI, EASE_PAPER } from '@/lib/motion';
 import Icon from '@/components/icons';
 import type { EarningsRow } from './types';
 import { addDays, etToday, fmtMDCN, weekStartMonday } from './types';
@@ -165,7 +165,7 @@ export default function MonthCalendar({
           initial={{ x: dir * 36, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: dir * -36, opacity: 0 }}
-          transition={{ duration: 0.26, ease: EASE_PAPER }}
+          transition={{ duration: DUR_UI, ease: EASE_PAPER }}
           className="grid grid-cols-7"
         >
           {cells.map((date, ci) => {

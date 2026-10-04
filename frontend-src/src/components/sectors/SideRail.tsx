@@ -67,7 +67,7 @@ function IvHeatCard({
                   }}
                   whileHover={{
                     y: -2,
-                    transition: { duration: DUR_FAST, ease: [0.22, 1, 0.36, 1] },
+                    transition: { duration: DUR_FAST, ease: EASE_PAPER },
                   }}
                   onClick={() => onOpenTicker(row.ticker)}
                   aria-label={t('{ticker} 板块 IV 排位 {rank}，打开详情', { ticker: row.ticker, rank: row.rank })}
