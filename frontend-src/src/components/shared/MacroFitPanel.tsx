@@ -54,7 +54,7 @@ export default function MacroFitPanel({
         <div className="flex flex-wrap items-center gap-2">
           <MacroFitBadge score={score} tailwind={tailwind} status={status} />
           {hasScore && typeof confidence === 'number' && (
-            <span className="font-mono text-micro text-ink-400 tnum">
+            <span className="text-micro text-ink-400 tnum">
               {t('置信度')} {Math.round(confidence * 100)}%
             </span>
           )}
@@ -77,7 +77,7 @@ export default function MacroFitPanel({
             {typeof technicalGap === 'number' && Number.isFinite(technicalGap) && (
               <p className="text-micro text-ink-400">
                 {t('技术 − 结构性宏观 =')}{' '}
-                <span className="font-mono tnum">
+                <span className="tnum">
                   {technicalGap > 0 ? '+' : ''}{technicalGap.toFixed(1)}
                 </span>
                 {technicalGap > 20
