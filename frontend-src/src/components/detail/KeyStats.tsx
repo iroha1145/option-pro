@@ -31,8 +31,7 @@ export default function KeyStats({ detail, className }: { detail: StockDetail; c
   return (
     /* 右栏随 K 线卡拉伸时由本卡吸收高度差：52 周区间贴底，与图卡底边对齐 */
     <div className={cn('card-surface flex flex-col p-5', className)}>
-      <p className="eyebrow">KEY STATS</p>
-      <h3 className="mt-1.5 text-h3 text-ink-900">{t('关键数据')}</h3>
+      <h3 className="text-h3 text-ink-900">{t('关键数据')}</h3>
       <dl className="mb-3 mt-3 divide-y divide-line">
         {rows.map(([k, v]) => (
           <div key={k} className="flex items-center justify-between py-2">

@@ -19,6 +19,8 @@ import { usePolling } from '@/hooks/usePolling';
 import EmptyState from '@/components/shared/EmptyState';
 import WatchlistToggle from '@/components/shared/WatchlistToggle';
 import MacroFitPanel from '@/components/shared/MacroFitPanel';
+import InfoHint from '@/components/shared/InfoHint';
+import { macroShadowHint } from '@/lib/scoreHints';
 import { SkeletonBlock, SkeletonText } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { BusyIcon } from '@/components/shared/IconSwap';
@@ -266,8 +268,7 @@ export default function StockDetail() {
         <aside className="flex flex-col gap-6 xl:col-span-4">
           <KeyStats detail={detail} className="flex-1" />
           <div className="card-surface p-5">
-            <p className="eyebrow">TECHNICALS</p>
-            <h3 className="mt-1.5 text-h3 text-ink-900">{__t('技术指标')}</h3>
+            <h3 className="text-h3 text-ink-900">{__t('技术指标')}</h3>
             {technical ? (
               <TechnicalPanel technical={technical} />
             ) : techQ.loading ? (
@@ -290,18 +291,16 @@ export default function StockDetail() {
           左卡单张自然拉齐；右列由结构卡吸收差额，AI 卡（结果长短不定）贴在列底。 */}
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-12">
         <div className="card-surface p-5 xl:col-span-7">
-          <p className="eyebrow">TREND BIAS · SIGNALS</p>
-          <h3 className="mb-4 mt-1.5 text-h3 text-ink-900">{__t('趋势偏向与近期信号')}</h3>
+          <h3 className="mb-4 text-h3 text-ink-900">{__t('趋势偏向与近期信号')}</h3>
           <TrendBiasPanel ticker={detail.ticker} refreshVersion={dataRevision} onPulled={handlePulled} />
-          <div className="mt-6">
-            <p className="eyebrow mb-3">RECENT SIGNALS</p>
+          {/* 近期信号：标题已含「近期信号」，这里只用分隔线起段，不再叠一行英文眉题 */}
+          <div className="mt-5 border-t border-line pt-4">
             <SignalList ticker={detail.ticker} refreshVersion={dataRevision} onPulled={handlePulled} />
           </div>
         </div>
         <div className="flex flex-col gap-6 xl:col-span-5">
           <div className="card-surface flex-1 p-5">
-            <p className="eyebrow">CHART STRUCTURE</p>
-            <h3 className="mt-1.5 text-h3 text-ink-900">{__t('K线结构分析')}</h3>
+            <h3 className="text-h3 text-ink-900">{__t('K线结构分析')}</h3>
             {technical ? (
               <StructurePanel technical={technical} />
             ) : techQ.loading ? (
@@ -325,7 +324,12 @@ export default function StockDetail() {
       {/* 行3: 宏观适配 · 相关突破事件（两张短卡并排，随行拉齐） */}
       <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
         <div className="card-surface p-5">
+          <h3 className="flex items-center gap-1 text-h3 text-ink-900">
+            {__t('宏观适配')}
+            <InfoHint hint={macroShadowHint()} side="bottom" size={12} />
+          </h3>
           <MacroFitPanel
+            bare
             score={detail.macroFit}
             tailwind={detail.macroTailwind}
             confidence={detail.macroFitConfidence}
@@ -340,15 +344,13 @@ export default function StockDetail() {
 
       {/* 行4: 期权链 */}
       <div className="card-surface mt-6 p-5">
-        <p className="eyebrow">OPTIONS CHAIN</p>
-        <h3 className="mb-4 mt-1.5 text-h3 text-ink-900">{__t('期权链')}</h3>
+        <h3 className="mb-4 text-h3 text-ink-900">{__t('期权链')}</h3>
         <OptionsPanel key={detail.ticker} ticker={detail.ticker} />
       </div>
 
       {/* 行5: 相关新闻 */}
       <div className="card-surface mt-6 p-5">
-        <p className="eyebrow">RELATED NEWS</p>
-        <h3 className="mb-4 mt-1.5 text-h3 text-ink-900">{__t('相关新闻')}</h3>
+        <h3 className="mb-4 text-h3 text-ink-900">{__t('相关新闻')}</h3>
         <NewsPanel ticker={detail.ticker} />
       </div>
 
