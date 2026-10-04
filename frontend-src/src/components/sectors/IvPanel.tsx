@@ -13,35 +13,34 @@ import { SCORE_HINTS } from '@/lib/scoreHints';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { useRetryCountdown } from '@/hooks/useRetryCountdown';
-import { useAppearance } from '@/hooks/useAppearance.ts';
 import { t } from '../../i18n/core.ts';
 import SectorChips from './SectorChips';
 import IvRefreshControl from './IvRefreshControl';
 import type { SectorIvFlowError } from './ivRefreshFlow';
 import type { IvMetaVm, IvRowVm } from './model';
-import { SOURCE_STATUS_CN, ivRankColor } from './model';
+import { SOURCE_STATUS_CN } from './model';
 
 /* ---------- source_status 徽标 ---------- */
 function SourceStatusBadge({ status }: { status: keyof typeof SOURCE_STATUS_CN }) {
   return (
-    <SoftBadge tone={status === 'insufficient_data' ? 'down' : 'warn'}>
+    <SoftBadge tone={status === 'insufficient_data' ? 'danger' : 'warn'}>
       <Icon name="flag" size={10} />
       {SOURCE_STATUS_CN[status]}
     </SoftBadge>
   );
 }
 
-/* ---------- IV rank 色阶条（低 up-600 → 中 brand-100 → 高 down-600） ---------- */
+/* ---------- IV rank 条：与右栏高 IV 列表同用中性墨色。IV 高低是类别信息，
+   不借涨跌或状态的红绿。 ---------- */
 function IvRankBar({ rank, replayKey }: { rank: number; replayKey: string }) {
-  useAppearance();
   return (
     <span className="inline-flex items-center gap-2">
       <span className="w-8 text-right text-body-s font-semibold text-ink-800 tnum">{rank}</span>
       <span className="h-1 w-[100px] strength-track overflow-hidden rounded-pill bg-line" role="presentation">
         <span
           key={replayKey}
-          className="block h-full origin-left animate-grow-bar rounded-pill"
-          style={{ width: `${Math.max(2, rank)}%`, backgroundColor: ivRankColor(rank) }}
+          className="block h-full origin-left animate-grow-bar rounded-pill bg-ink-500"
+          style={{ width: `${Math.max(2, rank)}%` }}
         />
       </span>
     </span>

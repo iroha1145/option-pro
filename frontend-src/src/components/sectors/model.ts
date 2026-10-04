@@ -10,7 +10,6 @@ import type {
   SectorStrengthRow,
 } from '@/api/modules/sectors';
 import { heatColor } from '@/lib/chart';
-import { getAppearance } from '@/lib/themePreference.ts';
 import type { MacroFitDriver } from '@/lib/macroFit';
 import { t } from '../../i18n/core.ts';
 
@@ -187,8 +186,6 @@ export function normalizeIvMeta(envelope: SectorIvRankingEnvelope | null): IvMet
   };
 }
 
-type Rgb = [number, number, number];
-
 /* 色阶两端（%）随统计周期放宽：月度收益的量级是日内涨跌的数倍，3 个月 +4% 和
    +14% 在 ±3% 的日内色阶上是同一种最深绿，热力图就失去了「扫颜色」的读法。 */
 const HEAT_SPAN: Record<SectorPeriod, number> = { '1mo': 6, '3mo': 12, '6mo': 18 };
@@ -201,33 +198,6 @@ export function heatSpan(period: SectorPeriod): number {
 /** 板块收益的热力色：按所选周期的色阶两端取色。 */
 export function heatTone(avgReturn: number, period: SectorPeriod = '3mo'): string {
   return heatColor(avgReturn, HEAT_SPAN[period]);
-}
-
-function ivStops(): { value: number; rgb: Rgb }[] {
-  const mid: Rgb = getAppearance() === 'dark' ? [37, 55, 76] : [228, 233, 255];
-  return [
-    { value: 0, rgb: [14, 159, 110] },
-    { value: 50, rgb: mid },
-    { value: 100, rgb: [229, 72, 77] },
-  ];
-}
-
-export function ivRankColor(rank: number): string {
-  const clamped = Math.max(0, Math.min(100, rank));
-  const stops = ivStops();
-  for (let index = 0; index < stops.length - 1; index += 1) {
-    const start = stops[index];
-    const end = stops[index + 1];
-    if (clamped >= start.value && clamped <= end.value) {
-      const position = (clamped - start.value) / (end.value - start.value);
-      const mixed = start.rgb.map((value, channel) =>
-        Math.round(value + (end.rgb[channel] - value) * position),
-      ) as Rgb;
-      return `rgb(${mixed[0]},${mixed[1]},${mixed[2]})`;
-    }
-  }
-  const mid = stops[1].rgb;
-  return `rgb(${mid[0]},${mid[1]},${mid[2]})`;
 }
 
 export const SOURCE_STATUS_CN: Record<Exclude<SectorSourceStatus, 'active'>, string> = {
