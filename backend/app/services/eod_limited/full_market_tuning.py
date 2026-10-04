@@ -106,7 +106,7 @@ def conservative_v17_policy(atr_multiplier: float = 2.0) -> TuningPolicy:
     ATR cut and a strict EXTENDED rejection. Its own gates (ADV, score floor,
     structure floor, coverage, absolute ATR cap) are registry values and stay.
     """
-    if not (finite_number(atr_multiplier) or 0) > 0:
+    if not (finite_real(atr_multiplier) or 0) > 0:
         raise ValueError("conservative ATR multiplier must be a positive number")
     return TuningPolicy(
         version=f"full-market-v1.7-cons-atr{float(atr_multiplier):g}",
@@ -176,7 +176,7 @@ class TuningContext:
         }
 
 
-def finite_number(value: Any) -> float | None:
+def finite_real(value: Any) -> float | None:
     """A finite real number as ``float``; booleans, strings and NaN/inf are None."""
     if isinstance(value, bool) or not isinstance(value, Real):
         return None
@@ -193,7 +193,7 @@ def reference_eligible(item: StockInput) -> bool:
         return False
     if type(item.history_sessions) is not int or item.history_sessions < MIN_HISTORY_SESSIONS:
         return False
-    price, adv, atr = map(finite_number, (item.raw_close, item.adv20, item.atr_pct))
+    price, adv, atr = map(finite_real, (item.raw_close, item.adv20, item.atr_pct))
     return bool(price is not None and price >= MIN_RAW_PRICE_USD
                 and adv is not None and adv >= MIN_ADV20_PROXY_USD
                 and atr is not None and atr > 0)
@@ -205,7 +205,7 @@ def _window_stats(closes: Mapping[date, float], grid: Sequence[date], skip: int)
     Every exchange session is required, not merely the endpoints. Missing bars
     never extend the window, forward-fill or turn into zero return.
     """
-    values = [finite_number(closes.get(day)) for day in grid]
+    values = [finite_real(closes.get(day)) for day in grid]
     if any(value is None or value <= 0 for value in values):
         return None
     end = values[-1 - skip] if skip else values[-1]
@@ -348,7 +348,7 @@ def prepare_full_market_context(
                 raise ValueError("duplicate session in price series")
             if partial is not None and bool(partial[index]):
                 continue
-            value = finite_number(series.close[index])
+            value = finite_real(series.close[index])
             if value is not None and value > 0:
                 out[day] = value
         return out
@@ -393,8 +393,8 @@ def atr_threshold(
     """(threshold in percent points or None, multiplier used, multiplier source)."""
     policy = policy or DEFAULT_POLICY
     profile_cfg = registry["profiles"][profile]
-    cap = finite_number(profile_cfg["atr_absolute_cap_pct"])
-    registry_multiplier = finite_number(profile_cfg["atr_sector_median_multiplier"])
+    cap = finite_real(profile_cfg["atr_absolute_cap_pct"])
+    registry_multiplier = finite_real(profile_cfg["atr_sector_median_multiplier"])
     if cap is None or cap <= 0 or registry_multiplier is None or registry_multiplier <= 0:
         raise ValueError("finite positive existing ATR policy required")
     override = policy.atr_multiplier.get(profile)
@@ -449,7 +449,7 @@ def tune_snapshot(
         if not factors or not isinstance(gates, Mapping) or "common" not in gates:
             rows.append(row)
             continue
-        atr = finite_number(source.get("atr_pct"))
+        atr = finite_real(source.get("atr_pct"))
         relax_extended = profile in policy.extended_state_profiles
         dropped = {"HIGH_ATR", ATR_REFERENCE_UNAVAILABLE} | ({EXTENDED_REASON} if relax_extended else set())
         new_common = [reason for reason in gates["common"] if reason not in dropped]
@@ -474,12 +474,12 @@ def tune_snapshot(
             entry_gate_reasons=[EXTENDED_REASON] if entry_state == EXTENDED_STATE else [],
         )
         new_factors = dict(factors)
-        old_r = finite_number(factors.get("R"))
+        old_r = finite_real(factors.get("R"))
         r_neutralized = False
         if profile in policy.r_neutral_profiles and old_r is not None:
             new_factors["R"] = R_NEUTRAL_VALUE
             r_neutralized = True
-        old_m = finite_number(factors.get("M"))
+        old_m = finite_real(factors.get("M"))
         alpha = policy.m_alpha[profile] if source.get("algorithm_id") in TUNED_FAMILIES else 0.0
         target = context.momentum_percentiles.get(sid)
         new_m, delta = old_m, 0.0
