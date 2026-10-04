@@ -65,6 +65,11 @@
     --ai-50: #E7F3F6;
     /* §4.1 缓动 */
     --ease-paper: cubic-bezier(.16, 1, .3, 1);
+    /* 圆角三档（docs/UI_DESIGN_SYSTEM.md §3）：组内小件 4、普通控件 6、控件组与浮层 8；
+       卡片 12、抽屉 16 走 Tailwind 的 rounded-lg / rounded-xl。 */
+    --r-chip: 4px;
+    --r-control: 6px;
+    --r-group: 8px;
     --ease-snap: cubic-bezier(.22, 1, .36, 1);
     /* v8 阴影三层制：更柔更大（rgba(16,24,40,*)），内高光 .7 保持 */
     --shadow-sh-1: 0 1px 2px rgba(16, 24, 40, .03);
@@ -333,7 +338,7 @@
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    border-radius: 8px;
+    border-radius: var(--r-group);
     background: var(--brand-600);
     padding: 0.5rem 1rem;
     font-size: 13px;
@@ -449,7 +454,7 @@
     width: 0;
     height: 32px;
     margin-top: -16px;
-    border-radius: 8px;
+    border-radius: var(--r-group);
     background: color-mix(in srgb, var(--ink-900) 5%, transparent);
     opacity: 0;
     pointer-events: none;
@@ -552,7 +557,7 @@
   gap: 6px;
   padding: 5px 10px;
   border: 1px solid var(--line-strong);
-  border-radius: 7px;
+  border-radius: var(--r-control);
   background: var(--card);
   color: var(--ink-600);
   font-size: 12px;
@@ -588,14 +593,14 @@
   gap: 2px;
   padding: 3px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-group);
   background: var(--control-track);
 }
 .filter-group .control-button {
   min-height: 28px;
   padding: 4px 10px;
   border-color: transparent;
-  border-radius: 7px;
+  border-radius: var(--r-chip);
   background: transparent;
 }
 .filter-group .control-button[aria-pressed="true"] {
@@ -606,14 +611,14 @@
 }
 .t-tabs.selection-group {
   padding: 3px;
-  border-radius: 10px;
+  border-radius: var(--r-group);
   border-color: var(--line);
   background: var(--control-track);
 }
 @layer components {
   /* 移动导航可通过已有 bg-brand-50 / shadow-none 保留自身的选中底色。 */
   .selection-indicator {
-    border-radius: 7px;
+    border-radius: calc(var(--r-group) - 3px);
     background: var(--card);
     box-shadow: var(--control-selected-shadow);
   }
@@ -621,7 +626,7 @@
 .t-tabs.selection-group .t-tab {
   height: auto;
   min-height: 28px;
-  border-radius: 7px;
+  border-radius: calc(var(--r-group) - 3px);
   padding: 4px 10px;
   color: var(--ink-600);
 }
@@ -664,7 +669,7 @@
   gap: 6px;
   padding: 5px 12px;
   border: 1px solid color-mix(in srgb, var(--ai-600) 26%, transparent);
-  border-radius: 7px;
+  border-radius: var(--r-control);
   background: var(--ai-50);
   color: var(--ai-600);
   font-size: 12px;
@@ -726,7 +731,7 @@
     padding: 2px;
     overflow: visible;
     border: 1px solid var(--line);
-    border-radius: 9px;
+    border-radius: var(--r-group);
     background: var(--control-track);
   }
   .selection-viewport-full > .mobile-selection-rail { width: 100%; }
@@ -743,7 +748,7 @@
     min-width: 44px;
     padding: 8px 12px;
     border: 0;
-    border-radius: 9px;
+    border-radius: var(--r-group);
     background: transparent;
     color: var(--ink-600);
     font-size: 12px;
@@ -752,7 +757,7 @@
     white-space: nowrap;
   }
   .t-tabs.selection-group .selection-indicator {
-    border-radius: 9px;
+    border-radius: var(--r-group);
     background: var(--card);
     box-shadow: var(--control-selected-shadow);
   }
@@ -778,12 +783,12 @@
   font-weight: 600;
   letter-spacing: -.035em;
 }
-.soft-badge { border-radius: 5px; }
+.soft-badge { border-radius: var(--r-chip); }
 
 /* Read-only floating details share one surface; coordinates never animate. */
 .cloud-popover {
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--r-group);
   background: var(--card);
   box-shadow: var(--popover-shadow);
   animation: cloud-popover-enter var(--tt-in-dur) var(--tt-in-ease) both;
@@ -802,11 +807,11 @@
 .strength-fill { opacity: .78; }
 .insight-frame {
   background: var(--paper-2);
-  border-radius: 10px;
+  border-radius: var(--r-group);
   box-shadow: var(--insight-frame-shadow);
 }
 .menu-select-trigger {
-  border-radius: 8px;
+  border-radius: var(--r-control);
   box-shadow: 0 1px 2px rgba(24, 43, 68, .025);
 }
 .data-coverage-strip {

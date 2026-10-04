@@ -66,7 +66,7 @@ function TierSegmented({
       renderLabel={(o, active) => (
         <span className="flex items-center gap-1.5">
           {o.label}
-          <span className={cn('min-w-4 rounded-[5px] px-1 py-px font-mono text-[11px] leading-[14px] tnum', active ? 'bg-paper-2 text-ink-600' : 'text-ink-400')}>
+          <span className={cn('min-w-4 rounded-sm px-1 py-px font-mono text-[11px] leading-[14px] tnum', active ? 'bg-paper-2 text-ink-600' : 'text-ink-400')}>
             {counts[o.value]}
           </span>
         </span>
@@ -118,7 +118,7 @@ function PriceInput({
           const n = Number(t);
           onCommit(t === '' || !Number.isFinite(n) ? null : n);
         }}
-        className="screener-price-input h-8 w-[88px] rounded-[9px] border border-line/70 bg-paper-2/50 pl-6 pr-2 font-mono text-caption text-ink-800 tnum placeholder:text-ink-400 hover:border-line-strong focus-visible:border-brand-400"
+        className="screener-price-input h-8 w-[88px] rounded-md border border-line/70 bg-paper-2/50 pl-6 pr-2 font-mono text-caption text-ink-800 tnum placeholder:text-ink-400 hover:border-line-strong focus-visible:border-brand-400"
       />
     </div>
   );

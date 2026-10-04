@@ -162,7 +162,7 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
   return (
     <div>
       <p className="eyebrow">{title}</p>
-      <div className="mt-3 rounded-[10px] border border-line/70 bg-card p-3">
+      <div className="mt-3 rounded-lg border border-line/70 bg-card p-3">
         {closes === undefined ? (
           <SkeletonBlock className="h-[72px] w-full rounded-sm" />
         ) : closes === null ? (

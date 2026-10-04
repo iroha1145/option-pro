@@ -412,7 +412,7 @@ export default function Login() {
 
             {/* 登录 / 注册切换：滑动指示条，沿用页面既有动效曲线 */}
             <SelectionViewport className="selection-viewport-full">
-              <div className="mobile-selection-rail mt-5 grid grid-cols-2 rounded-[10px] border border-line bg-[var(--control-track)] p-[3px]">
+              <div className="mobile-selection-rail mt-5 grid grid-cols-2 rounded-[var(--r-group)] border border-line bg-[var(--control-track)] p-[3px]">
                 {(['login', 'register'] as const).map((value) => (
                   <button
                     key={value}
@@ -423,7 +423,7 @@ export default function Login() {
                     }}
                     aria-pressed={mode === value}
                     className={cn(
-                      'relative h-8 rounded-[7px] text-caption font-medium transition-colors duration-fast',
+                      'relative h-8 rounded-[calc(var(--r-group)-3px)] text-caption font-medium transition-colors duration-fast',
                       mode === value ? 'text-brand-700' : 'text-ink-500 hover:text-ink-800',
                     )}
                   >

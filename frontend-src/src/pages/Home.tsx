@@ -172,7 +172,7 @@ function ListBody({
 /** 统计小砖：居中大数字 + micro 标签（涨绿/跌红/平灰；无数据显 —） */
 function MiniStat({ label, value, tone }: { label: string; value: number | null; tone: 'up' | 'down' | 'flat' }) {
   return (
-    <div className="rounded-[9px] bg-paper-2/70 py-2.5 text-center">
+    <div className="rounded-[var(--r-group)] bg-paper-2/70 py-2.5 text-center">
       <p
         className={cn(
           'metric-value text-data-l tnum',
@@ -741,7 +741,7 @@ function EarningsAnchorRow({ item: it, todayKey }: { item: EarningsItem; todayKe
     >
       <span
         className={cn(
-          'w-11 shrink-0 rounded-[9px] py-1.5 text-center',
+          'w-11 shrink-0 rounded-[var(--r-group)] py-1.5 text-center',
           isToday ? 'bg-brand-50' : 'bg-paper-2/80',
         )}
       >
