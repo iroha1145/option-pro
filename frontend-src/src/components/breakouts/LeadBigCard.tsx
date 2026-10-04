@@ -258,11 +258,29 @@ function LifecycleStepper({ state }: { state: string }) {
 /** mapBar 运行时携带契约 quote_only（可选字段，Candle 类型未声明，此处宽松扩展读取） */
 type MiniBar = Candle & { quote_only?: boolean };
 
-function buildMiniOption(bars: MiniBar[]): ChartOption {
+/** 卡片下方写着枢轴与失效位，图上画出同两条水平线，读者不必自己换算位置。 */
+interface MiniLevels { pivot: number | null; invalidation: number | null }
+
+function buildMiniOption(bars: MiniBar[], levels: MiniLevels): ChartOption {
   // Daily bars carry a session date: retain date-only values without shifting them to yesterday.
   const fmtBarTime = (iso: string) => /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso
     : Number.isFinite(Date.parse(iso)) ? new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(iso)) : '—';
   const labels = bars.map((b) => fmtBarTime(b.t).slice(5));
+  const levelPrices = [levels.pivot, levels.invalidation].filter((v): v is number => v !== null);
+  const levelLine = (price: number, name: string, color: string, type: 'solid' | number[]) => ({
+    yAxis: price,
+    lineStyle: { color, width: 1, type },
+    label: {
+      formatter: `${name} ${fmtPrice(price)}`,
+      color,
+      fontFamily: MONO,
+      fontSize: 11,
+      position: 'insideStartTop' as const,
+      backgroundColor: CH.tooltipBg,
+      padding: [1, 4],
+      borderRadius: 3,
+    },
+  });
   return {
     ...baseAnimation,
     grid: { left: 6, right: 6, top: 10, bottom: 4, containLabel: true },
@@ -281,6 +299,11 @@ function buildMiniOption(bars: MiniBar[]): ChartOption {
       axisTick: { show: false },
       axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: MONO },
       splitLine: { lineStyle: { color: CH.lineChart, width: 1, type: [2, 4], opacity: 0.7 } },
+      // 参考线不计入自动刻度范围，价位落在 30 根 K 线之外时要把轴撑开，否则线被裁掉。
+      ...(levelPrices.length > 0 && {
+        min: (extent: { min: number }) => Math.min(extent.min, ...levelPrices),
+        max: (extent: { max: number }) => Math.max(extent.max, ...levelPrices),
+      }),
     },
     tooltip: glassTooltip({
       trigger: 'axis',
@@ -330,12 +353,23 @@ function buildMiniOption(bars: MiniBar[]): ChartOption {
         },
         barMaxWidth: 10,
         z: 3,
+        ...(levelPrices.length > 0 && {
+          markLine: {
+            silent: true,
+            symbol: 'none',
+            animation: false,
+            data: [
+              ...(levels.pivot !== null ? [levelLine(levels.pivot, t('突破枢轴'), CH.brand600, 'solid')] : []),
+              ...(levels.invalidation !== null ? [levelLine(levels.invalidation, t('失效位置'), CH.ink400, [4, 3])] : []),
+            ],
+          },
+        }),
       },
     ],
   } as ChartOption;
 }
 
-function MiniKline({ ticker, dailyVersion, preparation, statusReadFailed }: { ticker: string; dailyVersion: string; preparation?: StockDataStatus; statusReadFailed: boolean }) {
+function MiniKline({ ticker, dailyVersion, preparation, statusReadFailed, pivot, invalidation }: { ticker: string; dailyVersion: string; preparation?: StockDataStatus; statusReadFailed: boolean; pivot: number | null; invalidation: number | null }) {
   useEffect(() => {
     if (dailyVersion) stocksApi.invalidatePreparedDaily(ticker);
   }, [ticker, dailyVersion]);
@@ -349,8 +383,8 @@ function MiniKline({ ticker, dailyVersion, preparation, statusReadFailed }: { ti
     void colorMode;
     void appearance;
     if (!data || data.candles.length <= 1) return null;
-    return buildMiniOption(data.candles.slice(-30));
-  }, [data, colorMode, appearance]);
+    return buildMiniOption(data.candles.slice(-30), { pivot, invalidation });
+  }, [data, colorMode, appearance, pivot, invalidation]);
   /* 突破标的常不在常规覆盖范围内：503 时可手动拉取（与详情页 ManualStockPull 同一预算通道） */
   const [pulling, setPulling] = useState(false);
   const [pullError, setPullError] = useState<string | null>(null);
@@ -692,7 +726,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
       {/* K线迷你图 */}
       <div className="mt-3">
         <p className="mb-1 text-micro text-ink-400">{t('日线 · 最多 30 个交易日')}</p>
-        <MiniKline key={e.ticker} ticker={e.ticker} dailyVersion={dailyVersion} preparation={preparation} statusReadFailed={statusReadFailed} />
+        <MiniKline key={e.ticker} ticker={e.ticker} dailyVersion={dailyVersion} preparation={preparation} statusReadFailed={statusReadFailed} pivot={num(e.pivot_price)} invalidation={invalid} />
       </div>
 
       {/* 三价位行 + 告警优先级环（右上同排） */}
