@@ -515,6 +515,12 @@
     background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .85), transparent);
     animation: shimmer 1.6s linear infinite;
   }
+  /* 关键帧写在这里：Tailwind 只在有 animate-shimmer 类时才输出它，散装骨架块
+     此前因此一直停在起点，看不到扫光。 */
+  @keyframes shimmer {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(100%); }
+  }
 
   /* marquee 在指针悬停或键盘焦点进入时暂停：键盘用户也要能停下移动的内容，
      焦点按钮停在哪由 IndexTape 调整 */
@@ -978,7 +984,6 @@
   .animate-marquee,
   .marquee-inner,
   .skeleton-shimmer::after,
-  .animate-shimmer,
   .spark-draw,
   .animate-led-pulse {
     animation: none !important;

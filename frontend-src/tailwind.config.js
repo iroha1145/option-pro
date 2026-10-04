@@ -208,10 +208,6 @@ module.exports = {
           from: { transform: 'scaleX(0)' },
           to: { transform: 'scaleX(1)' },
         },
-        shimmer: {
-          from: { transform: 'translateX(-100%)' },
-          to: { transform: 'translateX(100%)' },
-        },
         /* 动画元素只含第一套内容，其余副本绝对定位在它后面：每轮正好平移一套 */
         marquee: {
           from: { transform: 'translateX(0)' },
@@ -221,7 +217,6 @@ module.exports = {
       animation: {
         'led-pulse': 'led-pulse 1.5s cubic-bezier(.45,0,.15,1) infinite',
         'grow-bar': 'grow-bar 700ms cubic-bezier(.16,1,.3,1) both',
-        shimmer: 'shimmer 1.6s linear infinite',
         marquee: 'marquee 28s linear infinite',
       },
     },
