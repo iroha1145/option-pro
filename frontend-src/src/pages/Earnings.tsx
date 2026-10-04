@@ -512,7 +512,7 @@ export default function Earnings() {
             </div>
             <div className="grid grid-cols-7">
               {Array.from({ length: 7 }, (_, i) => (
-                <div key={i} className="min-h-[148px] space-y-2 border-r border-line p-2.5 last:border-r-0">
+                <div key={i} className="min-h-[96px] space-y-2 border-r border-line p-2.5 last:border-r-0">
                   <SkeletonBlock className="h-3 w-8" />
                   <SkeletonBlock className="h-2.5 w-10" />
                   <SkeletonBlock className="h-5 w-full" />
@@ -672,32 +672,12 @@ export default function Earnings() {
                 filteredByDay={selectedDay != null}
                 featuredFilteredEmpty={listMode === 'featured' && listState.allCount > 0}
                 onShowAll={() => onListModeChange('all')}
+                totalCount={filteredItems.length}
+                moreCount={Math.min(LIST_PAGE_SIZE, Math.max(0, filteredItems.length - visibleItems.length))}
+                onShowMore={() => setVisibleLimit((limit) => limit + LIST_PAGE_SIZE)}
+                collapseTo={visibleLimit > LIST_PAGE_SIZE ? LIST_PAGE_SIZE : null}
+                onCollapse={() => setVisibleLimit(LIST_PAGE_SIZE)}
               />
-              {visibleItems.length < filteredItems.length && (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line bg-card px-4 py-3">
-                  <p className="text-caption text-ink-500">
-                    {t('已显示')} <span className="font-mono text-ink-800 tnum">{visibleItems.length}</span>
-                    {' / '}
-                    <span className="font-mono text-ink-800 tnum">{filteredItems.length}</span> {t('条')}
-                  </p>
-                  <button
-                    onClick={() => setVisibleLimit((limit) => limit + LIST_PAGE_SIZE)}
-                    className="control-button h-8"
-                  >
-                    {t('显示更多 ·')} {Math.min(LIST_PAGE_SIZE, filteredItems.length - visibleItems.length)} {t('条')}
-                  </button>
-                </div>
-              )}
-              {visibleLimit > LIST_PAGE_SIZE && (
-                <div className="flex justify-end">
-                  <button
-                    onClick={() => setVisibleLimit(LIST_PAGE_SIZE)}
-                    className="h-8 px-2 text-caption text-ink-400 transition-colors hover:text-brand-600"
-                  >
-                    {t('收起至前')} {LIST_PAGE_SIZE} {t('条')}
-                  </button>
-                </div>
-              )}
             </>
           )}
         </div>

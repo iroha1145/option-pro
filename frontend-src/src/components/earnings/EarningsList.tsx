@@ -6,7 +6,7 @@ import AnalysisIcon from '@/components/shared/AnalysisIcon';
  *     预期波动始终保留，缺失时说明原因 · AI 影响钮
  * days_until=0「今天」高亮 · 行 stagger 40ms · 斜纹柱对 grow 错峰 700ms · <md 转卡片流
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { DUR_SECTION, EASE_PAPER, GROW_X, GROW_Y } from '@/lib/motion';
@@ -219,6 +219,14 @@ interface EarningsListProps {
   onShowAll?: () => void;
   /** 首屏自动选中不要滚页面；只有用户点日历/行时才把选中行滚进视口。 */
   autoSelected?: boolean;
+  /** 当前模式与日期范围内的总条数（items 已按「显示更多」切好）。 */
+  totalCount?: number;
+  /** 再显示一页会多出的条数；0 表示已经全部显示。 */
+  moreCount?: number;
+  onShowMore?: () => void;
+  /** 展开过「显示更多」时可收起回第一页，值为第一页条数。 */
+  collapseTo?: number | null;
+  onCollapse?: () => void;
 }
 
 export default function EarningsList({
@@ -230,6 +238,11 @@ export default function EarningsList({
   featuredFilteredEmpty = false,
   onShowAll,
   autoSelected = false,
+  totalCount,
+  moreCount = 0,
+  onShowMore,
+  collapseTo = null,
+  onCollapse,
 }: EarningsListProps) {
   /* 从日历点入非重点公司时选中行可能在视口外：温和地滚到就近可见位置。
      hooks 必须先于任何提前 return。自动选中不滚，否则首屏标题会被顶出视口。 */
@@ -238,6 +251,25 @@ export default function EarningsList({
     if (autoSelected) return;
     selectedRowRef.current?.scrollIntoView({ block: 'nearest' });
   }, [selectedTicker, autoSelected]);
+
+  /* 桌面列表在卡片内滚动：可视区底边常切在半行上。还有内容在下方时，底部页脚
+     上方叠一道渐隐，读得出「下面还有」；滚到底即撤掉，最后一行不被盖住。 */
+  const listRef = useRef<HTMLElement | null>(null);
+  const [moreBelow, setMoreBelow] = useState(false);
+  useEffect(() => {
+    const node = listRef.current;
+    if (!node) return;
+    const update = () => setMoreBelow(node.scrollHeight - node.clientHeight - node.scrollTop > 1);
+    const frame = requestAnimationFrame(update);
+    node.addEventListener('scroll', update, { passive: true });
+    const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
+    resize?.observe(node);
+    return () => {
+      cancelAnimationFrame(frame);
+      node.removeEventListener('scroll', update);
+      resize?.disconnect();
+    };
+  }, [items]);
 
   if (items.length === 0) {
     if (featuredFilteredEmpty) {
@@ -301,7 +333,8 @@ export default function EarningsList({
 
   return (
     <section
-      className="card-surface overflow-hidden md:max-h-[min(72vh,880px)] md:overflow-y-auto md:overscroll-contain [scrollbar-gutter:stable]"
+      ref={listRef}
+      className="card-surface overflow-hidden md:max-h-[min(72vh,880px)] md:scroll-pb-16 md:scroll-pt-11 md:overflow-y-auto md:overscroll-contain [scrollbar-gutter:stable]"
       aria-label={t("即将公布")}
     >
       {/* 桌面列头（≥md） */}
@@ -476,6 +509,36 @@ export default function EarningsList({
           </div>
         );
       })}
+
+      {/* 页脚：已显示条数与「显示更多」放在列表卡片里。桌面贴住滚动区底边，
+          无论滚到哪里都能看到还剩多少、一键展开。 */}
+      <div className="relative z-20 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-line bg-card px-4 py-2.5 md:sticky md:bottom-0">
+        {moreBelow && (
+          <span
+            className="pointer-events-none absolute inset-x-0 bottom-full hidden h-10 bg-gradient-to-t from-card to-transparent md:block"
+            aria-hidden="true"
+          />
+        )}
+        <p className="text-caption text-ink-500">
+          {t('已显示')} <span className="text-ink-800 tnum">{items.length}</span>
+          {' / '}
+          <span className="text-ink-800 tnum">{totalCount ?? items.length}</span> {t('条')}
+        </p>
+        {(moreCount > 0 || collapseTo !== null) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {collapseTo !== null && onCollapse && (
+              <button type="button" onClick={onCollapse} className="control-button">
+                {t('收起至前')} <span className="tnum">{collapseTo}</span> {t('条')}
+              </button>
+            )}
+            {moreCount > 0 && onShowMore && (
+              <button type="button" onClick={onShowMore} className="control-button">
+                {t('显示更多 ·')} <span className="tnum">{moreCount}</span> {t('条')}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </section>
   );
 }

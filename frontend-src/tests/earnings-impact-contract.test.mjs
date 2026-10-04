@@ -513,9 +513,12 @@ test('财报页面保留近期已公布结果并默认收纳长列表', () => {
   assert.equal(typesSource.includes(': prioritizeEarningsRows(listItems, visibleLimit)'), true);
   assert.equal(page.includes('const LIST_PAGE_SIZE = 24'), true);
   assert.equal(page.includes('computeEarningsListState({'), true);
-  assert.equal(page.includes('visibleItems.length < filteredItems.length'), true);
-  assert.equal(page.includes("{t('显示更多 ·')} {Math.min(LIST_PAGE_SIZE"), true);
-  assert.equal(page.includes("{t('收起至前')} {LIST_PAGE_SIZE} {t('条')}"), true);
+  // 「显示更多」「收起」放进列表卡片的页脚：页面只传条数与回调，列表负责渲染。
+  assert.equal(page.includes('totalCount={filteredItems.length}'), true);
+  assert.equal(page.includes('moreCount={Math.min(LIST_PAGE_SIZE, Math.max(0, filteredItems.length - visibleItems.length))}'), true);
+  assert.equal(page.includes('collapseTo={visibleLimit > LIST_PAGE_SIZE ? LIST_PAGE_SIZE : null}'), true);
+  assert.equal(list.includes(`{t('显示更多 ·')} <span className="tnum">{moreCount}</span> {t('条')}`), true);
+  assert.equal(list.includes(`{t('收起至前')} <span className="tnum">{collapseTo}</span> {t('条')}`), true);
   assert.equal(page.includes('row={selectedRow}'), true);
   const rightColumn = page.slice(page.indexOf('B3 AI 影响 + 低交互图表'));
   assert.equal(rightColumn.includes('<ImpactCard'), true);
