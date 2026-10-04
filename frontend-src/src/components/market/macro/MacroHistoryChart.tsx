@@ -183,7 +183,7 @@ export default function MacroHistoryChart({
   }, [points, modules, shownModules, colorMode, appearance]);
 
   return (
-    <section className="card-surface p-5" aria-label={t("宏观环境历史")}>
+    <section className="card-surface flex h-full flex-col p-5" aria-label={t("宏观环境历史")}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <h3 className="text-h3 text-ink-900">
           {t('综合分历史')}
@@ -229,8 +229,9 @@ export default function MacroHistoryChart({
           )}
         </p>
       )}
-      <div className={cn(INSIGHT_FRAME, 'mt-4')}>
-        <div className="h-[240px] w-full">
+      {/* 大屏与左列（综合分 + 对照卡）并排：图随栏高拉伸，两列底边齐平，至少 240px */}
+      <div className={cn(INSIGHT_FRAME, 'mt-4 flex flex-col lg:flex-1')}>
+        <div className="h-[240px] w-full lg:h-auto lg:min-h-[240px] lg:flex-1">
         {loading && points.length === 0 ? (
           <SkeletonBlock className="h-full w-full" />
         ) : error && points.length === 0 ? (

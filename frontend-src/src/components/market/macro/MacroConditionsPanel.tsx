@@ -277,24 +277,33 @@ export default function MacroConditionsPanel({
         </p>
       )}
 
-      {/* B. 综合卡 + C. 历史图 */}
+      {/* B. 综合卡 + D2. 技术 × 结构性宏观（左列上下叠放）与 C. 历史图并排：
+          综合卡单独一列时比历史图矮一大截，对照卡整行铺开时右半边是空的，
+          叠在一起两列底边齐平。D2 仅展示（增量任务 Phase 1）。 */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <div className="lg:col-span-5">
-          {hasComposite && data.composite ? (
-            <CompositeCard
-              composite={data.composite}
-              historyBasis={data.historyBasis}
-              dataThrough={data.dataThrough}
-            />
-          ) : (
-            <div className="card-surface h-full">
-              <EmptyState
-                icon="doc-quote"
-                title={t("暂无正式综合分")}
-                description={t("至少需要 5 类有效指标才能计算综合分。")}
+        <div className="flex flex-col gap-4 lg:col-span-5">
+          <div className="flex-1">
+            {hasComposite && data.composite ? (
+              <CompositeCard
+                composite={data.composite}
+                historyBasis={data.historyBasis}
+                dataThrough={data.dataThrough}
               />
-            </div>
-          )}
+            ) : (
+              <div className="card-surface h-full">
+                <EmptyState
+                  icon="doc-quote"
+                  title={t("暂无正式综合分")}
+                  description={t("至少需要 5 类有效指标才能计算综合分。")}
+                />
+              </div>
+            )}
+          </div>
+          <MacroTechnicalMatrix
+            technical={technicalScore ?? null}
+            structural={data.structuralScore}
+            structuralModules={data.structuralModules}
+          />
         </div>
         <div className="lg:col-span-7">
           <MacroHistoryChart
@@ -311,13 +320,6 @@ export default function MacroConditionsPanel({
 
       {/* D. 七模块分数与因子详情：模块只在这一处列出，点开一行看因子 */}
       <FactorDetails modules={data.modules} snapshotKey={snapshotStamp ?? ''} dataThrough={data.dataThrough} />
-
-      {/* D2. 技术 × 结构性宏观二维状态（增量任务 Phase 1，仅展示） */}
-      <MacroTechnicalMatrix
-        technical={technicalScore ?? null}
-        structural={data.structuralScore}
-        structuralModules={data.structuralModules}
-      />
 
       {/* E. 驱动因素 */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
