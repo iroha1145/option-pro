@@ -1124,11 +1124,11 @@ def _intraday_overlays(series: Mapping[str, list], data_through: str, chart_rang
             hold_or += 1
     last_span = highs[-1] - lows[-1] if n else 0.0
     last_clv = ((2 * closes[-1] - highs[-1] - lows[-1]) / last_span) if last_span > 0 else None
+    from app.services.breakouts.feature_engine import compute_time_of_day_rvol
+    from app.services.breakouts.models import MarketSession, TemporalCutoff
+
     tod_rvol = None
     try:
-        from app.services.breakouts.feature_engine import compute_time_of_day_rvol
-        from app.services.breakouts.models import MarketSession, TemporalCutoff
-
         index = pd.DatetimeIndex([datetime.fromtimestamp(int(t), tz=timezone.utc) for t in times])
         frame = pd.DataFrame(
             {

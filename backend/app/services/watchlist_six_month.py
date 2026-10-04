@@ -20,6 +20,8 @@ import time
 from datetime import date, datetime, tzinfo
 from typing import Any, Callable, Iterable, Mapping
 
+from app.failure_diagnostics import record_fallback_failure
+
 TREND_RANGE = "6mo"
 TREND_INTERVAL = "1wk"
 TREND_ADJUSTMENT = "split"
@@ -175,7 +177,8 @@ def cached_weekly_history(
         return history
     try:
         fetched = fetch(to_fetch)
-    except Exception:
+    except Exception as exc:
+        record_fallback_failure("watchlist_trend_fetch", exc)
         fetched = {}
     with _lock:
         for ticker in to_fetch:
@@ -266,7 +269,8 @@ def fetch_six_month_daily(
     closes: dict[str, list[tuple[date, float]]] = {}
     try:
         massive_frame, _missing = download_massive_history(tickers, TREND_RANGE)
-    except Exception:
+    except Exception as exc:
+        record_fallback_failure("watchlist_trend_massive", exc)
         massive_frame = None
     for ticker in tickers:
         points = _session_closes(
@@ -289,7 +293,8 @@ def fetch_six_month_daily(
             kwargs["session"] = session
         try:
             yahoo_frame = download_in_bounded_batches(download, **kwargs)
-        except Exception:
+        except Exception as exc:
+            record_fallback_failure("watchlist_trend_yahoo", exc)
             yahoo_frame = None
         for ticker in remaining:
             points = _session_closes(

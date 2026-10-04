@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from app.data_paths import get_data_paths
+from app.failure_diagnostics import record_fallback_failure
 
 from .universe import STOCK_PROVIDER_TYPES
 
@@ -257,7 +258,8 @@ def refresh_missing(
         counts["looked_up"] += 1
         try:
             detail = fetch(ticker)
-        except Exception:  # noqa: BLE001 - provider trouble must not stop the worker
+        except Exception as exc:  # noqa: BLE001 - provider trouble must not stop the worker
+            record_fallback_failure("eod_industry_lookup", exc)
             counts["failed"] += 1
             continue
         table.extend([{"ticker": ticker, "cik": cik or detail.get("cik"), "as_of": stamp,
