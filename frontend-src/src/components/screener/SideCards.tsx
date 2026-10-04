@@ -77,7 +77,7 @@ export function TierHistogram({
                   style={{
                     height: `${Math.max(4, (refN / maxRef) * 72)}px`,
                     transformOrigin: 'bottom',
-                    backgroundImage: 'repeating-linear-gradient(45deg, rgba(138,148,176,.28) 0 1px, transparent 1px 4px)',
+                    backgroundImage: 'repeating-linear-gradient(45deg, color-mix(in srgb, var(--ink-400) 28%, transparent) 0 1px, transparent 1px 4px)',
                   }}
                   aria-hidden="true"
                 />

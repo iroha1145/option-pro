@@ -36,7 +36,7 @@ function EpsPairBars({ est, act, index }: { est: number | null; act: number | nu
         className="w-2.5 origin-bottom rounded-t-[2px] border border-ink-300/70"
         style={{
           height: h(est),
-          backgroundImage: 'repeating-linear-gradient(45deg, rgba(138,148,176,.55) 0 1.2px, transparent 1.2px 4px)',
+          backgroundImage: 'repeating-linear-gradient(45deg, color-mix(in srgb, var(--ink-400) 50%, transparent) 0 1.2px, transparent 1.2px 4px)',
         }}
         variants={GROW_Y}
         transition={{ duration: 0.7, ease: EASE_PAPER, delay: index * 0.05 }}
