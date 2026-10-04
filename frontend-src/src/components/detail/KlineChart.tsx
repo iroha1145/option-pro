@@ -1140,19 +1140,19 @@ export default function KlineChart({
               </span>
               <span
                 className={cn(
-                  'font-mono tnum font-medium',
+                  'tnum font-medium',
                   measurement.isDrawdown ? 'text-down-600' : 'text-up-600',
                 )}
               >
                 {t('{pct}（{abs}）', { pct: fmtPct(measurement.changePct), abs: fmtSigned(measurement.changeAbs) })}
               </span>
-              <span className="font-mono tnum text-ink-400">
+              <span className="tnum text-ink-400">
                 {fmtPrice(measurement.startPrice)} → {fmtPrice(measurement.endPrice)}
               </span>
               <span className="text-ink-400">{measureDurationText(range, measurement)}</span>
               {measurement.recoveryPct !== null && (
                 <span className="text-ink-400">
-                  {t('修复需')} <span className="font-mono tnum">{fmtPct(measurement.recoveryPct)}</span>
+                  {t('修复需')} <span className="tnum">{fmtPct(measurement.recoveryPct)}</span>
                 </span>
               )}
               <button

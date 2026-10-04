@@ -109,7 +109,7 @@ export default function SignalList({
             <SignalChip type={e.type} label={e.label} />
             <div className="min-w-0 flex-1">
               {/* 盘前跳空等事件可无成交价（event_price=null）——显「—」，不崩页 */}
-              <p className="font-mono text-body-s text-ink-800 tnum">
+              <p className="text-body-s text-ink-800 tnum">
                 {t('触发')} {typeof e.price === 'number' && Number.isFinite(e.price) ? fmtPrice(e.price) : '—'}
               </p>
               <p className="text-micro text-ink-400">{fmtRelative(e.at)}</p>

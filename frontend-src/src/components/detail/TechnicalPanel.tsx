@@ -11,7 +11,7 @@ import { t } from '../../i18n/core.ts';
 function MiniStat({ label, value, hint }: { label: string; value: string; hint?: ScoreHint }) {
   return (
     <div className="rounded-md bg-paper-2 px-1.5 py-1.5 text-center">
-      <div className="truncate font-mono text-body-s font-medium text-ink-900 tnum">{value}</div>
+      <div className="truncate text-body-s font-medium text-ink-900 tnum">{value}</div>
       <div className="flex items-center justify-center gap-0.5 text-micro text-ink-400">
         <span className="truncate" title={label}>{label}</span>
         {hint && <InfoHint hint={hint} size={11} side="bottom" />}

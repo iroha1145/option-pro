@@ -264,7 +264,7 @@ function AiOptionInsight({
               {result.key_strikes.map((strike) => (
                 <span
                   key={strike}
-                  className="rounded-xs border border-ai-600/20 bg-card px-1.5 py-0.5 font-mono text-micro text-ink-600"
+                  className="rounded-xs border border-ai-600/20 bg-card px-1.5 py-0.5 text-micro text-ink-600 tnum"
                 >
                   {strike}
                 </span>
@@ -494,7 +494,7 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
         {shownChain && (
           <p className="text-micro text-ink-400">
             {t('标的价')}{' '}
-            <span className="font-mono text-ink-600 tnum">
+            <span className="text-ink-600 tnum">
               {dash(shownChain.spot, (n) => fmtPrice(n))}
             </span>
             {shownChain.spot === null && (

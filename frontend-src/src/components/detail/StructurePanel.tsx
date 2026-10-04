@@ -16,14 +16,15 @@ import { cn } from '@/lib/utils';
 import type { TechBaseState, TechnicalStructure } from '@/api/types';
 import { t } from '../../i18n/core.ts';
 
-function StructFact({ label, value, hint }: { label: string; value: string; hint?: typeof STRUCTURE_HINTS[string] }) {
+/** 价格、百分比、倍数用正文字体的等宽数字；日期区间传 mono（日期与代码保持等宽字体） */
+function StructFact({ label, value, hint, mono = false }: { label: string; value: string; hint?: typeof STRUCTURE_HINTS[string]; mono?: boolean }) {
   return (
     <div className="rounded-md bg-paper-2 px-2 py-1">
       <dt className="flex flex-wrap items-center gap-x-1 text-micro text-ink-400">
         {label}
         {hint && <InfoHint hint={hint} size={10} />}
       </dt>
-      <dd className="font-mono text-caption text-ink-800 tnum">{value}</dd>
+      <dd className={`text-caption text-ink-800 tnum${mono ? ' font-mono' : ''}`}>{value}</dd>
     </div>
   );
 }
@@ -58,7 +59,7 @@ function ScoreLine({ label, score, hint }: { label: string; score: number | null
           />
         )}
       </span>
-      <span className="font-mono text-caption text-ink-700 tnum">{valid ? Math.round(score) : '—'}</span>
+      <span className="text-caption text-ink-700 tnum">{valid ? Math.round(score) : '—'}</span>
     </div>
   );
 }
@@ -174,7 +175,7 @@ export default function StructurePanel({ technical }: { technical: TechnicalStru
           <dl className="grid grid-cols-2 gap-1.5 text-caption">
             <StructFact label={t('阻力带')} value={`${priceOr(base.resistance_low)} – ${priceOr(base.resistance_high)}`} />
             <StructFact label={t('失效位')} value={priceOr(base.invalidation_price)} />
-            <StructFact label={t('形成区间')} value={`${base.base_start ?? '—'} → ${base.base_end ?? '—'}`} />
+            <StructFact label={t('形成区间')} value={`${base.base_start ?? '—'} → ${base.base_end ?? '—'}`} mono />
             <StructFact label={t('支撑下沿')} value={priceOr(base.support_low)} />
           </dl>
         )}

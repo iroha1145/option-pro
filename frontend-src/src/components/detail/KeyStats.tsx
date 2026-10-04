@@ -37,14 +37,14 @@ export default function KeyStats({ detail, className }: { detail: StockDetail; c
         {rows.map(([k, v]) => (
           <div key={k} className="flex items-center justify-between py-2">
             <dt className="text-body-s text-ink-400">{k}</dt>
-            <dd className="font-mono text-body-s text-ink-800 tnum">{v}</dd>
+            <dd className="text-body-s text-ink-800 tnum">{v}</dd>
           </div>
         ))}
       </dl>
       <div className="mt-auto border-t border-line pt-3">
         <div className="flex items-center justify-between text-micro text-ink-400">
           <span>{t('52 周区间')}</span>
-          <span className="font-mono tnum">{has52 ? `${fmtPrice(r52[0])} — ${fmtPrice(r52[1])}` : '—'}</span>
+          <span className="tnum">{has52 ? `${fmtPrice(r52[0])} — ${fmtPrice(r52[1])}` : '—'}</span>
         </div>
         {has52 && (
           <div className="relative mt-2 h-1 rounded-pill bg-line" role="presentation">

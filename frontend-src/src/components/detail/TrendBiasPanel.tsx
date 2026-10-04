@@ -65,7 +65,7 @@ function Gauge({ score, label }: { score: number; label: StockTrendBiasView['tre
         />
       </svg>
       <div className="absolute inset-x-0 bottom-0 flex flex-col items-center">
-        <span className="font-mono text-data-xl text-ink-900 tnum">{Math.round(shown)}</span>
+        <span className="metric-value text-data-xl text-ink-900">{Math.round(shown)}</span>
         <span className="mt-0.5 flex items-center gap-1">
           <span className={cn('rounded-xs px-1.5 py-px text-caption font-medium', LABEL_STYLE[label])}>{t(label)}</span>
           <InfoHint hint={SCORE_HINTS.trendBias} side="bottom" size={11} />
@@ -82,7 +82,7 @@ function MissingGauge({ label }: { label: StockTrendBiasView['trend_bias_label']
         <path d="M 20 84 A 64 64 0 0 1 148 84" fill="none" stroke="var(--line)" strokeWidth="10" strokeLinecap="round" />
       </svg>
       <div className="absolute inset-x-0 bottom-0 flex flex-col items-center">
-        <span className="font-mono text-data-xl text-ink-400 tnum">—</span>
+        <span className="metric-value text-data-xl text-ink-400">—</span>
         <span className={cn('mt-0.5 rounded-xs px-1.5 py-px text-caption font-medium', LABEL_STYLE[label])}>{t(label)}</span>
       </div>
     </div>
@@ -169,7 +169,7 @@ export default function TrendBiasPanel({
                   style={{ width: `${v ?? 0}%`, animationDelay: `${i * 60}ms` }}
                 />
               </span>
-              <span className="w-8 shrink-0 text-right font-mono text-caption text-ink-600 tnum">
+              <span className="w-8 shrink-0 text-right text-caption text-ink-600 tnum">
                 {v === null ? '—' : Math.round(v)}
               </span>
             </div>
