@@ -3,6 +3,9 @@ import type { StructuralOverlay } from './structuralOverlays.ts';
 import type { PatternInkInput } from '../linePresentation.ts';
 type Translate = (message: string, variables?: Record<string, string | number | null | undefined>) => string;
 const identity: Translate = (s, v) => s.replace(/\{(\w+)\}/g, (m, k: string) => String(v?.[k] ?? m));
+/** 未回补缺口的填色与描边；图例色块引用同一对值。 */
+export const GAP_FILL = 'rgba(184,120,33,0.10)';
+export const GAP_BORDER = 'rgba(184,120,33,0.30)';
 export function overlayTier(o: Pick<StructuralOverlay, 'evidence'>): PatternInkInput['tier'] {
   const tier = o.evidence.displayTier;
   return tier === 'primary' || tier === 'secondary' || tier === 'context' || tier === 'historical' ? tier : undefined;
@@ -38,8 +41,8 @@ export function gapAreas(o: Pick<StructuralOverlay, 'geometry' | 'status'>, inde
   const historical = o.status === 'expired';
   return intervals.map((p, i) => [
     { xAxis: start, yAxis: p.low,
-      itemStyle: { color: historical ? 'rgba(82,97,122,0.025)' : 'rgba(184,120,33,0.10)',
-        borderColor: historical ? 'rgba(82,97,122,0.16)' : 'rgba(184,120,33,0.30)', borderWidth: 0.7, borderType: 'dashed' },
+      itemStyle: { color: historical ? 'rgba(82,97,122,0.025)' : GAP_FILL,
+        borderColor: historical ? 'rgba(82,97,122,0.16)' : GAP_BORDER, borderWidth: 0.7, borderType: 'dashed' },
       label: { show: i === largest, position: 'insideTopLeft', fontSize: 10, color: drawingPaint('#866026'),
         formatter: historical ? t('价格缺口 · 已回补') : t('价格缺口 · 未回补') } },
     { xAxis: end, yAxis: p.high },

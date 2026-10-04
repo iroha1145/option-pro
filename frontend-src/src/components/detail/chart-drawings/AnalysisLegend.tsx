@@ -1,5 +1,6 @@
 import { t } from '../../../i18n/core.ts';
 import { LINE_INK } from './linePresentation.ts';
+import { GAP_BORDER, GAP_FILL } from './analysis/semanticPresentation.ts';
 
 const RAIL_KINDS = new Set(['support_trend', 'resistance_trend', 'channel', 'triangle', 'wedge']);
 
@@ -20,7 +21,7 @@ export default function AnalysisLegend({ overlays }: {
         <span>{t('深色为主要边界，细线为参考；虚线为延伸，淡色点线为历史结构')}</span>
       </>}
       {hasBox && <span className="inline-flex items-center gap-1"><span aria-hidden="true" className="h-2.5 w-4 rounded-sm border" style={{ backgroundColor: 'rgba(82,97,122,0.075)', borderColor: 'rgba(82,97,122,0.3)' }} />{t('整理区')}</span>}
-      {hasGap && <span className="inline-flex items-center gap-1"><span aria-hidden="true" className="h-2.5 w-4 rounded-sm border border-dashed" style={{ backgroundColor: 'rgba(184,120,33,0.10)', borderColor: 'rgba(184,120,33,0.3)' }} />{t('价格缺口（日线）')}</span>}
+      {hasGap && <span className="inline-flex items-center gap-1"><span aria-hidden="true" className="h-2.5 w-4 rounded-sm border border-dashed" style={{ backgroundColor: GAP_FILL, borderColor: GAP_BORDER }} />{t('价格缺口（日线）')}</span>}
     </p>
   );
 }
