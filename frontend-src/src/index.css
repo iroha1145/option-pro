@@ -813,6 +813,11 @@
   padding: 8px 0;
   line-height: 20px;
 }
+/* 说明图标视觉只有 11-13px：粗指针下用透明伪元素把点按区域扩到约 44px，外观不变。 */
+@media (pointer: coarse) {
+  .t-tt-trigger { position: relative; }
+  .t-tt-trigger::after { content: ''; position: absolute; inset: -16px; }
+}
 @media (pointer: coarse) {
   .menu-select-trigger,
   .scan-trigger,
