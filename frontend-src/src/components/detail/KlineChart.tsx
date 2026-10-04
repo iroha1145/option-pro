@@ -1222,8 +1222,6 @@ export default function KlineChart({
         mode={mode}
       />
 
-      {/* 静态类名不过 cn()：tailwind-merge 默认配置把 text-micro 当文字颜色，与 text-ink-400 合并时
-          会丢掉字号，这一行曾按继承的 14px 显示。 */}
       <p className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-micro text-ink-400">
         <span className="font-mono tnum">
           {data

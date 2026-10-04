@@ -59,8 +59,6 @@ export default function IndexCard(props: IndexCardProps) {
   const label = t('{name} {code} 详情', { name: quote.name, code: quote.code });
   const surface = cn(SURFACE, focused && 'ring-1 ring-brand-100');
 
-  /* 字号类与颜色类不放进同一个 cn()：tailwind-merge 不认识 text-caption 这类
-     自定义字阶，会把它当颜色类和 text-ink-* 合并掉。 */
   const body = (
     <>
       <span className="flex min-w-0 items-baseline justify-between gap-1.5">
@@ -68,9 +66,11 @@ export default function IndexCard(props: IndexCardProps) {
         <span className="shrink-0 font-mono text-micro text-ink-400">{quote.code}</span>
       </span>
       <span
-        className={`metric-value tick-flash self-start rounded-xs text-[17px] leading-6 text-ink-900 sm:text-data-l${
-          flash === 'up' ? ' tick-flash-up' : flash === 'down' ? ' tick-flash-down' : ''
-        }`}
+        className={cn(
+          'metric-value tick-flash self-start rounded-xs text-[17px] leading-6 text-ink-900 sm:text-data-l',
+          flash === 'up' && 'tick-flash-up',
+          flash === 'down' && 'tick-flash-down',
+        )}
       >
         {hasPrice ? fmtPrice(quote.price) : '—'}
       </span>
