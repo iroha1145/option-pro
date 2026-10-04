@@ -301,9 +301,7 @@ def public_home_resource_parameters(resource: str, *, now: float) -> dict[str, A
     if resource == "market_signals":
         return {"period": "1y"}
     if resource == "earnings":
-        return {
-            "market_date": datetime.fromtimestamp(now, _MARKET_TZ).date().isoformat()
-        }
+        return earnings_resource_parameters(datetime.fromtimestamp(now, _MARKET_TZ).date())
     if resource == "unusual":
         return {"type": "all", "min_vol_oi": 1.0}
     if resource == "cta_trend":
@@ -314,6 +312,10 @@ def public_home_resource_parameters(resource: str, *, now: float) -> dict[str, A
             "method_version": METHOD_VERSION,
         }
     raise KeyError(resource)
+
+
+def earnings_resource_parameters(market_date: date) -> dict[str, Any]:
+    return {"market_date": market_date.isoformat()}
 
 
 def breakout_lead_chart_parameters(ticker: str) -> dict[str, Any]:
@@ -1672,6 +1674,7 @@ __all__ = [
     "PUBLIC_HOME_SNAPSHOT_VERSION",
     "create_public_home_entry",
     "breakout_lead_chart_parameters",
+    "earnings_resource_parameters",
     "public_home_entry_is_servable",
     "public_home_resource_parameters",
     "read_owner_public_home_entry",

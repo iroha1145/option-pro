@@ -153,6 +153,17 @@ class PreparedSubmission:
     params: dict[str, Any]
 
 
+def _escape_untrusted_json(raw: str) -> str:
+    return raw.replace("<", "\\u003c").replace(">", "\\u003e")
+
+
+def untrusted_json_size(value: Any) -> int:
+    """UTF-8 bytes ``value`` occupies once escaped the way submission escapes it."""
+
+    raw = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    return len(_escape_untrusted_json(raw).encode("utf-8"))
+
+
 def _bounded_untrusted_json(payload: dict[str, Any]) -> str:
     raw = json.dumps(
         payload,
@@ -161,7 +172,7 @@ def _bounded_untrusted_json(payload: dict[str, Any]) -> str:
         separators=(",", ":"),
         allow_nan=False,
     )
-    raw = raw.replace("<", "\\u003c").replace(">", "\\u003e")
+    raw = _escape_untrusted_json(raw)
     if len(raw.encode("utf-8")) > _MAX_UNTRUSTED_JSON_BYTES:
         raise ValueError("ai_input_too_large")
     return raw

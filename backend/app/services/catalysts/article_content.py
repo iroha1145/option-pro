@@ -17,10 +17,11 @@ from urllib.parse import quote, urljoin, urlsplit, urlunsplit
 
 from lxml import html
 
+from app.services.ai_jobs.models import NEWS_ARTICLE_TEXT_MAX_CHARS
+
 from .news_links import resolve_publisher_url
 
 _MAX_BYTES = 1024 * 1024
-_MAX_TEXT = 12000
 _GOOGLE_ARTICLE_PATH = re.compile(r"/articles/[A-Za-z0-9_-]{16,4096}(?:\?hl=en-US&gl=US&ceid=US:en)?\Z")
 _NOISE = re.compile(r"(?:^|[-_\s])(nav|menu|footer|header|related|recommend\w*|comment\w*|subscribe\w*|subscription|newsletter|advert\w*|social|share|paywall)(?:$|[-_\s])", re.I)
 _CHALLENGE = re.compile(r"just a moment|verify (?:that )?you are human|access denied|captcha|checking your browser|enable javascript and cookies", re.I)
@@ -340,7 +341,7 @@ def _extract(payload: bytes, expected_title: str, *, source_url: str = "") -> tu
         unique_sentence_length = len(" ".join(dict.fromkeys(sentences)))
         if sentences and (unique_sentence_length < (180 if short_brief else 300) or unique_sentence_length < len(text) * 0.5):
             continue
-        return text[:_MAX_TEXT], partial or len(text) > _MAX_TEXT
+        return text[:NEWS_ARTICLE_TEXT_MAX_CHARS], partial or len(text) > NEWS_ARTICLE_TEXT_MAX_CHARS
     raise _Unavailable("no_matching_article_body")
 
 

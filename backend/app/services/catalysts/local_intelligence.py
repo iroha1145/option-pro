@@ -710,25 +710,18 @@ def _loads(value: str | None, default: Any) -> Any:
         return default
 
 
-def _untrusted_json_bytes(value: Any) -> int:
-    """Bytes a value occupies once the runtime escapes it for submission."""
-
-    raw = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-    return len(raw.encode("utf-8")) + 5 * (raw.count("<") + raw.count(">"))
-
-
 def _bounded_news_summary(
     summary: Any, maximum: int = NEWS_SUMMARY_MAX_BYTES,
 ) -> tuple[Any, bool]:
     if (
         not isinstance(summary, str)
-        or _untrusted_json_bytes(summary) <= maximum
+        or ai_runtime.untrusted_json_size(summary) <= maximum
     ):
         return summary, False
     low, high = 0, len(summary)
     while low < high:
         middle = (low + high + 1) // 2
-        if _untrusted_json_bytes(summary[:middle]) <= maximum:
+        if ai_runtime.untrusted_json_size(summary[:middle]) <= maximum:
             low = middle
         else:
             high = middle - 1
@@ -798,13 +791,13 @@ def _news_input_context(payload: Mapping[str, Any]) -> dict[str, Any]:
 def _bounded_ticker_hints(hints: Any) -> tuple[Any, bool]:
     if (
         not isinstance(hints, list)
-        or _untrusted_json_bytes(hints) <= NEWS_TICKER_HINTS_MAX_BYTES
+        or ai_runtime.untrusted_json_size(hints) <= NEWS_TICKER_HINTS_MAX_BYTES
     ):
         return hints, False
     kept: list[Any] = []
     used = 2
     for hint in hints:
-        cost = _untrusted_json_bytes(hint) + (1 if kept else 0)
+        cost = ai_runtime.untrusted_json_size(hint) + (1 if kept else 0)
         if used + cost > NEWS_TICKER_HINTS_MAX_BYTES:
             break
         kept.append(hint)
