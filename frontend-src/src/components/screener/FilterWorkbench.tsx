@@ -152,8 +152,8 @@ export function ScanButton({
       }
       transition={dirty && !scanning ? { duration: 1.2, repeat: 2 } : { duration: DUR_FAST }}
       className={cn(
-        'scan-trigger relative h-9 min-w-[168px] overflow-hidden rounded-[9px] bg-brand-600 px-4 text-on-accent shadow-btn-hi transition-[filter] duration-fast',
-        scanning ? 'cursor-wait' : 'hover:brightness-105',
+        // 与同行下拉框同为 36px；粗指针下 .scan-trigger 仍放大到 44px。
+        'btn-primary scan-trigger relative h-9 min-h-0 min-w-[168px] overflow-hidden',
         className,
       )}
       aria-live="polite"

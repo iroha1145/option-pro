@@ -25,50 +25,11 @@ import type { IconName } from '@/components/icons';
 import { pageRegionProps } from '@/lib/pageRegion';
 import { t } from '../i18n/core.ts';
 
-/* ---------------- L0 主视觉（内联 login-motif + K 线循环） ---------------- */
-const MOTIF_STYLE = `
-  .login-kline-loop {
-    stroke-dasharray: 1000;
-    stroke-dashoffset: 1000;
-    animation: login-kline-loop 10s cubic-bezier(.16,1,.3,1) infinite;
-  }
-  @keyframes login-kline-loop {
-    0% { stroke-dashoffset: 1000; opacity: 0; animation-timing-function: cubic-bezier(.16,1,.3,1); }
-    8% { opacity: 1; }
-    60% { stroke-dashoffset: 0; opacity: 1; }
-    88% { stroke-dashoffset: 0; opacity: 1; }
-    100% { stroke-dashoffset: 0; opacity: 0; }
-  }
-  .login-kline-blip {
-    transform-box: fill-box;
-    transform-origin: center;
-    opacity: 0;
-    animation: login-kline-blip 10s ease-out infinite;
-  }
-  @keyframes login-kline-blip {
-    0%, 58% { transform: scale(.15); opacity: 0; }
-    63% { opacity: .8; }
-    80% { transform: scale(1); opacity: 0; }
-    100% { transform: scale(1); opacity: 0; }
-  }
-  .login-drift { animation: login-drift 24s cubic-bezier(.45,0,.15,1) infinite alternate; }
-  @keyframes login-drift {
-    from { transform: translate(-8px, -6px); }
-    to { transform: translate(8px, 8px); }
-  }
-  .login-paused .login-drift,
-  .login-paused .login-kline-loop,
-  .login-paused .login-kline-blip { animation-play-state: paused; }
-  @media (prefers-reduced-motion: reduce) {
-    .login-drift, .login-kline-loop, .login-kline-blip { animation: none !important; }
-    .login-kline-loop { stroke-dashoffset: 0; opacity: 1; }
-  }
-`;
+/* ---------------- L0 主视觉（login-motif + K 线循环，样式在 index.css） ---------------- */
 
 function LoginMotif({ className }: { className?: string }) {
   return (
     <div className={cn('login-drift', className)} aria-hidden="true">
-      <style>{MOTIF_STYLE}</style>
       <svg viewBox="0 0 1200 900" fill="none" className="h-auto w-full">
         <defs>
           <pattern id="login-motif-dots" width="18" height="18" patternUnits="userSpaceOnUse">
@@ -315,7 +276,7 @@ export default function Login() {
         <div className="absolute right-4 top-4 z-20 md:right-8 md:top-6">
           <ThemeSwitcher />
         </div>
-        <div className="size-8 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-label={t("加载中")} {...pageRegionProps('login', 'loading')} />
+        <div {...pageRegionProps('login', 'loading')}><Spinner size={32} label={t('加载中')} /></div>
       </div>
     );
   }
@@ -363,10 +324,8 @@ export default function Login() {
         aria-hidden="true"
         style={{ background: 'radial-gradient(60% 40% at 85% 0%, rgba(46,70,224,.05), transparent 70%)' }}
       />
-      {/* L0 主视觉层：桌面右下 40% / 移动顶部裁切 45% */}
-      <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[52%] items-end justify-end opacity-90 lg:flex" aria-hidden="true">
-        <LoginMotif className="w-[min(720px,100%)] translate-y-[6%]" />
-      </div>
+      {/* L0 主视觉层：只在移动端顶部裁切 45%。桌面上它落在登录卡片正后方，
+          只露出被切碎的定位针和线段，像排版事故，所以桌面只留点阵底纹。 */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[45dvh] overflow-hidden opacity-50 lg:hidden" aria-hidden="true">
         <LoginMotif className="mx-auto w-[560px] max-w-none" />
       </div>
@@ -402,15 +361,15 @@ export default function Login() {
             {t('汇集行情、选股、财报与新闻，帮助你跟踪美股市场。')}
           </motion.p>
 
-          {/* 特性三行（移动：横滑 chips） */}
-          <div className="no-scrollbar mt-8 flex gap-6 max-lg:overflow-x-auto max-lg:pb-1 lg:flex-col lg:gap-5">
+          {/* 特性三行只在桌面展示：手机上登录才是这一页的事，表单要进第一屏。 */}
+          <div className="mt-8 hidden flex-col gap-5 lg:flex">
             {FEATURES.map((f, i) => (
               <motion.div
                 key={f.title}
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: 0.42 + i * 0.12 }}
-                className="flex items-start gap-3 max-lg:min-w-[220px] max-lg:rounded-lg max-lg:border max-lg:border-line max-lg:bg-card/80 max-lg:p-3"
+                className="flex items-start gap-3"
               >
                 <span className="mt-0.5 text-brand-600">
                   <Icon name={f.icon} size={20} />
@@ -427,7 +386,7 @@ export default function Login() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: DUR_SECTION, delay: 0.9 }}
-            className="mt-10 border-t border-line pt-4 text-caption text-ink-400"
+            className="mt-10 hidden border-t border-line pt-4 text-caption text-ink-400 lg:block"
           >
             {t('内容仅供研究参考')}
           </motion.p>
@@ -453,7 +412,7 @@ export default function Login() {
 
             {/* 登录 / 注册切换：滑动指示条，沿用页面既有动效曲线 */}
             <SelectionViewport className="selection-viewport-full">
-              <div className="mobile-selection-rail mt-5 grid grid-cols-2 rounded-sm border border-line-strong bg-card p-1">
+              <div className="mobile-selection-rail mt-5 grid grid-cols-2 rounded-[10px] border border-line bg-[var(--control-track)] p-[3px]">
                 {(['login', 'register'] as const).map((value) => (
                   <button
                     key={value}
@@ -464,15 +423,15 @@ export default function Login() {
                     }}
                     aria-pressed={mode === value}
                     className={cn(
-                      'relative h-8 rounded-xs text-caption font-medium transition-colors duration-fast',
-                      mode === value ? 'text-on-accent' : 'text-ink-500 hover:text-ink-800',
+                      'relative h-8 rounded-[7px] text-caption font-medium transition-colors duration-fast',
+                      mode === value ? 'text-brand-700' : 'text-ink-500 hover:text-ink-800',
                     )}
                   >
                     {mode === value && (
                       <motion.span
                         data-selection-decoration=""
                         layoutId="login-mode-pill"
-                        className="absolute inset-0 rounded-xs bg-brand-600 shadow-chip"
+                        className="selection-indicator absolute inset-0"
                         transition={SPRING_INDICATOR}
                       />
                     )}
@@ -505,7 +464,7 @@ export default function Login() {
                     userShake.error ? 'border-danger-600' : 'border-line-strong',
                   )}
                 >
-                  <Icon name="command" size={16} className="shrink-0 text-ink-400" />
+                  <Icon name="user" size={16} className="shrink-0 text-ink-400" />
                   <input
                     type="text"
                     value={username}
@@ -588,14 +547,8 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={serviceDown || state === 'verifying' || state === 'success'}
-                className={cn(
-                  'flex h-12 w-full items-center justify-center gap-2 rounded-md font-mono text-[14px] tracking-[0.02em] text-on-accent shadow-btn-hi',
-                  'transition-[transform,filter,background-color] duration-fast',
-                  state === 'success'
-                    ? 'bg-ok-600'
-                    : 'bg-brand-600 hover:-translate-y-px hover:brightness-[1.06] active:translate-y-0 active:brightness-95 active:duration-instant',
-                  'disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0',
-                )}
+                aria-busy={state === 'verifying'}
+                className={cn('btn-primary h-12 w-full text-body', state === 'success' && 'bg-ok-600')}
               >
                 {state === 'verifying' ? (
                   <>

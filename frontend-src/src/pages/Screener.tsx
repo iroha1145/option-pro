@@ -1111,7 +1111,7 @@ export default function Screener() {
                     <div className="flex flex-col items-center gap-3">
                       <button
                         onClick={onScanClick}
-                        className="btn-primary"
+                        className="control-button"
                       >
                         <Icon name="crosshair" size={14} />
                         {__t('开始扫描')}

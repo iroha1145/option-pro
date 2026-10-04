@@ -1020,3 +1020,41 @@
     box-shadow: none !important;
   }
 }
+
+/* 登录页主视觉：K 线描线循环、落点脉冲与整体漂移（此前以内联 <style> 随组件注入）。 */
+.login-kline-loop {
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: login-kline-loop 10s var(--ease-paper) infinite;
+}
+@keyframes login-kline-loop {
+  0% { stroke-dashoffset: 1000; opacity: 0; animation-timing-function: cubic-bezier(.16,1,.3,1); }
+  8% { opacity: 1; }
+  60% { stroke-dashoffset: 0; opacity: 1; }
+  88% { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
+.login-kline-blip {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: login-kline-blip 10s ease-out infinite;
+}
+@keyframes login-kline-blip {
+  0%, 58% { transform: scale(.15); opacity: 0; }
+  63% { opacity: .8; }
+  80% { transform: scale(1); opacity: 0; }
+  100% { transform: scale(1); opacity: 0; }
+}
+.login-drift { animation: login-drift 24s cubic-bezier(.45,0,.15,1) infinite alternate; }
+@keyframes login-drift {
+  from { transform: translate(-8px, -6px); }
+  to { transform: translate(8px, 8px); }
+}
+.login-paused .login-drift,
+.login-paused .login-kline-loop,
+.login-paused .login-kline-blip { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) {
+  .login-drift, .login-kline-loop, .login-kline-blip { animation: none !important; }
+  .login-kline-loop { stroke-dashoffset: 0; opacity: 1; }
+}
