@@ -31,6 +31,7 @@ from app.services.ai_jobs.models import (
     validate_simplified_chinese_text,
 )
 from app.services.ai_jobs.repository import AIJobRepository
+from app.services.sqlite_errors import is_sqlite_lock_contention
 
 from .errors import CatalystError, InvalidCursorError
 from .news_quality import TITLE_STOP_WORDS, news_quality
@@ -654,19 +655,6 @@ def _recent_analysis_count(
         if (completed_at := _parse_time(item.get("analyzed_at"))) is not None
         and cutoff <= completed_at <= as_of
     )
-
-
-def _is_sqlite_write_contention(error: BaseException) -> bool:
-    if not isinstance(error, sqlite3.OperationalError):
-        return False
-    code = getattr(error, "sqlite_errorcode", None)
-    if isinstance(code, int) and (code & 0xFF) in {
-        sqlite3.SQLITE_BUSY,
-        sqlite3.SQLITE_LOCKED,
-    }:
-        return True
-    message = str(error).casefold()
-    return "database is locked" in message or "database table is locked" in message
 
 
 def _analysis_status_matches(actual: Any, requested: Any) -> bool:
@@ -1945,7 +1933,7 @@ class LocalCatalystIntelligence:
                    ORDER BY c.change_sequence"""
             ).fetchall()
         except sqlite3.OperationalError as error:
-            if _is_sqlite_write_contention(error):
+            if is_sqlite_lock_contention(error):
                 return 0
             raise
         inserted = 0
@@ -2228,7 +2216,7 @@ class LocalCatalystIntelligence:
                         ).fetchall()
                     )
         except sqlite3.OperationalError as error:
-            if allow_write_contention and _is_sqlite_write_contention(error):
+            if allow_write_contention and is_sqlite_lock_contention(error):
                 return {}
             raise
         finally:
@@ -5692,7 +5680,7 @@ class LocalCatalystIntelligence:
                     connection.rollback()
                     raise
         except sqlite3.OperationalError as error:
-            if not _is_sqlite_write_contention(error):
+            if not is_sqlite_lock_contention(error):
                 raise
             return False
         return True
@@ -6963,7 +6951,7 @@ class LocalCatalystIntelligence:
                     connection.rollback()
                     raise
         except Exception as error:
-            if not _is_sqlite_write_contention(error):
+            if not is_sqlite_lock_contention(error):
                 raise
             cycle = self._focus_cycle_from_row(
                 intent,
@@ -7538,7 +7526,7 @@ class LocalCatalystIntelligence:
                             connection.rollback()
                             raise
                 except Exception as error:
-                    if not _is_sqlite_write_contention(error):
+                    if not is_sqlite_lock_contention(error):
                         raise
                     # The paid task is already terminal, so a transient local
                     # writer must not turn polling into a false failed cycle.
