@@ -558,7 +558,7 @@ export default function Home() {
                   <p className="truncate text-caption text-ink-500">{instrumentName(ins.instrument, ins.label)}</p>
                   <p
                     className={cn(
-                      'mt-0.5 font-mono text-data-m tnum',
+                      'mt-0.5 text-data-m tnum',
                       ins.position_score === null
                         ? 'text-ink-400'
                         : ins.position_score > 0
@@ -570,7 +570,7 @@ export default function Home() {
                   >
                     {signed(ins.position_score)}
                   </p>
-                  <p className="mt-0.5 font-mono text-micro text-ink-400 tnum">{signed(ins.flow_score)}</p>
+                  <p className="mt-0.5 text-micro text-ink-400 tnum">{signed(ins.flow_score)}</p>
                 </div>
               ))}
             </div>
@@ -665,7 +665,7 @@ function MarketStatusPanel({
         <div className="flex items-center justify-between border-y border-line py-2">
           <span className="text-caption text-ink-500">{t('六维形态均值')}</span>
           <span className="flex items-baseline gap-2">
-            <span className="font-mono text-data-m text-ink-900 tnum">
+            <span className="metric-value text-data-m text-ink-900">
               {mean === null ? '—' : mean.toFixed(1)}
             </span>
             {bias && <span className="text-caption text-ink-500">{bias}</span>}
@@ -675,7 +675,7 @@ function MarketStatusPanel({
 
       <p className="mt-3 text-micro text-ink-400">
         {t('扫描池')}
-        {breadth.total !== null && <span className="font-mono tnum"> · {breadth.total}</span>}
+        {breadth.total !== null && <span className="tnum"> · {breadth.total}</span>}
       </p>
       <div className="mb-4 mt-1.5 grid grid-cols-3 gap-2">
         <MiniStat label={t('上涨')} value={breadth.adv} tone="up" />
@@ -776,7 +776,7 @@ function RadarSignalRow({ signal: s, index: i }: { signal: BreakoutSignal; index
         <span className="shrink-0 text-micro text-ink-400 xl:justify-self-end xl:[grid-area:time]">{fmtRelative(s.at)}</span>
       </span>
       <span className="flex items-center justify-end gap-2 [grid-area:quote] xl:contents">
-        <span className="font-mono text-caption text-ink-800 tnum xl:justify-self-end xl:[grid-area:price]">
+        <span className="text-caption text-ink-800 tnum xl:justify-self-end xl:[grid-area:price]">
           <LivePrice symbol={s.ticker} fallback={s.price} className="justify-end" />
         </span>
         <LiveChange symbol={s.ticker} fallback={s.changePct} size="sm" className="shrink-0 xl:justify-self-end xl:[grid-area:change]" />
@@ -819,7 +819,7 @@ function EarningsAnchorRow({ item: it, todayKey }: { item: EarningsItem; todayKe
       </p>
       <span className="flex shrink-0 items-center gap-1.5">
         {eps !== null && (
-          <span className="hidden font-mono text-micro text-ink-500 tnum sm:block lg:hidden xl:block">
+          <span className="hidden text-micro text-ink-500 tnum sm:block lg:hidden xl:block">
             {t('EPS 预期 {v}', { v: eps.toFixed(2) })}
           </span>
         )}
@@ -930,7 +930,7 @@ function WatchlistMoverRow({ item, preparation, statusReadFailed }: MoverProps) 
           <span className="shrink-0 font-mono text-caption font-semibold text-ink-800">{item.ticker}</span>
           <span className="min-w-0 truncate text-caption text-ink-500">{item.name}</span>
         </p>
-        <p className="mt-1.5 font-mono text-caption text-ink-800 tnum">
+        <p className="mt-1.5 text-caption text-ink-800 tnum">
           <LivePrice symbol={item.ticker} fallback={item.price} fallbackAt={item.updatedAt} />
         </p>
         <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
