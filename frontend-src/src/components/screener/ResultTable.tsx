@@ -233,7 +233,7 @@ export default function ResultTable({
                       aria-controls={isOpen ? panelId : undefined}
                       aria-label={t('展开或收起 {ticker} 详情', { ticker: r.ticker })}
                       className={cn(
-                        'inline-flex size-8 items-center justify-center rounded-sm border border-line text-ink-400 transition-[color,border-color,transform] duration-fast active:scale-[.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11',
+                        'inline-flex size-8 items-center justify-center rounded-sm border border-line text-ink-400 transition-[color,border-color,transform] duration-fast active:scale-[.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11',
                         isOpen && 'border-brand-400 text-brand-600',
                       )}
                     >

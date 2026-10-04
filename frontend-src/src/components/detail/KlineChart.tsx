@@ -1022,7 +1022,7 @@ export default function KlineChart({
               maxLength={240}
               value={drawing.draftText}
               onChange={(event) => drawing.setDraftText(event.target.value)}
-              className="w-full rounded-xs border border-line bg-card px-2 py-1 text-caption outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30"
+              className="w-full rounded-xs border border-line bg-card px-2 py-1 text-caption outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
               placeholder={t('点击放置文字，然后输入内容')}
             />
           </label>

@@ -21,7 +21,7 @@ const TOOLS: { id: DrawingTool; icon: IconName; label: string }[] = [
 function toolButtonCls(active: boolean): string {
   return cn(
     'inline-flex size-8 min-h-11 min-w-11 items-center justify-center rounded-xs border text-ink-500 outline-none transition-colors duration-fast md:size-8 md:min-h-8 md:min-w-8',
-    'focus-visible:ring-2 focus-visible:ring-brand-500/30',
+    'focus-visible:ring-2 focus-visible:ring-brand-600',
     active
       ? 'border-brand-400 bg-brand-50 text-brand-700 shadow-chip'
       : 'border-line hover:text-ink-700',

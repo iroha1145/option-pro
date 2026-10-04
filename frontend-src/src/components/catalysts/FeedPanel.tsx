@@ -75,7 +75,7 @@ export function NewsRow({
         type="button"
         onClick={() => onOpen(item.newsId)}
         aria-label={item.titleZh}
-        className="absolute inset-0 z-0 focus-visible:bg-paper-2/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-400/60"
+        className="absolute inset-0 z-0 focus-visible:bg-paper-2/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600"
       />
       <TimeCol iso={item.publishedAt} />
       {/* 内容层保留指针事件（可划选复制标题、title 提示可悬停），整行点击由这里

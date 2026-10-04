@@ -41,7 +41,7 @@ const PRESET_ORDER: Exclude<PresetId, 'custom'>[] = [
   'all',
 ];
 
-const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30';
+const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600';
 
 const FAMILY_LABELS = {
   short: t('短线'),

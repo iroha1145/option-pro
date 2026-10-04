@@ -61,7 +61,7 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
                 <button
                   onClick={() => onJumpDay(d.date)}
                   aria-label={t('{date} {weekday}，{n} 条财报，跳转', { date: fmtMDCN(d.date), weekday: weekdayCN(d.date), n })}
-                  className="group relative flex h-full min-w-0 flex-1 items-end focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-400/60"
+                  className="group relative flex h-full min-w-0 flex-1 items-end focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600"
                 >
                   {/* tooltip：当日代码列表。首/尾三分之一改为贴边对齐（审计 2.4.6）：
                       纯居中在窄屏上会把浮层伸出视口，Layout 的 overflow-x-clip

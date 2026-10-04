@@ -232,7 +232,7 @@ export default function IvPanel({
                       onOpenTicker(r.ticker);
                     }
                   }}
-                  className="group h-11 cursor-pointer border-b border-line transition-colors duration-fast last:border-0 hover:bg-paper-2 focus-visible:bg-paper-2 focus-visible:outline-none"
+                  className="group h-11 cursor-pointer border-b border-line transition-colors duration-fast last:border-0 hover:bg-paper-2 focus-visible:bg-paper-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600"
                 >
                   <td className="py-2 pr-2">
                     <span className="flex items-center gap-2.5">

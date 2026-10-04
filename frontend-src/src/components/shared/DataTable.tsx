@@ -107,7 +107,7 @@ export default function DataTable<T>({
                     <button
                       type="button"
                       onClick={() => toggleSort(c.key)}
-                      className="inline-flex items-center gap-1 rounded-xs transition-colors duration-fast hover:text-ink-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30"
+                      className="inline-flex items-center gap-1 rounded-xs transition-colors duration-fast hover:text-ink-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
                     >
                       {c.title}
                       <span className={cn('inline-flex transition-[transform,opacity] duration-ui ease-paper', sort?.key === c.key && !sort.desc && 'rotate-180', sort?.key !== c.key && 'opacity-30')}>
@@ -139,7 +139,7 @@ export default function DataTable<T>({
                 } : undefined}
                 className={cn(
                   'group border-b border-line last:border-0 transition-colors duration-fast',
-                  onRowClick && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500/30',
+                  onRowClick && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600',
                   'hover:bg-paper-2',
                   rowClassName?.(row),
                 )}

@@ -105,7 +105,7 @@ export default function DrawingInspector({
                   aria-pressed={drawing?.id === item.id}
                   onClick={() => onSelect?.(item.id)}
                   className={cn(
-                    'min-w-0 flex-1 rounded-xs border px-2 py-1 text-left text-micro outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30',
+                    'min-w-0 flex-1 rounded-xs border px-2 py-1 text-left text-micro outline-none focus-visible:ring-2 focus-visible:ring-brand-600',
                     drawing?.id === item.id ? 'border-brand-400 bg-brand-50' : 'border-line',
                   )}
                 >
@@ -158,7 +158,7 @@ export default function DrawingInspector({
                 aria-pressed={drawing.style.color.toUpperCase() === color.value}
                 onClick={() => onStyle({ ...drawing.style, color: color.value })}
                 className={cn(
-                  'size-6 min-h-11 min-w-11 rounded-xs border outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30 md:size-6 md:min-h-6 md:min-w-6',
+                  'size-6 min-h-11 min-w-11 rounded-xs border outline-none focus-visible:ring-2 focus-visible:ring-brand-600 md:size-6 md:min-h-6 md:min-w-6',
                   drawing.style.color.toUpperCase() === color.value ? 'border-ink-700' : 'border-line',
                 )}
                 style={{ background: drawingPaint(color.value) }}
@@ -175,7 +175,7 @@ export default function DrawingInspector({
                 aria-pressed={drawing.style.width === width}
                 onClick={() => onStyle({ ...drawing.style, width })}
                 className={cn(
-                  'rounded-xs border px-2 py-0.5 font-mono text-micro outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30',
+                  'rounded-xs border px-2 py-0.5 font-mono text-micro outline-none focus-visible:ring-2 focus-visible:ring-brand-600',
                   drawing.style.width === width ? 'border-brand-400 bg-brand-50' : 'border-line',
                 )}
               >
@@ -194,7 +194,7 @@ export default function DrawingInspector({
                 aria-pressed={drawing.style.dash === dash.id}
                 onClick={() => onStyle({ ...drawing.style, dash: dash.id })}
                 className={cn(
-                  'rounded-xs border px-2 py-0.5 text-micro outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30',
+                  'rounded-xs border px-2 py-0.5 text-micro outline-none focus-visible:ring-2 focus-visible:ring-brand-600',
                   drawing.style.dash === dash.id ? 'border-brand-400 bg-brand-50' : 'border-line',
                 )}
               >
@@ -224,7 +224,7 @@ export default function DrawingInspector({
                 maxLength={240}
                 value={drawing.text ?? ''}
                 onChange={(event) => onText(event.target.value)}
-                className="min-h-[72px] rounded-xs border border-line bg-card px-2 py-1 text-caption outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30"
+                className="min-h-[72px] rounded-xs border border-line bg-card px-2 py-1 text-caption outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
               />
             </label>
           )}

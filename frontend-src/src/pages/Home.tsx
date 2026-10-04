@@ -737,7 +737,7 @@ function EarningsAnchorRow({ item: it, todayKey }: { item: EarningsItem; todayKe
   return (
     <Link
       to={`/stock/${encodeURIComponent(it.ticker)}`}
-      className="flex items-center gap-3 px-4 py-2.5 transition-colors duration-fast hover:bg-paper-2/70 focus-visible:bg-paper-2/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-400/60 md:px-5"
+      className="flex items-center gap-3 px-4 py-2.5 transition-colors duration-fast hover:bg-paper-2/70 focus-visible:bg-paper-2/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600 md:px-5"
     >
       <span
         className={cn(
