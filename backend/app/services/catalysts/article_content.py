@@ -361,7 +361,7 @@ def fetch_article(url: str, *, expected_title: str = "", timeout_seconds: float 
             normalized, host, path = _validated_url(url)
             result["source_url"] = normalized
             if host == "news.google.com":
-                publisher = resolve_publisher_url(normalized, b"", request=_google_request, deadline=deadline)
+                publisher = resolve_publisher_url(normalized, request=_google_request, deadline=deadline)
                 _remaining(deadline)
                 if not publisher:
                     raise _Unavailable("publisher_url_unavailable")

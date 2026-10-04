@@ -2752,14 +2752,10 @@ class LocalCatalystIntelligence:
     def _recover_unlinked_news_jobs(
         self,
         connection: sqlite3.Connection,
-        jobs: Mapping[str, dict[str, Any]],
-        *,
-        planned: Sequence[dict[str, Any]] | None = None,
+        planned: Sequence[dict[str, Any]],
     ) -> int:
         """Write the links chosen by the read-only recovery plan."""
 
-        if planned is None:
-            planned = self._plan_unlinked_news_job_recovery(connection, jobs)
         recovered = 0
         for job in planned:
             key = self._news_job_revision_key(job)
@@ -4502,8 +4498,7 @@ class LocalCatalystIntelligence:
                     self._recover_stale_preparing_focus(connection, now=now)
                 recovered_links = self._recover_unlinked_news_jobs(
                     connection,
-                    ai_jobs,
-                    planned=news_link_plan,
+                    news_link_plan,
                 )
                 recovered_focus_links = self._recover_unlinked_focus_jobs(
                     connection,

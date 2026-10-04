@@ -33,7 +33,7 @@ def test_fixed_google_requests_and_escaped_signed_payload():
         return (200, {}, metadata(signature=signature)) if method == "GET" else (200, {}, reply())
 
     deadline = time.monotonic() + 5
-    assert news_links.resolve_publisher_url(GOOGLE_URL, b"<html>shell</html>", request=request, deadline=deadline) == PUBLISHER
+    assert news_links.resolve_publisher_url(GOOGLE_URL, request=request, deadline=deadline) == PUBLISHER
     assert calls[0][:2] == (f"https://news.google.com/articles/{ARTICLE_ID}?hl=en-US&gl=US&ceid=US:en", "GET")
     assert calls[1][:2] == (news_links._BATCH, "POST")
     assert all(call[3] == deadline for call in calls)
@@ -43,17 +43,6 @@ def test_fixed_google_requests_and_escaped_signed_payload():
     assert inner[-3:] == [ARTICLE_ID, 1790698323, signature]
 
 
-def test_reuses_matching_metadata_without_second_get():
-    calls = []
-
-    def request(url, *, method, body, deadline):
-        calls.append((url, method))
-        return 200, {}, reply()
-
-    assert news_links.resolve_publisher_url(GOOGLE_URL, metadata(), request=request, deadline=time.monotonic() + 2) == PUBLISHER
-    assert calls == [(news_links._BATCH, "POST")]
-
-
 def test_legacy_literal_url_decodes_without_network():
     raw_url = PUBLISHER.encode()
     article_id = base64.urlsafe_b64encode(b"\x08\x13\x22" + bytes([len(raw_url)]) + raw_url + b"\xd2\x01\x00").decode().rstrip("=")
@@ -61,7 +50,7 @@ def test_legacy_literal_url_decodes_without_network():
     def no_network(*args, **kwargs):
         pytest.fail("legacy link must not use network")
 
-    assert news_links.resolve_publisher_url(f"https://news.google.com/articles/{article_id}", b"", request=no_network, deadline=time.monotonic() + 2) == PUBLISHER
+    assert news_links.resolve_publisher_url(f"https://news.google.com/articles/{article_id}", request=no_network, deadline=time.monotonic() + 2) == PUBLISHER
 
 
 @pytest.mark.parametrize("url", [
@@ -74,7 +63,7 @@ def test_legacy_literal_url_decodes_without_network():
     "https://news.google.com/articles/" + ARTICLE_ID + "%2Fother",
 ])
 def test_unsupported_input_never_reaches_network(url):
-    assert news_links.resolve_publisher_url(url, b"", request=lambda *a, **k: pytest.fail("network"), deadline=time.monotonic() + 2) is None
+    assert news_links.resolve_publisher_url(url, request=lambda *a, **k: pytest.fail("network"), deadline=time.monotonic() + 2) is None
 
 
 @pytest.mark.parametrize("publisher", [
@@ -90,31 +79,31 @@ def test_unsupported_input_never_reaches_network(url):
 ])
 def test_rejects_unsafe_batch_results(publisher):
     def request(url, *, method, body, deadline):
-        return 200, {}, reply(publisher)
+        return (200, {}, metadata()) if method == "GET" else (200, {}, reply(publisher))
 
-    assert news_links.resolve_publisher_url(GOOGLE_URL, metadata(), request=request, deadline=time.monotonic() + 2) is None
+    assert news_links.resolve_publisher_url(GOOGLE_URL, request=request, deadline=time.monotonic() + 2) is None
 
 
 def test_ambiguous_metadata_fails_closed():
     def request(url, *, method, body, deadline):
         return 200, {}, metadata(signature="Signature1") + metadata(signature="Signature2")
 
-    assert news_links.resolve_publisher_url(GOOGLE_URL, b"", request=request, deadline=time.monotonic() + 2) is None
+    assert news_links.resolve_publisher_url(GOOGLE_URL, request=request, deadline=time.monotonic() + 2) is None
 
 
 def test_unrelated_link_and_invalid_reply_are_not_used():
     def request(url, *, method, body, deadline):
         return 200, {}, b'<a href="https://publisher.example/possibly-unrelated">Read more</a>' if method == "GET" else b""
 
-    assert news_links.resolve_publisher_url(GOOGLE_URL, b"", request=request, deadline=time.monotonic() + 2) is None
+    assert news_links.resolve_publisher_url(GOOGLE_URL, request=request, deadline=time.monotonic() + 2) is None
     assert news_links._batch_url(b"[[\"wrb.fr\",\"Fbv4je\",\"https://publisher.example/guess\"]]") is None
     assert news_links._batch_url(b"x" * 100001) is None
 
 
 def test_deadline_prevents_requests_and_timeout_is_fallback():
-    assert news_links.resolve_publisher_url(GOOGLE_URL, b"", request=lambda *a, **k: pytest.fail("network"), deadline=time.monotonic() - 1) is None
+    assert news_links.resolve_publisher_url(GOOGLE_URL, request=lambda *a, **k: pytest.fail("network"), deadline=time.monotonic() - 1) is None
 
     def timeout(*args, **kwargs):
         raise TimeoutError
 
-    assert news_links.resolve_publisher_url(GOOGLE_URL, b"", request=timeout, deadline=time.monotonic() + 2) is None
+    assert news_links.resolve_publisher_url(GOOGLE_URL, request=timeout, deadline=time.monotonic() + 2) is None
