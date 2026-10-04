@@ -4,7 +4,7 @@
  * variant="area"：卡片折线图——细线 + 极浅面积 + 小端点。
  * 小图保持真实观测点间的折线，和 Cloud Monitor 的清晰小图一致。
  * 两者都保留首绘 draw-line。
- * stretch：按渲染出来的实际宽度重新取点，而不是把固定宽度的图横向拉伸。
+ * stretch：按渲染出来的实际宽高重新取点，而不是把固定尺寸的图拉伸。
  * 拉伸时 non-scaling-stroke 让虚线按屏幕像素计长，pathLength=1 的首绘虚线
  * 只盖住「名义宽度 / 实际宽度」那一段，曲线末端会缺一截；末点圆也会被压扁。
  */
@@ -36,31 +36,33 @@ const straight = (pts: Pt[]): string =>
 const Sparkline = memo(function Sparkline({ data, width = 48, height = 20, change, variant = 'line', stretch = false, className }: SparklineProps) {
   const id = useId().replace(/[^a-zA-Z0-9]/g, '');
   const svgRef = useRef<SVGSVGElement>(null);
-  const [measured, setMeasured] = useState<number | null>(null);
+  const [measured, setMeasured] = useState<{ w: number; h: number } | null>(null);
   useLayoutEffect(() => {
     const el = svgRef.current;
     if (!stretch || !el || typeof ResizeObserver === 'undefined') return;
     const observer = new ResizeObserver(([entry]) => {
-      const next = Math.round(entry.contentRect.width);
-      if (next > 0) setMeasured(next);
+      const w = Math.round(entry.contentRect.width);
+      const h = Math.round(entry.contentRect.height);
+      if (w > 0 && h > 0) setMeasured((prev) => (prev && prev.w === w && prev.h === h ? prev : { w, h }));
     });
     observer.observe(el);
     return () => observer.disconnect();
   }, [stretch]);
-  const w = stretch && measured ? measured : width;
+  const w = stretch && measured ? measured.w : width;
+  const h = stretch && measured ? measured.h : height;
   const isArea = variant === 'area';
   /* 面积版留够边距，末点的实心圆 + 白环（半径合计 ~3.8px）才不会被裁掉 */
   const pad = isArea ? 5 : 2;
   const { line, area, last } = useMemo(() => {
     if (data.length < 2) return { line: '', area: '', last: null as Pt | null };
-    const pts = toPoints(data, w, height, pad);
+    const pts = toPoints(data, w, h, pad);
     const path = straight(pts);
     return {
       line: path,
-      area: `${path}L${pts[pts.length - 1][0].toFixed(1)},${height}L${pts[0][0].toFixed(1)},${height}Z`,
+      area: `${path}L${pts[pts.length - 1][0].toFixed(1)},${h}L${pts[0][0].toFixed(1)},${h}Z`,
       last: pts[pts.length - 1],
     };
-  }, [data, w, height, pad]);
+  }, [data, w, h, pad]);
 
   /* 三态与同屏 ChangeBadge 一致：持平不是上涨。
      卡片图以前不分涨跌一律刷品牌蓝，同一张卡上「−2.51%」是红的、曲线却是蓝的，
@@ -73,8 +75,10 @@ const Sparkline = memo(function Sparkline({ data, width = 48, height = 20, chang
       ref={svgRef}
       width={width}
       height={height}
-      viewBox={`0 0 ${w} ${height}`}
-      preserveAspectRatio={stretch ? 'none' : undefined}
+      /* stretch 不设 viewBox：用户坐标即屏幕像素，按量得的宽高直接作图。若设成
+         「0 0 量得宽 量得高」，viewBox 的宽高比会反过来改变元素的自然高度，
+         在高度不定的父级里一路长到 max-height。 */
+      viewBox={stretch ? undefined : `0 0 ${w} ${h}`}
       className={className}
       aria-hidden="true"
       role="presentation"

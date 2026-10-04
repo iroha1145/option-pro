@@ -93,25 +93,30 @@ function RetryButton({ onClick, refreshing }: { onClick: () => void; refreshing:
   );
 }
 
-/** 区块卡统一外壳：text-h3 标题 + 右侧 brand-700「查看全部」 */
+/** 区块卡统一外壳：text-h3 标题 + 右侧 brand-700「查看全部」；纵向弹性布局，
+ *  底部数据时间行用 mt-auto 贴底——同一行的两张卡被栅格拉到等高后，底边与页脚都对齐。 */
 function SectionCard({
   title,
   to,
+  updatedAt,
   children,
   className,
 }: {
   title: string;
   to: string;
+  /** 本区数据最近一次成功读取的时间；各区轮询节奏不同，各自标明 */
+  updatedAt?: number | null;
   children: ReactNode;
   className?: string;
 }) {
   return (
-    <section className={cn('card-surface', className)} aria-label={title}>
+    <section className={cn('card-surface flex flex-col', className)} aria-label={title}>
       <div className="flex items-center justify-between gap-3 px-4 pb-1 pt-4 md:px-5 md:pt-5">
         <h3 className="text-h3 text-ink-900">{title}</h3>
         <Link
           to={to}
-          className="link-learn shrink-0 text-caption font-medium text-brand-700 transition-colors duration-fast hover:text-brand-600"
+          /* 文字链只有 16px 高：粗指针下用上下内边距补到 44px，负外边距抵消，版面不动 */
+          className="link-learn shrink-0 text-caption font-medium text-brand-700 transition-colors duration-fast hover:text-brand-600 [@media(pointer:coarse)]:-my-3.5 [@media(pointer:coarse)]:py-3.5"
         >
           {t('查看全部')}
           <span className="link-learn-chevron" aria-hidden="true">
@@ -120,6 +125,12 @@ function SectionCard({
         </Link>
       </div>
       {children}
+      {updatedAt ? (
+        <p className="mt-auto flex items-center gap-1.5 border-t border-line px-4 py-2.5 text-micro text-ink-400 md:px-5">
+          {t('更新')}
+          <span className="font-mono tnum">{fmtTimeHHMMSS(updatedAt)}</span>
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -338,7 +349,7 @@ export default function Home() {
 
       {/* 指数带（SPX/NDX/DJI/RUT/SOX/VIX，点击进 /market?index= 高亮定位） */}
       <section
-        className="mt-8"
+        className="mt-5 md:mt-8"
         aria-label={t('指数概览')}
         {...pageRegionProps(
           'home-indices',
@@ -389,8 +400,10 @@ export default function Home() {
         )}
       </section>
 
-      {/* 行2：市场状态 + 雷达信号 */}
-      <div className="mt-8 grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
+      {/* 行2：市场状态 + 雷达信号。栅格默认 stretch，两卡同高、底边对齐；
+          lg 以下雷达排到市场状态前面，手机首屏在指数之后就能看到信号
+          （市场时段与更新时间页头已有）。 */}
+      <div className="mt-6 grid grid-cols-1 gap-6 md:mt-8 lg:grid-cols-3">
         <MarketStatusPanel
           status={status}
           session={session}
@@ -414,7 +427,7 @@ export default function Home() {
           }}
         />
 
-        <SectionCard title={t('雷达信号')} to="/breakouts" className="lg:col-span-2">
+        <SectionCard title={t('雷达信号')} to="/breakouts" updatedAt={breakoutsQ.lastUpdatedAt} className="order-first lg:order-none lg:col-span-2">
           <ListBody
             loading={breakoutsQ.loading}
             error={breakoutsQ.error}
@@ -433,9 +446,9 @@ export default function Home() {
         </SectionCard>
       </div>
 
-      {/* 行3：财报临近 + 自选异动 */}
-      <div className="mt-8 grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
-        <SectionCard title={t('财报临近')} to="/earnings">
+      {/* 行3：财报临近 + 自选异动，与行2同一套 1/3 + 2/3 栅格，两卡同高 */}
+      <div className="mt-6 grid grid-cols-1 gap-6 md:mt-8 lg:grid-cols-3">
+        <SectionCard title={t('财报临近')} to="/earnings" updatedAt={earningsQ.lastUpdatedAt}>
           <ListBody
             loading={earningsQ.loading}
             error={earningsQ.error}
@@ -454,7 +467,7 @@ export default function Home() {
           </ListBody>
         </SectionCard>
 
-        <SectionCard title={t('关注池异动')} to="/watchlist">
+        <SectionCard title={t('关注池异动')} to="/watchlist" updatedAt={watchlistQ.lastUpdatedAt} className="lg:col-span-2">
           <ListBody
             loading={watchlistQ.loading}
             error={watchlistQ.error}
@@ -464,20 +477,31 @@ export default function Home() {
             emptyTitle={t('暂无关注标的')}
             skeleton={<MoverListSkeleton rows={5} />}
           >
-            {/* 异动最大的一只作主条目（大图 + 区间说明 + 强度），其余为紧凑行 */}
-            <div className="mt-2 divide-y divide-line border-t border-line">
-              {movers.map((item, i) => {
-                const Mover = i === 0 ? WatchlistMoverLead : WatchlistMoverRow;
-                return (
-                  <Mover
-                    key={item.ticker}
-                    item={item}
-                    index={i}
-                    preparation={readiness.byTicker.get(quoteSymbol(item.ticker))}
-                    statusReadFailed={Boolean(readiness.error)}
-                  />
-                );
-              })}
+            {/* 异动最大的一只作主条目（大图 + 区间说明 + 强度），其余为紧凑行；
+                md 起主条目在左、紧凑行在右，中间一条发丝线 */}
+            <div className={`mt-2 border-t border-line${movers.length > 1 ? ' md:grid md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]' : ''}`}>
+              {movers[0] && (
+                <WatchlistMoverLead
+                  item={movers[0]}
+                  index={0}
+                  preparation={readiness.byTicker.get(quoteSymbol(movers[0].ticker))}
+                  statusReadFailed={Boolean(readiness.error)}
+                />
+              )}
+              {/* 只有一只时不留空的右栏和竖线，主条目占满整行 */}
+              {movers.length > 1 && (
+                <div className="divide-y divide-line border-t border-line md:border-l md:border-t-0">
+                  {movers.slice(1).map((item, i) => (
+                    <WatchlistMoverRow
+                      key={item.ticker}
+                      item={item}
+                      index={i + 1}
+                      preparation={readiness.byTicker.get(quoteSymbol(item.ticker))}
+                      statusReadFailed={Boolean(readiness.error)}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </ListBody>
         </SectionCard>
@@ -653,7 +677,7 @@ function MarketStatusPanel({
         {t('扫描池')}
         {breadth.total !== null && <span className="font-mono tnum"> · {breadth.total}</span>}
       </p>
-      <div className="mt-1.5 grid grid-cols-3 gap-2">
+      <div className="mb-4 mt-1.5 grid grid-cols-3 gap-2">
         <MiniStat label={t('上涨')} value={breadth.adv} tone="up" />
         <MiniStat label={t('下跌')} value={breadth.dec} tone="down" />
         <MiniStat label={t('平盘')} value={breadth.flat} tone="flat" />
@@ -661,7 +685,7 @@ function MarketStatusPanel({
 
       {/* 辅助指标直接展示；缺失读数仍遵守原有数据纪律，不补零。 */}
       {(strength?.aggregateAvailable === true || (signalMetrics && signalMetrics.length > 0)) && (
-        <div className="mt-4 border-t border-line/70 pt-3" data-testid="home-supporting-metrics">
+        <div className="mt-auto border-t border-line/70 pt-3" data-testid="home-supporting-metrics">
           <p className="text-caption font-medium text-ink-600">{t('辅助指标')}</p>
           <div className="mt-2 rounded-lg bg-paper-2/60 p-3">
             {strength?.aggregateAvailable === true && (
@@ -795,7 +819,7 @@ function EarningsAnchorRow({ item: it, todayKey }: { item: EarningsItem; todayKe
       </p>
       <span className="flex shrink-0 items-center gap-1.5">
         {eps !== null && (
-          <span className="hidden font-mono text-micro text-ink-500 tnum sm:block">
+          <span className="hidden font-mono text-micro text-ink-500 tnum sm:block lg:hidden xl:block">
             {t('EPS 预期 {v}', { v: eps.toFixed(2) })}
           </span>
         )}
@@ -849,7 +873,7 @@ function WatchlistMoverLead({ item, index: i, preparation, statusReadFailed }: M
   return (
     <Link
       to={`/stock/${encodeURIComponent(item.ticker)}`}
-      className={`block px-4 py-4 md:px-5 ${MOVER_LINK}`}
+      className={`flex flex-col px-4 py-4 md:h-full md:px-5 ${MOVER_LINK}`}
       data-testid="watchlist-mover-card"
     >
       <div className="flex items-center gap-2.5">
@@ -868,15 +892,17 @@ function WatchlistMoverLead({ item, index: i, preparation, statusReadFailed }: M
         <span className="shrink-0 text-micro text-ink-400">{trend ? t('近 {count} 个交易日', { count: trend.length }) : t('日线走势')}</span>
       </div>
       {spark && trend && periodChange !== null ? (
-        <figure className="mt-3" data-testid="watchlist-daily-trend" aria-label={moverTrendLabel(item.ticker, trend, periodChange)}>
-          <Sparkline data={spark} width={480} height={104} change={periodChange} variant="area" stretch className="h-[104px] w-full" />
+        /* md 起与右侧紧凑行并排：图随这一栏的高度长高，封顶 220px，再高就把 30 日的
+           起伏放大成陡峰，多出的空间留在说明行与强度行之间。上下堆叠时固定 104px。 */
+        <figure className="mt-3 flex flex-col md:flex-1" data-testid="watchlist-daily-trend" aria-label={moverTrendLabel(item.ticker, trend, periodChange)}>
+          <Sparkline data={spark} width={480} height={104} change={periodChange} variant="area" stretch className="h-[104px] w-full md:h-auto md:max-h-[220px] md:min-h-[104px] md:flex-1" />
           <figcaption className="mt-1 flex items-center justify-between gap-2 font-mono text-micro text-ink-400 tnum">
             <span>{trend[0].date.slice(5)} — {trend[trend.length - 1].date.slice(5)}</span>
             <span className="flex items-center gap-1.5"><span className="font-sans">{t('区间')}</span><ChangeBadge value={periodChange} size="sm" /></span>
           </figcaption>
         </figure>
       ) : (
-        <div className="mt-3 flex h-[122px] items-center justify-center rounded-sm bg-paper-2 px-4 text-center text-caption text-ink-400">
+        <div className="mt-3 flex min-h-[122px] items-center justify-center rounded-sm bg-paper-2 px-4 text-center text-caption text-ink-400 md:flex-1">
           {moverPendingText(preparation, statusReadFailed)}
         </div>
       )}
