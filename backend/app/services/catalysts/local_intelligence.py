@@ -753,15 +753,26 @@ def _article_snapshot(
     return article
 
 
+def _available_article(
+    revision: Mapping[str, Any] | sqlite3.Row,
+    *,
+    as_of: datetime | None = None,
+) -> dict[str, Any] | None:
+    article = _article_snapshot(revision, as_of=as_of)
+    if article is None or article.get("status") != "available":
+        return None
+    return article
+
+
 def _news_quality_reason(
     revision: Mapping[str, Any] | sqlite3.Row, *, as_of: datetime,
 ) -> str | None:
     item = dict(revision)
-    article = _article_snapshot(item, as_of=as_of) or {}
+    article = _available_article(item, as_of=as_of)
     return news_quality(
         str(item.get("raw_title") or ""),
         item.get("raw_summary"),
-        article.get("text") if article.get("status") == "available" else None,
+        article.get("text") if article is not None else None,
     )
 
 
@@ -850,8 +861,8 @@ def _news_article_matches(
         # Earlier paid requests stay bound even if a later forced request has
         # obtained a body. They must continue to be labelled title/summary only.
         return payload.get("article_status") in {None, "unavailable", "not_requested"}
-    stored = _article_snapshot(revision)
-    if not isinstance(article, dict) or stored is None or stored.get("status") != "available":
+    stored = _available_article(revision)
+    if not isinstance(article, dict) or stored is None:
         return False
     if payload.get("article_status") != "available" or set(article) != set(stored):
         return False
@@ -2255,14 +2266,18 @@ class LocalCatalystIntelligence:
     ) -> tuple[dict[str, dict[str, Any]], bool]:
         """News/focus jobs created inside the news retention window."""
 
-        created_since = (
+        return self._ai_job_snapshot_or_empty(
+            "catalyst_reconcile_ai_jobs",
+            created_since=self._ai_job_snapshot_floor(),
+        )
+
+    def _ai_job_snapshot_floor(self) -> datetime:
+        # The AI store's own clock: the floor is compared with the created_at
+        # values that store writes.
+        return (
             ai_job_store._utcnow()
             - timedelta(days=self._news_retention_days)
             - _AI_JOB_SNAPSHOT_MARGIN
-        )
-        return self._ai_job_snapshot_or_empty(
-            "catalyst_reconcile_ai_jobs",
-            created_since=created_since,
         )
 
     def _has_current_job_identity(
@@ -2970,9 +2985,7 @@ class LocalCatalystIntelligence:
         """
 
         item = dict(revision)
-        article = _article_snapshot(item, as_of=as_of)
-        if article is not None and article.get("status") != "available":
-            article = None
+        article = _available_article(item, as_of=as_of)
 
         def list_value(decoded_key: str, json_key: str) -> list[Any]:
             decoded = item.get(decoded_key)
@@ -3477,18 +3490,10 @@ class LocalCatalystIntelligence:
                 continue
             assert job is not None
             payload = self._job_payload(job)
-            revision = connection.execute(
-                """SELECT news_id,change_sequence,content_hash,source,raw_title,
-                          raw_summary,url,published_at,fetched_at,source_names_json,
-                          source_count,source_tickers_json,canonical_tickers_json,article_json
-                   FROM catalyst_local_news_revisions
-                   WHERE news_id=? AND change_sequence=? AND content_hash=?""",
-                (
-                    link["news_id"],
-                    link["change_sequence"],
-                    link["content_hash"],
-                ),
-            ).fetchone()
+            revision = self._news_revision_row(
+                connection,
+                (link["news_id"], link["change_sequence"], link["content_hash"]),
+            )
             if (
                 payload is None
                 or revision is None
@@ -4585,9 +4590,7 @@ class LocalCatalystIntelligence:
             row,
             as_of=as_of,
         )
-        article = _article_snapshot(row, as_of=as_of)
-        if article is not None and article.get("status") != "available":
-            article = None
+        article = _available_article(row, as_of=as_of)
         # Published analysis determines the item status below. Its linked job
         # may be a newer attempt, but that state is only needed by detail reads.
         if result is None and current_request_is_owner():
@@ -5973,8 +5976,7 @@ class LocalCatalystIntelligence:
         """
         if self._article_fetcher is None:
             return row
-        previous = _article_snapshot(row)
-        if previous and previous.get("status") == "available":
+        if _available_article(row) is not None:
             return row
         checked = _parse_time(row.get("article_checked_at"))
         if not force and checked is not None and (_utc_now() - checked).total_seconds() < ARTICLE_RETRY_SECONDS:
@@ -5992,8 +5994,7 @@ class LocalCatalystIntelligence:
             if stored is None:
                 connection.rollback()
                 return row
-            winner = _article_snapshot(stored)
-            if winner and winner.get("status") == "available":
+            if _available_article(stored) is not None:
                 row = {**row, **dict(stored)}
             else:
                 checked_at = _iso()
@@ -6117,7 +6118,7 @@ class LocalCatalystIntelligence:
         if self._article_fetcher is not None:
             probes = sorted(
                 (item for item in items if _news_quality_reason(item, as_of=now)
-                 and (_article_snapshot(item) or {}).get("status") != "available"),
+                 and _available_article(item) is None),
                 key=lambda item: str(item.get("article_checked_at") or ""),
             )[:SCHEDULED_ARTICLE_PROBE_LIMIT]
             if probes:
@@ -6172,19 +6173,10 @@ class LocalCatalystIntelligence:
         jobs: Mapping[str, dict[str, Any]],
     ) -> dict[str, Any] | None:
         with self._connect() as connection:
-            revision_row = connection.execute(
-                """SELECT news_id,change_sequence,content_hash,source,raw_title,
-                          raw_summary,url,published_at,fetched_at,source_names_json,
-                          source_count,source_tickers_json,
-                          canonical_tickers_json,article_json
-                   FROM catalyst_local_news_revisions
-                   WHERE news_id=? AND change_sequence=? AND content_hash=?""",
-                (
-                    row["news_id"],
-                    row["change_sequence"],
-                    row["content_hash"],
-                ),
-            ).fetchone()
+            revision_row = self._news_revision_row(
+                connection,
+                (row["news_id"], row["change_sequence"], row["content_hash"]),
+            )
             linked_job_ids = {
                 str(link["job_id"])
                 for link in connection.execute(
@@ -6729,7 +6721,7 @@ class LocalCatalystIntelligence:
                 and str(candidate["job_id"])
                 == f"intent:{candidate['cycle_id']}"
             ):
-                if self._expired_focus_intent_has_job(candidate, jobs):
+                if self._expired_focus_intent_job(candidate, jobs) is not None:
                     # Paid work exists for this intent; reconcile relinks it.
                     return None, True
                 # The intent expired before any paid job existed and never
@@ -6795,11 +6787,13 @@ class LocalCatalystIntelligence:
             return None, True
         return None, False
 
-    def _expired_focus_intent_has_job(
+    def _expired_focus_intent_job(
         self,
         intent: Mapping[str, Any] | sqlite3.Row,
         jobs: Mapping[str, dict[str, Any]],
-    ) -> bool:
+    ) -> dict[str, Any] | None:
+        """The paid market-focus job that belongs to an expired intent, if any."""
+
         cycle_id = str(intent["cycle_id"])
         for job in jobs.values():
             if job.get("job_type") != "market_focus":
@@ -6810,8 +6804,8 @@ class LocalCatalystIntelligence:
                 and payload.get("cycle_id") == cycle_id
                 and self._focus_job_matches_intent(job, intent)
             ):
-                return True
-        return False
+                return job
+        return None
 
     def _focus_calendar_events(
         self,
@@ -7240,29 +7234,15 @@ class LocalCatalystIntelligence:
         # never paid, so the read error surfaces instead of a new job.
         jobs = self._ai_job_snapshot(
             allow_write_contention=False,
-            created_since=(
-                ai_job_store._utcnow()
-                - timedelta(days=self._news_retention_days)
-                - _AI_JOB_SNAPSHOT_MARGIN
-            ),
+            created_since=self._ai_job_snapshot_floor(),
         )
         owned: dict[str, dict[str, Any]] = {}
         reclaimed_cycle_id: str | None = None
         for intent in intents:
-            for job in jobs.values():
-                if job.get("job_type") != "market_focus":
-                    continue
-                payload = self._job_payload(job)
-                if (
-                    payload is not None
-                    and payload.get("cycle_id") == str(intent["cycle_id"])
-                    and self._focus_job_matches_intent(job, intent)
-                ):
-                    owned[str(job["job_id"])] = job
-                    reclaimed_cycle_id = reclaimed_cycle_id or str(
-                        intent["cycle_id"]
-                    )
-                    break
+            job = self._expired_focus_intent_job(intent, jobs)
+            if job is not None:
+                owned[str(job["job_id"])] = job
+                reclaimed_cycle_id = reclaimed_cycle_id or str(intent["cycle_id"])
         if reclaimed_cycle_id is None:
             return None
         with self._connect() as connection:
