@@ -25,7 +25,7 @@ from app.failure_diagnostics import record_fallback_failure
 from app.services.breakouts.config import BreakoutSettings, get_breakout_settings
 from app.services.breakouts.errors import FAILURE_DOMAINS, BreakoutStageError
 from app.services.breakouts.health import check_breakout_health
-from app.services.breakouts.models import MarketSession
+from app.services.breakouts.models import MarketSession, enum_value
 from app.services.breakouts.providers.base import ProviderError
 from app.services.breakouts.repository import (
     DEFAULT_LOCK_NAME,
@@ -299,7 +299,7 @@ class BreakoutWorker:
         source_status = publication.get("source_status")
         if isinstance(source_status, Mapping):
             summary["source_status"] = {
-                str(key): str(getattr(value, "value", value))
+                str(key): str(enum_value(value))
                 for key, value in source_status.items()
             }
         source_errors = publication.get("source_errors")

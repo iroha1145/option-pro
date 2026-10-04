@@ -21,9 +21,9 @@ from .state import (
     WorkerAlreadyRunning,
     WorkerLeaseLost,
     WorkerStateRepository,
-    _iso,
     bounded_action_detail,
     bump_action_retry,
+    utc_iso,
     utc_now,
 )
 
@@ -107,7 +107,7 @@ def _public_error_code(error: Exception) -> str:
     return "task_failed"
 
 
-def _backoff_seconds(initial: float, maximum: float, failures: int) -> float:
+def backoff_seconds(initial: float, maximum: float, failures: int) -> float:
     """Exponential retry delay shared by task loops and per-item retries."""
 
     return min(maximum, initial * (2 ** min(max(failures - 1, 0), 10)))
@@ -366,7 +366,7 @@ class WorkerSupervisor:
                 error_code="retry_exhausted",
                 details={
                     "task_status": "degraded",
-                    "task_completed_at": _iso(now),
+                    "task_completed_at": utc_iso(now),
                     "result": {"reason": reason},
                 },
                 now=now,
@@ -416,7 +416,7 @@ class WorkerSupervisor:
             error_code=error_code or "task_degraded",
             details={
                 "task_status": "idle" if succeeded else "degraded",
-                "task_completed_at": _iso(completed),
+                "task_completed_at": utc_iso(completed),
                 "result": payload,
             },
             now=completed,
@@ -443,7 +443,7 @@ class WorkerSupervisor:
                 error_code=result.error_code or "task_degraded",
                 details={
                     "task_status": result.status,
-                    "task_completed_at": _iso(completed),
+                    "task_completed_at": utc_iso(completed),
                     "result": dict(result.details),
                 },
                 now=completed,
@@ -481,7 +481,7 @@ class WorkerSupervisor:
                 error_code=result.error_code or "invalid_parameters",
                 details={
                     "task_status": "degraded",
-                    "task_completed_at": _iso(completed),
+                    "task_completed_at": utc_iso(completed),
                 },
                 now=completed,
             )
@@ -522,7 +522,7 @@ class WorkerSupervisor:
                 error_code=interrupt_code,
                 details={
                     "task_status": "degraded",
-                    "task_completed_at": _iso(completed),
+                    "task_completed_at": utc_iso(completed),
                 },
                 now=completed,
             )
@@ -643,7 +643,7 @@ class WorkerSupervisor:
                 await asyncio.sleep(0.01)
 
     def _backoff(self, task: TaskSpec, failures: int) -> float:
-        return _backoff_seconds(
+        return backoff_seconds(
             task.failure_backoff_seconds,
             task.max_backoff_seconds,
             failures,

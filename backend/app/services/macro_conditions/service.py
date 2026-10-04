@@ -15,7 +15,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
-from .alignment import AsOfSeries, _as_date, build_grid, etf_from_rows, series_from_rows
+from .alignment import AsOfSeries, as_date, build_grid, etf_from_rows, series_from_rows
 from .calculations import compute_factor_points
 from .linkage import STRUCTURAL_MODULES, structural_macro_score
 from .formatting import (
@@ -335,7 +335,7 @@ class MacroConditionsService:
 
         latest: list[date] = []
         for entry in coverage.values():
-            value = _as_date(entry.get("latest"))
+            value = as_date(entry.get("latest"))
             if value is not None:
                 latest.append(value)
         if not latest:
@@ -365,7 +365,7 @@ class MacroConditionsService:
         if required_start is None:
             return False
         for series_id in registered:
-            earliest = _as_date(coverage[series_id].get("earliest"))
+            earliest = as_date(coverage[series_id].get("earliest"))
             if earliest is None or earliest > required_start:
                 return True
         return False
@@ -386,7 +386,7 @@ class MacroConditionsService:
         for spec in ETF_PROXIES:
             symbol = spec.symbol
             entry = coverage.get(symbol)
-            earliest = _as_date(entry.get("earliest")) if entry else None
+            earliest = as_date(entry.get("earliest")) if entry else None
             if earliest is None or earliest > required_start:
                 short.add(symbol)
         return short
@@ -601,7 +601,7 @@ class MacroConditionsService:
             payload["status"] = "unavailable"
             return payload
 
-        snapshot_date = _as_date(composite["snapshot_date"])
+        snapshot_date = as_date(composite["snapshot_date"])
         assert snapshot_date is not None
         modules = self.repository.modules_at(snapshot_date)
         factors = self.repository.factors_at(snapshot_date)
@@ -654,8 +654,8 @@ class MacroConditionsService:
         factors: Sequence[Mapping[str, Any]],
     ) -> str:
         today = self._clock().date()
-        snapshot_date = _as_date(composite.get("snapshot_date"))
-        data_through = _as_date(composite.get("data_through"))
+        snapshot_date = as_date(composite.get("snapshot_date"))
+        data_through = as_date(composite.get("data_through"))
         if snapshot_date is None:
             return "unavailable"
         if (today - snapshot_date).days > SNAPSHOT_STALE_CALENDAR_DAYS:
@@ -736,7 +736,7 @@ class MacroConditionsService:
                 "points": [],
                 "scoring_version": SCORING_VERSION,
             }
-        dates = [_as_date(row["snapshot_date"]) for row in rows]
+        dates = [as_date(row["snapshot_date"]) for row in rows]
         module_scores = self.repository.modules_for_dates(
             [value for value in dates if value is not None]
         )
@@ -771,7 +771,7 @@ class MacroConditionsService:
                 "factors": [],
                 "scoring_version": SCORING_VERSION,
             }
-        snapshot_date = _as_date(composite["snapshot_date"])
+        snapshot_date = as_date(composite["snapshot_date"])
         assert snapshot_date is not None
         modules = {
             str(row["module_id"]): row
@@ -900,7 +900,7 @@ class MacroConditionsService:
             return None
         if composite is None:
             return None
-        snapshot_date = _as_date(composite["snapshot_date"])
+        snapshot_date = as_date(composite["snapshot_date"])
         if snapshot_date is None:
             return None
         try:

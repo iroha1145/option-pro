@@ -12,6 +12,7 @@ from app.services.research_eod_v1.constants import COMPOSITE_FLOORS
 from app.services.sectors import SECTORS
 
 from .full_market_tuning import finite_number
+from .universe import FUND_SCOPE_ALL
 
 REFERENCE_PROFILE = "balanced"
 REFERENCE_HORIZON = "mid"
@@ -167,7 +168,7 @@ def build_theme_statistics(
     compute_version: str,
     feature_version: str,
     source_hash: str | None,
-    fund_scope: str = "all",
+    fund_scope: str = FUND_SCOPE_ALL,
 ) -> dict[str, Any]:
     """Score all 24 authored themes from one fixed profile/family, never Top-K.
 
@@ -207,7 +208,7 @@ def build_theme_statistics(
                     (reference.theme_missing.get(theme_id, {}).get(ticker, "SCORE_UNAVAILABLE") if reference else "SCORE_UNAVAILABLE")
                 )
                 missing[reason] += 1
-        if theme_id == FUND_THEME_ID and fund_scope != "all":
+        if theme_id == FUND_THEME_ID and fund_scope != FUND_SCOPE_ALL:
             scores = {}
             missing = Counter({FUND_SCOPE_REASON: len(members)})
         valid_scores = [scores[ticker] for ticker in members if ticker in scores]
@@ -232,7 +233,7 @@ def build_theme_statistics(
                 else "active" if len(valid_scores) == len(members) else "degraded"
             ),
         }
-        if theme_id == FUND_THEME_ID and fund_scope != "all":
+        if theme_id == FUND_THEME_ID and fund_scope != FUND_SCOPE_ALL:
             row["fund_scope"] = fund_scope
         for days, suffix in ((20, "1mo"), (63, "3mo"), (126, "6mo")):
             returns = [_return_pct(panel[ticker], days, served_session) for ticker in members if ticker in panel]

@@ -8,6 +8,7 @@ context back into a stock's intrinsic-strength score.
 
 from __future__ import annotations
 
+from app.services.breakouts.models import enum_value
 from app.services.numeric import (
     finite_number as _finite,
 )
@@ -738,7 +739,7 @@ def market_fit_for_setup(shape: Mapping[str, Any], setup_type: Any) -> float | N
     state = str(shape.get("state") or "")
     if state not in _STATE_RULES:
         return None
-    setup = str(getattr(setup_type, "value", setup_type) or "").upper()
+    setup = str(enum_value(setup_type) or "").upper()
     rules = shape.get("rules") if isinstance(shape.get("rules"), Mapping) else _STATE_RULES[state]
     recovery_setups = {"RETEST_BREAKOUT", "RECOVERY_BREAKOUT"}
     base_key = "recovery_breakout_fit" if setup in recovery_setups else "ordinary_breakout_fit"
@@ -763,7 +764,7 @@ def market_fit_for_setup(shape: Mapping[str, Any], setup_type: Any) -> float | N
 def eligibility_for_setup(shape: Mapping[str, Any], setup_type: Any) -> str:
     if str(shape.get("status") or "") not in {"active", "degraded"}:
         return "unknown"
-    setup = str(getattr(setup_type, "value", setup_type) or "").upper()
+    setup = str(enum_value(setup_type) or "").upper()
     rules = shape.get("rules") if isinstance(shape.get("rules"), Mapping) else {}
     if setup in {str(item).upper() for item in list(rules.get("preferred_setups") or [])}:
         return "preferred"

@@ -260,12 +260,12 @@ def fetch_six_month_daily(
     Only these two providers are used: the trend is decoration for a card, not
     a reason to spend the MarketData/Stooq/Finnhub budgets the screener relies on.
     """
-    from app.services.strength.scanner import _download_massive_history
+    from app.services.strength.scanner import download_massive_history
     from app.services.yfinance_batch import download_in_bounded_batches
 
     closes: dict[str, list[tuple[date, float]]] = {}
     try:
-        massive_frame, _missing = _download_massive_history(tickers, TREND_RANGE)
+        massive_frame, _missing = download_massive_history(tickers, TREND_RANGE)
     except Exception:
         massive_frame = None
     for ticker in tickers:

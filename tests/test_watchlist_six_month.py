@@ -175,7 +175,7 @@ def test_fetch_prefers_massive_then_asks_yahoo_for_the_rest(monkeypatch):
         index=pd.to_datetime(["2026-09-24", "2026-09-25"]),
     )
     massive_frame.columns = pd.MultiIndex.from_tuples(massive_frame.columns)
-    monkeypatch.setattr(scanner, "_download_massive_history", lambda tickers, period: (massive_frame, ["^N225"]))
+    monkeypatch.setattr(scanner, "download_massive_history", lambda tickers, period: (massive_frame, ["^N225"]))
     captured = {}
 
     def download(**kwargs):

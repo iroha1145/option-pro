@@ -11,6 +11,8 @@ from __future__ import annotations
 import re
 from typing import Any, Mapping
 
+from app.services.breakouts.models import enum_value
+
 
 _MULTIPLIER = re.compile(r"(?<![\w.])([+-]?\d+(?:\.\d+)?)\s*[- ]?(?:x|times)\b", re.I)
 _FUND_NAME = re.compile(r"\b(?:etf|etn|exchange[ -]traded (?:fund|note))\b", re.I)
@@ -38,7 +40,7 @@ def is_leveraged_etf(
     elif not isinstance(specs, (list, tuple, set)):
         specs = ()
     tokens = {str(value).strip().lower() for value in specs}
-    kind = str(getattr(asset_type, "value", asset_type) or "").lower()
+    kind = str(enum_value(asset_type) or "").lower()
     is_fund = (
         kind in {"etf", "etn", "fund"}
         or bool(tokens & {"etf", "etn"})

@@ -20,8 +20,8 @@ from app.execution_limits import BREAKOUT_TASK_TIMEOUT_SECONDS
 from app.personal_config import get_personal_config
 
 from .inventory import DEFAULT_TASK_NAMES
-from .runtime import TaskResult, TaskSpec, _backoff_seconds, _public_error_code
-from .state import _iso
+from .runtime import TaskResult, TaskSpec, _public_error_code, backoff_seconds
+from .state import utc_iso
 
 from app.personal_config import personal_analysis_permissions as _personal_analysis_permissions
 
@@ -111,7 +111,7 @@ async def _close_optional(resource: Any) -> None:
 
 
 def _timestamp_text(value: float) -> str:
-    return _iso(datetime.fromtimestamp(value, timezone.utc))
+    return utc_iso(datetime.fromtimestamp(value, timezone.utc))
 
 
 def _publication_refusal(publication: Mapping[str, Any]) -> dict[str, Any]:
@@ -3286,7 +3286,7 @@ class MaintenanceTask:
                     failures=failures,
                     retry_at=self._now()
                     + timedelta(
-                        seconds=_backoff_seconds(
+                        seconds=backoff_seconds(
                             self.failure_backoff_seconds,
                             self.max_backoff_seconds,
                             failures,
@@ -3367,7 +3367,7 @@ class RetentionTask:
                 details={
                     "backup": dict(backup_result.details),
                     "retention": {"status": "skipped_backup_failed"},
-                    "completed_at": _iso(self._now()),
+                    "completed_at": utc_iso(self._now()),
                 },
             )
 
@@ -3379,7 +3379,7 @@ class RetentionTask:
         if self._ai_repository_factory is not None:
             details["ai_history"], ai_error = await self._prune_ai_history()
             error_code = error_code or ai_error
-        details["completed_at"] = _iso(self._now())
+        details["completed_at"] = utc_iso(self._now())
         if error_code:
             return TaskResult(status="degraded", error_code=error_code, details=details)
         return TaskResult(status="idle", details=details)

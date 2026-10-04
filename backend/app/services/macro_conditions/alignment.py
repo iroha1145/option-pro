@@ -248,7 +248,7 @@ def series_from_rows(
 
     prepared: list[tuple[date, Optional[float], str, str]] = []
     for row in rows:
-        observation_date = _as_date(row.get("observation_date"))
+        observation_date = as_date(row.get("observation_date"))
         if observation_date is None:
             continue
         prepared.append(
@@ -277,7 +277,7 @@ def etf_from_rows(
 
     prepared: list[tuple[date, Optional[float], str, str]] = []
     for row in rows:
-        observation_date = _as_date(row.get("observation_date"))
+        observation_date = as_date(row.get("observation_date"))
         if observation_date is None:
             continue
         prepared.append(
@@ -297,7 +297,7 @@ def etf_from_rows(
     )
 
 
-def _as_date(value: object) -> Optional[date]:
+def as_date(value: object) -> Optional[date]:
     """Parse a stored ``date`` or ISO date string; anything else is ``None``.
 
     Shared with ``service.py`` so the two callers can never drift apart on
