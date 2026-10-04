@@ -33,7 +33,7 @@ import { quoteSymbol } from '@/lib/quoteSymbol';
 import { MARKET_LABEL, MARKET_TO_SESSION } from '@/lib/marketSession';
 import { useNow } from '@/hooks/useNow';
 import { cn } from '@/lib/utils';
-import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
+import { DUR_SECTION, EASE_PAPER, GROW_X } from '@/lib/motion';
 import { fmtCountdown, fmtNyTime, fmtRelative, fmtTimeHHMMSS } from '@/lib/format';
 import { instrumentName, signed } from '@/components/cta/ctaMeta';
 import EconomicCalendarCard from '@/components/catalysts/EconomicCalendarCard';
@@ -42,6 +42,8 @@ import StaleStrip from '@/components/shared/StaleStrip';
 import StockDataCoverage from '@/components/shared/StockDataCoverage';
 import SessionLED from '@/components/shared/SessionLED';
 import StrengthBar from '@/components/shared/StrengthBar';
+import SoftBadge from '@/components/shared/SoftBadge';
+import { strengthBarClass } from '@/lib/strengthColor';
 import { exNum, isFeaturedRow, type EarningsRow } from '@/components/earnings/types';
 import ChangeBadge from '@/components/shared/ChangeBadge';
 import IndexCard, { IndexCardSkeleton } from '@/components/shared/IndexCard';
@@ -73,7 +75,7 @@ const INDEX_GRID = 'grid grid-cols-3 gap-2 sm:gap-3 xl:[grid-template-columns:re
 const indexKey = (quote: IndexQuote) => quote.code;
 const indexPrice = (quote: IndexQuote) => quote.price;
 
-/** 卡片格入场 stagger 档位：i*0.04 封顶 0.3（雷达/自选两区同一节奏） */
+/** 列表错峰档位：i*0.04 封顶 0.3（雷达强度条、自选卡同一节奏） */
 function staggerDelay(i: number): number {
   return Math.min(i * 0.04, 0.3);
 }
@@ -421,11 +423,11 @@ export default function Home() {
             onRetry={() => breakoutsQ.refresh()}
             isEmpty={breakouts.length === 0}
             emptyTitle={t('暂无突破信号')}
-            skeleton={<SignalGridSkeleton cards={8} />}
+            skeleton={<RadarListSkeleton rows={8} />}
           >
-            <div className="grid grid-cols-1 gap-2.5 px-4 pb-4 pt-3 sm:grid-cols-2 md:px-5 md:pb-5 xl:grid-cols-2">
+            <div className="mt-2 divide-y divide-line border-t border-line">
               {breakouts.map((s, i) => (
-                <RadarSignalCard key={s.id} signal={s} index={i} />
+                <RadarSignalRow key={s.id} signal={s} index={i} />
               ))}
             </div>
           </ListBody>
@@ -685,37 +687,69 @@ function MarketStatusPanel({
   );
 }
 
-/** 雷达信号卡：TickerLogo+类型胶囊+相对时间 / 名称+价+涨跌 / 强度条。
+/* 雷达信号行的栅格：lg 及以下两行（代码与公司、价格与涨跌 / 形态与时间、强度），
+   xl 起一行七列定宽，上下行的形态、时间、价格、涨跌、强度各自对齐。 */
+const RADAR_ROW_GRID =
+  "grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-2.5 [grid-template-areas:'logo_id_quote'_'logo_meta_bar'] md:px-5 xl:grid-cols-[28px_minmax(0,1fr)_5rem_5rem_8rem_5.25rem_6.5rem] xl:gap-y-0 xl:[grid-template-areas:'logo_id_chip_time_price_change_bar']";
+
+/** 强度读数：轨道作视口观察者，条用 GROW_X 从左长出（零面积的条自己观察会一直判不进视口）。
+ *  读屏沿用 StrengthBar 的「强度分 {score}」/「强度分缺失」。 */
+function GrowStrength({ score, delay = 0, className }: { score: number | null | undefined; delay?: number; className?: string }) {
+  const valid = typeof score === 'number' && Number.isFinite(score);
+  return (
+    <span
+      className={cn('inline-flex items-center gap-2', className)}
+      aria-label={valid ? t('强度分 {score}', { score: score.toFixed(1) }) : t('强度分缺失')}
+    >
+      <motion.span
+        className="strength-track block h-1 w-14 shrink-0 overflow-hidden rounded-pill"
+        role="presentation"
+        initial="hidden"
+        whileInView="shown"
+        viewport={{ once: true, amount: 0.4 }}
+      >
+        {valid && (
+          <motion.span
+            className={cn('strength-fill block h-full origin-left rounded-pill', strengthBarClass(score))}
+            variants={GROW_X}
+            transition={{ duration: 0.7, ease: EASE_PAPER, delay }}
+            style={{ width: `${Math.max(0, Math.min(100, score))}%` }}
+          />
+        )}
+      </motion.span>
+      <span className="w-8 text-right text-caption font-medium text-ink-600 tnum">{valid ? score.toFixed(1) : '—'}</span>
+    </span>
+  );
+}
+
+/** 雷达信号行：代码+公司 / 形态 / 相对时间 / 价格+涨跌 / 强度，行间发丝线分隔。
  *  不加 aria-label：整行可见内容自然组成可访问名（审计）。 */
-function RadarSignalCard({ signal: s, index: i }: { signal: BreakoutSignal; index: number }) {
+function RadarSignalRow({ signal: s, index: i }: { signal: BreakoutSignal; index: number }) {
   useQuoteSymbols([s.ticker]);
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: staggerDelay(i) }}
+    <Link
+      to={`/stock/${encodeURIComponent(s.ticker)}`}
+      className={`${RADAR_ROW_GRID} transition-colors duration-fast hover:bg-paper-2/70 focus-visible:bg-paper-2/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600`}
     >
-      <Link to={`/stock/${encodeURIComponent(s.ticker)}`} className="card-surface card-hover block rounded-lg p-3">
-        <div className="flex items-center gap-2">
-          <TickerLogo ticker={s.ticker} size={24} />
-          <span className="shrink-0 font-mono text-caption font-semibold text-ink-800">{s.ticker}</span>
-          <span className="min-w-0 truncate rounded-md bg-paper-2 px-2 py-1 text-micro font-medium text-ink-600">
-            {s.label}
-          </span>
-          <span className="ml-auto shrink-0 text-micro text-ink-400">{fmtRelative(s.at)}</span>
-        </div>
-        <div className="mt-2 flex items-center gap-2">
-          <span className="min-w-0 flex-1 truncate text-caption text-ink-500">{s.name}</span>
-          <span className="shrink-0 font-mono text-caption text-ink-800 tnum">
-            <LivePrice symbol={s.ticker} fallback={s.price} />
-          </span>
-          <LiveChange symbol={s.ticker} fallback={s.changePct} size="sm" className="shrink-0" />
-        </div>
-        <div className="mt-2">
-          <StrengthBar score={s.strengthScore} width={56} showScore />
-        </div>
-      </Link>
-    </motion.div>
+      <TickerLogo ticker={s.ticker} size={28} className="[grid-area:logo]" />
+      <span className="flex min-w-0 items-baseline gap-2 [grid-area:id]">
+        <span className="shrink-0 font-mono text-caption font-semibold text-ink-800">{s.ticker}</span>
+        <span className="min-w-0 truncate text-caption text-ink-500">{s.name}</span>
+      </span>
+      <span className="flex min-w-0 items-center gap-2 [grid-area:meta] xl:contents">
+        <SoftBadge className="min-w-0 xl:justify-self-start xl:[grid-area:chip]">
+          <span className="truncate">{s.label}</span>
+        </SoftBadge>
+        <span className="shrink-0 text-micro text-ink-400 xl:justify-self-end xl:[grid-area:time]">{fmtRelative(s.at)}</span>
+      </span>
+      <span className="flex items-center justify-end gap-2 [grid-area:quote] xl:contents">
+        <span className="font-mono text-caption text-ink-800 tnum xl:justify-self-end xl:[grid-area:price]">
+          <LivePrice symbol={s.ticker} fallback={s.price} className="justify-end" />
+        </span>
+        <LiveChange symbol={s.ticker} fallback={s.changePct} size="sm" className="shrink-0 xl:justify-self-end xl:[grid-area:change]" />
+      </span>
+      <GrowStrength score={s.strengthScore} delay={staggerDelay(i)} className="justify-self-end [grid-area:bar]" />
+    </Link>
   );
 }
 
@@ -818,27 +852,17 @@ function WatchlistMoverCard({ item, index: i, preparation, statusReadFailed }: {
   );
 }
 
-/** 雷达卡片格骨架：2 列镜像真实卡（logo+胶囊 / 名称+徽标 / 强度条） */
-function SignalGridSkeleton({ cards }: { cards: number }) {
+/** 雷达列表骨架：与真实行同一套栅格，加载前后行高不跳 */
+function RadarListSkeleton({ rows }: { rows: number }) {
   return (
-    <div
-      className="grid grid-cols-1 gap-2.5 px-4 pb-4 pt-3 sm:grid-cols-2 md:px-5 md:pb-5 xl:grid-cols-2"
-      aria-hidden="true"
-    >
-      {Array.from({ length: cards }, (_, i) => (
-        <div key={i} className="card-surface rounded-lg p-3">
-          <div className="flex items-center gap-2">
-            <SkeletonBlock className="size-6 rounded-sm" />
-            <SkeletonBlock className="h-3 w-12" />
-            <SkeletonBlock className="h-4 w-14 rounded-xs" />
-            <SkeletonBlock className="ml-auto h-3 w-10" />
-          </div>
-          <div className="mt-2 flex items-center gap-2">
-            <SkeletonBlock className="h-3 flex-1" />
-            <SkeletonBlock className="h-3 w-14" />
-            <SkeletonBlock className="h-4 w-12 rounded-xs" />
-          </div>
-          <SkeletonBlock className="mt-2.5 h-[3px] w-14 rounded-pill" />
+    <div className="mt-2 divide-y divide-line border-t border-line" aria-hidden="true">
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className={RADAR_ROW_GRID}>
+          <SkeletonBlock className="size-7 rounded-md [grid-area:logo]" />
+          <SkeletonBlock className="h-3 w-28 [grid-area:id]" />
+          <SkeletonBlock className="h-4 w-24 rounded-xs [grid-area:meta] xl:[grid-area:chip]" />
+          <SkeletonBlock className="h-4 w-28 justify-self-end rounded-xs [grid-area:quote] xl:[grid-area:price]" />
+          <SkeletonBlock className="h-1 w-24 justify-self-end rounded-pill [grid-area:bar]" />
         </div>
       ))}
     </div>
