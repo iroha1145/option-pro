@@ -520,16 +520,6 @@ function measureDurationText(range: ChartRange, m: RangeMeasure): string {
   return t('{n} 根 · 跨 {d} 个交易日', { n: m.barCount, d: m.sessionDays });
 }
 
-/** 与 MacroHistoryChart 叠加线按钮一致的开关样式 */
-function toggleButtonCls(active: boolean): string {
-  return cn(
-    'rounded-xs border px-2 py-0.5 text-micro outline-none transition-colors duration-fast',
-    active
-      ? 'border-brand-400 bg-brand-50 text-brand-700 shadow-chip'
-      : 'border-line text-ink-400 hover:text-ink-600 focus-visible:text-ink-600',
-  );
-}
-
 export default function KlineChart({
   ticker,
   prevClose,
@@ -909,7 +899,6 @@ export default function KlineChart({
           options={CHART_RANGES}
           value={range}
           onChange={setRange}
-          className="[&_button]:font-mono [&_button]:text-micro"
         />
         <div className="flex flex-wrap items-center gap-2">
           <Segmented
@@ -926,7 +915,10 @@ export default function KlineChart({
             disabled={!analysisOk || !layerSettings.enabled.some(id => id === 'auto_patterns' || id === 'support_resistance')}
             title={t('根据已收盘 K 线识别支撑、阻力和形态，并合并相近线条')}
             onClick={() => setSmartDrawingEnabled(value => !value)}
-            className={cn(toggleButtonCls(smartDrawingEnabled), 'min-h-8 disabled:cursor-not-allowed disabled:opacity-50')}
+            /* 图表工具行的开关走 .control-button：选中态由 aria-pressed 驱动，字号与同一行的
+               K 线 / 面积分段一致。h-9 与分段外框同为 36（粗指针下 min-height 44 仍生效）；
+               原手写样式在手机上只有约 28px 高。 */
+            className="control-button h-9"
           >
             {t('智能画线')}
           </button>
@@ -942,7 +934,7 @@ export default function KlineChart({
               aria-pressed={basis === 'close'}
               aria-label={t('按收盘价口径测量')}
               onClick={() => setBasis((prev) => (prev === 'close' ? 'wick' : 'close'))}
-              className={toggleButtonCls(basis === 'close')}
+              className="control-button h-9"
             >
               {t('收盘口径')}
             </button>
@@ -955,7 +947,7 @@ export default function KlineChart({
               drawing.setTool('select');
               setMeasure((prev) => (prev.phase === 'idle' ? { phase: 'selectStart' } : { phase: 'idle' }));
             }}
-            className={toggleButtonCls(measureActive)}
+            className="control-button h-9"
           >
             {t('回撤')}
           </button>
@@ -1230,7 +1222,9 @@ export default function KlineChart({
         mode={mode}
       />
 
-      <p className={cn('mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-micro text-ink-400')}>
+      {/* 静态类名不过 cn()：tailwind-merge 默认配置把 text-micro 当文字颜色，与 text-ink-400 合并时
+          会丢掉字号，这一行曾按继承的 14px 显示。 */}
+      <p className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-micro text-ink-400">
         <span className="font-mono tnum">
           {data
             ? t('共 {n} 根 · 末根 {at}{status}', {
