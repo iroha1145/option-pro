@@ -322,13 +322,11 @@ export default function MacroConditionsPanel({
       {/* E. 驱动因素 */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <DriverList
-          eyebrow={t("改善最多 · IMPROVING")}
           title={t("7 日分数改善最多")}
           drivers={data.drivers.improving}
           emptyText={t("暂无 7 日前的数据可供比较，或本期没有评分上升的指标。")}
         />
         <DriverList
-          eyebrow={t("恶化最多 · DETERIORATING")}
           title={t("7 日分数恶化最多")}
           drivers={data.drivers.deteriorating}
           emptyText={t("暂无 7 日前的数据可供比较，或本期没有评分下降的指标。")}

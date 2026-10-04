@@ -86,7 +86,7 @@ export default function StatusCard({
       aria-label={t("市场状态")}
     >
       <div className="flex items-start justify-between">
-        <p className="eyebrow">{t('市场状态 · MARKET STATUS')}</p>
+        <h3 className="text-h3 text-ink-900">{t('市场状态')}</h3>
         <Icon name="clock-ny" size={18} className="text-ink-400" />
       </div>
       <div className="mt-4 flex items-center gap-2.5">

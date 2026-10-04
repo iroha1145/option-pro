@@ -164,7 +164,7 @@ export default function SignalsReading({
       aria-label={t("市场信号解读")}
     >
       <div className="flex items-start justify-between">
-        <p className="eyebrow">{t('市场信号解读 · SIGNALS READING')}</p>
+        <h3 className="text-h3 text-ink-900">{t('市场信号解读')}</h3>
         <Icon name="flag" size={18} className="text-ink-400" />
       </div>
 

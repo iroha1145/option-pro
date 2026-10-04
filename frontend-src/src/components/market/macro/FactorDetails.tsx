@@ -95,10 +95,7 @@ function ModuleSummary({
           expanded && 'rotate-90',
         )}
       />
-      <span className="col-start-2 row-start-1 flex min-w-0 items-baseline gap-2">
-        <span className="truncate text-body-s font-medium text-ink-800">{t(module.nameZh)}</span>
-        <span className="truncate font-mono text-micro uppercase tracking-wider text-ink-400">{module.nameEn}</span>
-      </span>
+      <span className="col-start-2 row-start-1 min-w-0 truncate text-body-s font-medium text-ink-800">{t(module.nameZh)}</span>
       <span className="col-start-3 row-start-1 text-right text-data-l font-medium text-ink-900 tnum">
         {scored ? module.score.toFixed(1) : '—'}
       </span>

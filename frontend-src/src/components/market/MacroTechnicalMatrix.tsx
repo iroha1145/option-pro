@@ -68,7 +68,7 @@ export default function MacroTechnicalMatrix({
   return (
     <div className={cn('card-surface p-5', className)}>
       <p className="eyebrow">
-        {t('技术 × 结构性宏观 · TECHNICAL × MACRO')}
+        {t('技术 × 结构性宏观')}
         <InfoHint hint={MATRIX_HINT} side="bottom" size={11} className="ml-1" />
       </p>
       <h3 className="mt-1.5 text-h3 text-ink-900">

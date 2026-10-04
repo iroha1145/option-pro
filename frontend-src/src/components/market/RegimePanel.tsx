@@ -87,7 +87,7 @@ export default function RegimePanel({
       aria-label={t("市场形态六维")}
     >
       <div className="flex items-start justify-between">
-        <p className="eyebrow">{t('市场形态六维 · MARKET REGIME')}</p>
+        <h3 className="text-h3 text-ink-900">{t('市场形态六维')}</h3>
         <p className="text-right">
           <span className="font-mono text-data-l text-ink-900 tnum">{mean.toFixed(1)}</span>
           <span className="block text-micro text-ink-400">
