@@ -1488,6 +1488,7 @@ export const EN: Record<string, string> = {
   "操作未完成，请稍后重试": "The action could not be completed. Try again shortly.",
   "本月财报密度": "This month's earnings density",
   "本月财报密度 · 未来 30 天": "This month's earnings density · Next 30 days",
+  "财报日程（美东时间）": "Earnings schedule (ET)",
   "每日财报数量": "Daily earnings count",
   "无财报": "No earnings",
   "今天": "Today",

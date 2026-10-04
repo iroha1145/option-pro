@@ -545,7 +545,7 @@ export default function Earnings() {
           <div>
             {/* 周 / 月视图切换（Segmented 滑块 260ms ease-paper；月历 accordion 320ms 展开） */}
             <div className="mb-3 flex items-center justify-between">
-              <p className="eyebrow">EARNINGS CALENDAR · ET</p>
+              <p className="eyebrow">{t('财报日程（美东时间）')}</p>
               <Segmented
                 options={[
                   { value: 'week' as const, label: t('周') },
