@@ -160,6 +160,56 @@ $PY $P/scripts/evaluate.py --db /content/data/replay.sqlite --replay '/content/r
 
 `--db-dir` 让没有 `research_bundle.json.gz` 的段从各自的 SQLite 读 T1 状态；`--workers 8` 让 8 个配置并行读账本。用时估计：本机读一个日文件约 0.1 秒（14 个文件 1.2 秒），800 个完成日 × 8 个配置 ÷ 8 进程约 2 分钟；退出与删失的计算约 20 万个触发 × 4 个持有期 × 2 种入场，约 3 到 5 分钟；合计 5 到 10 分钟，`--no-events` 可再省一点。规则 2 的年份只数配对天数达到 60 的年份（修订 5），其余年份在 `years_reported` 里只报告。`result_pack.json` 的 `completed_days` 与 `README_tables.md` 第一张表是覆盖的天数（每年、P1、P2）。
 
+## 7. 续跑（预登记修订 6）
+
+第一轮在 2026-09-29 05:20 UTC 停下，完成 415 个交易日；剩下约 835 天按修订 6 续跑。
+
+```
+# 子段清单：每个原始段从最后完成日的下一个交易日起切子段，各带 1 个预热日；2025-08 之前的段每子段 10 个
+# 交易日，之后的慢段 6 个（否则一个 10 天的慢子段要 18 小时，成为整台机器的关键路径）；
+# --split 2 按估计用时分成两台机器的清单（长的先排、往轻的那台放）
+$PY $P/scripts/continuation_segments.py --completed $P/results/full_partial_2026-09-29/completed_days_by_segment.json \
+    --length 10 --slow-length 6 --split 2 --parallel 40 --out /content/continuation
+# 每台机器（代码用本节之后的提交；FULL 同第 3 节）：
+$PY $P/scripts/run_segments.py --segments /content/continuation/segments_1.txt --parallel 40 --delete-db-after \
+    --out-root /content/replay/cont --db-root /content/db/cont --log-root /content/logs/cont -- "${FULL[@]}"
+```
+
+本机按 2026-09-29 的实测速度（每进程每小时 1.22 个交易日，2025-08 起的段 0.6）算：835 天切成 115 个子段（含 115 个预热日）约 1,000 进程小时；一台 40 进程约 25 小时，超过 24 小时会话；两台各 40 进程约 12.5 小时（最长的子段 11.7 小时，加建库与装环境各约 1.5 小时），各约 8.9 CU/h × 14 h ≈ 125 CU，两台共约 250 CU。每台峰值磁盘 40 × 10 天 × 0.28 GB ≈ 112 GB（子段写完 run.json 与 bundle 后立即删 SQLite），在 150 GB 之内。
+
+子段起点都是冷启动：预热 1 天（DATA_SPEC 13.1 说明了它何时精确），评估的结果包记全部段起点（`coverage.<配置>.segment_starts`）与截断过存活通道的日子。被信号杀掉（返回码为负）或 `STOP` 停下的子段不重试；返回码为正且没有 run.json 的子段重试一次。
+
+### 续跑后的评估
+
+```
+$PY $P/scripts/evaluate.py --db /content/data/replay.sqlite --replay '/content/replay/full/seg_*' --replay '/content/replay/cont/seg_*' \
+    --variants baseline,confirm3,chase15,orb15,orb60,disc5,adv25,basemin15 --baseline baseline \
+    --directory /content/data/massive_directory_2026-09-27 --db-dir /content/db/full --db-dir-extra ... \
+    --minute-store /content/minute_store --workers 8 --out /content/eval/full_all
+```
+
+第一轮的账本没有确认入场的 K 线价（旧运行器只给触发事件记 `next_bar_open`），所以评估要带 `--minute-store` 现查；第一轮各段的 bundle 已由 `ops/2026-09-29/export_t1.py` 补出并放在 Drive 的 `bundles_killed/`，复制到各段目录下即可，不再需要 `--db-dir`。新账本的 `next_bar_open`、`next_bar_delay_slots`、`benchmark_next_bar_open`、`benchmark_next_bar_delay_slots` 按修订 6 的规则记（股票最多跳 6 个空槽，SPY 不限）。
+
+### 验证运行（新机器上先跑这个，约 20 分钟）
+
+```
+$PY $P/scripts/replay.py "${FULL[@]}" --start 2026-09-24 --end 2026-09-25 --warmup 1 \
+    --out /content/replay/verify/seg_2026-09-24 --db-dir /content/db/verify/seg_2026-09-24 --label verify
+$PY $P/scripts/evaluate.py --db /content/data/replay.sqlite --replay /content/replay/verify/seg_2026-09-24 \
+    --variants baseline,confirm3,chase15 --baseline baseline --minute-store /content/minute_store --out /content/eval/verify
+```
+
+看三样：`run.json` 没有 `degraded`、`variants.baseline.production_field_hash` 是 cc09185b…；账本里触发事件带 `next_bar_delay_slots`、记录带 `benchmark_next_bar_delay_slots`；`result_pack.json` 的 `decisions.variants.confirm3.metric_view` 是 confirmed、`chase15.metric_view` 是 chaseable，`coverage.baseline.triggers_confirmed` 大于 0。停滞保护关闭本身由 `tests/test_radar_replay_harness.py` 证明（0.2 秒的保护让 0.7 秒的同步扫描抛 LeaseLostError，回放的设置下同一扫描正常返回）。
+
+### SPY 入场 K 线缺失的诊断
+
+```
+$PY $P/scripts/diagnose_spy_gaps.py --events /content/eval/full_partial/events_h20.csv \
+    --minute-store /content/minute_store --out /content/eval/spy_gaps.json
+```
+
+按美东小时、年份、起源分组，并对每个缺失触发查 SPY 当天有没有 K 线、精确槽位有没有、到下一根 SPY K 线隔几个空槽；`spy_in_coverage_table` 为假就是覆盖表没登记 SPY（叠加文件没进 `coverage.parquet`），那样 `has_bars_between` 直接返回假，与 K 线是否存在无关。
+
 ## 6. 完成日的规则与怎么停
 
 运行器一天的全部扫描做完才写 `ledger/<day>.jsonl.gz`（3aaa04d1 之后的提交先写 `.tmp` 再改名，杀在写入中不会留下截断文件；3aaa04d1 及之前直接写目标路径，杀在那一秒会留下读不出的文件，评估把它整日作废并计数）。`run.json`、`research_bundle.json.gz` 只在段结束时写；快照（`--full-snapshots`）也是按天写。所以：

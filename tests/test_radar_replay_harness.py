@@ -324,6 +324,84 @@ def test_day_files_reproduce_the_ticker_file_slots_and_the_window_keeps_bars(fro
     assert windowed.bars("TA", DAY3, DAY3).equals(store.bars("TA", DAY3, DAY3))
 
 
+def test_replay_worker_disables_the_stall_guard_and_a_failing_scan_does_not_kill_the_segment(frozen: dict, monkeypatch) -> None:
+    import asyncio
+    import time as _time
+
+    from app.services.breakouts.config import BreakoutSettings
+    from app.services.breakouts.worker import BreakoutWorker, LeaseLostError
+
+    from harness.runner import REPLAY_STALL_SECONDS
+
+    class _Repository:
+        def heartbeat_lock(self, *_args, **_kwargs):
+            return True
+
+        def __getattr__(self, name):
+            return lambda *args, **kwargs: None
+
+    async def blocking_scan():
+        _time.sleep(0.7)  # a CPU-bound stretch: the event loop cannot pulse
+        await asyncio.sleep(0)  # the production operation awaits again after its CPU work; a cancel lands here
+        return "done"
+
+    settings = BreakoutSettings(_env_file=None, BREAKOUT_RADAR_ENABLED=True)
+    guarded = BreakoutWorker(settings, _Repository(), lease_ttl_seconds=0.2, maximum_loop_stall_seconds=0.2)
+    with pytest.raises(LeaseLostError):
+        asyncio.run(guarded._run_with_lease_heartbeat(blocking_scan(), 1, "scan"))
+    relaxed = BreakoutWorker(settings, _Repository(), lease_ttl_seconds=0.2, maximum_loop_stall_seconds=REPLAY_STALL_SECONDS)
+    assert asyncio.run(relaxed._run_with_lease_heartbeat(blocking_scan(), 1, "scan")) == "done"
+
+    # One scan raising: with --on-degraded continue the scan is recorded as an exception and the
+    # segment finishes; with raise the segment stops.
+    original = BreakoutWorker._run_cycle
+    calls = {"n": 0}
+
+    async def flaky(self, lease, snapshot):
+        calls["n"] += 1
+        if calls["n"] == 3:
+            raise RuntimeError("synthetic scan failure")
+        return await original(self, lease, snapshot)
+
+    monkeypatch.setattr(BreakoutWorker, "_run_cycle", flaky)
+    config = _config(frozen, "flaky_continue", start=DAY3, end=DAY3, warmup=0, variants=["baseline"])
+    config.on_degraded = "continue"
+    summary = run_segment(config)
+    assert len(summary["degraded"]) == 1 and summary["degraded"][0]["status"] == "exception"
+    records = _read_jsonl(frozen["root"] / "runs" / "flaky_continue" / "baseline" / "ledger" / f"{DAY3.isoformat()}.jsonl.gz")
+    failed = [r for r in records if r["status"] == "exception"]
+    assert len(failed) == 1 and failed[0]["error_code"] == "RuntimeError" and "synthetic" in failed[0]["error"]
+    assert (frozen["root"] / "runs" / "flaky_continue" / "run.json").exists()
+    calls["n"] = 0
+    strict = _config(frozen, "flaky_raise", start=DAY3, end=DAY3, warmup=0, variants=["baseline"])
+    with pytest.raises(RuntimeError):
+        run_segment(strict)
+    assert summary["variants"]["baseline"]["production_field_hash"] == PRODUCTION_CONFIG_HASH
+
+
+def test_next_bar_falls_forward_over_empty_slots_within_the_bound(tmp_path) -> None:
+    import pandas as pd
+
+    from harness.stores import MinuteStore
+
+    day = datetime(2026, 7, 8, tzinfo=NY)
+    starts = [day.replace(hour=9, minute=30), day.replace(hour=9, minute=40), day.replace(hour=10, minute=25)]  # 09:35 and 09:45..10:20 missing
+    frame = pd.DataFrame({
+        "t": [int(s.timestamp() * 1000) for s in starts], "open": [10.0, 10.2, 10.9], "high": [10.1, 10.3, 11.0],
+        "low": [9.9, 10.1, 10.8], "close": [10.05, 10.25, 10.95], "volume": [100.0, 100.0, 100.0],
+    })
+    frame.to_parquet(tmp_path / "GAPPY.parquet", index=False)
+    pd.DataFrame({"ticker": ["GAPPY"], "day": ["2026-07-08"]}).to_parquet(tmp_path / "coverage.parquet", index=False)
+    store = MinuteStore(tmp_path)
+    assert store.next_bar("GAPPY", day.replace(hour=9, minute=30)) == (10.0, 0)  # on the boundary: that bar
+    assert store.next_bar("GAPPY", day.replace(hour=9, minute=31)) is None  # 09:35 missing, no skipping allowed
+    assert store.next_bar("GAPPY", day.replace(hour=9, minute=31), max_slots=6) == (10.2, 1)  # 09:40 after one empty slot
+    assert store.next_bar("GAPPY", day.replace(hour=9, minute=41), max_slots=6) is None  # 09:45..10:15 are seven empty slots
+    assert store.next_bar("GAPPY", day.replace(hour=9, minute=41), max_slots=None) == (10.9, 8)
+    assert store.next_bar("GAPPY", day.replace(hour=19, minute=58), max_slots=None) is None  # nothing before 20:00
+    assert store.next_bar_open("GAPPY", day.replace(hour=9, minute=31), max_slots=6) == 10.2
+
+
 def test_memo_off_is_byte_identical_to_memo_on(frozen: dict) -> None:
     on = run_segment(_config(frozen, "memo_on", start=DAY2, end=DAY3, warmup=1, variants=["baseline"], memo=True))
     off = run_segment(_config(frozen, "memo_off", start=DAY2, end=DAY3, warmup=1, variants=["baseline"], memo=False))

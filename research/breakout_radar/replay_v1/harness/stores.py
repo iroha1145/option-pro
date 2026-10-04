@@ -298,12 +298,15 @@ class MinuteStore:
             return True
         return position + 1 < len(days) and days[position + 1] <= high
 
-    def next_bar_open(self, ticker: str, as_of: datetime) -> float | None:
-        """Open of the 5-minute bar that starts at the first slot boundary at or after ``as_of``.
+    def next_bar(self, ticker: str, as_of: datetime, max_slots: int | None = 0) -> tuple[float, int] | None:
+        """(open, delay) of the first 5-minute bar starting at or after the slot boundary after ``as_of``.
 
         This is the earliest price a user who sees an event at ``as_of`` can trade at
-        (PREREGISTRATION section 5). The value is for evaluation only; the algorithm
-        never sees it. ``None`` when that bar does not exist (no trade, or after 20:00 ET).
+        (PREREGISTRATION section 5, 修订 6). ``delay`` counts the empty slots skipped:
+        0 means the bar starting at the next boundary itself. The search stays on the
+        same ET day and before 20:00; ``max_slots`` bounds how many empty slots may be
+        skipped (``None`` for no bound). The value is for evaluation only; the algorithm
+        never sees it. ``None`` when no such bar exists.
         """
 
         local = as_of.astimezone(NY)
@@ -311,18 +314,27 @@ class MinuteStore:
         rounded = minute if local.second == 0 and local.microsecond == 0 and minute % _SLOT_MINUTES == 0 else (minute // _SLOT_MINUTES + 1) * _SLOT_MINUTES
         if rounded >= 20 * 60:
             return None
-        start = local.replace(hour=rounded // 60, minute=rounded % 60, second=0, microsecond=0)
-        day = start.date()
+        day = local.date()
         if not self.has_bars_between(ticker, day, day):
             return None
         bars = self.bars(ticker, day, day)
         if bars.empty:
             return None
-        stamp = pd.Timestamp(start).tz_convert("UTC")
-        if stamp not in bars.index:
-            return None
-        value = bars.at[stamp, "Open"]
-        return float(value) if value == value else None
+        delay = 0
+        while rounded < 20 * 60 and (max_slots is None or delay <= max_slots):
+            start = local.replace(hour=rounded // 60, minute=rounded % 60, second=0, microsecond=0)
+            stamp = pd.Timestamp(start).tz_convert("UTC")
+            if stamp in bars.index:
+                value = bars.at[stamp, "Open"]
+                if value == value:
+                    return float(value), delay
+            rounded += _SLOT_MINUTES
+            delay += 1
+        return None
+
+    def next_bar_open(self, ticker: str, as_of: datetime, max_slots: int | None = 0) -> float | None:
+        found = self.next_bar(ticker, as_of, max_slots)
+        return None if found is None else found[0]
 
     def day_table(self, day: date) -> tuple[dict[str, int], np.ndarray, np.ndarray]:
         """Every ticker's (close, volume) slot rows for one day from ``days/<day>.parquet``."""

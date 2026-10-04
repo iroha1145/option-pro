@@ -25,7 +25,7 @@ import math
 import sqlite3
 import statistics
 from collections import Counter, defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
@@ -43,6 +43,10 @@ SCORE_SUBSET_MIN = 60.0
 TOP_PER_DAY = 10
 FUNNEL_VARIANTS = ("disc5", "adv25")
 FILTER_VIEWS = ("noorb", "mkt_gate", "tod")
+# 修订 6: switches that act after the trigger are judged on the view that shows their effect.
+METRIC_VIEW = {"confirm3": "confirmed", "chase15": "chaseable"}
+SWITCH_VIEWS = ("confirmed", "chaseable")
+STOCK_ENTRY_MAX_SLOTS = 6
 V16_EVALUATE = (
     Path(__file__).resolve().parents[3]
     / "option_pro_us_eod_v1" / "return_pack" / "full_market_v1_6" / "scripts" / "evaluate.py"
@@ -117,6 +121,14 @@ class Trigger:
     carryover: bool = False
     failed_at: str | None = None  # first FAILED transition after the trigger (ISO UTC)
     t1_status: str | None = None
+    # PREREGISTRATION 修订 6: the switches confirm3 and chase15 act after the trigger.
+    extended_at_trigger: bool = False  # EXTENDED at the trigger scan or at the next scan of the day
+    confirmed_at: str | None = None  # first CONFIRMED transition (ISO UTC), same scan or later
+    confirmed_day: str | None = None
+    confirmed_next_bar_open: float | None = None
+    confirmed_benchmark_open: float | None = None
+    next_bar_delay: int | None = None  # empty slots skipped before the entry bar (0 = the next bar itself)
+    benchmark_delay: int | None = None
 
     @property
     def bucket(self) -> str:
@@ -212,8 +224,9 @@ def read_variant(
     days_by_dir: dict[str, Path] = {}
     t1_status: dict[str, str] = {}
     info: dict[str, Any] = {"directories": [], "scans": 0, "skipped_duplicate_days": 0, "corrupt_files": [],
-                            "segments_without_bundle": 0, "degraded_scans": 0, "degraded_days": []}
+                            "segments_without_bundle": 0, "degraded_scans": 0, "degraded_days": [], "segment_starts": []}
     degraded_days: set[str] = set()
+    state: dict[str, Any] = {"watch_extended": {}, "entry_lookup": entry_lookup}
     for replay_dir in replay_dirs:
         variant_dir = replay_dir / folder_name
         if not variant_dir.is_dir():
@@ -230,11 +243,13 @@ def read_variant(
             if db_dir is not None:
                 for event_id, status in read_t1_from_db(Path(db_dir) / replay_dir.name / f"{folder_name}.sqlite").items():
                     t1_status.setdefault(event_id, status)
+        first_day_of_dir = None
         for path in sorted((variant_dir / "ledger").glob("*.jsonl.gz")):
             records = read_ledger_file(path)
             if records is None:
                 info["corrupt_files"].append(str(path))
                 continue
+            state["watch_extended"] = {}
             for record in records:
                 if record.get("kind") == "t1" or record.get("warmup"):
                     continue
@@ -243,11 +258,15 @@ def read_variant(
                 if owner != replay_dir:
                     info["skipped_duplicate_days"] += 1
                     continue
-                if record.get("status") == "degraded" or record.get("error_code"):
+                if first_day_of_dir is None:
+                    first_day_of_dir = day
+                if record.get("status") in ("degraded", "exception") or record.get("error_code"):
                     info["degraded_scans"] += 1
                     degraded_days.add(day)
-                _absorb_record(record, day, triggers, failed, funnel, entry_lookup)
+                _absorb_record(record, day, triggers, failed, funnel, state)
                 info["scans"] += 1
+        if first_day_of_dir is not None:
+            info["segment_starts"].append(first_day_of_dir)
     for event_id, trigger in triggers.items():
         trigger.failed_at = failed.get(event_id)
         trigger.t1_status = t1_status.get(event_id)
@@ -259,7 +278,21 @@ def read_variant(
 
 
 def _absorb_record(record: dict[str, Any], day: str, triggers: dict[str, Trigger], failed: dict[str, str],
-                   funnel: dict[str, DayFunnel], entry_lookup: Callable[[str, str], float | None] | None) -> None:
+                   funnel: dict[str, DayFunnel], state: dict[str, Any]) -> None:
+    entry_lookup = state.get("entry_lookup")
+    events_by_id = {e.get("event_id"): e for e in record.get("events") or []}
+    # Events triggered at the previous scan of the day: EXTENDED now counts as "extended at trigger".
+    for event_id in list(state["watch_extended"]):
+        event = events_by_id.get(event_id)
+        if event is not None and str(event.get("lifecycle_state")) == "EXTENDED" and event_id in triggers:
+            triggers[event_id].extended_at_trigger = True
+    state["watch_extended"] = {}
+    states_now: dict[str, set[str]] = defaultdict(set)
+    for transition in record.get("transitions") or []:
+        states_now[str(transition.get("event_id"))].add(str(transition.get("to_state")))
+    for event_id, states in states_now.items():
+        if "EXTENDED" in states and event_id in triggers and triggers[event_id].as_of == record["as_of"]:
+            triggers[event_id].extended_at_trigger = True
     if True:
         if True:
             bucket = funnel.setdefault(day, DayFunnel(day))
@@ -274,7 +307,6 @@ def _absorb_record(record: dict[str, Any], day: str, triggers: dict[str, Trigger
             bucket.cut_150 += max(0, prefilter - FUNNEL_CAPS[0])
             bucket.cut_60 += max(0, listed - FUNNEL_CAPS[1])
             bucket.cut_30 += max(0, structures - FUNNEL_CAPS[2])
-            events_by_id = {e.get("event_id"): e for e in record.get("events") or []}
             for transition in record.get("transitions") or []:
                 event_id = str(transition.get("event_id"))
                 to_state = str(transition.get("to_state"))
@@ -286,8 +318,10 @@ def _absorb_record(record: dict[str, Any], day: str, triggers: dict[str, Trigger
                     features = event.get("features") or {}
                     origin = str(event.get("origin_setup_type") or event.get("setup_type") or "")
                     next_open = event.get("next_bar_open")
+                    delay = event.get("next_bar_delay_slots")
                     if next_open is None and entry_lookup is not None:
                         next_open = entry_lookup(str(event.get("ticker")), record["as_of"])
+                        delay = None
                     triggers[event_id] = Trigger(
                         event_id=event_id,
                         ticker=str(event.get("ticker")).upper(),
@@ -307,10 +341,37 @@ def _absorb_record(record: dict[str, Any], day: str, triggers: dict[str, Trigger
                         pivot_id=event.get("pivot_id"),
                         asset_type=event.get("asset_type"),
                         carryover=bool(event.get("carryover")),
+                        extended_at_trigger=(
+                            str(event.get("lifecycle_state")) == "EXTENDED"
+                            or "extended_from_pivot" in (event.get("warnings") or [])
+                            or "EXTENDED" in states_now.get(event_id, set())
+                        ),
+                        next_bar_delay=None if delay is None else int(delay),
+                        benchmark_delay=_int_or_none(record.get("benchmark_next_bar_delay_slots")),
                     )
                     bucket.triggers += 1
+                    state["watch_extended"][event_id] = day
                 elif to_state == "FAILED" and event_id in triggers and event_id not in failed:
                     failed[event_id] = str(transition.get("evidence_at") or record["as_of"])
+            for event_id, states in states_now.items():
+                trigger = triggers.get(event_id)
+                if trigger is None or "CONFIRMED" not in states or trigger.confirmed_at is not None:
+                    continue
+                event = events_by_id.get(event_id)
+                confirmed_open = None if event is None else event.get("next_bar_open")
+                if confirmed_open is None and entry_lookup is not None and event is not None:
+                    confirmed_open = entry_lookup(str(event.get("ticker")), record["as_of"])
+                trigger.confirmed_at = record["as_of"]
+                trigger.confirmed_day = day
+                trigger.confirmed_next_bar_open = _float(confirmed_open)
+                trigger.confirmed_benchmark_open = _float(record.get("benchmark_next_bar_open"))
+
+
+def _int_or_none(value: Any) -> int | None:
+    try:
+        return None if value is None else int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def completed_days(loaded: Mapping[str, tuple[list[Trigger], dict[str, DayFunnel], dict[str, Any]]]) -> dict[str, Any]:
@@ -595,6 +656,23 @@ def select_view(triggers: list[Trigger], view: str) -> list[Trigger]:
         return kept
     if view == "t1":
         return [t for t in triggers if str(t.t1_status or "") == "met"]
+    if view == "confirmed":
+        # 修订 6: entry at the first bar after the first CONFIRMED transition; the entry day is
+        # the day of that scan, so a next-day confirmation of a carry-over event counts there.
+        kept = []
+        for t in triggers:
+            if t.confirmed_at is None or t.confirmed_day is None:
+                continue
+            copy = replace(
+                t, day=t.confirmed_day, as_of=t.confirmed_at, next_bar_open=t.confirmed_next_bar_open,
+                benchmark_open=t.confirmed_benchmark_open, minute=_et_minute(t.confirmed_at),
+            )
+            kept.append(copy)
+        return sorted(kept, key=lambda t: (t.as_of, t.event_id))
+    if view == "chaseable":
+        return [t for t in triggers if not t.extended_at_trigger]
+    if view == "extended":
+        return [t for t in triggers if t.extended_at_trigger]
     if ":" in view:
         kind, value = view.split(":", 1)
         attribute = {"origin": "origin", "bucket": "bucket", "market": "market_state"}[kind]
@@ -799,7 +877,8 @@ class VariantEvaluation:
 def evaluate_variant(name: str, triggers: list[Trigger], funnel: dict[str, DayFunnel], info: dict[str, Any],
                      prices: RadarPrices, *, views: Iterable[str] | None = None) -> VariantEvaluation:
     evaluation = VariantEvaluation(name, triggers, funnel, info)
-    names = list(views) if views is not None else ["all", "dedup", "top10", *FILTER_VIEWS, "alert60", "strength60", "t1", *group_views(triggers)]
+    names = list(views) if views is not None else ["all", "dedup", "top10", *FILTER_VIEWS, "alert60", "strength60", "t1",
+                                                     *SWITCH_VIEWS, "extended", *group_views(triggers)]
     cache: dict[tuple[str, int, str], TriggerResult] = {}
     for view in names:
         selected = select_view(triggers, view)
@@ -854,29 +933,53 @@ def metric_rows(evaluation: VariantEvaluation) -> list[dict[str, Any]]:
     return rows
 
 
-def removed_and_kept(candidate: VariantEvaluation, baseline: VariantEvaluation) -> tuple[float | None, float | None]:
-    """h20 excess of the baseline's triggers the candidate dropped versus those it kept (rule 6)."""
+def removed_and_kept(candidate: VariantEvaluation, baseline: VariantEvaluation, view: str = "all") -> tuple[float | None, float | None]:
+    """h20 excess of the baseline's triggers the candidate dropped versus those it kept (rule 6), on ``view``."""
 
-    kept_keys = {t.key for t in candidate.triggers}
+    kept_keys = {t.key for t in select_view(candidate.triggers, view)}
     removed, kept = [], []
-    for result in baseline.results.get(("all", PRIMARY_HOLDING, "next_bar"), []):
+    for result in baseline.results.get((view, PRIMARY_HOLDING, "next_bar"), []):
         if not result.observable or result.excess is None:
             continue
         (kept if result.trigger.key in kept_keys else removed).append(result.excess)
     return _mean(removed), _mean(kept)
 
 
+def metric_view(name: str) -> str:
+    """The view a candidate is judged on: confirm3 on confirmed entries, chase15 on the chaseable set."""
+
+    for part in name.split("+"):
+        if part in METRIC_VIEW:
+            return METRIC_VIEW[part]
+    return "all"
+
+
 def decisions(evaluations: Mapping[str, VariantEvaluation], baseline_name: str, stage2: Mapping[str, str] | None = None) -> dict[str, Any]:
     baseline = evaluations[baseline_name]
-    base_points = {h: baseline.points[("all", h, "next_bar")] for h in HOLDINGS}
     out: dict[str, Any] = {"baseline": baseline_name, "rules": RULES["adoption"], "variants": {}, "filters": {}, "stage2": {}}
     for name, evaluation in evaluations.items():
         if name == baseline_name:
             continue
-        points = {h: evaluation.points[("all", h, "next_bar")] for h in HOLDINGS}
-        funnel_candidate = any(part in FUNNEL_VARIANTS for part in name.split("+"))
-        removed_mean, kept_mean = removed_and_kept(evaluation, baseline) if funnel_candidate else (None, None)
-        out["variants"][name] = decide(points, base_points, funnel_candidate=funnel_candidate, removed_mean=removed_mean, kept_mean=kept_mean)
+        view = metric_view(name)
+        points = {h: evaluation.points[(view, h, "next_bar")] for h in HOLDINGS}
+        base_points = {h: baseline.points[(view, h, "next_bar")] for h in HOLDINGS}
+        parts = name.split("+")
+        funnel_candidate = any(part in FUNNEL_VARIANTS for part in parts) or "chase15" in parts
+        removed_mean, kept_mean = removed_and_kept(evaluation, baseline, view) if funnel_candidate else (None, None)
+        verdict = decide(points, base_points, funnel_candidate=funnel_candidate, removed_mean=removed_mean, kept_mean=kept_mean)
+        verdict["metric_view"] = view
+        if view == "confirmed":
+            verdict["confirmed_share"] = {
+                "candidate": round(len(select_view(evaluation.triggers, "confirmed")) / len(evaluation.triggers), 4) if evaluation.triggers else None,
+                "baseline": round(len(select_view(baseline.triggers, "confirmed")) / len(baseline.triggers), 4) if baseline.triggers else None,
+            }
+        if view == "chaseable":
+            verdict["extended_share"] = {
+                "candidate": round(sum(1 for t in evaluation.triggers if t.extended_at_trigger) / len(evaluation.triggers), 4) if evaluation.triggers else None,
+                "baseline": round(sum(1 for t in baseline.triggers if t.extended_at_trigger) / len(baseline.triggers), 4) if baseline.triggers else None,
+            }
+        out["variants"][name] = verdict
+    base_points = {h: baseline.points[("all", h, "next_bar")] for h in HOLDINGS}
     for view in FILTER_VIEWS:
         points = {h: baseline.points[(view, h, "next_bar")] for h in HOLDINGS}
         out["filters"][view] = decide(points, base_points)
@@ -964,7 +1067,8 @@ def readme_tables(rows: list[dict[str, Any]], verdicts: dict[str, Any], funnels:
               "| 候选 | 配对天数 | 20 日差 全期 / P1 / P2 | 年份更好 | 5 日差 | 63 日差 | 三情景同号 | 每日触发 | 采纳 |", "|---|---|---|---|---|---|---|---|---|"]
     for name, v in [*verdicts.get("variants", {}).items(), *verdicts.get("filters", {}).items()]:
         d = v["h20_diff_pp"]
-        lines.append(f"| {name} | {v['paired_days']} | {_fmt(d['ALL'])} / {_fmt(d['P1'])} / {_fmt(d['P2'])} | {v['rule2_years_better']}/{v['rule2_years_compared']} | {_fmt(v['h5_diff_pp'])} | {_fmt(v['h63_diff_pp'])} | {'是' if v['rule5_ok'] else '否'} | {_fmt(v['triggers_per_day']['candidate'])} 对 {_fmt(v['triggers_per_day']['baseline'])} | {'是' if v['adopt'] else '否'} |")
+        label = name if v.get("metric_view", "all") == "all" else f"{name}（视图 {v['metric_view']}）"
+        lines.append(f"| {label} | {v['paired_days']} | {_fmt(d['ALL'])} / {_fmt(d['P1'])} / {_fmt(d['P2'])} | {v['rule2_years_better']}/{v['rule2_years_compared']} | {_fmt(v['h5_diff_pp'])} | {_fmt(v['h63_diff_pp'])} | {'是' if v['rule5_ok'] else '否'} | {_fmt(v['triggers_per_day']['candidate'])} 对 {_fmt(v['triggers_per_day']['baseline'])} | {'是' if v['adopt'] else '否'} |")
     for name, v in verdicts.get("stage2", {}).items():
         lines.append(f"| {name}（组合） | — | 规则 1 到 5 {'过' if v['passes_rules_1_to_5'] else '不过'}；最好单项 {v['best_single']}；两段差距在 0.2 内 {_fmt(v['within_0_2pp'])} | | | | | | {'是' if v['adopt'] else '否'} |")
     return "\n".join(lines) + "\n"
@@ -1023,7 +1127,11 @@ def run(
         "coverage": {name: {**e.info, "days_evaluated": len(e.funnel), "days_first": min(e.funnel) if e.funnel else None,
                             "days_last": max(e.funnel) if e.funnel else None,
                             "triggers_without_next_bar_open": sum(1 for t in e.triggers if t.next_bar_open is None),
-                            "triggers_without_benchmark_open": sum(1 for t in e.triggers if t.benchmark_open is None)}
+                            "triggers_without_benchmark_open": sum(1 for t in e.triggers if t.benchmark_open is None),
+                            "triggers_entry_delayed": sum(1 for t in e.triggers if (t.next_bar_delay or 0) > 0),
+                            "triggers_benchmark_delayed": sum(1 for t in e.triggers if (t.benchmark_delay or 0) > 0),
+                            "triggers_confirmed": sum(1 for t in e.triggers if t.confirmed_at is not None),
+                            "triggers_extended_at_trigger": sum(1 for t in e.triggers if t.extended_at_trigger)}
                      for name, e in evaluations.items()},
         "funnel": funnels,
         "metrics": rows,

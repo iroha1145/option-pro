@@ -100,16 +100,25 @@ def world(tmp_path_factory) -> dict:
             [_event("e1", "GOOD", d0, good0 * 0.99, next_open=good0), _event("e2", "SPLT", d0, 20 * 1.005 ** 2, next_open=20 * 1.005 ** 2, alert=40),
              _event("e3", "GONE", d0, 5.0, next_open=5.0, alert=65, strength=70)],
             [{"event_id": "e1", "from_state": "WATCHING", "to_state": "TRIGGERED", "reason": "x", "evidence_at": "x"},
+             {"event_id": "e1", "from_state": "TRIGGERED", "to_state": "CONFIRMED", "reason": "x", "evidence_at": "x"},  # confirmed in the trigger scan
              {"event_id": "e2", "from_state": "WATCHING", "to_state": "TRIGGERED", "reason": "x", "evidence_at": "x"},
              {"event_id": "e3", "from_state": "WATCHING", "to_state": "TRIGGERED", "reason": "x", "evidence_at": "x"}],
             benchmark_open=400 * 1.001 ** 2, prefilter=170, listed=70, structures=40,
         ),
-        _scan_record(d0, 10, 7, [_event("e1", "GOOD", d0, good0)], [{"event_id": "e1", "from_state": "TRIGGERED", "to_state": "TRIGGERED", "reason": "again", "evidence_at": "x"}]),
+        # 10:07: e2 confirms (its entry bar open is recorded on the event), e3 goes EXTENDED one scan after its trigger.
+        _scan_record(
+            d0, 10, 7,
+            [_event("e1", "GOOD", d0, good0), {**_event("e2", "SPLT", d0, 20 * 1.005 ** 2 * 1.01, next_open=20 * 1.005 ** 2 * 1.02, alert=40), "lifecycle_state": "CONFIRMED"},
+             {**_event("e3", "GONE", d0, 5.1, alert=65, strength=70), "lifecycle_state": "EXTENDED"}],
+            [{"event_id": "e2", "from_state": "TRIGGERED", "to_state": "CONFIRMED", "reason": "confirmation_evidence_satisfied", "evidence_at": "x"},
+             {"event_id": "e3", "from_state": "TRIGGERED", "to_state": "EXTENDED", "reason": "distance_threshold_exceeded", "evidence_at": "x"}],
+            benchmark_open=400 * 1.001 ** 2 * 1.0005,
+        ),
         _scan_record(d0, 15, 55, [_event("e3", "GONE", d0, 4.9)], [{"event_id": "e3", "from_state": "TRIGGERED", "to_state": "FAILED", "reason": "x", "evidence_at": datetime(d0.year, d0.month, d0.day, 15, 55, tzinfo=NY).isoformat()}]),
     ])
     good1 = 10 * (1.01 ** 3)
     _write_ledger(base / "ledger", d1, [
-        _scan_record(d1, 9, 40, [_event("e4", "GOOD", d1, good1, origin="OPENING_RANGE_BREAKOUT", next_open=good1, alert=80)],
+        _scan_record(d1, 9, 40, [{**_event("e4", "GOOD", d1, good1, origin="OPENING_RANGE_BREAKOUT", next_open=good1, alert=80), "warnings": ["extended_from_pivot"]}],
                      [{"event_id": "e4", "from_state": "WATCHING", "to_state": "TRIGGERED", "reason": "x", "evidence_at": "x"}], benchmark_open=400 * 1.001 ** 3),
         _scan_record(d1, 12, 0, [], [], prefilter=90, listed=40, structures=20),
         {"variant": "baseline", "as_of": datetime(d1.year, d1.month, d1.day, 16, 30, tzinfo=NY).isoformat(), "kind": "t1", "warmup": False, "status": "completed"},
@@ -237,6 +246,44 @@ def test_adoption_rules_pair_on_common_days_and_check_the_funnel_candidate(world
     assert verdict["h20_diff_pp"]["ALL"] == pytest.approx(1.0)
     combo = ev.stage2_verdict({**verdict, "h20_diff_pp": {"ALL": 1.0, "P1": 0.9, "P2": 0.95}}, {"single": {**verdict, "adopt": True}})
     assert combo["best_single"] == "single" and combo["within_0_2pp"] is True
+
+
+def test_confirmed_and_chaseable_views_follow_amendment_6(world: dict, tmp_path: Path) -> None:
+    import shutil
+
+    triggers, _f, _i = ev.read_variant(world["dirs"], "baseline")
+    by_id = {t.event_id: t for t in triggers}
+    # e1 confirmed in its trigger scan, e2 one scan later with its own entry bar, e3 and e4 never.
+    assert by_id["e1"].confirmed_at == by_id["e1"].as_of and by_id["e1"].confirmed_next_bar_open == pytest.approx(10 * 1.01 ** 2)
+    assert by_id["e2"].confirmed_day == world["d0"].isoformat() and by_id["e2"].confirmed_next_bar_open == pytest.approx(20 * 1.005 ** 2 * 1.02)
+    assert by_id["e2"].confirmed_benchmark_open == pytest.approx(400 * 1.001 ** 2 * 1.0005)
+    assert by_id["e3"].confirmed_at is None and by_id["e4"].confirmed_at is None
+    # e3 went EXTENDED at the scan after its trigger, e4 carried the warning at its trigger.
+    assert by_id["e3"].extended_at_trigger and by_id["e4"].extended_at_trigger
+    assert not by_id["e1"].extended_at_trigger and not by_id["e2"].extended_at_trigger
+    confirmed = ev.select_view(triggers, "confirmed")
+    assert [t.event_id for t in confirmed] == ["e1", "e2"] and confirmed[1].next_bar_open == pytest.approx(20 * 1.005 ** 2 * 1.02)
+    assert confirmed[1].minute == 10 * 60 + 7 and confirmed[1].day == world["d0"].isoformat()
+    assert {t.event_id for t in ev.select_view(triggers, "chaseable")} == {"e1", "e2"}
+    assert {t.event_id for t in ev.select_view(triggers, "extended")} == {"e3", "e4"}
+    assert ev.metric_view("confirm3") == "confirmed" and ev.metric_view("chase15") == "chaseable"
+    assert ev.metric_view("basemin15") == "all" and ev.metric_view("confirm3+orb15") == "confirmed"
+    # A confirm3 and a chase15 variant (copies of the baseline here) are judged on their own views.
+    root = tmp_path / "switches"
+    shutil.copytree(world["root"] / "seg1" / "baseline", root / "seg1" / "baseline")
+    for name in ("confirm3", "chase15"):
+        shutil.copytree(world["root"] / "seg1" / "baseline", root / "seg1" / name)
+    pack = ev.run([root / "seg1"], ["baseline", "confirm3", "chase15"], world["db"], tmp_path / "eval", write_events=False)
+    confirm = pack["decisions"]["variants"]["confirm3"]
+    assert confirm["metric_view"] == "confirmed" and confirm["confirmed_share"] == {"candidate": 0.5, "baseline": 0.5}
+    assert confirm["h20_diff_pp"]["ALL"] == pytest.approx(0.0) and confirm["paired_days"] == 1
+    chase = pack["decisions"]["variants"]["chase15"]
+    assert chase["metric_view"] == "chaseable" and chase["extended_share"] == {"candidate": 0.5, "baseline": 0.5}
+    assert "rule6_ok" in chase and chase["rule6_removed_mean_pp"] is None  # nothing removed relative to the baseline
+    assert pack["coverage"]["baseline"]["triggers_confirmed"] == 2 and pack["coverage"]["baseline"]["triggers_extended_at_trigger"] == 2
+    assert ("confirmed", 20, "next_bar") in pack["metrics"] and ("chaseable", 20, "next_bar") in pack["metrics"] if isinstance(pack["metrics"], dict) else True
+    views = {(r["view"], r["holding"], r["entry"]) for r in pack["metrics"]}
+    assert ("confirmed", 20, "next_bar") in views and ("chaseable", 20, "next_bar") in views and ("extended", 20, "next_bar") in views
 
 
 def test_partial_segments_keep_only_days_every_variant_completed(world: dict, tmp_path: Path) -> None:

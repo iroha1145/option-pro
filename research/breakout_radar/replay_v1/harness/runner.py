@@ -215,6 +215,17 @@ def _write_gzip_lines(path: Path, records: list[dict[str, Any]]) -> None:
 
 
 STOP_FILE = "STOP"  # touch <out>/STOP: the segment finishes the current day, writes run.json and the bundles, exits
+# The worker's lease heartbeat cancels a scan whose event loop has not pulsed for
+# maximum_loop_stall_seconds of real time (worker.py _run_with_lease_heartbeat); replay scans
+# are CPU-bound and on a loaded machine one stretch exceeded the default 270 s, killing seven
+# segments on 2026-09-29. The guard protects a shared production lease, which the replay
+# does not have, so it is switched off here (a constructor argument, not a setting: the
+# settings hashes are unchanged).
+REPLAY_STALL_SECONDS = 10 ** 9
+# Entry prices for the evaluation (PREREGISTRATION 修订 6): a stock enters at the first bar
+# at or after the next slot within 30 minutes; SPY at its first bar that day.
+STOCK_ENTRY_MAX_SLOTS = 6
+ENTRY_TRANSITIONS = ("TRIGGERED", "CONFIRMED")
 
 
 def _json_default(value: Any) -> Any:
@@ -283,6 +294,7 @@ class _VariantRun:
             scan_service=self.service,
             clock=clock.market_clock(),
             owner_id=f"replay-{name}",
+            maximum_loop_stall_seconds=REPLAY_STALL_SECONDS,
         )
         self.lease = self.repository.acquire_lock(
             DEFAULT_LOCK_NAME, self.worker.owner_id, self.worker.lease_ttl_seconds, clock.now
@@ -362,6 +374,7 @@ class _VariantRun:
             "warmup": warmup,
             "status": result.get("status"),
             "error_code": result.get("error_code"),
+            "error": result.get("error"),
             "scan_run_id": result.get("scan_run_id"),
             "elapsed_ms": round(elapsed_ms, 1),
             "prefilter_count": self.provider.last_prefilter_count,
@@ -373,21 +386,25 @@ class _VariantRun:
         if publication is not None:
             events = [e if isinstance(e, dict) else e.model_dump(mode="python") for e in publication.get("events") or []]
             compact_events = [_compact_event(e) for e in events]
-            # Evaluation-only prices (PREREGISTRATION section 5): the open of the 5-minute bar
-            # after the scan for events triggered at this scan, and SPY's for the same bar.
-            # The algorithm never sees them; they are looked up after the scan has run.
-            triggered_ids = {
+            # Evaluation-only prices (PREREGISTRATION section 5, 修订 6): the open of the first
+            # bar after the scan for events that became TRIGGERED or CONFIRMED at this scan, and
+            # SPY's for the same moment. The algorithm never sees them; they are looked up
+            # after the scan has run.
+            entry_ids = {
                 str(t.get("event_id") if isinstance(t, dict) else getattr(t, "event_id", None))
                 for t in publication.get("transitions") or []
-                if str(_value(t.get("to_state") if isinstance(t, dict) else getattr(t, "to_state", None))) == "TRIGGERED"
+                if str(_value(t.get("to_state") if isinstance(t, dict) else getattr(t, "to_state", None))) in ENTRY_TRANSITIONS
             }
-            benchmark_open = None
-            if triggered_ids:
-                benchmark_open = self.minute_store.next_bar_open("SPY", as_of)
+            benchmark = None
+            if entry_ids:
+                benchmark = self.minute_store.next_bar("SPY", as_of, max_slots=None)
                 for compact in compact_events:
-                    if compact.get("event_id") in triggered_ids and compact.get("ticker"):
-                        compact["next_bar_open"] = self.minute_store.next_bar_open(str(compact["ticker"]), as_of)
-            record["benchmark_next_bar_open"] = benchmark_open
+                    if compact.get("event_id") in entry_ids and compact.get("ticker"):
+                        found = self.minute_store.next_bar(str(compact["ticker"]), as_of, max_slots=STOCK_ENTRY_MAX_SLOTS)
+                        compact["next_bar_open"] = None if found is None else found[0]
+                        compact["next_bar_delay_slots"] = None if found is None else found[1]
+            record["benchmark_next_bar_open"] = None if benchmark is None else benchmark[0]
+            record["benchmark_next_bar_delay_slots"] = None if benchmark is None else benchmark[1]
             record.update(
                 {
                     "candidate_count": len(publication.get("candidates") or []),
@@ -589,13 +606,25 @@ def run_segment(config: RunConfig) -> dict[str, Any]:
                     run.heartbeat(clock.now)
                     snapshot = run.worker.clock.snapshot()
                     tick = time.perf_counter()
-                    result = dict(await run.worker._run_cycle(run.lease, snapshot))
+                    try:
+                        result = dict(await run.worker._run_cycle(run.lease, snapshot))
+                    except Exception as exc:  # noqa: BLE001 - one scan must not take the segment down
+                        # PREREGISTRATION 修订 6: the scan is recorded as an exception, the day
+                        # is thereby degraded (the evaluation drops it), and the segment goes on
+                        # unless --on-degraded raise asks for a hard stop.
+                        run.captured = None
+                        result = {
+                            "status": "exception", "error_code": type(exc).__name__,
+                            "error": str(exc)[:300], "session": kind, "scan_run_id": None,
+                        }
+                        if config.on_degraded == "raise":
+                            raise RuntimeError(f"scan raised {result}") from exc
                     elapsed = (time.perf_counter() - tick) * 1000.0
-                    if result.get("status") == "degraded":
+                    if result.get("status") in ("degraded", "exception"):
                         detail = {
-                            "variant": run.name, "as_of": as_of.isoformat(), "error_code": result.get("error_code"),
-                            "failure_domain": result.get("failure_domain"),
-                            "exception": repr(failures.last) if failures.last is not None else None,
+                            "variant": run.name, "as_of": as_of.isoformat(), "status": result.get("status"),
+                            "error_code": result.get("error_code"), "failure_domain": result.get("failure_domain"),
+                            "exception": result.get("error") or (repr(failures.last) if failures.last is not None else None),
                         }
                         run.degraded.append(detail)
                         summary["degraded"].append(detail)
