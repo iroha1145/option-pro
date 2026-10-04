@@ -682,7 +682,7 @@ export default function Earnings() {
                   </p>
                   <button
                     onClick={() => setVisibleLimit((limit) => limit + LIST_PAGE_SIZE)}
-                    className="h-8 rounded-md border border-line bg-card-warm px-3 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
+                    className="control-button h-8"
                   >
                     {t('显示更多 ·')} {Math.min(LIST_PAGE_SIZE, filteredItems.length - visibleItems.length)} {t('条')}
                   </button>

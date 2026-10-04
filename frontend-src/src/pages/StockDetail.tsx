@@ -225,7 +225,7 @@ export default function StockDetail() {
       {__t('技术结构读取失败，请重试')}
       <button
         onClick={() => techQ.refresh()}
-        className="ml-auto rounded-md border border-line px-2 py-0.5 text-micro text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+        className="control-button ml-auto"
       >
         {__t('重试')}
       </button>

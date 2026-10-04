@@ -261,7 +261,7 @@ export default function HistoryRail({
                 <button
                   onClick={onLoadMore}
                   disabled={loadingMore}
-                  className="flex items-center gap-2 rounded-md border border-line bg-card px-3 py-1.5 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
+                  className="control-button"
                 >
                   {loadingMore && <Spinner size={14} tone="brand" />}
                   {t('加载更多')}
@@ -271,7 +271,7 @@ export default function HistoryRail({
                 <button
                   onClick={onFetchMore}
                   disabled={loadingServerMore}
-                  className="flex items-center gap-2 rounded-md border border-line bg-card px-3 py-1.5 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
+                  className="control-button"
                 >
                   {loadingServerMore && <Spinner size={14} tone="brand" />}
                   {t('继续读取更早事件')}

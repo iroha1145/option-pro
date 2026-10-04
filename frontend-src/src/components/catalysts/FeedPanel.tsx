@@ -340,7 +340,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
               <button
                 onClick={() => void loadMore()}
                 disabled={loadingMore || !q.enabled || refreshing}
-                className="inline-flex items-center gap-2 rounded-md border border-line bg-card px-4 py-2 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
+                className="control-button"
               >
                 {loadingMore && <Spinner size={14} tone="muted" />}
                 {__t('加载更多')}

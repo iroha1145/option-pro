@@ -389,7 +389,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
                       <button
                         onClick={() => void rollback()}
                         disabled={saving}
-                        className="rounded-md border border-line bg-card px-2.5 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-50"
+                        className="control-button"
                       >
                         {__t('回滚上一版')}
                       </button>

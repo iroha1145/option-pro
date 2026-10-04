@@ -380,7 +380,7 @@ export default function EventDetail({
               </button>
               <button
                 onClick={() => onShowTickerEvents(event.ticker)}
-                className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3.5 py-2 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+                className="control-button"
               >
                 {__t('该代码全部事件')}
               </button>

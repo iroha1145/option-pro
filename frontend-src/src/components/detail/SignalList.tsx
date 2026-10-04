@@ -73,7 +73,7 @@ export default function SignalList({
               signalsQ.refresh();
               eventsQ.refresh();
             }}
-            className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+            className="control-button mt-3"
           >
             <BusyIcon busy={signalsQ.refreshing || eventsQ.refreshing} size={13} tone="brand" />
             {t('重试')}

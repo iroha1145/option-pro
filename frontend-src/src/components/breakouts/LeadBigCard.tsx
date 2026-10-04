@@ -418,7 +418,7 @@ function MiniKline({ ticker, dailyVersion, preparation, statusReadFailed }: { ti
             )}
             <button
               onClick={() => refresh()}
-              className="rounded-md border border-line bg-card px-2.5 py-1 text-micro font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+              className="control-button"
             >
               {t('重试')}
             </button>
@@ -783,7 +783,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <button
             onClick={() => onOpen(e)}
-            className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3.5 py-2 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+            className="control-button"
           >
             <Icon name="doc-quote" size={13} />
             {t('查看完整证据')}

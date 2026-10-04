@@ -1056,7 +1056,7 @@ export default function Watchlist() {
               <p className="mt-3 text-caption text-ink-400">{t('市场信号读取失败')}</p>
               <button
                 onClick={() => signalsQ.refresh()}
-                className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+                className="control-button mt-3"
               >
                 <Icon name="refresh" size={13} />
                 {t('重试')}

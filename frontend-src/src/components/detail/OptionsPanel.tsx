@@ -529,7 +529,7 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
               type="button"
               onClick={() => refreshChain()}
               disabled={retrySeconds > 0 || chainRefreshing}
-              className="inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-wait disabled:opacity-60"
+              className="control-button"
             >
               <BusyIcon busy={chainRefreshing} size={13} tone="brand" />
               {chainRefreshing ? t('正在重试') : t('重试该到期日')}

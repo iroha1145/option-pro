@@ -887,7 +887,7 @@ export default function Screener() {
                 onClick={() => void onStrengthRefresh()}
                 disabled={refreshingStrength || scanState === 'scanning'}
                 title={__t("重新计算强度评分（需管理员登录）")}
-                className="flex h-9 items-center gap-2 rounded-md border border-line bg-card px-3 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
+                className="control-button h-9"
               >
                 <BusyIcon busy={refreshingStrength} size={15} tone="brand" />
                 {__t('刷新强度分')}
@@ -1316,7 +1316,7 @@ export default function Screener() {
               <p className="mt-3 text-body-s text-ink-500">{marketQ.error.code === 503 ? __t('数据暂不可用 · 稍后刷新再试') : marketQ.error.message}</p>
               <button
                 onClick={() => marketQ.refresh()}
-                className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+                className="control-button mt-3"
               >
                 <Icon name="refresh" size={13} />
                 {__t('重试')}
@@ -1443,7 +1443,7 @@ function PagerButton({ label, disabled, onClick }: { label: string; disabled: bo
     <button
       onClick={onClick}
       disabled={disabled}
-      className="flex min-h-11 min-w-11 items-center rounded-md border border-line bg-card px-3 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
+      className="control-button min-h-11 min-w-11"
     >
       {label}
     </button>

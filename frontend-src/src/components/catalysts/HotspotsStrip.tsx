@@ -151,7 +151,7 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
               <p className="mt-1 text-micro text-ink-400">{__t('请稍后重试，恢复后将显示热点')}</p>
               <button
                 onClick={() => listQ.refresh()}
-                className="mt-3 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+                className="control-button mt-3"
               >
                 {__t('重试')}
               </button>
