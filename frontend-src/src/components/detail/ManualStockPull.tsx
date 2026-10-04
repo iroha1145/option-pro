@@ -133,7 +133,7 @@ export default function ManualStockPull({
           {running ? t('正在获取行情数据') : t('拉取并分析')}
         </button>
         {error && (
-          <p role="alert" className="text-caption text-down-700">
+          <p role="alert" className="text-caption text-danger-700">
             {error}
           </p>
         )}
@@ -170,14 +170,14 @@ export default function ManualStockPull({
       )}
 
       {error && (
-        <p role="alert" className="text-caption text-down-700">
+        <p role="alert" className="text-caption text-danger-700">
           {error}
         </p>
       )}
 
       {result && !running && (
         <div role="status" aria-live="polite" className="space-y-1.5">
-          <p className={cn('text-caption font-medium', result.status === 'completed' ? 'text-up-700' : 'text-warn-600')}>
+          <p className={cn('text-caption font-medium', result.status === 'completed' ? 'text-ok-700' : 'text-warn-700')}>
             {t('已完成')} {availableCount}/3
             {result.persistenceStatus === 'failed' ? t(' · 服务器保存失败，重启后可能失效') : ''}
           </p>
@@ -191,7 +191,7 @@ export default function ManualStockPull({
                   className={cn(
                     'rounded-xs border px-1.5 py-0.5 text-micro',
                     ok
-                      ? 'border-up-600/20 bg-up-50 text-up-700'
+                      ? 'border-ok-600/20 bg-ok-50 text-ok-700'
                       : 'border-warn-600/25 bg-warn-50 text-warn-600',
                   )}
                 >

@@ -10,7 +10,7 @@ import { useCalendarResource } from './useCalendarResource';
 import CatalystCacheStatus from './CatalystCacheStatus';
 import { cacheStatusProps } from './cacheStatusProps';
 
-const BARS = { high: 'bg-down-600', medium: 'bg-warn-600', low: 'bg-brand-400', holiday: 'bg-ink-300' };
+const BARS = { high: 'bg-ink-800', medium: 'bg-ink-500', low: 'bg-ink-300', holiday: 'bg-line-strong' };
 export default function EconomicCalendarCard() {
   const q = useCalendarResource();
   const copy = calendarCopy(localeTag());

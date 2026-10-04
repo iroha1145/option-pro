@@ -109,7 +109,7 @@ export type BreakoutCurrentEvent = BreakoutEventFull;
 
 /** 追高风险反向（越高越危险）；普通评分使用公共强度色阶。 */
 export function riskBarClass(score: number): string {
-  if (score >= 70) return 'bg-down-600';
+  if (score >= 70) return 'bg-danger-600';
   if (score >= 50) return 'bg-warn-600';
   return 'bg-ink-300';
 }

@@ -502,7 +502,7 @@ export default function Login() {
                     'transition-[box-shadow,border-color] duration-fast',
                     'focus-within:border-brand-600 focus-within:shadow-focus-ring',
                     userShake.classes.input,
-                    userShake.error ? 'border-down-600' : 'border-line-strong',
+                    userShake.error ? 'border-danger-600' : 'border-line-strong',
                   )}
                 >
                   <Icon name="command" size={16} className="shrink-0 text-ink-400" />
@@ -527,7 +527,7 @@ export default function Login() {
               </label>
               <div className="t-error-track">
                 <div className="t-error-clip">
-                  <p className="t-error-msg text-caption text-down-700">{t('请输入用户名')}</p>
+                  <p className="t-error-msg text-caption text-danger-700">{t('请输入用户名')}</p>
                 </div>
               </div>
               </div>
@@ -540,7 +540,7 @@ export default function Login() {
                     't-input flex h-12 items-center gap-2 rounded-sm border bg-card px-3 transition-[box-shadow,border-color] duration-fast',
                     'focus-within:border-brand-600 focus-within:shadow-focus-ring',
                     pwShake.classes.input,
-                    pwShake.error ? 'border-down-600' : 'border-line-strong',
+                    pwShake.error ? 'border-danger-600' : 'border-line-strong',
                   )}
                 >
                   <Icon name="shield" size={16} className="shrink-0 text-ink-400" />
@@ -577,7 +577,7 @@ export default function Login() {
               )}
               <div className="t-error-track">
                 <div className="t-error-clip">
-                  <p className="t-error-msg text-caption text-down-700">{t('请输入密码')}</p>
+                  <p className="t-error-msg text-caption text-danger-700">{t('请输入密码')}</p>
                 </div>
               </div>
               </div>
@@ -592,7 +592,7 @@ export default function Login() {
                   'flex h-12 w-full items-center justify-center gap-2 rounded-md font-mono text-[14px] tracking-[0.02em] text-on-accent shadow-btn-hi',
                   'transition-[transform,filter,background-color] duration-fast',
                   state === 'success'
-                    ? 'bg-up-600'
+                    ? 'bg-ok-600'
                     : 'bg-brand-600 hover:-translate-y-px hover:brightness-[1.06] active:translate-y-0 active:brightness-95 active:duration-instant',
                   'disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0',
                 )}
@@ -622,7 +622,7 @@ export default function Login() {
               <p
                 className={cn(
                   'mt-3 min-h-5 text-caption',
-                  statusMsg?.tone === 'warn' ? 'text-warn-600' : 'text-down-700',
+                  statusMsg?.tone === 'warn' ? 'text-warn-700' : 'text-danger-700',
                   !statusMsg && 'opacity-0',
                 )}
                 role={statusMsg?.tone === 'error' ? 'alert' : 'status'}

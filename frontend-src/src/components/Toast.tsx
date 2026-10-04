@@ -21,8 +21,8 @@ interface ToastItem {
 }
 
 const BAR: Record<ToastKind, string> = {
-  success: 'bg-up-700',
-  error: 'bg-down-700',
+  success: 'bg-ok-700',
+  error: 'bg-danger-700',
   info: 'bg-brand-600',
 };
 

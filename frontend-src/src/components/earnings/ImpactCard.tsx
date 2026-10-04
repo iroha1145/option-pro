@@ -601,7 +601,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
           {/* ---------- 最终结果锁定，禁止重复请求 ---------- */}
           {phase === 'final-locked' && (
             <div className="flex flex-col items-center py-9 text-center">
-              <span className="flex size-12 items-center justify-center rounded-lg bg-up-50 text-up-700">
+              <span className="flex size-12 items-center justify-center rounded-lg bg-ok-50 text-ok-700">
                 <AnalysisIcon size={22} />
               </span>
               <SoftBadge tone="up" className="mt-3">
@@ -703,8 +703,8 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                   <p className="mt-0.5 text-micro text-ink-500">{__t('可以重新生成分析')}</p>
                 </div>
               ) : (
-                <div className="rounded-md border border-down-600/30 bg-down-50 p-3">
-                  <p className="text-caption font-medium text-down-700">{__t('分析任务失败')}</p>
+                <div className="rounded-md border border-danger-600/30 bg-danger-50 p-3">
+                  <p className="text-caption font-medium text-danger-700">{__t('分析任务失败')}</p>
                   <p className="mt-0.5 text-micro text-ink-500">{errorMsg || __t('未知原因')}</p>
                 </div>
               )}
@@ -788,7 +788,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                   </div>
                 )}
                 {isFinalImpact(impact) && (
-                  <p className="mt-3 rounded-md border border-up-600/20 bg-up-50 px-3 py-2 text-micro leading-5 text-up-700">
+                  <p className="mt-3 rounded-md border border-ok-600/20 bg-ok-50 px-3 py-2 text-micro leading-5 text-ok-700">
                     {__t('已根据公布后的实际业绩更新。')}
                   </p>
                 )}

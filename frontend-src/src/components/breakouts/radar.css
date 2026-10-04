@@ -14,8 +14,9 @@
   vertical-align: middle;
   font-variant-numeric: tabular-nums;
 }
-.radar-chip-brand { background: var(--brand-50); color: var(--brand-600); }
+.radar-chip-brand { background: var(--brand-50); color: var(--brand-700); }
 .radar-chip-up { background: var(--up-50); color: var(--up-700); }
+.radar-chip-ok { background: var(--ok-50); color: var(--ok-700); }
 .radar-chip-down { background: var(--down-50); color: var(--down-700); }
 .radar-chip-neutral { background: var(--paper); color: var(--ink-500); }
 .radar-chip-volume {

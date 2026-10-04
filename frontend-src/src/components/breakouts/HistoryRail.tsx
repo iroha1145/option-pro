@@ -280,7 +280,7 @@ export default function HistoryRail({
                 <p className="font-mono text-micro text-ink-300 tnum">{t('已加载全部')} {events.length} {t('条')}</p>
               )}
               {serverMoreError && (
-                <p className="text-micro text-down-700">
+                <p className="text-micro text-danger-700">
                   {t('加载更多失败：')}{serverMoreError.message}
                 </p>
               )}

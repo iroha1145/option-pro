@@ -13,10 +13,10 @@ import { fmtLocaleDate, fmtLocaleTime } from '@/lib/format';
 import { t as __t } from '../../i18n/core.ts';
 
 const IMPACT_STYLE: Record<EconomicEvent['impact'], { bar: string; tone: BadgeTone; dots: number }> = {
-  high: { bar: 'bg-down-600', tone: 'down', dots: 3 },
-  medium: { bar: 'bg-warn-600', tone: 'warn', dots: 2 },
-  low: { bar: 'bg-brand-400', tone: 'brand', dots: 1 },
-  holiday: { bar: 'bg-ink-300', tone: 'neutral', dots: 0 },
+  high: { bar: 'bg-ink-800', tone: 'neutral', dots: 3 },
+  medium: { bar: 'bg-ink-500', tone: 'neutral', dots: 2 },
+  low: { bar: 'bg-ink-300', tone: 'neutral', dots: 1 },
+  holiday: { bar: 'bg-line-strong', tone: 'neutral', dots: 0 },
 };
 
 function ImpactChip({ ev }: { ev: EconomicEvent }) {

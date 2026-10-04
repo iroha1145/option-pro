@@ -61,7 +61,7 @@ const fmtEventTime = fmtNyEventTime;
 /* ---------------- 时段 chip（§1.6 LED 色） ---------------- */
 const SESSION_DOT: Record<BreakoutSession, string> = {
   premarket: 'bg-warn-600',
-  regular: 'bg-up-600',
+  regular: 'bg-ok-600',
   postmarket: 'bg-ai-600',
   closed: 'bg-ink-400',
 };
@@ -193,7 +193,7 @@ function LifecycleStepper({ state }: { state: string }) {
           tone === 'current' && 'bg-brand-600 ring-4 ring-brand-100',
           tone === 'past' && 'bg-ink-300',
           tone === 'future' && 'border border-line-strong bg-card',
-          tone === 'down' && 'bg-down-600 ring-2 ring-down-600/25',
+          tone === 'down' && 'bg-danger-600 ring-2 ring-danger-600/25',
           tone === 'ink-end' && 'bg-ink-400 ring-2 ring-ink-400/25',
         )}
         aria-hidden="true"
@@ -203,7 +203,7 @@ function LifecycleStepper({ state }: { state: string }) {
           'mt-1.5 whitespace-nowrap text-[11px] leading-[16px]',
           tone === 'current' && 'font-semibold text-brand-700',
           (tone === 'past' || tone === 'future') && 'text-ink-400',
-          tone === 'down' && 'font-semibold text-down-700',
+          tone === 'down' && 'font-semibold text-danger-700',
           tone === 'ink-end' && 'font-semibold text-ink-500',
         )}
       >
@@ -400,7 +400,7 @@ function MiniKline({ ticker, dailyVersion, preparation, statusReadFailed }: { ti
                   : t('正在获取日线，完成后自动显示')}
           </p>
           {pullError && (
-            <p role="alert" className="text-micro text-down-700">
+            <p role="alert" className="text-micro text-danger-700">
               {pullError}
             </p>
           )}
@@ -484,7 +484,7 @@ const CONTRIB_DEFS = [
   { key: 'breakout_quality', label: t('突破质量'), cls: 'bg-brand-600' },
   { key: 'intrinsic_strength', label: t('内在强度'), cls: 'bg-brand-400' },
   { key: 'market_fit', label: t('市场契合'), cls: 'bg-ai-600' },
-  { key: 'sector_fit', label: t('板块契合'), cls: 'bg-up-600' },
+  { key: 'sector_fit', label: t('板块契合'), cls: 'bg-ink-500' },
   { key: 'data_confidence', label: t('数据置信'), cls: 'bg-ink-300' },
   { key: 'event_freshness', label: t('事件新鲜度'), cls: 'bg-warn-600' },
 ] as const;

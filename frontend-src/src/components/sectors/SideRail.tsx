@@ -168,7 +168,7 @@ function CoverageCard({
           className={cn(
             'rounded-xs border px-1.5 py-0.5 text-micro',
             meta.status === 'active'
-              ? 'border-up-600/20 bg-up-50 text-up-700'
+              ? 'border-ok-600/20 bg-ok-50 text-ok-700'
               : 'border-warn-600/25 bg-warn-50 text-warn-600',
           )}
         >

@@ -272,7 +272,7 @@ function MobileDockContent() {
                   }}
                   className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left transition-[transform,background-color] hover:bg-paper-2 active:bg-line/60 disabled:cursor-wait disabled:opacity-60"
                 >
-                  <span className={cn('flex size-9 items-center justify-center rounded-md border border-line', isOwner ? 'bg-up-50 text-up-700' : 'bg-card-warm text-ink-400')}>
+                  <span className={cn('flex size-9 items-center justify-center rounded-md border border-line', isOwner ? 'bg-ok-50 text-ok-700' : 'bg-card-warm text-ink-400')}>
                     <Icon name={isSignedIn ? 'logout' : 'shield'} size={17} />
                   </span>
                   <span className="flex-1">

@@ -1,7 +1,7 @@
 import type { HTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
 
-export type BadgeTone = 'neutral' | 'brand' | 'ai' | 'up' | 'down' | 'warn';
+export type BadgeTone = 'neutral' | 'brand' | 'ai' | 'up' | 'down' | 'ok' | 'danger' | 'warn';
 
 const TONES: Record<BadgeTone, string> = {
   neutral: 'bg-paper-2 text-ink-600',
@@ -9,6 +9,8 @@ const TONES: Record<BadgeTone, string> = {
   ai: 'bg-ai-50 text-ai-600',
   up: 'bg-up-50 text-up-700',
   down: 'bg-down-50 text-down-700',
+  ok: 'bg-ok-50 text-ok-700',
+  danger: 'bg-danger-50 text-danger-700',
   warn: 'bg-warn-50 text-warn-700',
 };
 

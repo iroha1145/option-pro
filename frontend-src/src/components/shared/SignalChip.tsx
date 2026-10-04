@@ -9,7 +9,7 @@ const STYLE: Record<SignalType, string> = {
   pullback: 'text-ink-500 bg-paper',
   'ma-touch': 'text-ink-500 bg-paper',
   gap: 'text-ai-600 bg-ai-50',
-  'iv-spike': 'text-down-700 bg-down-50',
+  'iv-spike': 'text-warn-700 bg-warn-50',
 };
 
 export default function SignalChip({ type, label, className }: { type: SignalType | string; label: string; className?: string }) {

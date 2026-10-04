@@ -16,7 +16,7 @@ test('shared strength color helper preserves score thresholds after moving out o
   for (const [score, expected] of [
     [0, 'bg-ink-300'], [49.9, 'bg-ink-300'], [50, 'bg-brand-400'],
     [69.9, 'bg-brand-400'], [70, 'bg-brand-600'], [84.9, 'bg-brand-600'],
-    [85, 'bg-up-600'], [100, 'bg-up-600'],
+    [85, 'bg-ok-600'], [100, 'bg-ok-600'],
   ]) assert.equal(strengthBarClass(score), expected);
 });
 
@@ -30,12 +30,12 @@ async function walk(dir) {
   return out;
 }
 
-test('every ink/warn/brand/up/down/ai scale step used in src exists in tailwind.config.js', async () => {
+test('every ink/warn/brand/up/down/ok/danger/ai scale step used in src exists in tailwind.config.js', async () => {
   const config = await readFile(path.join(root, 'tailwind.config.js'), 'utf8');
   const defined = new Set();
   // 解析 config 里的 `ink: { 900: …, 700: … }` 等数字键
   for (const [, scale, body] of config.matchAll(
-    /(ink|warn|brand|up|down|ai)\s*:\s*\{([^}]*)\}/g,
+    /(ink|warn|brand|up|down|ok|danger|ai)\s*:\s*\{([^}]*)\}/g,
   )) {
     for (const [, step] of body.matchAll(/(?:^|[\s,{])(\d{2,3})\s*:/g)) {
       defined.add(`${scale}-${step}`);
@@ -48,7 +48,7 @@ test('every ink/warn/brand/up/down/ai scale step used in src exists in tailwind.
     if (file.includes(`${path.sep}components${path.sep}ui${path.sep}`)) continue; // shadcn 基座另有令牌体系
     const text = await readFile(file, 'utf8');
     for (const match of text.matchAll(
-      /(?:text|bg|border|decoration|ring|fill|stroke|from|to|via|divide|outline|shadow|caret|accent)-(ink|warn|brand|up|down|ai)-(\d{2,3})(?![\d-])/g,
+      /(?:text|bg|border|decoration|ring|fill|stroke|from|to|via|divide|outline|shadow|caret|accent)-(ink|warn|brand|up|down|ok|danger|ai)-(\d{2,3})(?![\d-])/g,
     )) {
       const key = `${match[1]}-${match[2]}`;
       if (!defined.has(key)) {
@@ -61,4 +61,16 @@ test('every ink/warn/brand/up/down/ai scale step used in src exists in tailwind.
     [],
     `发现引用未定义色阶的类名（Tailwind 不会为它们生成规则）：\n${offenders.join('\n')}`,
   );
+});
+
+test('状态色 ok / danger 不随红涨绿跌互换', async () => {
+  const css = await readFile(path.join(srcDir, 'index.css'), 'utf8');
+  const asianBlocks = [...css.matchAll(/html(?:\.dark)?\[data-color-mode="asian"\]\s*\{([^}]*)\}/g)].map((m) => m[1]);
+  assert.equal(asianBlocks.length, 2, '应有浅色与夜间两个红涨绿跌块');
+  for (const block of asianBlocks) {
+    assert.match(block, /--up-600/);
+    assert.doesNotMatch(block, /--(ok|danger)-/);
+  }
+  assert.match(css, /--ok-600:/);
+  assert.match(css, /--danger-600:/);
 });

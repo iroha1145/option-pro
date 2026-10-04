@@ -61,7 +61,7 @@ export default function BreadthHistogram({
     >
       <div className="flex items-start justify-between">
         <p className="eyebrow">{t('强度分布 · 全市场')}</p>
-        <span className="inline-flex items-center gap-1 rounded-xs bg-up-50 px-1.5 py-0.5 font-mono text-micro text-up-700 tnum">
+        <span className="inline-flex items-center gap-1 rounded-xs bg-ok-50 px-1.5 py-0.5 font-mono text-micro text-ok-700 tnum">
           <Icon name="target" size={12} strokeWidth={1.45} />
           ≥85 · {data.ge85Count} {t('只')}
         </span>

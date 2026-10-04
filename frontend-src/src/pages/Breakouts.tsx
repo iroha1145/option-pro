@@ -94,7 +94,7 @@ const WATCH_SCOPE_OPTIONS = [
 /* ---------------- 市场时段 chip（§1.6 色） ---------------- */
 const SESSION_DOT: Record<BreakoutSession, string> = {
   premarket: 'bg-warn-600',
-  regular: 'bg-up-600',
+  regular: 'bg-ok-600',
   postmarket: 'bg-ai-600',
   closed: 'bg-ink-400',
 };
@@ -504,7 +504,7 @@ export default function Breakouts() {
         {/* 紧凑状态条：启用 LED · 快照与活跃条数（副标合并至此去重）· 最近扫描 · 时段 chip · 扫描服务 · 下次扫描倒计时 · 查看范围 */}
         <div className="radar-status flex flex-wrap items-center justify-end gap-x-4 gap-y-2 pb-1 text-caption text-ink-500">
           <span className="inline-flex items-center gap-1.5">
-            <span className={cn('size-2 rounded-full', status?.enabled ? 'bg-up-600 animate-led-pulse' : 'bg-ink-300')} aria-hidden="true" />
+            <span className={cn('size-2 rounded-full', status?.enabled ? 'bg-ok-600 animate-led-pulse' : 'bg-ink-300')} aria-hidden="true" />
             {status ? (status.enabled ? __t('扫描已启用') : __t('扫描已暂停')) : __t('状态读取中…')}
           </span>
           <span className="font-mono tnum">
@@ -522,7 +522,7 @@ export default function Breakouts() {
               size={13}
               className={
                 status?.worker?.healthy === true
-                  ? 'text-up-600'
+                  ? 'text-ok-600'
                   : status?.worker?.healthy === false
                     ? 'text-warn-600'
                     : 'text-ink-400'

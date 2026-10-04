@@ -244,7 +244,7 @@ test('Login renders is-error and is-shaking via React className, not classList',
   assert.match(login, /pwShake\.play\(\);/);
   assert.match(
     login,
-    /className=\{cn\([\s\S]*pwShake\.classes\.input[\s\S]*pwShake\.error \? 'border-down-600'/,
+    /className=\{cn\([\s\S]*pwShake\.classes\.input[\s\S]*pwShake\.error \? 'border-danger-600'/,
   );
   assert.doesNotMatch(login, /classList\.add\(/);
   assert.doesNotMatch(login, /classList\.remove\(/);

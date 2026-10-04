@@ -98,8 +98,8 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
             unreadCell
           ) : (
             <div className="flex flex-wrap items-center gap-2">
-              <Led tone={s?.collecting ? 'up' : 'muted'} pulse={!!s?.collecting} />
-              <SoftBadge tone={s?.collecting ? 'up' : 'neutral'} size="md" className="whitespace-normal">
+              <Led tone={s?.collecting ? 'ok' : 'muted'} pulse={!!s?.collecting} />
+              <SoftBadge tone={s?.collecting ? 'ok' : 'neutral'} size="md" className="whitespace-normal">
                 {s?.collecting ? t('采集中') : t('已暂停')}
                 {s?.collecting && s.intervalMinutes != null && <span className="text-ink-500"> {t('· 每')} {s.intervalMinutes} {t('分钟')}</span>}
               </SoftBadge>
@@ -112,8 +112,8 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
             <p className="mt-1 flex flex-wrap items-center gap-x-2.5 font-mono text-micro text-ink-400 tnum">
               <span>{t('上次采集')} {fmtRelative(s.lastCrawlAt)}</span>
               {s.streams?.map((st) => (
-                <SoftBadge key={st.name} tone={st.ok ? 'up' : 'down'} className="whitespace-normal [overflow-wrap:anywhere]">
-                  <Led tone={st.ok ? 'up' : 'down'} className="size-1.5" />
+                <SoftBadge key={st.name} tone={st.ok ? 'ok' : 'danger'} className="whitespace-normal [overflow-wrap:anywhere]">
+                  <Led tone={st.ok ? 'ok' : 'danger'} className="size-1.5" />
                   {st.name}
                 </SoftBadge>
               ))}

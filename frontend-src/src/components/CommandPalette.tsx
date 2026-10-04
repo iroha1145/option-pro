@@ -443,7 +443,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
               )}
               {!searching && searchError && (
                 <div className="flex flex-col items-center px-6 py-10 text-center" role="alert" aria-live="assertive">
-                  <span className="flex size-9 items-center justify-center rounded-full bg-down-50 text-down-700">
+                  <span className="flex size-9 items-center justify-center rounded-full bg-danger-50 text-danger-700">
                     <Icon name="x" size={15} />
                   </span>
                   <p className="mt-3 text-body-s font-medium text-ink-700">{__t('搜索未完成')}</p>

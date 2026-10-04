@@ -176,7 +176,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="mt-3 text-caption text-down-700"
+            className="mt-3 text-caption text-danger-700"
           >
             {error ??
               (job?.status === 'failed'

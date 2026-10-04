@@ -243,7 +243,7 @@ export default function EarningsAnalysisControls() {
             {lastRun ? summaryText(lastRun) : lastRunNote}
           </p>
         )}
-        {error && <p className="mt-1 text-micro text-down-700">{error}</p>}
+        {error && <p className="mt-1 text-micro text-danger-700">{error}</p>}
         {workerStatusError && <p className="mt-1 text-micro text-warn-700" role="status">{workerStatusError}</p>}
       </div>
     </section>

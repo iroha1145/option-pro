@@ -79,7 +79,7 @@ function OwnerAnalysisProgressCard() {
     return (
       <section aria-label={t("新闻分析进度")} className="card-surface mt-4 px-5 py-4">
         <div className="flex items-center gap-2">
-          <Led tone="down" />
+          <Led tone="danger" />
           <p className="text-body-s font-medium text-ink-800">{t('分析进度暂不可用')}</p>
         </div>
         <p className="mt-1 text-micro text-ink-400">{progressQ.error.message}</p>
@@ -116,7 +116,7 @@ function OwnerAnalysisProgressCard() {
           </p>
           <div className="mt-1.5 flex items-center gap-2">
             <Led
-              tone={processing ? 'ai' : validating ? 'warn' : progress.total > 0 ? 'up' : 'muted'}
+              tone={processing ? 'ai' : validating ? 'warn' : progress.total > 0 ? 'ok' : 'muted'}
               pulse={processing}
             />
             <p className="text-body-s font-medium text-ink-800">{progressHeadline(progress)}</p>
@@ -155,7 +155,7 @@ function OwnerAnalysisProgressCard() {
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
         <Metric label={t("总任务")} value={progress.total} />
         <Metric label={t("已结束")} value={progress.finished} />
-        <Metric label={t("成功")} value={progress.succeeded} tone="up" />
+        <Metric label={t("成功")} value={progress.succeeded} tone="ok" />
         <Metric
           label={t("待校验")}
           value={progress.awaitingValidation}
@@ -164,9 +164,9 @@ function OwnerAnalysisProgressCard() {
         <Metric
           label={t("被拒绝")}
           value={progress.rejected}
-          tone={progress.rejected ? 'down' : undefined}
+          tone={progress.rejected ? 'danger' : undefined}
         />
-        <Metric label={t("失败")} value={progress.failed} tone={progress.failed ? 'down' : undefined} />
+        <Metric label={t("失败")} value={progress.failed} tone={progress.failed ? 'danger' : undefined} />
         <Metric label={t("等待")} value={progress.waiting} tone={progress.waiting ? 'warn' : undefined} />
         <Metric label={t("进行中")} value={progress.inProgress} tone={progress.inProgress ? 'ai' : undefined} />
       </div>
@@ -184,7 +184,7 @@ function OwnerAnalysisProgressCard() {
           </span>
         )}
         {progress.rejected > 0 && (
-          <span className="text-down-700">
+          <span className="text-warn-700">
             {t('部分分析未通过语言或格式检查，暂未发布')}
           </span>
         )}

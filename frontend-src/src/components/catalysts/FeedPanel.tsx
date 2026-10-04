@@ -352,7 +352,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
               <p className="mt-1.5 text-micro text-ink-500" role="status">{__t('列表已更新，请再试一次')}</p>
             )}
             {moreError && (
-              <p className="mt-1.5 text-micro text-down-700">
+              <p className="mt-1.5 text-micro text-danger-700">
                 {__t('加载更多失败：')}{moreError.message} ·{' '}
                 <button type="button" disabled={!q.enabled || refreshing} onClick={() => void loadMore()} className="font-medium underline underline-offset-2">
                   {__t('重试')}

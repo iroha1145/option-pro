@@ -41,7 +41,7 @@ export default class AppErrorBoundary extends Component<Props, State> {
           maxWidth: '34rem',
           padding: '1.5rem',
           borderRadius: '12px',
-          border: '1px solid color-mix(in srgb, var(--down-600, #E5484D) 25%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--danger-600, #E5484D) 25%, transparent)',
           background: 'var(--card, #fff)',
           color: 'var(--ink-900, #1b1b1f)',
           fontFamily:

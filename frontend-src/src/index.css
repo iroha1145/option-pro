@@ -41,8 +41,17 @@
     --down-600: #E5484D;
     --down-700: #C4302B;
     --down-50: #FCECEC;
+    /* 状态色：成功、正常、在线用 ok，错误、失败、删除用 danger。取值与默认涨跌色相同，
+       但红涨绿跌模式不互换——「操作成功」不能跟着行情偏好变红。 */
+    --ok-700: #0B7A55;
+    --ok-600: #0E9F6E;
+    --ok-50: #E5F6EF;
+    --danger-700: #C4302B;
+    --danger-600: #E5484D;
+    --danger-50: #FCECEC;
     --on-accent: #FFFFFF;
-    --warn-700: #B87109;
+    /* 700 是警示文字档：#B87109 在 warn-50 上只有 3.5:1，加深到 5.1:1。 */
+    --warn-700: #935B00;
     --warn-600: #E8930C;
     --warn-50: #FCF3E2;
     --scrim: rgba(13, 22, 38, .32);
@@ -142,6 +151,12 @@
     --down-600: #FF8A80;
     --down-700: #FFB4AE;
     --down-50: #3A1618;
+    --ok-700: #7EE0B8;
+    --ok-600: #62D0A5;
+    --ok-50: #163D34;
+    --danger-700: #FFB4AE;
+    --danger-600: #FF8A80;
+    --danger-50: #3A1618;
     --on-accent: #191B20;
     --warn-700: #FDE047;
     --warn-600: #FACC15;

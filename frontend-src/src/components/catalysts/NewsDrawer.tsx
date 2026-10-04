@@ -802,8 +802,8 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
 
             {/* 失败 */}
             {showFailed && (
-              <div className="mt-4 rounded-md border border-down-600/20 bg-down-50 p-3.5">
-                <p className="text-body-s font-medium text-down-700">{__t('分析失败')}</p>
+              <div className="mt-4 rounded-md border border-danger-600/20 bg-danger-50 p-3.5">
+                <p className="text-body-s font-medium text-danger-700">{__t('分析失败')}</p>
                 <p className="mt-1 text-micro text-ink-500">{failureText}</p>
               </div>
             )}

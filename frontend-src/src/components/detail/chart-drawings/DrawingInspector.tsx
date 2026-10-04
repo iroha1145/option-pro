@@ -127,7 +127,7 @@ export default function DrawingInspector({
                   type="button"
                   aria-label={t('删除图形')}
                   onClick={() => onDeleteId?.(item.id)}
-                  className="rounded-xs border border-down-600/40 px-1.5 py-1 text-micro text-down-600"
+                  className="rounded-xs border border-danger-600/40 px-1.5 py-1 text-micro text-danger-600"
                 >
                   <Icon name="x" size={13} />
                 </button>
@@ -239,7 +239,7 @@ export default function DrawingInspector({
             </button>
             <button type="button" aria-label={t('上移一层')} onClick={() => onZ(1)} className="rounded-xs border border-line px-2 py-1 text-micro">{t('上移一层')}</button>
             <button type="button" aria-label={t('下移一层')} onClick={() => onZ(-1)} className="rounded-xs border border-line px-2 py-1 text-micro">{t('下移一层')}</button>
-            <button type="button" aria-label={t('删除图形')} onClick={onDelete} className="rounded-xs border border-down-600/40 px-2 py-1 text-micro text-down-600">{t('删除图形')}</button>
+            <button type="button" aria-label={t('删除图形')} onClick={onDelete} className="rounded-xs border border-danger-600/40 px-2 py-1 text-micro text-danger-600">{t('删除图形')}</button>
           </div>
         </>
       ) : (
@@ -252,7 +252,7 @@ export default function DrawingInspector({
         ) : null}
         <button type="button" onClick={() => fileRef.current?.click()} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导入 JSON')}</button>
         <button type="button" onClick={onImportLocal} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导入本机绘图')}</button>
-        <button type="button" onClick={onClear} className="rounded-xs border border-down-600/40 px-2 py-1 text-micro text-down-600">{t('清除全部手绘')}</button>
+        <button type="button" onClick={onClear} className="rounded-xs border border-danger-600/40 px-2 py-1 text-micro text-danger-600">{t('清除全部手绘')}</button>
         <input
           ref={fileRef}
           type="file"

@@ -226,7 +226,7 @@ function AiOptionInsight({
         </div>
       )}
 
-      {error && <p role="status" className="mt-2.5 text-caption text-down-700">
+      {error && <p role="status" className="mt-2.5 text-caption text-danger-700">
         {error}
         {queryIssue === 'retrying' && <span className="ml-2">{t('正在重新查询原任务')}</span>}
         {(queryIssue === 'paused' || queryIssue === 'blocked') && <button onClick={resume} className="ml-2 font-medium text-ai-600">{t('继续查询原任务')}</button>}
@@ -293,7 +293,7 @@ function AiOptionInsight({
 
       {job?.status === 'succeeded' && !result && (
         <div className="mt-3 border-t border-ai-600/20 pt-3">
-          <p className="text-caption text-down-700">
+          <p className="text-caption text-danger-700">
             {job.error === 'legacy_output_hidden'
               ? aiJobErrorMessage('legacy_output_hidden')
               : t('分析已完成，但没有返回可展示的结果。')}

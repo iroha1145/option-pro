@@ -63,6 +63,17 @@ module.exports = {
           600: 'color-mix(in srgb, var(--down-600) calc(100% * <alpha-value>), transparent)',
           50: 'color-mix(in srgb, var(--down-50) calc(100% * <alpha-value>), transparent)',
         },
+        /* 状态色（index.css 说明）：不随红涨绿跌互换。 */
+        ok: {
+          700: token('--ok-700'),
+          600: token('--ok-600'),
+          50: token('--ok-50'),
+        },
+        danger: {
+          700: token('--danger-700'),
+          600: token('--danger-600'),
+          50: token('--danger-50'),
+        },
         warn: {
           /* 700：警示横幅主文案用档（warn-50 底上比 600 重一档，审计 2.4.5） */
           700: token('--warn-700'),
@@ -189,9 +200,9 @@ module.exports = {
         /* v8.3 tick-flash keyframes 退役：keyframes 一旦触发必须跑完、无法中断，
            改为 index.css 的 .tick-flash*（常驻 600ms 回落 transition + 瞬时上色态）。 */
         'led-pulse': {
-          '0%': { boxShadow: '0 0 0 0 color-mix(in srgb, var(--up-600) 55%, transparent)' },
-          '70%': { boxShadow: '0 0 0 6px color-mix(in srgb, var(--up-600) 0%, transparent)' },
-          '100%': { boxShadow: '0 0 0 0 color-mix(in srgb, var(--up-600) 0%, transparent)' },
+          '0%': { boxShadow: '0 0 0 0 color-mix(in srgb, var(--ok-600) 55%, transparent)' },
+          '70%': { boxShadow: '0 0 0 6px color-mix(in srgb, var(--ok-600) 0%, transparent)' },
+          '100%': { boxShadow: '0 0 0 0 color-mix(in srgb, var(--ok-600) 0%, transparent)' },
         },
         'grow-bar': {
           from: { transform: 'scaleX(0)' },

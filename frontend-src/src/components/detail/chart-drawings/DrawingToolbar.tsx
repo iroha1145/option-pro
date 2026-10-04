@@ -136,7 +136,7 @@ export default function DrawingToolbar({
         )}
         aria-live="polite"
       >
-        <span className={cn('size-1.5 rounded-full', syncStatus === 'unsynced' || syncStatus === 'load_failed' || syncStatus === 'write_failed' || syncStatus === 'conflict' ? 'bg-warn-600' : syncStatus === 'saving' ? 'bg-brand-400' : 'bg-up-600')} aria-hidden />
+        <span className={cn('size-1.5 rounded-full', syncStatus === 'unsynced' || syncStatus === 'load_failed' || syncStatus === 'write_failed' || syncStatus === 'conflict' ? 'bg-warn-600' : syncStatus === 'saving' ? 'bg-brand-400' : 'bg-ok-600')} aria-hidden />
         <span>{syncStatus === 'guest' && compact ? t('未同步') : syncLabel}</span>
         {!quotaBlocked && (syncStatus === 'unsynced' || syncStatus === 'load_failed' || syncStatus === 'write_failed') && (
           <button type="button" className="underline-offset-2 hover:underline" onClick={onRetry} aria-label={t('重试同步')}>

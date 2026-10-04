@@ -70,15 +70,15 @@ export interface ScreenerStrengthPresentation {
   label: string;
   barClass: string;
   textClass: string;
-  badgeTone: 'up' | 'brand' | 'warn' | 'neutral';
+  badgeTone: 'ok' | 'brand' | 'warn' | 'neutral';
 }
 
 export function screenerStrengthPresentation(score: number): ScreenerStrengthPresentation {
   if (score >= 90) {
-    return { band: 'S', tone: 's', label: __t('顶尖'), barClass: 'bg-up-700', textClass: 'text-up-700', badgeTone: 'up' };
+    return { band: 'S', tone: 's', label: __t('顶尖'), barClass: 'bg-ok-700', textClass: 'text-ok-700', badgeTone: 'ok' };
   }
   if (score >= 85) {
-    return { band: 'A', tone: 'a-high', label: __t('极强'), barClass: 'bg-up-600', textClass: 'text-up-700', badgeTone: 'up' };
+    return { band: 'A', tone: 'a-high', label: __t('极强'), barClass: 'bg-ok-600', textClass: 'text-ok-700', badgeTone: 'ok' };
   }
   if (score >= 80) {
     return { band: 'A', tone: 'a', label: __t('强势'), barClass: 'bg-brand-600', textClass: 'text-brand-700', badgeTone: 'brand' };
@@ -87,7 +87,7 @@ export function screenerStrengthPresentation(score: number): ScreenerStrengthPre
     return { band: 'B', tone: 'b', label: __t('较强'), barClass: 'bg-brand-400', textClass: 'text-brand-700', badgeTone: 'brand' };
   }
   if (score >= 60) {
-    return { band: 'C', tone: 'c', label: __t('观察'), barClass: 'bg-warn-600', textClass: 'text-warn-600', badgeTone: 'warn' };
+    return { band: 'C', tone: 'c', label: __t('观察'), barClass: 'bg-warn-600', textClass: 'text-warn-700', badgeTone: 'warn' };
   }
   return { band: 'D', tone: 'd', label: __t('偏弱'), barClass: 'bg-ink-300', textClass: 'text-ink-600', badgeTone: 'neutral' };
 }

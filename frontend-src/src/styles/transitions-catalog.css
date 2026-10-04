@@ -505,9 +505,9 @@
   transition-delay: var(--tt-delay);
 }
 
-/* Login/password error border uses Paper Terminal down-600. Catalog only owns the tween. */
+/* Login/password error border uses the Paper Terminal danger colour. Catalog only owns the tween. */
 .t-input.is-error {
-  border-color: var(--down-600);
+  border-color: var(--danger-600);
 }
 
 /* catalog 12 的 .t-input 只 transition border-color，会顶掉组件原有的

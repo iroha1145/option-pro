@@ -19,8 +19,8 @@ import ManualStockPull from './ManualStockPull';
 import { t } from '../../i18n/core.ts';
 
 const RESULT_META = {
-  hit: { text: t('已达成'), cls: 'bg-up-50 text-up-700' },
-  failed: { text: t('已失效'), cls: 'bg-down-50 text-down-700' },
+  hit: { text: t('已达成'), cls: 'bg-ok-50 text-ok-700' },
+  failed: { text: t('已失效'), cls: 'bg-danger-50 text-danger-700' },
   pending: { text: t('进行中'), cls: 'bg-brand-50 text-brand-700' },
 } as const;
 
