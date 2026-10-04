@@ -220,6 +220,27 @@ def validate_information_cutoff(*, signal_time: datetime, session_close: datetim
         raise ValueError('signal predates source availability')
 
 
+def capped_selection(rows: Sequence[Mapping[str, Any]], top_k: int,
+                     score_floor: float) -> list[Mapping[str, Any]]:
+    """Eligible means all upstream setup gates passed, NOT merely scored."""
+    if type(top_k) is not int or top_k < 0:
+        raise ValueError('top_k must be a nonnegative integer')
+    floor = finite(score_floor, name='score_floor', minimum=0, maximum=100)
+    admitted: dict[str, Mapping[str, Any]] = {}
+    for row in rows:
+        security_id = row.get('security_id')
+        if not isinstance(security_id, str) or not security_id:
+            raise ValueError('stable security_id required')
+        if security_id in admitted:
+            raise ValueError('deduplicate/calibrate multi-theme rows before final selection')
+        if row.get('status') != 'eligible' or row.get('score') is None:
+            continue
+        score = finite(row['score'], name='row.score', minimum=0, maximum=100)
+        if score >= floor:
+            admitted[security_id] = row
+    return sorted(admitted.values(), key=lambda row: (-float(row['score']), row['security_id']))[:top_k]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--registry', type=Path, default=DEFAULT_REGISTRY_PATH)
