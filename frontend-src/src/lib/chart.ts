@@ -49,7 +49,7 @@ const CHART_SURFACE = {
   },
   dark: {
     ink400: '#A0A8B5',
-    ink300: '#6B7382',
+    ink300: '#848D9A',
     lineChart: '#353944',
     brand600: '#6B82FF',
     brand500: '#8B9CFF',

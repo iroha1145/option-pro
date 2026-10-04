@@ -10,7 +10,7 @@ export default function Footer() {
           className="w-full min-[360px]:w-auto min-[360px]:min-w-0 min-[360px]:flex-1"
           text={t('内容仅供研究参考')}
         />
-        <p className="max-w-full break-words font-mono text-micro text-ink-300">
+        <p className="max-w-full break-words font-mono text-micro text-ink-400">
           OPTIX PRO · PAPER TERMINAL v2
         </p>
       </div>

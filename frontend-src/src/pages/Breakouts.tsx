@@ -489,15 +489,15 @@ export default function Breakouts() {
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
-        className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-b border-line pb-5"
+        className="page-masthead flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-b border-line pb-5"
       >
-        <div>
-          <p className="flex items-baseline gap-2.5">
-            <span className="font-mono text-caption font-semibold text-brand-600">§03</span>
-            <span className="eyebrow">BREAKOUT RADAR · INTRADAY</span>
-          </p>
-          <h1 className="mt-2 font-display text-display-l text-ink-900">{__t('突破雷达')}</h1>
-          <p className="mt-1.5 text-body-s text-ink-500">{__t('发现突破机会，跟踪确认与回踩过程。')}</p>
+        <div className="flex min-w-0 flex-1 basis-72 items-start gap-3 sm:gap-4">
+          <span className="page-folio">§03</span>
+          <div className="min-w-0">
+            <p className="eyebrow">BREAKOUT RADAR · INTRADAY</p>
+            <h1 className="page-title mt-1.5 font-display text-display-l text-ink-900">{__t('突破雷达')}</h1>
+            <p className="page-lede mt-1.5 text-body-s text-ink-500">{__t('发现突破机会，跟踪确认与回踩过程。')}</p>
+          </div>
         </div>
         {/* 紧凑状态条：启用 LED · 快照与活跃条数（副标合并至此去重）· 最近扫描 · 时段 chip · 扫描服务 · 下次扫描倒计时 · 查看范围 */}
         <div className="radar-status flex flex-wrap items-center justify-end gap-x-4 gap-y-2 pb-1 text-caption text-ink-500">
