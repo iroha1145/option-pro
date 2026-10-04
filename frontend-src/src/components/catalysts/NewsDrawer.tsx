@@ -777,7 +777,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
                 <p className="mt-3 text-body-s font-medium text-ink-800">{analysis.headlineSummary}</p>
                 {/* causal_summary serif 引文 */}
                 <blockquote className="mt-3 border-l-[3px] border-ai-600/40 pl-3.5">
-                  <p className="font-quote text-[14px] leading-[24px] text-ink-800">{analysis.causalSummary}</p>
+                  <p className="text-[14px] leading-[24px] text-ink-800">{analysis.causalSummary}</p>
                 </blockquote>
                 <div className="mt-4 space-y-2">
                   {analysis.trustedStockImpacts.map((imp, i) => (

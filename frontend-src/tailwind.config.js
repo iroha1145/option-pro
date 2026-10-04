@@ -155,7 +155,7 @@ module.exports = {
       fontFamily: {
         /* v8：display 换系统 sans 栈（与 sans 相同但独立变量保留，大标不再用衬线） */
         display: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', '"PingFang SC"', '"Hiragino Sans GB"', '"Noto Sans SC"', '"Microsoft YaHei UI"', 'sans-serif'],
-        /* 衬线只保留给「编辑式引文」场景：font-quote */
+        /* 衬线只保留给新闻原文摘要这类「编辑式引文」：font-quote。模型与系统生成的文字用无衬线。 */
         quote: ['Georgia', '"Songti SC"', '"Noto Serif SC"', 'serif'],
         sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', '"PingFang SC"', '"Hiragino Sans GB"', '"Noto Sans SC"', '"Microsoft YaHei UI"', 'sans-serif'],
         mono: ['ui-monospace', 'SFMono-Regular', '"SF Mono"', 'Menlo', 'Consolas', '"Liberation Mono"', 'monospace'],

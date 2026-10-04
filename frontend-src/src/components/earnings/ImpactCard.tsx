@@ -157,7 +157,7 @@ function QuotedSummary({ text, onOpenTicker }: { text: string; onOpenTicker: (t:
   return (
     /* 引文左线是印刷传统，但引文线不该比正文响：满饱和彩条会读成「AI 装饰条」 */
     <blockquote className="rounded-sm border-l-2 border-ai-600/40 bg-ai-50/50 py-3 pl-4 pr-3">
-      <p className="font-quote text-[15px] leading-[26px] text-ink-800">
+      <p className="text-[15px] leading-[26px] text-ink-800">
         {parts.map((p, i) =>
           /^\$[A-Z]/.test(p) ? (
             <button

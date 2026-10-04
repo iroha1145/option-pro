@@ -211,7 +211,7 @@ export default function SignalsReading({
           </div>
           <p className="mt-1 text-micro text-ink-400">{bias?.basis ?? t('数据不足，暂无法判断趋势')}</p>
           <blockquote className="mt-4 flex-1 rounded-lg border border-line bg-card-warm p-4">
-            <p className="font-quote text-[15px] leading-[26px] text-ink-800">{reading}</p>
+            <p className="text-[15px] leading-[26px] text-ink-800">{reading}</p>
           </blockquote>
         </div>
       </div>
