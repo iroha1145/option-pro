@@ -1089,6 +1089,39 @@ def test_analysis_job_endpoint_is_limited_to_news_jobs() -> None:
     assert service.analysis_job(news_id) is None
 
 
+def test_analysis_job_accepts_only_the_known_v6_news_schema_transition() -> None:
+    job_id = "aij_" + "v" * 32
+    legacy_version, legacy_hash = ai_runtime.LEGACY_NEWS_V6_SCHEMA_IDENTITY
+    current_version, current_hash = ai_runtime.schema_identity("news_impact")
+    row = {
+        "job_id": job_id,
+        "job_type": "news_impact",
+        "status": "completed",
+        "model": "gpt-5.6-terra",
+        "reasoning": "max",
+        "execution_mode": "background",
+        "prompt_version": "news-impact-zh-cn-v6",
+        "schema_version": legacy_version,
+        "schema_sha256": legacy_hash,
+        "result": _news_result(),
+    }
+    repository = FakeAIRepository({job_id: row})
+    service = _service("manual", repository=repository)
+
+    # A v6 job stored under the pre-body schema stays readable...
+    assert service.analysis_job(job_id)["job_id"] == job_id
+    # ...but only under the v6 prompt that actually produced it.
+    row["prompt_version"] = ai_runtime.PROMPT_VERSIONS["news_impact"]
+    assert service.analysis_job(job_id) is None
+    row["schema_version"], row["schema_sha256"] = current_version, current_hash
+    assert service.analysis_job(job_id)["job_id"] == job_id
+    row["schema_sha256"] = "0" * 64
+    assert service.analysis_job(job_id) is None
+    row["schema_sha256"] = current_hash
+    row["execution_mode"] = "inline"
+    assert service.analysis_job(job_id) is None
+
+
 def test_read_mode_can_cancel_a_news_job_created_before_the_mode_changed() -> None:
     job_id = "aij_" + "c" * 32
     schema_version, schema_hash = ai_runtime.schema_identity("news_impact")

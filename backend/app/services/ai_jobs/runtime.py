@@ -400,6 +400,28 @@ def news_schema_identity_matches(
     )
 
 
+def schema_identity_current(
+    job_type: str,
+    prompt_version: Any,
+    schema_version: Any,
+    schema_sha256: Any,
+    *,
+    current_identity: tuple[str, str] | None = None,
+) -> bool:
+    """Whether a stored job's schema identity still matches the runtime contract.
+
+    News jobs also accept the known v6 transition; every other type needs the
+    exact current identity. Prompt-version gating stays with the callers: the
+    worker deliberately applies none.
+    """
+    current = current_identity if current_identity is not None else schema_identity(job_type)
+    if job_type == "news_impact":
+        return news_schema_identity_matches(
+            prompt_version, schema_version, schema_sha256, current_identity=current,
+        )
+    return (schema_version, schema_sha256) == current
+
+
 def runtime_configuration_valid(settings: Any) -> bool:
     return (
         str(settings.openai_model) == OFFICIAL_OPENAI_MODEL

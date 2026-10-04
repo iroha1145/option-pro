@@ -538,15 +538,18 @@ class PersonalCatalystService:
             row = self.ai_repository.get_job(job_id)
         if row is None or row.get("job_type") != "news_impact":
             return None
-        schema_version, schema_hash = ai_runtime.schema_identity("news_impact")
+        current_identity = ai_runtime.schema_identity("news_impact")
         if (
             row.get("model") != self.settings.model
             or row.get("reasoning") != self.settings.reasoning
             or row.get("execution_mode") != "background"
             or row.get("prompt_version") not in ai_runtime.NEWS_READABLE_PROMPT_VERSIONS
-            or not ai_runtime.news_schema_identity_matches(
-                row.get("prompt_version"), row.get("schema_version"), row.get("schema_sha256"),
-                current_identity=(schema_version, schema_hash),
+            or not ai_runtime.schema_identity_current(
+                "news_impact",
+                row.get("prompt_version"),
+                row.get("schema_version"),
+                row.get("schema_sha256"),
+                current_identity=current_identity,
             )
         ):
             return None

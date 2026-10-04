@@ -633,15 +633,13 @@ async def process_job(
             repository.fail(job["job_id"], owner, source_disabled_error)
             return
 
-        current_schema_version, current_schema_sha256 = runtime.schema_identity(
-            job["job_type"]
-        )
-        schema_matches = (
-            runtime.news_schema_identity_matches(
-                job.get("prompt_version"), job["schema_version"], job["schema_sha256"],
-                current_identity=(current_schema_version, current_schema_sha256),
-            ) if job["job_type"] == "news_impact" else
-            (job["schema_version"], job["schema_sha256"]) == (current_schema_version, current_schema_sha256)
+        current_identity = runtime.schema_identity(job["job_type"])
+        schema_matches = runtime.schema_identity_current(
+            job["job_type"],
+            job.get("prompt_version"),
+            job["schema_version"],
+            job["schema_sha256"],
+            current_identity=current_identity,
         )
         if (
             job["model"] != runtime.OFFICIAL_OPENAI_MODEL

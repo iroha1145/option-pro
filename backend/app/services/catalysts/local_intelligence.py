@@ -2279,22 +2279,17 @@ class LocalCatalystIntelligence:
     ) -> bool:
         if row is None or row.get("job_type") != expected_type:
             return False
-        schema_version, schema_hash = (
-            expected_schema
-            if expected_schema is not None
-            else ai_runtime.schema_identity(expected_type)
+        schema_matches = ai_runtime.schema_identity_current(
+            expected_type,
+            row.get("prompt_version"),
+            row.get("schema_version"),
+            row.get("schema_sha256"),
+            current_identity=expected_schema,
         )
         prompt = (
             NEWS_PROMPT_VERSION if expected_type == "news_impact" else FOCUS_PROMPT_VERSION
         )
         supported_prompts = ai_runtime.NEWS_READABLE_PROMPT_VERSIONS if expected_type == "news_impact" else {prompt}
-        schema_matches = (
-            ai_runtime.news_schema_identity_matches(
-                row.get("prompt_version"), row.get("schema_version"), row.get("schema_sha256"),
-                current_identity=(schema_version, schema_hash),
-            ) if expected_type == "news_impact" else
-            (row.get("schema_version"), row.get("schema_sha256")) == (schema_version, schema_hash)
-        )
         return not (
             row.get("model") != self.model
             or row.get("reasoning") != self.reasoning
