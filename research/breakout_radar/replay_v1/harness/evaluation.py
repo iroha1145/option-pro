@@ -205,16 +205,42 @@ def read_t1_from_db(path: Path) -> dict[str, str]:
         connection.close()
 
 
+Lookup = Callable[..., "tuple[float, int] | None"]
+
+
+def store_lookups(store: Any) -> tuple[Lookup, Lookup]:
+    """Entry-price lookups on a minute store for ledgers that lack the recorded values.
+
+    Both follow PREREGISTRATION 修订 6: the stock enters at the first bar at or after the
+    next slot within ``STOCK_ENTRY_MAX_SLOTS`` empty slots, SPY at its first bar that day.
+    Each returns ``(open, delay)`` or ``None``.
+    """
+
+    def entry_lookup(ticker: str, as_of: str) -> tuple[float, int] | None:
+        stamp = datetime.fromisoformat(as_of.replace("Z", "+00:00")).astimezone(timezone.utc)
+        return store.next_bar(ticker, stamp, max_slots=STOCK_ENTRY_MAX_SLOTS)
+
+    def benchmark_lookup(as_of: str) -> tuple[float, int] | None:
+        stamp = datetime.fromisoformat(as_of.replace("Z", "+00:00")).astimezone(timezone.utc)
+        return store.next_bar("SPY", stamp, max_slots=None)
+
+    return entry_lookup, benchmark_lookup
+
+
 def read_variant(
-    replay_dirs: list[Path], variant: str, *, entry_lookup: Callable[[str, str], float | None] | None = None,
-    db_dir: Path | None = None,
+    replay_dirs: list[Path], variant: str, *, entry_lookup: Lookup | None = None,
+    benchmark_lookup: Lookup | None = None, db_dir: Path | None = None,
 ) -> tuple[list[Trigger], dict[str, DayFunnel], dict[str, Any]]:
     """Triggers, per-day funnel counts and T1 statuses of one variant across segment directories.
 
     Warm-up scans are skipped; a day present in two directories is taken from the first;
-    a truncated day file is skipped and counted. ``entry_lookup(ticker, as_of)`` supplies
-    ``next_bar_open`` for ledgers written before the runner recorded it. Without a research
-    bundle (a killed segment) T1 statuses come from ``db_dir/<segment>/<variant>.sqlite``.
+    a truncated day file is skipped and counted. ``entry_lookup(ticker, as_of)`` and
+    ``benchmark_lookup(as_of)`` (see ``store_lookups``) backfill ``next_bar_open`` and the
+    SPY entry where a ledger lacks them: ledgers written before the runner recorded them,
+    CONFIRMED-only scans of the first round, and the round-1 store's SPY gaps (DATA_SPEC
+    20.15). Recorded values are kept; the backfills are counted in ``info["backfills"]``.
+    Without a research bundle (a killed segment) T1 statuses come from
+    ``db_dir/<segment>/<variant>.sqlite``.
     """
 
     folder_name = variant.replace("+", "_")
@@ -226,7 +252,8 @@ def read_variant(
     info: dict[str, Any] = {"directories": [], "scans": 0, "skipped_duplicate_days": 0, "corrupt_files": [],
                             "segments_without_bundle": 0, "degraded_scans": 0, "degraded_days": [], "segment_starts": []}
     degraded_days: set[str] = set()
-    state: dict[str, Any] = {"watch_extended": {}, "entry_lookup": entry_lookup}
+    state: dict[str, Any] = {"watch_extended": {}, "entry_lookup": entry_lookup, "benchmark_lookup": benchmark_lookup,
+                             "backfills": Counter()}
     for replay_dir in replay_dirs:
         variant_dir = replay_dir / folder_name
         if not variant_dir.is_dir():
@@ -274,12 +301,37 @@ def read_variant(
     info["triggers"] = len(ordered)
     info["days"] = len(funnel)
     info["degraded_days"] = sorted(degraded_days)
+    info["backfills"] = {key: state["backfills"][key] for key in
+                         ("entry_triggers", "benchmark_triggers", "entry_confirmed", "benchmark_confirmed")}
     return ordered, funnel, info
 
 
 def _absorb_record(record: dict[str, Any], day: str, triggers: dict[str, Trigger], failed: dict[str, str],
                    funnel: dict[str, DayFunnel], state: dict[str, Any]) -> None:
     entry_lookup = state.get("entry_lookup")
+    benchmark_lookup = state.get("benchmark_lookup")
+    backfills: Counter = state["backfills"]
+
+    def benchmark_at_record(kind: str) -> tuple[float | None, int | None]:
+        value = _float(record.get("benchmark_next_bar_open"))
+        delay = _int_or_none(record.get("benchmark_next_bar_delay_slots"))
+        if value is None and benchmark_lookup is not None:
+            found = benchmark_lookup(record["as_of"])
+            if found is not None:
+                value, delay = float(found[0]), int(found[1])
+                backfills[f"benchmark_{kind}"] += 1
+        return value, delay
+
+    def entry_at_record(event: dict[str, Any], kind: str) -> tuple[float | None, int | None]:
+        value = _float(event.get("next_bar_open"))
+        delay = _int_or_none(event.get("next_bar_delay_slots"))
+        if value is None and entry_lookup is not None:
+            found = entry_lookup(str(event.get("ticker")), record["as_of"])
+            if found is not None:
+                value, delay = float(found[0]), int(found[1])
+                backfills[f"entry_{kind}"] += 1
+        return value, delay
+
     events_by_id = {e.get("event_id"): e for e in record.get("events") or []}
     # Events triggered at the previous scan of the day: EXTENDED now counts as "extended at trigger".
     for event_id in list(state["watch_extended"]):
@@ -317,11 +369,8 @@ def _absorb_record(record: dict[str, Any], day: str, triggers: dict[str, Trigger
                     scores = event.get("scores") or {}
                     features = event.get("features") or {}
                     origin = str(event.get("origin_setup_type") or event.get("setup_type") or "")
-                    next_open = event.get("next_bar_open")
-                    delay = event.get("next_bar_delay_slots")
-                    if next_open is None and entry_lookup is not None:
-                        next_open = entry_lookup(str(event.get("ticker")), record["as_of"])
-                        delay = None
+                    next_open, delay = entry_at_record(event, "triggers")
+                    benchmark_open, benchmark_delay = benchmark_at_record("triggers")
                     triggers[event_id] = Trigger(
                         event_id=event_id,
                         ticker=str(event.get("ticker")).upper(),
@@ -331,8 +380,8 @@ def _absorb_record(record: dict[str, Any], day: str, triggers: dict[str, Trigger
                         origin=origin,
                         setup=str(event.get("setup_type") or ""),
                         trigger_price=_float(event.get("event_price")),
-                        next_bar_open=_float(next_open),
-                        benchmark_open=_float(record.get("benchmark_next_bar_open")),
+                        next_bar_open=next_open,
+                        benchmark_open=benchmark_open,
                         alert=_float(scores.get("alert_priority_score")),
                         strength=_float(scores.get("intrinsic_strength_score")),
                         market_state=features.get("market_shape_state"),
@@ -346,8 +395,8 @@ def _absorb_record(record: dict[str, Any], day: str, triggers: dict[str, Trigger
                             or "extended_from_pivot" in (event.get("warnings") or [])
                             or "EXTENDED" in states_now.get(event_id, set())
                         ),
-                        next_bar_delay=None if delay is None else int(delay),
-                        benchmark_delay=_int_or_none(record.get("benchmark_next_bar_delay_slots")),
+                        next_bar_delay=delay,
+                        benchmark_delay=benchmark_delay,
                     )
                     bucket.triggers += 1
                     state["watch_extended"][event_id] = day
@@ -358,13 +407,11 @@ def _absorb_record(record: dict[str, Any], day: str, triggers: dict[str, Trigger
                 if trigger is None or "CONFIRMED" not in states or trigger.confirmed_at is not None:
                     continue
                 event = events_by_id.get(event_id)
-                confirmed_open = None if event is None else event.get("next_bar_open")
-                if confirmed_open is None and entry_lookup is not None and event is not None:
-                    confirmed_open = entry_lookup(str(event.get("ticker")), record["as_of"])
+                confirmed_open = None if event is None else entry_at_record(event, "confirmed")[0]
                 trigger.confirmed_at = record["as_of"]
                 trigger.confirmed_day = day
-                trigger.confirmed_next_bar_open = _float(confirmed_open)
-                trigger.confirmed_benchmark_open = _float(record.get("benchmark_next_bar_open"))
+                trigger.confirmed_next_bar_open = confirmed_open
+                trigger.confirmed_benchmark_open = benchmark_at_record("confirmed")[0]
 
 
 def _int_or_none(value: Any) -> int | None:
@@ -1076,16 +1123,13 @@ def readme_tables(rows: list[dict[str, Any]], verdicts: dict[str, Any], funnels:
 
 def _read_variant_job(args: tuple[list[str], str, str | None, str | None]) -> tuple[str, tuple[list[Trigger], dict[str, DayFunnel], dict[str, Any]]]:
     replay_dirs, name, minute_store, db_dir = args
-    entry_lookup = None
+    entry_lookup = benchmark_lookup = None
     if minute_store is not None:
         from .stores import MinuteStore
 
-        store = MinuteStore(minute_store)
-
-        def entry_lookup(ticker: str, as_of: str) -> float | None:
-            return store.next_bar_open(ticker, datetime.fromisoformat(as_of.replace("Z", "+00:00")).astimezone(timezone.utc))
-
-    return name, read_variant([Path(p) for p in replay_dirs], name, entry_lookup=entry_lookup, db_dir=None if db_dir is None else Path(db_dir))
+        entry_lookup, benchmark_lookup = store_lookups(MinuteStore(minute_store))
+    return name, read_variant([Path(p) for p in replay_dirs], name, entry_lookup=entry_lookup, benchmark_lookup=benchmark_lookup,
+                              db_dir=None if db_dir is None else Path(db_dir))
 
 
 def run(

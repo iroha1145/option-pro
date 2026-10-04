@@ -188,7 +188,7 @@ $PY $P/scripts/evaluate.py --db /content/data/replay.sqlite --replay '/content/r
     --minute-store /content/minute_store --workers 8 --out /content/eval/full_all
 ```
 
-第一轮的账本没有确认入场的 K 线价（旧运行器只给触发事件记 `next_bar_open`），所以评估要带 `--minute-store` 现查；第一轮各段的 bundle 已由 `ops/2026-09-29/export_t1.py` 补出并放在 Drive 的 `bundles_killed/`，复制到各段目录下即可，不再需要 `--db-dir`。新账本的 `next_bar_open`、`next_bar_delay_slots`、`benchmark_next_bar_open`、`benchmark_next_bar_delay_slots` 按修订 6 的规则记（股票最多跳 6 个空槽，SPY 不限）。
+第一轮的账本没有确认入场的 K 线价（旧运行器只给触发事件记 `next_bar_open`），也在 SPY 缺页的两段（DATA_SPEC 20.15）与所有只有 CONFIRMED 转换的扫描上没有基准价，所以评估要带 `--minute-store`（用修正后的分钟库）现查，现查次数记在 `coverage.<配置>.backfills`；第一轮各段的 bundle 已由 `ops/2026-09-29/export_t1.py` 补出并放在 Drive 的 `bundles_killed/`，复制到各段目录下即可，不再需要 `--db-dir`。新账本的 `next_bar_open`、`next_bar_delay_slots`、`benchmark_next_bar_open`、`benchmark_next_bar_delay_slots` 按修订 6 的规则记（股票最多跳 6 个空槽，SPY 不限）。
 
 ### 验证运行（新机器上先跑这个，约 20 分钟）
 

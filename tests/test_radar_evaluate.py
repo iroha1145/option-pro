@@ -286,6 +286,51 @@ def test_confirmed_and_chaseable_views_follow_amendment_6(world: dict, tmp_path:
     assert ("confirmed", 20, "next_bar") in views and ("chaseable", 20, "next_bar") in views and ("extended", 20, "next_bar") in views
 
 
+def test_minute_store_backfills_missing_entry_and_benchmark_prices_under_the_amendment_6_rule(world: dict, tmp_path: Path) -> None:
+    """Round-1 ledgers: no SPY bar recorded (store gap, or a CONFIRMED-only scan), stock bar missing at the exact slot."""
+
+    import pandas as pd
+
+    from harness.stores import MinuteStore
+
+    d0 = world["d0"]
+    day = datetime(d0.year, d0.month, d0.day, tzinfo=NY)
+
+    def bars(ticker: str, times: list[tuple[int, int]], opens: list[float]) -> None:
+        stamps = [int(day.replace(hour=h, minute=m).timestamp() * 1000) for h, m in times]
+        pd.DataFrame({"t": stamps, "open": opens, "high": opens, "low": opens, "close": opens, "volume": [100.0] * len(opens)}).to_parquet(tmp_path / f"{ticker}.parquet", index=False)
+
+    bars("SPY", [(10, 10), (10, 15)], [401.0, 402.0])  # nothing at 10:05: SPY's first later bar is 10:10
+    bars("GOOD", [(10, 15)], [10.5])  # the 10:05 and 10:10 slots are empty: entry after two empty slots
+    pd.DataFrame({"ticker": ["SPY", "GOOD"], "day": [d0.isoformat()] * 2}).to_parquet(tmp_path / "coverage.parquet", index=False)
+    store = MinuteStore(tmp_path)
+    ledger = tmp_path / "seg" / "baseline" / "ledger"
+    event = _event("x1", "GOOD", d0, 10.0)  # next_bar_open absent, as the first runner wrote for non-triggered scans
+    _write_ledger(ledger, d0, [
+        _scan_record(d0, 10, 2, [event], [{"event_id": "x1", "from_state": "WATCHING", "to_state": "TRIGGERED", "reason": "x", "evidence_at": "x"}], benchmark_open=None),
+        _scan_record(d0, 10, 7, [{**event, "lifecycle_state": "CONFIRMED"}], [{"event_id": "x1", "from_state": "TRIGGERED", "to_state": "CONFIRMED", "reason": "x", "evidence_at": "x"}], benchmark_open=None),
+    ])
+    without = ev.read_variant([tmp_path / "seg"], "baseline")[0][0]
+    assert without.next_bar_open is None and without.benchmark_open is None and without.confirmed_benchmark_open is None
+    entry_lookup, benchmark_lookup = ev.store_lookups(store)
+    triggers, _f, info = ev.read_variant([tmp_path / "seg"], "baseline", entry_lookup=entry_lookup, benchmark_lookup=benchmark_lookup)
+    trigger = triggers[0]
+    assert (trigger.next_bar_open, trigger.next_bar_delay) == (10.5, 2)  # 10:05 and 10:10 empty, 10:15 within the 6-slot bound
+    assert (trigger.benchmark_open, trigger.benchmark_delay) == (401.0, 1)  # SPY: 10:05 empty, 10:10 taken, no bound
+    assert (trigger.confirmed_next_bar_open, trigger.confirmed_benchmark_open) == (10.5, 401.0)  # 10:07 -> slot 10:10: GOOD at 10:15, SPY at 10:10
+    assert info["backfills"] == {"entry_triggers": 1, "benchmark_triggers": 1, "entry_confirmed": 1, "benchmark_confirmed": 1}
+    # Recorded values win over the lookup, so old exact-slot values stay as written.
+    recorded = {**event, "next_bar_open": 9.99, "next_bar_delay_slots": 0}
+    _write_ledger(tmp_path / "seg2" / "baseline" / "ledger", d0, [
+        _scan_record(d0, 10, 2, [recorded], [{"event_id": "x1", "from_state": "WATCHING", "to_state": "TRIGGERED", "reason": "x", "evidence_at": "x"}], benchmark_open=400.5),
+    ])
+    kept, _f2, info2 = ev.read_variant([tmp_path / "seg2"], "baseline", entry_lookup=entry_lookup, benchmark_lookup=benchmark_lookup)
+    assert (kept[0].next_bar_open, kept[0].benchmark_open) == (9.99, 400.5) and sum(info2["backfills"].values()) == 0
+    # The stock rule stops after six empty slots; the benchmark rule does not.
+    assert entry_lookup("GOOD", datetime(d0.year, d0.month, d0.day, 9, 31, tzinfo=NY).isoformat()) is None
+    assert benchmark_lookup(datetime(d0.year, d0.month, d0.day, 9, 31, tzinfo=NY).isoformat()) == (401.0, 7)
+
+
 def test_partial_segments_keep_only_days_every_variant_completed(world: dict, tmp_path: Path) -> None:
     """A killed segment: a truncated day file, a day only one variant finished, no bundle, T1 from SQLite."""
 
