@@ -28,7 +28,6 @@ _PENETRATE_ATR = 0.55
 _KEEP_QUALITY = 0.45
 _MAX_RESULTS = 12
 _TOUCH_GAP = 3
-_SWING_SPANS = (2, 3, 5)
 # consensus = 有多少条独立候选线落在同一几何上。孤证起步 0.55，每多一条
 # 被 NMS 合并进来的候选 +0.15，封顶 1.0——佐证只能抬 displayPriority，
 # 不能像旧写法那样把合并后的行压到孤证之下。

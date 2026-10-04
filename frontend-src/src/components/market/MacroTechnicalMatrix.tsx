@@ -68,7 +68,7 @@ export default function MacroTechnicalMatrix({
   return (
     <div className={cn('card-surface p-5', className)}>
       <p className="eyebrow">
-        {t('技术 × 结构性宏观 · TECHNICAL × MACRO')}
+        {t('技术 × 结构性宏观')}
         <InfoHint hint={MATRIX_HINT} side="bottom" size={11} className="ml-1" />
       </p>
       <h3 className="mt-1.5 text-h3 text-ink-900">
@@ -80,13 +80,13 @@ export default function MacroTechnicalMatrix({
           <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2">
             <div>
               <dt className="text-micro text-ink-400">{t('技术形态')}</dt>
-              <dd className="font-mono text-data-l text-ink-900 tnum">
+              <dd className="metric-value text-data-l text-ink-900">
                 {technical?.toFixed(1)}
               </dd>
             </div>
             <div>
               <dt className="text-micro text-ink-400">{t('结构性宏观')}</dt>
-              <dd className="font-mono text-data-l text-ink-900 tnum">
+              <dd className="metric-value text-data-l text-ink-900">
                 {structural?.toFixed(1)}
               </dd>
             </div>
@@ -96,8 +96,8 @@ export default function MacroTechnicalMatrix({
               {t('差值')}{' '}
               <span
                 className={cn(
-                  'font-mono tnum',
-                  gap > 20 ? 'text-warn-600' : gap < -20 ? 'text-brand-700' : 'text-ink-700',
+                  'tnum',
+                  gap > 20 ? 'text-warn-700' : gap < -20 ? 'text-brand-700' : 'text-ink-700',
                 )}
               >
                 {gap > 0 ? '+' : ''}{gap.toFixed(1)}
@@ -122,10 +122,10 @@ export default function MacroTechnicalMatrix({
         </p>
       )}
       {moduleText && (
-        <p className="mt-2 text-micro text-ink-300">{t('结构性宏观 =')} {moduleText}</p>
+        <p className="mt-2 text-micro text-ink-400">{t('结构性宏观 =')} {moduleText}</p>
       )}
       {/* 两套分界线不一样，说出来，免得读者拿象限和顺风/逆风对不上。 */}
-      <p className="mt-1 text-micro text-ink-300">{t(MACRO_QUADRANT_NOTE)}</p>
+      <p className="mt-1 text-micro text-ink-400">{t(MACRO_QUADRANT_NOTE)}</p>
     </div>
   );
 }

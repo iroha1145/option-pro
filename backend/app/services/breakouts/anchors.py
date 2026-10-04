@@ -12,7 +12,7 @@ import math
 from typing import Any, Mapping
 from zoneinfo import ZoneInfo
 
-from app.services.breakouts.models import BreakoutEventAnchor
+from app.services.breakouts.models import BreakoutEventAnchor, enum_value
 
 
 _NEW_YORK = ZoneInfo("America/New_York")
@@ -29,7 +29,7 @@ def _positive(value: Any) -> float | None:
 
 
 def _enum(value: Any) -> str:
-    return str(getattr(value, "value", value) or "")
+    return str(enum_value(value) or "")
 
 
 def _session_date(value: Any) -> date | None:

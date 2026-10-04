@@ -7,8 +7,8 @@
 import { useMemo, useRef, useState } from 'react';
 import { isMock } from '@/api/client';
 import { optionsApi } from '@/api/modules/options';
-import { aiJobBlockedMessage, aiJobsApi } from '@/api/modules/ai-jobs';
-import { aiJobDeferralMessage, aiJobErrorMessage } from '@/api/aiJobNormalize';
+import { aiJobsApi } from '@/api/modules/ai-jobs';
+import { aiJobBlockedMessage, aiJobDeferralMessage, aiJobErrorMessage } from '@/api/aiJobNormalize';
 import { usePolling } from '@/hooks/usePolling';
 import { useRetryCountdown } from '@/hooks/useRetryCountdown';
 import { useAccess } from '@/hooks/useAccess';
@@ -64,7 +64,7 @@ const DIRECTION_META: Record<
 > = {
   bullish: { label: t('偏多'), className: 'bg-up-50 text-up-700' },
   bearish: { label: t('偏空'), className: 'bg-down-50 text-down-700' },
-  mixed: { label: t('多空混合'), className: 'bg-warn-50 text-warn-600' },
+  mixed: { label: t('多空混合'), className: 'bg-warn-50 text-warn-700' },
   unknown: { label: t('方向未知'), className: 'bg-paper-2 text-ink-500' },
 };
 
@@ -226,7 +226,7 @@ function AiOptionInsight({
         </div>
       )}
 
-      {error && <p role="status" className="mt-2.5 text-caption text-down-700">
+      {error && <p role="status" className="mt-2.5 text-caption text-danger-700">
         {error}
         {queryIssue === 'retrying' && <span className="ml-2">{t('正在重新查询原任务')}</span>}
         {(queryIssue === 'paused' || queryIssue === 'blocked') && <button onClick={resume} className="ml-2 font-medium text-ai-600">{t('继续查询原任务')}</button>}
@@ -264,14 +264,14 @@ function AiOptionInsight({
               {result.key_strikes.map((strike) => (
                 <span
                   key={strike}
-                  className="rounded-xs border border-ai-600/20 bg-card px-1.5 py-0.5 font-mono text-micro text-ink-600"
+                  className="rounded-xs border border-ai-600/20 bg-card px-1.5 py-0.5 text-micro text-ink-600 tnum"
                 >
                   {strike}
                 </span>
               ))}
             </div>
           )}
-          <p className="mt-2.5 border-t border-ai-600/15 pt-2 text-caption text-warn-600">
+          <p className="mt-2.5 border-t border-ai-600/15 pt-2 text-caption text-warn-700">
             {t('风险说明：')}{result.risk_note}
           </p>
           <p className="mt-2 text-micro text-ink-400">
@@ -293,7 +293,7 @@ function AiOptionInsight({
 
       {job?.status === 'succeeded' && !result && (
         <div className="mt-3 border-t border-ai-600/20 pt-3">
-          <p className="text-caption text-down-700">
+          <p className="text-caption text-danger-700">
             {job.error === 'legacy_output_hidden'
               ? aiJobErrorMessage('legacy_output_hidden')
               : t('分析已完成，但没有返回可展示的结果。')}
@@ -494,7 +494,7 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
         {shownChain && (
           <p className="text-micro text-ink-400">
             {t('标的价')}{' '}
-            <span className="font-mono text-ink-600 tnum">
+            <span className="text-ink-600 tnum">
               {dash(shownChain.spot, (n) => fmtPrice(n))}
             </span>
             {shownChain.spot === null && (
@@ -529,7 +529,7 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
               type="button"
               onClick={() => refreshChain()}
               disabled={retrySeconds > 0 || chainRefreshing}
-              className="inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-wait disabled:opacity-60"
+              className="control-button"
             >
               <BusyIcon busy={chainRefreshing} size={13} tone="brand" />
               {chainRefreshing ? t('正在重试') : t('重试该到期日')}

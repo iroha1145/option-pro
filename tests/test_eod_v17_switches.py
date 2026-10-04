@@ -188,6 +188,44 @@ def test_sic_table_resolves_reused_tickers_by_cik_and_falls_back_to_the_ticker(t
     assert reloaded.sic_for("AAC", "0002128115") == "6770"
 
 
+@pytest.mark.parametrize("name", ["table.json.gz", "table.json"])
+def test_sic_table_save_writes_sorted_json_and_replaces_the_previous_file(tmp_path, name):
+    path = tmp_path / "nested" / name
+    SicTable([{"ticker": "OLD", "cik": None, "as_of": "2026-01-01", "sic_code": "1000"}]).save(path)
+    table = SicTable([
+        {"ticker": "ZED", "cik": None, "as_of": "2026-09-01", "sic_code": "7373", "sic_description": "Café software"},
+        {"ticker": "AAC", "cik": "2", "as_of": "2026-09-02", "sic_code": "6770"},
+        {"ticker": "AAC", "cik": "1", "as_of": "2026-09-03", "sic_code": "3443"},
+    ])
+    table.save(path)
+    expected = json.dumps({"version": 1, "records": sorted(
+        table.records, key=lambda item: (item["ticker"], item["cik"] or "", item["as_of"] or ""),
+    )}, sort_keys=True, ensure_ascii=False)
+    raw = path.read_bytes()
+    assert (gzip.decompress(raw) if name.endswith(".gz") else raw).decode("utf-8") == expected
+    assert [item.name for item in path.parent.iterdir()] == [name]
+
+
+def test_sic_table_save_is_fsynced_and_a_failed_rename_keeps_the_old_table(tmp_path, monkeypatch):
+    from app.services.eod_limited import store
+
+    path = tmp_path / "industry-sic-v1.json.gz"
+    synced = []
+    real_fsync = store.os.fsync
+    monkeypatch.setattr(store.os, "fsync", lambda fd: synced.append(fd) or real_fsync(fd))
+    SicTable([{"ticker": "OLD", "cik": None, "as_of": "2026-01-01", "sic_code": "1000"}]).save(path)
+    assert len(synced) == 2  # the temp file, then the directory entry of the rename
+
+    def refuse(*_args):
+        raise OSError("rename refused")
+
+    monkeypatch.setattr(store.os, "replace", refuse)
+    with pytest.raises(OSError, match="rename refused"):
+        SicTable([{"ticker": "NEW", "cik": None, "as_of": "2026-09-01", "sic_code": "2000"}]).save(path)
+    assert [item.name for item in tmp_path.iterdir()] == [path.name]
+    assert SicTable.load(path).sic_for("OLD") == "1000"
+
+
 def test_refresh_looks_up_only_unseen_tickers_within_the_budget_and_survives_failures():
     table = SicTable([{"ticker": "AAA", "cik": "1", "as_of": "2026-09-01", "sic_code": "2834"}])
     seen = []
@@ -198,11 +236,13 @@ def test_refresh_looks_up_only_unseen_tickers_within_the_budget_and_survives_fai
             raise RuntimeError("provider down")
         return {"cik": f"cik-{ticker}", "sic_code": "3674" if ticker != "BZZ" else None}
 
-    counts = industry_module.refresh_missing(table, [("AAA", "1"), "BAD", ("BBB", "cik-BBB"), "BZZ", "CCC", "DDD"],
-                                             budget=4, as_of=date(2026, 9, 28), fetch=fetch)
+    counts = industry_module.refresh_missing(
+        table, [("AAA", "1"), ("BAD", None), ("BBB", "cik-BBB"), ("BZZ", None), ("CCC", None), ("DDD", None)],
+        budget=4, as_of=date(2026, 9, 28), fetch=fetch,
+    )
     assert seen == ["BAD", "BBB", "BZZ", "CCC"]  # sorted, AAA already known, DDD deferred
     assert counts == {"looked_up": 4, "failed": 1, "classified": 2, "no_sic": 1, "deferred": 1}
-    assert table.sic_for("BBB") == "3674" and table.has_ticker("BZZ") and not table.has_ticker("BAD")
+    assert table.sic_for("BBB") == "3674" and table.has_pair("BZZ") and not table.has_pair("BAD")
     assert table.sic_for("BBB", "cik-BBB") == "3674"
     # A reused ticker: the old issuer is on file, the directory now shows a new CIK -> looked up again,
     # stored under the new CIK, and the old record keeps answering for the old CIK.
@@ -234,9 +274,38 @@ def test_ensure_industry_tags_persists_the_table_and_classifies_stock_members(tm
     assert summary["classified"] == len(tags_out) == 50 + 1  # 60 stocks, every sixth unclassified, plus FRESH
     assert summary["refresh"] == {"looked_up": 1, "classified": 1}
     assert summary["groups"] == 4  # 2834 and 2836 share sic3:283; FRESH joins 602
-    assert SicTable.load(industry_module.table_path(root)).has_ticker("FRESH")
+    assert SicTable.load(industry_module.table_path(root)).has_pair("FRESH")
     again, summary2 = industry_module.ensure_industry_tags(directory, root=root, level=3, budget=10, fetch=fetch)
     assert calls == ["FRESH"] and again == tags_out and summary2["refresh"] == {}
+
+
+@pytest.mark.parametrize("damage", ["truncated", "zeroed", "empty"])
+def test_a_damaged_table_is_read_as_empty_and_rewritten_by_the_refresh(tmp_path, monkeypatch, damage):
+    root = tmp_path / "data"
+    path = industry_module.table_path(root)
+    SicTable(sic_table()).save(path)
+    saved = path.read_bytes()
+    path.write_bytes({"truncated": saved[: len(saved) // 2], "zeroed": b"\0" * 64, "empty": b""}[damage])
+    logged = []
+    monkeypatch.setattr(industry_module, "record_fallback_failure", lambda stage, exc, **_kw: logged.append(stage))
+
+    tags, summary = industry_module.ensure_industry_tags(
+        directory_rows(), root=root, level=3, budget=5, fetch=lambda _ticker: {"sic_code": "6022"},
+    )
+
+    assert logged == ["eod_industry_table_read"]
+    assert summary["refresh"] == {"looked_up": 5, "classified": 5, "deferred": summary["stock_tickers"] - 5}
+    assert len(tags) == 5
+    assert len(SicTable.load(path)) == 5  # the damaged file was replaced by a readable one
+
+
+def test_a_table_with_the_wrong_shape_is_still_an_error(tmp_path):
+    root = tmp_path / "data"
+    path = industry_module.table_path(root)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(gzip.compress(b'{"version": 1, "records": 5}'))
+    with pytest.raises(TypeError):
+        industry_module.ensure_industry_tags(directory_rows(), root=root, budget=5, fetch=lambda _ticker: {})
 
 
 # ---------------------------------------------------------------- options

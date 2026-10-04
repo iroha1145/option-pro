@@ -108,7 +108,7 @@ export default function WatchlistManager({ tickers, maxTickers, busy, onSave, on
                 <span className="truncate font-mono font-medium">{symbol}</span>
               </label>)}
             </div> : <p className="py-6 text-center text-caption text-ink-400">{t('保存后自选列表将为空。')}</p>}
-            {error && <p role="alert" className="mt-3 break-words rounded-md bg-down-50 px-3 py-2 text-caption text-down-700">{error}</p>}
+            {error && <p role="alert" className="mt-3 break-words rounded-md bg-danger-50 px-3 py-2 text-caption text-danger-700">{error}</p>}
           </div>
           <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-line bg-card-warm p-4 sm:px-6">
             <p className="text-caption text-ink-500" aria-live="polite">{t('新增 {add} · 移除 {remove}', { add: delta.add.length, remove: delta.remove.length })}</p>

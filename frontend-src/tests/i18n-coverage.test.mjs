@@ -178,7 +178,6 @@ const KNOWN_TYPE_DISCRIMINANTS = new Set([
   // operand of `??`, not itself t()'s direct argument, so the classifier can't see
   // that the whole expression is covered by the outer call. It is (verified by hand).
   'components/shared/MacroFitBadge.tsx 暂无宏观读数',
-  'components/shared/MacroFitPanel.tsx 暂无宏观读数',
 ]);
 
 /**

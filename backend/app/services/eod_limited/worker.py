@@ -31,6 +31,7 @@ from .diagnostic_store import DiagnosticWriter, prune_old_generations
 from .inference import precompute_session_raws, precompute_theme_raws, score_eod_session
 from .panel import bars_to_panel, prepare_limited_panel, select_universe_tickers
 from .store import publish_batch, read_batch, variant_key
+from .universe import FUND_SCOPE_ALL
 
 if TYPE_CHECKING:
     from .live_config import LiveConfig
@@ -283,7 +284,7 @@ def run_eod_limited_job(
             horizons=list(dict.fromkeys(item_horizon for _, item_horizon in wanted)),
             themes=themes,
             geometry_workers=4,
-            **({} if scoring_options is None else {"options": scoring_options}),
+            options=scoring_options,
         )
     writer = DiagnosticWriter(
         root=root, served_session=target.isoformat(), compute_version=COMPUTE_VERSION,
@@ -326,7 +327,7 @@ def run_eod_limited_job(
                 algorithms=algorithms,
                 on_family_rows=retain_block,
                 **({"compact": True, "snapshot_cache": snapshot_cache} if market_input else {}),
-                **({} if scoring_options is None else {"options": scoring_options}),
+                options=scoring_options,
             )
             if synthetic_input:
                 scored["synthetic"] = True
@@ -343,7 +344,7 @@ def run_eod_limited_job(
             reference_diagnostics, panel=panel, coverage_records=coverage,
             served_session=target.isoformat(), compute_version=COMPUTE_VERSION,
             feature_version=FEATURE_VERSION, source_hash=manifest.get("source_hash"),
-            fund_scope=config.fund_scope if market_input else "all",
+            fund_scope=config.fund_scope if market_input else FUND_SCOPE_ALL,
         )
         diagnostic_manifest = writer.finish()
         batch = {

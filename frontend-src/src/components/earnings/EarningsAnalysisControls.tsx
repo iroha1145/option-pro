@@ -239,11 +239,11 @@ export default function EarningsAnalysisControls() {
         </p>
         {(lastRun || lastRunNote) && (
           <p className="mt-2 border-t border-line pt-2 text-micro text-ink-500" role="status" aria-live="polite">
-            <span className="mr-2 text-ink-300">{t('最近检查')}</span>
+            <span className="mr-2 text-ink-400">{t('最近检查')}</span>
             {lastRun ? summaryText(lastRun) : lastRunNote}
           </p>
         )}
-        {error && <p className="mt-1 text-micro text-down-700">{error}</p>}
+        {error && <p className="mt-1 text-micro text-danger-700">{error}</p>}
         {workerStatusError && <p className="mt-1 text-micro text-warn-700" role="status">{workerStatusError}</p>}
       </div>
     </section>

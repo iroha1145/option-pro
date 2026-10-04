@@ -260,7 +260,7 @@ test.describe("macro conditions desktop", () => {
     await stubApi(page, { conditions: conditions(), history: history() });
     await openMarket(page);
 
-    await expect(page.getByText("宏观环境 · MACRO CONDITIONS")).toBeVisible();
+    await expect(page.getByText("宏观环境", { exact: true })).toBeVisible();
     await expect(page.getByRole("region", { name: "宏观环境综合分", exact: true })).toBeVisible();
     await expect(
       page
@@ -268,7 +268,7 @@ test.describe("macro conditions desktop", () => {
         .getByText("中性")
         .first(),
     ).toBeVisible();
-    // 七个模块卡
+    // 七个模块行（每行一个 article）
     for (const module of MODULES) {
       await expect(page.getByRole("article", { name: `${module.zh} 模块`, exact: true })).toBeVisible();
     }
@@ -412,7 +412,7 @@ test.describe("macro conditions degraded states", () => {
     await openMarket(page);
     await expect(page.getByText("部分数据缺失")).toBeVisible();
     await expect(page.getByText(/数据更新提示：/)).toBeVisible();
-    // 图表未被清空，模块卡仍在，缺分模块如实说明门槛
+    // 图表未被清空，模块行仍在，缺分模块如实说明门槛
     await expect(page.getByRole("region", { name: "宏观环境历史", exact: true })).toBeVisible();
     await expect(page.getByLabel("风险 模块")).toBeVisible();
     await expect(page.getByText(/有效因子不足.*门槛，本模块不出分（不按 50 补齐）/)).toBeVisible();

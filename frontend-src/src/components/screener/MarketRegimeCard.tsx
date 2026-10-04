@@ -116,13 +116,13 @@ export default function MarketRegimeCard({ market }: { market: MarketStrength })
     <div className="card-surface p-5">
       <div className="flex items-baseline justify-between">
         <p className="eyebrow">
-          {t('市场形态 · MARKET REGIME')}
+          {t('市场形态')}
           <InfoHint hint={SCORE_HINTS.marketRegime} side="bottom" size={12} className="ml-1" />
         </p>
         {regime && regime.score !== null ? (
           <span className="metric-value text-data-m text-ink-900 tnum">{regime.score}</span>
         ) : (
-          <span className="font-mono text-micro text-ink-300 tnum">{t('6 维')}</span>
+          <span className="font-mono text-micro text-ink-400 tnum">{t('6 维')}</span>
         )}
       </div>
       {regime && (regime.label || regime.spreadLabel) && (

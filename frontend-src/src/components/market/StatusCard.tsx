@@ -86,7 +86,7 @@ export default function StatusCard({
       aria-label={t("市场状态")}
     >
       <div className="flex items-start justify-between">
-        <p className="eyebrow">{t('市场状态 · MARKET STATUS')}</p>
+        <h3 className="text-h3 text-ink-900">{t('市场状态')}</h3>
         <Icon name="clock-ny" size={18} className="text-ink-400" />
       </div>
       <div className="mt-4 flex items-center gap-2.5">
@@ -104,7 +104,7 @@ export default function StatusCard({
         <CountdownRow label={t("距下一收盘")} at={data.next_close} now={now} />
         <div className="flex items-center justify-between border-y border-line py-2.5">
           <span className="text-caption text-ink-500">{t('节假日')}</span>
-          <span className="font-mono text-data-m text-ink-600 tnum">{data.holiday ?? '—'}</span>
+          <span className="text-data-m text-ink-600">{data.holiday ?? '—'}</span>
         </div>
       </div>
       <p className="mt-3 text-caption text-ink-500">

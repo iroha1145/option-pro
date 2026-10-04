@@ -163,16 +163,6 @@ export interface MacroModuleDetail {
   factors: MacroFactor[];
 }
 
-export interface MacroFactorHistoryPoint {
-  date: string;
-  rawValue: number | null;
-  signedValue: number | null;
-  score: number | null;
-  status: string | null;
-  dataThrough: string | null;
-  historyBasis: MacroHistoryBasis | null;
-}
-
 export interface MacroRefreshResult {
   requestId: string | null;
   status: string | null;

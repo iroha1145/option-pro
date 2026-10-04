@@ -298,7 +298,7 @@ function snapshotRefreshHarness() {
   vm.runInNewContext(extract(
     'onRefreshSnapshot',
     '  const [scanning, setScanning] = useState(false);',
-    '\n  /* 下次扫描倒计时 mm:ss */',
+    '\n  /* 快照时间取契约 as_of',
   ), scope);
   return {
     action, timers, reads, toasts, scanning,

@@ -132,7 +132,8 @@ export default function ResultTable({
                 key={i}
                 style={h.width ? { width: h.width } : undefined}
                 className={cn(
-                  'border-b border-line px-3 py-2.5 text-eyebrow font-sans uppercase tracking-[0.14em] text-ink-400',
+                  // 列头多为中文：大写和 0.14em 字距只会把「催化剂 · 72H」撑成两行。
+                  'whitespace-nowrap border-b border-line px-3 py-2.5 text-caption font-medium text-ink-400',
                   h.align === 'right' ? 'text-right' : h.align === 'center' ? 'text-center' : 'text-left',
                 )}
               >
@@ -176,7 +177,7 @@ export default function ResultTable({
                           <span className="font-mono text-body-s font-semibold text-ink-800">{r.ticker}</span>
                           {r.sector && <SoftBadge className="max-w-[7.5rem]" title={t(r.sector)}><span className="truncate">{t(r.sector)}</span></SoftBadge>}
                           {r.observationOnly && <SoftBadge data-testid={`screener-eod-watch-${r.ticker}`}>{t('观察')}</SoftBadge>}
-                          {r.listKind === 'composite' && r.status === 'eligible' && <SoftBadge tone="up">{t('合格')}</SoftBadge>}
+                          {r.listKind === 'composite' && r.status === 'eligible' && <SoftBadge tone="ok">{t('合格')}</SoftBadge>}
                         </span>
                         <span className="block max-w-[150px] truncate text-micro text-ink-400" title={r.name}>{r.name}</span>
                       </span>
@@ -209,7 +210,7 @@ export default function ResultTable({
                       flash={flashes[r.ticker] ?? null}
                       className="tick-flash inline-block rounded-xs px-1 font-mono text-body-s text-ink-900 tnum"
                     >
-                      <LivePrice symbol={r.ticker} fallback={r.price} fallbackAt={r.priceAsOf ?? r.dailyDataThrough} fallbackKind="scan" />
+                      <LivePrice symbol={r.ticker} fallback={r.price} fallbackAt={r.priceAsOf ?? r.dailyDataThrough} fallbackKind="scan" className="flex-nowrap whitespace-nowrap" />
                     </PeriodicPriceFlash>
                     <span className="ml-1.5 align-middle">
                       <LiveChange symbol={r.ticker} fallback={r.changePct} fallbackPrice={r.price} fallbackAt={r.priceAsOf ?? r.dailyDataThrough} size="sm" />
@@ -221,7 +222,7 @@ export default function ResultTable({
                   </td>
                   {/* 20 日平均美元成交额 */}
                   <td className="px-3 py-2 text-right font-mono text-body-s text-ink-600 tnum" title={r.dollarVolumeProxyAvailable ? t('20 日均成交额代理') : undefined}>
-                    {dvPending ? <span className="text-ink-300">…</span> : dv === null || dv === undefined ? '—' : `$${fmtCompact(dv)}`}
+                    {dvPending ? <span className="text-ink-400">…</span> : dv === null || dv === undefined ? '—' : `$${fmtCompact(dv)}`}
                     {r.dollarVolumeProxyAvailable && <span className="ml-1 text-micro text-ink-400">{t('估')}</span>}
                   </td>
                   {/* 展开 */}
@@ -233,7 +234,7 @@ export default function ResultTable({
                       aria-controls={isOpen ? panelId : undefined}
                       aria-label={t('展开或收起 {ticker} 详情', { ticker: r.ticker })}
                       className={cn(
-                        'inline-flex size-8 items-center justify-center rounded-sm border border-line text-ink-400 transition-[color,border-color,transform] duration-fast active:scale-[.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11',
+                        'inline-flex size-8 items-center justify-center rounded-sm border border-line text-ink-400 transition-[color,border-color,transform] duration-fast active:scale-[.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11',
                         isOpen && 'border-brand-400 text-brand-600',
                       )}
                     >

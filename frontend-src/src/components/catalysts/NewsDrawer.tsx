@@ -15,6 +15,8 @@ import { fmtLocaleDateTime, fmtLocaleTime } from '@/lib/format';
 import { getQueryPrincipalGeneration } from '@/api/queryRegistry';
 import {
   ReadAttemptAborted,
+  AI_JOB_POLL_FAILURE_WAITS_MS,
+  AI_JOB_POLL_WAITS_MS,
   boundedReadRetryDelayMs,
   createCancellableSleep,
   runBoundedRead,
@@ -30,8 +32,6 @@ import { t as __t } from '../../i18n/core.ts';
 const TERMINAL: NewsAnalysisJob['status'][] = ['completed', 'failed', 'cancelled', 'insufficient_context'];
 const inFlight = (status: CatalystNewsItem['analysisStatus']) => status === 'queued' || status === 'in_progress';
 /* 轮询成功后的退避；失败后的等待取本地退避与 Retry-After 的较大值。 */
-const POLL_BACKOFF_MS = [2000, 3000, 5000, 8000, 10000];
-const POLL_FAILURE_WAITS_MS = [5_000, 10_000, 20_000, 30_000] as const;
 /* 一次轮询最多自动查 5 分钟（页面隐藏的时间不计入），之后交给手动重试。 */
 const POLL_BUDGET_MS = 5 * 60_000;
 const pageHidden = () => typeof document !== 'undefined' && document.visibilityState === 'hidden';
@@ -301,6 +301,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
       }
     })();
     return request.cancel;
+    // 只在换新闻或手动重读时读详情；seed 与 onUpdate 随父组件每次渲染变化。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newsId, detailEpoch]);
 
@@ -360,6 +361,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
       recoverySeqRef.current += 1;
       sleeper.cancel();
     };
+    // 恢复只跟新闻与任务身份走；job 由本效果自己写入，列进来会自我触发。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newsId, item?.newsId, item?.analysisJobId, item?.analysisStatus, recoveryEpoch]);
 
@@ -469,7 +471,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
              不能几百毫秒后就被清掉，退回一句笼统的失败文案（审计 FE-3）。 */
           return;
         }
-        const delay = POLL_BACKOFF_MS[Math.min(backoffRef.current, POLL_BACKOFF_MS.length - 1)];
+        const delay = AI_JOB_POLL_WAITS_MS[Math.min(backoffRef.current, AI_JOB_POLL_WAITS_MS.length - 1)];
         backoffRef.current += 1;
         pollRef.current = window.setTimeout(() => void tick(), delay);
       } catch (error) {
@@ -483,17 +485,18 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
         if (pollFailuresRef.current >= 2) {
           setJobNotice({ text: __t('任务状态暂时读不到，正在重试'), retryable: false });
         }
-        const delay = boundedReadRetryDelayMs(pollFailuresRef.current - 1, error, POLL_FAILURE_WAITS_MS);
+        const delay = boundedReadRetryDelayMs(pollFailuresRef.current - 1, error, AI_JOB_POLL_FAILURE_WAITS_MS);
         pollRef.current = window.setTimeout(() => void tick(), delay);
       }
     };
     backoffRef.current = 0;
     pollFailuresRef.current = 0;
-    pollRef.current = window.setTimeout(() => void tick(), POLL_BACKOFF_MS[0]);
+    pollRef.current = window.setTimeout(() => void tick(), AI_JOB_POLL_WAITS_MS[0]);
     return () => {
       stopPoll();
       dropVisibleWait();
     };
+    // 轮询的生命周期只跟任务身份与状态；回调与 toast 变化不该重启计时。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newsId, job?.jobId, job?.status, pollRetryEpoch]);
 
@@ -774,7 +777,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
                 <p className="mt-3 text-body-s font-medium text-ink-800">{analysis.headlineSummary}</p>
                 {/* causal_summary serif 引文 */}
                 <blockquote className="mt-3 border-l-[3px] border-ai-600/40 pl-3.5">
-                  <p className="font-quote text-[14px] leading-[24px] text-ink-800">{analysis.causalSummary}</p>
+                  <p className="text-[14px] leading-[24px] text-ink-800">{analysis.causalSummary}</p>
                 </blockquote>
                 <div className="mt-4 space-y-2">
                   {analysis.trustedStockImpacts.map((imp, i) => (
@@ -791,7 +794,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
             {/* 信息不足 · 未调用模型 */}
             {showInsufficient && (
               <div className="mt-4 rounded-md bg-warn-50 p-4 text-center">
-                <Icon name="doc-quote" size={22} className="mx-auto text-warn-600" />
+                <Icon name="doc-quote" size={22} className="mx-auto text-warn-700" />
                 <p className="mt-2 text-body-s font-medium text-ink-800">{__t('信息不足 · 未调用模型')}</p>
                 <p className="mt-1 text-micro text-ink-400">{__t('这条新闻信息量不足，未做 AI 分析')}</p>
               </div>
@@ -799,8 +802,8 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
 
             {/* 失败 */}
             {showFailed && (
-              <div className="mt-4 rounded-md border border-down-600/20 bg-down-50 p-3.5">
-                <p className="text-body-s font-medium text-down-700">{__t('分析失败')}</p>
+              <div className="mt-4 rounded-md border border-danger-600/20 bg-danger-50 p-3.5">
+                <p className="text-body-s font-medium text-danger-700">{__t('分析失败')}</p>
                 <p className="mt-1 text-micro text-ink-500">{failureText}</p>
               </div>
             )}

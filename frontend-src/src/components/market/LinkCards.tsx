@@ -5,12 +5,11 @@ import { Link } from 'react-router';
 import Icon, { type IconName } from '@/components/icons';
 import { t } from '../../i18n/core.ts';
 
-const CARDS: { to: string; icon: IconName; title: string; en: string; desc: string }[] = [
+const CARDS: { to: string; icon: IconName; title: string; desc: string }[] = [
   {
     to: '/sectors',
     icon: 'layers',
     title: t('板块透视'),
-    en: 'SECTORS',
     /* 后端目录是 24 个可重叠的主题板块，不是 GICS 十一行业（审计 2.1.16） */
     desc: t('比较板块涨跌、个股强度与期权隐含波动率。'),
   },
@@ -18,7 +17,6 @@ const CARDS: { to: string; icon: IconName; title: string; en: string; desc: stri
     to: '/breakouts',
     icon: 'radar',
     title: t('突破雷达'),
-    en: 'BREAKOUT RADAR',
     desc: t('查看今日突破信号，追踪触发、确认与回踩过程。'),
   },
 ];
@@ -34,16 +32,13 @@ export default function LinkCards() {
               <Icon name={c.icon} size={20} />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="flex items-baseline gap-2">
-                <span className="text-h3 text-ink-900">{c.title}</span>
-                <span className="eyebrow">{c.en}</span>
-              </span>
+              <span className="block text-h3 text-ink-900">{c.title}</span>
               <span className="mt-1 block truncate text-caption text-ink-500">{c.desc}</span>
             </span>
             <Icon
               name="arrow-up-right"
               size={16}
-              className="shrink-0 text-ink-300 transition-[transform,color] duration-fast ease-paper group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-brand-600"
+              className="shrink-0 text-ink-400 transition-[transform,color] duration-fast ease-paper group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-brand-600"
             />
           </Link>
         </div>

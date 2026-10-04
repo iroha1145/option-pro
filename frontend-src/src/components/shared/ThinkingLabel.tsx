@@ -11,19 +11,16 @@ import { cn } from '@/lib/utils';
 export default function ThinkingLabel({
   children,
   live = true,
-  tone = 'ai',
   className,
 }: {
   /** 状态文字；同时作为扫光层（::before 的 attr(data-text)）的副本。 */
   children: string;
   live?: boolean;
-  /** ai：青瓷底色（模型任务）；ink：墨色底（一般的进行中文案）。 */
-  tone?: 'ai' | 'ink';
   className?: string;
 }) {
   if (!live) return <span className={className}>{children}</span>;
   return (
-    <span className={cn('t-shimmer', tone === 'ai' && 'is-ai', className)} data-text={children}>
+    <span className={cn('t-shimmer is-ai', className)} data-text={children}>
       {children}
     </span>
   );

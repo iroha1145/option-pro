@@ -111,6 +111,18 @@ def _displayable_zh(item: Mapping[str, Any]) -> bool:
     return bool(str(item.get("title_zh") or "").strip() and str(item.get("summary_zh") or "").strip())
 
 
+def _apply_zh_visibility(projected: dict[str, Any], items: list[dict[str, Any]]) -> None:
+    """Keep only items with validated Chinese copy; count the rest as hidden.
+
+    Pending English news projects to a blank title_zh, so it is counted in
+    hidden_unanalyzed instead of being returned.
+    """
+
+    visible = [item for item in items if _displayable_zh(item)]
+    projected["items"] = visible
+    projected["hidden_unanalyzed"] = len(items) - len(visible)
+
+
 class _LocalIntelligence(Protocol):
     def initialize(self) -> None: ...
     def status(
@@ -538,15 +550,18 @@ class PersonalCatalystService:
             row = self.ai_repository.get_job(job_id)
         if row is None or row.get("job_type") != "news_impact":
             return None
-        schema_version, schema_hash = ai_runtime.schema_identity("news_impact")
+        current_identity = ai_runtime.schema_identity("news_impact")
         if (
             row.get("model") != self.settings.model
             or row.get("reasoning") != self.settings.reasoning
             or row.get("execution_mode") != "background"
             or row.get("prompt_version") not in ai_runtime.NEWS_READABLE_PROMPT_VERSIONS
-            or not ai_runtime.news_schema_identity_matches(
-                row.get("prompt_version"), row.get("schema_version"), row.get("schema_sha256"),
-                current_identity=(schema_version, schema_hash),
+            or not ai_runtime.schema_identity_current(
+                "news_impact",
+                row.get("prompt_version"),
+                row.get("schema_version"),
+                row.get("schema_sha256"),
+                current_identity=current_identity,
             )
         ):
             return None
@@ -1369,9 +1384,7 @@ class PersonalCatalystService:
                 projected["next_cursor"] = None
                 projected["has_more"] = False
         else:
-            visible = [item for item in matched if _displayable_zh(item)]
-            projected["items"] = visible
-            projected["hidden_unanalyzed"] = max(0, len(matched) - len(visible))
+            _apply_zh_visibility(projected, matched)
         if not projected["items"] and not projected.get("has_more"):
             projected["status"] = "empty"
         projected["analysis_availability"] = self._analysis_availability_for_access(
@@ -1492,18 +1505,13 @@ class PersonalCatalystService:
                     as_of=kwargs.get("as_of"),
                     include_job_state=include_owner_state,
                 )
-                # Same rule as feed(): an item without validated Chinese copy
-                # (pending English news projects to blank title_zh) is counted,
-                # not returned.
                 items = [
                     item
                     for item in projected.get("items") or []
                     if isinstance(item, dict)
                 ]
-                visible = [item for item in items if _displayable_zh(item)]
-                projected["items"] = visible
-                projected["hidden_unanalyzed"] = len(items) - len(visible)
-                if not visible and not projected.get("has_more"):
+                _apply_zh_visibility(projected, items)
+                if not projected["items"] and not projected.get("has_more"):
                     projected["status"] = "empty"
                 projected_results[str(ticker)] = projected
             payload["results"] = projected_results

@@ -86,7 +86,7 @@ export default function ConfirmDialog({
             <span
               className={cn(
                 'mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md',
-                danger ? 'bg-down-50 text-down-600' : 'bg-ai-50 text-ai-600',
+                danger ? 'bg-danger-50 text-danger-600' : 'bg-ai-50 text-ai-600',
               )}
             >
               <AnalysisIcon size={18} />
@@ -107,7 +107,7 @@ export default function ConfirmDialog({
             <button
               onClick={onConfirm}
               className={danger
-                ? 'rounded-md bg-down-600 px-3.5 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] duration-fast hover:brightness-105'
+                ? 'rounded-md bg-danger-600 px-3.5 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] duration-fast hover:brightness-105'
                 : 'btn-ai'}
             >
               {confirmLabel}

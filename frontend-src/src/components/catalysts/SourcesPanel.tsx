@@ -73,7 +73,7 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
               <p className="text-h3 text-ink-800">{s.source}</p>
               <SoftBadge tone={s.status === 'active' ? 'up' : 'warn'}>
                 {/* 源正常/异常是静态健康状态，不脉冲 */}
-                <Led tone={s.status === 'active' ? 'up' : 'warn'} className="size-1.5" />
+                <Led tone={s.status === 'active' ? 'ok' : 'warn'} className="size-1.5" />
                 {s.status === 'active' ? t('正常') : t('异常')}
               </SoftBadge>
             </div>

@@ -54,11 +54,11 @@ function IndicatorReadouts({ chart, bars, range, panes, layout }: {
         style={{ top: header.top, height: header.height }}>
         <div className="flex min-w-0 items-center justify-between gap-3 leading-5">
           <span className="truncate font-medium text-ink-600" title={row.label}>{row.label}</span>
-          <span className="shrink-0 font-mono text-[10px]" title={stamp}>
+          <span className="shrink-0 font-mono text-micro" title={stamp}>
             {selected === null ? t('末根读数') : t('光标读数')} · {stamp}
           </span>
         </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono tnum leading-5">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 tnum leading-5">
           {row.series.map((series, seriesIndex) => <span key={series.name} className="inline-flex items-center gap-1.5 whitespace-nowrap"
             data-indicator-value={series.name} title={`${series.name}: ${series.value ?? '—'} · ${stamp}`}>
             <i className="h-1.5 w-1.5 shrink-0 rounded-full" aria-hidden style={{ backgroundColor: rowIndex === 0 ? CH.ink400 : seriesIndex === 0 ? CH.brand500 : seriesIndex === 1 ? CH.ai600 : CH.ink400 }} />

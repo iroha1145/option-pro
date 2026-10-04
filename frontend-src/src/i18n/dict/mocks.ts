@@ -165,12 +165,9 @@ export const MOCKS: Dict = {
   '大盘成长联动': ['Broad growth-stock linkage', 'グロース株との連動'],
   '同板块联动': ['Same-sector linkage', '同セクター連動'],
 
-  /* fixtures2.ts：催化剂日历事件标签（getCatalystsCalendar） */
-  'CPI 数据公布': ['CPI release', 'CPI発表'],
+  /* fixtures2.ts：经济日历事件标签 */
   'FOMC 会议纪要': ['FOMC minutes', 'FOMC議事要旨'],
   '初请失业金人数': ['Initial jobless claims', '新規失業保険申請件数'],
-  'PPI 数据公布': ['PPI release', 'PPI発表'],
-  '零售销售月率': ['Retail sales m/m', '小売売上高 前月比'],
 
   /* fixtures2.ts：AI 任务 / Worker 心跳 */
   '任务不存在': ['Task not found', 'タスクが見つかりません'],
@@ -178,19 +175,9 @@ export const MOCKS: Dict = {
     'AI analysis complete: combines fundamentals, price/volume action, and options pricing — see the full result below.',
     'AI分析が完了しました。ファンダメンタルズ・値動き・オプション価格を総合的に評価しました。詳細は本文でご確認ください。',
   ],
-  '指数行情采集': ['Index quote ingestion', '指数相場収集'],
-  '自选股快照': ['Watchlist snapshot', 'ウォッチリストのスナップショット'],
-  '强度分计算': ['Strength score calculation', '強度スコア計算'],
   '板块聚合': ['Sector aggregation', 'セクター集計'],
-  '财报日历同步': ['Earnings calendar sync', '決算カレンダー同期'],
-  '新闻抓取': ['News crawler', 'ニュース収集'],
-  '热点聚类': ['Hotspot clustering', '注目テーマのクラスタリング'],
   '期权异动': ['Unusual options scan', 'オプション異常検知'],
-  'AI 任务调度': ['AI job scheduler', 'AIジョブスケジューラ'],
   '运行正常': ['Running normally', '正常稼働'],
-  '延迟略高于均值': ['Latency slightly above average', 'レイテンシがやや平均超過'],
-  '队列积压清理中': ['Clearing queue backlog', 'キュー滞留を解消中'],
-  '等待下一周期': ['Waiting for next cycle', '次のサイクル待ち'],
 
   /* fixtures2.ts：热点主题关键词标签（THEME_DEFS.keywords） */
   '算力': ['Compute', 'コンピューティング'],

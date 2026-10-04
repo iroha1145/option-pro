@@ -25,7 +25,6 @@ _reject_constant = partial(reject_non_finite_json, error_message="non-finite JSO
 INTERNAL_API_PREFIX = "/internal/v1"
 NEWS_PAGE_LIMIT = 500
 CALENDAR_PAGE_LIMIT = 50
-MAX_PAGE_LIMIT = NEWS_PAGE_LIMIT
 DEFAULT_MAX_RESPONSE_BYTES = 5 * 1024 * 1024
 _Sleep = Callable[[float], Awaitable[None]]
 

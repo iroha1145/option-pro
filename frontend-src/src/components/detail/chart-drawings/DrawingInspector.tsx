@@ -105,14 +105,14 @@ export default function DrawingInspector({
                   aria-pressed={drawing?.id === item.id}
                   onClick={() => onSelect?.(item.id)}
                   className={cn(
-                    'min-w-0 flex-1 rounded-xs border px-2 py-1 text-left text-micro outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30',
+                    'min-w-0 flex-1 rounded-xs border px-2 py-1 text-left text-micro outline-none focus-visible:ring-2 focus-visible:ring-brand-600',
                     drawing?.id === item.id ? 'border-brand-400 bg-brand-50' : 'border-line',
                   )}
                 >
                   <span>{KIND_LABEL[item.kind]}</span>
                   {item.hidden ? <span className="ml-1 text-ink-400">{t('已隐藏')}</span> : null}
                   {item.locked ? <span className="ml-1 text-ink-400">{t('已锁定')}</span> : null}
-                  {unresolvedItem ? <span className="ml-1 text-warn-600">{t('未解析')}</span> : null}
+                  {unresolvedItem ? <span className="ml-1 text-warn-700">{t('未解析')}</span> : null}
                   <span className="ml-1 font-mono text-ink-400">{t('层级 {n}', { n: item.zOrder })}</span>
                 </button>
                 <button
@@ -127,7 +127,7 @@ export default function DrawingInspector({
                   type="button"
                   aria-label={t('删除图形')}
                   onClick={() => onDeleteId?.(item.id)}
-                  className="rounded-xs border border-down-600/40 px-1.5 py-1 text-micro text-down-600"
+                  className="rounded-xs border border-danger-600/40 px-1.5 py-1 text-micro text-danger-600"
                 >
                   <Icon name="x" size={13} />
                 </button>
@@ -138,12 +138,12 @@ export default function DrawingInspector({
       )}
       <p className="text-micro font-medium text-ink-500">{t('样式')}</p>
       {importError && (
-        <p className="rounded-xs border border-warn-600/30 bg-warn-50 px-2 py-1 text-micro text-warn-600" role="alert">
+        <p className="rounded-xs border border-warn-600/30 bg-warn-50 px-2 py-1 text-micro text-warn-700" role="alert">
           {IMPORT_ERROR[importError] ?? t('导入失败：数据无效')}
         </p>
       )}
       {unresolved && (
-        <p className="rounded-xs border border-warn-600/30 bg-warn-50 px-2 py-1 text-micro text-warn-600">
+        <p className="rounded-xs border border-warn-600/30 bg-warn-50 px-2 py-1 text-micro text-warn-700">
           {t('锚点无法解析（数据已更新）')}
         </p>
       )}
@@ -158,7 +158,7 @@ export default function DrawingInspector({
                 aria-pressed={drawing.style.color.toUpperCase() === color.value}
                 onClick={() => onStyle({ ...drawing.style, color: color.value })}
                 className={cn(
-                  'size-6 min-h-11 min-w-11 rounded-xs border outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30 md:size-6 md:min-h-6 md:min-w-6',
+                  'size-6 min-h-11 min-w-11 rounded-xs border outline-none focus-visible:ring-2 focus-visible:ring-brand-600 md:size-6 md:min-h-6 md:min-w-6',
                   drawing.style.color.toUpperCase() === color.value ? 'border-ink-700' : 'border-line',
                 )}
                 style={{ background: drawingPaint(color.value) }}
@@ -175,7 +175,7 @@ export default function DrawingInspector({
                 aria-pressed={drawing.style.width === width}
                 onClick={() => onStyle({ ...drawing.style, width })}
                 className={cn(
-                  'rounded-xs border px-2 py-0.5 font-mono text-micro outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30',
+                  'rounded-xs border px-2 py-0.5 font-mono text-micro outline-none focus-visible:ring-2 focus-visible:ring-brand-600',
                   drawing.style.width === width ? 'border-brand-400 bg-brand-50' : 'border-line',
                 )}
               >
@@ -194,7 +194,7 @@ export default function DrawingInspector({
                 aria-pressed={drawing.style.dash === dash.id}
                 onClick={() => onStyle({ ...drawing.style, dash: dash.id })}
                 className={cn(
-                  'rounded-xs border px-2 py-0.5 text-micro outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30',
+                  'rounded-xs border px-2 py-0.5 text-micro outline-none focus-visible:ring-2 focus-visible:ring-brand-600',
                   drawing.style.dash === dash.id ? 'border-brand-400 bg-brand-50' : 'border-line',
                 )}
               >
@@ -224,7 +224,7 @@ export default function DrawingInspector({
                 maxLength={240}
                 value={drawing.text ?? ''}
                 onChange={(event) => onText(event.target.value)}
-                className="min-h-[72px] rounded-xs border border-line bg-card px-2 py-1 text-caption outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30"
+                className="min-h-[72px] rounded-xs border border-line bg-card px-2 py-1 text-caption outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
               />
             </label>
           )}
@@ -239,7 +239,7 @@ export default function DrawingInspector({
             </button>
             <button type="button" aria-label={t('上移一层')} onClick={() => onZ(1)} className="rounded-xs border border-line px-2 py-1 text-micro">{t('上移一层')}</button>
             <button type="button" aria-label={t('下移一层')} onClick={() => onZ(-1)} className="rounded-xs border border-line px-2 py-1 text-micro">{t('下移一层')}</button>
-            <button type="button" aria-label={t('删除图形')} onClick={onDelete} className="rounded-xs border border-down-600/40 px-2 py-1 text-micro text-down-600">{t('删除图形')}</button>
+            <button type="button" aria-label={t('删除图形')} onClick={onDelete} className="rounded-xs border border-danger-600/40 px-2 py-1 text-micro text-danger-600">{t('删除图形')}</button>
           </div>
         </>
       ) : (
@@ -252,7 +252,7 @@ export default function DrawingInspector({
         ) : null}
         <button type="button" onClick={() => fileRef.current?.click()} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导入 JSON')}</button>
         <button type="button" onClick={onImportLocal} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导入本机绘图')}</button>
-        <button type="button" onClick={onClear} className="rounded-xs border border-down-600/40 px-2 py-1 text-micro text-down-600">{t('清除全部手绘')}</button>
+        <button type="button" onClick={onClear} className="rounded-xs border border-danger-600/40 px-2 py-1 text-micro text-danger-600">{t('清除全部手绘')}</button>
         <input
           ref={fileRef}
           type="file"

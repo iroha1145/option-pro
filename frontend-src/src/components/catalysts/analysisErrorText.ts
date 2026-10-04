@@ -5,15 +5,8 @@
  * 由调用方给通用句，绝不把原始码打到页面上。排队期的推迟码（并发上限、冷却、轮询推迟）
  * 表示任务还会自动继续，不是失败原因，同样返回 null。
  */
-import { aiJobKnownErrorMessage } from '../../api/aiJobNormalize.ts';
+import { AI_JOB_DEFERRAL_CODES, aiJobKnownErrorMessage } from '../../api/aiJobNormalize.ts';
 import { t } from '../../i18n/core.ts';
-
-const DEFERRAL_CODES = new Set([
-  'global_concurrency_limit',
-  'analysis_cooldown_active',
-  'provider_poll_deferred',
-  'provider_cancel_deferred',
-]);
 
 const QUOTA_USED = t('今天的 AI 用量已用完，这次没有执行分析');
 const PROVIDER_DOWN = t('模型服务暂时不可用，请稍后重试');
@@ -64,7 +57,7 @@ const REASONS: Record<string, string> = {
 /** 已知的失败原因；未知码与排队期推迟码返回 null。 */
 export function analysisFailureReason(code: string | null | undefined): string | null {
   const key = String(code ?? '').trim();
-  if (!key || DEFERRAL_CODES.has(key)) return null;
+  if (!key || AI_JOB_DEFERRAL_CODES.has(key)) return null;
   // 新闻与焦点特有的说法优先；其余错误码沿用个股分析面板的共用表，避免两边各缺一半。
   return REASONS[key] ?? aiJobKnownErrorMessage(key);
 }

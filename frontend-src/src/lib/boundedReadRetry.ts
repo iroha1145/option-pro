@@ -6,6 +6,10 @@
  */
 
 export const NEWS_DETAIL_RETRY_WAITS_MS = [1_500, 3_000] as const;
+/** AI 任务进行中的查询节奏：先密后疏，封顶 10 秒。 */
+export const AI_JOB_POLL_WAITS_MS = [2000, 3000, 5000, 8000, 10000] as const;
+/** AI 任务查询连续失败后的退避（与 Retry-After 取较大值）。 */
+export const AI_JOB_POLL_FAILURE_WAITS_MS = [5_000, 10_000, 20_000, 30_000] as const;
 /** 自动重试最多静默等这么久；服务端 Retry-After 超过它就直接抛错，交给界面显示错误与手动重试。 */
 export const MAX_AUTO_RETRY_WAIT_MS = 10_000;
 

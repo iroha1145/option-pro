@@ -21,7 +21,7 @@ const TOOLS: { id: DrawingTool; icon: IconName; label: string }[] = [
 function toolButtonCls(active: boolean): string {
   return cn(
     'inline-flex size-8 min-h-11 min-w-11 items-center justify-center rounded-xs border text-ink-500 outline-none transition-colors duration-fast md:size-8 md:min-h-8 md:min-w-8',
-    'focus-visible:ring-2 focus-visible:ring-brand-500/30',
+    'focus-visible:ring-2 focus-visible:ring-brand-600',
     active
       ? 'border-brand-400 bg-brand-50 text-brand-700 shadow-chip'
       : 'border-line hover:text-ink-700',
@@ -132,11 +132,11 @@ export default function DrawingToolbar({
       <span
         className={cn(
           'ml-1 inline-flex items-center gap-1 text-micro',
-          syncStatus === 'unsynced' || syncStatus === 'load_failed' || syncStatus === 'write_failed' || syncStatus === 'conflict' ? 'text-warn-600' : 'text-ink-400',
+          syncStatus === 'unsynced' || syncStatus === 'load_failed' || syncStatus === 'write_failed' || syncStatus === 'conflict' ? 'text-warn-700' : 'text-ink-400',
         )}
         aria-live="polite"
       >
-        <span className={cn('size-1.5 rounded-full', syncStatus === 'unsynced' || syncStatus === 'load_failed' || syncStatus === 'write_failed' || syncStatus === 'conflict' ? 'bg-warn-600' : syncStatus === 'saving' ? 'bg-brand-400' : 'bg-up-600')} aria-hidden />
+        <span className={cn('size-1.5 rounded-full', syncStatus === 'unsynced' || syncStatus === 'load_failed' || syncStatus === 'write_failed' || syncStatus === 'conflict' ? 'bg-warn-600' : syncStatus === 'saving' ? 'bg-brand-400' : 'bg-ok-600')} aria-hidden />
         <span>{syncStatus === 'guest' && compact ? t('未同步') : syncLabel}</span>
         {!quotaBlocked && (syncStatus === 'unsynced' || syncStatus === 'load_failed' || syncStatus === 'write_failed') && (
           <button type="button" className="underline-offset-2 hover:underline" onClick={onRetry} aria-label={t('重试同步')}>

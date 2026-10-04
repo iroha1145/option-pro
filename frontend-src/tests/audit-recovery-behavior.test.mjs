@@ -5,6 +5,8 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import { ApiError } from '../src/api/client.ts';
 import { aiJobCreateErrorMessage } from '../src/api/aiJobNormalize.ts';
+import * as boundedReadRetry from '../src/lib/boundedReadRetry.ts';
+import * as retryDelay from '../src/lib/retryDelay.ts';
 import { createReactStub } from './helpers/react-hooks.mjs';
 
 const settle = async () => { for (let i = 0; i < 15; i++) await Promise.resolve(); };
@@ -80,6 +82,8 @@ function jobHarness(respond) {
     '@/api/client': { ApiError },
     '@/api/modules/ai-jobs': { aiJobsApi: { get: id => { queries.push(id); return respond(id); }, cancel: async id => ({ id, status: 'cancelled' }) } },
     '@/api/aiJobNormalize': { aiJobCreateErrorMessage },
+    '@/lib/boundedReadRetry': boundedReadRetry,
+    '@/lib/retryDelay': retryDelay,
   }, { ...clock, Date: class extends Date { static now() { return clock.now(); } }, document: { hidden: false, addEventListener() {}, removeEventListener() {} } });
   const read = stub.mount(() => useAiJob());
   return { ...stub, clock, queries, read, creates: () => creates,

@@ -11,7 +11,8 @@ from app.services.research_eod_v1.composite import _collapse_same_family, _dedup
 from app.services.research_eod_v1.constants import COMPOSITE_FLOORS
 from app.services.sectors import SECTORS
 
-from .full_market_tuning import finite_number
+from .full_market_tuning import finite_real
+from .universe import FUND_SCOPE_ALL
 
 REFERENCE_PROFILE = "balanced"
 REFERENCE_HORIZON = "mid"
@@ -34,7 +35,7 @@ DATA_REASONS = frozenset({
 
 def _stage(row: Mapping[str, Any]) -> str:
     reasons = {str(reason) for reason in row.get("rejection_reasons") or ()}
-    if finite_number(row.get("score")) is None or reasons & DATA_REASONS:
+    if finite_real(row.get("score")) is None or reasons & DATA_REASONS:
         return "data_insufficient"
     if row.get("status") == "eligible":
         return "strict_eligible"
@@ -45,7 +46,7 @@ def _stage(row: Mapping[str, Any]) -> str:
 
 def _m1_funnel(rows: Sequence[Mapping[str, Any]], profile: str, published_n: int) -> dict[str, int]:
     """Count M1's existing gates before its final top-20 truncation."""
-    eligible = [row for row in rows if row.get("status") == "eligible" and finite_number(row.get("score")) is not None]
+    eligible = [row for row in rows if row.get("status") == "eligible" and finite_real(row.get("score")) is not None]
     grouped = _dedup_security(eligible)
     by_security: dict[str, list[Mapping[str, Any]]] = {}
     for row in eligible:
@@ -57,11 +58,11 @@ def _m1_funnel(rows: Sequence[Mapping[str, Any]], profile: str, published_n: int
         if len(set(row.get("family_votes") or ())) < 2:
             continue
         two_family += 1
-        if finite_number(row.get("consensus_z")) is None or float(row["consensus_z"]) < COMPOSITE_FLOORS[profile]:
+        if finite_real(row.get("consensus_z")) is None or float(row["consensus_z"]) < COMPOSITE_FLOORS[profile]:
             continue
         floor_pass += 1
         family = _collapse_same_family(by_security[str(row["security_id"])])
-        scores = [float(item["score"]) for item in family if finite_number(item.get("score")) is not None]
+        scores = [float(item["score"]) for item in family if finite_real(item.get("score")) is not None]
         if scores and max(scores) - min(scores) <= 25:
             spread_pass += 1
     if published_n != min(20, spread_pass):
@@ -112,7 +113,7 @@ class VariantDiagnostics:
             missing = self.theme_missing.setdefault(theme_id, {})
             for row in rows:
                 ticker = str(row["security_id"])
-                score = finite_number(row.get("score"))
+                score = finite_real(row.get("score"))
                 if score is not None:
                     scores[ticker] = score
                 else:
@@ -153,8 +154,8 @@ def _return_pct(series: Any, days: int, served_session: str) -> float | None:
         start_index = available_sessions.index(start_session)
     except ValueError:
         return None
-    start = finite_number(close[start_index])
-    end = finite_number(close[-1])
+    start = finite_real(close[start_index])
+    end = finite_real(close[-1])
     return None if start is None or end is None or start <= 0 else 100.0 * (end / start - 1.0)
 
 
@@ -167,7 +168,7 @@ def build_theme_statistics(
     compute_version: str,
     feature_version: str,
     source_hash: str | None,
-    fund_scope: str = "all",
+    fund_scope: str = FUND_SCOPE_ALL,
 ) -> dict[str, Any]:
     """Score all 24 authored themes from one fixed profile/family, never Top-K.
 
@@ -207,7 +208,7 @@ def build_theme_statistics(
                     (reference.theme_missing.get(theme_id, {}).get(ticker, "SCORE_UNAVAILABLE") if reference else "SCORE_UNAVAILABLE")
                 )
                 missing[reason] += 1
-        if theme_id == FUND_THEME_ID and fund_scope != "all":
+        if theme_id == FUND_THEME_ID and fund_scope != FUND_SCOPE_ALL:
             scores = {}
             missing = Counter({FUND_SCOPE_REASON: len(members)})
         valid_scores = [scores[ticker] for ticker in members if ticker in scores]
@@ -232,7 +233,7 @@ def build_theme_statistics(
                 else "active" if len(valid_scores) == len(members) else "degraded"
             ),
         }
-        if theme_id == FUND_THEME_ID and fund_scope != "all":
+        if theme_id == FUND_THEME_ID and fund_scope != FUND_SCOPE_ALL:
             row["fund_scope"] = fund_scope
         for days, suffix in ((20, "1mo"), (63, "3mo"), (126, "6mo")):
             returns = [_return_pct(panel[ticker], days, served_session) for ticker in members if ticker in panel]

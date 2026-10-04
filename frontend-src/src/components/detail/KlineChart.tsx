@@ -13,7 +13,8 @@ import { displayedQuoteLabel, preferLiveQuote } from '@/lib/liveQuotes';
  * 锚点按 bar 时间戳存储、静默刷新后重新解析，解析不到判失效
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion } from 'framer-motion';
+import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 import { DUR_UI, EASE_PAPER } from '@/lib/motion';
 import ReactECharts from '@/components/charts/ReactECharts';
 import Segmented from '@/components/shared/Segmented';
@@ -78,7 +79,6 @@ import type { ChartBarEx } from '@/mocks/fixtures';
 import type { TechnicalStructure } from '@/api/types';
 
 type ChartMode = 'candle' | 'area';
-export type TechOverlays = TechnicalStructure['chart_overlays'];
 
 /** 读回 ECharts 实例当前的 inside 缩放窗口（索引口径）。 */
 function readZoomWindow(chart: EChartsInstance, barCount: number): ZoomWindow | null {
@@ -520,16 +520,6 @@ function measureDurationText(range: ChartRange, m: RangeMeasure): string {
   return t('{n} 根 · 跨 {d} 个交易日', { n: m.barCount, d: m.sessionDays });
 }
 
-/** 与 MacroHistoryChart 叠加线按钮一致的开关样式 */
-function toggleButtonCls(active: boolean): string {
-  return cn(
-    'rounded-xs border px-2 py-0.5 text-micro outline-none transition-colors duration-fast',
-    active
-      ? 'border-brand-400 bg-brand-50 text-brand-700 shadow-chip'
-      : 'border-line text-ink-400 hover:text-ink-600 focus-visible:text-ink-600',
-  );
-}
-
 export default function KlineChart({
   ticker,
   prevClose,
@@ -584,7 +574,7 @@ export default function KlineChart({
   const [basis, setBasis] = useState<MeasureBasis>('wick');
   const [chartInst, setChartInst] = useState<EChartsInstance | null>(null);
   const measureActive = measure.phase !== 'idle';
-  const reducedMotion = Boolean(useReducedMotion());
+  const reducedMotion = usePrefersReducedMotion();
   const identityKey = isCustomer && username ? `account:${username}` : isOwner ? 'owner' : 'anonymous';
   const bars = data?.bars;
   // 结构负载与图表 bars 各有缓存，可能短暂错版本；不同源就暂隐叠加。
@@ -909,7 +899,6 @@ export default function KlineChart({
           options={CHART_RANGES}
           value={range}
           onChange={setRange}
-          className="[&_button]:font-mono [&_button]:text-micro"
         />
         <div className="flex flex-wrap items-center gap-2">
           <Segmented
@@ -926,7 +915,10 @@ export default function KlineChart({
             disabled={!analysisOk || !layerSettings.enabled.some(id => id === 'auto_patterns' || id === 'support_resistance')}
             title={t('根据已收盘 K 线识别支撑、阻力和形态，并合并相近线条')}
             onClick={() => setSmartDrawingEnabled(value => !value)}
-            className={cn(toggleButtonCls(smartDrawingEnabled), 'min-h-8 disabled:cursor-not-allowed disabled:opacity-50')}
+            /* 图表工具行的开关走 .control-button：选中态由 aria-pressed 驱动，字号与同一行的
+               K 线 / 面积分段一致。h-9 与分段外框同为 36（粗指针下 min-height 44 仍生效）；
+               原手写样式在手机上只有约 28px 高。 */
+            className="control-button h-9"
           >
             {t('智能画线')}
           </button>
@@ -942,7 +934,7 @@ export default function KlineChart({
               aria-pressed={basis === 'close'}
               aria-label={t('按收盘价口径测量')}
               onClick={() => setBasis((prev) => (prev === 'close' ? 'wick' : 'close'))}
-              className={toggleButtonCls(basis === 'close')}
+              className="control-button h-9"
             >
               {t('收盘口径')}
             </button>
@@ -955,7 +947,7 @@ export default function KlineChart({
               drawing.setTool('select');
               setMeasure((prev) => (prev.phase === 'idle' ? { phase: 'selectStart' } : { phase: 'idle' }));
             }}
-            className={toggleButtonCls(measureActive)}
+            className="control-button h-9"
           >
             {t('回撤')}
           </button>
@@ -1023,7 +1015,7 @@ export default function KlineChart({
               maxLength={240}
               value={drawing.draftText}
               onChange={(event) => drawing.setDraftText(event.target.value)}
-              className="w-full rounded-xs border border-line bg-card px-2 py-1 text-caption outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30"
+              className="w-full rounded-xs border border-line bg-card px-2 py-1 text-caption outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
               placeholder={t('点击放置文字，然后输入内容')}
             />
           </label>
@@ -1032,7 +1024,7 @@ export default function KlineChart({
       )}
 
       {data?._stale && (
-        <p className="mt-3 flex items-center gap-1.5 rounded-xs border border-warn-600/30 bg-warn-50 px-2.5 py-1.5 text-caption text-warn-600">
+        <p className="mt-3 flex items-center gap-1.5 rounded-xs border border-warn-600/30 bg-warn-50 px-2.5 py-1.5 text-caption text-warn-700">
           <Icon name="bell" size={13} />
           {t('数据暂未刷新 · 显示最近一次结果（延迟行情）')}
         </p>
@@ -1140,19 +1132,19 @@ export default function KlineChart({
               </span>
               <span
                 className={cn(
-                  'font-mono tnum font-medium',
+                  'tnum font-medium',
                   measurement.isDrawdown ? 'text-down-600' : 'text-up-600',
                 )}
               >
                 {t('{pct}（{abs}）', { pct: fmtPct(measurement.changePct), abs: fmtSigned(measurement.changeAbs) })}
               </span>
-              <span className="font-mono tnum text-ink-400">
+              <span className="tnum text-ink-400">
                 {fmtPrice(measurement.startPrice)} → {fmtPrice(measurement.endPrice)}
               </span>
               <span className="text-ink-400">{measureDurationText(range, measurement)}</span>
               {measurement.recoveryPct !== null && (
                 <span className="text-ink-400">
-                  {t('修复需')} <span className="font-mono tnum">{fmtPct(measurement.recoveryPct)}</span>
+                  {t('修复需')} <span className="tnum">{fmtPct(measurement.recoveryPct)}</span>
                 </span>
               )}
               <button
@@ -1166,7 +1158,7 @@ export default function KlineChart({
           )}
           {measureInvalid && (
             <>
-              <span className="text-warn-600">{t('测量已失效（数据已更新）')}</span>
+              <span className="text-warn-700">{t('测量已失效（数据已更新）')}</span>
               <button
                 type="button"
                 onClick={() => setMeasure({ phase: 'selectStart' })}
@@ -1190,7 +1182,7 @@ export default function KlineChart({
         />
       )}
       {analysisDrift && (
-        <p className="mt-1 text-micro text-warn-600" role="status">
+        <p className="mt-1 text-micro text-warn-700" role="status">
           {analysisDrift.sameWindow && analysisDrift.expected != null && analysisDrift.bars === analysisDrift.expected
             ? t('分析图层与当前 K 线数值对不上（同窗口 {n} 根），已暂隐', { n: analysisDrift.bars })
             : t('分析图层与当前 K 线不同版本（图上 {n} 根 / 分析 {m} 根），已暂隐，刷新后恢复', {
@@ -1230,7 +1222,7 @@ export default function KlineChart({
         mode={mode}
       />
 
-      <p className={cn('mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-micro text-ink-400')}>
+      <p className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-micro text-ink-400">
         <span className="font-mono tnum">
           {data
             ? t('共 {n} 根 · 末根 {at}{status}', {
@@ -1306,7 +1298,7 @@ function OverlayLegend({
 }) {
   if (inconsistent) {
     return (
-      <p className="mt-2 text-micro text-warn-600">
+      <p className="mt-2 text-micro text-warn-700">
         {t('结构分析与当前 K 线数据版本不一致，技术点位已暂隐，刷新后恢复')}
       </p>
     );
@@ -1334,7 +1326,7 @@ function OverlayLegend({
           <span className="inline-block h-0 w-4 border-t border-dotted border-down-600" aria-hidden />,
           t('失效位'),
         )}
-      {chip(<span aria-hidden className="text-warn-600" style={{ fontSize: 8 }}>▼</span>, t('确认摆动高点'))}
+      {chip(<span aria-hidden className="text-warn-700" style={{ fontSize: 8 }}>▼</span>, t('确认摆动高点'))}
       {chip(<span aria-hidden className="text-ai-600" style={{ fontSize: 8 }}>▲</span>, t('确认摆动低点'))}
       {mode === 'candle' && showMa20
         && chip(

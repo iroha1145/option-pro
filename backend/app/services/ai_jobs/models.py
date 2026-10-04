@@ -41,6 +41,9 @@ AIJobType = Literal[
     "news_impact",
     "market_focus",
 ]
+# Longest news body a news_impact payload may carry; the catalyst article
+# extractor clips to it, so an extracted body never fails payload validation.
+NEWS_ARTICLE_TEXT_MAX_CHARS = 12_000
 _TICKER_PATTERN_TEXT = r"^[A-Za-z0-9][A-Za-z0-9.\-^]*$"
 _TICKER_PATTERN = re.compile(_TICKER_PATTERN_TEXT)
 Ticker = Annotated[
@@ -2710,7 +2713,7 @@ def _validate_job_payload_identities(job_type: str, payload: dict) -> None:
                 or article.get("status") != "available"
                 or payload.get("article_status") != "available"
                 or not isinstance(article.get("text"), str)
-                or not 1 <= len(article["text"]) <= 12_000
+                or not 1 <= len(article["text"]) <= NEWS_ARTICLE_TEXT_MAX_CHARS
                 or not isinstance(article.get("source_url"), str)
                 or not article["source_url"].startswith("https://")
                 or type(article.get("truncated")) is not bool

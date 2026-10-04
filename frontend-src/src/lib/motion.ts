@@ -29,3 +29,11 @@ export const SPRING_INDICATOR: Transition = {
  * 与 beUI 的 SPRING_PRESS（500/30）同档；数值与价格类元素仍不用弹簧。
  */
 export const SPRING_POP = { type: 'spring', stiffness: 520, damping: 32 } as const;
+
+/**
+ * 数据条入场：变体挂在条上，initial="hidden" + whileInView="shown" 挂在轨道或
+ * 外层容器上。条从 scale 0 起步时包围盒面积为 0，直接让它自己观察视口，
+ * 有一部分永远判不进去，条一直空着，读起来像「没有数据」。
+ */
+export const GROW_X = { hidden: { scaleX: 0 }, shown: { scaleX: 1 } } as const;
+export const GROW_Y = { hidden: { scaleY: 0 }, shown: { scaleY: 1 } } as const;

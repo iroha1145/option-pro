@@ -107,7 +107,7 @@ export default function Market() {
                 : 'content',
         )}
       >
-        <p className="eyebrow mb-3">{t('指数概览 · INDEX OVERVIEW（延迟行情）')}</p>
+        <p className="eyebrow mb-3">{t('指数概览')} · {t('延迟行情')}</p>
         <IndexCards
           data={indicesQ.data}
           loading={indicesQ.loading}
@@ -157,10 +157,7 @@ export default function Market() {
             <Icon name="wallet-gauge" size={20} />
           </span>
           <span className="min-w-0 flex-1 basis-40">
-            <span className="flex flex-wrap items-baseline gap-x-2">
-              <span className="text-h3 text-ink-900">{t('CTA 趋势资金')}</span>
-              <span className="eyebrow">CTA TREND FLOW</span>
-            </span>
+            <span className="block text-h3 text-ink-900">{t('CTA 趋势资金')}</span>
             <span className="mt-1 block text-caption text-ink-500">
               {t('查看趋势模型估算的仓位变化，以及可能引起调整的价位。')}
             </span>
@@ -215,7 +212,7 @@ export default function Market() {
 
       {/* B7 联动卡 */}
       <section className="mt-8" aria-label={t("联动视图")}>
-        <p className="eyebrow mb-3">{t('联动视图 · DRILL DOWN')}</p>
+        <p className="eyebrow mb-3">{t('联动视图')}</p>
         <LinkCards />
       </section>
     </div>

@@ -8,6 +8,7 @@
  * - null 一律显「—」，不折成 0（量价缺数据时假突破风险不是零）。
  * - 形态/Spring/Upthrust 是最近数根内的历史事件，带发生时点。
  */
+import type { ReactNode } from 'react';
 import InfoHint from '@/components/shared/InfoHint';
 import { STRUCTURE_HINTS } from '@/lib/structureHints';
 import { strengthBarClass } from '@/lib/strengthColor';
@@ -16,14 +17,15 @@ import { cn } from '@/lib/utils';
 import type { TechBaseState, TechnicalStructure } from '@/api/types';
 import { t } from '../../i18n/core.ts';
 
-function StructFact({ label, value, hint }: { label: string; value: string; hint?: typeof STRUCTURE_HINTS[string] }) {
+/** 价格、百分比、倍数用正文字体的等宽数字；日期区间传 mono（日期与代码保持等宽字体） */
+function StructFact({ label, value, hint, mono = false }: { label: string; value: ReactNode; hint?: typeof STRUCTURE_HINTS[string]; mono?: boolean }) {
   return (
     <div className="rounded-md bg-paper-2 px-2 py-1">
       <dt className="flex flex-wrap items-center gap-x-1 text-micro text-ink-400">
         {label}
         {hint && <InfoHint hint={hint} size={10} />}
       </dt>
-      <dd className="font-mono text-caption text-ink-800 tnum">{value}</dd>
+      <dd className={`text-caption text-ink-800 tnum${mono ? ' font-mono' : ''}`}>{value}</dd>
     </div>
   );
 }
@@ -58,7 +60,7 @@ function ScoreLine({ label, score, hint }: { label: string; score: number | null
           />
         )}
       </span>
-      <span className="font-mono text-caption text-ink-700 tnum">{valid ? Math.round(score) : '—'}</span>
+      <span className="text-caption text-ink-700 tnum">{valid ? Math.round(score) : '—'}</span>
     </div>
   );
 }
@@ -66,7 +68,7 @@ function ScoreLine({ label, score, hint }: { label: string; score: number | null
 /* 与 SignalList RESULT_META 同惯例：标签在定义处 t()，渲染处直接用（不二次翻译） */
 const BASE_STATE_META: Record<TechBaseState['status'], { label: string; cls: string }> = {
   in_base: { label: t('价格在结构区间内'), cls: 'bg-paper-2 text-ink-600' },
-  at_resistance: { label: t('正测试区间上沿'), cls: 'bg-warn-50 text-warn-600' },
+  at_resistance: { label: t('正测试区间上沿'), cls: 'bg-warn-50 text-warn-700' },
   breakout: { label: t('已突破区间上沿'), cls: 'bg-up-50 text-up-700' },
   below_support: { label: t('跌破支撑下沿'), cls: 'bg-down-50 text-down-700' },
   failed: { label: t('已跌破失效位'), cls: 'bg-down-50 text-down-700' },
@@ -174,7 +176,12 @@ export default function StructurePanel({ technical }: { technical: TechnicalStru
           <dl className="grid grid-cols-2 gap-1.5 text-caption">
             <StructFact label={t('阻力带')} value={`${priceOr(base.resistance_low)} – ${priceOr(base.resistance_high)}`} />
             <StructFact label={t('失效位')} value={priceOr(base.invalidation_price)} />
-            <StructFact label={t('形成区间')} value={`${base.base_start ?? '—'} → ${base.base_end ?? '—'}`} />
+            {/* 半宽格在手机上放不下整段区间：只在箭头处换行，不把日期拆成「2026-」「08-29」 */}
+            <StructFact
+              label={t('形成区间')}
+              value={<><span className="whitespace-nowrap">{base.base_start ?? '—'}</span> → <span className="whitespace-nowrap">{base.base_end ?? '—'}</span></>}
+              mono
+            />
             <StructFact label={t('支撑下沿')} value={priceOr(base.support_low)} />
           </dl>
         )}
@@ -187,7 +194,8 @@ export default function StructurePanel({ technical }: { technical: TechnicalStru
             {t('量价配合')}
             <InfoHint hint={STRUCTURE_HINTS.vol_price} />
           </span>
-          <span className="rounded-pill bg-ai-50 px-2 py-0.5 text-micro font-medium text-ai-600">
+          {/* 量价形态是规则算出的类别，用中性底；青瓷色只留给模型分析结果 */}
+          <span className="rounded-pill bg-paper-2 px-2 py-0.5 text-micro font-medium text-ink-600">
             {vpm.setup_label ? t(vpm.setup_label) : '—'}
           </span>
         </div>

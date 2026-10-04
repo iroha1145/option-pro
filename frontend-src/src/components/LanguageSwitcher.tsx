@@ -121,7 +121,7 @@ export default function LanguageSwitcher({ className }: { className?: string }) 
                       active ? 'text-brand-600' : 'text-ink-700 hover:bg-paper-2',
                     )}
                   >
-                    <span className="w-4 shrink-0 font-mono text-[10px] text-ink-400">{l.short}</span>
+                    <span className="w-4 shrink-0 font-mono text-micro text-ink-400">{l.short}</span>
                     <span className="flex-1">{l.native}</span>
                     {active && <Icon name="check" size={13} className="shrink-0" />}
                   </button>

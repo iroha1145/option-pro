@@ -801,8 +801,9 @@ def _read_eod_limited_snapshot(
         PURPOSE_SYNTHETIC,
         RESEARCH_SEALED_SESSION,
     )
-    from app.services.eod_limited.project import project_strength_payload
+    from app.services.eod_limited.project import empty_eligible_reason, project_strength_payload
     from app.services.eod_limited.store import read_batch, variant_from_batch, snapshot_path
+    from app.services.eod_limited.universe import FUND_SCOPE_ALL
     from app.services.research_eod_v1.calendar_asof import settled_eod_session
 
     kind = list_kind if list_kind in {LIST_KIND_OBSERVATION, LIST_KIND_COMPOSITE} else LIST_KIND_OBSERVATION
@@ -857,12 +858,7 @@ def _read_eod_limited_snapshot(
         payload["composite_n"] = sum(
             1 for row in payload.get("composite_rows") or [] if row.get("stock_or_etf_track") == track
         )
-        payload["empty_eligible_reason"] = (
-            "consensus_insufficient" if payload["eligible_n"] and not payload["composite_n"]
-            else "data_qualification_unverified" if payload["watch_n"]
-            else "technical_threshold" if payload.get("rejected_n")
-            else "no_complete_candidates"
-        )
+        payload["empty_eligible_reason"] = empty_eligible_reason(payload)
     for key in ("observation_rows", "composite_rows"):
         rows = [
             row for row in payload.get(key) or []
@@ -888,7 +884,7 @@ def _read_eod_limited_snapshot(
     # v1.7 scores only the benchmark funds (SPY, QQQ and the sealed etfs theme), so
     # track=etf and track=all carry at most those twelve fund rows; the scope is
     # named here so a short fund list is never mistaken for missing data.
-    payload["fund_scope"] = str((payload.get("coverage") or {}).get("fund_scope") or "all")
+    payload["fund_scope"] = str((payload.get("coverage") or {}).get("fund_scope") or FUND_SCOPE_ALL)
     key = "composite_rows" if kind == LIST_KIND_COMPOSITE else "observation_rows"
     payload["rows"] = list(payload[key])
     top = int(parameters.get("top") or 0)
@@ -1268,6 +1264,7 @@ async def stock(ticker: str, profile: str = Query("balanced", pattern="^(conserv
 @router.get("/sectors")
 async def sectors(period: str = Query("3mo", pattern="^(1mo|3mo|6mo)$")) -> dict[str, Any]:
     from app.services.eod_limited.context_snapshot import read_context_snapshot, sector_rows_with_scores
+    from app.services.eod_limited.universe import FUND_SCOPE_ALL
 
     if period not in {"1mo", "3mo", "6mo"}:
         raise HTTPException(status_code=400, detail="Unsupported sector period")
@@ -1293,7 +1290,7 @@ async def sectors(period: str = Query("3mo", pattern="^(1mo|3mo|6mo)$")) -> dict
     )
     return sanitize({
         "as_of": context.get("as_of"), "period": period, "sectors": rows, "count": len(rows),
-        "fund_scope": str(((selection or {}).get("coverage") or {}).get("fund_scope") or "all"),
+        "fund_scope": str(((selection or {}).get("coverage") or {}).get("fund_scope") or FUND_SCOPE_ALL),
         "_cached": True, "snapshot_source": "strength_context_worker",
         "_stale": stale, "source_status": "stale" if stale else context.get("source_status", "active"),
         "stale_reason": reason, "context_source_status": context.get("source_status"),

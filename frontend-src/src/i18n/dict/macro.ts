@@ -33,7 +33,6 @@ export const MACRO: Dict = {
   '融资': ['Funding', 'ファンディング'],
   '国债': ['Treasury', '国債'],
   '利率': ['Rates', '金利'],
-  '技术 × 结构性宏观 · TECHNICAL × MACRO': ['Technical × structural macro', 'テクニカル × 構造的マクロ · TECHNICAL × MACRO'],
   '暂无技术与宏观对照数据': ['No technical–macro comparison data', 'テクニカルとマクロの比較データがありません'],
   '技术形态': ['Technical', 'テクニカル'],
   '结构性宏观': ['Structural macro', '構造的マクロ'],
@@ -48,17 +47,15 @@ export const MACRO: Dict = {
 
   /* ============ src/components/market/macro/CompositeCard.tsx ============ */
   '历史区间按当前修订值回算': ['Historical range recomputed on latest revisions', '履歴期間は最新修正値による遡及計算'],
-  '本地点时快照': ['Local point-in-time snapshot', 'ローカル時点スナップショット'],
   '当时记录的数据': ['Data recorded at the time', '当時記録したデータ'],
   '混合：部分区间按当前修订值回算': ['Mixed: part of the range is recomputed on latest revisions', '混在：一部区間は最新修正値による遡及計算'],
   '宏观环境综合分': ['Macro conditions composite score', 'マクロ環境総合スコア'],
-  '综合分 · COMPOSITE': ['Composite', '総合スコア · COMPOSITE'],
+  '综合分': ['Composite', '総合スコア'],
   '历史分位': ['Historical percentile', 'ヒストリカル・パーセンタイル'],
   '环境标签暂不可用': ['Regime label unavailable', '環境ラベルは利用できません'],
   '7 日变化': ['7-day change', '7日間の変化'],
   '有效模块': ['Valid modules', '有効モジュール'],
   '数据截止': ['Data as of', 'データ基準日'],
-  '分数反映当前金融环境在过去 5 年中的相对位置；分数越高，环境越有利于风险资产。': ['The score places current financial conditions within the past 5 years. Higher scores indicate greater support for risk assets.', '現在の金融環境が過去5年間のどの水準にあるかを示します。高いほど、リスク資産に有利な環境です。'],
 
   /* ============ src/components/market/macro/FactorDetails.tsx ============ */
   '重试': ['Retry', '再試行'],
@@ -95,16 +92,11 @@ export const MACRO: Dict = {
   '宏观环境未启用': ['Macro conditions disabled', 'マクロ環境は無効です'],
   '管理员配置经济数据平台（FRED）的访问密钥后，即可开始更新宏观数据。': ['Macro data can start updating once an administrator configures a FRED access key.', '管理者が経済データサービス（FRED）のアクセスキーを設定すると、マクロデータの更新が始まります。'],
   '本功能在配置中处于关闭状态。': ['This feature is turned off in the current configuration.', 'この機能は現在の設定でオフになっています。'],
-  '配置只能在服务器端完成；页面不显示任何密钥信息。': [
-    'Configuration can only be done server-side; this page never displays key information.',
-    '設定はサーバー側でのみ行えます。本ページに鍵情報が表示されることはありません。',
-  ],
   '刷新冷却中。': ['Refresh is cooling down.', '更新はクールダウン中です。'],
   '服务器尚未配置宏观数据源密钥。': ['The server has not configured a macro data-source key yet.', 'サーバー側でマクロデータソースキーがまだ設定されていません。'],
   '后台服务暂不可用，请稍后重试。': ['The background service is unavailable. Please try again later.', 'バックグラウンド処理を利用できません。しばらくしてから再度お試しください。'],
   '刷新请求未成功。': ['The refresh request did not succeed.', '更新リクエストは失敗しました。'],
   '宏观环境暂不可用': ['Macro conditions unavailable', 'マクロ環境は利用できません'],
-  '宏观环境 · MACRO CONDITIONS': ['Macro conditions', 'マクロ環境 · MACRO CONDITIONS'],
   '联储流动性、融资、国债、利率、信用、风险与外部冲击的 5 年历史分位。': [
     '5-year historical percentiles for Fed liquidity, funding, Treasury, rates, credit, risk, and external shocks.',
     'FRBの流動性・ファンディング・国債・金利・クレジット・リスク・外部ショックに関する過去5年間のヒストリカル・パーセンタイル。',
@@ -114,16 +106,10 @@ export const MACRO: Dict = {
   '。当前显示上次成功更新的数据。': ['. Showing the last successfully updated data.', '。前回正常に更新できたデータを表示しています。'],
   '暂无正式综合分': ['No official composite score', '正式な総合スコアなし'],
   '至少需要 5 类有效指标才能计算综合分。': ['At least 5 valid indicator groups are needed to calculate the composite score.', '総合スコアの算出には、少なくとも5つの有効な指標グループが必要です。'],
-  '改善最多 · IMPROVING': ['Most improved', '改善幅トップ · IMPROVING'],
   '7 日分数改善最多': ['Biggest 7-day score improvement', '7日間のスコア改善幅トップ'],
   '暂无 7 日前的数据可供比较，或本期没有评分上升的指标。': ['No data from 7 days ago is available for comparison, or no indicator scores rose this period.', '7日前の比較データがないか、この期間にスコアが上昇した指標がありません。'],
-  '恶化最多 · DETERIORATING': ['Most deteriorated', '悪化幅トップ · DETERIORATING'],
   '7 日分数恶化最多': ['Biggest 7-day score decline', '7日間のスコア悪化幅トップ'],
   '暂无 7 日前的数据可供比较，或本期没有评分下降的指标。': ['No data from 7 days ago is available for comparison, or no indicator scores fell this period.', '7日前の比較データがないか、この期間にスコアが低下した指標がありません。'],
-  '「按当前修订值回算」的历史区间使用今天能看到的最新修订数据，不代表当时市场已知的分数； 本地部署后每次实际抓取形成的快照才具备真实的点时语义。': [
-    'Historical ranges labeled "recomputed on latest revisions" use the most recent revised data available today — they do not represent the score as known to the market at the time. Only the snapshots actually captured live after this feature launched carry true point-in-time meaning.',
-    '「最新修正値による遡及計算」とラベル表示された履歴期間は、本日時点で参照できる最新の修正済みデータを使って計算したものであり、当時市場が実際に知り得たスコアではありません。本機能の稼働後にローカルで実際に取得して作成されたスナップショットのみが、真の時点データとしての意味を持ちます。',
-  ],
 
   /* ============ src/components/market/macro/MacroHistoryChart.tsx ============ */
   '按当前修订值回算': ['Recomputed on latest revisions', '最新修正値による遡及計算'],
@@ -132,7 +118,7 @@ export const MACRO: Dict = {
   '中性 50': ['Neutral 50', '中立 50'],
   '综合分（当时记录）': ['Composite (recorded at the time)', '総合スコア（当時の記録）'],
   '宏观环境历史': ['Macro conditions history', 'マクロ環境の履歴'],
-  '综合分历史 · COMPOSITE HISTORY': ['Composite history', '総合スコア履歴 · COMPOSITE HISTORY'],
+  '综合分历史': ['Composite history', '総合スコア履歴'],
   '历史区间': ['History range', '履歴期間'],
   '历史数据读取失败：': ['Failed to load historical data: ', '履歴データの読み込みに失敗しました：'],
   '历史数据积累中，记录足够后将显示综合分曲线。': ['The composite chart will appear once enough historical records are available.', '履歴データを蓄積中です。記録がそろうと総合スコアの推移を表示します。'],
@@ -140,7 +126,7 @@ export const MACRO: Dict = {
   '叠加模块线': ['Overlay module lines', 'モジュール別ラインを重ねる'],
   '虚线按最新修订数据重新计算；实线为当时记录的分数。': ['Dashed lines use the latest revised data; solid lines show scores recorded at the time.', '破線は最新の改定データで再計算した値、実線は当時記録したスコアです。'],
 
-  /* ============ src/components/market/macro/ModuleCard.tsx ============ */
+  /* ============ src/components/market/macro/FactorDetails.tsx（模块摘要行） ============ */
   '有效因子 —': ['Valid factors —', '有効ファクター —'],
   '截止': ['As of', '基準日'],
   '有效因子不足': ['Fewer than', '有効ファクターが'],
@@ -148,8 +134,6 @@ export const MACRO: Dict = {
     "valid factors, so this module doesn't output a score (it is not backfilled with 50).",
     '件未満のため、このモジュールはスコアを出しません（50点で補うこともありません）。',
   ],
-
-  /* ============ src/components/market/macro/ModuleGrid.tsx ============ */
   '暂无模块分数。数据接入后这里会显示七个模块。': [
     'No module scores yet. Once data is connected, the seven modules will appear here.',
     'モジュールスコアはまだありません。データ接続後、ここに7つのモジュールが表示されます。',
@@ -176,22 +160,6 @@ export const MACRO: Dict = {
   '该标的未归入板块，无暴露画像': ["This ticker isn't classified into a sector, so there's no exposure profile", 'この銘柄はセクターに分類されていないため、エクスポージャー・プロファイルがありません'],
   '该板块暴露观测不足，不给分': ["This sector's exposure observations are insufficient, so no score is given", 'このセクターのエクスポージャー観測が不足しているため、スコアを算出しません'],
   '宏观适配（0–100）': ['Macro fit (0–100)', 'マクロ適合度（0–100）'],
-  '当前宏观环境与该股票所属板块暴露画像的匹配度：把每个宏观因子的历史分位中心化后，': [
-    "How well the current macro backdrop matches the exposure profile of the stock's sector: each macro factor's historical percentile is centered,",
-    '現在のマクロ環境が、その銘柄が属するセクターのエクスポージャー・プロファイルとどれだけ一致しているかを示します。各マクロファクターのヒストリカル・パーセンタイルを中心化した上で、',
-  ],
-  '按该板块对这个因子的确定性暴露加权。65 以上记顺风，35 以下记逆风。': [
-    "then weighted by that sector's deterministic exposure to the factor. 65 or above is recorded as a tailwind, 35 or below as a headwind.",
-    'そのセクターの当該ファクターに対する確定的エクスポージャーで加重します。65以上は追い風、35以下は逆風として記録します。',
-  ],
-  '影子字段：不参与排名，不改变强度分、突破质量分或事件生命周期。覆盖度不足时不给分，': [
-    "Shadow field: it does not participate in ranking and does not change the strength score, breakout quality score, or event lifecycle. No score is given when coverage is insufficient,",
-    'シャドウフィールド：ランキングには関与せず、強度スコア・ブレイクアウトの質・イベントのライフサイクルも変更しません。カバレッジが不十分な場合はスコアを算出せず、',
-  ],
-  '也不按中性 50 计。分数是历史分位，不是预测。': [
-    'nor is it backfilled as a neutral 50. The score is a historical percentile, not a forecast.',
-    '中立の50点として扱うこともありません。スコアはヒストリカル・パーセンタイルであり、予測ではありません。',
-  ],
 
   /* ============ src/mocks/macro.ts ============ */
   '联储净流动性': ['Fed net liquidity', 'FRB純流動性'],
@@ -244,7 +212,6 @@ export const MACRO: Dict = {
   '无读数': ['No reading', 'データなし'],
 
   /* ============ src/components/shared/MacroFitPanel.tsx ============ */
-  '宏观适配 · MACRO FIT': ['Macro fit', 'マクロ適合度 · MACRO FIT'],
   '置信度': ['Confidence', '信頼度'],
   '正面': ['Positive', 'ポジティブ'],
   '：': [': ', '：'],

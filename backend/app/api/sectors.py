@@ -37,11 +37,9 @@ router = APIRouter(prefix="/api/sectors", tags=["sectors"])
 # Per-key locks prevent thundering herd: without them, concurrent cold-cache
 # requests would each kick off a full sector scan.
 #
-# No production endpoint calls _cached() any more (the snapshot-backed path
-# below replaced it) but tests/test_backend_cache_and_iv.py still exercises
-# it directly, so it stays rather than being deleted out from under that
-# coverage (initial audit pass called this dead code; a repo-wide grep for
-# the module's `sector_api` test alias, not just `sectors.`, found otherwise).
+# No production endpoint calls _cached() (the snapshot-backed path below
+# replaced it); it stays because tests/test_backend_cache_and_iv.py exercises
+# it directly through the module's `sector_api` alias.
 _cache: dict[str, tuple[float, float, Any]] = {}
 _locks: dict[str, asyncio.Lock] = {}
 _MAX_STALE_SECONDS = 60 * 60
@@ -173,9 +171,7 @@ def ensure_sector(sector_id: str) -> None:
 
 @router.get("")
 async def list_sectors():
-    return sanitize(
-        {"sectors": [{"id": id_, "name": data["name"], "tickers": data["tickers"]} for id_, data in SECTORS.items()]}
-    )
+    return {"sectors": [{"id": id_, "name": data["name"], "tickers": data["tickers"]} for id_, data in SECTORS.items()]}
 
 
 async def _sector_iv_rows(sector_id: str) -> list[dict[str, Any]]:
@@ -232,7 +228,7 @@ async def _sector_iv_rows(sector_id: str) -> list[dict[str, Any]]:
                     price = None
                     price_provider = None
             # A provider returning NaN/Inf must not reach the JSON response as
-            # a `price` that is neither a valid number nor null (M-12).
+            # a `price` that is neither a valid number nor null.
             price = _finite_number(price)
             return {
                 "ticker": ticker,
@@ -286,7 +282,7 @@ def _rank_iv_rows(sector_id: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
             "ticker": row["ticker"],
             "name": row.get("name") or row["ticker"],
             # Defensive even though _sector_iv_rows already sanitizes its own
-            # price (M-12): this function is also called directly with rows
+            # price: this function is also called directly with rows
             # built elsewhere, and a passthrough NaN/Inf must not reach here.
             "price": _finite_number(row.get("price")),
             "price_provider": row.get("price_provider"),

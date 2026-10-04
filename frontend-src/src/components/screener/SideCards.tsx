@@ -77,7 +77,7 @@ export function TierHistogram({
                   style={{
                     height: `${Math.max(4, (refN / maxRef) * 72)}px`,
                     transformOrigin: 'bottom',
-                    backgroundImage: 'repeating-linear-gradient(45deg, rgba(138,148,176,.28) 0 1px, transparent 1px 4px)',
+                    backgroundImage: 'repeating-linear-gradient(45deg, color-mix(in srgb, var(--ink-400) 28%, transparent) 0 1px, transparent 1px 4px)',
                   }}
                   aria-hidden="true"
                 />
@@ -94,7 +94,7 @@ export function TierHistogram({
       </div>
       <div className="mt-1.5 flex gap-2.5">
         {TIERS.map((t) => (
-          <span key={t} className={cn('flex-1 text-center font-mono text-[10px] tnum', activeTier === t ? 'text-brand-600' : 'text-ink-400')}>
+          <span key={t} className={cn('flex-1 text-center font-mono text-micro tnum', activeTier === t ? 'text-brand-600' : 'text-ink-400')}>
             {t}
           </span>
         ))}
@@ -165,7 +165,7 @@ export function MethodCard({
                 {onRetry && (
                   <button
                     onClick={onRetry}
-                    className="mt-2 flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+                    className="control-button mt-2"
                   >
                     <Icon name="refresh" size={12} />
                     {__t('重试')}

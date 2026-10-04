@@ -7,7 +7,7 @@
  * 日期分组小头（Serif 13px + 计数）· 游标分页「加载更多 · 剩 N 条」（复用原时间线分页逻辑）
  * 面板与大卡等高对齐（~560px 上限 + 内部细滚动条）
  */
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import type { ApiError } from '@/api/client';
 import { cn } from '@/lib/utils';
@@ -93,8 +93,6 @@ export default function HistoryRail({
   filterKey,
 }: HistoryRailProps) {
   const [visible, setVisible] = useState(PAGE);
-  const moreTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
 
   /* 筛选条件变化时重置分页（渲染期派生，避免 effect 级联） */
   const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
@@ -103,10 +101,9 @@ export default function HistoryRail({
     setVisible(PAGE);
   }
 
-  const shown = events.slice(0, visible);
   const groups = useMemo(() => {
     const map = new Map<string, BreakoutEventFull[]>();
-    shown.forEach((e) => {
+    events.slice(0, visible).forEach((e) => {
       const key = fmtNyDayKey(e.event_at);
       if (!key) return;
       const arr = map.get(key) ?? [];
@@ -114,15 +111,11 @@ export default function HistoryRail({
       map.set(key, arr);
     });
     return [...map.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
-  }, [shown]);
+  }, [events, visible]);
 
   const hasMore = events.length > visible;
   const onLoadMore = () => {
-    setLoadingMore(true);
-    moreTimer.current = setTimeout(() => {
-      setVisible((v) => v + PAGE);
-      setLoadingMore(false);
-    }, 320);
+    setVisible((v) => v + PAGE);
   };
 
   let rowIndex = 0;
@@ -260,10 +253,8 @@ export default function HistoryRail({
               {hasMore ? (
                 <button
                   onClick={onLoadMore}
-                  disabled={loadingMore}
-                  className="flex items-center gap-2 rounded-md border border-line bg-card px-3 py-1.5 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
+                  className="control-button"
                 >
-                  {loadingMore && <Spinner size={14} tone="brand" />}
                   {t('加载更多')}
                   <span className="font-mono text-micro text-ink-400 tnum">{t('剩')} {events.length - visible} {t('条')}</span>
                 </button>
@@ -271,16 +262,16 @@ export default function HistoryRail({
                 <button
                   onClick={onFetchMore}
                   disabled={loadingServerMore}
-                  className="flex items-center gap-2 rounded-md border border-line bg-card px-3 py-1.5 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
+                  className="control-button"
                 >
                   {loadingServerMore && <Spinner size={14} tone="brand" />}
                   {t('继续读取更早事件')}
                 </button>
               ) : (
-                <p className="font-mono text-micro text-ink-300 tnum">{t('已加载全部')} {events.length} {t('条')}</p>
+                <p className="font-mono text-micro text-ink-400 tnum">{t('已加载全部')} {events.length} {t('条')}</p>
               )}
               {serverMoreError && (
-                <p className="text-micro text-down-700">
+                <p className="text-micro text-danger-700">
                   {t('加载更多失败：')}{serverMoreError.message}
                 </p>
               )}

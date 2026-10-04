@@ -206,6 +206,33 @@ def test_scheduler_probes_routine_title_before_discarding_a_material_body(tmp_pa
     assert engine.feed(as_of=datetime.now(timezone.utc))["items"][0]["news_id"] == 1
 
 
+def test_locked_store_during_a_body_probe_does_not_abort_scheduled_selection(tmp_path, monkeypatch):
+    etl, _ai, engine = _stack(tmp_path)
+    now = datetime.now(timezone.utc)
+    _apply_news(etl, [
+        _news_change(1, 1, available_at=now - timedelta(minutes=6), title="Example declares $0.2175 dividend"),
+        _news_change(2, 2, available_at=now - timedelta(minutes=5), title="Sample Corp declares $0.30 dividend"),
+    ], as_of=now)
+    engine.reconcile()
+    engine._article_fetcher = lambda *_args, **_kwargs: article(text="The company increased its dividend by 25 percent. " * 15)
+    prepare = engine._prepare_article
+
+    def locked_for_first(item, **kwargs):
+        # Another writer holding the catalyst store past busy_timeout.
+        if int(item["news_id"]) == 1:
+            raise sqlite3.OperationalError("database is locked")
+        return prepare(item, **kwargs)
+
+    recorded = []
+    monkeypatch.setattr(engine, "_prepare_article", locked_for_first)
+    monkeypatch.setattr(local, "record_fallback_failure", lambda stage, error, **_kwargs: recorded.append((stage, type(error))))
+    candidates = engine._scheduled_news_candidates(now=now, limit=10)
+    # The locked item keeps its stored state, as if its page were unreadable:
+    # still routine, so not a candidate. The other probe is unaffected.
+    assert [row["news_id"] for row in candidates] == [2]
+    assert recorded == [("catalyst_scheduled_article_probe", sqlite3.OperationalError)]
+
+
 def test_failed_fetch_cooldown_and_first_success_is_immutable(story):
     _etl, _ai, engine = story
     calls = []

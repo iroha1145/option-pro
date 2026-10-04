@@ -44,7 +44,7 @@ function NetImpactBar({ value, analyzed }: { value: number; analyzed: number }) 
       <div className="flex items-center gap-2">
         <NetImpactLabel />
         <div className="h-1.5 w-28 rounded-pill bg-line" aria-hidden="true" />
-        <span className="font-mono text-micro text-ink-300">—</span>
+        <span className="font-mono text-micro text-ink-400">—</span>
       </div>
     );
   }
@@ -162,9 +162,9 @@ export default function StocksPanel({ filters }: { filters: CatalystFilters; ref
             </span>
             <span className="hidden items-center gap-1 font-mono text-micro tnum md:flex" title={t("利多 / 利空 / 中性")}>
               <SoftBadge tone="up">{r.bullish}</SoftBadge>
-              <span className="text-ink-300">/</span>
+              <span className="text-ink-400">/</span>
               <SoftBadge tone="down">{r.bearish}</SoftBadge>
-              <span className="text-ink-300">/</span>
+              <span className="text-ink-400">/</span>
               <SoftBadge>{r.neutral}</SoftBadge>
             </span>
             <span className="hidden w-14 text-right font-mono text-micro text-ink-500 tnum sm:block" title={t("来源数")}>
@@ -177,7 +177,7 @@ export default function StocksPanel({ filters }: { filters: CatalystFilters; ref
               {r.count}
               <span className="ml-0.5 text-micro font-normal text-ink-400">{t('条')}</span>
             </span>
-            <Icon name="chevron-right" size={14} className="shrink-0 text-ink-300 transition-colors duration-fast group-hover:text-brand-600" />
+            <Icon name="chevron-right" size={14} className="shrink-0 text-ink-400 transition-colors duration-fast group-hover:text-brand-600" />
           </motion.button>
         ))}
       </div>

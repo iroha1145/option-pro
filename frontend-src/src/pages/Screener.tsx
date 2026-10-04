@@ -751,6 +751,7 @@ export default function Screener() {
       strengthRefreshInFlight.current = false;
       setRefreshingStrength(false);
     }
+    // universeQ、marketQ 每次渲染都是新对象，refresh 本身是稳定的。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applied, runScan, toast]);
 
@@ -886,7 +887,7 @@ export default function Screener() {
                 onClick={() => void onStrengthRefresh()}
                 disabled={refreshingStrength || scanState === 'scanning'}
                 title={__t("重新计算强度评分（需管理员登录）")}
-                className="flex h-9 items-center gap-2 rounded-md border border-line bg-card px-3 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
+                className="control-button h-9"
               >
                 <BusyIcon busy={refreshingStrength} size={15} tone="brand" />
                 {__t('刷新强度分')}
@@ -1026,7 +1027,7 @@ export default function Screener() {
                     className="gap-1"
                   >
                     {c.label}
-                    <button onClick={c.onRemove} aria-label={__t('移除条件 {label}', { label: c.label })} className="text-ink-300 transition-colors duration-fast hover:text-down-600">
+                    <button onClick={c.onRemove} aria-label={__t('移除条件 {label}', { label: c.label })} className="text-ink-400 transition-colors duration-fast hover:text-danger-600">
                       <Icon name="x" size={10} />
                     </button>
                   </SoftBadge>
@@ -1110,7 +1111,7 @@ export default function Screener() {
                     <div className="flex flex-col items-center gap-3">
                       <button
                         onClick={onScanClick}
-                        className="btn-primary"
+                        className="control-button"
                       >
                         <Icon name="crosshair" size={14} />
                         {__t('开始扫描')}
@@ -1123,7 +1124,7 @@ export default function Screener() {
                               onClick={() => onPresetQuick(p.id)}
                               className="control-button"
                             >
-                              <Icon name="spark-ai" size={13} className="text-ink-300" />
+                              <Icon name="spark-ai" size={13} className="text-ink-400" />
                               {p.name}
                             </button>
                           ))}
@@ -1311,11 +1312,11 @@ export default function Screener() {
             <MarketRegimeCard market={marketQ.data} />
           ) : marketQ.error ? (
             <div className="card-surface p-5">
-              <p className="eyebrow">{__t('市场形态 · MARKET REGIME')}</p>
+              <p className="eyebrow">{__t('市场形态')}</p>
               <p className="mt-3 text-body-s text-ink-500">{marketQ.error.code === 503 ? __t('数据暂不可用 · 稍后刷新再试') : marketQ.error.message}</p>
               <button
                 onClick={() => marketQ.refresh()}
-                className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+                className="control-button mt-3"
               >
                 <Icon name="refresh" size={13} />
                 {__t('重试')}
@@ -1442,7 +1443,7 @@ function PagerButton({ label, disabled, onClick }: { label: string; disabled: bo
     <button
       onClick={onClick}
       disabled={disabled}
-      className="flex min-h-11 min-w-11 items-center rounded-md border border-line bg-card px-3 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
+      className="control-button touch-target"
     >
       {label}
     </button>

@@ -1,175 +1,206 @@
-import { useState, type CSSProperties } from 'react';
+/**
+ * 板块热力：按所选周期的平均收益从高到低排成一列发散条。
+ *
+ * 此前是 6 列热力砖：11 个板块排完剩一行 5 块的残行，而且砖按接口顺序摆，
+ * 要靠扫颜色自己排名次。现在名次、条长和颜色同时表达同一个数：条从零轴向右
+ * 是涨、向左是跌，两栏共用一个零轴和比例尺；颜色仍走 heatColor 的周期色阶
+ * （±6% / ±12% / ±18%）。
+ * 1280 以上分两栏、按列读名次，更窄时单栏。数量不论多少都不会留下残行。
+ */
+import { useMemo, type CSSProperties, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { DUR_UI, EASE_PAPER } from '@/lib/motion';
+import { DUR_UI, EASE_PAPER, GROW_X } from '@/lib/motion';
 import { fmtPct } from '@/lib/format';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
+import StrengthBar from '@/components/shared/StrengthBar';
 import { useColorMode } from '@/hooks/useColorMode.ts';
 import { useAppearance } from '@/hooks/useAppearance.ts';
 import type { SectorVm } from './model';
-import { heatTone, periodLabel } from './model';
+import { heatSpan, heatTone, periodLabel } from './model';
 import { t } from '../../i18n/core.ts';
 
-const GRID_CLASS =
-  'grid grid-cols-2 gap-2.5 md:grid-cols-4 md:gap-3 xl:grid-cols-6';
+/* 名次 · 板块 · 发散条 · 收益 · 平均强度（≥md）。320 宽也给条留出约 44px。 */
+const ROW_GRID =
+  'grid grid-cols-[1rem_minmax(0,5.5rem)_minmax(0,1fr)_4.25rem] items-center gap-x-2 sm:grid-cols-[1.25rem_minmax(0,6.5rem)_minmax(0,1fr)_4.25rem] sm:gap-x-2.5 md:grid-cols-[1.5rem_minmax(0,8rem)_minmax(0,1fr)_4.5rem_6.5rem] md:gap-x-3';
 
-/** 与 GRID_CLASS 的断点同步（Tailwind 默认 md 768 / xl 1280）。 */
-function gridColumns(): number {
-  if (typeof window === 'undefined') return 4;
-  return window.innerWidth >= 1280 ? 6 : window.innerWidth >= 768 ? 4 : 2;
+/* 宽屏（≥1280）分两栏、按列读名次：前一半在左栏，后一半在右栏，每栏顶上一行
+   列名。更窄时两栏会把条挤到几十像素，保持单栏。 */
+const LIST_GRID =
+  'grid grid-cols-1 gap-y-0.5 xl:grid-flow-col xl:grid-cols-2 xl:gap-x-10 xl:[grid-template-rows:repeat(var(--heat-rows),auto)]';
+
+/** 收益从高到低；没有收益的板块排在最后，按名称稳定排序。 */
+function rankByReturn(sectors: SectorVm[]): SectorVm[] {
+  return [...sectors].sort((left, right) => {
+    if (left.avgReturn === null || right.avgReturn === null) {
+      if (left.avgReturn === right.avgReturn) return left.name.localeCompare(right.name);
+      return left.avgReturn === null ? 1 : -1;
+    }
+    return right.avgReturn - left.avgReturn || (right.avgStrength ?? 0) - (left.avgStrength ?? 0);
+  });
 }
 
 /**
- * 对角波入场（beUI heat-calendar 的 (行+列)×步长；rareui github-activity 同一思路）：
- * 从左上角向右下铺开，而不是逐块排队。步长 35ms、封顶 300ms——此前按序号
- * index×40ms，24 块砖最后一块要等近 1 秒才出现。
+ * 两栏共用的一把尺：零轴按本期最跌与最涨之间的比例放，正负同一比例尺（1% 等长）。
+ * 全距不足一个周期色阶时按色阶补齐，避免月内微小涨跌被画成满格长条。
  */
-function waveDelayMs(index: number, cols: number): number {
-  return Math.min((Math.floor(index / cols) + (index % cols)) * 35, 300);
+interface ReturnScale {
+  /** 零轴在条区里的位置（0–100） */
+  axis: number;
+  /** 条区全宽代表的收益（%） */
+  extent: number;
 }
 
-function HeatTile({
+function returnScale(sectors: SectorVm[], span: number): ReturnScale {
+  const values = sectors.flatMap((sector) => (sector.avgReturn === null ? [] : [sector.avgReturn]));
+  let low = Math.min(0, ...values);
+  let high = Math.max(0, ...values);
+  if (high - low < span) {
+    if (high === 0 && low === 0) {
+      low = -span / 2;
+      high = span / 2;
+    } else {
+      const grow = span / (high - low);
+      low *= grow;
+      high *= grow;
+    }
+  }
+  return { axis: (-low / (high - low)) * 100, extent: high - low };
+}
+
+function ColumnHeader({ period, className }: { period: SectorVm['period']; className?: string }) {
+  return (
+    <div className={cn(ROW_GRID, 'border-b border-line px-2 pb-2 text-micro font-medium text-ink-500', className)} aria-hidden="true">
+      <span />
+      <span>{t('板块')}</span>
+      <span className="col-span-2 text-right md:col-span-2">{t('{period}平均收益', { period: periodLabel(period) })}</span>
+      <span className="hidden md:block">{t('平均强度')}</span>
+    </div>
+  );
+}
+
+function HeatRow({
   sector,
-  delayMs,
+  rank,
+  scale,
   selected,
   onToggle,
 }: {
   sector: SectorVm;
-  delayMs: number;
+  rank: number;
+  scale: ReturnScale;
   selected: boolean;
   onToggle: () => void;
 }) {
-  /* heatTone → heatColor 在渲染期直接读全局涨跌习惯（模块级快照，不是 props）。
-     不订阅就只有换盘那一刻不重绘：整块热力矩阵留在旧口径上，与页面其余部分
-     （徽章、涨跌幅、K 线）红绿相反，直到别的原因触发一次重渲染才追上。 */
-  useColorMode();
-  useAppearance();
-  const value = sector.avgReturn ?? 0;
-  /* count-up 减量：热力砖涨跌直接呈现终值 */
-  const animated = value;
-  const hasReturn = sector.avgReturn !== null;
-  /* 缺数不能与「真实持平」同色（审计 2.1.17）：热力图的主要读法就是扫颜色，
-     avgReturn 为 null 的砖底色换成中性纸面+虚线边，一眼可辨「没数据」。 */
-  const tone = hasReturn ? heatTone(value, sector.period) : { bg: 'var(--card-warm, #FBFCFD)', dark: false };
+  const value = sector.avgReturn;
+  const hasReturn = value !== null;
+  const tone = hasReturn ? heatTone(value, sector.period) : undefined;
+  const length = hasReturn ? (Math.abs(value) / scale.extent) * 100 : 0;
   const leader = sector.leaders[0] ?? null;
-  const textMain = !hasReturn ? 'text-ink-800' : tone.dark ? 'text-white' : 'text-black';
-  const textSub = !hasReturn ? 'text-ink-500' : tone.dark ? 'text-white' : 'text-black';
-  const barFill = !hasReturn ? 'bg-ink-900/25' : tone.dark ? 'bg-white/40' : 'bg-black/25';
 
   return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-pressed={selected}
-      aria-label={
-        hasReturn
-          ? t('{name}{period}平均收益 {ret}%，平均强度 {strength}', { name: sector.name, period: periodLabel(sector.period), ret: sector.avgReturn?.toFixed(2), strength: sector.avgStrength ?? t('暂无') })
-          : t('{name}暂无强度聚合', { name: sector.name })
-      }
-      className={cn(
-        'heat-tile group relative h-[92px] overflow-visible rounded-md text-left shadow-sh-1 hover:shadow-sh-2 md:h-[108px]',
-        !hasReturn && 'border border-dashed border-line-strong',
-        selected && 'shadow-sh-2',
-      )}
-      style={{ backgroundColor: tone.bg, '--heat-delay': `${delayMs}ms` } as CSSProperties}
-    >
-      {selected && (
-        <motion.span
-          layoutId="sector-selected-bar"
-          className="absolute left-0 top-0 z-10 h-full w-[3px] rounded-l-md bg-brand-600"
-          initial={{ scaleY: 0 }}
-          animate={{ scaleY: 1 }}
-          transition={{ duration: DUR_UI, ease: EASE_PAPER }}
-          style={{ originY: 0.5 }}
-          aria-hidden="true"
-        />
-      )}
-
-      <span className="flex h-full flex-col justify-between p-3">
-        <span className="flex min-w-0 items-start justify-between gap-1.5">
-          <span
-            className={cn(
-              'truncate text-[13px] font-semibold leading-[18px]',
-              textMain,
-            )}
-          >
+    <motion.div layout="position" transition={{ duration: DUR_UI, ease: EASE_PAPER }}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-pressed={selected}
+        aria-label={
+          hasReturn
+            ? t('{name}{period}平均收益 {ret}%，平均强度 {strength}', { name: sector.name, period: periodLabel(sector.period), ret: sector.avgReturn?.toFixed(2), strength: sector.avgStrength ?? t('暂无') })
+            : t('{name}暂无强度聚合', { name: sector.name })
+        }
+        className={cn(
+          'group relative w-full rounded-md px-2 py-1.5 text-left transition-colors duration-fast',
+          ROW_GRID,
+          selected ? 'bg-brand-50' : 'hover:bg-paper-2',
+        )}
+      >
+        <span className="text-right text-caption text-ink-400 tnum">{hasReturn ? rank : '—'}</span>
+        <span className="min-w-0">
+          <span className={cn('block truncate text-body-s font-medium', hasReturn ? 'text-ink-800' : 'text-ink-500')}>
             {sector.name}
           </span>
-          <span className={cn('hidden font-mono text-micro tnum md:inline', textSub)}>
+          <span className="block truncate text-micro text-ink-400 tnum">
             {t('有评分 {scored} / {total}', { scored: sector.scoredCount ?? '—', total: sector.memberCount })}
           </span>
         </span>
-        <span>
-          <span
-            className={cn(
-              'block font-mono text-[15px] font-semibold leading-5 tnum',
-              textMain,
-            )}
-          >
-            {hasReturn ? fmtPct(animated) : '—'}
-          </span>
-          <span className={cn('block text-micro', textSub)}>
-            {t('{period}平均收益', { period: periodLabel(sector.period) })}
-          </span>
-        </span>
-      </span>
 
-      {sector.avgStrength !== null && (
-        <span
-          className="absolute inset-x-0 bottom-0 h-[3px] overflow-hidden rounded-b-md"
-          aria-hidden="true"
-        >
-          <span
-            className={cn('block h-full origin-left animate-grow-bar', barFill)}
-            style={{
-              width: `${Math.max(2, Math.min(100, sector.avgStrength))}%`,
-              animationDelay: `${delayMs + 120}ms`,
-            }}
-          />
-        </span>
-      )}
-
-      <span
-        role="tooltip"
-        className="cloud-popover pointer-events-none absolute -top-2 left-1/2 z-30 hidden w-48 -translate-x-1/2 -translate-y-full p-2.5 text-left md:group-hover:block md:group-focus-visible:block"
-      >
-        <span className="eyebrow block">{sector.name} {t('· 成分股汇总')}</span>
-        <span className="mt-1.5 block space-y-1 text-micro">
-          <span className="flex items-center justify-between gap-2">
-            <span className="text-ink-500">{t('平均强度')}</span>
-            <span className="font-mono text-ink-800 tnum">
-              {sector.avgStrength?.toFixed(1) ?? '—'}
-            </span>
-          </span>
-          <span className="flex items-center justify-between gap-2">
-            <span className="text-ink-500">{t('强度领先')}</span>
-            <span className="font-mono font-semibold text-ink-800">
-              {leader
-                ? `${leader.ticker} ${leader.score?.toFixed(1) ?? '—'}`
-                : '—'}
-            </span>
-          </span>
-          <span className="flex items-center justify-between gap-2 border-t border-line pt-1">
-            <span className="text-ink-500">{t('统计覆盖')}</span>
-            <span className="font-mono text-ink-800 tnum">
-              {sector.coveredCount ?? '—'} / {sector.memberCount}
-            </span>
-          </span>
-          <span className="flex items-center justify-between gap-2">
-            <span className="text-ink-500">{t('评分覆盖')}</span>
-            <span className="font-mono text-ink-800 tnum">
-              {sector.scoredCount ?? '—'} / {sector.memberCount}
-            </span>
-          </span>
-          {sector.scoreDataThrough && (
-            <span className="flex items-center justify-between gap-2">
-              <span className="text-ink-500">{t('评分截至')}</span>
-              <span className="font-mono text-ink-800 tnum">{sector.scoreDataThrough}</span>
-            </span>
+        {/* 发散条：向右为涨、向左为跌，零轴位置随本期涨跌分布 */}
+        <span className="relative block h-3" aria-hidden="true">
+          {hasReturn ? (
+            <motion.span
+              className={cn(
+                'absolute inset-y-0 transition-[left,right,width,background-color] duration-ui ease-paper',
+                value >= 0 ? 'origin-left rounded-r-xs' : 'origin-right rounded-l-xs',
+              )}
+              style={{
+                ...(value >= 0 ? { left: `${scale.axis}%` } : { right: `${100 - scale.axis}%` }),
+                width: `${Math.max(length, 0.6)}%`,
+                backgroundColor: tone,
+              }}
+              variants={GROW_X}
+              transition={{ duration: 0.7, ease: EASE_PAPER, delay: Math.min(rank * 0.03, 0.3) }}
+            />
+          ) : (
+            <span className="absolute inset-x-0 top-1/2 border-t border-dashed border-line-strong" />
           )}
+          <span className="absolute -inset-y-1 w-px bg-line-strong transition-[left] duration-ui ease-paper" style={{ left: `${scale.axis}%` }} />
         </span>
-      </span>
-    </button>
+
+        <span
+          className={cn(
+            'text-right text-body-s font-semibold tnum',
+            !hasReturn || value === 0 ? 'text-ink-500' : value > 0 ? 'text-up-700' : 'text-down-700',
+          )}
+        >
+          {hasReturn ? fmtPct(value) : '—'}
+        </span>
+        <span className="hidden md:block">
+          <StrengthBar score={sector.avgStrength} width={48} />
+        </span>
+        <span
+          role="tooltip"
+          className="cloud-popover pointer-events-none absolute -top-1.5 left-10 z-30 hidden w-52 -translate-y-full p-2.5 text-left md:group-hover:block md:group-focus-visible:block"
+        >
+          <span className="eyebrow block">{sector.name} {t('· 成分股汇总')}</span>
+          <span className="mt-1.5 block space-y-1 text-micro">
+            <span className="flex items-center justify-between gap-2">
+              <span className="text-ink-500">{t('平均强度')}</span>
+              <span className="text-ink-800 tnum">
+                {sector.avgStrength?.toFixed(1) ?? '—'}
+              </span>
+            </span>
+            <span className="flex items-center justify-between gap-2">
+              <span className="text-ink-500">{t('强度领先')}</span>
+              <span className="font-semibold text-ink-800">
+                {leader
+                  ? <><span className="font-mono">{leader.ticker}</span> <span className="tnum">{leader.score?.toFixed(1) ?? '—'}</span></>
+                  : '—'}
+              </span>
+            </span>
+            <span className="flex items-center justify-between gap-2 border-t border-line pt-1">
+              <span className="text-ink-500">{t('统计覆盖')}</span>
+              <span className="text-ink-800 tnum">
+                {sector.coveredCount ?? '—'} / {sector.memberCount}
+              </span>
+            </span>
+            <span className="flex items-center justify-between gap-2">
+              <span className="text-ink-500">{t('评分覆盖')}</span>
+              <span className="text-ink-800 tnum">
+                {sector.scoredCount ?? '—'} / {sector.memberCount}
+              </span>
+            </span>
+            {sector.scoreDataThrough && (
+              <span className="flex items-center justify-between gap-2">
+                <span className="text-ink-500">{t('评分截至')}</span>
+                <span className="font-mono text-ink-800 tnum">{sector.scoreDataThrough}</span>
+              </span>
+            )}
+          </span>
+        </span>
+      </button>
+
+    </motion.div>
   );
 }
 
@@ -184,32 +215,72 @@ export default function HeatMatrix({
   selectedId,
   onSelect,
 }: HeatMatrixProps) {
-  // 入场只在挂载时播一次，列数按挂载时的视口取一次就够（换周期不重挂、不重播）。
-  const [cols] = useState(gridColumns);
+  /* heatTone → heatColor 在渲染期直接读全局涨跌习惯与外观（模块级快照，不是 props）。
+     不订阅就只有换盘那一刻不重绘：整列条留在旧口径上，与页面其余部分（徽章、
+     涨跌幅、K 线）红绿相反，直到别的原因触发一次重渲染才追上。 */
+  useColorMode();
+  useAppearance();
+  const ranked = useMemo(() => rankByReturn(sectors), [sectors]);
+  const period = ranked[0]?.period ?? '3mo';
+  const scale = useMemo(() => returnScale(ranked, heatSpan(period)), [ranked, period]);
+  const perColumn = Math.ceil(ranked.length / 2);
+
   return (
-    <div className={GRID_CLASS} role="group" aria-label={t("板块平均收益热力矩阵")}>
-      {sectors.map((sector, index) => (
-        <HeatTile
-          key={sector.id}
-          sector={sector}
-          delayMs={waveDelayMs(index, cols)}
-          selected={selectedId === sector.id}
-          onToggle={() => onSelect(sector.id)}
-        />
+    <motion.div
+      className={LIST_GRID}
+      style={{ '--heat-rows': perColumn + 1 } as CSSProperties}
+      role="group"
+      aria-label={t("板块平均收益热力矩阵")}
+      initial="hidden"
+      whileInView="shown"
+      viewport={{ once: true, amount: 0.2 }}
+    >
+      <ColumnHeader period={period} />
+      {ranked.map((sector, index) => (
+        <HeatRowSlot key={sector.id} showHeader={index === perColumn} period={period}>
+          <HeatRow
+            sector={sector}
+            rank={index + 1}
+            scale={scale}
+            selected={selectedId === sector.id}
+            onToggle={() => onSelect(sector.id)}
+          />
+        </HeatRowSlot>
       ))}
-    </div>
+    </motion.div>
+  );
+}
+
+/** 右栏第一行之前补一行列名（只在两栏时出现）。 */
+function HeatRowSlot({
+  showHeader,
+  period,
+  children,
+}: {
+  showHeader: boolean;
+  period: SectorVm['period'];
+  children: ReactNode;
+}) {
+  return (
+    <>
+      {showHeader && <ColumnHeader period={period} className="hidden xl:grid" />}
+      {children}
+    </>
   );
 }
 
 export function HeatMatrixSkeleton() {
   return (
-    <div className={GRID_CLASS} aria-hidden="true">
-      {/* 骨架数与真实目录（24 主题）对齐，避免加载完成时布局跳变（审计 2.1.16） */}
+    <div className={LIST_GRID} style={{ '--heat-rows': 12 } as CSSProperties} aria-hidden="true">
+      {/* 骨架行数与真实目录（24 个主题）对齐，避免加载完成时布局跳变（审计 2.1.16） */}
       {Array.from({ length: 24 }, (_, index) => (
-        <SkeletonBlock
-          key={index}
-          className="h-[92px] rounded-md md:h-[108px]"
-        />
+        <div key={index} className={cn(ROW_GRID, 'h-11 px-2')}>
+          <SkeletonBlock className="h-3 w-3 justify-self-end" />
+          <SkeletonBlock className="h-3.5 w-20" />
+          <SkeletonBlock className="h-3 w-full" />
+          <SkeletonBlock className="h-3.5 w-12 justify-self-end" />
+          <SkeletonBlock className="hidden h-1 w-full md:block" />
+        </div>
       ))}
     </div>
   );

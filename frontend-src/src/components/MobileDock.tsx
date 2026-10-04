@@ -102,7 +102,7 @@ function MobileDockContent() {
           {...routeIntentHandlers(item.path)}
         >
           <Icon name={item.icon} size={19} className={active ? 'text-brand-600' : 'text-ink-400'} />
-          <span className={cn('text-[10px] leading-none', active ? 'font-medium text-brand-600' : 'text-ink-400')}>{item.label}</span>
+          <span className={cn('text-micro leading-none', active ? 'font-medium text-brand-600' : 'text-ink-400')}>{item.label}</span>
         </Link>
       </div>
     );
@@ -130,7 +130,7 @@ function MobileDockContent() {
               aria-current={moreActive ? 'page' : undefined}
             >
               <Icon name="menu" size={19} className={moreActive ? 'text-brand-600' : 'text-ink-400'} />
-              <span className={cn('text-[10px] leading-none', moreActive ? 'font-medium text-brand-600' : 'text-ink-400')}>{t('更多')}</span>
+              <span className={cn('text-micro leading-none', moreActive ? 'font-medium text-brand-600' : 'text-ink-400')}>{t('更多')}</span>
             </button>
           </div>
         </motion.div>
@@ -246,7 +246,7 @@ function MobileDockContent() {
                     {isNavPathActive(location.pathname, m.path) ? (
                       <span className="size-1.5 shrink-0 rounded-full bg-brand-600" aria-hidden="true" />
                     ) : (
-                      <Icon name="chevron-right" size={14} className="text-ink-300" />
+                      <Icon name="chevron-right" size={14} className="text-ink-400" />
                     )}
                   </button>
                 ))}
@@ -272,7 +272,7 @@ function MobileDockContent() {
                   }}
                   className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left transition-[transform,background-color] hover:bg-paper-2 active:bg-line/60 disabled:cursor-wait disabled:opacity-60"
                 >
-                  <span className={cn('flex size-9 items-center justify-center rounded-md border border-line', isOwner ? 'bg-up-50 text-up-700' : 'bg-card-warm text-ink-400')}>
+                  <span className={cn('flex size-9 items-center justify-center rounded-md border border-line', isOwner ? 'bg-ok-50 text-ok-700' : 'bg-card-warm text-ink-400')}>
                     <Icon name={isSignedIn ? 'logout' : 'shield'} size={17} />
                   </span>
                   <span className="flex-1">

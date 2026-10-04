@@ -10,7 +10,6 @@ import type {
   SectorStrengthRow,
 } from '@/api/modules/sectors';
 import { heatColor } from '@/lib/chart';
-import { getAppearance } from '@/lib/themePreference.ts';
 import type { MacroFitDriver } from '@/lib/macroFit';
 import { t } from '../../i18n/core.ts';
 
@@ -187,80 +186,18 @@ export function normalizeIvMeta(envelope: SectorIvRankingEnvelope | null): IvMet
   };
 }
 
-type Rgb = [number, number, number];
-
-function parseRgb(css: string): Rgb | null {
-  const match = css.match(/rgb\((\d+),(\d+),(\d+)\)/);
-  return match
-    ? [Number(match[1]), Number(match[2]), Number(match[3])]
-    : null;
-}
-
-function luminance([red, green, blue]: Rgb): number {
-  const linear = [red, green, blue].map(value => {
-    const channel = value / 255;
-    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
-}
-
 /* 色阶两端（%）随统计周期放宽：月度收益的量级是日内涨跌的数倍，3 个月 +4% 和
    +14% 在 ±3% 的日内色阶上是同一种最深绿，热力图就失去了「扫颜色」的读法。 */
 const HEAT_SPAN: Record<SectorPeriod, number> = { '1mo': 6, '3mo': 12, '6mo': 18 };
 
-export function heatTone(avgReturn: number, period: SectorPeriod = '3mo'): { bg: string; dark: boolean } {
-  const bg = heatColor(avgReturn, HEAT_SPAN[period]);
-  const rgb = parseRgb(bg);
-  const light = rgb ? luminance(rgb) : 1;
-  return { bg, dark: 1.05 / (light + 0.05) > (light + 0.05) / 0.05 };
+/** 该周期色阶的满格收益（%）；热力条的长度与颜色按同一把尺子。 */
+export function heatSpan(period: SectorPeriod): number {
+  return HEAT_SPAN[period];
 }
 
-function ivStops(): { value: number; rgb: Rgb }[] {
-  const mid: Rgb = getAppearance() === 'dark' ? [37, 55, 76] : [228, 233, 255];
-  return [
-    { value: 0, rgb: [14, 159, 110] },
-    { value: 50, rgb: mid },
-    { value: 100, rgb: [229, 72, 77] },
-  ];
-}
-
-export function ivRankColor(rank: number): string {
-  const clamped = Math.max(0, Math.min(100, rank));
-  const stops = ivStops();
-  for (let index = 0; index < stops.length - 1; index += 1) {
-    const start = stops[index];
-    const end = stops[index + 1];
-    if (clamped >= start.value && clamped <= end.value) {
-      const position = (clamped - start.value) / (end.value - start.value);
-      const mixed = start.rgb.map((value, channel) =>
-        Math.round(value + (end.rgb[channel] - value) * position),
-      ) as Rgb;
-      return `rgb(${mixed[0]},${mixed[1]},${mixed[2]})`;
-    }
-  }
-  const mid = stops[1].rgb;
-  return `rgb(${mid[0]},${mid[1]},${mid[2]})`;
-}
-
-/* v8.3 IV 高位砖去糖果色：满底热色是「AI 生成热力图」签名。砖改为白底 card +
-   左缘 3px 热色竖条 + 极淡 tint 底，热色只出现在「数据墨水」上（竖条/数字）。
-   toneOnColor/light 分支随满底背景一并退役（luminance 仍服务 heatTone）。 */
-
-/** 砖底极淡 tint：ivRankColor 的 rgb 加 0.12 alpha（几乎不可见，近看有温度）。 */
-export function ivRankTint(rank: number): string {
-  const rgb = parseRgb(ivRankColor(rank));
-  return rgb ? `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.12)` : 'rgba(228,233,255,0.12)';
-}
-
-/** rank 数字墨色：热色与 ink-800(#182338) 按 55% 混色，保证数字在 tint 底上可读。 */
-export function ivRankInk(rank: number): string {
-  const rgb = parseRgb(ivRankColor(rank));
-  const ink: Rgb = getAppearance() === 'dark' ? [241, 243, 245] : [24, 35, 56];
-  if (!rgb) return `rgb(${ink[0]},${ink[1]},${ink[2]})`;
-  const mixed = rgb.map((value, channel) =>
-    Math.round(value * 0.55 + ink[channel] * 0.45),
-  ) as Rgb;
-  return `rgb(${mixed[0]},${mixed[1]},${mixed[2]})`;
+/** 板块收益的热力色：按所选周期的色阶两端取色。 */
+export function heatTone(avgReturn: number, period: SectorPeriod = '3mo'): string {
+  return heatColor(avgReturn, HEAT_SPAN[period]);
 }
 
 export const SOURCE_STATUS_CN: Record<Exclude<SectorSourceStatus, 'active'>, string> = {

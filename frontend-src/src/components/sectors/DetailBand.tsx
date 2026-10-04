@@ -31,7 +31,7 @@ function Metric({
       <dt className="text-micro text-ink-400">{label}</dt>
       <dd
         className={cn(
-          'mt-1 truncate font-mono text-data-l font-semibold text-ink-800 tnum',
+          'mt-1 truncate metric-value text-data-l text-ink-800',
           tone === 'up' && 'text-up-700',
           tone === 'down' && 'text-down-700',
         )}
@@ -132,7 +132,7 @@ export default function DetailBand({
                       onClick={() => onOpenTicker(leader.ticker)}
                       className="group flex min-h-11 w-full items-center gap-3 py-2 text-left transition-colors duration-fast hover:bg-paper-2"
                     >
-                      <span className="w-5 shrink-0 font-mono text-micro text-ink-300 tnum">
+                      <span className="w-5 shrink-0 font-mono text-micro text-ink-400 tnum">
                         {String(index + 1).padStart(2, '0')}
                       </span>
                       <TickerLogo ticker={leader.ticker} size={26} />
@@ -142,13 +142,13 @@ export default function DetailBand({
                       <span className="ml-auto text-micro text-ink-400">
                         {t('强度')}
                       </span>
-                      <span className="w-12 text-right font-mono text-data-m font-semibold text-ink-800 tnum">
+                      <span className="w-12 text-right text-data-m font-semibold text-ink-800 tnum">
                         {leader.score?.toFixed(1) ?? '—'}
                       </span>
                       <Icon
                         name="arrow-up-right"
                         size={12}
-                        className="text-ink-300 transition-colors duration-fast group-hover:text-brand-600"
+                        className="text-ink-400 transition-colors duration-fast group-hover:text-brand-600"
                       />
                     </button>
                   </li>
@@ -160,7 +160,7 @@ export default function DetailBand({
           <div>
             <div className="flex items-center justify-between gap-3">
               <p className="eyebrow">{t('板块目录成分')}</p>
-              <span className="font-mono text-micro text-ink-400 tnum">
+              <span className="text-micro text-ink-400 tnum">
                 {sector.memberCount} {t('只')}
               </span>
             </div>

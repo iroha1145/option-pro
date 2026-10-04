@@ -153,6 +153,17 @@ class PreparedSubmission:
     params: dict[str, Any]
 
 
+def _escape_untrusted_json(raw: str) -> str:
+    return raw.replace("<", "\\u003c").replace(">", "\\u003e")
+
+
+def untrusted_json_size(value: Any) -> int:
+    """UTF-8 bytes ``value`` occupies once escaped the way submission escapes it."""
+
+    raw = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    return len(_escape_untrusted_json(raw).encode("utf-8"))
+
+
 def _bounded_untrusted_json(payload: dict[str, Any]) -> str:
     raw = json.dumps(
         payload,
@@ -161,7 +172,7 @@ def _bounded_untrusted_json(payload: dict[str, Any]) -> str:
         separators=(",", ":"),
         allow_nan=False,
     )
-    raw = raw.replace("<", "\\u003c").replace(">", "\\u003e")
+    raw = _escape_untrusted_json(raw)
     if len(raw.encode("utf-8")) > _MAX_UNTRUSTED_JSON_BYTES:
         raise ValueError("ai_input_too_large")
     return raw
@@ -398,6 +409,28 @@ def news_schema_identity_matches(
         and stored == LEGACY_NEWS_V6_SCHEMA_IDENTITY
         and current == NEWS_CONTENT_SCHEMA_IDENTITY
     )
+
+
+def schema_identity_current(
+    job_type: str,
+    prompt_version: Any,
+    schema_version: Any,
+    schema_sha256: Any,
+    *,
+    current_identity: tuple[str, str] | None = None,
+) -> bool:
+    """Whether a stored job's schema identity still matches the runtime contract.
+
+    News jobs also accept the known v6 transition; every other type needs the
+    exact current identity. Prompt-version gating stays with the callers: the
+    worker deliberately applies none.
+    """
+    current = current_identity if current_identity is not None else schema_identity(job_type)
+    if job_type == "news_impact":
+        return news_schema_identity_matches(
+            prompt_version, schema_version, schema_sha256, current_identity=current,
+        )
+    return (schema_version, schema_sha256) == current
 
 
 def runtime_configuration_valid(settings: Any) -> bool:

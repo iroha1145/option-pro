@@ -12,8 +12,7 @@ import Icon from '@/components/icons';
 import { DUR_UI, EASE_PAPER } from '@/lib/motion';
 import { createSignalAnalysisJob } from './api';
 import { useAiJob } from './useAiJob';
-import { aiJobBlockedMessage, aiJobResultSummary } from '@/api/modules/ai-jobs';
-import { aiJobDeferralMessage, aiJobErrorMessage } from '@/api/aiJobNormalize';
+import { aiJobBlockedMessage, aiJobDeferralMessage, aiJobErrorMessage, aiJobResultSummary } from '@/api/aiJobNormalize';
 import { isIndexSymbol } from '@/lib/quoteSymbol';
 import ThinkingLabel from '@/components/shared/ThinkingLabel';
 import { t } from '../../i18n/core.ts';
@@ -34,12 +33,12 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
   const deferral = aiJobDeferralMessage(job);
 
   return (
-    <div className="rounded-lg border border-line bg-card p-4 shadow-sh-1">
+    <div className="card-surface p-5">
       <div className="flex items-center justify-between gap-3">
-        <p className="flex items-center gap-2 text-h3 text-ink-900">
+        <h3 className="flex items-center gap-2 text-h3 text-ink-900">
           <Icon name="spark-ai" size={16} className="text-ai-600" />
           {isIndexSymbol(ticker) ? t('AI 指数分析') : t('AI 股票分析')}
-        </p>
+        </h3>
         {isOwner && !job && !starting && !confirming && (
           <button
             onClick={() => setConfirming(true)}
@@ -177,7 +176,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="mt-3 text-caption text-down-700"
+            className="mt-3 text-caption text-danger-700"
           >
             {error ??
               (job?.status === 'failed'

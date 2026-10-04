@@ -1,100 +1,20 @@
 /**
- * B1 指数概览（6 卡：SPX/NDX/DJI/RUT/SOX/VIX）
- * 名称+代码 · 价格直接呈现（tick-flash 提示更新）· ChangeBadge · 当日 mini sparkline
- * live 模式无指数 K 线端点 → 不渲染分时图模块
- * ?index= 指定的卡高亮并滚动定位
+ * B1 指数概览（6 卡：SPX/NDX/DJI/RUT/SOX/VIX），卡片与首页共用 shared/IndexCard。
+ * 这里负责栅格、价格闪烁、加载/出错/空态，以及 ?index= 指定卡的高亮与滚动定位。
  */
-import { memo, useEffect, useMemo, useRef } from 'react';
-import { motion } from 'framer-motion';
-import { DUR_SECTION, DUR_UI, EASE_PAPER } from '@/lib/motion';
+import { useEffect, useRef } from 'react';
 import { isMock, type ApiError } from '@/api/client';
 import type { IndexQuote } from '@/api/types';
 import { getIndexIntraday } from '@/mocks/marketPulse';
-import { cn } from '@/lib/utils';
-import { fmtPrice } from '@/lib/format';
 import { quoteSymbol } from '@/lib/quoteSymbol';
 import { useTickFlash } from '@/hooks/useTickFlash';
-import ChangeBadge from '@/components/shared/ChangeBadge';
 import EmptyState from '@/components/shared/EmptyState';
-import { SkeletonCard } from '@/components/shared/Skeleton';
+import IndexCard, { IndexCardSkeleton } from '@/components/shared/IndexCard';
 import { BusyIcon } from '@/components/shared/IconSwap';
-import Sparkline from '@/components/charts/Sparkline';
 import { t } from '../../i18n/core.ts';
 
-const IndexCard = memo(function IndexCard({
-  quote,
-  index,
-  flash,
-  focused,
-  registerRef,
-  onOpen,
-}: {
-  quote: IndexQuote;
-  index: number;
-  flash: 'up' | 'down' | undefined;
-  focused: boolean;
-  registerRef: (code: string, el: HTMLButtonElement | null) => void;
-  onOpen: (code: string) => void;
-}) {
-  /* 数据纪律：无有效价（live 快照缺失时映射为 0）显「—」，不显 0.00 */
-  const hasPrice = Number.isFinite(quote.price) && quote.price > 0;
-  /* count-up 减量：指数卡价格直接呈现终值，更新反馈交给 tick-flash */
-  const price = hasPrice ? quote.price : 0;
-  const spark = useMemo(
-    () => (isMock && quote.changePct !== null ? getIndexIntraday(quote.code, quote.changePct) : null),
-    [quote.code, quote.changePct],
-  );
-  return (
-    /* 用真 button 而不是加 onClick 的 div：键盘可达，读屏能报出这是可操作项。 */
-    <motion.button
-      type="button"
-      ref={(el) => registerRef(quote.code, el)}
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: Math.min(index * 0.045, 0.4) }}
-      /* 点卡片开该指数的详情页——与全站「点代码开详情」一致。
-         这里不做「选中」：本页四个面板都是全市场读数，没有按指数的版本可切换，
-         留一个改不动数据的选中态等于承诺一个兑现不了的交互。?index= 仍然保留，
-         但只用于从顶部 tape 跳进来时高亮定位。
-         统一传真实符号 ^GSPC，使跳转与缓存键保持一致。 */
-      onClick={() => onOpen(quoteSymbol(quote.symbol || quote.code))}
-      /* 上浮 -3px/240ms 与自选卡、热点卡同一套手感；走 whileHover 而不是 CSS
-         hover:-translate-y，因为入场动画结束后 framer 会留下内联 transform，
-         把 CSS 位移压掉。 */
-      whileHover={{ y: -3, transition: { duration: DUR_UI, ease: 'easeOut' } }}
-      className={cn(
-        'card-surface card-glare relative block w-full overflow-hidden p-4 text-left',
-        'transition-shadow duration-240 ease-out hover:shadow-sh-2',
-        'focus-visible:shadow-focus-ring',
-        focused && 'ring-1 ring-brand-100',
-      )}
-      aria-label={t('{name} {code} 详情', { name: quote.name, code: quote.code })}
-    >
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="min-w-0">
-          <span className="block truncate text-caption text-ink-500">{quote.name}</span>
-          <span className="font-mono text-micro text-ink-400">{quote.code}</span>
-        </p>
-        <ChangeBadge value={quote.changePct} size="sm" />
-      </div>
-      <p
-        className={cn(
-          'metric-value tick-flash mt-3 inline-block rounded-xs text-[24px] leading-8 text-ink-900',
-          flash === 'up' && 'tick-flash-up',
-          flash === 'down' && 'tick-flash-down',
-        )}
-      >
-        {hasPrice ? fmtPrice(price) : '—'}
-      </p>
-      {spark && quote.changePct !== null && (
-        <div className="mt-2 flex h-8 items-center justify-between gap-2">
-          <span className="text-micro text-ink-400">{t('当日')}</span>
-          <Sparkline data={spark} width={84} height={28} change={quote.changePct} className="max-w-[65%]" />
-        </div>
-      )}
-    </motion.button>
-  );
-});
+/* 与首页指数带同一栅格：窄于 360px 时两列，其余手机三列，xl 起按最小 170px 自动排 */
+const INDEX_GRID = 'grid grid-cols-2 gap-2 min-[360px]:grid-cols-3 sm:gap-3 xl:[grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]';
 
 const indexKey = (quote: IndexQuote) => quote.code;
 const indexPrice = (quote: IndexQuote) => quote.price;
@@ -120,9 +40,6 @@ export default function IndexCards({
 
   /* ?index= 滚动定位 */
   const cardRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const registerRef = (code: string, el: HTMLButtonElement | null) => {
-    cardRefs.current[code] = el;
-  };
   /* 每个 focus 值只滚动一次：deps 里的 data 每 60s 轮询都换新引用，
      不加一次性守卫会周期性把页面强行拽回这张卡。 */
   const scrolledForRef = useRef<string | null>(null);
@@ -139,9 +56,9 @@ export default function IndexCards({
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className={INDEX_GRID}>
         {Array.from({ length: 6 }, (_, i) => (
-          <SkeletonCard key={i} />
+          <IndexCardSkeleton key={i} />
         ))}
       </div>
     );
@@ -195,16 +112,22 @@ export default function IndexCards({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-      {data.map((q, i) => (
+    <div className={INDEX_GRID}>
+      {data.map((quote, i) => (
+        /* 点卡片开该指数的详情页，与全站「点代码开详情」一致；统一传真实符号 ^GSPC，
+           使跳转与缓存键保持一致。?index= 只用于从顶部 tape 跳进来时高亮定位。 */
         <IndexCard
-          key={q.code}
-          quote={q}
+          key={quote.code}
+          quote={quote}
           index={i}
-          flash={flashes[q.code]}
-          focused={focus?.toUpperCase() === q.code}
-          registerRef={registerRef}
-          onOpen={onOpen}
+          flash={flashes[quote.code]}
+          focused={focus?.toUpperCase() === quote.code}
+          ref={(el) => {
+            cardRefs.current[quote.code] = el;
+          }}
+          /* live 没有指数 K 线端点，小图只在演示模式画 */
+          spark={isMock && quote.changePct !== null ? getIndexIntraday(quote.code, quote.changePct) : null}
+          onOpen={() => onOpen(quoteSymbol(quote.symbol || quote.code))}
         />
       ))}
     </div>

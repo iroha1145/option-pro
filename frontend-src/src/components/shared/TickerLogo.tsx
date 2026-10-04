@@ -14,7 +14,7 @@ function CompanyMark({ ticker, size = 32, className }: Props) {
     <span
       data-company-logo={ticker}
       data-logo-state={source ? loaded ? 'loaded' : 'loading' : 'fallback'}
-      className={cn('relative inline-flex shrink-0 select-none items-center justify-center overflow-hidden rounded-md border border-line/70 bg-card font-semibold text-ink-500', className)}
+      className={cn('relative inline-flex shrink-0 select-none items-center justify-center overflow-hidden rounded-md border border-line/70 font-semibold text-ink-500', source ? 'bg-[var(--logo-plate)]' : 'bg-card', className)}
       style={{ width: size, height: size, fontSize: size * 0.45, lineHeight: 1 }}
       aria-hidden="true"
     >

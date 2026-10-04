@@ -54,17 +54,17 @@ export default function SectorList({
           row.avgReturn !== null ? (
             <span
               className={cn(
-                'font-mono text-data-m font-semibold tnum',
+                'text-data-m font-semibold tnum',
                 row.avgReturn === 0 ? 'text-ink-500' : row.avgReturn > 0 ? 'text-up-700' : 'text-down-700',
               )}
             >
               {fmtPct(row.avgReturn)}
-              <span className="ml-1 text-micro font-normal text-ink-300">
+              <span className="ml-1 text-micro font-normal text-ink-400">
                 {periodLabel(row.period)}
               </span>
             </span>
           ) : (
-            <span className="font-mono text-ink-300">—</span>
+            <span className="font-mono text-ink-400">—</span>
           ),
       },
       {
@@ -78,7 +78,7 @@ export default function SectorList({
             {row.avgStrength !== null ? (
               <StrengthBar score={row.avgStrength} width={72} />
             ) : (
-              <span className="font-mono text-ink-300">—</span>
+              <span className="font-mono text-ink-400">—</span>
             )}
             <span className="text-micro text-ink-400">
               {t('有评分 {scored} / {total}', { scored: row.scoredCount ?? '—', total: row.memberCount })}
@@ -119,7 +119,7 @@ export default function SectorList({
         sortable: true,
         sortValue: (row) => row.coveredCount ?? Number.NaN,
         render: (row) => (
-          <span className="font-mono text-data-m text-ink-600 tnum">
+          <span className="text-data-m text-ink-600 tnum">
             {row.coveredCount ?? '—'} / {row.memberCount}
           </span>
         ),
@@ -143,7 +143,7 @@ export default function SectorList({
               ))}
             </span>
           ) : (
-            <span className="font-mono text-ink-300">—</span>
+            <span className="font-mono text-ink-400">—</span>
           ),
       },
     ],

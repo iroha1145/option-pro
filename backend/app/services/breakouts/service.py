@@ -54,6 +54,7 @@ from app.services.breakouts.models import (
     MarketSession,
     MarketShapeSnapshot,
     TemporalCutoff,
+    enum_value,
 )
 from app.services.algorithm_diagnostics import record_t1_attach_ms, record_t1_status
 from app.services.breakouts.t1_priority import attach_t1_features, event_t1_status
@@ -1838,10 +1839,7 @@ class BreakoutRadarService:
         ][: self.settings.provider_result_limit]
         per_event_errors: list[dict[str, str]] = []
         source_errors: dict[str, str] = {}
-        discovery_status = getattr(discovery, "status", None)
-        discovery_status = str(
-            getattr(discovery_status, "value", discovery_status) or "unknown"
-        )
+        discovery_status = str(enum_value(getattr(discovery, "status", None)) or "unknown")
         raw_live_priors = list(realtime_events or ())
         if len(raw_live_priors) > 200:
             raise ValueError("at most 200 realtime events can be evaluated")

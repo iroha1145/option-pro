@@ -3,9 +3,10 @@ import { useQuoteSymbols } from '@/hooks/useLiveQuote';
  * /stock/:ticker 个股研究整页（v2 · 参考日股工作台 StockDetail 卡片重排）
  *
  * 行0: 返回 + S0 价格头 + 手动拉取
- * 行1: K线(8列, 叠加技术点位) + 右栏(4列: 关键数据 / 技术指标 / 相关突破事件)
- * 行2: 趋势偏向 + 近期信号(7列) + K线结构分析(5列)
- * 行3: 宏观适配 + AI 股票分析（AI 卡持有付费任务轮询，常驻挂载不随区块卸载）
+ * 行1: K线(8列, 叠加技术点位) + 右栏(4列: 关键数据 / 技术指标)
+ * 行2: 趋势偏向 + 近期信号(7列) + K线结构分析 / AI 股票分析(5列竖排；
+ *      AI 卡持有付费任务轮询，常驻挂载不随区块卸载)
+ * 行3: 宏观适配 + 相关突破事件（两张短卡并排）
  * 行4: 期权链（通栏）
  * 行5: 相关新闻（通栏）
  *
@@ -18,6 +19,8 @@ import { usePolling } from '@/hooks/usePolling';
 import EmptyState from '@/components/shared/EmptyState';
 import WatchlistToggle from '@/components/shared/WatchlistToggle';
 import MacroFitPanel from '@/components/shared/MacroFitPanel';
+import InfoHint from '@/components/shared/InfoHint';
+import { macroShadowHint } from '@/lib/scoreHints';
 import { SkeletonBlock, SkeletonText } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { BusyIcon } from '@/components/shared/IconSwap';
@@ -96,22 +99,22 @@ export default function StockDetail() {
     else navigate('/watchlist', { replace: true });
   };
 
-  const backButton = (
-    <button
-      type="button"
-      onClick={goBack}
-      className="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-card px-3 py-1.5 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:bg-paper-2 hover:text-ink-800"
-    >
-      <Icon name="chevron-right" size={14} className="rotate-180" />
-      {__t('返回')}
-    </button>
+  /* 页首操作行：返回与加入自选都是 .control-button，同一行同高（桌面 32、粗指针 44） */
+  const toolbar = (
+    <div className="flex flex-wrap items-center gap-2">
+      <button type="button" onClick={goBack} className="control-button">
+        <Icon name="chevron-right" size={14} className="rotate-180" />
+        {__t('返回')}
+      </button>
+      <WatchlistToggle ticker={symbol} />
+    </div>
   );
 
   if (loading && !detail) {
     return (
       <div className="space-y-5" aria-busy="true" {...pageRegionProps('stock', 'loading')}>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">{backButton}<WatchlistToggle ticker={symbol} /></div>
+          {toolbar}
           <span className="eyebrow">STOCK · ${symbol}</span>
         </div>
         <PriceHeader symbol={symbol} />
@@ -131,7 +134,7 @@ export default function StockDetail() {
     return (
       <div {...pageRegionProps('stock', is404 || manualRecovery ? 'empty' : 'error')}>
         <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">{backButton}<WatchlistToggle ticker={symbol} /></div>
+          {toolbar}
           <span className="eyebrow">STOCK · ${symbol}</span>
         </div>
         <PriceHeader symbol={symbol} />
@@ -200,7 +203,7 @@ export default function StockDetail() {
   /* 概览未覆盖该标的：基础行情来自强度扫描行，如实提示口径 */
   const scopeBanner = detail.snapshotScope === 'strength-row' && (
     <div className="mt-3 rounded-md border border-warn-600/25 bg-warn-50 px-3 py-2" role="status">
-      <p className="flex items-start gap-2 text-caption leading-[18px] text-warn-600">
+      <p className="flex items-start gap-2 text-caption leading-[18px] text-warn-700">
         <Icon name="flag" size={13} className="mt-px shrink-0" />
         {__t('当前只有筛选结果里的基础行情，日线与技术指标按实际情况显示')}
       </p>
@@ -221,11 +224,11 @@ export default function StockDetail() {
   const techSnapshotMissing = techError?.bizCode === 'public_snapshot_unavailable';
   const techRetryRow = (
     <p className="mt-3 flex items-center gap-2 text-body-s text-ink-400">
-      <Icon name="doc-quote" size={16} className="text-ink-300" />
+      <Icon name="doc-quote" size={16} className="text-ink-400" />
       {__t('技术结构读取失败，请重试')}
       <button
         onClick={() => techQ.refresh()}
-        className="ml-auto rounded-md border border-line px-2 py-0.5 text-micro text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+        className="control-button ml-auto"
       >
         {__t('重试')}
       </button>
@@ -236,53 +239,34 @@ export default function StockDetail() {
     <div {...pageRegionProps('stock', 'content')}>
       {/* 行0 */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">{backButton}<WatchlistToggle ticker={symbol} /></div>
+        {toolbar}
         <span className="eyebrow">STOCK · ${symbol}</span>
       </div>
       <PriceHeader detail={detail} />
       {scopeBanner}
       {detail.snapshotScope !== 'strength-row' && (
-        <ManualStockPull ticker={detail.ticker} onPulled={handlePulled} compact className="mt-3" />
+        <ManualStockPull ticker={detail.ticker} onPulled={handlePulled} compact quiet className="mt-3" />
       )}
 
-      {/* 行1: K线(8) + 关键数据(4)。右栏只留关键数据：技术指标与突破事件
-          下沉到行2/行3 与对面高卡配对，消掉图下方那块大留白（对齐日股观感）。 */}
-      <div className="mt-8 grid grid-cols-1 items-start gap-6 xl:grid-cols-12">
-        <div className="xl:col-span-8">
-          <div className="card-surface p-5">
-            {/* 图例改由 KlineChart 内部按模式/状态渲染（真图例：色块/符号 + 状态语义） */}
-            <KlineChart
-              ticker={detail.ticker}
-              prevClose={detail.prevClose}
-              currentPrice={detail.price}
-              quoteUpdatedAt={detail.updatedAt}
-              height={420}
-              refreshVersion={dataRevision}
-              technical={technical}
-            />
-          </div>
+      {/* 行1: K线(8) + 右栏(4: 关键数据 / 技术指标)。两列等高：右栏随行拉伸，
+          关键数据卡吸收差额（52 周区间贴底），图下与右栏下都不留空。 */}
+      <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-12">
+        <div className="card-surface p-5 xl:col-span-8">
+          {/* 图例改由 KlineChart 内部按模式/状态渲染（真图例：色块/符号 + 状态语义） */}
+          <KlineChart
+            ticker={detail.ticker}
+            prevClose={detail.prevClose}
+            currentPrice={detail.price}
+            quoteUpdatedAt={detail.updatedAt}
+            height={420}
+            refreshVersion={dataRevision}
+            technical={technical}
+          />
         </div>
-        <aside className="xl:col-span-4">
-          <KeyStats detail={detail} />
-        </aside>
-      </div>
-
-      {/* 行2: 趋势偏向 + 信号(7) · 技术指标 + K线结构(5 竖排)。
-          右列两卡叠放后与左列高卡大致等高；items-start 让残差只是背景。 */}
-      <div className="mt-6 grid grid-cols-1 items-start gap-6 xl:grid-cols-12">
-        <div className="card-surface p-5 xl:col-span-7">
-          <p className="eyebrow">TREND BIAS · SIGNALS</p>
-          <h3 className="mb-4 mt-1.5 text-h3 text-ink-900">{__t('趋势偏向与近期信号')}</h3>
-          <TrendBiasPanel ticker={detail.ticker} refreshVersion={dataRevision} onPulled={handlePulled} />
-          <div className="mt-6">
-            <p className="eyebrow mb-3">RECENT SIGNALS</p>
-            <SignalList ticker={detail.ticker} refreshVersion={dataRevision} onPulled={handlePulled} />
-          </div>
-        </div>
-        <div className="grid content-start gap-6 xl:col-span-5">
+        <aside className="flex flex-col gap-6 xl:col-span-4">
+          <KeyStats detail={detail} className="flex-1" />
           <div className="card-surface p-5">
-            <p className="eyebrow">TECHNICALS</p>
-            <h3 className="mt-1.5 text-h3 text-ink-900">{__t('技术指标')}</h3>
+            <h3 className="text-h3 text-ink-900">{__t('技术指标')}</h3>
             {technical ? (
               <TechnicalPanel technical={technical} />
             ) : techQ.loading ? (
@@ -298,9 +282,23 @@ export default function StockDetail() {
               <TechnicalPanel technical={null} />
             )}
           </div>
-          <div className="card-surface p-5">
-            <p className="eyebrow">CHART STRUCTURE</p>
-            <h3 className="mt-1.5 text-h3 text-ink-900">{__t('K线结构分析')}</h3>
+        </aside>
+      </div>
+
+      {/* 行2: 趋势偏向 + 信号(7) · K线结构 + AI 分析(5 竖排)。两列随行拉伸：
+          左卡单张自然拉齐；右列由结构卡吸收差额，AI 卡（结果长短不定）贴在列底。 */}
+      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-12">
+        <div className="card-surface p-5 xl:col-span-7">
+          <h3 className="mb-4 text-h3 text-ink-900">{__t('趋势偏向与近期信号')}</h3>
+          <TrendBiasPanel ticker={detail.ticker} refreshVersion={dataRevision} onPulled={handlePulled} />
+          {/* 近期信号：标题已含「近期信号」，这里只用分隔线起段，不再叠一行英文眉题 */}
+          <div className="mt-5 border-t border-line pt-4">
+            <SignalList ticker={detail.ticker} refreshVersion={dataRevision} onPulled={handlePulled} />
+          </div>
+        </div>
+        <div className="flex flex-col gap-6 xl:col-span-5">
+          <div className="card-surface flex-1 p-5">
+            <h3 className="text-h3 text-ink-900">{__t('K线结构分析')}</h3>
             {technical ? (
               <StructurePanel technical={technical} />
             ) : techQ.loading ? (
@@ -317,41 +315,40 @@ export default function StockDetail() {
               <StructurePanel technical={null} />
             )}
           </div>
-        </div>
-      </div>
-
-      {/* 行3: 宏观适配 + 突破事件(5 竖排) · AI 分析(7)（items-start 同行2） */}
-      <div className="mt-6 grid grid-cols-1 items-start gap-6 xl:grid-cols-12">
-        <div className="grid content-start gap-6 xl:col-span-5">
-          <div className="card-surface p-5">
-            <MacroFitPanel
-              score={detail.macroFit}
-              tailwind={detail.macroTailwind}
-              confidence={detail.macroFitConfidence}
-              supporting={detail.macroSupporting}
-              opposing={detail.macroOpposing}
-              technicalGap={detail.macroTechnicalGap}
-              status={detail.macroShadowStatus}
-            />
-          </div>
-          <SidebarEvents ticker={detail.ticker} />
-        </div>
-        <div className="xl:col-span-7">
           <AiAnalysisCard key={detail.ticker} ticker={detail.ticker} />
         </div>
       </div>
 
+      {/* 行3: 宏观适配 · 相关突破事件（两张短卡并排，随行拉齐） */}
+      <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+        <div className="card-surface p-5">
+          <h3 className="flex items-center gap-1 text-h3 text-ink-900">
+            {__t('宏观适配')}
+            <InfoHint hint={macroShadowHint()} side="bottom" size={12} />
+          </h3>
+          <MacroFitPanel
+            bare
+            score={detail.macroFit}
+            tailwind={detail.macroTailwind}
+            confidence={detail.macroFitConfidence}
+            supporting={detail.macroSupporting}
+            opposing={detail.macroOpposing}
+            technicalGap={detail.macroTechnicalGap}
+            status={detail.macroShadowStatus}
+          />
+        </div>
+        <SidebarEvents ticker={detail.ticker} />
+      </div>
+
       {/* 行4: 期权链 */}
       <div className="card-surface mt-6 p-5">
-        <p className="eyebrow">OPTIONS CHAIN</p>
-        <h3 className="mb-4 mt-1.5 text-h3 text-ink-900">{__t('期权链')}</h3>
+        <h3 className="mb-4 text-h3 text-ink-900">{__t('期权链')}</h3>
         <OptionsPanel key={detail.ticker} ticker={detail.ticker} />
       </div>
 
       {/* 行5: 相关新闻 */}
       <div className="card-surface mt-6 p-5">
-        <p className="eyebrow">RELATED NEWS</p>
-        <h3 className="mb-4 mt-1.5 text-h3 text-ink-900">{__t('相关新闻')}</h3>
+        <h3 className="mb-4 text-h3 text-ink-900">{__t('相关新闻')}</h3>
         <NewsPanel ticker={detail.ticker} />
       </div>
 

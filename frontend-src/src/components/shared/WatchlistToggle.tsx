@@ -20,7 +20,8 @@ export default function WatchlistToggle({ ticker }: { ticker: string }) {
      进页时本来就在自选里的票显示静止的勾，不空放一次庆祝。写入前就置位：
      写入完成与 busy 回落往往在同一次渲染里，等 await 之后再置位就晚了一拍。 */
   const [justAdded, setJustAdded] = useState(false);
-  const style = 'inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md border border-line-strong bg-card px-3 text-caption font-medium text-ink-600 shadow-btn transition-[color,border-color,transform] duration-fast ease-snap hover:border-brand-400 hover:text-brand-600 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50';
+  /* 与页首「返回」同一副次级按钮：桌面 32px，窄屏和粗指针 44px；已加入时走 aria-pressed 的选中态 */
+  const style = 'control-button touch-target';
   if (!canManageWatchlist && !personal.loading && !personal.error) {
     return <Link className={style} to="/login" state={{ from: location.pathname }}><Icon name="plus" size={15} />{t('登录后加入自选')}</Link>;
   }

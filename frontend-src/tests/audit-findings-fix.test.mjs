@@ -67,7 +67,8 @@ test('404 主按钮回首页', async () => {
 
 test('useAiJob 用退避轮询，取消失败写入 error', async () => {
   const hook = codeOf(await source('components/detail/useAiJob.ts'));
-  assert.match(hook, /\[2000, 3000, 5000, 8000, 10000\]/);
+  assert.match(hook, /AI_JOB_POLL_WAITS_MS\[Math\.min\(attempt/);
+  assert.match(codeOf(await source('lib/boundedReadRetry.ts')), /AI_JOB_POLL_WAITS_MS = \[2000, 3000, 5000, 8000, 10000\]/);
   assert.match(hook, /document\.hidden/);
   assert.match(hook, /setError\(e instanceof Error \? e\.message : t\('取消失败'\)\)/);
   assert.doesNotMatch(hook, /setTimeout\(\(\) => void tick\(\), 2500\)/);

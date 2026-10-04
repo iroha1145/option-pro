@@ -67,7 +67,7 @@ export default function Segmented<T extends string>({
               type="button"
               role="tab"
               className={cn(
-                't-tab relative z-10 text-caption font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30',
+                't-tab relative z-10 text-caption font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600',
                 scrollable && 'shrink-0 whitespace-nowrap',
               )}
               aria-selected={active}

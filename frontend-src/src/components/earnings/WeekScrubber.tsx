@@ -71,10 +71,10 @@ export default function WeekScrubber({
   return (
     <section className="card-surface overflow-hidden" aria-label={__t("周历")}>
       {/* 周切换条 */}
-      <div className="flex h-11 items-center justify-between border-b border-line px-4">
+      <div className="flex h-11 items-center justify-between border-b border-line px-4 [@media(pointer:coarse)]:h-14">
         <button
           onClick={() => onWeekChange(-1)}
-          className="flex size-7 items-center justify-center rounded-sm border border-line bg-card text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+          className="flex size-7 items-center justify-center rounded-sm border border-line bg-card text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 [@media(pointer:coarse)]:size-11"
           aria-label={__t("上一周")}
         >
           <Icon name="chevron-right" size={14} className="rotate-180" />
@@ -85,7 +85,7 @@ export default function WeekScrubber({
         </p>
         <button
           onClick={() => onWeekChange(1)}
-          className="flex size-7 items-center justify-center rounded-sm border border-line bg-card text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+          className="flex size-7 items-center justify-center rounded-sm border border-line bg-card text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 [@media(pointer:coarse)]:size-11"
           aria-label={__t("下一周")}
         >
           <Icon name="chevron-right" size={14} />
@@ -115,6 +115,7 @@ export default function WeekScrubber({
               const dayItems = byDate.get(date) ?? [];
               const isToday = date === today;
               const isSelected = selectedDay === date;
+              const hasReports = dayItems.length > 0;
               const shown = dayItems.slice(0, MAX_CHIPS);
               const extra = dayItems.length - shown.length;
               return (
@@ -136,71 +137,70 @@ export default function WeekScrubber({
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: di * 0.035 }}
                   className={cn(
-                    'flex min-h-[148px] w-[86px] shrink-0 cursor-pointer snap-start flex-col border-r border-line px-2 py-2.5 text-left transition-colors duration-fast last:border-r-0 sm:w-auto sm:min-w-0',
+                    'flex min-h-[96px] w-[86px] shrink-0 cursor-pointer snap-start flex-col border-r border-line px-2 py-2.5 text-left transition-colors duration-fast last:border-r-0 sm:w-auto sm:min-w-0',
                     isSelected ? 'bg-brand-50' : 'hover:bg-paper-2',
                     'tick-flash',
-                    flashing && dayItems.length > 0 && 'tick-flash-up',
+                    flashing && hasReports && 'tick-flash-up',
                   )}
                 >
-                  {/* 日期头 */}
-                  <div className="flex items-center justify-between">
-                    <span className={cn('text-caption', isToday ? 'font-semibold text-brand-600' : 'text-ink-500')}>
+                  {/* 日期头：有财报的日子用正文墨色并在右上角写数量；空白日只留浅色日期，
+                      不再每格画一个「—」，一眼看出这周哪几天有事。 */}
+                  <div className="flex items-center justify-between gap-1">
+                    <span
+                      className={cn(
+                        'flex items-center gap-1 text-caption',
+                        isToday ? 'font-semibold text-brand-600' : hasReports ? 'font-medium text-ink-800' : 'text-ink-400',
+                      )}
+                    >
                       {weekdayCN(date)}
+                      {isToday && <span className="size-1.5 rounded-full bg-brand-600" aria-label={__t("今天")} />}
                     </span>
-                    {isToday && <span className="size-1.5 rounded-full bg-brand-600" aria-label={__t("今天")} />}
+                    {hasReports && (
+                      <span className="text-micro font-medium text-ink-600 tnum">
+                        {__t('{n} 条', { n: dayItems.length })}
+                      </span>
+                    )}
                   </div>
-                  <span className={cn('font-mono text-micro tnum', isToday ? 'text-brand-600' : 'text-ink-400')}>
+                  <span className={cn('font-mono text-micro tnum', isToday ? 'text-brand-600' : hasReports ? 'text-ink-500' : 'text-ink-400')}>
                     {fmtMMDD(date)}
                   </span>
 
                   {/* 财报 chips 竖堆（前 3 个 + 折叠 +N） */}
-                  <div className="mt-2 flex flex-1 flex-col gap-1">
-                    {dayItems.length === 0 ? (
-                      <span className="pt-1 font-mono text-micro text-ink-300" aria-hidden="true">
-                        —
-                      </span>
-                    ) : (
-                      <>
-                        {shown.map((it, ci) => {
-                          const active = selectedTicker === it.ticker && selectedDay === date;
-                          return (
-                            <motion.button
-                              key={it.ticker}
-                              initial={{ opacity: 0, scale: 0.9 }}
-                              animate={{ opacity: 1, scale: 1 }}
-                              transition={{ ...SPRING_POP, delay: di * 0.035 + ci * 0.02 }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onSelectTicker(it.ticker, date);
-                              }}
-                              aria-label={__t('{ticker} {timing}财报，查看 AI 影响', { ticker: it.ticker, timing: timingLabel(it.timing) })}
-                              className={cn(
-                                'flex h-6 items-center gap-1 rounded-xs border-l-2 px-1 transition-[transform,background-color] duration-fast hover:-translate-y-px',
-                                active
-                                  ? 'border-brand-600 bg-brand-100'
-                                  : 'border-transparent bg-paper-2 hover:bg-brand-50',
-                              )}
-                            >
-                              <Icon
-                                name={it.timing === 'bmo' ? 'sun-bmo' : it.timing === 'amc' ? 'moon-amc' : 'clock-ny'}
-                                size={12}
-                                className={it.timing === 'bmo' ? 'text-warn-600' : it.timing === 'amc' ? 'text-ai-600' : 'text-ink-400'}
-                              />
-                              <span className="font-mono text-micro font-medium text-ink-800">{it.ticker}</span>
-                            </motion.button>
-                          );
-                        })}
-                        {extra > 0 && (
-                          <span className="px-1 font-mono text-[10px] leading-4 text-ink-400">+{extra}</span>
-                        )}
-                      </>
-                    )}
-                  </div>
-
-                  {/* 每日数量 */}
-                  <span className="mt-1 font-mono text-[10px] leading-4 text-ink-300 tnum">
-                    {dayItems.length > 0 ? __t('{n} 条', { n: dayItems.length }) : ''}
-                  </span>
+                  {hasReports && (
+                    <div className="mt-2 flex flex-1 flex-col gap-1">
+                      {shown.map((it, ci) => {
+                        const active = selectedTicker === it.ticker && selectedDay === date;
+                        return (
+                          <motion.button
+                            key={it.ticker}
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ ...SPRING_POP, delay: di * 0.035 + ci * 0.02 }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectTicker(it.ticker, date);
+                            }}
+                            aria-label={__t('{ticker} {timing}财报，查看 AI 影响', { ticker: it.ticker, timing: timingLabel(it.timing) })}
+                            className={cn(
+                              'flex h-6 items-center gap-1 rounded-xs px-1.5 transition-[transform,background-color] duration-fast hover:-translate-y-px',
+                              active ? 'bg-brand-100 text-brand-700' : 'bg-paper-2 text-ink-800 hover:bg-brand-50',
+                            )}
+                          >
+                            {/* 盘前盘后是类别：图标形状区分，不借警示琥珀或 AI 青瓷色 */}
+                            <Icon
+                              name={it.timing === 'bmo' ? 'sun-bmo' : it.timing === 'amc' ? 'moon-amc' : 'clock-ny'}
+                              size={12}
+                              className={active ? 'text-brand-700' : 'text-ink-500'}
+                            />
+                            <span className="font-mono text-micro font-medium">{it.ticker}</span>
+                          </motion.button>
+                        );
+                      })}
+                      {extra > 0 && (
+                        <span className="px-1 text-micro leading-4 text-ink-500 tnum">+{extra}</span>
+                      )}
+                    </div>
+                  )}
                 </motion.div>
               );
             })}

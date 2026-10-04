@@ -100,12 +100,12 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
       {/* ticker 过滤 */}
       <div className="flex items-center gap-1.5">
         <div className="relative">
-          <Icon name="search" size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-300" />
+          <Icon name="search" size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
           <input
             value={filters.ticker}
             onChange={(e) => set({ ticker: e.target.value.toUpperCase().replace(/[^A-Z0-9.^-]/g, '').slice(0, 12) })}
             placeholder={t("代码过滤")}
-            className="h-8 w-28 rounded-md border border-line bg-card pl-7 pr-2 font-mono text-caption text-ink-800 placeholder:text-ink-300 focus:border-brand-400 focus:outline-none"
+            className="h-8 w-28 rounded-md border border-line bg-card pl-7 pr-2 font-mono text-caption text-ink-800 placeholder:text-ink-400 focus:border-brand-400 focus:outline-none"
             aria-label={t("按代码过滤")}
           />
         </div>
@@ -246,7 +246,7 @@ function CountNote({ total, filtered }: { total: number | null; filtered: boolea
   return (
     <p className="font-mono text-micro text-ink-400 tnum">
       {total === null ? '—' : t('{n} 条', { n: total })}
-      {filtered && total !== null && <span className="text-ink-300"> {t('· 已过滤')}</span>}
+      {filtered && total !== null && <span className="text-ink-400"> {t('· 已过滤')}</span>}
     </p>
   );
 }

@@ -1,10 +1,10 @@
 /**
  * 宏观综合卡 — 综合分 / Regime / 7 日变化 / 置信度 / 有效模块数 / 数据截止。
- * 大分数用 font-mono + text-data-xxl + tnum；分数条复用 strengthBarClass 色阶。
+ * 大分数用 metric-value + text-data-xxl；分数条复用 strengthBarClass 色阶。
  * 明确写出「历史分位，不是预测」，不做任何进度条式的品牌装饰。
  */
 import { motion } from 'framer-motion';
-import { EASE_PAPER } from '@/lib/motion';
+import { EASE_PAPER, GROW_X } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useCountUp } from '@/hooks/useCountUp';
 import { strengthBarClass } from '@/lib/strengthColor';
@@ -60,7 +60,7 @@ export default function CompositeCard({
       aria-label={t("宏观环境综合分")}
     >
       <div className="flex items-start justify-between gap-3">
-        <p className="eyebrow">{t('综合分 · COMPOSITE')}</p>
+        <h3 className="text-h3 text-ink-900">{t('综合分')}</h3>
         <span className="flex items-center gap-1 text-micro text-ink-400">
           {t('历史分位')}
           <InfoHint hint={SCORE_HINTS_MACRO.macroComposite} side="bottom" align="end" size={11} />
@@ -68,7 +68,7 @@ export default function CompositeCard({
       </div>
 
       <div className="mt-4 flex flex-wrap items-end gap-x-4 gap-y-2">
-        <span className="font-mono text-data-xxl text-ink-900 tnum">
+        <span className="metric-value text-data-xxl text-ink-900">
           <span className="sr-only">{hasScore ? (composite.score as number).toFixed(1) : '—'}</span>
           <span aria-hidden="true">{shown === null ? '—' : shown.toFixed(1)}</span>
         </span>
@@ -88,21 +88,25 @@ export default function CompositeCard({
         </div>
       </div>
 
-      <div className="mt-4 h-[3px] overflow-hidden rounded-pill bg-line" role="presentation">
+      <motion.div
+        className="mt-4 h-[3px] overflow-hidden rounded-pill bg-line"
+        role="presentation"
+        initial="hidden"
+        whileInView="shown"
+        viewport={{ once: true, amount: 0.4 }}
+      >
         {hasScore && (
           <motion.div
             className={cn(
               'h-full origin-left rounded-pill',
               strengthBarClass(composite.score as number),
             )}
-            initial={{ scaleX: 0 }}
-            whileInView={{ scaleX: 1 }}
-            viewport={{ once: true, amount: 0.4 }}
+            variants={GROW_X}
             transition={{ duration: 0.7, ease: EASE_PAPER }}
             style={{ width: `${Math.max(2, Math.min(100, composite.score as number))}%` }}
           />
         )}
-      </div>
+      </motion.div>
 
       <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
         <StatLine

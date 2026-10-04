@@ -159,7 +159,7 @@ export default function TriggerLadder({ row }: { row: CtaInstrumentEstimate }) {
                     {t('需收盘确认')}
                   </span>
                   {crossed && (
-                    <span className="inline-flex items-center gap-1 rounded-pill border border-warn-600/40 px-1.5 py-0.5 text-micro text-warn-600">
+                    <span className="inline-flex items-center gap-1 rounded-pill border border-warn-600/40 px-1.5 py-0.5 text-micro text-warn-700">
                       <PulseDot />
                       {t('盘中已穿越 · 待收盘确认')}
                     </span>

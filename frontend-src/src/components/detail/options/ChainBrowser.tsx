@@ -25,13 +25,14 @@ function reason(c: ChainContract): string {
   return t('未达到关注阈值');
 }
 
+/* 看涨 / 看跌是合约类别：看跌用中性墨色，不借只表示模型结果的青瓷色。 */
 function SideLabel({ side }: { side: ContractSide }) {
   return <span className={cn('inline-flex items-center rounded px-2 py-1 text-caption font-medium',
-    side === 'call' ? 'bg-brand-50 text-brand-700' : 'bg-ai-50 text-ai-600')}>{sideName(side)}</span>;
+    side === 'call' ? 'bg-brand-50 text-brand-700' : 'bg-paper-2 text-ink-700')}>{sideName(side)}</span>;
 }
 
 function Ratio({ contract: c }: { contract: ChainContract }) {
-  return <span className={cn('font-mono tnum', c.activity.includes('ratio') && 'font-semibold text-warn-700')}>
+  return <span className={cn('tnum', c.activity.includes('ratio') && 'font-semibold text-warn-700')}>
     {c.volOi.kind === 'ratio' ? `${c.volOi.ratio.toFixed(1)}×` : c.volOi.kind === 'new_opening' ? t('不可比') : '—'}
   </span>;
 }
@@ -40,7 +41,7 @@ function ContractDetail({ contract: c, onClose }: { contract: ChainContract; onC
   return <section className="rounded-lg border border-brand-100 bg-brand-50/40 p-4" aria-label={t('合约报价明细')}>
     <div className="flex items-center justify-between gap-3">
       <h4 className="text-body-s font-semibold text-ink-900">{contractName(c)}</h4>
-      <button type="button" onClick={onClose} className="flex min-h-9 items-center gap-1 rounded-md px-2 text-caption text-ink-600 hover:bg-card" aria-label={t('收起合约明细')}>
+      <button type="button" onClick={onClose} className="touch-target flex min-h-9 items-center justify-center gap-1 rounded-md px-2 text-caption text-ink-600 hover:bg-card" aria-label={t('收起合约明细')}>
         {t('收起')}<Icon name="chevron-down" className="rotate-180" size={13} />
       </button>
     </div>
@@ -49,7 +50,7 @@ function ContractDetail({ contract: c, onClose }: { contract: ChainContract; onC
         [t('买方报价'), price(c.bid)], [t('卖方报价'), price(c.ask)],
         [t('隐含波动率'), c.iv === null ? '—' : `${(c.iv * 100).toFixed(1)}%`],
         [t('估算成交金额'), c.premium === null ? '—' : `$${fmtCompact(c.premium)}`],
-      ].map(([label, value]) => <div key={label}><dt className="text-caption text-ink-500">{label}</dt><dd className="mt-1 font-mono text-body-s text-ink-900 tnum">{value}</dd></div>)}
+      ].map(([label, value]) => <div key={label}><dt className="text-caption text-ink-500">{label}</dt><dd className="mt-1 text-body-s text-ink-900 tnum">{value}</dd></div>)}
     </dl>
     <p className="mt-3 text-caption text-ink-600">{reason(c)}</p>
     <p className="mt-2 text-micro leading-relaxed text-ink-500">{t('参考价取买卖报价中值；成交金额按参考价 × 成交张数 × 100 估算。隐含波动率可能包含模型估算。')}</p>
@@ -87,15 +88,15 @@ export default function ChainBrowser({ chain }: { chain: OptionChain }) {
   return <div className="mt-5 space-y-5">
     <section className="overflow-hidden rounded-lg border border-line" aria-label={t('成交关注')}>
       <div className="flex items-center justify-between gap-3 border-b border-line bg-paper-2/60 px-4 py-3">
-        <div className="flex items-center gap-2"><Icon name="bolt" size={16} className="text-warn-600" /><h4 className="text-body-s font-semibold text-ink-900">{t('成交关注')}</h4><span className="font-mono text-caption text-ink-500">{alerts.length}</span></div>
-        {alerts.length > 0 && <button type="button" onClick={() => { setScope('alerts'); setSide('all'); setSelectedId(null); }} className="min-h-9 rounded-md px-2 text-caption font-medium text-brand-700 hover:bg-brand-50">{t('查看全部异动')}<span aria-hidden="true"> →</span></button>}
+        <div className="flex items-center gap-2"><Icon name="bolt" size={16} className="text-warn-700" /><h4 className="text-body-s font-semibold text-ink-900">{t('成交关注')}</h4><span className="text-caption text-ink-500 tnum">{alerts.length}</span></div>
+        {alerts.length > 0 && <button type="button" onClick={() => { setScope('alerts'); setSide('all'); setSelectedId(null); }} className="touch-target min-h-9 rounded-md px-2 text-caption font-medium text-brand-700 hover:bg-brand-50">{t('查看全部异动')}<span aria-hidden="true"> →</span></button>}
       </div>
       {alerts.length > 0 ? <ul className="divide-y divide-line">
         {alerts.slice(0, 3).map((c) => <li key={c.id}>
           <button type="button" onClick={(event) => openDetail(c.id, event.currentTarget)} aria-label={t('查看 {contract} 明细', { contract: contractName(c) })} className="grid min-h-16 w-full grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition-colors duration-fast hover:bg-paper-2 sm:grid-cols-[minmax(170px,1fr)_1.5fr_auto]">
-            <span className="flex flex-wrap items-center gap-2"><SideLabel side={c.side} /><span className="font-mono text-body-s font-semibold text-ink-900">${strikeText(c.strike)}</span></span>
+            <span className="flex flex-wrap items-center gap-2"><SideLabel side={c.side} /><span className="text-body-s font-semibold text-ink-900 tnum">${strikeText(c.strike)}</span></span>
             <span className="col-start-1 text-caption text-warn-700 sm:col-auto">{reason(c)}</span>
-            <span className="col-start-2 row-start-1 row-end-3 text-right sm:col-auto sm:row-auto"><span className="block font-mono text-body-s text-ink-900 tnum">{number(c.volume)}</span><span className="text-micro text-ink-500">{t('成交张数')}</span></span>
+            <span className="col-start-2 row-start-1 row-end-3 text-right sm:col-auto sm:row-auto"><span className="block text-body-s text-ink-900 tnum">{number(c.volume)}</span><span className="text-micro text-ink-500">{t('成交张数')}</span></span>
           </button>
         </li>)}
       </ul> : <p className="px-4 py-4 text-caption text-ink-500">{t('当前到期日暂无异动合约。')}</p>}
@@ -129,19 +130,19 @@ export default function ChainBrowser({ chain }: { chain: OptionChain }) {
             </tr></thead>
             <tbody className="divide-y divide-line">{visible.map((c) => <tr key={c.id} className={cn('hover:bg-paper-2/70', selectedId === c.id && 'bg-brand-50')}>
               <td className="px-3 py-3"><SideLabel side={c.side} /></td>
-              <td className="px-3 py-3 text-right"><span className="font-mono font-semibold text-ink-900">${strikeText(c.strike)}</span>{c.strike === nearest && <span className="mt-0.5 block text-[10px] text-ink-500">{t('最接近现价')}</span>}</td>
-              <td className="px-3 py-3 text-right font-mono text-ink-800 tnum">{price(c.mid)}</td>
-              <td className="min-w-28 px-3 py-3 text-right"><span className="font-mono text-ink-900 tnum">{number(c.volume)}</span><div className="mt-1.5 h-1 overflow-hidden rounded-sm bg-line" aria-hidden="true"><div className={cn('h-full', c.side === 'call' ? 'bg-brand-500/60' : 'bg-ai-600/55')} style={{ width: `${(c.volume ?? 0) / maxVolume * 100}%` }} /></div></td>
-              <td className="px-3 py-3 text-right font-mono text-ink-600 tnum">{number(c.openInterest)}</td>
-              <td className="px-3 py-3 text-right"><Ratio contract={c} />{c.activity.length > 0 && <span className="mt-0.5 block text-[10px] text-warn-700">{t('需关注')}</span>}</td>
-              <td className="px-3 py-3"><button type="button" className="min-h-9 rounded-md border border-line-strong bg-card px-2.5 text-caption text-ink-600 hover:border-brand-400 hover:text-brand-700" onClick={(event) => openDetail(c.id, event.currentTarget)} aria-expanded={selectedId === c.id} aria-label={t('查看 {contract} 明细', { contract: contractName(c) })}>{t('明细')}</button></td>
+              <td className="px-3 py-3 text-right"><span className="font-semibold text-ink-900 tnum">${strikeText(c.strike)}</span>{c.strike === nearest && <span className="mt-0.5 block text-micro text-ink-500">{t('最接近现价')}</span>}</td>
+              <td className="px-3 py-3 text-right text-ink-800 tnum">{price(c.mid)}</td>
+              <td className="min-w-28 px-3 py-3 text-right"><span className="text-ink-900 tnum">{number(c.volume)}</span><div className="mt-1.5 h-1 overflow-hidden rounded-sm bg-line" aria-hidden="true"><div className={cn('h-full', c.side === 'call' ? 'bg-brand-500/60' : 'bg-ink-400/55')} style={{ width: `${(c.volume ?? 0) / maxVolume * 100}%` }} /></div></td>
+              <td className="px-3 py-3 text-right text-ink-600 tnum">{number(c.openInterest)}</td>
+              <td className="px-3 py-3 text-right"><Ratio contract={c} />{c.activity.length > 0 && <span className="mt-0.5 block text-caption text-warn-700">{t('需关注')}</span>}</td>
+              <td className="px-3 py-3"><button type="button" className="control-button" onClick={(event) => openDetail(c.id, event.currentTarget)} aria-expanded={selectedId === c.id} aria-label={t('查看 {contract} 明细', { contract: contractName(c) })}>{t('明细')}</button></td>
             </tr>)}</tbody>
           </table>
         </div>
         <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line md:hidden" aria-label={t('期权合约列表')}>
           {visible.map((c) => <li key={c.id} className="p-3.5">
-            <div className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><SideLabel side={c.side} /><strong className="font-mono text-body-s text-ink-900">${strikeText(c.strike)}</strong></span><button type="button" onClick={(event) => openDetail(c.id, event.currentTarget)} aria-expanded={selectedId === c.id} aria-label={t('查看 {contract} 明细', { contract: contractName(c) })} className="min-h-9 rounded-md border border-line-strong px-3 text-caption text-ink-600">{t('明细')}</button></div>
-            <dl className="mt-3 grid grid-cols-3 gap-2">{[[t('参考价（每股）'), price(c.mid)], [t('成交量'), number(c.volume)], [t('持仓量'), number(c.openInterest)]].map(([label, value]) => <div key={label}><dt className="text-micro text-ink-500">{label}</dt><dd className="mt-1 font-mono text-caption text-ink-900 tnum">{value}</dd></div>)}</dl>
+            <div className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><SideLabel side={c.side} /><strong className="text-body-s text-ink-900 tnum">${strikeText(c.strike)}</strong></span><button type="button" onClick={(event) => openDetail(c.id, event.currentTarget)} aria-expanded={selectedId === c.id} aria-label={t('查看 {contract} 明细', { contract: contractName(c) })} className="control-button">{t('明细')}</button></div>
+            <dl className="mt-3 grid grid-cols-3 gap-2">{[[t('参考价（每股）'), price(c.mid)], [t('成交量'), number(c.volume)], [t('持仓量'), number(c.openInterest)]].map(([label, value]) => <div key={label}><dt className="text-micro text-ink-500">{label}</dt><dd className="mt-1 text-caption text-ink-900 tnum">{value}</dd></div>)}</dl>
             {c.activity.length > 0 && <p className="mt-3 rounded-md bg-warn-50 px-2 py-1.5 text-caption text-warn-700">{reason(c)}</p>}
           </li>)}
         </ul>

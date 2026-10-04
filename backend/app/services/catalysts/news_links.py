@@ -115,7 +115,6 @@ def _batch_url(response: bytes) -> str | None:
 
 def resolve_publisher_url(
     url: str,
-    page_html: bytes,
     *,
     request: Callable,
     deadline: float,
@@ -145,16 +144,12 @@ def resolve_publisher_url(
             return old
         if time.monotonic() >= deadline:
             return None
+        fixed_url = "https://news.google.com/articles/" + quote(article_id, safe="") + "?hl=en-US&gl=US&ceid=US:en"
+        status, _headers, content = request(fixed_url, method="GET", body=None, deadline=deadline)
+        if status != 200 or not isinstance(content, bytes) or len(content) > _MAX_PAGE:
+            return None
         parser = _ArticleMetadata(article_id)
-        if page_html and len(page_html) <= _MAX_PAGE:
-            parser.feed(page_html.decode("utf-8", errors="replace"))
-        if len(parser.matches) != 1:
-            fixed_url = "https://news.google.com/articles/" + quote(article_id, safe="") + "?hl=en-US&gl=US&ceid=US:en"
-            status, _headers, content = request(fixed_url, method="GET", body=None, deadline=deadline)
-            if status != 200 or not isinstance(content, bytes) or len(content) > _MAX_PAGE:
-                return None
-            parser = _ArticleMetadata(article_id)
-            parser.feed(content.decode("utf-8", errors="replace"))
+        parser.feed(content.decode("utf-8", errors="replace"))
         if len(parser.matches) != 1 or time.monotonic() >= deadline:
             return None
         timestamp, signature = next(iter(parser.matches))

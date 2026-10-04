@@ -81,7 +81,7 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
             basis={__t('vs 昨收')}
           />
         </div>
-        <p className="pb-1.5 text-right font-mono text-micro text-ink-500 tnum">
+        <p className="pb-1.5 text-right text-micro text-ink-500 tnum">
           {__t('成交量')} {compactOr(detail?.volume)} {__t('· 市值')} {isNum(detail?.marketCap) ? `$${fmtCompact(detail?.marketCap)}` : '—'}
         </p>
       </div>

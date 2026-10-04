@@ -75,7 +75,7 @@ export function NewsRow({
         type="button"
         onClick={() => onOpen(item.newsId)}
         aria-label={item.titleZh}
-        className="absolute inset-0 z-0 focus-visible:bg-paper-2/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-400/60"
+        className="absolute inset-0 z-0 focus-visible:bg-paper-2/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600"
       />
       <TimeCol iso={item.publishedAt} />
       {/* 内容层保留指针事件（可划选复制标题、title 提示可悬停），整行点击由这里
@@ -340,19 +340,19 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
               <button
                 onClick={() => void loadMore()}
                 disabled={loadingMore || !q.enabled || refreshing}
-                className="inline-flex items-center gap-2 rounded-md border border-line bg-card px-4 py-2 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
+                className="control-button"
               >
                 {loadingMore && <Spinner size={14} tone="muted" />}
                 {__t('加载更多')}
               </button>
             ) : (
-              <p className="text-micro text-ink-300">{__t('已加载全部')} {items.length} {__t('条')}</p>
+              <p className="text-micro text-ink-400">{__t('已加载全部')} {items.length} {__t('条')}</p>
             )}
             {moreStale && !moreError && (
               <p className="mt-1.5 text-micro text-ink-500" role="status">{__t('列表已更新，请再试一次')}</p>
             )}
             {moreError && (
-              <p className="mt-1.5 text-micro text-down-700">
+              <p className="mt-1.5 text-micro text-danger-700">
                 {__t('加载更多失败：')}{moreError.message} ·{' '}
                 <button type="button" disabled={!q.enabled || refreshing} onClick={() => void loadMore()} className="font-medium underline underline-offset-2">
                   {__t('重试')}

@@ -95,6 +95,15 @@ class _EndpointCacheEntry:
     value: Any
 
 
+def _fetched_entry(value: Any, fetched_at: float, ttl: int, max_age: int) -> _EndpointCacheEntry:
+    return _EndpointCacheEntry(
+        expires_at=fetched_at + ttl,
+        stale_until=fetched_at + max(ttl, max_age),
+        fetched_at=fetched_at,
+        value=value,
+    )
+
+
 _endpoint_cache: dict[str, _EndpointCacheEntry] = {}
 # Per-key lock prevents thundering herd: concurrent requests for the same
 # cold key would otherwise all kick off their own yfinance fetch.
@@ -437,12 +446,7 @@ async def _load_and_store_endpoint(
             value = await loader()
             fetched_at = time.time()
             _maybe_purge_endpoint_cache(fetched_at)
-            entry = _EndpointCacheEntry(
-                expires_at=fetched_at + ttl,
-                stale_until=fetched_at + max(ttl, max_age),
-                fetched_at=fetched_at,
-                value=value,
-            )
+            entry = _fetched_entry(value, fetched_at, ttl, max_age)
             _endpoint_cache[key] = entry
             _endpoint_refresh_retry_after.pop(key, None)
             _run_endpoint_success_callback(key, on_success, value, fetched_at)
@@ -479,12 +483,7 @@ async def _force_replace_endpoint(
             value = await loader()
             fetched_at = time.time()
             _maybe_purge_endpoint_cache(fetched_at)
-            entry = _EndpointCacheEntry(
-                expires_at=fetched_at + ttl,
-                stale_until=fetched_at + max(ttl, max_age),
-                fetched_at=fetched_at,
-                value=value,
-            )
+            entry = _fetched_entry(value, fetched_at, ttl, max_age)
             _endpoint_cache[key] = entry
             _endpoint_refresh_retry_after.pop(key, None)
             return entry
@@ -2305,43 +2304,13 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
             )
             from app.services.zh_names import get_zh_name
 
-            def frame_for(dataset, ticker):
-                if dataset is None or getattr(dataset, "empty", True):
-                    return None
-                columns = getattr(dataset, "columns", None)
-                if getattr(columns, "nlevels", 1) > 1:
-                    level_zero = columns.get_level_values(0)
-                    if ticker in level_zero:
-                        return dataset[ticker]
-                    level_one = columns.get_level_values(1)
-                    if ticker in level_one:
-                        return dataset.xs(ticker, axis=1, level=1)
-                    return None
-                return dataset if len(all_tickers) == 1 else None
-
-            def finite_closes(frame, market_timezone):
-                if frame is None or frame.empty:
-                    return []
-                close_col = "Close" if "Close" in frame.columns else "Adj Close"
-                if close_col not in frame.columns:
-                    return []
-                points = []
-                for index, value in frame[close_col].items():
-                    try:
-                        price = float(value)
-                    except (TypeError, ValueError, OverflowError):
-                        continue
-                    if not math.isfinite(price) or price <= 0:
-                        continue
-                    raw_dt = index.to_pydatetime() if hasattr(index, "to_pydatetime") else index
-                    if not isinstance(raw_dt, datetime):
-                        continue
-                    if raw_dt.tzinfo is None:
-                        market_dt = raw_dt.replace(tzinfo=market_timezone)
-                    else:
-                        market_dt = raw_dt.astimezone(market_timezone)
-                    points.append((market_dt, price))
-                return points
+            def finite_closes(dataset, ticker, market_timezone):
+                points = watchlist_six_month.market_closes(
+                    watchlist_six_month.close_series(dataset, ticker, single=len(all_tickers) == 1),
+                    market_timezone,
+                )
+                # A quote needs a time of day, which a plain-date bar cannot carry.
+                return [point for point in points if isinstance(point[0], datetime)]
 
             def session_name(market_dt, market_timezone):
                 if market_timezone.key != _WATCHLIST_MARKET_TIMEZONE.key:
@@ -2359,8 +2328,8 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
             for t in all_tickers:
                 try:
                     market_timezone = _watchlist_market_timezone(t)
-                    daily = finite_closes(frame_for(daily_df, t), market_timezone)
-                    latest = finite_closes(frame_for(latest_df, t), market_timezone)
+                    daily = finite_closes(daily_df, t, market_timezone)
+                    latest = finite_closes(latest_df, t, market_timezone)
                     if not daily or not latest:
                         continue
 
@@ -4142,13 +4111,7 @@ async def _pull_stock_data_once(
         if publish_to_cache:
             return await _force_replace_endpoint(key, ttl, max_age, loader)
         value = await loader()
-        fetched_at = time.time()
-        return _EndpointCacheEntry(
-            expires_at=fetched_at + ttl,
-            stale_until=fetched_at + max(ttl, max_age),
-            fetched_at=fetched_at,
-            value=value,
-        )
+        return _fetched_entry(value, time.time(), ttl, max_age)
 
     overview_result, chart_result = await asyncio.gather(
         _capture_refresh(

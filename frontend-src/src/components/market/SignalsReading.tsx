@@ -96,8 +96,8 @@ function MetricRows({ data }: { data: MarketSignalsSnapshot }) {
               <InfoHint hint={MARKET_SIGNAL_HINTS[metric.key]} align="start" size={11} />
             )}
           </span>
-          <span className="text-right font-mono text-caption text-ink-800 tnum">{metric.value}</span>
-          <span className="text-right font-mono text-micro text-ink-400 tnum">
+          <span className="text-right text-caption text-ink-800 tnum">{metric.value}</span>
+          <span className="text-right text-micro text-ink-400 tnum">
             {metric.topScore !== null || metric.bottomScore !== null
               ? `${metric.topScore ?? '—'} / ${metric.bottomScore ?? '—'}`
               : t('未评分')}
@@ -164,7 +164,7 @@ export default function SignalsReading({
       aria-label={t("市场信号解读")}
     >
       <div className="flex items-start justify-between">
-        <p className="eyebrow">{t('市场信号解读 · SIGNALS READING')}</p>
+        <h3 className="text-h3 text-ink-900">{t('市场信号解读')}</h3>
         <Icon name="flag" size={18} className="text-ink-400" />
       </div>
 
@@ -177,21 +177,21 @@ export default function SignalsReading({
                 {t('顶部风险')}
                 <InfoHint hint={SCORE_HINTS.readingTop} side="bottom" align="start" size={11} className="ml-1" />
               </span>
-              <span className="mt-1 block font-mono text-data-m text-down-700 tnum">{signals.topScore ?? '—'}</span>
+              <span className="mt-1 block metric-value text-data-m text-down-700">{signals.topScore ?? '—'}</span>
             </p>
             <p className="rounded-md border border-line bg-card-warm p-3">
               <span className="block text-micro text-ink-400">
                 {t('底部修复')}
                 <InfoHint hint={SCORE_HINTS.readingBottom} side="bottom" size={11} className="ml-1" />
               </span>
-              <span className="mt-1 block font-mono text-data-m text-up-700 tnum">{signals.bottomScore ?? '—'}</span>
+              <span className="mt-1 block metric-value text-data-m text-up-700">{signals.bottomScore ?? '—'}</span>
             </p>
             <p className="rounded-md border border-line bg-card-warm p-3">
               <span className="block text-micro text-ink-400">
                 {t('数据质量')}
                 <InfoHint hint={SCORE_HINTS.readingDataQuality} side="bottom" align="end" size={11} className="ml-1" />
               </span>
-              <span className="mt-1 block font-mono text-data-m text-ink-800 tnum">{signals.dataQuality ?? '—'}</span>
+              <span className="mt-1 block metric-value text-data-m text-ink-800">{signals.dataQuality ?? '—'}</span>
             </p>
           </div>
           <div className="mt-5">
@@ -204,14 +204,14 @@ export default function SignalsReading({
           <div className="flex items-baseline justify-between gap-3">
             <p>
               <span className="text-caption text-ink-500">{t('趋势偏向')}</span>
-              <span className={cn('ml-3 font-display text-display-m font-semibold', bias ? biasColor(bias.label) : 'text-ink-300')}>
+              <span className={cn('ml-3 font-display text-display-m font-semibold', bias ? biasColor(bias.label) : 'text-ink-400')}>
                 {bias?.label ? t(bias.label) : '—'}
               </span>
             </p>
           </div>
           <p className="mt-1 text-micro text-ink-400">{bias?.basis ?? t('数据不足，暂无法判断趋势')}</p>
           <blockquote className="mt-4 flex-1 rounded-lg border border-line bg-card-warm p-4">
-            <p className="font-quote text-[15px] leading-[26px] text-ink-800">{reading}</p>
+            <p className="text-[15px] leading-[26px] text-ink-800">{reading}</p>
           </blockquote>
         </div>
       </div>

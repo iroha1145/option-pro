@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 from app.config import get_settings
 from app.failure_diagnostics import record_fallback_failure
 from app.services.market_calendar import options_close_minutes
+from app.services.key_locks import acquire_key_lock, release_key_lock
 from app.services.option_capability import (
     CAPABILITY_VERSION,
     PROVIDER_YAHOO,
@@ -20,6 +21,8 @@ from app.services.option_capability import (
 )
 from app.services.yahoo_option_io import run_yahoo_option_io
 from app.services.quote_quality import (
+    option_moneyness as _option_moneyness,
+    option_in_the_money as _option_in_the_money,
     estimated_premium,
     inverted_iv_acceptable,
     option_mark,
@@ -118,27 +121,11 @@ def _purge_cache(now: datetime) -> None:
 
 
 def _acquire_key_lock(key: str) -> threading.Lock:
-    """Reserve a per-key lock without leaving failed unique keys behind."""
-    with _cache_lock:
-        key_lock = _key_locks.get(key)
-        if key_lock is None:
-            key_lock = threading.Lock()
-            _key_locks[key] = key_lock
-        _key_lock_users[key] = _key_lock_users.get(key, 0) + 1
-    key_lock.acquire()
-    return key_lock
+    return acquire_key_lock(key, _cache_lock, _key_locks, _key_lock_users)
 
 
 def _release_key_lock(key: str, key_lock: threading.Lock) -> None:
-    key_lock.release()
-    with _cache_lock:
-        remaining = _key_lock_users.get(key, 1) - 1
-        if remaining > 0:
-            _key_lock_users[key] = remaining
-            return
-        _key_lock_users.pop(key, None)
-        if key not in _cache and _key_locks.get(key) is key_lock:
-            _key_locks.pop(key, None)
+    release_key_lock(key, key_lock, _cache_lock, _key_locks, _key_lock_users, _cache)
 
 
 def _cache_value(value: Any, metadata: dict[str, Any], with_metadata: bool) -> Any:
@@ -343,37 +330,6 @@ def get_expirations_snapshot(ticker: str) -> dict[str, Any]:
         return _unsupported_expiration_snapshot(symbol)
     expirations, metadata = _get_expirations_cached(symbol, with_metadata=True)
     return _annotate_expiration_snapshot(symbol, expirations, metadata)
-
-
-def _option_moneyness(
-    side: str,
-    strike: float,
-    underlying_price: float | None,
-) -> str:
-    if underlying_price is None or underlying_price <= 0:
-        return "unavailable"
-    if strike == underlying_price:
-        return "atm"
-    if side == "call":
-        return "otm" if strike > underlying_price else "itm"
-    return "otm" if strike < underlying_price else "itm"
-
-
-def _option_in_the_money(
-    side: str,
-    strike: float,
-    underlying_price: float | None,
-    provider_value: Any,
-) -> bool | None:
-    if underlying_price is not None and underlying_price > 0:
-        if side == "call":
-            return strike < underlying_price
-        return strike > underlying_price
-    if isinstance(provider_value, bool):
-        return provider_value
-    if type(provider_value).__name__ == "bool_":
-        return bool(provider_value)
-    return None
 
 
 def _deep_otm_fraction(

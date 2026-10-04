@@ -11,7 +11,8 @@ A ticker can appear several times with different CIKs (reused symbols); the
 directory row's CIK picks the right one, and rows without a CIK fall back to
 the ticker. Funds never receive an industry. Only common stocks and ADRs do.
 
-Two ways to feed production, chosen here:
+With an industry mode switched on (``LIVE_CONFIG`` keeps it off), the table
+has two sources:
 
 * the table lives in ``DATA_DIR/eod-limited-v1/industry-sic-v1.json.gz`` and is
   refreshed by ``ensure_industry_tags``: every run looks up a bounded number of
@@ -34,16 +35,18 @@ import gzip
 import json
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
+import zlib
 
 from app.data_paths import get_data_paths
+from app.failure_diagnostics import record_fallback_failure
 
+from .store import atomic_write_bytes
 from .universe import STOCK_PROVIDER_TYPES
 
 TABLE_NAME = "industry-sic-v1.json.gz"
 SIC_LEVELS = (2, 3, 4)
 DEFAULT_LEVEL = 3
 DEFAULT_LOOKUP_BUDGET = 400
-SOURCE_MASSIVE_DETAIL = "massive_reference_ticker_detail"
 
 
 @dataclass(frozen=True)
@@ -138,9 +141,6 @@ class SicTable:
         latest = max(candidates, key=lambda record: record["as_of"] or "")
         return latest["sic_code"]
 
-    def has_ticker(self, ticker: Any) -> bool:
-        return _text(ticker) in self._by_ticker
-
     def has_pair(self, ticker: Any, cik: Any = None) -> bool:
         """True when ``sic_for(ticker, cik)`` is answered by a record (with or without a code).
 
@@ -191,14 +191,8 @@ class SicTable:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         ordered = sorted(self.records, key=lambda item: (item["ticker"], item["cik"] or "", item["as_of"] or ""))
-        body = json.dumps({"version": 1, "records": ordered}, sort_keys=True, ensure_ascii=False)
-        temporary = path.with_suffix(path.suffix + ".tmp")
-        if path.suffix == ".gz":
-            with gzip.open(temporary, "wt", encoding="utf-8") as handle:
-                handle.write(body)
-        else:
-            temporary.write_text(body, encoding="utf-8")
-        temporary.replace(path)
+        body = json.dumps({"version": 1, "records": ordered}, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        atomic_write_bytes(path, gzip.compress(body) if path.suffix == ".gz" else body)
 
 
 def table_path(root: Path | str | None = None) -> Path:
@@ -207,8 +201,19 @@ def table_path(root: Path | str | None = None) -> Path:
 
 
 def load_table(root: Path | str | None = None) -> SicTable:
+    """The saved table; empty when there is none or a crash left it truncated or corrupt.
+
+    Reading a damaged table as empty lets the next refresh rewrite it instead of
+    failing before the lookup on every run.
+    """
     path = table_path(root)
-    return SicTable.load(path) if path.exists() else SicTable()
+    if not path.exists():
+        return SicTable()
+    try:
+        return SicTable.load(path)
+    except (EOFError, ValueError, gzip.BadGzipFile, zlib.error) as exc:
+        record_fallback_failure("eod_industry_table_read", exc)
+        return SicTable()
 
 
 def _massive_detail(ticker: str) -> Mapping[str, Any]:
@@ -232,7 +237,7 @@ def directory_pairs(directory: Sequence[Mapping[str, Any]], tickers: Iterable[st
 
 def refresh_missing(
     table: SicTable,
-    pairs: Iterable[tuple[str, str | None] | str],
+    pairs: Iterable[tuple[str, str | None]],
     *,
     budget: int = DEFAULT_LOOKUP_BUDGET,
     as_of: date | None = None,
@@ -241,12 +246,11 @@ def refresh_missing(
     """Look up at most ``budget`` (ticker, cik) pairs the table cannot answer; failures retry next run.
 
     The record is stored under the directory's CIK, so a reused ticker gets one
-    record per issuer; a bare ticker string means "no CIK known".
+    record per issuer; a ``None`` CIK means "no CIK known".
     """
     counts: Counter = Counter()
     stamp = (as_of or date.today()).isoformat()
-    normalized = sorted({(str(item), None) if isinstance(item, str) else (str(item[0]), _text(item[1]))
-                         for item in pairs}, key=lambda pair: (pair[0], pair[1] or ""))
+    normalized = sorted({(str(item[0]), _text(item[1])) for item in pairs}, key=lambda pair: (pair[0], pair[1] or ""))
     for ticker, cik in normalized:
         if table.has_pair(ticker, cik):
             continue
@@ -256,7 +260,8 @@ def refresh_missing(
         counts["looked_up"] += 1
         try:
             detail = fetch(ticker)
-        except Exception:  # noqa: BLE001 - provider trouble must not stop the worker
+        except Exception as exc:  # noqa: BLE001 - provider trouble must not stop the worker
+            record_fallback_failure("eod_industry_lookup", exc)
             counts["failed"] += 1
             continue
         table.extend([{"ticker": ticker, "cik": cik or detail.get("cik"), "as_of": stamp,

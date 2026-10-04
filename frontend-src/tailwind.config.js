@@ -63,6 +63,17 @@ module.exports = {
           600: 'color-mix(in srgb, var(--down-600) calc(100% * <alpha-value>), transparent)',
           50: 'color-mix(in srgb, var(--down-50) calc(100% * <alpha-value>), transparent)',
         },
+        /* 状态色（index.css 说明）：不随红涨绿跌互换。 */
+        ok: {
+          700: token('--ok-700'),
+          600: token('--ok-600'),
+          50: token('--ok-50'),
+        },
+        danger: {
+          700: token('--danger-700'),
+          600: token('--danger-600'),
+          50: token('--danger-50'),
+        },
         warn: {
           /* 700：警示横幅主文案用档（warn-50 底上比 600 重一档，审计 2.4.5） */
           700: token('--warn-700'),
@@ -144,7 +155,7 @@ module.exports = {
       fontFamily: {
         /* v8：display 换系统 sans 栈（与 sans 相同但独立变量保留，大标不再用衬线） */
         display: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', '"PingFang SC"', '"Hiragino Sans GB"', '"Noto Sans SC"', '"Microsoft YaHei UI"', 'sans-serif'],
-        /* 衬线只保留给「编辑式引文」场景：font-quote */
+        /* 衬线只保留给新闻原文摘要这类「编辑式引文」：font-quote。模型与系统生成的文字用无衬线。 */
         quote: ['Georgia', '"Songti SC"', '"Noto Serif SC"', 'serif'],
         sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', '"PingFang SC"', '"Hiragino Sans GB"', '"Noto Sans SC"', '"Microsoft YaHei UI"', 'sans-serif'],
         mono: ['ui-monospace', 'SFMono-Regular', '"SF Mono"', 'Menlo', 'Consolas', '"Liberation Mono"', 'monospace'],
@@ -186,86 +197,28 @@ module.exports = {
         section: '560ms',
       },
       keyframes: {
-        "accordion-down": {
-          from: { height: "0" },
-          to: { height: "var(--radix-accordion-content-height)" },
-        },
-        "accordion-up": {
-          from: { height: "var(--radix-accordion-content-height)" },
-          to: { height: "0" },
-        },
-        "caret-blink": {
-          "0%,70%,100%": { opacity: "1" },
-          "20%,50%": { opacity: "0" },
-        },
-        /* design.md §4.2 具名动效库 */
-        'rise-in': {
-          from: { opacity: '0', transform: 'translateY(14px)' },
-          to: { opacity: '1', transform: 'translateY(0)' },
-        },
-        'page-fade-in': {
-          from: { opacity: '0', transform: 'translateY(10px)' },
-          to: { opacity: '1', transform: 'translateY(0)' },
-        },
-        'page-fade-out': {
-          from: { opacity: '1' },
-          to: { opacity: '0' },
-        },
         /* v8.3 tick-flash keyframes 退役：keyframes 一旦触发必须跑完、无法中断，
            改为 index.css 的 .tick-flash*（常驻 600ms 回落 transition + 瞬时上色态）。 */
         'led-pulse': {
-          '0%': { boxShadow: '0 0 0 0 color-mix(in srgb, var(--up-600) 55%, transparent)' },
-          '70%': { boxShadow: '0 0 0 6px color-mix(in srgb, var(--up-600) 0%, transparent)' },
-          '100%': { boxShadow: '0 0 0 0 color-mix(in srgb, var(--up-600) 0%, transparent)' },
-        },
-        'radar-sweep': {
-          from: { transform: 'rotate(0deg)' },
-          to: { transform: 'rotate(360deg)' },
-        },
-        'blip-ripple': {
-          '0%': { transform: 'scale(0)', opacity: '.8' },
-          '100%': { transform: 'scale(1)', opacity: '0' },
+          '0%': { boxShadow: '0 0 0 0 color-mix(in srgb, var(--ok-600) 55%, transparent)' },
+          '70%': { boxShadow: '0 0 0 6px color-mix(in srgb, var(--ok-600) 0%, transparent)' },
+          '100%': { boxShadow: '0 0 0 0 color-mix(in srgb, var(--ok-600) 0%, transparent)' },
         },
         'grow-bar': {
           from: { transform: 'scaleX(0)' },
           to: { transform: 'scaleX(1)' },
-        },
-        shimmer: {
-          from: { transform: 'translateX(-100%)' },
-          to: { transform: 'translateX(100%)' },
         },
         /* 动画元素只含第一套内容，其余副本绝对定位在它后面：每轮正好平移一套 */
         marquee: {
           from: { transform: 'translateX(0)' },
           to: { transform: 'translateX(-100%)' },
         },
-        'nudge-shake': {
-          '0%,100%': { transform: 'translateX(0)' },
-          '20%,60%': { transform: 'translateX(-6px)' },
-          '40%,80%': { transform: 'translateX(6px)' },
-        },
-        'spin-once': {
-          from: { transform: 'rotate(0deg)' },
-          to: { transform: 'rotate(360deg)' },
-        },
       },
       animation: {
-        "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
-        "caret-blink": "caret-blink 1.25s ease-out infinite",
-        'rise-in': 'rise-in 560ms cubic-bezier(.16,1,.3,1) both',
-        'page-fade-in': 'page-fade-in 280ms cubic-bezier(.16,1,.3,1) both',
-        'page-fade-out': 'page-fade-out 160ms cubic-bezier(.16,1,.3,1) both',
         'led-pulse': 'led-pulse 1.5s cubic-bezier(.45,0,.15,1) infinite',
-        'radar-sweep': 'radar-sweep 3.2s linear infinite',
-        'blip-ripple': 'blip-ripple 2s cubic-bezier(.45,0,.15,1) infinite',
         'grow-bar': 'grow-bar 700ms cubic-bezier(.16,1,.3,1) both',
-        shimmer: 'shimmer 1.6s linear infinite',
         marquee: 'marquee 28s linear infinite',
-        'nudge-shake': 'nudge-shake 400ms cubic-bezier(.22,1,.36,1)',
-        'spin-once': 'spin-once 600ms cubic-bezier(.16,1,.3,1)',
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
 }

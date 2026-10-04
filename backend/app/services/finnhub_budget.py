@@ -17,6 +17,7 @@ import time
 from typing import Callable, TypeVar
 
 from app.data_paths import get_data_paths
+from app.services.sqlite_errors import is_sqlite_lock_contention
 
 
 MAX_PER_MINUTE = 60
@@ -68,9 +69,8 @@ def _with_busy_retry(operation: Callable[[], _T]) -> _T:
         try:
             return operation()
         except sqlite3.Error as exc:
-            code = getattr(exc, "sqlite_errorcode", 0) & 0xFF
             remaining = deadline - time.perf_counter()
-            if code not in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED} or remaining <= 0:
+            if not is_sqlite_lock_contention(exc) or remaining <= 0:
                 raise
             time.sleep(min(0.025, remaining))
 

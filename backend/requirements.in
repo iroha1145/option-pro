@@ -8,6 +8,7 @@ idna==3.18
 # Security fixes required by the runtime audit for networking and HTML parsing.
 anyio==4.14.2
 soupsieve==2.9.0
+urllib3==2.8.0
 pydantic==2.10.4
 pydantic-settings==2.7.0
 python-dotenv==1.2.2

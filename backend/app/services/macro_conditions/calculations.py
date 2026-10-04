@@ -295,20 +295,6 @@ class DerivedGrid:
         resolved = self._last_valid[position]
         return None if resolved is None else self.values[resolved]
 
-    def trailing_valid(self, index: int, count: int) -> tuple[float, ...]:
-        if not 0 <= index < len(self.values) or count <= 0:
-            return ()
-        collected: list[float] = []
-        for position in range(index, -1, -1):
-            value = self.values[position]
-            if value is None:
-                continue
-            collected.append(value)
-            if len(collected) == count:
-                break
-        collected.reverse()
-        return tuple(collected)
-
     def point_as_of(self, when: date) -> Optional[DerivedPoint]:
         """The as-of value together with its provenance."""
 
@@ -323,7 +309,7 @@ class DerivedGrid:
         index: int,
         count: int,
     ) -> tuple[DerivedPoint, ...]:
-        """Same selection as ``trailing_valid``, carrying provenance.
+        """The last ``count`` non-missing points up to ``index``, oldest first, with provenance.
 
         A rolling window's visibility is the *latest* first-visible time among
         every row inside it, so the window has to be walked as points, not as
@@ -695,9 +681,9 @@ _FUNDING_FRAGMENTATION_SERIES: tuple[str, ...] = tuple(
 def _funding_fragmentation(when, index, series, etfs, *, dispersion, **_extra):
     inputs = _Inputs(when, series, etfs)
     # Attribute today's reading to each of the seven underlying series
-    # individually (M-9), the same way every other factor names its inputs.
-    # A single generic "funding_spread_panel" tag could not tell "all seven
-    # missing" from "one stale leg" apart, so confidence was overstated
+    # individually, the same way every other factor names its inputs. A
+    # single generic "funding_spread_panel" tag cannot tell "all seven
+    # missing" from "one stale leg" apart, which would overstate confidence
     # against this factor's registered required_series=7.
     for series_id in _FUNDING_FRAGMENTATION_SERIES:
         inputs.series(series_id)
@@ -708,7 +694,7 @@ def _funding_fragmentation(when, index, series, etfs, *, dispersion, **_extra):
         else ()
     )
     if today is None or len(window_points) < FUNDING_FRAGMENTATION_WINDOW:
-        # Minimum-sample discipline (M-9), matching _tga_deviation /
+        # Minimum-sample discipline, matching _tga_deviation /
         # _rate_volatility / _fx_realized_volatility / _oil_volatility_deviation:
         # fewer than the registered window of valid points -- during a backfill
         # start or right after a data gap -- must not be reported as though it

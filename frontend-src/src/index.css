@@ -41,8 +41,19 @@
     --down-600: #E5484D;
     --down-700: #C4302B;
     --down-50: #FCECEC;
+    /* 状态色：成功、正常、在线用 ok，错误、失败、删除用 danger。取值与默认涨跌色相同，
+       但红涨绿跌模式不互换——「操作成功」不能跟着行情偏好变红。 */
+    /* 公司标志底板：标志多为浅色背景设计，夜间也垫一块浅底，深色标志才不会融进卡片。 */
+    --logo-plate: #FFFFFF;
+    --ok-700: #0B7A55;
+    --ok-600: #0E9F6E;
+    --ok-50: #E5F6EF;
+    --danger-700: #C4302B;
+    --danger-600: #E5484D;
+    --danger-50: #FCECEC;
     --on-accent: #FFFFFF;
-    --warn-700: #B87109;
+    /* 700 是警示文字档：#B87109 在 warn-50 上只有 3.5:1，加深到 5.1:1。 */
+    --warn-700: #935B00;
     --warn-600: #E8930C;
     --warn-50: #FCF3E2;
     --scrim: rgba(13, 22, 38, .32);
@@ -54,8 +65,12 @@
     --ai-50: #E7F3F6;
     /* §4.1 缓动 */
     --ease-paper: cubic-bezier(.16, 1, .3, 1);
+    /* 圆角三档（docs/UI_DESIGN_SYSTEM.md §3）：组内小件 4、普通控件 6、控件组与浮层 8；
+       卡片 12、抽屉 16 走 Tailwind 的 rounded-lg / rounded-xl。 */
+    --r-chip: 4px;
+    --r-control: 6px;
+    --r-group: 8px;
     --ease-snap: cubic-bezier(.22, 1, .36, 1);
-    --ease-inout: cubic-bezier(.45, 0, .15, 1);
     /* v8 阴影三层制：更柔更大（rgba(16,24,40,*)），内高光 .7 保持 */
     --shadow-sh-1: 0 1px 2px rgba(16, 24, 40, .03);
     --shadow-sh-2: 0 1px 2px rgba(16, 24, 40, .03), 0 12px 32px -14px rgba(16, 24, 40, .10);
@@ -83,8 +98,6 @@
     /* shadcn/ui 基座变量（亮纸面映射；v8.1 hue 44°→220° 随纸面降温，杜绝冷暖混用） */
     --background: 220 20% 97%;
     --foreground: 218 48% 10%;
-    --card-h: 0 0% 100%;
-    --card-foreground: 218 48% 10%;
     --popover: 0 0% 100%;
     --popover-foreground: 218 48% 10%;
     --primary: 232 74% 53%;
@@ -100,7 +113,6 @@
     --border: 220 22% 89%;
     --input: 220 18% 80%;
     --ring: 232 74% 53%;
-    --radius: 12px; /* v8 圆角回暖：r-lg 8→12 */
     /* Catalog paint 重映射只有一份，在 transitions-catalog.css 的适配区——
        这里 @layer base 的副本在层叠里永远输给未分层的 transitions-root.css，
        是死代码还会误导改错地方。 */
@@ -146,6 +158,13 @@
     --down-600: #FF8A80;
     --down-700: #FFB4AE;
     --down-50: #3A1618;
+    --logo-plate: #E6E8EC;
+    --ok-700: #7EE0B8;
+    --ok-600: #62D0A5;
+    --ok-50: #163D34;
+    --danger-700: #FFB4AE;
+    --danger-600: #FF8A80;
+    --danger-50: #3A1618;
     --on-accent: #191B20;
     --warn-700: #FDE047;
     --warn-600: #FACC15;
@@ -177,8 +196,6 @@
     --scrim-strong: rgba(0, 0, 0, .65);
     --background: 220 12% 11%;
     --foreground: 210 17% 95%;
-    --card-h: 225 11% 16%;
-    --card-foreground: 210 17% 95%;
     --popover: 225 11% 16%;
     --popover-foreground: 210 17% 95%;
     --primary: 232 100% 71%;
@@ -298,13 +315,6 @@
     to { opacity: 0; transform: scale(.98); }
   }
 
-  /* 发丝线工具类 */
-  .hairline-b { border-bottom: 1px solid var(--line); }
-  .hairline-t { border-top: 1px solid var(--line); }
-  .hairline-x { border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
-  .hairline { border: 1px solid var(--line); }
-  .hairline-strong { border: 1px solid var(--line-strong); }
-
   /* §3.4 毛玻璃（禁液态玻璃，仅磨砂分层） */
   .glass {
     background: var(--overlay);
@@ -328,7 +338,7 @@
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    border-radius: 8px;
+    border-radius: var(--r-group);
     background: var(--brand-600);
     padding: 0.5rem 1rem;
     font-size: 13px;
@@ -444,7 +454,7 @@
     width: 0;
     height: 32px;
     margin-top: -16px;
-    border-radius: 8px;
+    border-radius: var(--r-group);
     background: color-mix(in srgb, var(--ink-900) 5%, transparent);
     opacity: 0;
     pointer-events: none;
@@ -510,6 +520,12 @@
     background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .85), transparent);
     animation: shimmer 1.6s linear infinite;
   }
+  /* 关键帧写在这里：Tailwind 只在有 animate-shimmer 类时才输出它，散装骨架块
+     此前因此一直停在起点，看不到扫光。 */
+  @keyframes shimmer {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(100%); }
+  }
 
   /* marquee 在指针悬停或键盘焦点进入时暂停：键盘用户也要能停下移动的内容，
      焦点按钮停在哪由 IndexTape 调整 */
@@ -541,7 +557,7 @@
   gap: 6px;
   padding: 5px 10px;
   border: 1px solid var(--line-strong);
-  border-radius: 7px;
+  border-radius: var(--r-control);
   background: var(--card);
   color: var(--ink-600);
   font-size: 12px;
@@ -577,14 +593,14 @@
   gap: 2px;
   padding: 3px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-group);
   background: var(--control-track);
 }
 .filter-group .control-button {
   min-height: 28px;
   padding: 4px 10px;
   border-color: transparent;
-  border-radius: 7px;
+  border-radius: var(--r-chip);
   background: transparent;
 }
 .filter-group .control-button[aria-pressed="true"] {
@@ -595,14 +611,14 @@
 }
 .t-tabs.selection-group {
   padding: 3px;
-  border-radius: 10px;
+  border-radius: var(--r-group);
   border-color: var(--line);
   background: var(--control-track);
 }
 @layer components {
   /* 移动导航可通过已有 bg-brand-50 / shadow-none 保留自身的选中底色。 */
   .selection-indicator {
-    border-radius: 7px;
+    border-radius: calc(var(--r-group) - 3px);
     background: var(--card);
     box-shadow: var(--control-selected-shadow);
   }
@@ -610,7 +626,7 @@
 .t-tabs.selection-group .t-tab {
   height: auto;
   min-height: 28px;
-  border-radius: 7px;
+  border-radius: calc(var(--r-group) - 3px);
   padding: 4px 10px;
   color: var(--ink-600);
 }
@@ -653,7 +669,7 @@
   gap: 6px;
   padding: 5px 12px;
   border: 1px solid color-mix(in srgb, var(--ai-600) 26%, transparent);
-  border-radius: 7px;
+  border-radius: var(--r-control);
   background: var(--ai-50);
   color: var(--ai-600);
   font-size: 12px;
@@ -715,7 +731,7 @@
     padding: 2px;
     overflow: visible;
     border: 1px solid var(--line);
-    border-radius: 9px;
+    border-radius: var(--r-group);
     background: var(--control-track);
   }
   .selection-viewport-full > .mobile-selection-rail { width: 100%; }
@@ -732,7 +748,7 @@
     min-width: 44px;
     padding: 8px 12px;
     border: 0;
-    border-radius: 9px;
+    border-radius: var(--r-group);
     background: transparent;
     color: var(--ink-600);
     font-size: 12px;
@@ -741,7 +757,7 @@
     white-space: nowrap;
   }
   .t-tabs.selection-group .selection-indicator {
-    border-radius: 9px;
+    border-radius: var(--r-group);
     background: var(--card);
     box-shadow: var(--control-selected-shadow);
   }
@@ -767,12 +783,12 @@
   font-weight: 600;
   letter-spacing: -.035em;
 }
-.soft-badge { border-radius: 5px; }
+.soft-badge { border-radius: var(--r-chip); }
 
 /* Read-only floating details share one surface; coordinates never animate. */
 .cloud-popover {
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--r-group);
   background: var(--card);
   box-shadow: var(--popover-shadow);
   animation: cloud-popover-enter var(--tt-in-dur) var(--tt-in-ease) both;
@@ -791,16 +807,26 @@
 .strength-fill { opacity: .78; }
 .insight-frame {
   background: var(--paper-2);
-  border-radius: 10px;
+  border-radius: var(--r-group);
   box-shadow: var(--insight-frame-shadow);
 }
 .menu-select-trigger {
-  border-radius: 8px;
+  border-radius: var(--r-control);
   box-shadow: 0 1px 2px rgba(24, 43, 68, .025);
 }
 .data-coverage-strip {
   padding: 8px 0;
   line-height: 20px;
+}
+/* 行情带按钮只有 24px 高：粗指针下行情带加高到 44px，每个指数整格可点。 */
+@media (pointer: coarse) {
+  .marquee-track { height: 2.75rem; }
+  .marquee-track button { min-height: 2.75rem; }
+}
+/* 说明图标视觉只有 11-13px：粗指针下用透明伪元素把点按区域扩到约 44px，外观不变。 */
+@media (pointer: coarse) {
+  .t-tt-trigger { position: relative; }
+  .t-tt-trigger::after { content: ''; position: absolute; inset: -16px; }
 }
 @media (pointer: coarse) {
   .menu-select-trigger,
@@ -898,31 +924,6 @@
   }
 }
 
-/* 板块热力砖：入场是自左上角铺开的对角波（延迟由 HeatMatrix 按行列算好写进
-   --heat-delay）；hover 抬起与按压回缩走独立的 translate / scale 属性，与入场
-   关键帧的 transform 互不覆盖，离开时也不再继承入场延迟。换统计周期时底色
-   平滑过渡，而不是 11 块砖同时闪一下。 */
-.heat-tile {
-  animation: heat-tile-in var(--duration-very-slow) var(--ease-smooth-out) both;
-  animation-delay: var(--heat-delay, 0ms);
-  transition:
-    translate var(--duration-fast) var(--ease-smooth-out),
-    scale var(--duration-quick) var(--ease-smooth-out),
-    box-shadow var(--duration-fast) var(--ease-smooth-out),
-    background-color var(--duration-fast) var(--ease-smooth-out);
-}
-@keyframes heat-tile-in {
-  from { opacity: 0; transform: translateY(var(--distance-medium)) scale(.98); }
-}
-@media (hover: hover) and (pointer: fine) {
-  .heat-tile:hover { translate: 0 -3px; }
-}
-.heat-tile:active { scale: .98; }
-@media (prefers-reduced-motion: reduce) {
-  .heat-tile { animation: none; }
-  .heat-tile:hover { translate: none; }
-}
-
 /* 雷达卡片定位闪烁：点击历史事件定位到当日卡时，左缘群青竖条 + 外圈光晕闪两次。
    原先写在 Breakouts.tsx 里的内联 <style>，每次渲染都重建一份样式表。 */
 @keyframes bk-locate-flash {
@@ -951,16 +952,11 @@
 }
 
 @layer utilities {
-  /* 点阵纹理（登录页/页头带可加密到 18px） */
-  .dot-grid {
-    background-image: radial-gradient(circle, rgba(13, 22, 38, .035) 1px, transparent 1px);
-    background-size: 22px 22px;
-  }
+  /* 点阵纹理（登录页） */
   .dot-grid-dense {
     background-image: radial-gradient(circle, rgba(13, 22, 38, .04) 1px, transparent 1px);
     background-size: 18px 18px;
   }
-  html.dark .dot-grid,
   html.dark .dot-grid-dense {
     background-image: radial-gradient(circle, rgba(241, 243, 245, .045) 1px, transparent 1px);
   }
@@ -975,12 +971,9 @@
 
 /* §4.2 降级：减少动态偏好 */
 @media (prefers-reduced-motion: reduce) {
-  .animate-radar-sweep,
   .animate-marquee,
   .marquee-inner,
-  .animate-blip-ripple,
   .skeleton-shimmer::after,
-  .animate-shimmer,
   .spark-draw,
   .animate-led-pulse {
     animation: none !important;
@@ -991,9 +984,7 @@
   .spark-draw {
     stroke-dashoffset: 0 !important;
   }
-  .anim-fade-in,
-  .animate-rise-in,
-  .animate-page-fade-in {
+  .anim-fade-in {
     animation-duration: 160ms !important;
   }
   *, *::before, *::after {
@@ -1018,4 +1009,42 @@
     outline-offset: 3px;
     box-shadow: none !important;
   }
+}
+
+/* 登录页主视觉：K 线描线循环、落点脉冲与整体漂移（此前以内联 <style> 随组件注入）。 */
+.login-kline-loop {
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: login-kline-loop 10s var(--ease-paper) infinite;
+}
+@keyframes login-kline-loop {
+  0% { stroke-dashoffset: 1000; opacity: 0; animation-timing-function: cubic-bezier(.16,1,.3,1); }
+  8% { opacity: 1; }
+  60% { stroke-dashoffset: 0; opacity: 1; }
+  88% { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
+.login-kline-blip {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: login-kline-blip 10s ease-out infinite;
+}
+@keyframes login-kline-blip {
+  0%, 58% { transform: scale(.15); opacity: 0; }
+  63% { opacity: .8; }
+  80% { transform: scale(1); opacity: 0; }
+  100% { transform: scale(1); opacity: 0; }
+}
+.login-drift { animation: login-drift 24s cubic-bezier(.45,0,.15,1) infinite alternate; }
+@keyframes login-drift {
+  from { transform: translate(-8px, -6px); }
+  to { transform: translate(8px, 8px); }
+}
+.login-paused .login-drift,
+.login-paused .login-kline-loop,
+.login-paused .login-kline-blip { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) {
+  .login-drift, .login-kline-loop, .login-kline-blip { animation: none !important; }
+  .login-kline-loop { stroke-dashoffset: 0; opacity: 1; }
 }

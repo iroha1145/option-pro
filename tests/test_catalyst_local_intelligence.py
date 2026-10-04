@@ -7776,6 +7776,39 @@ def test_anon_complete_cache_hit_fingerprints_once(tmp_path, monkeypatch) -> Non
     assert calls["n"] == 1
 
 
+def test_anon_items_are_cached_for_a_window_with_a_published_analysis(
+    tmp_path,
+) -> None:
+    # Items are attached only while the request's rows still equal the cached
+    # rows, so building an item must not write into its revision row.
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime.now(timezone.utc)
+    _apply_news(
+        etl,
+        [_news_change(1, 1, available_at=now - timedelta(minutes=5))],
+        as_of=now,
+    )
+    intelligence.reconcile()
+    job = intelligence.request_analysis(1, force=False)
+    _finish_job(
+        ai,
+        job["job_id"],
+        _news_result(news_id=1, change_sequence=1, content_hash="hash-1-1"),
+    )
+    intelligence.reconcile()
+    local_module._reset_revision_cache()
+
+    with request_owner_access_context(False):
+        feed = intelligence.feed(
+            as_of=datetime.now(timezone.utc), window_hours=24, limit=10
+        )
+
+    assert feed["items"][0]["analysis_status"] == "completed"
+    assert feed["items"][0]["analysis_input"] is not None
+    cached = local_module._REVISION_CACHE[(str(intelligence.db_path), 24)]
+    assert cached.get("anon_items") is not None
+
+
 def test_incomplete_revision_cache_falls_back_to_slow_path(
     tmp_path, monkeypatch
 ) -> None:

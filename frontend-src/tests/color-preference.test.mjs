@@ -141,7 +141,7 @@ test('K 线 / 情景 / 仓位 / 迷你 K 在色彩习惯变化时重建 option',
   assert.match(kline, /\[data, range, mode, prevClose, overlay, extraMarks, analysisOption, colorMode, appearance\]/);
   assert.match(scenario, /\[row, colorMode, appearance\]/);
   assert.match(history, /\[history, colorMode, appearance\]/);
-  assert.match(lead, /\[data, colorMode, appearance\]/);
+  assert.match(lead, /\[data, colorMode, appearance, pivot, invalidation\]/);
 });
 
 /* 上一条按名点了四张图；这条是镜子：任何在渲染期读全局涨跌习惯的组件都必须订阅。

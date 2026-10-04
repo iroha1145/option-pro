@@ -183,10 +183,10 @@ export default function MacroHistoryChart({
   }, [points, modules, shownModules, colorMode, appearance]);
 
   return (
-    <section className="card-surface p-5" aria-label={t("宏观环境历史")}>
+    <section className="card-surface flex h-full flex-col p-5" aria-label={t("宏观环境历史")}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <p className="eyebrow">
-          {t('综合分历史 · COMPOSITE HISTORY')}
+        <h3 className="text-h3 text-ink-900">
+          {t('综合分历史')}
           <InfoHint
             hint={SCORE_HINTS_MACRO.macroHistoryBasis}
             side="bottom"
@@ -194,7 +194,7 @@ export default function MacroHistoryChart({
             size={11}
             className="ml-1"
           />
-        </p>
+        </h3>
         <SelectionViewport>
           <div className="mobile-selection-rail flex flex-wrap gap-1" role="group" aria-label={t("历史区间")}>
             {HISTORY_RANGES.map((item) => (
@@ -220,7 +220,7 @@ export default function MacroHistoryChart({
       {error && points.length > 0 && (
         /* 新区间读取失败、图上还是上一区间的曲线：按钮已高亮新区间，不标注
            就是同屏说谎（审计 #54）。 */
-        <p className="mt-3 flex items-center justify-between gap-2 rounded-xs border border-warn-600/30 bg-warn-50 px-2.5 py-1.5 text-caption text-warn-600">
+        <p className="mt-3 flex items-center justify-between gap-2 rounded-xs border border-warn-600/30 bg-warn-50 px-2.5 py-1.5 text-caption text-warn-700">
           {t('该区间读取失败，仍显示上一区间的曲线')}
           {onRetry && (
             <button type="button" onClick={onRetry} className="shrink-0 font-medium underline underline-offset-2">
@@ -229,18 +229,19 @@ export default function MacroHistoryChart({
           )}
         </p>
       )}
-      <div className={cn(INSIGHT_FRAME, 'mt-4')}>
-        <div className="h-[240px] w-full">
+      {/* 大屏与左列（综合分 + 对照卡）并排：图随栏高拉伸，两列底边齐平，至少 240px */}
+      <div className={cn(INSIGHT_FRAME, 'mt-4 flex flex-col lg:flex-1')}>
+        <div className="h-[240px] w-full lg:h-auto lg:min-h-[240px] lg:flex-1">
         {loading && points.length === 0 ? (
           <SkeletonBlock className="h-full w-full" />
         ) : error && points.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
-            <p className="text-body-s text-warn-600">{t('历史数据读取失败：')}{error.message}</p>
+            <p className="text-body-s text-warn-700">{t('历史数据读取失败：')}{error.message}</p>
             {onRetry && (
               <button
                 type="button"
                 onClick={onRetry}
-                className="rounded-md border border-line bg-card px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+                className="control-button"
               >
                 {t('重试')}
               </button>

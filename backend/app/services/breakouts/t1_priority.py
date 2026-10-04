@@ -33,7 +33,7 @@ from app.services.breakouts.feature_engine import (
     trim_daily_bars,
 )
 from app.services.breakouts.anchors import resolve_event_anchor
-from app.services.breakouts.models import MarketSession, TemporalCutoff
+from app.services.breakouts.models import MarketSession, TemporalCutoff, enum_value
 from app.services.market_calendar import ET, is_trading_day, prior_trading_sessions
 
 
@@ -106,7 +106,7 @@ def _event_setup_type(event: Mapping[str, Any] | None) -> str:
 
     payload = dict(event or {})
     setup = payload.get("setup_type") or payload.get("origin_setup_type") or ""
-    return str(getattr(setup, "value", setup)).strip()
+    return str(enum_value(setup)).strip()
 
 
 def t1_setup_applicable(event: Mapping[str, Any] | None) -> bool:

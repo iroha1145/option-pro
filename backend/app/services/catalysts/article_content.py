@@ -17,10 +17,14 @@ from urllib.parse import quote, urljoin, urlsplit, urlunsplit
 
 from lxml import html
 
+from app.failure_diagnostics import record_fallback_failure
+from app.services.ai_jobs.models import NEWS_ARTICLE_TEXT_MAX_CHARS
+
 from .news_links import resolve_publisher_url
+from .news_quality import TITLE_STOP_WORDS
 
 _MAX_BYTES = 1024 * 1024
-_MAX_TEXT = 12000
+_TITLE_MATCH_STOP_WORDS = TITLE_STOP_WORDS | {"news"}
 _GOOGLE_ARTICLE_PATH = re.compile(r"/articles/[A-Za-z0-9_-]{16,4096}(?:\?hl=en-US&gl=US&ceid=US:en)?\Z")
 _NOISE = re.compile(r"(?:^|[-_\s])(nav|menu|footer|header|related|recommend\w*|comment\w*|subscribe\w*|subscription|newsletter|advert\w*|social|share|paywall)(?:$|[-_\s])", re.I)
 _CHALLENGE = re.compile(r"just a moment|verify (?:that )?you are human|access denied|captcha|checking your browser|enable javascript and cookies", re.I)
@@ -205,7 +209,7 @@ def _walk(value):
 
 def _title_matches(expected: str, actual: str) -> bool:
     def tokens(text):
-        words = set(re.findall(r"[a-z0-9]{3,}", text.lower())) - {"the", "and", "for", "with", "from", "that", "this", "news"}
+        words = set(re.findall(r"[a-z0-9]{3,}", text.lower())) - _TITLE_MATCH_STOP_WORDS
         for run in re.findall(r"[\u3400-\u9fff]+", text):
             words.update(run[i:i + 2] for i in range(max(1, len(run) - 1)))
         return words
@@ -340,7 +344,7 @@ def _extract(payload: bytes, expected_title: str, *, source_url: str = "") -> tu
         unique_sentence_length = len(" ".join(dict.fromkeys(sentences)))
         if sentences and (unique_sentence_length < (180 if short_brief else 300) or unique_sentence_length < len(text) * 0.5):
             continue
-        return text[:_MAX_TEXT], partial or len(text) > _MAX_TEXT
+        return text[:NEWS_ARTICLE_TEXT_MAX_CHARS], partial or len(text) > NEWS_ARTICLE_TEXT_MAX_CHARS
     raise _Unavailable("no_matching_article_body")
 
 
@@ -360,7 +364,7 @@ def fetch_article(url: str, *, expected_title: str = "", timeout_seconds: float 
             normalized, host, path = _validated_url(url)
             result["source_url"] = normalized
             if host == "news.google.com":
-                publisher = resolve_publisher_url(normalized, b"", request=_google_request, deadline=deadline)
+                publisher = resolve_publisher_url(normalized, request=_google_request, deadline=deadline)
                 _remaining(deadline)
                 if not publisher:
                     raise _Unavailable("publisher_url_unavailable")
@@ -385,6 +389,9 @@ def fetch_article(url: str, *, expected_title: str = "", timeout_seconds: float 
         result["reason"] = str(exc)
     except (TimeoutError, socket.timeout):
         result["reason"] = "timeout"
-    except Exception:
+    except Exception as exc:
         result["reason"] = "timeout" if deadline is not None and time.monotonic() >= deadline else "fetch_failed"
+        # Network and parser failures are expected here, but a defect in the
+        # extractor would otherwise look like an unavailable page indefinitely.
+        record_fallback_failure("catalyst_article_fetch", exc)
     return result

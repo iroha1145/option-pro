@@ -201,7 +201,7 @@ _TITLE_STOPWORDS = frozenset(
 _TITLE_RELATED_MIN_OVERLAP = 0.6
 
 
-def _title_tokens(value: Any) -> frozenset[str]:
+def _release_title_tokens(value: Any) -> frozenset[str]:
     """English tokens used only by the fuzzy relatedness check below.
 
     Deliberately does not call _public_calendar_title: it works directly off
@@ -230,8 +230,8 @@ def _titles_are_related(event_title: Any, candidate_title: Any) -> bool:
     _TITLE_RELATED_MIN_OVERLAP of the shorter side's word count.
     """
 
-    event_tokens = _title_tokens(event_title)
-    candidate_tokens = _title_tokens(candidate_title)
+    event_tokens = _release_title_tokens(event_title)
+    candidate_tokens = _release_title_tokens(candidate_title)
     if not event_tokens or not candidate_tokens:
         return False
     if (event_tokens & _TITLE_QUALIFIER_TOKENS) != (candidate_tokens & _TITLE_QUALIFIER_TOKENS):

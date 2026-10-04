@@ -11,7 +11,7 @@ import { t } from '../../i18n/core.ts';
 function MiniStat({ label, value, hint }: { label: string; value: string; hint?: ScoreHint }) {
   return (
     <div className="rounded-md bg-paper-2 px-1.5 py-1.5 text-center">
-      <div className="truncate font-mono text-body-s font-medium text-ink-900 tnum">{value}</div>
+      <div className="truncate text-body-s font-medium text-ink-900 tnum">{value}</div>
       <div className="flex items-center justify-center gap-0.5 text-micro text-ink-400">
         <span className="truncate" title={label}>{label}</span>
         {hint && <InfoHint hint={hint} size={11} side="bottom" />}
@@ -27,7 +27,8 @@ export default function TechnicalPanel({ technical }: { technical: TechnicalStru
   if (!technical) return <p className="mt-3 text-caption text-ink-400">{t('暂无数据')}</p>;
   const tech = technical.technicals;
   return (
-    <dl className="mt-3 grid grid-cols-3 gap-1.5">
+    /* 右栏 4 列宽时三列会把「MACD 柱变化（柱−）」截断：窄栏两列，整宽时三列 */
+    <dl className="mt-3 grid grid-cols-2 gap-1.5 md:grid-cols-3 xl:grid-cols-2">
       <MiniStat
         label={t('RSI 14')}
         value={tech.rsi14 !== null ? tech.rsi14.toFixed(1) : '—'}
