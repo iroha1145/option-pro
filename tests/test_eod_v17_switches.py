@@ -279,6 +279,35 @@ def test_ensure_industry_tags_persists_the_table_and_classifies_stock_members(tm
     assert calls == ["FRESH"] and again == tags_out and summary2["refresh"] == {}
 
 
+@pytest.mark.parametrize("damage", ["truncated", "zeroed", "empty"])
+def test_a_damaged_table_is_read_as_empty_and_rewritten_by_the_refresh(tmp_path, monkeypatch, damage):
+    root = tmp_path / "data"
+    path = industry_module.table_path(root)
+    SicTable(sic_table()).save(path)
+    saved = path.read_bytes()
+    path.write_bytes({"truncated": saved[: len(saved) // 2], "zeroed": b"\0" * 64, "empty": b""}[damage])
+    logged = []
+    monkeypatch.setattr(industry_module, "record_fallback_failure", lambda stage, exc, **_kw: logged.append(stage))
+
+    tags, summary = industry_module.ensure_industry_tags(
+        directory_rows(), root=root, level=3, budget=5, fetch=lambda _ticker: {"sic_code": "6022"},
+    )
+
+    assert logged == ["eod_industry_table_read"]
+    assert summary["refresh"] == {"looked_up": 5, "classified": 5, "deferred": summary["stock_tickers"] - 5}
+    assert len(tags) == 5
+    assert len(SicTable.load(path)) == 5  # the damaged file was replaced by a readable one
+
+
+def test_a_table_with_the_wrong_shape_is_still_an_error(tmp_path):
+    root = tmp_path / "data"
+    path = industry_module.table_path(root)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(gzip.compress(b'{"version": 1, "records": 5}'))
+    with pytest.raises(TypeError):
+        industry_module.ensure_industry_tags(directory_rows(), root=root, budget=5, fetch=lambda _ticker: {})
+
+
 # ---------------------------------------------------------------- options
 
 

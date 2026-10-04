@@ -35,6 +35,7 @@ import gzip
 import json
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
+import zlib
 
 from app.data_paths import get_data_paths
 from app.failure_diagnostics import record_fallback_failure
@@ -201,8 +202,19 @@ def table_path(root: Path | str | None = None) -> Path:
 
 
 def load_table(root: Path | str | None = None) -> SicTable:
+    """The saved table; empty when there is none or a crash left it truncated or corrupt.
+
+    Reading a damaged table as empty lets the next refresh rewrite it instead of
+    failing before the lookup on every run.
+    """
     path = table_path(root)
-    return SicTable.load(path) if path.exists() else SicTable()
+    if not path.exists():
+        return SicTable()
+    try:
+        return SicTable.load(path)
+    except (EOFError, ValueError, gzip.BadGzipFile, zlib.error) as exc:
+        record_fallback_failure("eod_industry_table_read", exc)
+        return SicTable()
 
 
 def _massive_detail(ticker: str) -> Mapping[str, Any]:
