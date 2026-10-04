@@ -4145,7 +4145,7 @@ class LocalCatalystIntelligence:
         *,
         as_of: datetime,
     ) -> tuple[dict[str, Any] | None, str | None]:
-        result, available, _current = self._analysis_state_for_revision(
+        result, available, _current, _input_context = self._analysis_state_for_revision(
             connection,
             row,
             as_of=as_of,
@@ -4158,8 +4158,9 @@ class LocalCatalystIntelligence:
         row: dict[str, Any],
         *,
         as_of: datetime,
-    ) -> tuple[dict[str, Any] | None, str | None, bool]:
-        """Published analysis, its time, and whether the current contract holds.
+    ) -> tuple[dict[str, Any] | None, str | None, bool, dict[str, Any] | None]:
+        """Published analysis, its time, whether the current contract holds,
+        and the input context the paid request was built from.
 
         A previously accepted paid result that fails the current contract is
         still returned (it is never discarded), flagged as not current.
@@ -4172,7 +4173,7 @@ class LocalCatalystIntelligence:
             input_context_json = row.get("analysis_input_context_json")
             audited = bool(row.get("analysis_result_audited"))
             if raw_value is None or result_available_at is None:
-                return None, None, False
+                return None, None, False, None
         else:
             link = connection.execute(
                 """SELECT link.job_id AS analysis_result_job_id,
@@ -4201,19 +4202,19 @@ class LocalCatalystIntelligence:
                 ),
             ).fetchone()
             if link is None:
-                return None, None, False
+                return None, None, False, None
             raw_value = link["result_json"]
             result_available_at = link["result_available_at"]
             result_job_id = link["analysis_result_job_id"]
             input_context_json = link["input_context_json"]
             audited = bool(link["result_audited"])
-        row["_analysis_input_context"] = _loads(input_context_json, _news_input_context({}))
+        input_context = _loads(input_context_json, _news_input_context({}))
         payload = self._news_validation_payload(row, as_of=as_of)
         raw_result = str(raw_value)
         if audited:
             result = _loads(raw_result, None)
             if _news_result_identity_matches(result, payload):
-                return result, str(result_available_at), True
+                return result, str(result_available_at), True, input_context
         try:
             result = validate_result("news_impact", raw_result, payload)
         except (TypeError, ValueError):
@@ -4227,9 +4228,9 @@ class LocalCatalystIntelligence:
                     raw_result=raw_result,
                 )
             ):
-                return None, None, False
-            return result, str(result_available_at), False
-        return result, str(result_available_at), True
+                return None, None, False, None
+            return result, str(result_available_at), False, input_context
+        return result, str(result_available_at), True, input_context
 
     def _plan_hotspots(
         self,
@@ -4573,7 +4574,7 @@ class LocalCatalystIntelligence:
         as_of: datetime,
         jobs: Mapping[str, dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        result, available, current = self._analysis_state_for_revision(
+        result, available, current, input_context = self._analysis_state_for_revision(
             connection,
             row,
             as_of=as_of,
@@ -4648,7 +4649,7 @@ class LocalCatalystIntelligence:
             "source_count": int(row.get("source_count") or 1),
             "analysis_status": status,
             "analysis": result,
-            "analysis_input": row.get("_analysis_input_context") if result is not None else None,
+            "analysis_input": input_context,
             # Private: False marks a previously accepted result that the public
             # boundary hides; filters and counts must not treat it as visible.
             "_analysis_current": bool(result is not None and current),
