@@ -13,7 +13,8 @@ import { displayedQuoteLabel, preferLiveQuote } from '@/lib/liveQuotes';
  * 锚点按 bar 时间戳存储、静默刷新后重新解析，解析不到判失效
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion } from 'framer-motion';
+import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 import { DUR_UI, EASE_PAPER } from '@/lib/motion';
 import ReactECharts from '@/components/charts/ReactECharts';
 import Segmented from '@/components/shared/Segmented';
@@ -583,7 +584,7 @@ export default function KlineChart({
   const [basis, setBasis] = useState<MeasureBasis>('wick');
   const [chartInst, setChartInst] = useState<EChartsInstance | null>(null);
   const measureActive = measure.phase !== 'idle';
-  const reducedMotion = Boolean(useReducedMotion());
+  const reducedMotion = usePrefersReducedMotion();
   const identityKey = isCustomer && username ? `account:${username}` : isOwner ? 'owner' : 'anonymous';
   const bars = data?.bars;
   // 结构负载与图表 bars 各有缓存，可能短暂错版本；不同源就暂隐叠加。

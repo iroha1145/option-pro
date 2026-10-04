@@ -1,6 +1,7 @@
 import AnalysisIcon from '@/components/shared/AnalysisIcon';
 import { useState } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion } from 'framer-motion';
+import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import SoftBadge, { type BadgeTone } from '@/components/shared/SoftBadge';
@@ -49,7 +50,7 @@ function progressHeadline(progress: NewsAnalysisProgress): string {
 }
 
 function OwnerAnalysisProgressCard() {
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = usePrefersReducedMotion();
   const [busy, setBusy] = useState(true);
   const [readProgress] = useState(() => createReadBackoff(fetchNewsAnalysisProgress, PROGRESS_FAILURE_WAITS_MS));
   const progressQ = usePolling(readProgress, busy ? 5_000 : 30_000);

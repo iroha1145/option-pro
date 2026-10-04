@@ -9,7 +9,8 @@
  */
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion } from 'framer-motion';
+import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 import { useAccess } from '@/hooks/useAccess';
 import { accessApi } from '@/api/modules/access';
 import { ApiError } from '@/api/client';
@@ -150,7 +151,7 @@ export default function Login() {
   /* 从别处「去登录」带来的来源页（#21）：登录成功回到出发点而不是固定 /watchlist */
   const fromPath = (location.state as { from?: string } | null)?.from ?? null;
   const toast = useToast();
-  const reduced = useReducedMotion();
+  const reduced = usePrefersReducedMotion();
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
