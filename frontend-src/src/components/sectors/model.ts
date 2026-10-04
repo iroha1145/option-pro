@@ -208,6 +208,11 @@ function luminance([red, green, blue]: Rgb): number {
    +14% 在 ±3% 的日内色阶上是同一种最深绿，热力图就失去了「扫颜色」的读法。 */
 const HEAT_SPAN: Record<SectorPeriod, number> = { '1mo': 6, '3mo': 12, '6mo': 18 };
 
+/** 该周期色阶的满格收益（%）；热力条的长度与颜色按同一把尺子。 */
+export function heatSpan(period: SectorPeriod): number {
+  return HEAT_SPAN[period];
+}
+
 export function heatTone(avgReturn: number, period: SectorPeriod = '3mo'): { bg: string; dark: boolean } {
   const bg = heatColor(avgReturn, HEAT_SPAN[period]);
   const rgb = parseRgb(bg);
@@ -240,27 +245,6 @@ export function ivRankColor(rank: number): string {
   }
   const mid = stops[1].rgb;
   return `rgb(${mid[0]},${mid[1]},${mid[2]})`;
-}
-
-/* v8.3 IV 高位砖去糖果色：满底热色是「AI 生成热力图」签名。砖改为白底 card +
-   左缘 3px 热色竖条 + 极淡 tint 底，热色只出现在「数据墨水」上（竖条/数字）。
-   toneOnColor/light 分支随满底背景一并退役（luminance 仍服务 heatTone）。 */
-
-/** 砖底极淡 tint：ivRankColor 的 rgb 加 0.12 alpha（几乎不可见，近看有温度）。 */
-export function ivRankTint(rank: number): string {
-  const rgb = parseRgb(ivRankColor(rank));
-  return rgb ? `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.12)` : 'rgba(228,233,255,0.12)';
-}
-
-/** rank 数字墨色：热色与 ink-800(#182338) 按 55% 混色，保证数字在 tint 底上可读。 */
-export function ivRankInk(rank: number): string {
-  const rgb = parseRgb(ivRankColor(rank));
-  const ink: Rgb = getAppearance() === 'dark' ? [241, 243, 245] : [24, 35, 56];
-  if (!rgb) return `rgb(${ink[0]},${ink[1]},${ink[2]})`;
-  const mixed = rgb.map((value, channel) =>
-    Math.round(value * 0.55 + ink[channel] * 0.45),
-  ) as Rgb;
-  return `rgb(${mixed[0]},${mixed[1]},${mixed[2]})`;
 }
 
 export const SOURCE_STATUS_CN: Record<Exclude<SectorSourceStatus, 'active'>, string> = {
