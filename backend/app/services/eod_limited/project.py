@@ -191,7 +191,7 @@ def _dedupe_observation_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[str
     return list(best.values())
 
 
-def _empty_eligible_reason(scored: Mapping[str, Any]) -> str:
+def empty_eligible_reason(scored: Mapping[str, Any]) -> str:
     if int(scored.get("eligible_n") or 0) > 0 and int(scored.get("composite_n") or 0) == 0:
         return "consensus_insufficient"
     if int(scored.get("watch_n") or 0) > 0:
@@ -282,7 +282,7 @@ def project_strength_payload(
         "rejected_n": rejected_n,
         "composite_n": int(scored.get("composite_n") or 0),
         "observation_n": len(observation_rows),
-        "empty_eligible_reason": _empty_eligible_reason(scored),
+        "empty_eligible_reason": empty_eligible_reason(scored),
         "list_kind": list_kind,
         "observation_rows": observation_rows,
         "composite_rows": composite_rows,

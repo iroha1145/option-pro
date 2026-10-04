@@ -402,6 +402,21 @@ def _load_validated_document(
         return None, {}
 
 
+def _visible(saved_at: float, resource: str, now: float, *, keep_expired: bool = False) -> bool:
+    max_age = STOCK_PULL_RESOURCE_MAX_AGE_SECONDS[resource]
+    return not (
+        saved_at > now + STOCK_PULL_MAX_CLOCK_SKEW_SECONDS
+        or (not keep_expired and saved_at + max_age <= now)
+    )
+
+
+def _freshness(saved_at: float, resource: str, now: float) -> dict[str, Any]:
+    return {
+        "fresh": saved_at + STOCK_PULL_RESOURCE_FRESH_SECONDS[resource] > now,
+        "max_age": STOCK_PULL_RESOURCE_MAX_AGE_SECONDS[resource],
+    }
+
+
 def _read_document(
     path: Path,
     *,
@@ -413,12 +428,7 @@ def _read_document(
     for ticker, resources in validated.items():
         visible_resources: dict[str, dict[str, Any]] = {}
         for resource, entry in resources.items():
-            saved_at = float(entry["saved_at"])
-            max_age = STOCK_PULL_RESOURCE_MAX_AGE_SECONDS[resource]
-            if (
-                saved_at > now + STOCK_PULL_MAX_CLOCK_SKEW_SECONDS
-                or (not keep_expired and saved_at + max_age <= now)
-            ):
+            if not _visible(float(entry["saved_at"]), resource, now, keep_expired=keep_expired):
                 continue
             visible_resources[resource] = entry
         if visible_resources:
@@ -459,11 +469,7 @@ def read_stock_pull_resource(
         # fields from their response copy, so never expose the cached tree.
         "payload": copy.deepcopy(entry["payload"]),
         "saved_at": saved_at,
-        "fresh": (
-            saved_at + STOCK_PULL_RESOURCE_FRESH_SECONDS[resource]
-            > observed_at
-        ),
-        "max_age": STOCK_PULL_RESOURCE_MAX_AGE_SECONDS[resource],
+        **_freshness(saved_at, resource, observed_at),
     }
 
 
@@ -530,24 +536,11 @@ def read_stock_pull_summary(
     target = stock_pull_snapshot_path(path)
     with _snapshot_lock:
         resources = _read_summary(target).get(symbol, {})
-    visible: dict[str, dict[str, Any]] = {}
-    for resource, item in resources.items():
-        saved_at = item["saved_at"]
-        max_age = STOCK_PULL_RESOURCE_MAX_AGE_SECONDS[resource]
-        if (
-            saved_at > observed_at + STOCK_PULL_MAX_CLOCK_SKEW_SECONDS
-            or saved_at + max_age <= observed_at
-        ):
-            continue
-        visible[resource] = {
-            **item,
-            "fresh": (
-                saved_at + STOCK_PULL_RESOURCE_FRESH_SECONDS[resource]
-                > observed_at
-            ),
-            "max_age": max_age,
-        }
-    return visible
+    return {
+        resource: {**item, **_freshness(item["saved_at"], resource, observed_at)}
+        for resource, item in resources.items()
+        if _visible(item["saved_at"], resource, observed_at)
+    }
 
 
 def write_stock_pull_resources(

@@ -801,7 +801,7 @@ def _read_eod_limited_snapshot(
         PURPOSE_SYNTHETIC,
         RESEARCH_SEALED_SESSION,
     )
-    from app.services.eod_limited.project import project_strength_payload
+    from app.services.eod_limited.project import empty_eligible_reason, project_strength_payload
     from app.services.eod_limited.store import read_batch, variant_from_batch, snapshot_path
     from app.services.eod_limited.universe import FUND_SCOPE_ALL
     from app.services.research_eod_v1.calendar_asof import settled_eod_session
@@ -858,12 +858,7 @@ def _read_eod_limited_snapshot(
         payload["composite_n"] = sum(
             1 for row in payload.get("composite_rows") or [] if row.get("stock_or_etf_track") == track
         )
-        payload["empty_eligible_reason"] = (
-            "consensus_insufficient" if payload["eligible_n"] and not payload["composite_n"]
-            else "data_qualification_unverified" if payload["watch_n"]
-            else "technical_threshold" if payload.get("rejected_n")
-            else "no_complete_candidates"
-        )
+        payload["empty_eligible_reason"] = empty_eligible_reason(payload)
     for key in ("observation_rows", "composite_rows"):
         rows = [
             row for row in payload.get(key) or []

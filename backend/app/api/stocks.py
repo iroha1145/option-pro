@@ -95,6 +95,15 @@ class _EndpointCacheEntry:
     value: Any
 
 
+def _fetched_entry(value: Any, fetched_at: float, ttl: int, max_age: int) -> _EndpointCacheEntry:
+    return _EndpointCacheEntry(
+        expires_at=fetched_at + ttl,
+        stale_until=fetched_at + max(ttl, max_age),
+        fetched_at=fetched_at,
+        value=value,
+    )
+
+
 _endpoint_cache: dict[str, _EndpointCacheEntry] = {}
 # Per-key lock prevents thundering herd: concurrent requests for the same
 # cold key would otherwise all kick off their own yfinance fetch.
@@ -437,12 +446,7 @@ async def _load_and_store_endpoint(
             value = await loader()
             fetched_at = time.time()
             _maybe_purge_endpoint_cache(fetched_at)
-            entry = _EndpointCacheEntry(
-                expires_at=fetched_at + ttl,
-                stale_until=fetched_at + max(ttl, max_age),
-                fetched_at=fetched_at,
-                value=value,
-            )
+            entry = _fetched_entry(value, fetched_at, ttl, max_age)
             _endpoint_cache[key] = entry
             _endpoint_refresh_retry_after.pop(key, None)
             _run_endpoint_success_callback(key, on_success, value, fetched_at)
@@ -479,12 +483,7 @@ async def _force_replace_endpoint(
             value = await loader()
             fetched_at = time.time()
             _maybe_purge_endpoint_cache(fetched_at)
-            entry = _EndpointCacheEntry(
-                expires_at=fetched_at + ttl,
-                stale_until=fetched_at + max(ttl, max_age),
-                fetched_at=fetched_at,
-                value=value,
-            )
+            entry = _fetched_entry(value, fetched_at, ttl, max_age)
             _endpoint_cache[key] = entry
             _endpoint_refresh_retry_after.pop(key, None)
             return entry
@@ -4142,13 +4141,7 @@ async def _pull_stock_data_once(
         if publish_to_cache:
             return await _force_replace_endpoint(key, ttl, max_age, loader)
         value = await loader()
-        fetched_at = time.time()
-        return _EndpointCacheEntry(
-            expires_at=fetched_at + ttl,
-            stale_until=fetched_at + max(ttl, max_age),
-            fetched_at=fetched_at,
-            value=value,
-        )
+        return _fetched_entry(value, time.time(), ttl, max_age)
 
     overview_result, chart_result = await asyncio.gather(
         _capture_refresh(
