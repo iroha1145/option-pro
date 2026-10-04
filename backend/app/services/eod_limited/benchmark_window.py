@@ -32,6 +32,7 @@ from typing import Any, Sequence
 from app.services.market_calendar import prior_trading_sessions
 from app.services.research_eod_v1.constants import PROFILES, RESIDUAL_HISTORY_MIN
 from app.services.research_eod_v1.residual import residual_benchmark_sessions
+from app.services.research_eod_v1.series import SecuritySeries
 
 from .full_market_tuning import TuningPolicy, momentum_grid
 from .inference import SESSION_PANEL_BARS
@@ -107,7 +108,7 @@ def _positive(value: Any) -> bool:
     return math.isfinite(number) and number > 0
 
 
-def window_problems(benchmark: str, series: Any, window: BenchmarkWindow) -> list[dict[str, Any]]:
+def window_problems(benchmark: str, series: SecuritySeries, window: BenchmarkWindow) -> list[dict[str, Any]]:
     """Why ``series`` cannot serve as the benchmark over ``window``; empty when it can.
 
     Three problems are told apart: a required session without a bar inside the
@@ -116,7 +117,7 @@ def window_problems(benchmark: str, series: Any, window: BenchmarkWindow) -> lis
     residual needs.
     """
     # The scorers read the close-price-return view (``panel.prepare_limited_panel``).
-    view = series.with_close_price_return() if hasattr(series, "with_close_price_return") else series
+    view = series.with_close_price_return()
     position = {day: index for index, day in enumerate(view.dates)}
     first = view.dates[0] if len(view.dates) else None
     partial = view.bar_partial

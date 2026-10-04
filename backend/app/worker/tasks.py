@@ -2256,6 +2256,7 @@ class StrengthRefreshTask:
     async def _run_eod_limited(self, parameters: dict[str, Any]) -> TaskResult:
         from app.api.strength import strength_scan_parameters_hash
         from app.services.eod_limited import PURPOSE_LIVE
+        from app.services.eod_limited.market_data import AllMarketDataError
         from app.services.eod_limited.worker import run_eod_limited_job
         from app.services.research_eod_v1.constants import HORIZONS
 
@@ -2308,17 +2309,17 @@ class StrengthRefreshTask:
             }
             # AllMarketDataError names the trading days that failed, so the
             # status API can show which session blocks the full-market input.
-            reason_code = getattr(exc, "reason_code", None)
-            if isinstance(reason_code, str) and reason_code:
-                details["reason_code"] = reason_code[:120]
-            failed_sessions = list(getattr(exc, "failed_sessions", None) or ())
-            if failed_sessions:
-                details["failed_session_count"] = len(failed_sessions)
-                # Bounded for the 16 KiB status row and 128-item action lists.
-                details["failed_sessions"] = [
-                    {"session": str(session)[:32], "reason_code": str(code)[:120]}
-                    for session, code in failed_sessions[:_FAILED_SESSIONS_SHOWN]
-                ]
+            if isinstance(exc, AllMarketDataError):
+                if isinstance(exc.reason_code, str) and exc.reason_code:
+                    details["reason_code"] = exc.reason_code[:120]
+                failed_sessions = list(exc.failed_sessions)
+                if failed_sessions:
+                    details["failed_session_count"] = len(failed_sessions)
+                    # Bounded for the 16 KiB status row and 128-item action lists.
+                    details["failed_sessions"] = [
+                        {"session": str(session)[:32], "reason_code": str(code)[:120]}
+                        for session, code in failed_sessions[:_FAILED_SESSIONS_SHOWN]
+                    ]
             return TaskResult(
                 status="degraded",
                 error_code="eod_limited_input_unavailable",
