@@ -85,7 +85,8 @@ export default function IndexTape() {
      下一轮没有价格变化时状态就再也没人清除（审计 P2-5）。 */
   const flashes = useTickFlash(data, tapeKey, tapePrice);
   const navigate = useNavigate();
-  const openMarket = (code: string) => navigate(`/market?index=${encodeURIComponent(code)}`);
+  // 稳定引用，TapeRow 的 memo 才能在价格闪烁以外的重渲染里跳过各副本。
+  const openMarket = useCallback((code: string) => navigate(`/market?index=${encodeURIComponent(code)}`), [navigate]);
 
   const items = data ?? [];
   const innerRef = useRef<HTMLDivElement>(null);
