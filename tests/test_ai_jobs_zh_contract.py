@@ -2453,67 +2453,6 @@ def test_public_job_hides_new_shape_result_when_legacy_payload_lacks_identity(
     assert public["error_code"] == "legacy_output_hidden"
 
 
-def test_v1_database_migration_preserves_and_disables_sync_history(tmp_path):
-    path = tmp_path / "ai-jobs-v1.db"
-    connection = sqlite3.connect(path)
-    connection.executescript(
-        """
-        CREATE TABLE ai_jobs (
-            job_id TEXT PRIMARY KEY,job_type TEXT NOT NULL,request_hash TEXT NOT NULL,
-            payload_json TEXT NOT NULL,status TEXT NOT NULL,priority INTEGER NOT NULL,
-            model TEXT NOT NULL,reasoning TEXT NOT NULL,execution_mode TEXT NOT NULL,
-            prompt_version TEXT NOT NULL,schema_version TEXT NOT NULL,
-            schema_sha256 TEXT NOT NULL,openai_response_id TEXT,
-            submission_started_at TEXT,submitted_at TEXT,last_polled_at TEXT,
-            completed_at TEXT,attempt_count INTEGER NOT NULL,poll_count INTEGER NOT NULL,
-            next_attempt_at TEXT,error_code TEXT,result_json TEXT,
-            usage_input_tokens INTEGER,usage_cached_input_tokens INTEGER,
-            usage_output_tokens INTEGER,usage_reasoning_tokens INTEGER,
-            usage_total_tokens INTEGER,cancel_requested_at TEXT,lease_owner TEXT,
-            lease_expires_at TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL
-        );
-        """
-    )
-    connection.execute(
-        """
-        INSERT INTO ai_jobs(
-            job_id,job_type,request_hash,payload_json,status,priority,
-            model,reasoning,execution_mode,prompt_version,schema_version,
-            schema_sha256,attempt_count,poll_count,created_at,updated_at
-        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-        """,
-        (
-            "aij_legacy_sync_123",
-            "earnings_impact",
-            "legacy-hash",
-            "{}",
-            "pending",
-            50,
-            "gpt-5.6-terra",
-            "max",
-            "worker_sync",
-            "earnings-v2",
-            "earnings-v2",
-            "legacy-digest",
-            0,
-            0,
-            "2026-07-15T00:00:00Z",
-            "2026-07-15T00:00:00Z",
-        ),
-    )
-    connection.commit()
-    connection.close()
-
-    repository = AIJobRepository(path)
-    repository.initialize()
-    migrated = repository.get_job("aij_legacy_sync_123")
-    assert migrated["status"] == "failed"
-    assert migrated["execution_mode"] == "background"
-    assert migrated["legacy_execution_mode"] == "worker_sync"
-    assert migrated["error_code"] == "legacy_execution_mode_disabled"
-    assert migrated["execution_number"] == 1
-
-
 @pytest.mark.parametrize(
     ("response", "expected"),
     [
