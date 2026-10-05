@@ -412,3 +412,31 @@ def test_memo_off_is_byte_identical_to_memo_on(frozen: dict) -> None:
         left = _snapshots(frozen["root"] / "runs" / "memo_on", "baseline", day)
         right = _snapshots(frozen["root"] / "runs" / "memo_off", "baseline", day)
         assert json.dumps(left, sort_keys=True) == json.dumps(right, sort_keys=True)
+
+
+def test_runner_records_spy_at_the_stock_entry_moment_when_the_stock_rolls_forward(tmp_path) -> None:
+    """修订 7: a delayed stock entry carries SPY at that same bar; an on-time entry carries nothing extra."""
+
+    import pandas as pd
+
+    from harness.runner import record_entry_prices
+    from harness.stores import MinuteStore
+
+    day = datetime(2026, 7, 8, tzinfo=NY)
+
+    def bars(ticker: str, times: list[tuple[int, int]], opens: list[float]) -> None:
+        stamps = [int(day.replace(hour=h, minute=m).timestamp() * 1000) for h, m in times]
+        pd.DataFrame({"t": stamps, "open": opens, "high": opens, "low": opens, "close": opens, "volume": [100.0] * len(opens)}).to_parquet(tmp_path / f"{ticker}.parquet", index=False)
+
+    bars("SPY", [(10, 5), (10, 10), (10, 15)], [400.0, 401.0, 402.0])
+    bars("LATE", [(10, 15)], [10.5])  # 10:05 and 10:10 empty
+    bars("ONTIME", [(10, 5)], [20.0])
+    pd.DataFrame({"ticker": ["SPY", "LATE", "ONTIME"], "day": ["2026-07-08"] * 3}).to_parquet(tmp_path / "coverage.parquet", index=False)
+    store = MinuteStore(tmp_path)
+    events = [{"event_id": "a", "ticker": "LATE"}, {"event_id": "b", "ticker": "ONTIME"}, {"event_id": "c", "ticker": "LATE"}]
+    benchmark = record_entry_prices(store, events, {"a", "b"}, day.replace(hour=10, minute=2, second=37))
+    assert benchmark == (400.0, 0)  # the record keeps SPY at the scan's own slot
+    assert (events[0]["next_bar_open"], events[0]["next_bar_delay_slots"]) == (10.5, 2)
+    assert (events[0]["benchmark_open_at_entry"], events[0]["benchmark_delay_at_entry"]) == (402.0, 0)  # SPY at 10:15, the stock's bar
+    assert (events[1]["next_bar_open"], events[1]["next_bar_delay_slots"]) == (20.0, 0) and "benchmark_open_at_entry" not in events[1]
+    assert "next_bar_open" not in events[2]  # no entry transition for this event at this scan

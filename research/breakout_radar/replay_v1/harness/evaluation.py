@@ -26,7 +26,7 @@ import sqlite3
 import statistics
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 from zoneinfo import ZoneInfo
@@ -34,7 +34,10 @@ from zoneinfo import ZoneInfo
 NY = ZoneInfo("America/New_York")
 HOLDINGS = (1, 5, 20, 63)
 PRIMARY_HOLDING = 20
-NW_LAGS = {1: 0, 5: 0, 20: 3, 63: 11}
+# 修订 7: one point per trading day, so h-day windows of adjacent days overlap on h - 1 lags.
+NW_LAGS = {1: 0, 5: 4, 20: 19, 63: 62}
+BOOTSTRAP_SAMPLES = 2000
+BOOTSTRAP_SEED = 20261005
 P1_END = "2024-12-31"
 COMPLETE_YEARS = ("2022", "2023", "2024", "2025")
 MIN_YEAR_DAYS = 60  # PREREGISTRATION 修订 5: a year with fewer covered days is reported, not counted in rule 2
@@ -77,7 +80,9 @@ RULES = {
     "entry": "open of the 5-minute bar after the scan (next_bar_open); control: the trigger mark",
     "exits": "closes 1, 5, 20, 63 sessions after the trigger day, split-adjusted",
     "benchmark": "SPY entered at the same bar (else its close on the trigger day), exited at the same close",
-    "aggregation": "equal weight within a day, mean over days; Newey-West t with lag h/5 - 1",
+    "aggregation": "equal weight within a day, mean over observed days; Newey-West t with lag h - 1 on the daily series (修订 7); moving-block bootstrap (block h) as the overlap-robust check",
+    "benchmark_alignment": "SPY taken at the stock's actual entry moment (slot after the scan plus the delay); unmatched cases are flagged, not approximated (修订 7)",
+    "causality": "chaseable/extended membership is frozen at the trigger scan; extended_by_next_scan is a descriptive field only (修订 7)",
     "observation": dict(V16.RULES),
     "primary_holding": PRIMARY_HOLDING,
     "p1_end": P1_END,
@@ -121,14 +126,20 @@ class Trigger:
     carryover: bool = False
     failed_at: str | None = None  # first FAILED transition after the trigger (ISO UTC)
     t1_status: str | None = None
-    # PREREGISTRATION 修订 6: the switches confirm3 and chase15 act after the trigger.
-    extended_at_trigger: bool = False  # EXTENDED at the trigger scan or at the next scan of the day
+    # PREREGISTRATION 修订 6 and 7: the switches confirm3 and chase15 act after the trigger.
+    extended_at_trigger: bool = False  # EXTENDED in the trigger scan itself (causal, 修订 7)
+    extended_by_next_scan: bool = False  # EXTENDED at the next scan of the day: descriptive only, never a view for adoption
     confirmed_at: str | None = None  # first CONFIRMED transition (ISO UTC), same scan or later
     confirmed_day: str | None = None
     confirmed_next_bar_open: float | None = None
     confirmed_benchmark_open: float | None = None
+    confirmed_next_bar_delay: int | None = None
+    confirmed_entry_at: str | None = None
+    confirmed_benchmark_aligned: bool | None = None
     next_bar_delay: int | None = None  # empty slots skipped before the entry bar (0 = the next bar itself)
     benchmark_delay: int | None = None
+    entry_at: str | None = None  # ISO UTC start of the bar the stock actually enters at (slot after the scan + delay)
+    benchmark_aligned: bool | None = None  # SPY taken at entry_at (True), recorded at the scan's slot while the stock was delayed (False)
 
     @property
     def bucket(self) -> str:
@@ -166,6 +177,18 @@ def _et_day(stamp: str) -> str:
 def _et_minute(stamp: str) -> int:
     local = datetime.fromisoformat(stamp.replace("Z", "+00:00")).astimezone(NY)
     return local.hour * 60 + local.minute
+
+
+def entry_moment(as_of: str, delay: int | None) -> str:
+    """ISO UTC start of the entry bar: the first 5-minute boundary at or after ``as_of`` plus ``delay`` slots."""
+
+    local = datetime.fromisoformat(as_of.replace("Z", "+00:00")).astimezone(NY)
+    minute = local.hour * 60 + local.minute
+    on_boundary = local.second == 0 and local.microsecond == 0 and minute % 5 == 0
+    rounded = minute if on_boundary else (minute // 5 + 1) * 5
+    rounded += 5 * int(delay or 0)
+    start = local.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(minutes=rounded)
+    return start.astimezone(timezone.utc).isoformat()
 
 
 def read_ledger_file(path: Path) -> list[dict[str, Any]] | None:
@@ -302,7 +325,9 @@ def read_variant(
     info["days"] = len(funnel)
     info["degraded_days"] = sorted(degraded_days)
     info["backfills"] = {key: state["backfills"][key] for key in
-                         ("entry_triggers", "benchmark_triggers", "entry_confirmed", "benchmark_confirmed")}
+                         ("entry_triggers", "benchmark_triggers", "entry_confirmed", "benchmark_confirmed",
+                          "benchmark_realigned_triggers", "benchmark_realigned_confirmed",
+                          "benchmark_misaligned_triggers", "benchmark_misaligned_confirmed")}
     return ordered, funnel, info
 
 
@@ -312,15 +337,35 @@ def _absorb_record(record: dict[str, Any], day: str, triggers: dict[str, Trigger
     benchmark_lookup = state.get("benchmark_lookup")
     backfills: Counter = state["backfills"]
 
-    def benchmark_at_record(kind: str) -> tuple[float | None, int | None]:
-        value = _float(record.get("benchmark_next_bar_open"))
-        delay = _int_or_none(record.get("benchmark_next_bar_delay_slots"))
-        if value is None and benchmark_lookup is not None:
-            found = benchmark_lookup(record["as_of"])
+    def benchmark_at_entry(event: dict[str, Any], entry_delay: int | None, kind: str) -> tuple[float | None, int | None, str, bool | None]:
+        """SPY at the stock's actual entry moment (修订 7): (open, delay, entry_at, aligned).
+
+        With a zero stock delay the scan's recorded SPY bar is that moment. When the stock
+        rolled forward, a per-event value the runner recorded at the entry moment is used,
+        else the minute store; without either the recorded scan-slot value stays, flagged.
+        """
+
+        entry_at = entry_moment(record["as_of"], entry_delay)
+        recorded = _float(record.get("benchmark_next_bar_open"))
+        recorded_delay = _int_or_none(record.get("benchmark_next_bar_delay_slots"))
+        if (entry_delay or 0) == 0 and recorded is not None:
+            # The recorded value is SPY's first bar at or after the scan's slot, which is the entry moment.
+            return recorded, recorded_delay, entry_at, True
+        at_entry = _float(event.get("benchmark_open_at_entry"))
+        if at_entry is not None:
+            return at_entry, _int_or_none(event.get("benchmark_delay_at_entry")), entry_at, True
+        if benchmark_lookup is not None:
+            found = benchmark_lookup(entry_at)
             if found is not None:
-                value, delay = float(found[0]), int(found[1])
-                backfills[f"benchmark_{kind}"] += 1
-        return value, delay
+                if recorded is None:
+                    backfills[f"benchmark_{kind}"] += 1
+                else:
+                    backfills[f"benchmark_realigned_{kind}"] += 1
+                return float(found[0]), int(found[1]), entry_at, True
+        if recorded is None:
+            return None, None, entry_at, None
+        backfills[f"benchmark_misaligned_{kind}"] += 1
+        return recorded, recorded_delay, entry_at, False
 
     def entry_at_record(event: dict[str, Any], kind: str) -> tuple[float | None, int | None]:
         value = _float(event.get("next_bar_open"))
@@ -333,11 +378,12 @@ def _absorb_record(record: dict[str, Any], day: str, triggers: dict[str, Trigger
         return value, delay
 
     events_by_id = {e.get("event_id"): e for e in record.get("events") or []}
-    # Events triggered at the previous scan of the day: EXTENDED now counts as "extended at trigger".
+    # Events triggered at the previous scan of the day: an EXTENDED state now is later information
+    # (修订 7); it is kept as a descriptive field and never changes the causal membership.
     for event_id in list(state["watch_extended"]):
         event = events_by_id.get(event_id)
         if event is not None and str(event.get("lifecycle_state")) == "EXTENDED" and event_id in triggers:
-            triggers[event_id].extended_at_trigger = True
+            triggers[event_id].extended_by_next_scan = True
     state["watch_extended"] = {}
     states_now: dict[str, set[str]] = defaultdict(set)
     for transition in record.get("transitions") or []:
@@ -370,7 +416,7 @@ def _absorb_record(record: dict[str, Any], day: str, triggers: dict[str, Trigger
                     features = event.get("features") or {}
                     origin = str(event.get("origin_setup_type") or event.get("setup_type") or "")
                     next_open, delay = entry_at_record(event, "triggers")
-                    benchmark_open, benchmark_delay = benchmark_at_record("triggers")
+                    benchmark_open, benchmark_delay, entry_at, aligned = benchmark_at_entry(event, delay, "triggers")
                     triggers[event_id] = Trigger(
                         event_id=event_id,
                         ticker=str(event.get("ticker")).upper(),
@@ -397,6 +443,8 @@ def _absorb_record(record: dict[str, Any], day: str, triggers: dict[str, Trigger
                         ),
                         next_bar_delay=delay,
                         benchmark_delay=benchmark_delay,
+                        entry_at=entry_at,
+                        benchmark_aligned=aligned,
                     )
                     bucket.triggers += 1
                     state["watch_extended"][event_id] = day
@@ -407,11 +455,15 @@ def _absorb_record(record: dict[str, Any], day: str, triggers: dict[str, Trigger
                 if trigger is None or "CONFIRMED" not in states or trigger.confirmed_at is not None:
                     continue
                 event = events_by_id.get(event_id)
-                confirmed_open = None if event is None else entry_at_record(event, "confirmed")[0]
+                confirmed_open, confirmed_delay = (None, None) if event is None else entry_at_record(event, "confirmed")
+                benchmark_open, _bd, confirmed_entry_at, aligned = benchmark_at_entry(event or {}, confirmed_delay, "confirmed")
                 trigger.confirmed_at = record["as_of"]
                 trigger.confirmed_day = day
                 trigger.confirmed_next_bar_open = confirmed_open
-                trigger.confirmed_benchmark_open = benchmark_at_record("confirmed")[0]
+                trigger.confirmed_next_bar_delay = confirmed_delay
+                trigger.confirmed_entry_at = confirmed_entry_at
+                trigger.confirmed_benchmark_open = benchmark_open
+                trigger.confirmed_benchmark_aligned = aligned
 
 
 def _int_or_none(value: Any) -> int | None:
@@ -641,7 +693,9 @@ def evaluate_trigger(trigger: Trigger, prices: RadarPrices, holding: int, entry_
         if entry_price is None or entry_price <= 0:
             return TriggerResult(trigger, holding, entry_kind, "no_entry_bar")
         outcome = prices.observe_intraday(trigger.ticker, trigger.day, holding, entry_price)
-        spy_entry = trigger.benchmark_open  # SPY at the same bar for both intraday entries
+        # SPY at the stock's actual entry moment (修订 7). The trigger-mark control values the stock at
+        # the last complete bar's close but still uses this SPY entry: a stated mismatch, labelled below.
+        spy_entry = trigger.benchmark_open
     result = TriggerResult(trigger, holding, entry_kind, outcome.status, ret=outcome.ret, exit_day=outcome.exit_day)
     result.failed_by_next_close = failed_by_next_close(trigger, prices)
     if outcome.status == "no_label":
@@ -654,6 +708,11 @@ def evaluate_trigger(trigger: Trigger, prices: RadarPrices, holding: int, entry_
             except (KeyError, ZeroDivisionError):
                 return None, "no_spy"
         spy_ret, basis = prices.benchmark_return(trigger.day, exit_day, spy_entry)
+        if basis == "bar":
+            if entry_kind == "trigger_mark":
+                basis = "bar_control"  # SPY at the next bar, stock at the trigger mark: not the same moment
+            elif trigger.benchmark_aligned is False:
+                basis = "bar_misaligned"  # SPY recorded at the scan's slot while the stock rolled forward
         return (None if spy_ret is None else ret - spy_ret), basis
 
     if outcome.observable and outcome.ret is not None and outcome.exit_day:
@@ -713,6 +772,8 @@ def select_view(triggers: list[Trigger], view: str) -> list[Trigger]:
             copy = replace(
                 t, day=t.confirmed_day, as_of=t.confirmed_at, next_bar_open=t.confirmed_next_bar_open,
                 benchmark_open=t.confirmed_benchmark_open, minute=_et_minute(t.confirmed_at),
+                next_bar_delay=t.confirmed_next_bar_delay, entry_at=t.confirmed_entry_at,
+                benchmark_aligned=t.confirmed_benchmark_aligned, benchmark_delay=None,
             )
             kept.append(copy)
         return sorted(kept, key=lambda t: (t.as_of, t.event_id))
@@ -720,6 +781,8 @@ def select_view(triggers: list[Trigger], view: str) -> list[Trigger]:
         return [t for t in triggers if not t.extended_at_trigger]
     if view == "extended":
         return [t for t in triggers if t.extended_at_trigger]
+    if view == "extended_by_next_scan":  # descriptive only (修订 7): uses information after the entry
+        return [t for t in triggers if t.extended_by_next_scan]
     if ":" in view:
         kind, value = view.split(":", 1)
         attribute = {"origin": "origin", "bucket": "bucket", "market": "market_state"}[kind]
@@ -767,8 +830,43 @@ def day_points(results: list[TriggerResult]) -> list[dict[str, Any]]:
             "failed_known": len(failed),
             "statuses": dict(statuses),
             "benchmark_close_fallback": sum(1 for r in rows if r.benchmark_basis == "close"),
+            "benchmark_misaligned": sum(1 for r in rows if r.benchmark_basis == "bar_misaligned"),
         })
     return points
+
+
+def block_bootstrap(values: list[float], block: int, samples: int = BOOTSTRAP_SAMPLES, seed: int = BOOTSTRAP_SEED) -> dict[str, float | None]:
+    """Moving-block bootstrap of the mean of a daily series whose h-day windows overlap (修订 7).
+
+    Blocks of ``block`` consecutive observed days are drawn with replacement until the
+    resample has the original length; the standard error, the t-like ratio and the 2.5/97.5
+    percentiles of the resampled means are returned. Deterministic for a given seed.
+    """
+
+    n = len(values)
+    block = max(1, int(block))
+    starts = n - block + 1
+    if n < 3 or starts < 2:  # nothing to resample: too few days for one block to move
+        return {"se": None, "t": None, "ci_low": None, "ci_high": None}
+    import random
+
+    rng = random.Random(seed)
+    mean = statistics.fmean(values)
+    means = []
+    for _ in range(samples):
+        picked: list[float] = []
+        while len(picked) < n:
+            start = rng.randrange(starts)
+            picked.extend(values[start:start + block])
+        means.append(statistics.fmean(picked[:n]))
+    means.sort()
+    se = statistics.pstdev(means)
+    return {
+        "se": se,
+        "t": mean / se if se > 0 else None,
+        "ci_low": means[int(0.025 * (samples - 1))],
+        "ci_high": means[int(0.975 * (samples - 1))],
+    }
 
 
 def periods(points: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
@@ -784,7 +882,8 @@ def _pct(value: float | None) -> float | None:
 
 def summarize(points: list[dict[str, Any]], holding: int) -> dict[str, Any]:
     means = [p["mean"] for p in points if p["mean"] is not None]
-    t_value = newey_west_t(means, NW_LAGS.get(holding, max(0, holding // 5 - 1))) if means else None
+    t_value = newey_west_t(means, NW_LAGS.get(holding, max(0, holding - 1))) if means else None
+    boot = block_bootstrap(means, holding) if means else {"se": None, "t": None, "ci_low": None, "ci_high": None}
     observable = sum(p["observable"] for p in points)
     hits = sum(p["hits"] for p in points)
     statuses: Counter = Counter()
@@ -794,8 +893,13 @@ def summarize(points: list[dict[str, Any]], holding: int) -> dict[str, Any]:
     summary = {
         "days": len(points),
         "days_observable": len(means),
+        "days_skipped_no_observation": len(points) - len(means),  # 修订 7: skipped, not zero-filled
         "mean_excess_pct": _pct(statistics.fmean(means)) if means else None,
         "t": round(t_value, 2) if t_value is not None else None,
+        "nw_lag": NW_LAGS.get(holding, max(0, holding - 1)),
+        "boot_se_pct": _pct(boot["se"]),
+        "boot_t": round(boot["t"], 2) if boot["t"] is not None else None,
+        "boot_ci95_pct": [_pct(boot["ci_low"]), _pct(boot["ci_high"])],
         "legacy_pct": _pct(statistics.fmean([p["legacy"] for p in points if p["legacy"] is not None])) if any(p["legacy"] is not None for p in points) else None,
         "zero_pct": _pct(statistics.fmean([p["zero"] for p in points if p["zero"] is not None])) if any(p["zero"] is not None for p in points) else None,
         "loss_pct": _pct(statistics.fmean([p["loss"] for p in points if p["loss"] is not None])) if any(p["loss"] is not None for p in points) else None,
@@ -805,6 +909,7 @@ def summarize(points: list[dict[str, Any]], holding: int) -> dict[str, Any]:
         "observable_share": round(observable / sum(p["n"] for p in points), 4) if points and sum(p["n"] for p in points) else None,
         "failed_by_next_close_share": round(sum(p["failed_next_close"] for p in points) / failed_known, 4) if failed_known else None,
         "benchmark_close_fallback": sum(p["benchmark_close_fallback"] for p in points),
+        "benchmark_misaligned": sum(p.get("benchmark_misaligned", 0) for p in points),
     }
     for status in OBSERVABLE_STATUSES + CENSORED_STATUSES + ("no_entry_bar",):
         summary[f"n_{status}"] = statuses.get(status, 0)
@@ -864,6 +969,7 @@ def decide(
     h20_all, n_all = period_diff(PRIMARY_HOLDING, "ALL")
     paired_days, paired_diffs = paired(periods(points[PRIMARY_HOLDING])["ALL"], periods(baseline[PRIMARY_HOLDING])["ALL"])
     paired_t = newey_west_t(paired_diffs, NW_LAGS[PRIMARY_HOLDING]) if len(paired_diffs) >= 3 else None
+    paired_boot = block_bootstrap(paired_diffs, PRIMARY_HOLDING) if len(paired_diffs) >= 3 else {"se": None, "t": None, "ci_low": None, "ci_high": None}
     base_by_day = {p["day"]: p for p in baseline[PRIMARY_HOLDING]}
     cand_by_day = {p["day"]: p for p in points[PRIMARY_HOLDING]}
     bounds = {name: period_diff(PRIMARY_HOLDING, "ALL", name)[0] for name in ("legacy", "zero", "loss")}
@@ -875,6 +981,9 @@ def decide(
         # Newey-West t (lag 3) of the paired daily h20 differences: a significance figure for the
         # adoption table; the rules themselves are sign-based (section 9) and do not use it.
         "paired_t_h20": round(paired_t, 2) if paired_t is not None else None,
+        "paired_nw_lag": NW_LAGS[PRIMARY_HOLDING],
+        "paired_boot_t_h20": round(paired_boot["t"], 2) if paired_boot["t"] is not None else None,
+        "paired_boot_ci95_pp": [_pct(paired_boot["ci_low"]), _pct(paired_boot["ci_high"])],
         "_paired_h20": [
             {"day": day, "candidate_pct": _pct(cand_by_day[day]["mean"]), "baseline_pct": _pct(base_by_day[day]["mean"]), "diff_pct": _pct(diff)}
             for day, diff in zip(paired_days, paired_diffs)
@@ -936,8 +1045,10 @@ def evaluate_variant(name: str, triggers: list[Trigger], funnel: dict[str, DayFu
                      prices: RadarPrices, *, views: Iterable[str] | None = None) -> VariantEvaluation:
     evaluation = VariantEvaluation(name, triggers, funnel, info)
     names = list(views) if views is not None else ["all", "dedup", "top10", *FILTER_VIEWS, "alert60", "strength60", "t1",
-                                                     *SWITCH_VIEWS, "extended", *group_views(triggers)]
-    cache: dict[tuple[str, int, str], TriggerResult] = {}
+                                                     *SWITCH_VIEWS, "extended", "extended_by_next_scan", *group_views(triggers)]
+    # 修订 7: the cache key is the full entry specification, so a view that re-enters an event
+    # (confirmed) never receives another view's result and the view order cannot matter.
+    cache: dict[tuple, TriggerResult] = {}
     for view in names:
         selected = select_view(triggers, view)
         entry_kinds = ["t1_next_open"] if view == "t1" else (["next_bar", "trigger_mark"] if view == "all" else ["next_bar"])
@@ -945,7 +1056,8 @@ def evaluate_variant(name: str, triggers: list[Trigger], funnel: dict[str, DayFu
             for holding in HOLDINGS:
                 results = []
                 for trigger in selected:
-                    key = (trigger.event_id, holding, entry_kind)
+                    key = (trigger.event_id, holding, entry_kind, trigger.day, trigger.as_of,
+                           trigger.next_bar_open, trigger.benchmark_open, trigger.trigger_price)
                     result = cache.get(key)
                     if result is None:
                         result = evaluate_trigger(trigger, prices, holding, entry_kind)
@@ -1097,7 +1209,7 @@ def readme_tables(rows: list[dict[str, Any]], verdicts: dict[str, Any], funnels:
         lines += [f"| P1（到 {P1_END}） | {completion.get('p1_days')} |", f"| P2 | {completion.get('p2_days')} |",
                   f"| 合计 | {len(completion.get('days', []))} |", "",
                   f"不是每个配置都完成的天：{len(completion.get('dropped_not_in_every_variant', []))}；有降级扫描而剔除的天：{len(completion.get('dropped_degraded', []))}。", ""]
-    lines += ["## 主指标：触发后 20 个交易日对 SPY 的超额（按日等权，百分点；括号内 NW t）", "",
+    lines += ["## 主指标：触发后 20 个交易日对 SPY 的超额（按日等权，百分点；括号内 NW t，滞后 19；块自助 t 见 metrics.csv 的 boot_t）", "",
              "| 配置 | 全期 | P1 | P2 | " + " | ".join(years) + " | 每日触发 | 命中率 |", "|---|---|---|---|" + "---|" * len(years) + "---|---|"]
     for variant in variants:
         cells = []
@@ -1121,14 +1233,14 @@ def readme_tables(rows: list[dict[str, Any]], verdicts: dict[str, Any], funnels:
         f = funnels.get(variant) or {}
         p = f.get("per_scan") or {}
         lines.append(f"| {variant} | {_fmt(p.get('prefilter'))} | {_fmt(p.get('listed'))} | {_fmt(p.get('structures'))} | {_fmt(p.get('events'))} | {_fmt(p.get('cut_150'))} | {_fmt(p.get('cut_60'))} | {_fmt(p.get('cut_30'))} | {_fmt(f.get('triggers_per_day'))} |")
-    lines += ["", "## 取舍（预登记第 9 节，与基线按共同日配对，差值为百分点；配对 t 是 NW 滞后 3，只作报告）", "",
-              "| 候选 | 配对天数 | 20 日差 全期 / P1 / P2 | 配对 t | 年份更好 | 5 日差 | 63 日差 | 三情景同号 | 每日触发 | 采纳 |", "|---|---|---|---|---|---|---|---|---|---|"]
+    lines += ["", "## 取舍（预登记第 9 节，与基线按共同日配对，差值为百分点；配对 t 是 NW 滞后 19，块自助 t 的块长 20，都只作报告）", "",
+              "| 候选 | 配对天数 | 20 日差 全期 / P1 / P2 | 配对 NW t | 块自助 t | 年份更好 | 5 日差 | 63 日差 | 三情景同号 | 每日触发 | 采纳 |", "|---|---|---|---|---|---|---|---|---|---|---|"]
     for name, v in [*verdicts.get("variants", {}).items(), *verdicts.get("filters", {}).items()]:
         d = v["h20_diff_pp"]
         label = name if v.get("metric_view", "all") == "all" else f"{name}（视图 {v['metric_view']}）"
-        lines.append(f"| {label} | {v['paired_days']} | {_fmt(d['ALL'])} / {_fmt(d['P1'])} / {_fmt(d['P2'])} | {_fmt(v.get('paired_t_h20'))} | {v['rule2_years_better']}/{v['rule2_years_compared']} | {_fmt(v['h5_diff_pp'])} | {_fmt(v['h63_diff_pp'])} | {'是' if v['rule5_ok'] else '否'} | {_fmt(v['triggers_per_day']['candidate'])} 对 {_fmt(v['triggers_per_day']['baseline'])} | {'是' if v['adopt'] else '否'} |")
+        lines.append(f"| {label} | {v['paired_days']} | {_fmt(d['ALL'])} / {_fmt(d['P1'])} / {_fmt(d['P2'])} | {_fmt(v.get('paired_t_h20'))} | {_fmt(v.get('paired_boot_t_h20'))} | {v['rule2_years_better']}/{v['rule2_years_compared']} | {_fmt(v['h5_diff_pp'])} | {_fmt(v['h63_diff_pp'])} | {'是' if v['rule5_ok'] else '否'} | {_fmt(v['triggers_per_day']['candidate'])} 对 {_fmt(v['triggers_per_day']['baseline'])} | {'是' if v['adopt'] else '否'} |")
     for name, v in verdicts.get("stage2", {}).items():
-        lines.append(f"| {name}（组合） | — | 规则 1 到 5 {'过' if v['passes_rules_1_to_5'] else '不过'}；最好单项 {v['best_single']}；两段差距在 0.2 内 {_fmt(v['within_0_2pp'])} | | | | | | | {'是' if v['adopt'] else '否'} |")
+        lines.append(f"| {name}（组合） | — | 规则 1 到 5 {'过' if v['passes_rules_1_to_5'] else '不过'}；最好单项 {v['best_single']}；两段差距在 0.2 内 {_fmt(v['within_0_2pp'])} | | | | | | | | {'是' if v['adopt'] else '否'} |")
     return "\n".join(lines) + "\n"
 
 
@@ -1192,7 +1304,10 @@ def run(
                             "triggers_entry_delayed": sum(1 for t in e.triggers if (t.next_bar_delay or 0) > 0),
                             "triggers_benchmark_delayed": sum(1 for t in e.triggers if (t.benchmark_delay or 0) > 0),
                             "triggers_confirmed": sum(1 for t in e.triggers if t.confirmed_at is not None),
-                            "triggers_extended_at_trigger": sum(1 for t in e.triggers if t.extended_at_trigger)}
+                            "triggers_extended_at_trigger": sum(1 for t in e.triggers if t.extended_at_trigger),
+                            "triggers_extended_by_next_scan": sum(1 for t in e.triggers if t.extended_by_next_scan),
+                            "triggers_benchmark_misaligned": sum(1 for t in e.triggers if t.benchmark_aligned is False),
+                            "confirmed_benchmark_misaligned": sum(1 for t in e.triggers if t.confirmed_benchmark_aligned is False)}
                      for name, e in evaluations.items()},
         "funnel": funnels,
         "metrics": rows,

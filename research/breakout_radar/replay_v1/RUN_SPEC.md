@@ -141,9 +141,9 @@ $PY $P/scripts/evaluate.py --db /content/data/replay.sqlite --replay '/content/r
 $PY $P/scripts/evaluate.py --db ... --replay '/content/replay/realtime/seg_*' --variants baseline,rvol2,lookback10 --out /content/eval/realtime
 ```
 
-规则在 `harness/evaluation.py` 开头与 `result_pack.json` 的 `rules`：事件是每个 `event_id` 第一条 TRIGGERED 转换，记在扫描的美东日期上；入场是账本里的 `next_bar_open`（旧账本没有这一字段时传 `--minute-store` 现查），对照入场是触发价；退出是触发日之后第 1、5、20、63 个交易日的收盘（拆股复权），观察规则与 legacy、zero、loss 三个情景沿用 v1.6 研究包的 `evaluate.py`（`--directory` 给点时目录才能核身份，不给时缺口一律记 `censored_unverified`）；SPY 在同一根 K 线入场，账本里没有 SPY 的 K 线时按触发日收盘入场并在结果里计数（`benchmark_close_fallback`）。日内等权、按日平均，Newey-West t 的滞后 0 / 0 / 3 / 11。
+规则在 `harness/evaluation.py` 开头与 `result_pack.json` 的 `rules`：事件是每个 `event_id` 第一条 TRIGGERED 转换，记在扫描的美东日期上；入场是账本里的 `next_bar_open`（旧账本没有这一字段时传 `--minute-store` 现查），对照入场是触发价；退出是触发日之后第 1、5、20、63 个交易日的收盘（拆股复权），观察规则与 legacy、zero、loss 三个情景沿用 v1.6 研究包的 `evaluate.py`（`--directory` 给点时目录才能核身份，不给时缺口一律记 `censored_unverified`）；SPY 在股票实际入场的那一刻入场（预登记修订 7：扫描后下一个槽位起点加延迟槽数 × 5 分钟，取当刻或之后同一天第一根 K 线；股票延迟 0 时就是账本记录的值，延迟大于 0 时用运行器记在事件上的 `benchmark_open_at_entry`，没有则从分钟库现查，都没有就保留扫描槽位的值并记 `benchmark_misaligned` 计数），账本里没有 SPY 的 K 线时按触发日收盘入场并在结果里计数（`benchmark_close_fallback`）。触发价对照的 SPY 仍是下一根 K 线，结果里标为 `bar_control`，它不是同窗口超额。日内等权、按日平均；Newey-West t 的滞后是 h − 1（1 / 5 / 20 / 63 日为 0 / 4 / 19 / 62，修订 7），另给移动块自助法（块长 h、2,000 次重采样、固定种子）的标准误、t 与 95% 区间（`boot_se_pct`、`boot_t`、`boot_ci95_pct`；配对差是 `paired_boot_t_h20`、`paired_boot_ci95_pp`）。
 
-输出：`metrics.csv`（每个配置 × 视图 × 入场 × 持有期 × 分段）、`events_h20.csv`（每个触发一行，`--no-events` 可省）、`result_pack.json`（规则、覆盖、漏斗、全部指标、取舍）、`README_tables.md`（主指标、次指标、基线切分、漏斗、取舍五张表）、`decision.json`。视图：`all`、`dedup`（代码 × 日去重）、`top10`（每日告警优先级前 10）、`noorb`、`mkt_gate`、`tod`、`alert60`、`strength60`、`t1`（T1 满足的子集，次日开盘入场）、按起源 / 时段 / 市场形态分组。取舍按预登记第 9 节与基线按共同日配对（规则 1 到 6，组合看 `stage2`）。
+输出：`metrics.csv`（每个配置 × 视图 × 入场 × 持有期 × 分段）、`events_h20.csv`（每个触发一行，`--no-events` 可省）、`result_pack.json`（规则、覆盖、漏斗、全部指标、取舍）、`README_tables.md`（主指标、次指标、基线切分、漏斗、取舍五张表）、`decision.json`。视图：`all`、`dedup`（代码 × 日去重）、`top10`（每日告警优先级前 10）、`noorb`、`mkt_gate`、`tod`、`alert60`、`strength60`、`t1`（T1 满足的子集，次日开盘入场）、`confirmed`（确认后下一根 K 线入场，记在确认日）、`chaseable` 与 `extended`（按触发那次扫描已知的追高标记划分，修订 7）、`extended_by_next_scan`（下一次扫描才标追高：事后描述，不进取舍）、按起源 / 时段 / 市场形态分组。取舍按预登记第 9 节与基线按共同日配对（规则 1 到 6，组合看 `stage2`）。
 
 **SPY 的 5 分钟 K 线**：SPY 不会进「涨幅 ≥ 3%」的抓取名单，分钟库里没有它，`benchmark_next_bar_open` 会全空、评估退到收盘入场。请把 SPY 五年的 5 分钟 K 线也抓下来放进 `minute_raw`（一个代码约 65 页），建库时就会带上。
 
@@ -189,6 +189,19 @@ $PY $P/scripts/evaluate.py --db /content/data/replay.sqlite --replay '/content/r
 ```
 
 第一轮的账本没有确认入场的 K 线价（旧运行器只给触发事件记 `next_bar_open`），也在 SPY 缺页的两段（DATA_SPEC 20.15）与所有只有 CONFIRMED 转换的扫描上没有基准价，所以评估要带 `--minute-store`（用修正后的分钟库）现查，现查次数记在 `coverage.<配置>.backfills`；第一轮各段的 bundle 已由 `ops/2026-09-29/export_t1.py` 补出并放在 Drive 的 `bundles_killed/`，复制到各段目录下即可，不再需要 `--db-dir`。新账本的 `next_bar_open`、`next_bar_delay_slots`、`benchmark_next_bar_open`、`benchmark_next_bar_delay_slots` 按修订 6 的规则记（股票最多跳 6 个空槽，SPY 不限）。
+
+### 修订 7 的重算（2026-10-05）
+
+外部审查之后的四处修正（结果缓存按入场规格隔离、追高归类冻结在触发扫描、Newey-West 滞后 h − 1 加块自助、SPY 对齐股票的实际入场时刻）都在评估脚本里，账本已经有全部需要的字段，不重跑回放。在有第一轮账本与 bundle、115 个续跑子段和重建后的分钟库的机器上跑：
+
+```
+$PY $P/scripts/evaluate.py --db /content/data/replay.sqlite --replay '/content/replay/full/seg_*' --replay '/content/replay/cont/seg_*' \
+    --variants baseline,confirm3,chase15,orb15,orb60,disc5,adv25,basemin15 --baseline baseline \
+    --directory /content/data/massive_directory_2026-09-27 \
+    --minute-store /content/minute_store --workers 8 --out /content/eval/full_2026-10-05b
+```
+
+必须带 `--minute-store`：账本里 SPY 记在扫描的槽位，股票延迟入场的事件（第一轮与续跑都有）要从分钟库重取入场那一刻的 SPY，现查次数记在 `coverage.<配置>.backfills` 的 `benchmark_realigned_triggers` 与 `benchmark_realigned_confirmed`；有分钟库时 `benchmark_misaligned_*` 应为 0，不为 0 说明分钟库缺 SPY 的那一天。核对三样：`coverage.baseline.triggers_extended_at_trigger` 与 `triggers_extended_by_next_scan` 是两个不同的数；`metrics.csv` 有 `nw_lag`（20 日为 19）与 `boot_t`；`decision.json` 每个候选有 `paired_t_h20`、`paired_boot_t_h20`、`paired_boot_ci95_pp`。把 `README_tables.md`、`decision.json`、`result_pack.json` 的 `coverage` 放进仓库 `results/full_2026-10-05b/`；`results/full_2026-10-05/` 原样保留，标为已被取代。若重算后通过第一阶段的候选不止一个，再按第 5 节加 `--stage2` 跑组合。
 
 ### 验证运行（新机器上先跑这个，约 20 分钟）
 

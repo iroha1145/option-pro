@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import gzip
 import json
+import random
 import sqlite3
+import statistics
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -176,7 +178,7 @@ def test_intraday_outcomes_split_adjust_censor_and_measure_excess(world: dict) -
     assert gone.legacy_excess is not None and gone.failed_by_next_close is True
     # Control entry at the trigger mark (1% lower) gives a higher return than the next bar open.
     control = ev.evaluate_trigger(by_id["e1"], prices, 20, "trigger_mark")
-    assert control.excess > good.excess and control.benchmark_basis == "bar"
+    assert control.excess > good.excess and control.benchmark_basis == "bar_control"  # SPY at the next bar, stock at the mark (修订 7 label)
     # Without a SPY bar the benchmark enters at its close on the trigger day and says so.
     by_id["e1"].benchmark_open = None
     prices._intraday_outcomes.clear()
@@ -266,14 +268,17 @@ def test_confirmed_and_chaseable_views_follow_amendment_6(world: dict, tmp_path:
     assert by_id["e2"].confirmed_day == world["d0"].isoformat() and by_id["e2"].confirmed_next_bar_open == pytest.approx(20 * 1.005 ** 2 * 1.02)
     assert by_id["e2"].confirmed_benchmark_open == pytest.approx(400 * 1.001 ** 2 * 1.0005)
     assert by_id["e3"].confirmed_at is None and by_id["e4"].confirmed_at is None
-    # e3 went EXTENDED at the scan after its trigger, e4 carried the warning at its trigger.
-    assert by_id["e3"].extended_at_trigger and by_id["e4"].extended_at_trigger
+    # e3 went EXTENDED only at the scan after its trigger: later information, descriptive only (修订 7);
+    # e4 carried the warning at its trigger, which is causal.
+    assert not by_id["e3"].extended_at_trigger and by_id["e3"].extended_by_next_scan
+    assert by_id["e4"].extended_at_trigger and not by_id["e4"].extended_by_next_scan
     assert not by_id["e1"].extended_at_trigger and not by_id["e2"].extended_at_trigger
     confirmed = ev.select_view(triggers, "confirmed")
     assert [t.event_id for t in confirmed] == ["e1", "e2"] and confirmed[1].next_bar_open == pytest.approx(20 * 1.005 ** 2 * 1.02)
     assert confirmed[1].minute == 10 * 60 + 7 and confirmed[1].day == world["d0"].isoformat()
-    assert {t.event_id for t in ev.select_view(triggers, "chaseable")} == {"e1", "e2"}
-    assert {t.event_id for t in ev.select_view(triggers, "extended")} == {"e3", "e4"}
+    assert {t.event_id for t in ev.select_view(triggers, "chaseable")} == {"e1", "e2", "e3"}
+    assert {t.event_id for t in ev.select_view(triggers, "extended")} == {"e4"}
+    assert {t.event_id for t in ev.select_view(triggers, "extended_by_next_scan")} == {"e3"}
     assert ev.metric_view("confirm3") == "confirmed" and ev.metric_view("chase15") == "chaseable"
     assert ev.metric_view("basemin15") == "all" and ev.metric_view("confirm3+orb15") == "confirmed"
     # A confirm3 and a chase15 variant (copies of the baseline here) are judged on their own views.
@@ -286,9 +291,10 @@ def test_confirmed_and_chaseable_views_follow_amendment_6(world: dict, tmp_path:
     assert confirm["metric_view"] == "confirmed" and confirm["confirmed_share"] == {"candidate": 0.5, "baseline": 0.5}
     assert confirm["h20_diff_pp"]["ALL"] == pytest.approx(0.0) and confirm["paired_days"] == 1
     chase = pack["decisions"]["variants"]["chase15"]
-    assert chase["metric_view"] == "chaseable" and chase["extended_share"] == {"candidate": 0.5, "baseline": 0.5}
+    assert chase["metric_view"] == "chaseable" and chase["extended_share"] == {"candidate": 0.25, "baseline": 0.25}
     assert "rule6_ok" in chase and chase["rule6_removed_mean_pp"] is None  # nothing removed relative to the baseline
-    assert pack["coverage"]["baseline"]["triggers_confirmed"] == 2 and pack["coverage"]["baseline"]["triggers_extended_at_trigger"] == 2
+    assert pack["coverage"]["baseline"]["triggers_confirmed"] == 2 and pack["coverage"]["baseline"]["triggers_extended_at_trigger"] == 1
+    assert pack["coverage"]["baseline"]["triggers_extended_by_next_scan"] == 1 and pack["coverage"]["baseline"]["triggers_benchmark_misaligned"] == 0
     assert ("confirmed", 20, "next_bar") in pack["metrics"] and ("chaseable", 20, "next_bar") in pack["metrics"] if isinstance(pack["metrics"], dict) else True
     views = {(r["view"], r["holding"], r["entry"]) for r in pack["metrics"]}
     assert ("confirmed", 20, "next_bar") in views and ("chaseable", 20, "next_bar") in views and ("extended", 20, "next_bar") in views
@@ -324,16 +330,40 @@ def test_minute_store_backfills_missing_entry_and_benchmark_prices_under_the_ame
     triggers, _f, info = ev.read_variant([tmp_path / "seg"], "baseline", entry_lookup=entry_lookup, benchmark_lookup=benchmark_lookup)
     trigger = triggers[0]
     assert (trigger.next_bar_open, trigger.next_bar_delay) == (10.5, 2)  # 10:05 and 10:10 empty, 10:15 within the 6-slot bound
-    assert (trigger.benchmark_open, trigger.benchmark_delay) == (401.0, 1)  # SPY: 10:05 empty, 10:10 taken, no bound
-    assert (trigger.confirmed_next_bar_open, trigger.confirmed_benchmark_open) == (10.5, 401.0)  # 10:07 -> slot 10:10: GOOD at 10:15, SPY at 10:10
-    assert info["backfills"] == {"entry_triggers": 1, "benchmark_triggers": 1, "entry_confirmed": 1, "benchmark_confirmed": 1}
+    # 修订 7: SPY is taken at the stock's entry moment (10:15), not at the scan's own slot (10:05 -> 10:10 = 401.0).
+    assert (trigger.benchmark_open, trigger.benchmark_delay, trigger.benchmark_aligned) == (402.0, 0, True)
+    assert trigger.entry_at == datetime(d0.year, d0.month, d0.day, 10, 15, tzinfo=NY).astimezone(timezone.utc).isoformat()
+    # 10:07 -> slot 10:10: GOOD at 10:15 (one empty slot), SPY at that same 10:15 bar.
+    assert (trigger.confirmed_next_bar_open, trigger.confirmed_next_bar_delay, trigger.confirmed_benchmark_open) == (10.5, 1, 402.0)
+    assert trigger.confirmed_entry_at == trigger.entry_at and trigger.confirmed_benchmark_aligned is True
+    assert info["backfills"] == {"entry_triggers": 1, "benchmark_triggers": 1, "entry_confirmed": 1, "benchmark_confirmed": 1,
+                                 "benchmark_realigned_triggers": 0, "benchmark_realigned_confirmed": 0,
+                                 "benchmark_misaligned_triggers": 0, "benchmark_misaligned_confirmed": 0}
     # Recorded values win over the lookup, so old exact-slot values stay as written.
     recorded = {**event, "next_bar_open": 9.99, "next_bar_delay_slots": 0}
     _write_ledger(tmp_path / "seg2" / "baseline" / "ledger", d0, [
         _scan_record(d0, 10, 2, [recorded], [{"event_id": "x1", "from_state": "WATCHING", "to_state": "TRIGGERED", "reason": "x", "evidence_at": "x"}], benchmark_open=400.5),
     ])
     kept, _f2, info2 = ev.read_variant([tmp_path / "seg2"], "baseline", entry_lookup=entry_lookup, benchmark_lookup=benchmark_lookup)
-    assert (kept[0].next_bar_open, kept[0].benchmark_open) == (9.99, 400.5) and sum(info2["backfills"].values()) == 0
+    assert (kept[0].next_bar_open, kept[0].benchmark_open, kept[0].benchmark_aligned) == (9.99, 400.5, True) and sum(info2["backfills"].values()) == 0
+    # A stock that rolled forward two slots while SPY was recorded at the scan's slot (round-1 ledgers):
+    # flagged as misaligned without a store, realigned to the 10:15 bar with one.
+    rolled = {**event, "next_bar_open": 10.5, "next_bar_delay_slots": 2}
+    trigger_only = [{"event_id": "x1", "from_state": "WATCHING", "to_state": "TRIGGERED", "reason": "x", "evidence_at": "x"}]
+    _write_ledger(tmp_path / "seg3" / "baseline" / "ledger", d0, [_scan_record(d0, 10, 2, [rolled], trigger_only, benchmark_open=400.5)])
+    flagged, _f3, info3 = ev.read_variant([tmp_path / "seg3"], "baseline")
+    assert (flagged[0].benchmark_open, flagged[0].benchmark_aligned) == (400.5, False) and info3["backfills"]["benchmark_misaligned_triggers"] == 1
+    connection = sqlite3.connect(f"file:{world['db']}?mode=ro", uri=True)
+    prices = ev.RadarPrices(connection, SESSIONS[0].isoformat())
+    assert ev.evaluate_trigger(flagged[0], prices, 20, "next_bar").benchmark_basis == "bar_misaligned"
+    realigned, _f4, info4 = ev.read_variant([tmp_path / "seg3"], "baseline", entry_lookup=entry_lookup, benchmark_lookup=benchmark_lookup)
+    assert (realigned[0].benchmark_open, realigned[0].benchmark_aligned) == (402.0, True) and info4["backfills"]["benchmark_realigned_triggers"] == 1
+    assert ev.evaluate_trigger(realigned[0], prices, 20, "next_bar").benchmark_basis == "bar"
+    # A value the runner itself recorded at the entry moment wins over any lookup.
+    own_value = {**rolled, "benchmark_open_at_entry": 402.5, "benchmark_delay_at_entry": 0}
+    _write_ledger(tmp_path / "seg4" / "baseline" / "ledger", d0, [_scan_record(d0, 10, 2, [own_value], trigger_only, benchmark_open=400.5)])
+    own, _f5, info5 = ev.read_variant([tmp_path / "seg4"], "baseline", entry_lookup=entry_lookup, benchmark_lookup=benchmark_lookup)
+    assert (own[0].benchmark_open, own[0].benchmark_aligned) == (402.5, True) and sum(info5["backfills"].values()) == 0
     # The stock rule stops after six empty slots; the benchmark rule does not.
     assert entry_lookup("GOOD", datetime(d0.year, d0.month, d0.day, 9, 31, tzinfo=NY).isoformat()) is None
     assert benchmark_lookup(datetime(d0.year, d0.month, d0.day, 9, 31, tzinfo=NY).isoformat()) == (401.0, 7)
@@ -388,4 +418,118 @@ def test_run_writes_the_result_pack_and_tables(world: dict) -> None:
     assert "disc5" in pack["decisions"]["stage2"]
     # The paired daily series behind each verdict is a CSV, not part of the JSON pack.
     assert (out / "paired_h20_disc5.csv").exists() and "_paired_h20" not in pack["decisions"]["variants"]["disc5"]
-    assert "paired_t_h20" in pack["decisions"]["variants"]["disc5"]
+    assert "paired_t_h20" in pack["decisions"]["variants"]["disc5"] and "paired_boot_t_h20" in pack["decisions"]["variants"]["disc5"]
+
+
+# ---- PREREGISTRATION 修订 7: the four evaluator corrections from the PR #209 review ----
+
+
+def _trigger_only(event_id: str) -> list[dict]:
+    return [{"event_id": event_id, "from_state": "WATCHING", "to_state": "TRIGGERED", "reason": "x", "evidence_at": "x"}]
+
+
+def test_confirmed_view_uses_its_own_entry_whatever_the_view_order(world: dict) -> None:
+    """F1: the result cache is keyed by the entry itself, so the confirmed view never inherits a first-trigger result."""
+
+    connection = sqlite3.connect(f"file:{world['db']}?mode=ro", uri=True)
+    prices = ev.RadarPrices(connection, SESSIONS[0].isoformat())
+    triggers, funnel, info = ev.read_variant(world["dirs"], "baseline")
+    e2 = next(t for t in triggers if t.event_id == "e2")
+    confirmed_e2 = next(t for t in ev.select_view(triggers, "confirmed") if t.event_id == "e2")
+    expected = ev.evaluate_trigger(confirmed_e2, prices, 20, "next_bar")
+    first = ev.evaluate_trigger(e2, prices, 20, "next_bar")
+    assert expected.ret < first.ret and expected.excess < first.excess  # the confirmed entry is 2% higher, same exit
+    runs = {}
+    for order in (["all", "confirmed"], ["confirmed"], ["confirmed", "all"]):
+        evaluation = ev.evaluate_variant("baseline", triggers, funnel, info, prices, views=order)
+        by_event = {r.trigger.event_id: r for r in evaluation.results[("confirmed", 20, "next_bar")]}
+        assert by_event["e2"].ret == pytest.approx(expected.ret) and by_event["e2"].excess == pytest.approx(expected.excess)
+        assert by_event["e2"].trigger.next_bar_open == pytest.approx(confirmed_e2.next_bar_open)
+        assert by_event["e2"].trigger.benchmark_open == pytest.approx(confirmed_e2.benchmark_open)
+        if "all" in order:
+            all_e2 = {r.trigger.event_id: r for r in evaluation.results[("all", 20, "next_bar")]}["e2"]
+            assert all_e2.ret == pytest.approx(first.ret)  # and the first-trigger view keeps its own entry
+        runs[tuple(order)] = [(p["day"], p["mean"], p["n"]) for p in evaluation.points[("confirmed", 20, "next_bar")]]
+    assert runs[("all", "confirmed")] == runs[("confirmed",)] == runs[("confirmed", "all")]
+
+
+def test_next_day_confirmation_is_grouped_on_the_confirmation_day(world: dict, tmp_path: Path) -> None:
+    """F1: an event confirmed the next morning enters, and is counted, on that morning, whatever the view order."""
+
+    d0, d1 = world["d0"], world["d1"]
+    good0, good1 = 10 * 1.01 ** 2, 10 * 1.01 ** 3
+    ledger = tmp_path / "seg" / "baseline" / "ledger"
+    _write_ledger(ledger, d0, [_scan_record(d0, 15, 55, [_event("n1", "GOOD", d0, good0, next_open=good0)], _trigger_only("n1"), benchmark_open=400 * 1.001 ** 2)])
+    _write_ledger(ledger, d1, [_scan_record(
+        d1, 9, 40, [{**_event("n1", "GOOD", d0, good1, next_open=good1), "lifecycle_state": "CONFIRMED"}],
+        [{"event_id": "n1", "from_state": "TRIGGERED", "to_state": "CONFIRMED", "reason": "x", "evidence_at": "x"}], benchmark_open=400 * 1.001 ** 3,
+    )])
+    triggers, funnel, info = ev.read_variant([tmp_path / "seg"], "baseline")
+    assert triggers[0].day == d0.isoformat() and triggers[0].confirmed_day == d1.isoformat()
+    connection = sqlite3.connect(f"file:{world['db']}?mode=ro", uri=True)
+    prices = ev.RadarPrices(connection, SESSIONS[0].isoformat())
+    for order in (["all", "confirmed"], ["confirmed", "all"]):
+        evaluation = ev.evaluate_variant("baseline", triggers, funnel, info, prices, views=order)
+        confirmed = evaluation.results[("confirmed", 20, "next_bar")]
+        assert [r.trigger.day for r in confirmed] == [d1.isoformat()] and confirmed[0].trigger.next_bar_open == pytest.approx(good1)
+        assert confirmed[0].ret == pytest.approx(1.01 ** 20 - 1)  # entered on d1 at that session's level, 20 sessions later
+        assert [p["day"] for p in evaluation.points[("confirmed", 20, "next_bar")]] == [d1.isoformat()]
+        assert [p["day"] for p in evaluation.points[("all", 20, "next_bar")]] == [d0.isoformat()]
+
+
+def test_extended_membership_is_frozen_at_the_trigger_scan(world: dict, tmp_path: Path) -> None:
+    """F2: appending the next scan never changes the chaseable/extended sets; a same-scan EXTENDED still counts."""
+
+    d0 = world["d0"]
+    trigger_scan = _scan_record(d0, 10, 2, [_event("f1", "GONE", d0, 5.0, next_open=5.0)], _trigger_only("f1"), benchmark_open=400.0)
+    later_scan = _scan_record(
+        d0, 10, 7, [{**_event("f1", "GONE", d0, 5.3), "lifecycle_state": "EXTENDED"}],
+        [{"event_id": "f1", "from_state": "TRIGGERED", "to_state": "EXTENDED", "reason": "distance_threshold_exceeded", "evidence_at": "x"}], benchmark_open=400.2,
+    )
+    _write_ledger(tmp_path / "prefix" / "baseline" / "ledger", d0, [trigger_scan])
+    _write_ledger(tmp_path / "full" / "baseline" / "ledger", d0, [trigger_scan, later_scan])
+    prefix = ev.read_variant([tmp_path / "prefix"], "baseline")[0][0]
+    full = ev.read_variant([tmp_path / "full"], "baseline")[0][0]
+    assert prefix.extended_at_trigger is False and full.extended_at_trigger is False
+    assert prefix.extended_by_next_scan is False and full.extended_by_next_scan is True
+    assert [t.event_id for t in ev.select_view([full], "chaseable")] == ["f1"] and ev.select_view([full], "extended") == []
+    assert [t.event_id for t in ev.select_view([full], "extended_by_next_scan")] == ["f1"]
+    same_scan = _scan_record(
+        d0, 10, 2, [{**_event("f2", "GONE", d0, 5.0, next_open=5.0), "lifecycle_state": "EXTENDED"}],
+        [*_trigger_only("f2"), {"event_id": "f2", "from_state": "TRIGGERED", "to_state": "EXTENDED", "reason": "x", "evidence_at": "x"}], benchmark_open=400.0,
+    )
+    _write_ledger(tmp_path / "same" / "baseline" / "ledger", d0, [same_scan])
+    same = ev.read_variant([tmp_path / "same"], "baseline")[0][0]
+    assert same.extended_at_trigger is True and ev.select_view([same], "chaseable") == []
+
+
+def test_newey_west_lags_match_the_daily_index_and_the_block_bootstrap_is_deterministic() -> None:
+    """F3: lag h - 1 on the daily series; a moving-block bootstrap with block h as the overlap-robust check."""
+
+    assert ev.NW_LAGS == {1: 0, 5: 4, 20: 19, 63: 62}
+    rng = random.Random(1)
+    series = [rng.gauss(0.001, 0.01) for _ in range(200)]
+    first, second = ev.block_bootstrap(series, 20), ev.block_bootstrap(series, 20)
+    assert first == second and first["se"] > 0 and first["ci_low"] < statistics.fmean(series) < first["ci_high"]
+    assert ev.block_bootstrap([0.01] * 8, 20) == {"se": None, "t": None, "ci_low": None, "ci_high": None}  # one block cannot move
+    base_point = {"n": 2, "observable": 2, "hits": 1, "legacy": 0.0, "zero": 0.0, "loss": 0.0, "failed_next_close": 0, "failed_known": 2, "statuses": {}, "benchmark_close_fallback": 0}
+    # (A strictly alternating series has a zero Bartlett long-run variance at lag 19, so the noise is random here.)
+    noise = [rng.gauss(0.0, 0.002) for _ in range(60)]
+    points = [{**base_point, "day": d.isoformat(), "mean": 0.01 + noise[i]} for i, d in enumerate(SESSIONS[:60])]
+    summary = ev.summarize(points, 20)
+    assert summary["nw_lag"] == 19 and summary["t"] > 0 and summary["boot_t"] > 0 and summary["boot_ci95_pct"][0] < summary["boot_ci95_pct"][1]
+    assert ev.summarize(points, 5)["nw_lag"] == 4 and ev.summarize(points, 1)["nw_lag"] == 0
+    base = {h: [{**p, "mean": 0.01} for p in points] for h in ev.HOLDINGS}
+    cand = {h: [{**p, "mean": 0.02 + noise[i]} for i, p in enumerate(points)] for h in ev.HOLDINGS}
+    verdict = ev.decide(cand, base)
+    assert verdict["paired_nw_lag"] == 19 and verdict["paired_t_h20"] > 2 and verdict["paired_boot_t_h20"] > 2
+    assert verdict["paired_boot_ci95_pp"][0] > 0 and verdict["paired_boot_ci95_pp"][0] < 1.0 < verdict["paired_boot_ci95_pp"][1]
+
+
+def test_entry_moment_follows_the_store_rounding() -> None:
+    """F4: the entry moment is the slot after the scan plus the stock's delay, with the store's rounding rule."""
+
+    assert ev.entry_moment("2024-01-04T10:02:37-05:00", 0) == "2024-01-04T15:05:00+00:00"
+    assert ev.entry_moment("2024-01-04T10:02:37-05:00", 2) == "2024-01-04T15:15:00+00:00"
+    assert ev.entry_moment("2024-01-04T15:05:00+00:00", 0) == "2024-01-04T15:05:00+00:00"  # on a boundary: that slot itself
+    assert ev.entry_moment("2024-01-04T15:05:00+00:00", None) == "2024-01-04T15:05:00+00:00"

@@ -221,6 +221,30 @@ STOP_FILE = "STOP"  # touch <out>/STOP: the segment finishes the current day, wr
 # segments on 2026-09-29. The guard protects a shared production lease, which the replay
 # does not have, so it is switched off here (a constructor argument, not a setting: the
 # settings hashes are unchanged).
+def record_entry_prices(minute_store: Any, compact_events: list[dict[str, Any]], entry_ids: set[str], as_of: datetime) -> tuple[float, int] | None:
+    """Evaluation-only entry prices for the events in ``entry_ids`` (PREREGISTRATION 修订 6 and 7).
+
+    Each event gets the open of the first bar after the scan (``next_bar_open``) and the empty
+    slots skipped to reach it (``next_bar_delay_slots``, at most ``STOCK_ENTRY_MAX_SLOTS``).
+    When the stock rolled forward, SPY is also read at that same entry moment
+    (``benchmark_open_at_entry`` / ``benchmark_delay_at_entry``), so the evaluation never has
+    to pair a delayed stock entry with SPY at the scan's own slot. Returns SPY's (open, delay)
+    at the scan's slot for the record itself. The algorithm never sees any of these values.
+    """
+
+    benchmark = minute_store.next_bar("SPY", as_of, max_slots=None)
+    for compact in compact_events:
+        if compact.get("event_id") in entry_ids and compact.get("ticker"):
+            found = minute_store.next_bar(str(compact["ticker"]), as_of, max_slots=STOCK_ENTRY_MAX_SLOTS)
+            compact["next_bar_open"] = None if found is None else found[0]
+            compact["next_bar_delay_slots"] = None if found is None else found[1]
+            if found is not None and found[1] > 0:
+                aligned = minute_store.next_bar("SPY", as_of + timedelta(minutes=5 * found[1]), max_slots=None)
+                compact["benchmark_open_at_entry"] = None if aligned is None else aligned[0]
+                compact["benchmark_delay_at_entry"] = None if aligned is None else aligned[1]
+    return benchmark
+
+
 REPLAY_STALL_SECONDS = 10 ** 9
 # Entry prices for the evaluation (PREREGISTRATION 修订 6): a stock enters at the first bar
 # at or after the next slot within 30 minutes; SPY at its first bar that day.
@@ -395,14 +419,7 @@ class _VariantRun:
                 for t in publication.get("transitions") or []
                 if str(_value(t.get("to_state") if isinstance(t, dict) else getattr(t, "to_state", None))) in ENTRY_TRANSITIONS
             }
-            benchmark = None
-            if entry_ids:
-                benchmark = self.minute_store.next_bar("SPY", as_of, max_slots=None)
-                for compact in compact_events:
-                    if compact.get("event_id") in entry_ids and compact.get("ticker"):
-                        found = self.minute_store.next_bar(str(compact["ticker"]), as_of, max_slots=STOCK_ENTRY_MAX_SLOTS)
-                        compact["next_bar_open"] = None if found is None else found[0]
-                        compact["next_bar_delay_slots"] = None if found is None else found[1]
+            benchmark = record_entry_prices(self.minute_store, compact_events, entry_ids, as_of) if entry_ids else None
             record["benchmark_next_bar_open"] = None if benchmark is None else benchmark[0]
             record["benchmark_next_bar_delay_slots"] = None if benchmark is None else benchmark[1]
             record.update(
