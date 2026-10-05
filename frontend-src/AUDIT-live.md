@@ -50,4 +50,4 @@ mock 路径（`mockOr` fixture 分支）行为零改动；所有修正均在 liv
 - **tickerSummaries** 无 ticker 入参时需先拉 feed 收集 source_tickers（两次请求）；batch 响应信封（map vs array）已双兼容，需联调确认。
 - **runtime settings 内层形状**：契约为嵌套 `{ai:{...}, catalyst:{...}}`，UI RuntimeSettings 为扁平 mock 形状；当前无页面消费 settings/updateSettings/history/rollback（仅 workerAction 被用），将来接入设置页时需做嵌套映射。
 - **detail 页 useAiJob**（不可改文件）：固定 2.5s 轮询（非契约退避序列），且 cancel 守卫仅认 queued/running —— live 归一后的 in_progress 任务在详情页不可取消（earnings/catalysts 页任务流不受影响）。
-- **GET /worker/actions?action_type&limit 与 /worker/actions/{request_id}** 契约存在但无 UI 消费，模块未暴露。
+- **GET /worker/actions?action_type&limit** 没有 UI 消费，2026-10-05 已删除；`/worker/actions/{request_id}` 由 runtime 模块轮询后台任务时使用。

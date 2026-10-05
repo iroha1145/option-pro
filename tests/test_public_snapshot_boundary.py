@@ -372,15 +372,14 @@ def test_sector_iv_reads_persisted_strength_worker_options_without_provider_call
 
     monkeypatch.setattr(sectors, "_iv_ranking_payload", unexpected_scan)
 
-    async def scenario() -> tuple[dict, dict, dict]:
+    async def scenario() -> tuple[dict, dict]:
         with request_owner_access_context(False):
             public_payload = await sectors.iv_ranking("semiconductors", _request())
-            heatmap_payload = await sectors.heatmap("semiconductors", _request())
         with request_owner_access_context(True):
             owner_payload = await sectors.iv_ranking("software", _request())
-        return public_payload, heatmap_payload, owner_payload
+        return public_payload, owner_payload
 
-    public_payload, heatmap_payload, owner_payload = asyncio.run(scenario())
+    public_payload, owner_payload = asyncio.run(scenario())
 
     assert calls == 0
     assert public_payload["refresh"]["status"] == "queued"
@@ -401,8 +400,6 @@ def test_sector_iv_reads_persisted_strength_worker_options_without_provider_call
         0.0,
     ]
     assert public_payload["providers"] == ["Yahoo/yfinance"]
-    assert heatmap_payload["data"] == heatmap_payload["rankings"]
-    assert heatmap_payload["data"][0]["ticker"] == "NVDA"
     assert owner_payload["rankings"][0]["ticker"] == "MSFT"
     # 单个样本没有可辩护的板块内分位——绝对 IV 照常给出，分位留空。
     assert owner_payload["rankings"][0]["sector_iv_rank"] is None

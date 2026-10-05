@@ -111,38 +111,12 @@ def test_alert_request_rejects_unbounded_or_unexpected_input():
     assert request.alerts[0].dte == pytest.approx(42.375)
 
 
-def test_legacy_paid_route_validates_body_but_never_runs_model(monkeypatch):
-    calls = 0
-
-    def forbidden(*_args, **_kwargs):
-        nonlocal calls
-        calls += 1
-        raise AssertionError("legacy model function must not run")
-
-    monkeypatch.setattr(runtime, "submit_background", forbidden)
-    app = FastAPI()
-    app.include_router(router)
-    client = TestClient(app, base_url="http://localhost")
-    response = client.post(
-        "/api/ai/analyze-alerts",
-        json={
-            "ticker": "AAPL",
-            "alerts": [_valid_alert()],
-            "underlying_price": 200,
-            "expiration": "2026-08-21",
-        },
-    )
-    assert response.status_code == 409
-    assert response.json()["status"] == "analysis_required"
-    assert calls == 0
-
-
 def test_ai_route_rejects_body_larger_than_64_kib():
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app, base_url="http://localhost")
     response = client.post(
-        "/api/ai/analyze-alerts",
+        "/api/ai/jobs/option-alerts",
         content=b"x" * (_MAX_AI_BODY_BYTES + 1),
         headers={"content-type": "application/json"},
     )
@@ -159,7 +133,7 @@ def test_ai_route_rejects_chunked_body_larger_than_64_kib():
         yield b"x" * (_MAX_AI_BODY_BYTES // 2 + 1)
 
     response = client.post(
-        "/api/ai/analyze-alerts",
+        "/api/ai/jobs/option-alerts",
         content=chunks(),
         headers={"content-type": "application/json"},
     )

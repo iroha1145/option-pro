@@ -8,7 +8,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.access import request_owner_access_context
+from app.access import request_owner_access_context, require_public_read_or_owner_access
 from app.api import access as access_api
 from app.api import accounts as accounts_api
 from app.services.accounts import (
@@ -44,6 +44,9 @@ def client(store: AccountStore) -> TestClient:
 
     app.include_router(accounts_api.router)
     app.include_router(access_api.router)
+    # /api/access/status reports the account session; production serves it to
+    # visitors in password mode, so the read gate is out of scope here.
+    app.dependency_overrides[require_public_read_or_owner_access] = lambda: None
     # base_url https so the HTTPS gate is satisfied the same way production is.
     return TestClient(app, base_url="https://localhost")
 
@@ -135,7 +138,7 @@ def test_existing_short_password_account_can_still_log_in(client, store):
     )
     assert response.status_code == 200
     assert response.json()["account"]["username"] == "legacy-user"
-    assert client.get("/api/account/me").json()["logged_in"] is True
+    assert client.get("/api/access/status").json()["account"]["logged_in"] is True
 
 
 @pytest.mark.parametrize("password, code", [
@@ -163,7 +166,7 @@ def test_register_signs_in_and_sets_an_httponly_cookie(client: TestClient) -> No
     assert "HttpOnly" in cookie
     assert "Secure" in cookie
     assert "SameSite=strict" in cookie
-    identity = client.get("/api/account/me").json()
+    identity = client.get("/api/access/status").json()["account"]
     assert identity["logged_in"] is True
     assert identity["username"] == "alice"
 
@@ -222,7 +225,7 @@ def test_customer_signs_in_through_the_shared_login_endpoint(
     assert body["logged_in"] is False
     assert body["account"] == {"logged_in": True, "username": "bob"}
     assert accounts_api.ACCOUNT_COOKIE_NAME in response.headers["set-cookie"]
-    assert client.get("/api/account/me").json()["username"] == "bob"
+    assert client.get("/api/access/status").json()["account"]["username"] == "bob"
 
 
 def test_customer_session_never_grants_owner_access(
@@ -237,7 +240,7 @@ def test_customer_session_never_grants_owner_access(
     )
     from app.access import OWNER_COOKIE_NAME
 
-    assert client.get("/api/account/me").json()["username"] == "carol"
+    assert client.get("/api/access/status").json()["account"]["username"] == "carol"
     assert accounts_api.ACCOUNT_COOKIE_NAME in client.cookies
     # The owner cookie is what every owner-gated route reads; signing in as a
     # customer must never mint one.
@@ -374,9 +377,9 @@ def test_logout_revokes_the_session(client: TestClient, store: AccountStore) -> 
         json={"username": "frank", "password": "fixture-password-for-tests"},
         headers={**HEADERS, "Content-Type": "application/json"},
     )
-    assert client.get("/api/account/me").json()["logged_in"] is True
+    assert client.get("/api/access/status").json()["account"]["logged_in"] is True
     assert client.post("/api/account/logout", headers=HEADERS).status_code == 200
-    assert client.get("/api/account/me").json()["logged_in"] is False
+    assert client.get("/api/access/status").json()["account"]["logged_in"] is False
 
 
 def test_revoked_token_stops_resolving(store: AccountStore) -> None:
@@ -573,9 +576,9 @@ def test_owner_watchlist_is_not_a_customer_identity(owner_client: TestClient) ->
         json={"ticker": "MSFT"},
         headers=HEADERS,
     )
-    me = owner_client.get("/api/account/me")
-    assert me.status_code == 200
-    assert me.json() == {"logged_in": False, "username": None}
+    status_response = owner_client.get("/api/access/status")
+    assert status_response.status_code == 200
+    assert status_response.json()["account"] == {"logged_in": False, "username": None}
 
 
 def test_owner_and_customer_watchlists_stay_separate(

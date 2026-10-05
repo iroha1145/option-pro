@@ -629,30 +629,6 @@ async def ai_status():
     }
 
 
-@router.post("/analyze-alerts")
-async def analyze_alerts(req: AlertsRequest):
-    """Compatibility endpoint: validation remains, paid work moved to jobs."""
-
-    return JSONResponse(
-        {
-            "status": "analysis_required",
-            "message": "Create a persistent option-alerts job with POST /api/ai/jobs/option-alerts",
-        },
-        status_code=409,
-    )
-
-
-@router.get("/earnings-correlation")
-async def earnings_correlation():
-    return JSONResponse(
-        {
-            "status": "analysis_required",
-            "message": "Synchronous GET no longer creates paid analysis",
-        },
-        status_code=409,
-    )
-
-
 @router.get("/earnings-impact/{ticker}")
 async def earnings_impact(
     ticker: Annotated[Ticker, Path(description="US-listed ticker symbol")],

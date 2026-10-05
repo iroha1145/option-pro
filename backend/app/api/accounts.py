@@ -393,17 +393,6 @@ def register(request: Request, payload: Annotated[CredentialsRequest, Body()]) -
     return response
 
 
-@router.get("/me")
-def me(request: Request) -> Response:
-    account = current_account(request)
-    body = (
-        _account_payload(account)
-        if account is not None
-        else {"logged_in": False, "username": None}
-    )
-    return JSONResponse(body, headers={"Cache-Control": "no-store"})
-
-
 @router.post("/logout", dependencies=[Depends(require_same_origin_request)])
 def logout(request: Request) -> Response:
     get_account_store().revoke_session(request.cookies.get(ACCOUNT_COOKIE_NAME, ""))

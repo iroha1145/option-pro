@@ -364,31 +364,6 @@ def test_m12_iv_ranking_endpoint_sanitizes_non_finite_values(monkeypatch) -> Non
     assert row["atm_iv_percent"] is None
 
 
-def test_m12_heatmap_endpoint_sanitizes_non_finite_values(monkeypatch) -> None:
-    from app.api import sectors
-    from tests.http_response_support import anonymous_get_request
-
-    async def fake_payload(_sector_id):
-        return {
-            "sector_id": "semiconductors",
-            "sector_name": "半导体",
-            "rankings": [
-                {
-                    "ticker": "AMD",
-                    "atm_iv_percent": float("inf"),
-                    "sector_iv_rank": float("nan"),
-                }
-            ],
-            "refresh": {"status": "idle"},
-        }
-
-    monkeypatch.setattr(sectors, "_request_iv_payload", fake_payload)
-    result = asyncio.run(sectors.heatmap("semiconductors", anonymous_get_request()))
-    row = result["data"][0]
-    assert row["atm_iv_percent"] is None
-    assert row["sector_iv_rank"] is None
-
-
 # ---------------------------------------------------------------------------
 # M-低 (technical): chart_analysis.py RVOL isolation
 # ---------------------------------------------------------------------------
