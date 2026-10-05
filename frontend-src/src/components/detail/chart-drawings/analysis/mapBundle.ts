@@ -312,10 +312,6 @@ export function analysisGate(bundle: ChartAnalysisBundle | null, opts: AnalysisG
   return 'ok';
 }
 
-export function analysisMatchesChart(bundle: ChartAnalysisBundle | null, opts: AnalysisGateOpts): boolean {
-  return analysisGate(bundle, opts) === 'ok';
-}
-
 /** 后端 series_from_chart_bars 的 dates 口径：日/周是纽约交易日，分钟是 epoch 秒。 */
 export function barStampForRange(t: string, range: string): string {
   const epoch = epochOfStamp(t);

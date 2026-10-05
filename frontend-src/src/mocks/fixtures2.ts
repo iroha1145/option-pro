@@ -21,7 +21,6 @@ import type {
   SignalType,
   TechSwingPoint,
   TechnicalStructure,
-  UnusualOption,
 } from '@/api/types';
 import { t as __t } from '../i18n/core.ts';
 
@@ -830,29 +829,6 @@ export function optionsSupported(ticker: string): boolean {
   return OPTION_TICKERS.includes(ticker.toUpperCase());
 }
 export const OPTION_SUPPORTED_LIST = OPTION_TICKERS.join(' ');
-
-export function getUnusualOptions(): UnusualOption[] {
-  const r = new Rng(90909);
-  return Array.from({ length: 12 }, (_, i) => {
-    const t = OPTION_TICKERS[r.int(0, OPTION_TICKERS.length - 1)];
-    const info = TICKER_POOL.find((x) => x.ticker === t)!;
-    const side: UnusualOption['side'] = r.chance(0.62) ? 'call' : 'put';
-    const dte = r.int(2, 45);
-    return {
-      id: `uo-${i + 1}`,
-      ticker: t,
-      side,
-      strike: round2(info.base * (1 + r.float(-0.08, 0.12))),
-      expiration: new Date(Date.now() + dte * 86_400_000).toISOString().slice(0, 10),
-      volume: Math.round(r.float(2, 48) * 1000),
-      openInterest: Math.round(r.float(4, 90) * 1000),
-      premium: round2(r.float(12, 480)),
-      // 合约类型不代表成交主动方；演示和真实接口使用相同的未知方向口径。
-      sentiment: 'neutral' as const,
-      at: new Date(Date.now() - r.int(5, 240) * 60_000).toISOString(),
-    };
-  }).sort((a, b) => (a.at < b.at ? 1 : -1));
-}
 
 export function getOptionExpirations(ticker: string): string[] {
   const r = new Rng(4141 + ticker.length);

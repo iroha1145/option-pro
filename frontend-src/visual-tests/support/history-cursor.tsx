@@ -1,4 +1,5 @@
 import { createRoot } from 'react-dom/client';
+import { flushSync } from 'react-dom';
 import { useEffect, useState } from 'react';
 import MacroHistoryChart from '../../src/components/market/macro/MacroHistoryChart';
 import PositionHistoryChart from '../../src/components/cta/PositionHistoryChart';
@@ -21,6 +22,9 @@ declare global {
   interface Window {
     historyCursorHarness: {
       replace(count: number, start?: number): string;
+      replaceAfterResize(kind: 'macro' | 'position', count: number, start: number): string;
+      refreshThenReplace(kind: 'macro' | 'position', count: number, start: number): string;
+      refresh(): void;
       inspect(kind: 'macro' | 'position'): { pointerStatus: unknown; emphasized: boolean };
       pixel(kind: 'macro' | 'position', index: number): { x: number; y: number };
     };
@@ -42,6 +46,23 @@ export function Harness() {
         setPoints(next);
         return next.at(-1)?.date ?? '';
       },
+      replaceAfterResize(kind, count, start) {
+        // Resize queues ECharts' tooltip refresh; commit the response before that callback runs.
+        instance(kind).chart.resize();
+        const next = makePoints(count, start);
+        flushSync(() => setPoints(next));
+        return next.at(-1)?.date ?? '';
+      },
+      refreshThenReplace(kind, count, start) {
+        instance(kind).chart.resize();
+        flushSync(() => setPoints((current) => current.map((point) => ({ ...point, score: 70 }))));
+        const next = makePoints(count, start);
+        flushSync(() => setPoints(next));
+        return next.at(-1)?.date ?? '';
+      },
+      refresh() {
+        flushSync(() => setPoints((current) => current.map((point) => ({ ...point, score: 70 }))));
+      },
       inspect(kind) {
         const { chart } = instance(kind);
         const axis = (chart.getOption().xAxis as { axisPointer?: { status?: unknown } }[])[0];
@@ -59,7 +80,7 @@ export function Harness() {
   }, []);
   return <main className="grid grid-cols-2 gap-6 p-8">
     <div data-testid="macro-chart"><MacroHistoryChart points={points} modules={[]} range="1Y" loading={false} onRangeChange={() => {}} /></div>
-    <div data-testid="position-chart"><PositionHistoryChart history={points.map((point, i) => ({ date: point.date, position: i % 60 - 30 }))} /></div>
+    <div data-testid="position-chart"><PositionHistoryChart history={points.map((point) => ({ date: point.date, position: (point.score ?? 30) - 60 }))} /></div>
     <button type="button">离开图表</button>
   </main>;
 }

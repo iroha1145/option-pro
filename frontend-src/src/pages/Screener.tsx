@@ -6,7 +6,7 @@ import { useQuoteSymbols } from '@/hooks/useLiveQuote';
  * B2 结果区（统计行 + 参数回显 chips + 三态排序 Segmented + 结果表/卡片流 + 行展开）
  * B3 右侧栏（市场形态 6 维 / 强度剖面 / 评分方法 / 空结果引导）
  * 状态：未扫描 empty-scan.svg · 扫描中骨架 · 无命中 · 503 快照不可用（保留上次结果）
- * 数据：strengthApi.scan / market / profilesMeta + catalystsApi.batchSummaries72h（单次批量）+ signalsApi.stock
+ * 数据：strengthApi.scanEnvelope / market / profilesMeta + catalystsApi.batchSummaries72h（单次批量）+ signalsApi.stock
  */
 import SoftBadge from '@/components/shared/SoftBadge';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -47,7 +47,7 @@ import ResultTable from '@/components/screener/ResultTable';
 import ResultCards from '@/components/screener/ResultCards';
 import ScanHistoryPopover from '@/components/screener/ScanHistoryPopover';
 import SecurityDiagnostics from '@/components/screener/SecurityDiagnostics';
-import { MethodCard, TierHistogram } from '@/components/screener/SideCards';
+import { MethodCard } from '@/components/screener/SideCards';
 import { buildStrengthScanRequest } from '@/components/screener/scanRequest';
 import {
   clearPendingStrengthTask,
@@ -87,8 +87,6 @@ import {
   type ScanFilters,
   type ScanHistoryEntry,
   type SortMode,
-  type Tier,
-  type TierFilter,
 } from '@/components/screener/types';
 import { localeTag, t as __t } from '../i18n/core.ts';
 import {
@@ -116,8 +114,6 @@ function withPreset(base: ScanFilters, id: string): ScanFilters {
   if (id === 'conservative' || id === 'balanced' || id === 'aggressive') {
     return { ...base, presetId: id, profile: id, minScore: null };
   }
-  if (id === 'breakout') return { ...base, presetId: id, profile: 'aggressive', minScore: 70 };
-  if (id === 'lowvol') return { ...base, presetId: id, profile: 'conservative', minScore: null };
   return { ...base, presetId: id, profile: 'balanced', minScore: null };
 }
 
@@ -546,7 +542,7 @@ export default function Screener() {
     return out;
   }, [rows, applied, scanMeta?.filterSupport?.minAvgDollarVolume]);
 
-  // Both the table and tier comparison use this macro-filtered pool. Missing is not neutral.
+  // Missing macro data is not neutral.
   const macroFilteredBase = useMemo(() => macroToneFilter === 'all'
     ? filteredBase
     : filteredBase.filter((r) => macroToneOf(r.macroFit, r.macroTailwind) === macroToneFilter),
@@ -782,12 +778,6 @@ export default function Screener() {
     void runScan(filters);
   };
 
-  const onTierFromHistogram = useCallback((t: TierFilter) => {
-    setDraft((d) => ({ ...d, tier: t, presetId: null, minScore: null }));
-    setApplied((a) => ({ ...a, tier: t, presetId: null, minScore: null }));
-    setPage(1);
-  }, []);
-
   const onPresetQuick = useCallback(
     (id: string) => {
       const f = withPreset(draft, id);
@@ -815,14 +805,6 @@ export default function Screener() {
     if (candidates <= returned) return null;
     return { returned, screened: candidates };
   }, [scanMeta, rows]);
-  const hitsByTier = useMemo(() => {
-    const acc: Record<Tier, number> = { S: 0, A: 0, B: 0, C: 0, D: 0 };
-    macroFilteredBase.forEach((r) => {
-      acc[tierOf(r.strengthScore)] += 1;
-    });
-    return acc;
-  }, [macroFilteredBase]);
-
   /**
    * 评分说明必须描述实际使用的评分风格（审计 P2-11）。
    *
@@ -1191,7 +1173,6 @@ export default function Screener() {
                         catalysts={catalysts}
                         details={details}
                         flashes={flashes}
-                        weights={activeProfile?.weights ?? null}
                         signals={signalsMap}
                         onOpenDetail={openTicker}
                         animKey={animKey}
@@ -1208,7 +1189,6 @@ export default function Screener() {
                         onToggle={onToggle}
                         catalysts={catalysts}
                         details={details}
-                        weights={activeProfile?.weights ?? null}
                         signals={signalsMap}
                         onOpenDetail={openTicker}
                         animKey={animKey}
@@ -1260,7 +1240,6 @@ export default function Screener() {
                     catalysts={catalysts}
                     details={details}
                     flashes={flashes}
-                    weights={activeProfile?.weights ?? null}
                     signals={signalsMap}
                     onOpenDetail={openTicker}
                     animKey={animKey}
@@ -1274,7 +1253,6 @@ export default function Screener() {
                     onToggle={onToggle}
                     catalysts={catalysts}
                     details={details}
-                    weights={activeProfile?.weights ?? null}
                     signals={signalsMap}
                     onOpenDetail={openTicker}
                     animKey={animKey}
@@ -1324,8 +1302,6 @@ export default function Screener() {
           ) : (
             <SkeletonCard />
           )}
-          {/* 选中判定与柱高同源（applied）：用 draft 判定时，工作台改过分档后点柱子会被读成「取消」，要点两次 */}
-          <TierHistogram hits={hitsByTier} market={marketQ.data} activeTier={applied.tier} onSelect={onTierFromHistogram} />
           <MethodCard
             profile={activeProfile}
             loading={profilesQ.loading}

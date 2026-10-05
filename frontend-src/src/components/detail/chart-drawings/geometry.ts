@@ -17,13 +17,6 @@ export function distancePointToSegment(p: Point, a: Point, b: Point): number {
   return Math.hypot(p.x - (a.x + t * vx), p.y - (a.y + t * vy));
 }
 
-export function horizontalProjection(price: number, xMin: number, xMax: number): Segment {
-  return {
-    a: { x: xMin, y: price },
-    b: { x: xMax, y: price },
-  };
-}
-
 /**
  * Clip a ray that starts at `origin` and passes through `through` to the visible
  * rectangle. Uses Liang–Barsky so the far end is a real intersection with the
@@ -98,16 +91,6 @@ export function channelEdges(p1: Point, p2: Point, p3: Point): {
     parallel: { a: q1, b: q2 },
     fill: [{ ...p1 }, { ...p2 }, q2, q1],
   };
-}
-
-export function vectorsParallel(a: Point, b: Point, c: Point, d: Point, eps = 1e-6): boolean {
-  const vx = b.x - a.x;
-  const vy = b.y - a.y;
-  const ux = d.x - c.x;
-  const uy = d.y - c.y;
-  const cross = vx * uy - vy * ux;
-  const scale = Math.hypot(vx, vy) * Math.hypot(ux, uy) + 1e-12;
-  return Math.abs(cross) <= eps * scale;
 }
 
 export function moveChannelWhole(

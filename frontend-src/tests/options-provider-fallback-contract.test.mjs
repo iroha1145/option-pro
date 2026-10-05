@@ -69,7 +69,6 @@ function loadOptionsModule(marketGet) {
     }
     if (id === '@/mocks/fixtures2') {
       return {
-        getUnusualOptions: () => [],
         getOptionExpirations: () => [],
         getOptionChain: () => ({}),
       };

@@ -2,7 +2,7 @@
  * 市场形态 6 维条（契约 market_regime 字段对照）
  * index_trend / momentum / breadth / volume / risk_appetite / risk_on_spread
  * live：直读 /strength/market 的 market_regime 真实六维分 + 综合分/label/warnings（不再由分布推导）
- * mock：无 regime 字段时回退直方图确定性推导（不编造随机量）
+ * mock：使用与真实接口相同的六维数据结构
  * 数值条首帧显示完整比例，不以自身零面积观测触发；说明按需查看
  */
 import SoftBadge from '@/components/shared/SoftBadge';
@@ -44,36 +44,6 @@ function liveDims(r: MarketRegimeInfo): RegimeDim[] {
   ];
 }
 
-/** mock：由 10 桶直方图推导六维（0–100）——live 无直方图时不会走到这里 */
-function deriveRegime(m: MarketStrength): RegimeDim[] {
-  const h = m.histogram;
-  const total = Math.max(1, h.reduce((s, n) => s + n, 0));
-  const share = (from: number, to: number) => h.slice(from, to + 1).reduce((s, n) => s + n, 0) / total;
-  const ge50 = share(5, 9);
-  const ge60 = share(6, 9);
-  const ge70 = share(7, 9);
-  const ge85 = m.ge85Count / total;
-  const wAvg = (from: number, to: number) => {
-    let sw = 0;
-    let sn = 0;
-    for (let i = from; i <= to; i++) {
-      sw += h[i] * (i * 10 + 5);
-      sn += h[i];
-    }
-    return sn === 0 ? 0 : sw / sn;
-  };
-  const spread = Math.max(0, Math.min(100, wAvg(7, 9) - wAvg(0, 3)));
-  const clamp = (v: number) => Math.max(0, Math.min(100, Math.round(v)));
-  return [
-    { key: 'index_trend', label: t('指数趋势'), en: 'INDEX TREND', value: clamp(m.avgScore), hint: t('全市场强度分均值，衡量指数层面趋势健康度。'), hintKey: 'regimeTrend' },
-    { key: 'momentum', label: t('市场动量'), en: 'MOMENTUM', value: clamp(ge70 * 160), hint: t('强度 ≥70 的标的占比，反映资金推动的力度。'), hintKey: 'regimeMomentum' },
-    { key: 'breadth', label: t('市场广度'), en: 'BREADTH', value: clamp(ge50 * 100), hint: t('强度 ≥50 标的占全市场比例，越高说明上涨扩散越广。'), hintKey: 'regimeBreadth' },
-    { key: 'volume', label: t('量能配合'), en: 'VOLUME', value: clamp(ge60 * 130), hint: t('强度 ≥60 的标的占比，反映资金参与是否跟上趋势。'), hintKey: 'regimeVolume' },
-    { key: 'risk_appetite', label: t('风险偏好'), en: 'RISK APPETITE', value: clamp(m.avgScore * 0.8 + ge85 * 80), hint: t('强度均值与高强度标的占比加权，反映资金愿意承担多少风险。'), hintKey: 'regimeRiskAppetite' },
-    { key: 'risk_on_spread', label: t('强弱价差'), en: 'RISK-ON SPREAD', value: clamp(spread), hint: t('高分组（≥70）与低分组（<40）均分之差，价差越大风格越极化。'), hintKey: 'regimeRiskOn' },
-  ];
-}
-
 function RegimeBar({ dim }: { dim: RegimeDim }) {
   /* count-up 减量：六维条数值直接呈现终值 */
   const v = dim.value ?? 0;
@@ -111,7 +81,10 @@ function RegimeBar({ dim }: { dim: RegimeDim }) {
 
 export default function MarketRegimeCard({ market }: { market: MarketStrength }) {
   const regime = market.regime ?? null;
-  const dims = regime ? liveDims(regime) : deriveRegime(market);
+  const dims = liveDims(regime ?? {
+    score: null, label: null, spreadLabel: null, warnings: [], asOf: null,
+    dims: { indexTrend: null, momentum: null, breadth: null, volume: null, riskAppetite: null, riskOnSpread: null },
+  });
   return (
     <div className="card-surface p-5">
       <div className="flex items-baseline justify-between">

@@ -1,112 +1,10 @@
-/**
- * B3 右侧栏卡片
- * 1. TierHistogram 强度剖面卡：S/A/B/C/D 五档 hatch 柱（命中=实心 brand-600，全市场参照=斜纹 ink-400），点击联动 B1 分档
- * 2. MethodCard 评分方法卡（可折叠 accordion）：四因子权重条 + 档位说明
- */
+/** 评分方法卡：说明当前评分规则，读取失败时保留重试入口。 */
 import { useId, useState } from 'react';
-import { motion } from 'framer-motion';
-import { SPRING_POP } from '@/lib/motion';
-import type { MarketStrength, StrengthProfile } from '@/api/types';
-import { cn } from '@/lib/utils';
+import type { StrengthProfile } from '@/api/types';
 import Icon from '@/components/icons';
-import HatchLegend from '@/components/shared/HatchLegend';
 import { SCORE_HINTS } from '@/lib/scoreHints';
-import { SUBSCORE_META, type Tier, type TierFilter } from './types';
 import { t as __t } from '../../i18n/core.ts';
 
-const TIERS: Tier[] = ['S', 'A', 'B', 'C', 'D'];
-
-/* ---------------- 强度剖面卡 ---------------- */
-export function TierHistogram({
-  hits,
-  market,
-  activeTier,
-  onSelect,
-}: {
-  /** 当前结果各档命中数 */
-  hits: Record<Tier, number> | null;
-  /** 全市场参照（strengthApi.market 直方图） */
-  market: MarketStrength | null;
-  activeTier: TierFilter;
-  onSelect: (t: TierFilter) => void;
-}) {
-  // 全市场 10 桶 → 五档；live 契约无直方图（histogram=[]）→ 参照如实隐藏，不编造
-  const ref: Record<Tier, number> | null =
-    market && market.histogram.length >= 10
-      ? {
-          S: market.histogram[9],
-          A: market.histogram[8],
-          B: market.histogram[7],
-          C: market.histogram[6],
-          D: market.histogram.slice(0, 6).reduce((s, n) => s + n, 0),
-        }
-      : null;
-  const maxHit = Math.max(1, ...TIERS.map((t) => hits?.[t] ?? 0));
-  const maxRef = Math.max(1, ...TIERS.map((t) => ref?.[t] ?? 0));
-
-  return (
-    <div className="card-surface p-5">
-      <p className="eyebrow">{__t('强度分布 · 候选比较')}</p>
-      <div className="mt-4 flex h-28 items-end gap-2.5">
-        {TIERS.map((t) => {
-          const hit = hits?.[t] ?? 0;
-          const refN = ref?.[t] ?? 0;
-          const selectable = t !== 'D';
-          const active = activeTier === t;
-          return (
-            <motion.button
-              key={t}
-              onClick={selectable ? () => onSelect(active ? 'all' : t) : undefined}
-              disabled={!selectable}
-              animate={{ scale: active ? 1.04 : 1 }}
-              transition={SPRING_POP}
-              aria-pressed={active}
-              title={selectable ? __t('只看 {tier} 档', { tier: t }) : __t('D 档（<60）计入「全部」')}
-              className={cn(
-                'group relative flex h-full flex-1 flex-col items-center justify-end gap-1 rounded-t-[4px] border-b-2 pb-0.5 transition-colors duration-fast',
-                active ? 'border-brand-400 bg-paper-2' : 'border-transparent hover:bg-paper-2',
-                !selectable && 'cursor-default opacity-70',
-              )}
-            >
-              <span className="metric-value text-[11px] leading-none text-ink-500 tnum">{hit}</span>
-              {/* 全市场参照（斜纹）：live 无直方图时整列隐藏 */}
-              {ref !== null && (
-                <span
-                  className="w-full max-w-[26px] rounded-t-[3px] border border-ink-300/30"
-                  style={{
-                    height: `${Math.max(4, (refN / maxRef) * 72)}px`,
-                    transformOrigin: 'bottom',
-                    backgroundImage: 'repeating-linear-gradient(45deg, color-mix(in srgb, var(--ink-400) 28%, transparent) 0 1px, transparent 1px 4px)',
-                  }}
-                  aria-hidden="true"
-                />
-              )}
-              {/* 命中（实心） */}
-              <span
-                className={cn('-mt-1 w-full max-w-[26px] rounded-t-[3px]', active ? 'bg-brand-600' : 'bg-brand-600/85')}
-                style={{ height: `${Math.max(hit > 0 ? 5 : 2, (hit / maxHit) * 56)}px`, transformOrigin: 'bottom' }}
-                aria-hidden="true"
-              />
-            </motion.button>
-          );
-        })}
-      </div>
-      <div className="mt-1.5 flex gap-2.5">
-        {TIERS.map((t) => (
-          <span key={t} className={cn('flex-1 text-center font-mono text-micro tnum', activeTier === t ? 'text-brand-600' : 'text-ink-400')}>
-            {t}
-          </span>
-        ))}
-      </div>
-      {ref !== null ? (
-        <HatchLegend className="mt-3.5" actual={__t("筛选后候选")} estimate={__t("全市场参照")} />
-      ) : null}
-      <p className="mt-3.5 text-micro text-ink-400">{__t('已应用其他筛选，分档和数量上限不影响此图')}</p>
-    </div>
-  );
-}
-
-/* ---------------- 评分方法卡（可折叠） ---------------- */
 export function MethodCard({
   profile,
   loading = false,
@@ -114,9 +12,7 @@ export function MethodCard({
   onRetry,
 }: {
   profile: StrengthProfile | null;
-  /** /strength/profiles 仍在首取（此时 profile 必为 null） */
   loading?: boolean;
-  /** /strength/profiles 请求失败（此时 profile 必为 null） */
   error?: boolean;
   onRetry?: () => void;
 }) {
@@ -134,13 +30,7 @@ export function MethodCard({
       >
         <span className="eyebrow">
           {__t('评分方法 ·')}{' '}
-          {profile
-            ? profile.name
-            : loading
-              ? __t('读取中')
-              : error
-                ? __t('档位未知')
-                : __t('默认权重')}
+          {profile ? profile.name : loading ? __t('读取中') : __t('档位未知')}
         </span>
         <span className="t-acc-chevron text-ink-400">
           <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
@@ -149,62 +39,33 @@ export function MethodCard({
         </span>
       </button>
       <div id={panelId} className="t-acc-panel" aria-hidden={!open} inert={!open}>
-          <div className="t-acc-panel-inner">
-            {profileUnknown && loading ? (
-              <div className="mt-4 space-y-2.5" aria-hidden="true">
-                {SUBSCORE_META.map(({ key }) => (
-                  <span key={key} className="skeleton-shimmer block h-3 w-full rounded-xs" />
-                ))}
-              </div>
-            ) : profileUnknown && error ? (
-              <div className="mt-4">
-                <p className="text-caption leading-[18px] text-ink-500">
-                  {__t('评分档位读取失败，无法显示当前权重。')}
-                </p>
-                {onRetry && (
-                  <button
-                    onClick={onRetry}
-                    className="control-button mt-2"
-                  >
-                    <Icon name="refresh" size={12} />
-                    {__t('重试')}
-                  </button>
-                )}
-              </div>
-            ) : !profile?.weights ? (
-              /* live 契约不下发旧版四因子权重。这里说明当前收盘日线八因子、
-               * 风险偏好门槛与观察/综合名单关系，不用“权重暂无”掩盖真实规则。 */
-              <div className="mt-4 space-y-2">
-                <p className="text-caption leading-[18px] text-ink-500">{SCORE_HINTS.strengthComposite.body}</p>
-                {SCORE_HINTS.strengthComposite.note && (
-                  <p className="text-micro leading-[16px] text-ink-400">{SCORE_HINTS.strengthComposite.note}</p>
-                )}
-              </div>
-            ) : (
-              <div className="mt-4 grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-2.5">
-                {SUBSCORE_META.map(({ key, label }) => {
-                  const w = profile.weights?.[key] ?? null;
-                  return (
-                    <div key={key} className="col-span-3 grid grid-cols-subgrid items-center gap-x-2.5">
-                      <span className="text-caption text-ink-500">{label}</span>
-                      <span className="strength-track h-1.5 overflow-hidden rounded-pill bg-paper" role="presentation">
-                        {w !== null && (
-                          <span
-                            className="block h-full origin-left rounded-pill bg-brand-500"
-                            style={{ width: `${w}%` }}
-                          />
-                        )}
-                      </span>
-                      <span className="text-right font-mono text-caption text-ink-800 tnum">{w !== null ? `${w}%` : '—'}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            {profile?.weights && profile.description && (
-              <p className="mt-3 text-caption leading-[18px] text-ink-500">{profile.description}</p>
-            )}
-          </div>
+        <div className="t-acc-panel-inner">
+          {profileUnknown && loading ? (
+            <div className="mt-4 space-y-2.5" aria-hidden="true">
+              <span className="skeleton-shimmer block h-3 w-full rounded-xs" />
+              <span className="skeleton-shimmer block h-3 w-full rounded-xs" />
+            </div>
+          ) : profileUnknown && error ? (
+            <div className="mt-4">
+              <p className="text-caption leading-[18px] text-ink-500">
+                {__t('评分档位读取失败，请重试。')}
+              </p>
+              {onRetry && (
+                <button onClick={onRetry} className="control-button mt-2">
+                  <Icon name="refresh" size={12} />
+                  {__t('重试')}
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="mt-4 space-y-2">
+              <p className="text-caption leading-[18px] text-ink-500">{SCORE_HINTS.strengthComposite.body}</p>
+              {SCORE_HINTS.strengthComposite.note && (
+                <p className="text-micro leading-[16px] text-ink-400">{SCORE_HINTS.strengthComposite.note}</p>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

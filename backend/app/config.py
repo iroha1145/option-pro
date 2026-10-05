@@ -180,7 +180,6 @@ class Settings(BaseSettings):
     fred_api_key: SecretStr = Field(default=SecretStr(""), alias="FRED_API_KEY")
     finnhub_api_key: str = Field(default="", alias="FINNHUB_API_KEY")
     finnhub_base_url: AnyHttpUrl = Field(default="https://finnhub.io/api/v1", alias="FINNHUB_BASE_URL")
-    finnhub_enrich_limit: int = Field(default=20, alias="FINNHUB_ENRICH_LIMIT")
     finnhub_candle_fallback_enabled: bool = Field(default=True, alias="FINNHUB_CANDLE_FALLBACK_ENABLED")
     finnhub_candle_fallback_limit: int = Field(default=80, alias="FINNHUB_CANDLE_FALLBACK_LIMIT")
     quotes_enabled: bool = Field(default=_PERSONAL_CONFIG.quotes.enabled, alias="QUOTES_ENABLED")
@@ -191,13 +190,6 @@ class Settings(BaseSettings):
     quotes_release_seconds: int = Field(default=_PERSONAL_CONFIG.quotes.release_seconds, ge=0, le=30, alias="QUOTES_RELEASE_SECONDS")
     stooq_price_fallback_enabled: bool = Field(default=True, alias="STOOQ_PRICE_FALLBACK_ENABLED")
     stooq_price_fallback_limit: int = Field(default=260, alias="STOOQ_PRICE_FALLBACK_LIMIT")
-    yahoo_options_enabled: bool = Field(default=True, alias="YAHOO_OPTIONS_ENABLED")
-    yahoo_options_enrich_limit: int = Field(default=90, alias="YAHOO_OPTIONS_ENRICH_LIMIT")
-    yahoo_option_target_dte: int = Field(default=30, alias="YAHOO_OPTION_TARGET_DTE")
-    yahoo_option_min_dte: int = Field(default=14, alias="YAHOO_OPTION_MIN_DTE")
-    yahoo_option_max_dte: int = Field(default=60, alias="YAHOO_OPTION_MAX_DTE")
-    yahoo_option_strike_window_pct: float = Field(default=0.16, alias="YAHOO_OPTION_STRIKE_WINDOW_PCT")
-    yahoo_options_failure_limit: int = Field(default=8, alias="YAHOO_OPTIONS_FAILURE_LIMIT")
     # Process-local Yahoo options I/O budget. Multi-worker deployments
     # multiply this cap by the worker count.
     yahoo_option_max_in_flight: int = Field(default=3, ge=1, le=8, alias="YAHOO_OPTION_MAX_IN_FLIGHT")
@@ -215,10 +207,6 @@ class Settings(BaseSettings):
     marketdata_base_url: AnyHttpUrl = Field(default="https://api.marketdata.app", alias="MARKETDATA_BASE_URL")
     marketdata_stock_candle_fallback_enabled: bool = Field(default=True, alias="MARKETDATA_STOCK_CANDLE_FALLBACK_ENABLED")
     marketdata_stock_candle_fallback_limit: int = Field(default=260, alias="MARKETDATA_STOCK_CANDLE_FALLBACK_LIMIT")
-    marketdata_options_enrich_limit: int = Field(default=8, alias="MARKETDATA_OPTIONS_ENRICH_LIMIT")
-    marketdata_option_dte: int = Field(default=30, alias="MARKETDATA_OPTION_DTE")
-    marketdata_option_strike_limit: int = Field(default=8, alias="MARKETDATA_OPTION_STRIKE_LIMIT")
-    marketdata_option_mode: str = Field(default="delayed", alias="MARKETDATA_OPTION_MODE")
     request_timeout: float = Field(default=20.0, alias="REQUEST_TIMEOUT")
 
     model_config = SettingsConfigDict(

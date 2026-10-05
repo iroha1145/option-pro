@@ -82,8 +82,6 @@ def test_context_build_uses_descriptive_data_without_old_ranking(monkeypatch: py
 
     monkeypatch.setattr(scanner, "_theme_universe", lambda: (["NVDA"], {"NVDA": {"theme_ids": ["semiconductors", "ai_cloud"]}}))
     monkeypatch.setattr(scanner, "_download_history", download)
-    monkeypatch.setattr(scanner, "scan_strength", forbidden)
-    monkeypatch.setattr(scanner, "_score_rows", forbidden)
     monkeypatch.setattr(scanner, "_intrinsic_row", forbidden)
     monkeypatch.setattr(scanner, "score_intrinsic", forbidden)
     monkeypatch.setattr(scoring, "score_intrinsic", forbidden)
@@ -201,12 +199,11 @@ def test_owner_get_routes_read_eod_scores_and_independent_context(monkeypatch: p
     async def selection(**kwargs):
         return _selection()
 
-    async def forbidden(*args, **kwargs):
+    def forbidden(*args, **kwargs):
         raise AssertionError("no live old ranking or market download in GET")
 
     monkeypatch.setattr(strength, "_public_strength_snapshot", selection)
-    for name in ("stock_strength", "sector_strength", "market_strength"):
-        monkeypatch.setattr(strength, name, forbidden)
+    monkeypatch.setattr("app.services.strength.scanner._download_history", forbidden)
     stock = asyncio.run(strength.stock("NVDA", profile="balanced"))
     assert stock["row"]["score"] == 72
     sectors = asyncio.run(strength.sectors(period="3mo"))
@@ -284,7 +281,6 @@ def test_macro_read_overlay_updates_same_price_session_without_mutation_or_io(tm
     monkeypatch.setattr(context, "_atomic_write", forbidden)
     monkeypatch.setattr(context, "build_context_snapshot", forbidden)
     monkeypatch.setattr(scanner, "_download_history", forbidden)
-    monkeypatch.setattr(scanner, "scan_strength", forbidden)
     first = context.read_context_snapshot(root=tmp_path, now=NOW)
     second = context.read_context_snapshot(root=tmp_path, now=NOW)
     assert len(calls) == 2

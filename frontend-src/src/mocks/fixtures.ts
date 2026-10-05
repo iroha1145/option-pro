@@ -3,6 +3,7 @@
  * 确定性种子；时间戳相对「当前」动态生成；写操作更新本地 fixture。
  */
 import { Rng, round2, round4 } from './rng';
+import { getMarketRegime } from './marketPulse';
 import { quoteSymbol } from '@/lib/quoteSymbol';
 import { TICKER_POOL, type TickerInfo } from './data';
 import type {
@@ -252,26 +253,22 @@ export function getMarketSignals(): MarketSignalsSummary {
 }
 
 export function getMarketStrength(): MarketStrength {
-  const r = new Rng(4451);
-  // 10 桶近似正态（峰值 60–70）
-  const histogram = Array.from({ length: 10 }, (_, b) => {
-    const center = 6.2;
-    const d = (b - center) / 2.1;
-    return Math.max(1, Math.round(46 * Math.exp(-d * d) + r.float(-3, 3)));
-  });
-  const total = histogram.reduce((s, n) => s + n, 0);
-  const ge85Count = histogram[8] + histogram[9];
-  const avgScore = round2(histogram.reduce((s, n, b) => s + n * (b * 10 + 5), 0) / total);
-  // aggregateAvailable：Market.tsx B6 用严格 === true 判定；mock 不产出该字段
-  // 会让强度分布整块在演示模式永不渲染（真数据反而有）。
-  return { avgScore, ge85Count, histogram, aggregateAvailable: true };
+  const regime = getMarketRegime();
+  return { regime: {
+    score: null, label: null, spreadLabel: null, warnings: [], asOf: null,
+    dims: {
+      indexTrend: regime.index_trend_score, momentum: regime.market_momentum_score,
+      breadth: regime.market_breadth_score, volume: regime.market_volume_score,
+      riskAppetite: regime.risk_appetite_score, riskOnSpread: regime.risk_on_spread_score,
+    },
+  } };
 }
 
 export function getStrengthProfiles(): StrengthProfile[] {
   return [
-    { id: 'balanced', name: __t('均衡动量'), description: __t('趋势/动量/量能/波动均衡加权，适合大多数市况。'), weights: { trend: 30, momentum: 30, volume: 20, volatility: 20 } },
-    { id: 'breakout', name: __t('突破猎手'), description: __t('加重动量与量能，捕捉放量突破早期的标的。'), weights: { trend: 20, momentum: 40, volume: 30, volatility: 10 } },
-    { id: 'lowvol', name: __t('低波稳健'), description: __t('偏好低波动与趋势延续，回撤优先。'), weights: { trend: 40, momentum: 15, volume: 10, volatility: 35 } },
+    { id: 'conservative', name: __t('稳健') },
+    { id: 'balanced', name: __t('均衡') },
+    { id: 'aggressive', name: __t('进取') },
   ];
 }
 
@@ -301,12 +298,16 @@ export function runStrengthScan(): ScreenerRow[] {
       avgDollarVolume20d: i % 17 === 16 ? null
         : SCAN_LIQUID_DOLLAR_VOLUME[info.ticker] ?? 40_000_000 + (i % 8) * 180_000_000,
       band,
-      subscores: {
-        trend: Math.round(r.normal(62, 16, 15, 98)),
-        momentum: Math.round(r.normal(60, 18, 12, 98)),
-        volume: Math.round(r.normal(58, 20, 10, 99)),
-        volatility: Math.round(r.normal(55, 16, 10, 95)),
-      },
+      subscoreDims: [
+        { key: 'factor_T', label: __t('趋势'), value: Math.round(r.normal(62, 16, 15, 98)) },
+        { key: 'factor_M', label: __t('动量'), value: Math.round(r.normal(60, 18, 12, 98)) },
+        { key: 'factor_V', label: __t('量能'), value: Math.round(r.normal(58, 20, 10, 99)) },
+        { key: 'factor_R', label: __t('稳定性'), value: Math.round(r.normal(55, 16, 10, 95)) },
+        { key: 'factor_S', label: __t('结构'), value: strengthScore },
+        { key: 'factor_B', label: __t('突破'), value: strengthScore },
+        { key: 'factor_P', label: __t('回踩'), value: null },
+        { key: 'factor_G', label: __t('行业'), value: null },
+      ],
       sparkline: makeSparkline(r, changePct, 24),
       /* 宏观适配：合成值，与任何第三方报告的示例分数无关。刻意让每 7 只里有 1 只
          没有读数，这样「没读到」这条路径在 mock 模式下也看得见 —— 它和「中性」

@@ -151,7 +151,7 @@ function loadOptionsModule(marketGet) {
       };
     }
     if (id === '@/mocks/fixtures2') {
-      return { getUnusualOptions: () => [], getOptionExpirations: () => [], getOptionChain: () => ({}) };
+      return { getOptionExpirations: () => [], getOptionChain: () => ({}) };
     }
     if (id === '@/lib/optionCapability') {
       return {

@@ -25,12 +25,13 @@ function apiFor(payload) {
   const calls = [];
   const client = {
     mockOr: (_mock, request) => request(),
+    get: async () => payload,
     toQuery: params => new URLSearchParams(Object.entries(params).filter(([, value]) => value != null)).toString(),
   };
   const { strengthApi } = load('api/modules/strength.ts', {
     '../client': client,
     '../marketRead': { marketGet: async (path, options) => { calls.push({ path, options }); return payload; } },
-    '../sharedRead': {},
+    '../sharedRead': { sharedGlobalGet: async () => payload },
     '../live': live,
     '../macroFields': load('api/macroFields.ts', { './live': live }),
     '@/mocks/fixtures': {},
@@ -108,4 +109,42 @@ test('默认实时读取、轮询路径和刷新请求均使用同一全市场�
   for (const [key, value] of Object.entries(request.refreshParameters)) {
     assert.equal(query.get(key), value == null ? null : String(value), `读取与刷新参数必须一致: ${key}`);
   }
+});
+
+
+test('当前市场接口只映射六维形态，保留零值和缺失值', async () => {
+  const { strengthApi } = apiFor({ market_regime: {
+    score: 57.1, index_trend_score: 80, market_momentum_score: 0,
+    market_breadth_score: null, market_volume_score: 54,
+    risk_appetite_score: 69.7, risk_on_spread_score: 62.6,
+  } });
+  const data = plain(await strengthApi.market());
+  assert.deepEqual(Object.keys(data), ['regime']);
+  assert.equal(data.regime.dims.indexTrend, 80);
+  assert.equal(data.regime.dims.momentum, 0);
+  assert.equal(data.regime.dims.breadth, null);
+  assert.deepEqual(plain(await apiFor({}).strengthApi.market()), {});
+});
+
+test('当前档位只显示真实枚举名称，旧重复接口不再导出', async () => {
+  const { strengthApi } = apiFor({ profiles: ['conservative', 'balanced', 'aggressive'], sectors: [] });
+  assert.deepEqual(plain(await strengthApi.profilesMeta()), {
+    profiles: [{ id: 'conservative', name: '稳健' }, { id: 'balanced', name: '均衡' }, { id: 'aggressive', name: '进取' }],
+    sectors: [],
+  });
+  assert.equal('profiles' in strengthApi, false);
+  assert.equal('scan' in strengthApi, false);
+});
+
+test('真实八因子和有效权重保留，缺失行业读数不变成零', async () => {
+  const keys = ['T', 'M', 'S', 'B', 'P', 'V', 'R', 'G'];
+  const dims = keys.map((key, index) => ({ key: `factor_${key}`, label: key, value: index === 7 ? null : index * 10 }));
+  const weights = { T: 0.2, M: 0.3, S: 0.1, B: 0.1, P: 0.1, V: 0.1, R: 0.1 };
+  const { strengthApi } = apiFor({ rows: [{ ticker: 'AAA', price: 100, final_score: 80, factor_dims: dims, effective_weights: weights }] });
+  const row = plain((await strengthApi.scanEnvelope()).rows[0]);
+  assert.deepEqual(row.subscoreDims, dims);
+  assert.deepEqual(row.effectiveWeights, weights);
+  assert.equal('subscores' in row, false);
+  assert.equal(row.subscoreDims[0].value, 0);
+  assert.equal(row.subscoreDims[7].value, null);
 });

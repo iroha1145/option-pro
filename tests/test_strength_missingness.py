@@ -23,23 +23,6 @@ def _history(size: int = 320) -> pd.DataFrame:
     )
 
 
-def _intrinsic_row() -> dict:
-    hist = _history()
-    row = scanner._feature_row(
-        "AAA",
-        hist,
-        hist,
-        {"sector_id": "software", "sector_name": "软件"},
-    )
-    assert row is not None
-    return scanner._intrinsic_row(
-        row,
-        hist,
-        range_feature={"status": "disabled", "version": "fixture"},
-        range_mode="disabled",
-    )
-
-
 def test_weighted_available_renormalizes_only_real_evidence() -> None:
     result = weighted_available(
         {"known": 80.0, "missing": None},
@@ -97,23 +80,19 @@ def test_missing_252d_and_rsi_never_create_neutral_contributions() -> None:
 
 
 def test_unknown_market_and_options_do_not_change_intrinsic() -> None:
-    intrinsic = _intrinsic_row()
-    active_market = scanner._score_rows(
-        [intrinsic],
-        {"status": "active", "score": 80.0, "confidence": 1.0},
-        "balanced",
-        0,
-    )[0]
-    missing_market = scanner._score_rows(
-        [{**intrinsic, "option_heat_score": None}],
-        {"status": "insufficient_data", "score": None},
-        "balanced",
-        0,
-    )[0]
-    assert active_market["intrinsic_score"] == missing_market["intrinsic_score"]
-    assert missing_market["market_fit_score"] is None
-    assert missing_market["option_heat_score"] is None
-    assert missing_market["option_score_weight"] == 0.0
+    hist = _history()
+    raw = scanner._feature_row("AAA", hist, hist, {})
+    missing = scanner._intrinsic_row(
+        {**raw, "market_fit_score": None, "option_heat_score": None}, hist,
+        range_feature={"status": "disabled", "version": "fixture"}, range_mode="disabled",
+    )
+    active = scanner._intrinsic_row(
+        {**raw, "market_fit_score": 95.0, "option_heat_score": 95.0}, hist,
+        range_feature={"status": "disabled", "version": "fixture"}, range_mode="disabled",
+    )
+    assert active["intrinsic_score"] == missing["intrinsic_score"]
+    assert active["contributions"] == missing["contributions"]
+    assert missing["intrinsic_score"] is not None
 
 
 def test_empty_intrinsic_evidence_is_not_forced_to_fifty() -> None:

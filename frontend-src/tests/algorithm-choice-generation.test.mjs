@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import vm from 'node:vm';
+import ts from 'typescript';
 
 import {
   nextChoiceGeneration,
   preferenceStorageKey,
   shouldApplyRemoteAlgorithmPreference,
-  shouldCommitChoiceGeneration,
   historyPageDecision,
   shouldCommitHistoryPage,
 } from '../src/lib/choiceGeneration.ts';
@@ -19,11 +20,48 @@ import {
   resetPreferenceWriteQueue,
 } from '../src/lib/viewPreferenceWrites.ts';
 
-test('later choice generation wins over a stale persist', () => {
-  const first = 1;
-  const second = nextChoiceGeneration(first);
-  assert.equal(shouldCommitChoiceGeneration(first, second), false);
-  assert.equal(shouldCommitChoiceGeneration(second, second), true);
+test('later radar choice suppresses stale persistence feedback from both outcomes', async () => {
+  const source = fs.readFileSync(new URL('../src/pages/Breakouts.tsx', import.meta.url), 'utf8');
+  const parsed = ts.createSourceFile('Breakouts.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let callback;
+  const visit = (node) => {
+    if (ts.isVariableDeclaration(node) && node.name.getText(parsed) === 'updateRadarSort') {
+      callback = node.initializer.arguments[0].getText(parsed);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(parsed);
+  assert.ok(callback, 'the actual radar choice callback must exist');
+  const compiled = ts.transpileModule(`(${callback})`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const pending = [];
+  const messages = [];
+  const choiceGeneration = { current: 0 };
+  const update = vm.runInNewContext(compiled, {
+    choiceGeneration, nextChoiceGeneration,
+    beginHistoryEpoch() {}, writeAlgorithmPreferences() {}, setRadarSort() {},
+    setExtraEvents() {}, setHistoryCursor() {}, setHistoryMoreError() {},
+    invalidateQueryPaths() {}, bumpAlgorithmViewGeneration() {},
+    isSignedIn: true, principal: 'account:alice', __t: (text) => text,
+    toast: { info: (text) => messages.push(text) },
+    persistAlgorithmChoice: () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
+  });
+  update('production');
+  update('t1_daily_priority');
+  update('follow_default');
+  assert.equal(choiceGeneration.current, 3);
+  pending[0].resolve({ syncError: new Error('old write failed') });
+  pending[1].reject(new Error('old write rejected'));
+  await Promise.resolve();
+  assert.deepEqual(messages, []);
+  pending[2].resolve({ syncError: new Error('current write failed') });
+  await Promise.resolve();
+  assert.deepEqual(messages, ['选择已生效，但尚未同步到账号']);
+  update('production');
+  pending[3].reject(new Error('current write rejected'));
+  await Promise.resolve();
+  assert.equal(messages.length, 2);
 });
 
 test('late remote preference reads do not apply after the user changes', () => {

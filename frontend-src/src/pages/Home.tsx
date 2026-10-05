@@ -9,7 +9,6 @@ import { LivePrice, LiveChange } from '@/components/shared/LiveQuote';
  *
  * 数据纪律（与 components/market/IndexCards.tsx 同款）：
  * - 无有效价显「—」，不显 0.00；sparkline 仅 mock 有数据，live 无指数 K 线端点如实留空
- * - 强度聚合 aggregateAvailable !== true 时隐藏对应行，不显 0
  */
 import { useEffect, useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router';
@@ -18,7 +17,6 @@ import { isMock, type ApiError } from '@/api/client';
 import type { BreakoutSignal, EarningsItem, IndexQuote, MarketSession, WatchlistItem } from '@/api/types';
 import { marketApi } from '@/api/modules/market';
 import { signalsApi } from '@/api/modules/signals';
-import { strengthApi } from '@/api/modules/strength';
 import { breakoutsApi } from '@/api/modules/breakouts';
 import { earningsApi } from '@/api/modules/earnings';
 import { stocksApi } from '@/api/modules/stocks';
@@ -219,7 +217,6 @@ export default function Home() {
   /* 300s：形态六维 / 信号 / 强度 / 雷达 / 财报 / 自选 / CTA */
   const regimeQ = usePolling(() => marketPulseApi.regime(), 300_000);
   const signalsQ = usePolling(() => signalsApi.market(), 300_000);
-  const strengthQ = usePolling(() => strengthApi.market(), 300_000);
   const breakoutsQ = usePolling(() => breakoutsApi.current(), 300_000);
   const earningsQ = usePolling(() => earningsApi.upcoming(), 300_000);
   const watchlistQ = usePolling(() => stocksApi.watchlist(true), 300_000);
@@ -413,14 +410,13 @@ export default function Home() {
           mean={mean}
           bias={bias}
           breadth={breadth}
-          strength={strengthQ.data}
           signalMetrics={signalsQ.data?.metrics ?? null}
           /* 该卡实际拼了四个辅助接口（六维/信号/强度/关注池宽度）：任一失败
              此前只会悄悄显示「—」或保留旧值——补统一陈旧提示（审计问题 5） */
-          auxError={Boolean(regimeQ.error || signalsQ.error || strengthQ.error || watchlistQ.error)}
-          auxRefreshing={regimeQ.refreshing || signalsQ.refreshing || strengthQ.refreshing || watchlistQ.refreshing}
+          auxError={Boolean(regimeQ.error || signalsQ.error || watchlistQ.error)}
+          auxRefreshing={regimeQ.refreshing || signalsQ.refreshing || watchlistQ.refreshing}
           onRetryAux={() => {
-            for (const q of [regimeQ, signalsQ, strengthQ, watchlistQ]) {
+            for (const q of [regimeQ, signalsQ, watchlistQ]) {
               if (q.error) q.refresh();
             }
           }}
@@ -584,7 +580,7 @@ export default function Home() {
   );
 }
 
-/** 「市场状态」卡：时段/纽约时间/倒计时/六维均值/涨跌平小砖/强度与信号 micro 行 */
+/** 「市场状态」卡：时段/纽约时间/倒计时/六维均值/涨跌平小砖/信号指标 */
 function MarketStatusPanel({
   status,
   session,
@@ -595,7 +591,6 @@ function MarketStatusPanel({
   mean,
   bias,
   breadth,
-  strength,
   signalMetrics,
   auxError,
   auxRefreshing,
@@ -610,7 +605,6 @@ function MarketStatusPanel({
   mean: number | null;
   bias: string | null;
   breadth: { adv: number | null; dec: number | null; flat: number | null; total: number | null };
-  strength: { aggregateAvailable?: boolean; avgScore: number; ge85Count: number } | null;
   signalMetrics: { label: string; value: number }[] | null;
   auxError: boolean;
   auxRefreshing: boolean;
@@ -686,17 +680,12 @@ function MarketStatusPanel({
       </div>
 
       {/* 辅助指标直接展示；缺失读数仍遵守原有数据纪律，不补零。 */}
-      {(strength?.aggregateAvailable === true || (signalMetrics && signalMetrics.length > 0)) && (
+      {(signalMetrics && signalMetrics.length > 0) && (
         <div className="mt-auto border-t border-line/70 pt-3" data-testid="home-supporting-metrics">
           <p className="text-caption font-medium text-ink-600">{t('辅助指标')}</p>
           <div className="mt-2 rounded-lg bg-paper-2/60 p-3">
-            {strength?.aggregateAvailable === true && (
-              <p className="text-caption text-ink-600">
-                {t('平均强度 {avg} · ≥85 {n} 只', { avg: strength.avgScore.toFixed(1), n: strength.ge85Count })}
-              </p>
-            )}
             {signalMetrics && signalMetrics.length > 0 && (
-              <div className={cn('grid grid-cols-2 gap-x-4 gap-y-2', strength?.aggregateAvailable === true && 'mt-3')}>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                 {signalMetrics.slice(0, 4).map((metric) => (
                   <p key={metric.label} className="flex items-baseline justify-between gap-2 text-micro text-ink-500">
                     <span className="min-w-0 truncate">{metric.label}</span>

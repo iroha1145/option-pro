@@ -326,8 +326,7 @@ def test_password_mode_owner_reads_worker_snapshot_not_live_scan(
 ) -> None:
     """审计 P1-02：password 公网模式下 Owner 普通 GET 一律读 Worker 快照。
 
-    现算路径（stock_strength 内部是整池扫描）必须完全不被触碰——
-    monkeypatch 成必炸函数来证明。
+    普通读取不能下载行情或重新计算市场强度；测试拦截实际计算入口。
     """
     from app.services.eod_limited import context_snapshot, store
 
@@ -348,12 +347,11 @@ def test_password_mode_owner_reads_worker_snapshot_not_live_scan(
     monkeypatch.setattr(strength.time, "time", lambda: NOW)
     _as_owner(monkeypatch)
 
-    async def _must_not_run(*_args, **_kwargs):
+    def _must_not_run(*_args, **_kwargs):
         raise AssertionError("live compute must not run in password mode")
 
-    monkeypatch.setattr(strength, "stock_strength", _must_not_run)
-    monkeypatch.setattr(strength, "market_strength", _must_not_run)
-    monkeypatch.setattr(strength, "sector_strength", _must_not_run)
+    monkeypatch.setattr("app.services.strength.scanner._download_history", _must_not_run)
+    monkeypatch.setattr("app.services.strength.scanner.market_strength", _must_not_run)
 
     stock = asyncio.run(strength.stock("AAPL", profile="balanced"))
     assert stock["snapshot_source"] == "eod_limited_worker"
@@ -379,7 +377,7 @@ def test_private_network_owner_reads_independent_market_context(
     async def _live():
         raise AssertionError("GET must not download market context")
 
-    monkeypatch.setattr(strength, "market_strength", _live)
+    monkeypatch.setattr("app.services.strength.scanner.market_strength", _live)
     monkeypatch.setattr(context_snapshot, "read_context_snapshot", lambda: sentinel)
     result = asyncio.run(strength.market())
     assert result["market_regime"]["score"] == 42

@@ -158,6 +158,78 @@ test('history charts expose a keyboard cursor that drives the header readout', a
 });
 
 for (const kind of ['macro', 'position']) {
+  for (const input of ['keyboard', 'mouse']) {
+    test(`${kind} history preserves the visible ${input} cursor across value refreshes`, async ({ page }) => {
+      const errors = [];
+      page.on('pageerror', (error) => errors.push(error.message));
+      await page.goto('/visual-tests/support/history-cursor.html');
+      const frame = page.getByTestId(`${kind}-chart`);
+      const chart = frame.getByRole('slider');
+      await chart.focus();
+      if (input === 'keyboard') {
+        await chart.press('Home');
+        await chart.press('ArrowRight');
+        await chart.press('ArrowRight');
+      } else {
+        await page.evaluate(() => document.fonts.ready);
+        const pixel = await page.evaluate((kind) => window.historyCursorHarness.pixel(kind, 2), kind);
+        await page.mouse.move(pixel.x, pixel.y);
+      }
+      await expect(chart).toHaveAttribute('aria-valuenow', '2');
+      await page.evaluate(() => window.historyCursorHarness.refresh());
+      await expect(chart).toHaveAttribute('aria-valuenow', '2');
+      await expect(chart).toHaveAttribute('aria-valuetext', new RegExp(`2026-01-03.*${kind === 'macro' ? '70.0' : '\\+10.0'}`));
+      await expect(frame).toContainText('2026-01-03');
+      await expect.poll(() => page.evaluate((kind) => window.historyCursorHarness.inspect(kind), kind)).toEqual({ pointerStatus: 'show', emphasized: true });
+      await expect(frame.locator('.cloud-chart-tooltip')).toBeVisible();
+      await expect(frame.locator('.cloud-chart-tooltip')).toContainText('2026-01-03');
+
+      if (input === 'keyboard') await chart.press('Escape');
+      else await page.getByRole('button', { name: '离开图表', exact: true }).focus();
+      await page.evaluate(() => window.historyCursorHarness.refresh());
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      await expect(chart).toHaveAttribute('aria-valuenow', '119');
+      await expect.poll(() => page.evaluate((kind) => window.historyCursorHarness.inspect(kind), kind)).toEqual({ pointerStatus: 'hide', emphasized: false });
+      await expect(frame.locator('.cloud-chart-tooltip')).toBeHidden();
+      expect(errors).toEqual([]);
+    });
+  }
+
+  test(`${kind} history discards old tooltip callbacks across a value refresh and a date change`, async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.goto('/visual-tests/support/history-cursor.html');
+    const frame = page.getByTestId(`${kind}-chart`);
+    const chart = frame.getByRole('slider');
+    await chart.focus();
+    await chart.press('Home');
+    await chart.press('ArrowRight');
+    await expect(chart).toHaveAttribute('aria-valuenow', '1');
+    const last = await page.evaluate((kind) => window.historyCursorHarness.refreshThenReplace(kind, 30, 90), kind);
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await expect(chart).toHaveAttribute('aria-valuenow', '29');
+    await expect(frame).toContainText(last);
+    await expect.poll(() => page.evaluate((kind) => window.historyCursorHarness.inspect(kind), kind)).toEqual({ pointerStatus: 'hide', emphasized: false });
+    expect(errors).toEqual([]);
+  });
+
+  test(`${kind} history discards a queued tooltip refresh when dates change`, async ({ page }) => {
+    await page.goto('/visual-tests/support/history-cursor.html');
+    const frame = page.getByTestId(`${kind}-chart`);
+    const chart = frame.getByRole('slider');
+    await expect(chart).toHaveAttribute('aria-valuemax', '119');
+    await chart.focus();
+    await chart.press('Home');
+    await chart.press('ArrowRight');
+    await expect(chart).toHaveAttribute('aria-valuenow', '1');
+    const last = await page.evaluate((kind) => window.historyCursorHarness.replaceAfterResize(kind, 30, 90), kind);
+    // Cross the queued refresh and the next paint; this checks the final readout, not its reset flash.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await expect(chart).toHaveAttribute('aria-valuenow', '29');
+    await expect(frame).toContainText(last);
+    await expect.poll(() => page.evaluate((kind) => window.historyCursorHarness.inspect(kind), kind)).toEqual({ pointerStatus: 'hide', emphasized: false });
+  });
+
   test(`${kind} history replaces shorter and same-length dates safely while the cursor is active`, async ({ page }) => {
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));

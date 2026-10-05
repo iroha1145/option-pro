@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import asyncio
 
 import numpy as np
 import pandas as pd
 import pytest
 
 from app.services import scoring, signals
-from app.services.strength import scanner
 from app.services.strength.scoring import rsi_score
 
 
@@ -257,25 +255,3 @@ def test_atr_does_not_masquerade_as_an_iv_rank_component() -> None:
 
     assert result["top_breakdown"]["options_crowding"] is None
     assert result["bottom_breakdown"]["options_panic_falling"] is None
-
-
-def test_stock_strength_explicitly_disables_price_and_liquidity_filters(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    captured = {}
-
-    async def fake_scan_strength(**kwargs):
-        captured.update(kwargs)
-        return {
-            "as_of": "2026-07-10T20:00:00+00:00",
-            "rows": [{"ticker": "PENNY", "price": 2.5}],
-            "market_regime": {},
-        }
-
-    monkeypatch.setattr(scanner, "scan_strength", fake_scan_strength)
-
-    payload = asyncio.run(scanner.stock_strength("penny"))
-
-    assert payload["row"]["price"] == 2.5
-    assert captured["min_price"] == 0
-    assert captured["min_avg_dollar_volume"] == 0

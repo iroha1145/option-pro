@@ -65,8 +65,8 @@ export function ScoreCell({
 }
 
 /* ----------------------------------------------------------------------------
- * 分项微条：4 段（14×3px 轨道 + 比例填充，§6-5 色阶，hover 毛玻璃 tooltip）
- * 数据源与展开区 BREAKDOWN 同源（subscoreDimsOf：live 契约周期分 / mock 四维），
+ * 分项微条：按实际因子数量展示，缺失读数保留空轨道
+ * 数据源与展开区同源（subscoreDimsOf），
  * 单项缺失（null）如实空轨道，tooltip 该项显「—」——不再出现整排占位。
  * -------------------------------------------------------------------------- */
 export function SubscoreTicks({ row, tipSide = 'top' }: { row: ScreenerRow; tipSide?: 'top' | 'bottom' }) {

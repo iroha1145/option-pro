@@ -31,10 +31,6 @@ def test_theme_universe_keeps_primary_sector_separate_from_theme_membership() ->
     assert first == second
 
 
-def test_single_observation_has_no_cross_sectional_percentile() -> None:
-    assert scanner._pct_rank([{"ticker": "AAA", "value": 10.0}], "value") == {}
-
-
 def test_average_dollar_volume_uses_daily_close_times_volume() -> None:
     hist = _history()
     row = scanner._feature_row(

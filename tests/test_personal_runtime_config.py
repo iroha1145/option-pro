@@ -122,3 +122,24 @@ def test_legacy_environment_cannot_override_personal_runtime(
     assert breakout.scan_interval_closed_seconds == 1800
     assert breakout.scan_retention_days == 90
     assert breakout.range_persistence_mode == "shadow"
+
+
+@pytest.mark.parametrize("source", ["environ", "dotenv"])
+def test_retired_strength_settings_do_not_block_startup(tmp_path, monkeypatch, source):
+    retired = (
+        "FINNHUB_ENRICH_LIMIT", "YAHOO_OPTIONS_ENABLED", "YAHOO_OPTIONS_ENRICH_LIMIT",
+        "YAHOO_OPTION_TARGET_DTE", "YAHOO_OPTION_MIN_DTE", "YAHOO_OPTION_MAX_DTE",
+        "YAHOO_OPTION_STRIKE_WINDOW_PCT", "YAHOO_OPTIONS_FAILURE_LIMIT",
+        "MARKETDATA_OPTIONS_ENRICH_LIMIT", "MARKETDATA_OPTION_DTE",
+        "MARKETDATA_OPTION_STRIKE_LIMIT", "MARKETDATA_OPTION_MODE",
+    )
+    env_file = None
+    if source == "environ":
+        for key in retired:
+            monkeypatch.setenv(key, "retired-invalid-value")
+    else:
+        env_file = tmp_path / "retired.env"
+        env_file.write_text("\n".join(f"{key}=retired-invalid-value" for key in retired))
+    settings = Settings(_env_file=env_file, YAHOO_OPTION_MAX_IN_FLIGHT=2)
+    assert settings.yahoo_option_max_in_flight == 2
+    assert not ({name.lower() for name in retired} & settings.model_dump().keys())

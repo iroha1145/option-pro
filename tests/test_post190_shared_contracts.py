@@ -10,7 +10,6 @@ from app.services import market_calendar, scoring
 from app.services.breakouts import clock, feature_engine
 from app.services.catalysts.etl_client import EtlProtocolError, MacroLensEtlClient
 from app.services.macro_conditions import linkage, market_proxy
-from app.services.strength import scanner, yahoo_options
 
 
 class BrokenNumber:
@@ -31,16 +30,6 @@ def test_numeric_consumers_keep_distinct_missing_and_error_boundaries():
     assert not stocks._is_finite_number(True)
     assert not stocks._is_finite_number("1.23456789")
     assert not stocks._is_finite_number(0, positive=True)
-
-
-def test_option_percentiles_keep_six_digit_preprocessing():
-    rows = [{"ticker": "A", "value": 1.0000001}, {"ticker": "B", "value": 1.0000002}]
-    assert scanner._pct_rank(rows, "value") == {"A": 0.0, "B": 100.0}
-    assert yahoo_options._pct_rank(rows, "value") == {"A": 50.0, "B": 50.0}
-    assert scanner._pct_rank(rows[:1], "value") == {}
-    assert yahoo_options._pct_rank(rows[:1], "value") == {}
-    provider_rows = [{"ticker": "A", "value": "1"}, {"ticker": "B", "value": None}, {"ticker": "C", "value": "2"}]
-    assert yahoo_options._pct_rank(provider_rows, "value") == {"A": 0.0, "C": 100.0}
 
 
 @pytest.mark.parametrize(("raw", "cause"), [

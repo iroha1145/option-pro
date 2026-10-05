@@ -171,7 +171,7 @@ test('期权适配层不再把缺失数值补成 0', async () => {
   const api = await source('api/modules/options.ts');
   const types = await source('api/types.ts');
 
-  // legRow / mapChain / mapUnusual 内不得再出现 `?? 0`
+  // legRow / mapChain 内不得再出现 `?? 0`
   assert.doesNotMatch(codeOf(api), /\?\?\s*0/);
   // 行权价缺失的合约必须被丢弃，而不是归到 strike=0
   assert.match(api, /const strike = pickN\(c, 'strike'\);\s*\n\s*if \(strike === null\) continue;/);
@@ -384,9 +384,10 @@ test('按涨跌幅排序时缺失值稳定排在末尾', async () => {
 test('缺失分项评分不被填成 0 分', async () => {
   const strength = await source('api/modules/strength.ts');
   const types = await source('api/types.ts');
-  assert.doesNotMatch(codeOf(strength), /trend: dims\[2\]\.value \?\? 0/);
-  assert.match(strength, /trend: dims\[2\]\.value,/);
-  assert.match(types, /trend: number \| null;/);
+  assert.match(strength, /value: pickN\(rec, 'value'\)/);
+  assert.match(strength, /subscoreDims: dims/);
+  assert.doesNotMatch(codeOf(strength), /subscores:/);
+  assert.match(types, /value: number \| null;/);
 });
 
 /* ---------------- P2-33：到期天数按纽约日历日 ---------------- */

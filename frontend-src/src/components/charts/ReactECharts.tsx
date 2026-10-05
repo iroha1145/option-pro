@@ -6,6 +6,8 @@ interface ReactEChartsProps {
   option: ChartOption;
   /** Read interaction state only when committing the option to the chart. */
   prepareOption?: (option: ChartOption) => ChartOption;
+  /** Restore interaction state after a new option has been committed. */
+  onOptionApplied?: () => void;
   className?: string;
   style?: React.CSSProperties;
   onClick?: (params: unknown) => void;
@@ -14,14 +16,19 @@ interface ReactEChartsProps {
   ariaLabel?: string;
 }
 
-export default function ReactECharts({ option, prepareOption, className, style, onClick, onInit, ariaLabel }: ReactEChartsProps) {
+export default function ReactECharts({ option, prepareOption, onOptionApplied, className, style, onClick, onInit, ariaLabel }: ReactEChartsProps) {
   const ref = useRef<HTMLDivElement>(null);
   const chartRef = useRef<EChartsInstance | null>(null);
   const onInitRef = useRef(onInit);
+  const onOptionAppliedRef = useRef(onOptionApplied);
 
   useEffect(() => {
     onInitRef.current = onInit;
   }, [onInit]);
+
+  useEffect(() => {
+    onOptionAppliedRef.current = onOptionApplied;
+  }, [onOptionApplied]);
 
   useEffect(() => {
     if (!ref.current) return;
@@ -44,6 +51,7 @@ export default function ReactECharts({ option, prepareOption, className, style, 
     const chart = chartRef.current;
     if (!chart) return;
     chart.setOption(prepareOption ? prepareOption(option) : option, { notMerge: true });
+    onOptionAppliedRef.current?.();
     if (onClick) {
       chart.off('click');
       chart.on('click', onClick);

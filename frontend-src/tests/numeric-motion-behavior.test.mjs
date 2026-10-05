@@ -410,15 +410,30 @@ test('clearing field feedback before its animation frame prevents a late shake',
   const h = harness();
   const { useCatalogShake } = loadTransitions(h);
   h.mount(() => useCatalogShake(1200));
+  let reads = 0;
+  h.value().inputRef.current = {
+    get offsetWidth() {
+      reads += 1;
+      assert.equal(h.value().shaking, false, 'shake must be off during reflow');
+      assert.equal(h.value().classes.input.includes('is-shaking'), false);
+      return 1;
+    },
+  };
   h.value().play({ message: true });
   assert.equal(h.value().error, true);
   assert.equal(h.value().shaking, false);
   h.frame(16);
   assert.equal(h.value().shaking, true);
+  assert.equal(reads, 1);
+  h.value().play();
+  assert.equal(h.value().shaking, false);
+  h.frame(32);
+  assert.equal(h.value().shaking, true);
+  assert.equal(reads, 2, 'repeat play must reflow before restarting');
   h.value().play();
   assert.equal(h.value().shaking, false);
   h.value().clear();
-  h.frame(32);
+  h.frame(48);
   assert.equal(h.value().error, false);
   assert.equal(h.value().shaking, false);
   assert.equal(h.frames.size, 0);

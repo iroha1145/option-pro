@@ -44,12 +44,12 @@ async function loadDrawings(t) {
     entry,
     `
 export {
-  horizontalProjection, clipRayToRect, channelEdges, channelOffset,
-  vectorsParallel, moveChannelWhole, moveChannelAnchor, normalizeRectangle,
+  clipRayToRect, channelEdges, channelOffset,
+  moveChannelWhole, moveChannelAnchor, normalizeRectangle,
   fibonacciPrices, constrainByShift, applyAltNoSnap, distancePointToSegment, nudgePoint,
 } from ${JSON.stringify(files.geometry)};
 export {
-  barKeyOf, resolveBarKey, resolveAnchor, snapBarIndex, drawingScopeKey, drawingsInScope, nudgeAnchors,
+  barKeyOf, resolveBarKey, resolveAnchor, snapBarIndex, nudgeAnchors,
 } from ${JSON.stringify(files.projection)};
 export {
   hitTestProjected, pickTopHit, hitTestDrawings, isLockedDragBlocked, textLabelBox,
@@ -66,7 +66,7 @@ export {
   quarantineDrawings, quarantineKey, drawingsFromCache,
 } from ${JSON.stringify(files.storage)};
 export {
-  addDraftPoint, applyShiftToDraft, exclusiveTool, isTextInputTarget,
+  addDraftPoint, isTextInputTarget,
   pointerKindFromEvent, escapeHandledByOverlay,
 } from ${JSON.stringify(files.tools)};
 export {
@@ -75,8 +75,8 @@ export {
 } from ${JSON.stringify(files.renderer)};
 export {
   DrawingOutbox, diffPersistOps, mutableFieldsDiffer, applyPersistResponse,
-  resolveListApply, resolveRetryAction, SCOPE_JOB_ID, keepLocalWithServerRevisions,
-  regeneratePersistOps, resolveSyncFailure, applyKnownRevisions, latestKnownRevision, parsePersistJobs,
+  resolveListApply, resolveRetryAction, SCOPE_JOB_ID,
+  resolveSyncFailure, applyKnownRevisions, latestKnownRevision, parsePersistJobs,
   jobIsCurrent, jobBelongsToScope, settleJob, releaseInflight, conflictSnapshotUsable, nextDrainRetryDelayMs,
 } from ${JSON.stringify(files.sync)};
 export { drainPersistJob } from ${JSON.stringify(files.drain)};
@@ -97,7 +97,7 @@ export {
   saveLayerSettings, toggleLayer, layerIdForOverlay,
 } from ${JSON.stringify(files.settings)};
 export {
-  mapChartAnalysis, analysisMatchesChart, filterOverlays, filterPanes, labelBudget, barFingerprint,
+  mapChartAnalysis, analysisGate, filterOverlays, filterPanes, labelBudget, barFingerprint,
   barFingerprintFromBars, closedBarsForFingerprint, canonicalBarPayload,
 } from ${JSON.stringify(files.mapBundle)};
 export { sha256Hex } from ${JSON.stringify(files.sha256)};
@@ -120,15 +120,22 @@ export { overlaysToMarks, overlaysToSeries, analysisLayout, alignSeriesToBars, p
   return import(`${pathToFileURL(output).href}?test=${Date.now()}`);
 }
 
+function vectorsParallel(a, b, c, d, eps = 1e-6) {
+  const vx = b.x - a.x;
+  const vy = b.y - a.y;
+  const ux = d.x - c.x;
+  const uy = d.y - c.y;
+  return Math.abs(vx * uy - vy * ux) <= eps * (Math.hypot(vx, vy) * Math.hypot(ux, uy) + 1e-12);
+}
+
 const rect = { xMin: 0, xMax: 100, yMin: 10, yMax: 50 };
 
-test('horizontal projection spans the visible x range at a price', async (t) => {
-  const { horizontalProjection } = await loadDrawings(t);
-  const line = horizontalProjection(42, 0, 80);
-  assert.equal(line.a.y, 42);
-  assert.equal(line.b.y, 42);
-  assert.equal(line.a.x, 0);
-  assert.equal(line.b.x, 80);
+test('horizontal drawing spans the visible x range at its anchor price', async (t) => {
+  const { toProjectedDrawing } = await loadDrawings(t);
+  const bars = [{ t: '2026-07-06T13:30:00Z', o: 40, h: 43, l: 39, c: 42 }];
+  const drawing = drawingOf('horizontal', [{ time: bars[0].t, barKey: '2026-07-06', price: 42 }]);
+  const projected = toProjectedDrawing(drawing, { bars, range: '1d', xMin: 0, xMax: 80, yMin: 30, yMax: 50 });
+  assert.deepEqual(projected.segments, [{ a: { x: 0, y: 42 }, b: { x: 80, y: 42 } }]);
 });
 
 test('segment endpoints stay at the two anchors', async (t) => {
@@ -176,7 +183,7 @@ test('ray intersects the visible price grid instead of a huge fake coordinate', 
 });
 
 test('channel stays parallel through whole-move and single-anchor move', async (t) => {
-  const { channelEdges, moveChannelWhole, moveChannelAnchor, vectorsParallel } = await loadDrawings(t);
+  const { channelEdges, moveChannelWhole, moveChannelAnchor } = await loadDrawings(t);
   const p1 = { x: 0, y: 10 };
   const p2 = { x: 10, y: 20 };
   const p3 = { x: 2, y: 4 };
@@ -367,15 +374,18 @@ test('unresolved drawings are omitted from marks rather than snapped', async (t)
   assert.equal(marks.lines.length, 0);
 });
 
-test('ticker/range/adjustment isolation', async (t) => {
-  const { drawingsInScope } = await loadDrawings(t);
-  const list = [
-    { ticker: 'NVDA', range: '1d', adjustment: 'raw' },
-    { ticker: 'NVDA', range: '1w', adjustment: 'raw' },
-    { ticker: 'AAPL', range: '1d', adjustment: 'raw' },
-  ];
-  assert.equal(drawingsInScope(list, 'NVDA', '1d').length, 1);
-  assert.equal(drawingsInScope(list, 'nvda', '1w').length, 1);
+test('account/ticker/range isolation uses actual persistence keys', async (t) => {
+  const { drawingsStorageKey, saveDrawings, loadDrawings: load } = await loadDrawings(t);
+  const store = memStore();
+  const current = drawingOf('horizontal', [{ time: '2026-07-06T13:30:00Z', barKey: '2026-07-06', price: 10 }]);
+  const key = drawingsStorageKey('acct', 'NVDA', '1d', 'raw');
+  saveDrawings(key, [current], store);
+  assert.equal(load(key, store).drawings.length, 1);
+  for (const [identity, ticker, range] of [['acct', 'NVDA', '1w'], ['acct', 'AAPL', '1d'], ['other-acct', 'NVDA', '1d']]) {
+    assert.equal(load(drawingsStorageKey(identity, ticker, range, 'raw'), store).drawings.length, 0);
+  }
+  assert.equal(drawingsStorageKey('acct', 'NVDA', '1d'), key);
+  assert.match(key, /:raw$/);
 });
 
 test('corrupt local storage is ignored', async (t) => {
@@ -646,7 +656,7 @@ test('nudgeAnchors applies the shipped nudge helper to real bar-key anchors', as
 });
 
 test('tilted channel fill vertices stay parallel to the two rails, not a bounding box', async (t) => {
-  const { drawingsToMarks, drawingSegments, vectorsParallel, fillIsAxisAligned } = await loadDrawings(t);
+  const { drawingsToMarks, drawingSegments, fillIsAxisAligned } = await loadDrawings(t);
   const bars = barsFor(12);
   const ctx = ctxFor(bars);
   const channel = drawingOf('channel', [
@@ -893,32 +903,25 @@ test('failed inflight create is replayed before a later update', async (t) => {
   assert.equal(second.drawing.style.color, '#E5484D');
 });
 
-test('keep-local conflict adopts the server revision and leaves local fields', async (t) => {
-  const { DrawingOutbox, keepLocalWithServerRevisions } = await loadDrawings(t);
+test('keep-local conflict preserves mutable fields in one scope replacement', async (t) => {
+  const { DrawingOutbox, SCOPE_JOB_ID } = await loadDrawings(t);
   const local = drawingOf('horizontal', [{ time: '2026-07-06T13:30:00Z', barKey: '2026-07-06', price: 10 }], {
-    style: { color: '#E5484D', width: 3, dash: 'dashed' },
-    revision: 2,
+    style: { color: '#E5484D', width: 3, dash: 'dashed' }, revision: 2,
   });
-  const server = drawingOf('horizontal', [{ time: '2026-07-06T13:30:00Z', barKey: '2026-07-06', price: 99 }], {
-    style: { color: '#2E46E0', width: 1, dash: 'solid' },
-    revision: 5,
-  });
-  const kept = keepLocalWithServerRevisions([local], [server]);
-  assert.equal(kept[0].revision, 5);
-  assert.equal(kept[0].style.color, '#E5484D');
-  assert.equal(kept[0].style.width, 3);
-  assert.equal(kept[0].anchors[0].price, 10);
-  const box = new DrawingOutbox();
+  const box = new DrawingOutbox(memStore());
   box.setScope({ identity: 'acct', ticker: 'NVDA', range: '1d', adjustment: 'raw' });
   box.enqueue({ drawingId: local.id, type: 'update', drawing: local });
-  const job = box.takeNext(local.id);
+  box.takeNext(local.id);
   box.failKeep(local.id);
-  box.stampRevisions(kept);
-  const replay = box.takeNext(local.id);
-  assert.equal(replay.type, 'update');
-  assert.equal(replay.drawing.revision, 5);
-  assert.equal(replay.drawing.style.color, '#E5484D');
-  assert.notEqual(job.drawing.revision, replay.drawing.revision);
+  box.replaceWithExactScope([local], 5, 'conflict_keep');
+  const replay = box.takeNext(SCOPE_JOB_ID);
+  assert.equal(replay.type, 'replace');
+  assert.equal(replay.expectedScopeRevision, 5);
+  assert.equal(replay.drawings[0].revision, 2);
+  assert.equal(replay.drawings[0].style.color, '#E5484D');
+  assert.equal(replay.drawings[0].style.width, 3);
+  assert.equal(replay.drawings[0].anchors[0].price, 10);
+  assert.equal(box.snapshot().length, 1);
 });
 
 test('replace import policy helper treats empty and swapped sets as the new list', async (t) => {
@@ -1014,7 +1017,7 @@ test('layer settings persist on a key separate from drawings', async (t) => {
 });
 
 test('fingerprint and dataThrough mismatch yields no auto marks', async (t) => {
-  const { mapChartAnalysis, analysisMatchesChart, filterOverlays, settingsFromPreset } = await loadDrawings(t);
+  const { mapChartAnalysis, analysisGate, filterOverlays, settingsFromPreset } = await loadDrawings(t);
   const bundle = mapChartAnalysis({
     ticker: 'AAPL',
     range: '1d',
@@ -1027,13 +1030,14 @@ test('fingerprint and dataThrough mismatch yields no auto marks', async (t) => {
     strengthContext: { finalScore: null, note: 'not a win probability' },
   });
   assert.ok(bundle);
-  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', dataThrough: '2026-07-16' }), false);
-  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', ticker: 'AAPL', dataThrough: '2026-07-16', fingerprint: 'abc' }), true);
-  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', ticker: 'MSFT', dataThrough: '2026-07-16', fingerprint: 'abc' }), false);
-  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', ticker: 'AAPL', dataThrough: '2026-07-15', fingerprint: 'abc' }), false);
-  assert.equal(analysisMatchesChart(bundle, { range: '1w', adjustment: 'raw', ticker: 'AAPL', dataThrough: '2026-07-16', fingerprint: 'abc' }), false);
-  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', ticker: 'AAPL', dataThrough: '2026-07-16', fingerprint: 'other' }), false);
-  const none = analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', ticker: 'AAPL', dataThrough: '2026-07-15', fingerprint: 'abc' })
+  assert.equal(analysisGate(bundle, { range: '1d', adjustment: 'raw', dataThrough: '2026-07-16' }), 'fingerprint');
+  assert.equal(analysisGate(bundle, { range: '1d', adjustment: 'raw', ticker: 'AAPL', dataThrough: '2026-07-16', fingerprint: 'abc' }), 'ok');
+  assert.equal(analysisGate(bundle, { range: '1d', adjustment: 'raw', ticker: 'MSFT', dataThrough: '2026-07-16', fingerprint: 'abc' }), 'ticker');
+  assert.equal(analysisGate(bundle, { range: '1d', adjustment: 'raw', ticker: 'AAPL', dataThrough: '2026-07-15', fingerprint: 'abc' }), 'data_through');
+  assert.equal(analysisGate(bundle, { range: '1w', adjustment: 'raw', ticker: 'AAPL', dataThrough: '2026-07-16', fingerprint: 'abc' }), 'range');
+  assert.equal(analysisGate(bundle, { range: '1d', adjustment: 'split', ticker: 'AAPL', dataThrough: '2026-07-16', fingerprint: 'abc' }), 'adjustment');
+  assert.equal(analysisGate(bundle, { range: '1d', adjustment: 'raw', ticker: 'AAPL', dataThrough: '2026-07-16', fingerprint: 'other' }), 'fingerprint');
+  const none = analysisGate(bundle, { range: '1d', adjustment: 'raw', ticker: 'AAPL', dataThrough: '2026-07-15', fingerprint: 'abc' }) === 'ok'
     ? filterOverlays(bundle.overlays, settingsFromPreset('minimal'))
     : [];
   assert.equal(none.length, 0);
@@ -1043,7 +1047,7 @@ test('fingerprint and dataThrough mismatch yields no auto marks', async (t) => {
 test('layer toggles change real marks and MA series, not only filterOverlays', async (t) => {
   const {
     overlaysToMarks, overlaysToSeries, filterOverlays, settingsFromPreset, toggleLayer, analysisLayout,
-    analysisMatchesChart, barFingerprint, barFingerprintFromBars, canonicalBarPayload, sha256Hex,
+    analysisGate, barFingerprint, barFingerprintFromBars, canonicalBarPayload, sha256Hex,
   } = await loadDrawings(t);
   const bars = [
     { t: '2026-07-06T13:30:00Z', o: 10, h: 12, l: 9, c: 11 },
@@ -1116,9 +1120,9 @@ test('layer toggles change real marks and MA series, not only filterOverlays', a
     ticker: 'AAPL', range: '1d', adjustment: 'raw', dataThrough: '2026-07-08',
     barFingerprint: fp, overlays: [], indicatorPanes: [], strengthContext: null, barCount: 3, lastClose: 13,
   };
-  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', ticker: 'AAPL', dataThrough: '2026-07-08', fingerprint: fp }), true);
-  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', ticker: 'AAPL', dataThrough: '2026-07-08', fingerprint: 'nope' }), false);
-  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', ticker: 'MSFT', dataThrough: '2026-07-08', fingerprint: fp }), false);
+  assert.equal(analysisGate(bundle, { range: '1d', adjustment: 'raw', ticker: 'AAPL', dataThrough: '2026-07-08', fingerprint: fp }), 'ok');
+  assert.equal(analysisGate(bundle, { range: '1d', adjustment: 'raw', ticker: 'AAPL', dataThrough: '2026-07-08', fingerprint: 'nope' }), 'fingerprint');
+  assert.equal(analysisGate(bundle, { range: '1d', adjustment: 'raw', ticker: 'MSFT', dataThrough: '2026-07-08', fingerprint: fp }), 'ticker');
   const vector = canonicalBarPayload([
     { t: 1700000000, o: 10, h: 11, l: 9, c: 10.5, v: 1000 },
     { t: 1700086400, o: 10.5, h: 12, l: 10, c: 11, v: 1100 },
@@ -1147,7 +1151,7 @@ function memStore() {
 }
 
 test('outbox persists across setScope and restores before a later GET would apply', async (t) => {
-  const { DrawingOutbox, outboxStorageKey, SCOPE_JOB_ID, applyPersistResponse, regeneratePersistOps } = await loadDrawings(t);
+  const { DrawingOutbox, outboxStorageKey, SCOPE_JOB_ID, applyPersistResponse } = await loadDrawings(t);
   const store = memStore();
   const nvda = { identity: 'acct', ticker: 'NVDA', range: '1d', adjustment: 'raw' };
   const aapl = { identity: 'acct', ticker: 'AAPL', range: '1d', adjustment: 'raw' };
@@ -1195,12 +1199,15 @@ test('outbox persists across setScope and restores before a later GET would appl
     { ...drawing, revision: 5, style: { ...drawing.style, color: '#E5484D' } },
     drawingOf('horizontal', [{ time: '2026-07-08T13:30:00Z', barKey: '2026-07-08', price: 11 }], { id: '33333333-3333-4333-8333-333333333333' }),
   ];
-  const ops = regeneratePersistOps(local, server);
-  const byType = Object.fromEntries(ops.map((op) => [op.drawingId, op.type]));
-  assert.equal(byType[drawing.id], 'update');
-  assert.equal(ops.find((op) => op.drawingId === drawing.id).drawing.revision, 5);
-  assert.equal(byType['22222222-2222-4222-8222-222222222222'], 'create');
-  assert.equal(byType['33333333-3333-4333-8333-333333333333'], 'delete');
+  box.replaceWithExactScope(local, 5, 'conflict_keep');
+  const replacement = box.takeNext(SCOPE_JOB_ID);
+  assert.equal(replacement.type, 'replace');
+  assert.equal(replacement.expectedScopeRevision, 5);
+  assert.deepEqual(replacement.drawings, local);
+  assert.equal(replacement.drawings.find((item) => item.id === drawing.id).revision, 2);
+  assert.ok(replacement.drawings.some((item) => item.id === '22222222-2222-4222-8222-222222222222'));
+  assert.equal(replacement.drawings.some((item) => item.id === server[1].id), false);
+  assert.equal(box.snapshot().length, 1);
 });
 
 const ANCHOR_ONE = { time: '2026-07-06T13:30:00Z', barKey: '2026-07-06', price: 10 };
@@ -2252,8 +2259,8 @@ test('drain releases inflight create so a later replace still runs after quota',
   assert.equal(replace.type, 'replace');
 });
 
-test('update 404 while still local enters conflict and regenerates create/delete', async (t) => {
-  const { DrawingOutbox, drainPersistJob, regeneratePersistOps } = await loadDrawings(t);
+test('update 404 requires a conflict decision before exact local replacement', async (t) => {
+  const { DrawingOutbox, drainPersistJob, SCOPE_JOB_ID, applyConflictDecision } = await loadDrawings(t);
   const local = drawingOf('horizontal', [ANCHOR_ONE]);
   const serverOnly = drawingOf('horizontal', [ANCHOR_ONE], { id: '22222222-2222-4222-8222-222222222222' });
   const box = new DrawingOutbox(memStore());
@@ -2281,9 +2288,18 @@ test('update 404 while still local enters conflict and regenerates create/delete
   assert.notEqual(outcome.status, 'idle');
   assert.ok(outcome.conflict);
   assert.equal(outcome.conflict.scopeRevision, 4);
-  const ops = regeneratePersistOps([local], [serverOnly]);
-  assert.deepEqual(ops.map((op) => op.type).sort(), ['create', 'delete']);
-  assert.equal(box.snapshot().some((job) => job.type === 'create'), false);
+  assert.equal(box.snapshot().some((job) => job.type === 'replace'), false);
+  const decision = applyConflictDecision({
+    snapshot: outcome.conflict, currentScope: box.getScope(),
+    generation: box.getScopeGeneration(), intent: 'keep',
+  });
+  assert.equal(decision.action, 'keep');
+  box.replaceWithExactScope([local], decision.snapshot.scopeRevision, 'conflict_keep');
+  const replacement = box.takeNext(SCOPE_JOB_ID);
+  assert.equal(replacement.expectedScopeRevision, 4);
+  assert.deepEqual(replacement.drawings, [local]);
+  assert.equal(replacement.drawings.some((item) => item.id === serverOnly.id), false);
+  assert.equal(box.snapshot().length, 1);
 });
 
 test('delayed takeServerConflict for another scope is ignored', async (t) => {
@@ -2770,7 +2786,7 @@ test('exportDrawings always uses the current list not a rejected import', async 
 });
 
 test('fingerprint mismatch snap candidates omit ungated swings and levels', async (t) => {
-  const { snapCandidatesFromOverlays, analysisMatchesChart, filterOverlays, settingsFromPreset } = await loadDrawings(t);
+  const { snapCandidatesFromOverlays, analysisGate, filterOverlays, settingsFromPreset } = await loadDrawings(t);
   const bundle = {
     ticker: 'NVDA',
     range: '1d',
@@ -2787,14 +2803,14 @@ test('fingerprint mismatch snap candidates omit ungated swings and levels', asyn
     indicatorPanes: [],
     strengthContext: null,
   };
-  assert.equal(analysisMatchesChart(bundle, {
+  assert.equal(analysisGate(bundle, {
     ticker: 'NVDA', range: '1d', adjustment: 'raw', dataThrough: '2026-01-01',
     barCount: 2, lastClose: 10, fingerprint: 'bbb',
-  }), false);
-  const gated = analysisMatchesChart(bundle, {
+  }), 'fingerprint');
+  const gated = analysisGate(bundle, {
     ticker: 'NVDA', range: '1d', adjustment: 'raw', dataThrough: '2026-01-01',
     barCount: 2, lastClose: 10, fingerprint: 'bbb',
-  }) ? filterOverlays(bundle.overlays, settingsFromPreset('all')) : [];
+  }) === 'ok' ? filterOverlays(bundle.overlays, settingsFromPreset('all')) : [];
   const candidates = snapCandidatesFromOverlays(gated);
   assert.equal(candidates.some((row) => row.price === 99.5 || row.price === 80), false);
 });

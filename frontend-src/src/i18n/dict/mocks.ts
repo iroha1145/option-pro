@@ -74,23 +74,6 @@ export const MOCKS: Dict = {
   '纳指 100': ['Nasdaq 100', 'ナスダック100'],
   '罗素 2000': ['Russell 2000', 'ラッセル2000'],
   '波动率指数': ['Volatility Index', 'ボラティリティ指数'],
-
-  /* fixtures.ts：强度画像 profile（screener 权重预设） */
-  '均衡动量': ['Balanced momentum', 'バランス型モメンタム'],
-  '趋势/动量/量能/波动均衡加权，适合大多数市况。': [
-    'Even weighting across trend, momentum, volume, and volatility — fits most market conditions.',
-    'トレンド・モメンタム・出来高・ボラティリティを均等に加重し、大半の相場環境に対応します。',
-  ],
-  '突破猎手': ['Breakout hunter', 'ブレイクアウト・ハンター'],
-  '加重动量与量能，捕捉放量突破早期的标的。': [
-    'Overweights momentum and volume to catch names early in a high-volume breakout.',
-    'モメンタムと出来高を重視し、出来高を伴うブレイクアウト初動の銘柄を捉えます。',
-  ],
-  '低波稳健': ['Low-vol stability', '低ボラティリティ安定型'],
-  '偏好低波动与趋势延续，回撤优先。': [
-    'Favors low volatility and trend continuation; drawdown control comes first.',
-    '低ボラティリティとトレンド継続を選好し、ドローダウン抑制を優先します。',
-  ],
   '风险资产相对避险': ['Risk assets vs. safe havens', 'リスク資産対安全資産'],
 
   /* fixtures.ts：趋势偏向四因子说明（getStockTrendBias） */

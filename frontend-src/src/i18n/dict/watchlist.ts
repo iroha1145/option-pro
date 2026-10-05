@@ -1,6 +1,6 @@
 /**
  * 自选观察页（Watchlist.tsx）：页头带、概览统计条、排序下拉、表格/卡片视图、
- * 增删自选、空态 / 错误态 / 覆盖缺口提示、侧栏（市场信号 / 强度分布 / 市场时钟）。
+ * 增删自选、空态 / 错误态 / 覆盖缺口提示、侧栏（市场信号 / 市场时钟）。
  */
 import type { Dict } from './types';
 
@@ -64,7 +64,6 @@ export const WATCHLIST: Dict = {
   '底部修复分': ['Bottom-formation score', '底打ちスコア'],
   '上涨 / 下跌': ['Advancers / decliners', '値上がり / 値下がり'],
   '平': ['flat', '横ばい'],
-  '全市场平均强度': ['Market-wide average strength', '全市場の平均強度'],
 
   /* ---------------- B2 工具行：视图切换 / 排序 / 增加自选 ---------------- */
   '自选列表': ['Watchlist', 'ウォッチリスト'],
