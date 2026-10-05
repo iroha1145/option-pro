@@ -72,6 +72,7 @@ export const BREAKOUTS: Dict = {
   '数据置信': ['Data confidence', 'データ信頼度'],
   '评分构成': ['Score components', 'スコアの内訳'],
   '美东': ['ET', '米東部時間'],
+  '默认排序：{name}': ['Default order: {name}', '既定の並び順：{name}'],
   '首要信号': ['Top signal', 'トップシグナル'],
   '同时段量能': ['Time-of-day RVOL', '同時間帯の出来高倍率'],
   '事件时间': ['Event time', 'イベント時刻'],

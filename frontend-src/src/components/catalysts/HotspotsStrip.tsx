@@ -102,13 +102,10 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
   return (
     <section className="mt-6" aria-label={__t("热点主题带")}>
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0">
-          <p className="eyebrow">
-            {__t('HOT THEMES · 热点带')}
-            <InfoHint hint={SCORE_HINTS.hotScore} side="bottom" size={12} className="ml-1" />
-          </p>
-          <h2 className="mt-1 text-h2 text-ink-900">{__t('市场关注的主题')}</h2>
-        </div>
+        <h2 className="flex min-w-0 items-center gap-1.5 text-h2 text-ink-900">
+          {__t('市场关注的主题')}
+          <InfoHint hint={SCORE_HINTS.hotScore} side="bottom" size={12} />
+        </h2>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {listStale && (
             <SoftBadge tone="warn" className="whitespace-normal">

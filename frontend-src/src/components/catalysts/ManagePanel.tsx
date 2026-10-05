@@ -303,10 +303,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
       >
         <span className="flex items-center gap-2.5">
           <Icon name="shield" size={15} className="text-brand-600" />
-          <span>
-            <span className="eyebrow block">OWNER CONSOLE</span>
-            <span className="text-body-s font-medium text-ink-800">{__t('管理面板 · 数据刷新 / 后台任务 / 运行设置')}</span>
-          </span>
+          <span className="text-body-s font-medium text-ink-800">{__t('管理面板 · 数据刷新 / 后台任务 / 运行设置')}</span>
         </span>
         <span className="flex items-center gap-2.5">
           {worker && (

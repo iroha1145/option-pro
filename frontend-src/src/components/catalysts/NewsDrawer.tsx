@@ -632,7 +632,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
       title={
         <span className="flex items-center gap-2">
           <Icon name="bolt" size={16} className="text-brand-600" />
-          <span className="eyebrow">{__t('NEWS DETAIL · 新闻详情')}</span>
+          <span className="text-h3 text-ink-900">{__t('新闻详情')}</span>
         </span>
       }
     >

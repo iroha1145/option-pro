@@ -631,9 +631,12 @@ export default function Breakouts() {
         </span>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-caption text-ink-500">
-        <span data-testid="radar-effective-algorithm">
-          {showT1 ? __t('日线量价条件优先（试用）') : __t('原雷达排序')}
-        </span>
+        {/* 只在「跟随默认」时说明实际生效的是哪种排序；手动选了的，分段控件上已经写着 */}
+        {radarSort === 'follow_default' && (
+          <span data-testid="radar-effective-algorithm">
+            {__t('默认排序：{name}', { name: showT1 ? __t('日线量价条件优先（试用）') : __t('原雷达排序') })}
+          </span>
+        )}
         {showT1 && (
           <span>{__t('满足固定日线量价条件的事件会在同一交易日组内优先。其余事件不删除。待收盘或数据不足时保持原顺序。')}</span>
         )}
@@ -661,10 +664,7 @@ export default function Breakouts() {
         )}
       >
         <div className="radar-section-heading mb-4 flex items-end justify-between pb-1">
-          <div>
-            <p className="eyebrow">TODAY&apos;S SIGNALS</p>
-            <h2 className="mt-1 text-h2 text-ink-900">{__t('当日信号')}</h2>
-          </div>
+          <h2 className="text-h2 text-ink-900">{__t('当日信号')}</h2>
           <p className="font-mono text-caption text-ink-400 tnum">
             {current.length} {__t('个活跃')}{onlyWatch ? __t(' · 只看自选') : ''}
           </p>
