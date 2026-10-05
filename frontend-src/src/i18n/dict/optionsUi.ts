@@ -16,7 +16,6 @@ export const OPTIONS_UI: Dict = {
   '隐含波动率': ['Implied volatility', 'インプライド・ボラティリティ'],
   '估算成交金额': ['Estimated traded value', '推定取引金額'],
   "参考价取买卖报价中值；成交金额按参考价 × 成交张数 × 100 估算。隐含波动率可能包含模型估算。": ["The reference price is the bid/ask midpoint. Estimated traded value is reference price × contracts traded × 100. Implied volatility may include model estimates.", "参考価格は売買気配の中値です。推定取引金額は参考価格×出来高×100で計算します。インプライド・ボラティリティにはモデル推定値が含まれる場合があります。"],
-  "模型估算采用 5% 利率，未计入股息。": ["Model estimates assume a 5% interest rate and exclude dividends.", "モデル推定では金利を5%とし、配当は計算に含めていません。"],
   "仅统计当前股票、所选到期日的期权合约。": ["Covers option contracts for this ticker and the selected expiration.", "現在の銘柄と選択した満期日のオプションが対象です。"],
   '成交关注': ['Activity to review', '注目取引'],
   '查看全部异动': ['View all flagged contracts', '注目契約をすべて表示'],

@@ -177,7 +177,6 @@ export const BREAKOUTS: Dict = {
   '已请求刷新': ['Refresh requested', '更新をリクエストしました'],
   '扫描任务已受理，完成后自动更新': ["Scan accepted — updates automatically once it's done", 'スキャンジョブを受け付けました。完了後、自動的に更新されます。'],
   '扫描任务未被受理，请稍后重试': ["Scan job wasn't accepted — try again shortly", 'スキャンジョブが受け付けられませんでした。しばらくしてから再度お試しください。'],
-  '发现突破机会，跟踪确认与回踩过程。': ['Find breakouts and follow confirmations and retests.', 'ブレイクアウトを探し、確認とリテストの経過を追います。'],
   '扫描已启用': ['Scanning enabled', 'スキャン有効'],
   '扫描已暂停': ['Scanning paused', 'スキャン一時停止'],
   '状态读取中…': ['Loading status…', '状態を読み込み中…'],
@@ -209,10 +208,6 @@ export const BREAKOUTS: Dict = {
   '下一轮扫描在冷却结束后自动开始': ['The next scan starts automatically once the cooldown ends', 'クールダウン終了後、次回スキャンが自動的に開始されます。'],
   '看看历史事件': ['Browse event history', 'イベント履歴を見る'],
   '其余当日信号 ·': ['Other signals today ·', '本日のその他のシグナル ·'],
-  '点击小卡查看事件详情 · 点击代码打开个股抽屉': [
-    'Click a card for event detail · click a ticker for the stock drawer',
-    'カードをクリックしてイベント詳細を表示 · 銘柄コードをクリックして個別銘柄ドロワーを開く',
-  ],
   '告警优先级数据不足': ['Alert priority: insufficient data', 'アラート優先度：データ不足'],
   '该股近 72 小时暂无相关催化剂': ['No catalysts for this stock in the past 72 hours', '直近72時間、この銘柄に関連するカタリストなし'],
   '事件新鲜度': ['Event freshness', 'イベント鮮度'],

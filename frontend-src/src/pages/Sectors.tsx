@@ -112,7 +112,6 @@ export default function Sectors() {
         section="04"
         eyebrow="SECTORS · LIVE AGGREGATES"
         title={t("板块透视")}
-        description={t("比较各板块的平均涨跌幅、个股强度与数据覆盖情况。")}
         meta={
           <>
             <span className="hidden font-mono text-micro text-ink-400 tnum sm:inline">
@@ -125,12 +124,7 @@ export default function Sectors() {
       />
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-y border-line py-3">
-        <div>
-          <p className="text-caption font-medium text-ink-700">{t('收益统计周期')}</p>
-          <p className="text-micro text-ink-400">
-            {t('数值由板块成分股汇总得出')}
-          </p>
-        </div>
+        <p className="text-caption font-medium text-ink-700">{t('收益统计周期')}</p>
         <Segmented
           options={[
             { value: '1mo', label: t('1 个月') },

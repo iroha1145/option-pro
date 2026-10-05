@@ -707,7 +707,7 @@ test('财报组件不再伪造 Optix Research 来源', () => {
   for (const source of componentSources) {
     assert.equal(source.includes('Optix Research'), false);
   }
-  assert.equal(density.includes('财报日程 · 以公司公告为准'), true);
+  assert.equal(density.includes('以公司公告为准'), false);
   assert.equal(density.includes('slice(0, MAX_TOOLTIP_TICKERS)'), true);
   assert.equal(density.includes('+{n - MAX_TOOLTIP_TICKERS}'), true);
   assert.equal(card.includes('AI 生成的财报影响分析'), true);

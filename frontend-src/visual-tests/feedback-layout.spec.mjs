@@ -69,10 +69,7 @@ for (const width of [390, 1440]) {
       const errors = [];
       page.on('pageerror', error => errors.push(error.message));
       await page.goto('/catalysts');
-      const notes = page.getByText('数据与分析说明', { exact: true });
-      await notes.click();
-      await expect(page.getByText(/新闻保留原始来源；影响分与置信度由模型估算/)).toBeVisible();
-      await notes.click();
+      await expect(page.getByText('数据与分析说明', { exact: true })).toHaveCount(0);
       const focus = page.getByRole('region', { name: '市场焦点周期', exact: true });
       await expect(focus.getByRole('heading', { name: '逐股评估', exact: true })).toBeVisible();
       await expect(focus).toContainText('证据不足');

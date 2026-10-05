@@ -30,7 +30,7 @@ const REFRESH_FOLLOW_INTERVAL_MS = 5_000;
 const REFRESH_FOLLOW_TIMEOUT_MS = 3 * 60_000;
 
 export const MACRO_SOURCE_NOTE =
-  t('宏观数据来自 FRED、纽约联储、联储理事会、芝加哥联储和 Cboe；跨资产代理使用 Option Pro 当前股票日线数据源。分数为过去 5 年历史分位，不是预测。');
+  t('宏观数据来自 FRED、纽约联储、联储理事会、芝加哥联储和 Cboe；跨资产代理使用 Option Pro 当前股票日线数据源。');
 
 const STATUS_CHIP: Record<
   MacroConditionsResponse['status'],
@@ -224,9 +224,6 @@ export default function MacroConditionsPanel({
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
           <p className="eyebrow">{t('宏观环境')}</p>
-          <p className="mt-1 text-body-s text-ink-500">
-            {t('联储流动性、融资、国债、利率、信用、风险与外部冲击的 5 年历史分位。')}
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-caption text-ink-400 tnum">

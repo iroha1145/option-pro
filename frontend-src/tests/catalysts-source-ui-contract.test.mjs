@@ -193,7 +193,6 @@ test('数据源卡映射真实近24小时条数与新鲜度滞后', async () => 
   );
   assert.equal(panel.includes('延迟 ms'), false);
   assert.equal(panel.includes('数据滞后'), true);
-  assert.equal(panel.includes('滞后时间表示数据的新旧程度'), true);
 });
 
 test('今日新闻优先使用完整过滤窗口汇总而非首屏五十条', async () => {
@@ -267,7 +266,7 @@ test('状态栏不再把产品名伪装成文章来源', () => {
   );
 
   assert.equal(source.includes('来源：Optix NewsDesk'), false);
-  assert.equal(source.includes('新闻保留原始来源'), true);
+  assert.equal(source.includes('由模型估算'), false);
 });
 
 test('经济日历保留真实实际值，并按日期与时间稳定排序', async () => {

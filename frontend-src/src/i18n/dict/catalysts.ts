@@ -130,7 +130,6 @@ export const CATALYSTS: Dict = {
   '提交失败': ['Submission failed', '送信に失敗しました'],
   '市场焦点周期': ['Market focus cycle', '市場フォーカスサイクル'],
   '逐股评估': ['Stock assessments', '銘柄別評価'],
-  '数据与分析说明': ['Data and analysis notes', 'データと分析について'],
   '周期计算中': ['Computing cycle', 'サイクル計算中'],
   '重试焦点周期': ['Retry focus cycle', 'フォーカスサイクルを再試行'],
   '触发新周期': ['Trigger new cycle', '新しいサイクルを実行'],
@@ -263,7 +262,6 @@ export const CATALYSTS: Dict = {
   '数据滞后': ['Data lag', 'データ遅延'],
   '近 24h 条数': ['Items in last 24h', '直近24時間の件数'],
   '最近抓取': ['Last fetched', '最終取得'],
-  '滞后时间表示数据的新旧程度；条数统计最近 24 小时收录的新闻与经济事件。': ['Lag indicates data freshness. Counts cover news and economic events collected in the last 24 hours.', '遅れ時間はデータの鮮度を示します。件数は直近24時間に取得したニュースと経済イベントの合計です。'],
 
   /* ---------------- StatusHero.tsx ---------------- */
   '需管理员登录': ['Administrator sign-in required', '管理者としてのログインが必要です'],
@@ -297,7 +295,6 @@ export const CATALYSTS: Dict = {
   '今日新闻': ['News today', '本日のニュース'],
   '条 / 24h': ['/ 24h', '件 / 24h'],
   '待中文': ['Awaiting Chinese', '中国語待ち'],
-  '新闻保留原始来源；影响分与置信度由模型估算。数据滞后时间反映来源的更新进度。': ['News retains its original source. Impact and confidence scores are model estimates. Data lag reflects source updates.', 'ニュースには元の出典を表示します。影響スコアと信頼度はモデルの推定値です。データの遅れは情報源の更新状況を示します。'],
 
   /* ---------------- StocksPanel.tsx ---------------- */
   '净影响分': ['Net impact score', 'ネット・インパクトスコア'],
@@ -379,7 +376,6 @@ export const CATALYSTS: Dict = {
   '股票影响': ['Stock impact', '銘柄インパクト'],
   '数据源': ['Sources', 'データソース'],
   '新闻催化剂': ['News catalysts', 'ニュース・カタリスト'],
-  '追踪市场新闻、经济事件及其对股票的影响。': ['Track market news, economic events, and their effects on stocks.', '市場ニュースや経済イベント、銘柄への影響を確認できます。'],
   '刷新本页数据': ["Refresh this page's data", 'このページのデータを更新'],
   '刷新': ['Refresh', '更新'],
   '催化剂视图': ['Catalysts view', 'カタリストビュー'],

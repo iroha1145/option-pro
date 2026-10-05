@@ -62,7 +62,7 @@ export default function DetailBand({
       <div className="card-surface mt-6 p-4 md:p-6">
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line pb-3">
           <div>
-            <p className="eyebrow">{t('板块详情 · 成分股汇总')}</p>
+            <p className="eyebrow">{t('板块详情')}</p>
             <h2 className="mt-1 font-display text-[18px] font-semibold leading-[24px] text-ink-900">
               {sector.name}
             </h2>

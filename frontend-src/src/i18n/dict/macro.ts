@@ -76,9 +76,9 @@ export const MACRO: Dict = {
 
   /* ============ src/components/market/macro/MacroConditionsPanel.tsx ============ */
   '冷却中': ['Cooling down', 'クールダウン中'],
-  '宏观数据来自 FRED、纽约联储、联储理事会、芝加哥联储和 Cboe；跨资产代理使用 Option Pro 当前股票日线数据源。分数为过去 5 年历史分位，不是预测。': [
-    "Macro data comes from FRED, the New York Fed, the Federal Reserve Board, the Chicago Fed, and Cboe; cross-asset proxies use Option Pro's current daily equity data feed. Scores are 5-year historical percentiles, not forecasts.",
-    'マクロデータは FRED、ニューヨーク連銀、FRB（連邦準備制度理事会）、シカゴ連銀、Cboe から取得しています。クロスアセットの代理指標には Option Pro の現行株式日足データソースを使用します。スコアは過去5年間のヒストリカル・パーセンタイルであり、予測ではありません。',
+  '宏观数据来自 FRED、纽约联储、联储理事会、芝加哥联储和 Cboe；跨资产代理使用 Option Pro 当前股票日线数据源。': [
+    "Macro data comes from FRED, the New York Fed, the Federal Reserve Board, the Chicago Fed, and Cboe; cross-asset proxies use Option Pro's current daily equity data feed.",
+    'マクロデータは FRED、ニューヨーク連銀、FRB（連邦準備制度理事会）、シカゴ連銀、Cboe から取得しています。クロスアセットの代理指標には Option Pro の現行株式日足データソースを使用します。',
   ],
   '部分数据缺失': ['Partial data missing', '一部データ欠落'],
   '暂无快照': ['No snapshot yet', 'スナップショットなし'],
@@ -97,10 +97,6 @@ export const MACRO: Dict = {
   '后台服务暂不可用，请稍后重试。': ['The background service is unavailable. Please try again later.', 'バックグラウンド処理を利用できません。しばらくしてから再度お試しください。'],
   '刷新请求未成功。': ['The refresh request did not succeed.', '更新リクエストは失敗しました。'],
   '宏观环境暂不可用': ['Macro conditions unavailable', 'マクロ環境は利用できません'],
-  '联储流动性、融资、国债、利率、信用、风险与外部冲击的 5 年历史分位。': [
-    '5-year historical percentiles for Fed liquidity, funding, Treasury, rates, credit, risk, and external shocks.',
-    'FRBの流動性・ファンディング・国債・金利・クレジット・リスク・外部ショックに関する過去5年間のヒストリカル・パーセンタイル。',
-  ],
   '登录后可手动刷新': ['Sign in to refresh manually', 'ログインすると手動更新が可能です'],
   '数据更新提示：': ['Data update notice: ', 'データ更新のお知らせ：'],
   '。当前显示上次成功更新的数据。': ['. Showing the last successfully updated data.', '。前回正常に更新できたデータを表示しています。'],

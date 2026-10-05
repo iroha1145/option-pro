@@ -7,7 +7,6 @@ import type { Dict } from './types';
 export const WATCHLIST: Dict = {
   '行情暂时读取失败，自选名单已保留。': ['Quotes could not be loaded. Your watchlist is still saved.', '相場を読み込めません。ウォッチリストは保存されています。'],
   "管理自选": ["Manage watchlist", "ウォッチリストを管理"],
-  "批量添加或移除股票，保存后生效。": ["Add or remove stocks in bulk. Changes take effect when saved.", "銘柄をまとめて追加・削除し、保存すると反映されます。"],
   "添加股票代码": ["Add stock tickers", "銘柄コードを追加"],
   "用逗号、空格或换行分隔，重复代码会自动合并。": ["Separate with commas, spaces or new lines. Duplicates are merged.", "コンマ、空白、改行で区切って入力。重複は自動でまとめられます。"],
   "加入列表": ["Add to list", "リストに追加"],
@@ -52,7 +51,6 @@ export const WATCHLIST: Dict = {
   "只（默认关注）": ["stocks (default watchlist)", "銘柄（標準リスト）"],
   /* ---------------- B0 页头带 ---------------- */
   '自选观察': ['Your watchlist', 'マイウォッチリスト'],
-  "跟踪自选股的价格、走势与市场信号。": ["Track prices, trends and signals for your watchlist.", "ウォッチリストの株価、トレンド、シグナルを確認。"],
   "更新自选行情与评分": ["Update watchlist quotes and scores", "ウォッチリストの株価とスコアを更新"],
   "管理员登录后可更新数据": ["Sign in as an administrator to update data", "管理者としてログインするとデータを更新できます"],
   '强制刷新': ['Force refresh', '強制更新'],

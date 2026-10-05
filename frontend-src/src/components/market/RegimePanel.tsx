@@ -34,10 +34,6 @@ const DIMS: { key: keyof MarketRegime; label: string; tip: string; hint: ScoreHi
   { key: 'risk_on_spread_score', label: t('风险利差'), tip: t('十组进攻／防守资产对的 20 日相对价差（QQQ/SPY、SOXX/XLK、HYG/IEF、XLY/XLP 等）。'), hint: SCORE_HINTS.regimeRiskOn },
 ];
 
-/** 面板级口径：说清这六个数算自什么、以及为什么它不随选中的指数变。 */
-const DIMS_SOURCE_NOTE =
-  t('六项指标共同反映美股市场情况，采用固定的股票指数、行业基金、波动率、债券与黄金数据，不随所选指数变化。');
-
 import { regimeMean } from '@/lib/regime';
 
 export default function RegimePanel({
@@ -131,10 +127,6 @@ export default function RegimePanel({
           );
         })}
       </div>
-      <p className="mt-4 border-t border-line pt-3 text-micro leading-relaxed text-ink-400">
-        {t('色阶：<50 弱 · 50–69 中性 · 70–84 强 · ≥85 极强')}
-        <span className="mt-1 block">{DIMS_SOURCE_NOTE}</span>
-      </p>
     </section>
   );
 }

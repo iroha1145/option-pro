@@ -328,7 +328,6 @@ export default function Home() {
         section="01"
         eyebrow="OPTIX PRO · DELAYED 15MIN"
         title={t('首页')}
-        description={t('查看主要指数、市场信号与关注股票。')}
         meta={
           <>
             <SessionLED

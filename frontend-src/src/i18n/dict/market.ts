@@ -9,14 +9,11 @@ export const MARKET: Dict = {
   '强度分布 · 全市场': ['Strength distribution · market-wide', '強度分布 · 全市場'],
   '只': ['stock||stocks', '銘柄'],
   '均值': ['Average', '平均'],
-  '每组 10 分 · 颜色由弱到强': ['10 points per group · colors run from weak to strong', '10点刻みで集計 · 色は弱い順から強い順'],
-  '统计全部扫描股票，不按指数划分。': ['Includes all scanned stocks, without grouping by index.', 'スキャン対象の全銘柄を集計しています。指数別の区分はありません。'],
 
   /* src/components/market/IndexCards.tsx */
   '暂无指数数据': ['No index data available', '指数データがありません'],
 
   /* src/pages/Home.tsx（首页：指数带 / 市场状态 / 雷达信号 / 财报临近 / 自选异动 / CTA 联动带） */
-  '查看主要指数、市场信号与关注股票。': ['Follow major indices, market signals, and your watchlist.', '主要指数、市場のシグナル、気になる銘柄を確認できます。'],
   '雷达信号': ['Radar signals', 'レーダーシグナル'],
   '暂无突破信号': ['No breakout signals yet', 'ブレイクアウトのシグナルはまだありません'],
   '财报临近': ['Earnings approaching', 'まもなく決算'],
@@ -29,12 +26,10 @@ export const MARKET: Dict = {
   '平盘': ['Unchanged', '変わらず'],
   '平均强度 {avg} · ≥85 {n} 只': ['Avg strength {avg} · {n} names ≥85', '平均強度 {avg} · ≥85 は {n} 銘柄'],
   'EPS 预期 {v}': ['EPS est. {v}', 'EPS予想 {v}'],
-  '主题板块热力与 IV 排名': ['Theme-sector heat & IV rankings', 'テーマ別セクターのヒートとIVランキング'],
 
   /* src/components/market/LinkCards.tsx */
   '突破雷达': ['Breakout radar', 'ブレイクアウト・レーダー'],
   '板块透视': ['Sector X-ray', 'セクター透視'],
-  '查看今日突破信号，追踪触发、确认与回踩过程。': ['View today’s breakout signals and track triggers, confirmations, and retests.', '当日のブレイクアウトと、その発生・確認・リテストの経過を確認できます。'],
 
   /* src/components/market/RegimePanel.tsx */
   '指数趋势': ['Index trend', '指数トレンド'],
@@ -49,11 +44,9 @@ export const MARKET: Dict = {
   'VIX 水平与一年分位、HYG−TLT 与 HYG−IEF 信用价差、10 年期利率变化、久期、SPY / QQQ 回撤。': ['VIX level and its one-year percentile, the HYG−TLT and HYG−IEF credit spreads, the change in the 10-year yield, duration, and SPY / QQQ drawdowns.', 'VIX の水準と1年パーセンタイル、HYG−TLT と HYG−IEF のクレジット・スプレッド、10年金利の変化、デュレーション、SPY / QQQ のドローダウン。'],
   '风险利差': ['Offense/defense spread', '攻守スプレッド'],
   '十组进攻／防守资产对的 20 日相对价差（QQQ/SPY、SOXX/XLK、HYG/IEF、XLY/XLP 等）。': ['The 20-day relative spread across ten offense/defense asset pairs (QQQ/SPY, SOXX/XLK, HYG/IEF, XLY/XLP, and others).', '攻め／守りの資産ペア10組の20日相対スプレッド（QQQ/SPY、SOXX/XLK、HYG/IEF、XLY/XLP など）。'],
-  '六项指标共同反映美股市场情况，采用固定的股票指数、行业基金、波动率、债券与黄金数据，不随所选指数变化。': ['The six indicators describe the US stock market using a fixed set of equity indices, sector funds, volatility, bonds, and gold. They do not change with the selected index.', '6つの指標は、株価指数・業種別ファンド・変動率・債券・金の固定データから米国株市場全体を評価します。選択した指数を切り替えても変わりません。'],
   '暂无市场环境六维数据': ['No market-regime data available', '市場環境六軸データがありません'],
   '市场形态六维': ['Six-factor market regime', '市場環境六軸'],
   '综合均值': ['Composite average', '総合平均'],
-  '色阶：<50 弱 · 50–69 中性 · 70–84 强 · ≥85 极强': ['Color scale: <50 weak · 50–69 neutral · 70–84 strong · ≥85 very strong', '色分け：<50 弱 · 50–69 中立 · 70–84 強 · ≥85 極強'],
 
   /* src/components/market/SignalsReading.tsx */
   '，': [', ', '、'],
@@ -72,7 +65,6 @@ export const MARKET: Dict = {
   '盘前流动性较薄，信号以开盘后确认为准。': ['Pre-market liquidity is thin — treat signals as provisional until confirmed after the open.', 'プレマーケットは流動性が薄く、シグナルは寄り付き後の確認を優先。'],
   '当前为最近一个交易日的数据，开盘后会重新计算。': ["This reflects the most recent trading day's data and will be recalculated after the next open.", '現在は直近営業日のデータで、次の取引開始後に再計算されます。'],
   '未评分': ['Not scored', '未評価'],
-  '右列：指标值 · 顶部风险分 / 底部修复分': ['Right column: indicator value · topping-risk score / bottom-formation score', '右列：指標値 · 天井リスク・スコア / 底打ちスコア'],
   '暂无信号汇总数据': ['No signal summary data available', 'シグナル集計データがありません'],
   '市场信号解读': ['Market signal reading', '市場シグナル解読'],
   '数据质量': ['Data quality', 'データ品質'],
@@ -81,8 +73,8 @@ export const MARKET: Dict = {
 
   /* src/components/market/StatusCard.tsx */
   '常规交易时段 · 9:30–16:00 ET': ['Regular trading hours · 9:30–16:00 ET', '通常取引時間 · 9:30–16:00 ET'],
-  '盘前交易 · 流动性较薄，报价点差偏大': ['Pre-market trading · thin liquidity, wider bid-ask spreads', 'プレマーケット取引 · 流動性が薄く、スプレッドが広がりやすい'],
-  '盘后交易 · 留意财报与公告驱动': ['After-hours trading · watch for earnings and announcement-driven moves', '時間外取引 · 決算や発表による値動きに注意'],
+  '盘前交易 · 4:00–9:30 ET': ['Pre-market · 4:00–9:30 ET', 'プレマーケット · 4:00–9:30 ET'],
+  '盘后交易 · 16:00–20:00 ET': ['After hours · 16:00–20:00 ET', '時間外取引 · 16:00–20:00 ET'],
   '隔夜休市 · 等待下一交易时段': ['Closed overnight · awaiting the next session', 'オーバーナイト休場 · 次のセッションを待機'],
   '周末休市 · 等待下一个交易日': ['Closed for the weekend · awaiting the next trading day', '週末休場 · 次の取引日を待機'],
   '节假日休市': ['Closed for the holiday', '祝日休場'],
@@ -99,14 +91,12 @@ export const MARKET: Dict = {
   '偏空': ['Bearish', '弱気'],
   '大盘强弱': ['Market strength', '地合いの強弱'],
   '该区间读取失败，仍显示上一区间的曲线': ['This range failed to load — still showing the previous range', 'この期間の読み込みに失敗したため、前の期間の曲線を表示しています'],
-  '查看主要指数、市场趋势与个股强弱分布。': ['Explore major indices, market trends, and the distribution of stock strength.', '主要指数、市場のトレンド、銘柄ごとの強弱分布を確認できます。'],
   '时段读取中…': ['Loading session…', 'セッション取得中…'],
   '时段未知': ['Session unknown', 'セッション不明'],
   '指数概览': ['Index overview', '指数概況'],
   '宏观环境': ['Macro conditions', 'マクロ環境'],
   '联动视图': ['Drill-down', '連動ビュー'],
   '暂未取得指数行情，请稍后重试': ['Index quotes are unavailable. Please try again later.', '指数の価格を取得できません。しばらくしてから再度お試しください。'],
-  '比较板块涨跌、个股强度与期权隐含波动率。': ['Compare sector returns, stock strength, and options implied volatility.', 'セクター別の騰落率、銘柄の強弱、オプションの予想変動率を比較できます。'],
   '{n} 个主要指数 {adv} 涨 {dec} 跌': ['{adv} of {n} major indices up, {dec} down', '主要{n}指数中 {adv} 上昇・{dec} 下落'],
 
   /* ---- CTA 趋势资金估算（B4.5，2026-08-08） ---- */
@@ -208,11 +198,9 @@ export const MARKET: Dict = {
 
   /* ---- /cta 独立页（2026-08-08，B4.5 剥离） ---- */
   'CTA 趋势资金': ['CTA trend flow', 'CTAトレンド資金'],
-  '根据价格趋势与波动率，估算趋势策略的仓位及其变化。': ['Estimate trend-following positions and changes from price trends and volatility.', '価格トレンドと変動率をもとに、トレンド追随戦略のポジションと変化を推定します。'],
   '指数总览': ['Index overview', '指数一覧'],
   '指数详情': ['Index details', '指数の詳細'],
   '仓位历史': ['Position history', 'ポジション履歴'],
-  '按相同方法计算的每日收盘估算值': ['Daily closing estimates calculated using the same method', '同じ方法で算出した、各取引日の引け時点の推定値'],
   '估算仓位历史曲线': ['Estimated position history curve', '推定ポジション履歴の曲線'],
   '触发阶梯': ['Trigger ladder', 'トリガーラダー'],
   '需收盘确认': ['Close confirmation required', '引け確認が必要'],
@@ -220,6 +208,5 @@ export const MARKET: Dict = {
   '数据不足，未生成估算': ['Insufficient data — no estimate generated', 'データ不足のため推定は生成されていません'],
   '波动率缩放': ['Volatility scaling', 'ボラティリティ縮尺'],
   '数据警告': ['Data warnings', 'データ警告'],
-  '查看趋势模型估算的仓位变化，以及可能引起调整的价位。': ['View model-based position changes and the price levels that could prompt adjustments.', 'トレンドモデルによる推定ポジションの変化と、調整の目安となる価格を確認できます。'],
   '查看 CTA 趋势详情': ['View CTA trend details', 'CTAトレンドの詳細を見る'],
 };

@@ -164,7 +164,6 @@ export default function Catalysts() {
         section="06"
         eyebrow="CATALYSTS · NEWS FLOW"
         title={__t("新闻催化剂")}
-        description={__t("追踪市场新闻、经济事件及其对股票的影响。")}
         meta={
           <>
             {lastLoadedAt && (

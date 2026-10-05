@@ -15,9 +15,7 @@ export const CHROME: Dict = {
   '财报': ['Earnings', '決算'],
   '催化': ['Catalysts', 'カタリスト'],
   '财报日历': ['Earnings calendar', '決算カレンダー'],
-  '即将公布 × AI 影响': ['Upcoming reports × AI impact', '発表予定 × AI インパクト'],
   '新闻催化': ['News catalysts', 'ニュース・カタリスト'],
-  '热点 · 情绪新闻流': ['Hotspots · sentiment news feed', '注目テーマ · センチメント付きニュース'],
   'Optix Pro 首页': ['Optix Pro home', 'Optix Pro ホーム'],
   '主导航': ['Main navigation', 'メインナビゲーション'],
   '移动端导航': ['Mobile navigation', 'モバイルナビゲーション'],
@@ -47,9 +45,7 @@ export const CHROME: Dict = {
   /* 登录状态 */
   '登录': ['Sign in', 'サインイン'],
   '大盘': ['Market', '地合い'],
-  '指数 · 宽度 · 宏观环境': ['Indices · breadth · macro conditions', '指数 · 幅 · マクロ環境'],
   'CTA': ['CTA', 'CTA'],
-  '趋势资金 · 触发位': ['Trend money · trigger levels', 'トレンド資金 · トリガー水準'],
   '退出': ['Sign out', 'サインアウト'],
   "管理员已登录": ["Administrator signed in", "管理者としてログイン中"],
   '访客只读模式': ['Guest · read-only', 'ゲスト · 閲覧のみ'],
@@ -109,7 +105,6 @@ export const CHROME: Dict = {
   '前往{label}': ['Go to {label}', '{label}へ移動'],
 
   /* 页脚 / 数据来源声明 */
-  '内容仅供研究参考': ['For research purposes', '調査・分析用の情報です'],
   "延迟行情": ["Delayed quotes", "遅延気配値"],
   '查看大盘强弱 · {code}': ['View market strength · {code}', '市場の強弱を見る · {code}'],
   '查看大盘强弱，{code} 最新价 {price}，{flat}': [

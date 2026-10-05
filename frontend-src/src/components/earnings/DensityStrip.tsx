@@ -2,13 +2,11 @@
  * B5 补充带：本月财报密度条（earnings.md）
  * 30 天横向迷你柱（每日财报数，brand-400，grow-bar 错峰）
  * hover 日 → 当日代码列表 tooltip；点击日 → 跳转该周并选中日格
- * 右侧 SourceNote 一行说明数据口径。
  */
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { EASE_PAPER, GROW_Y } from '@/lib/motion';
-import SourceNote from '@/components/shared/SourceNote';
 import type { EarningsRow } from './types';
 import { addDays, etToday, fmtMDCN, fmtMMDD, weekdayCN } from './types';
 import { t } from '../../i18n/core.ts';
@@ -117,7 +115,6 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
             <span>{t('+30 天')}</span>
           </div>
         </div>
-        <SourceNote className="mt-4" text={t("财报日程 · 以公司公告为准")} />
       </div>
     </section>
   );

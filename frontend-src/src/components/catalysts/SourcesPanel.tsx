@@ -7,7 +7,6 @@ import { catalystsContract } from './api';
 import { Led } from './bits';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonCard } from '@/components/shared/Skeleton';
-import SourceNote from '@/components/shared/SourceNote';
 import { fmtRelativeShort } from '@/lib/format';
 import { t } from '../../i18n/core.ts';
 
@@ -97,10 +96,6 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
           </motion.div>
         ))}
       </motion.div>
-      <SourceNote
-        className="mt-4"
-        text={t("滞后时间表示数据的新旧程度；条数统计最近 24 小时收录的新闻与经济事件。")}
-      />
     </div>
   );
 }

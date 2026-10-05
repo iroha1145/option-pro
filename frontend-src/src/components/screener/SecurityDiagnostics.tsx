@@ -97,7 +97,6 @@ function FactorDetails({ path, sources }: {
   return (
     <section className="mt-4 border-t border-line pt-4">
       <h5 className="text-body-s font-semibold text-ink-800">{t('因子与分数构成')}</h5>
-      <p className="mt-1 text-micro text-ink-500">{t('有效权重是本次实际参与计算的比例；贡献是各因子计入总分的分值。缺失项保持未提供。')}</p>
       {Object.keys(scoreGate).length > 0 && <div className="mt-3 rounded-md border border-line bg-paper-2 p-3 text-micro text-ink-600">
         <h6 className="font-semibold text-ink-800">{t('最终评分门（当前轨道）')}</h6>
         <div className="mt-1 grid gap-x-4 gap-y-1 sm:grid-cols-2">
@@ -121,7 +120,6 @@ function FactorDetails({ path, sources }: {
               <span>{t('分数贡献')}{t('：')}{diagnosticNumber(components[factor], 2)}</span>
             </div>
             {factor === 'G' && (path.track === 'PRICE_ONLY_DIAGNOSTIC' || path.track === 'D_MARKET_RESIDUAL_DIAGNOSTIC') && <p className="mt-1 text-micro text-ink-500">{t('当前诊断轨道禁用行业因子，不把缺失的行业数据当作零分。')}</p>}
-            {factor === 'R' && <p className="mt-1 text-micro text-ink-500">{t('稳定性衡量走势中波动和回撤的平稳程度，不表示未来收益有保证。')}</p>}
           </div>
         ))}
       </div>
@@ -308,7 +306,6 @@ export default function SecurityDiagnostics({ profile, timeframe, publicationKey
         </div>
         <div>
           <h4 className="text-body-s font-semibold text-ink-800">{t('完整评分路径')} <span className="font-mono">{paths.length}</span></h4>
-          <p className="mt-1 text-micro text-ink-500">{t('每条路径对应一个主题和一个家族。展开后可查看拒绝原因、波动门槛及因子贡献。')}</p>
           {paths.length ? <div className="mt-3 space-y-2">{paths.map((path, index) => <PathCard key={pathKey(path, index)} path={path} sources={sources} />)}</div>
             : <p className="mt-3 rounded-md border border-line p-3 text-body-s text-ink-500">{t('本批次没有这只证券的评分路径。请查看上方目录状态和数据截止日。')}</p>}
         </div>

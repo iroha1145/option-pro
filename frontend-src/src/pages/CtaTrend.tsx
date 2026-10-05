@@ -49,7 +49,6 @@ export default function CtaTrend() {
         section="CTA"
         eyebrow="CTA TREND FLOW · PROXY"
         title={t('CTA 趋势资金')}
-        description={t('根据价格趋势与波动率，估算趋势策略的仓位及其变化。')}
         meta={
           <>
             {ctaQ.data?.method_version && (

@@ -238,7 +238,6 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
             );
           })}
         </div>
-        {weights && <p className="mt-2.5 text-micro text-ink-400">{t('权重来自当前评分方法（右侧栏）')}</p>}
         {(row.status || row.qualification || (row.rejectionReasons && row.rejectionReasons.length > 0)) && (
           <div className="mt-4 space-y-1.5 border-t border-line pt-3" data-testid="screener-eod-row-details">
             <p className="eyebrow">{t('技术详情')}</p>
@@ -258,9 +257,6 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
               <p className="font-mono text-micro text-ink-500 tnum">
                 {t('支撑')} {row.knownSupport ?? '—'} · {t('失效')} {row.plannedInvalidation ?? '—'}
               </p>
-            )}
-            {row.observationOnly && (
-              <p className="text-micro text-ink-400">{t('观察分取各家族与主题路径中的最高分，不代表多家族共识。')}</p>
             )}
             {!row.dollarLiquidityVerified && (
               <p className="text-micro text-ink-400">{t('成交额口径未核实，不能当作已通过流动性门')}</p>
