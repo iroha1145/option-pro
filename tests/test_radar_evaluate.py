@@ -244,6 +244,14 @@ def test_adoption_rules_pair_on_common_days_and_check_the_funnel_candidate(world
         ev.P1_END = "2024-12-31"
     assert verdict["rule1_both_periods_up"] and verdict["rule3_ok"] and verdict["rule4_ok"] and verdict["rule5_ok"]
     assert verdict["h20_diff_pp"]["ALL"] == pytest.approx(1.0)
+    # A constant paired difference has zero variance: the Newey-West t is undefined, the series is kept.
+    assert verdict["paired_t_h20"] is None and len(verdict["_paired_h20"]) == 8 and verdict["_paired_h20"][0]["diff_pct"] == pytest.approx(1.0)
+    noisy = {h: [{**p, "mean": 0.02 + (0.003 if i % 2 else -0.003)} for i, p in enumerate(base[h])] for h in ev.HOLDINGS}
+    ev.P1_END = days[3]
+    try:
+        assert ev.decide(noisy, base)["paired_t_h20"] > 5
+    finally:
+        ev.P1_END = "2024-12-31"
     combo = ev.stage2_verdict({**verdict, "h20_diff_pp": {"ALL": 1.0, "P1": 0.9, "P2": 0.95}}, {"single": {**verdict, "adopt": True}})
     assert combo["best_single"] == "single" and combo["within_0_2pp"] is True
 
@@ -376,5 +384,8 @@ def test_run_writes_the_result_pack_and_tables(world: dict) -> None:
     assert pack["coverage"]["baseline"]["triggers"] == 4 and pack["coverage"]["baseline"]["triggers_without_next_bar_open"] == 0
     assert pack["funnel"]["baseline"]["per_scan"]["cut_150"] == pytest.approx(20 / 6, abs=1e-3)
     text = (out / "README_tables.md").read_text()
-    assert "| baseline |" in text and "| disc5 |" in text and "取舍" in text
+    assert "| baseline |" in text and "| disc5 |" in text and "取舍" in text and "配对 t" in text
     assert "disc5" in pack["decisions"]["stage2"]
+    # The paired daily series behind each verdict is a CSV, not part of the JSON pack.
+    assert (out / "paired_h20_disc5.csv").exists() and "_paired_h20" not in pack["decisions"]["variants"]["disc5"]
+    assert "paired_t_h20" in pack["decisions"]["variants"]["disc5"]

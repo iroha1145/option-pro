@@ -862,12 +862,23 @@ def decide(
     h5_all, _n5 = period_diff(5, "ALL")
     h63_all, _n63 = period_diff(63, "ALL")
     h20_all, n_all = period_diff(PRIMARY_HOLDING, "ALL")
+    paired_days, paired_diffs = paired(periods(points[PRIMARY_HOLDING])["ALL"], periods(baseline[PRIMARY_HOLDING])["ALL"])
+    paired_t = newey_west_t(paired_diffs, NW_LAGS[PRIMARY_HOLDING]) if len(paired_diffs) >= 3 else None
+    base_by_day = {p["day"]: p for p in baseline[PRIMARY_HOLDING]}
+    cand_by_day = {p["day"]: p for p in points[PRIMARY_HOLDING]}
     bounds = {name: period_diff(PRIMARY_HOLDING, "ALL", name)[0] for name in ("legacy", "zero", "loss")}
     cand_rate = _mean([p["n"] for p in points[PRIMARY_HOLDING]])
     base_rate = _mean([p["n"] for p in baseline[PRIMARY_HOLDING]])
     verdict = {
         "paired_days": n_all,
         "h20_diff_pp": {"ALL": _pct(h20_all), "P1": _pct(h20_p1), "P2": _pct(h20_p2)},
+        # Newey-West t (lag 3) of the paired daily h20 differences: a significance figure for the
+        # adoption table; the rules themselves are sign-based (section 9) and do not use it.
+        "paired_t_h20": round(paired_t, 2) if paired_t is not None else None,
+        "_paired_h20": [
+            {"day": day, "candidate_pct": _pct(cand_by_day[day]["mean"]), "baseline_pct": _pct(base_by_day[day]["mean"]), "diff_pct": _pct(diff)}
+            for day, diff in zip(paired_days, paired_diffs)
+        ],
         "years_diff_pp": years,
         "years_reported": years_reported,
         "h5_diff_pp": _pct(h5_all),
@@ -1110,14 +1121,14 @@ def readme_tables(rows: list[dict[str, Any]], verdicts: dict[str, Any], funnels:
         f = funnels.get(variant) or {}
         p = f.get("per_scan") or {}
         lines.append(f"| {variant} | {_fmt(p.get('prefilter'))} | {_fmt(p.get('listed'))} | {_fmt(p.get('structures'))} | {_fmt(p.get('events'))} | {_fmt(p.get('cut_150'))} | {_fmt(p.get('cut_60'))} | {_fmt(p.get('cut_30'))} | {_fmt(f.get('triggers_per_day'))} |")
-    lines += ["", "## 取舍（预登记第 9 节，与基线按共同日配对，差值为百分点）", "",
-              "| 候选 | 配对天数 | 20 日差 全期 / P1 / P2 | 年份更好 | 5 日差 | 63 日差 | 三情景同号 | 每日触发 | 采纳 |", "|---|---|---|---|---|---|---|---|---|"]
+    lines += ["", "## 取舍（预登记第 9 节，与基线按共同日配对，差值为百分点；配对 t 是 NW 滞后 3，只作报告）", "",
+              "| 候选 | 配对天数 | 20 日差 全期 / P1 / P2 | 配对 t | 年份更好 | 5 日差 | 63 日差 | 三情景同号 | 每日触发 | 采纳 |", "|---|---|---|---|---|---|---|---|---|---|"]
     for name, v in [*verdicts.get("variants", {}).items(), *verdicts.get("filters", {}).items()]:
         d = v["h20_diff_pp"]
         label = name if v.get("metric_view", "all") == "all" else f"{name}（视图 {v['metric_view']}）"
-        lines.append(f"| {label} | {v['paired_days']} | {_fmt(d['ALL'])} / {_fmt(d['P1'])} / {_fmt(d['P2'])} | {v['rule2_years_better']}/{v['rule2_years_compared']} | {_fmt(v['h5_diff_pp'])} | {_fmt(v['h63_diff_pp'])} | {'是' if v['rule5_ok'] else '否'} | {_fmt(v['triggers_per_day']['candidate'])} 对 {_fmt(v['triggers_per_day']['baseline'])} | {'是' if v['adopt'] else '否'} |")
+        lines.append(f"| {label} | {v['paired_days']} | {_fmt(d['ALL'])} / {_fmt(d['P1'])} / {_fmt(d['P2'])} | {_fmt(v.get('paired_t_h20'))} | {v['rule2_years_better']}/{v['rule2_years_compared']} | {_fmt(v['h5_diff_pp'])} | {_fmt(v['h63_diff_pp'])} | {'是' if v['rule5_ok'] else '否'} | {_fmt(v['triggers_per_day']['candidate'])} 对 {_fmt(v['triggers_per_day']['baseline'])} | {'是' if v['adopt'] else '否'} |")
     for name, v in verdicts.get("stage2", {}).items():
-        lines.append(f"| {name}（组合） | — | 规则 1 到 5 {'过' if v['passes_rules_1_to_5'] else '不过'}；最好单项 {v['best_single']}；两段差距在 0.2 内 {_fmt(v['within_0_2pp'])} | | | | | | {'是' if v['adopt'] else '否'} |")
+        lines.append(f"| {name}（组合） | — | 规则 1 到 5 {'过' if v['passes_rules_1_to_5'] else '不过'}；最好单项 {v['best_single']}；两段差距在 0.2 内 {_fmt(v['within_0_2pp'])} | | | | | | | {'是' if v['adopt'] else '否'} |")
     return "\n".join(lines) + "\n"
 
 
@@ -1159,6 +1170,12 @@ def run(
     rows = [row for evaluation in evaluations.values() for row in metric_rows(evaluation)]
     write_csv(out / "metrics.csv", rows)
     verdicts = decisions(evaluations, baseline, stage2) if baseline in evaluations else {}
+    # The paired daily series behind every verdict go to CSV files, not into the JSON pack.
+    for group in ("variants", "filters"):
+        for name, verdict in verdicts.get(group, {}).items():
+            series = verdict.pop("_paired_h20", None)
+            if series:
+                write_csv(out / f"paired_h20_{name}.csv", series)
     funnels = {name: funnel_summary(e.funnel) for name, e in evaluations.items()}
     if write_events:
         write_csv(out / "events_h20.csv", [row for e in evaluations.values() for row in event_rows(e)])
