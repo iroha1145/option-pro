@@ -97,9 +97,9 @@ function FactorDetails({ path, sources }: {
   const source = typeof path.weight_provenance_id === 'string' ? sources[path.weight_provenance_id] : undefined;
   return (
     <section className="mt-4 border-t border-line pt-4">
-      <h5 className="text-body-s font-semibold text-ink-800">{t('因子与分数构成')}</h5>
+      <h5 className="text-body-s font-medium text-ink-800">{t('因子与分数构成')}</h5>
       {Object.keys(scoreGate).length > 0 && <div className="mt-3 rounded-md border border-line bg-paper-2 p-3 text-micro text-ink-600">
-        <h6 className="font-semibold text-ink-800">{t('最终评分门（当前轨道）')}</h6>
+        <h6 className="font-medium text-ink-800">{t('最终评分门（当前轨道）')}</h6>
         <div className="mt-1 grid gap-x-4 gap-y-1 sm:grid-cols-2">
           <span>{t('因子覆盖率')}{t('：')}{diagnosticPercent(scoreGate.coverage_ratio)} / {t('最低要求')} {diagnosticPercent(scoreGate.coverage_min)} · {gateText(scoreGate.coverage_passed)}</span>
           <span>{t('最低分')}{t('：')}{diagnosticNumber(scoreGate.score_floor)} · {gateText(scoreGate.score_floor_passed)}</span>
@@ -148,7 +148,7 @@ function PathCard({ path, sources }: {
     <details className="min-w-0 rounded-md border border-line bg-paper-2 p-3 sm:p-4">
       <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="min-w-0 basis-full text-body-s font-semibold text-ink-800 sm:basis-0 sm:flex-1">{diagnosticTheme(theme)} · {diagnosticFamily(path.algorithm_id)}</span>
+          <span className="min-w-0 basis-full text-body-s font-medium text-ink-800 sm:basis-0 sm:flex-1">{diagnosticTheme(theme)} · {diagnosticFamily(path.algorithm_id)}</span>
           <span className="whitespace-nowrap font-mono text-body-s text-ink-800">{t('分数')} {diagnosticNumber(path.score)}</span>
           <span className="whitespace-nowrap text-micro text-ink-500">{pathStatus(path.status)}</span>
           <span className="whitespace-nowrap text-micro text-brand-600">{t('查看路径')}</span>
@@ -164,12 +164,12 @@ function PathCard({ path, sources }: {
           <span>{t('价格')}{t('：')}{money(path.price, 2)}</span>
         </div>
         <div>
-          <h5 className="font-semibold text-ink-800">{t('未通过或待核实的条件')}</h5>
+          <h5 className="font-medium text-ink-800">{t('未通过或待核实的条件')}</h5>
           {reasons.length ? <ul className="mt-1 list-disc space-y-1 pl-5">{reasons.map((reason, reasonIndex) => <li key={`${reason}-${reasonIndex}`}>{diagnosticReason(reason)}</li>)}</ul>
             : <p className="mt-1 text-ink-500">{path.status === 'eligible' ? t('这条路径没有记录拒绝原因。') : t('该路径没有提供具体原因。')}</p>}
         </div>
         <div>
-          <h5 className="font-semibold text-ink-800">{t('波动与延伸')}</h5>
+          <h5 className="font-medium text-ink-800">{t('波动与延伸')}</h5>
           <div className="mt-1 grid gap-x-4 gap-y-1 text-micro text-ink-500 sm:grid-cols-2">
             <span>{t('实际波动幅度')}{t('：')}{pctPoint(path.atr_pct)}</span>
             <span>{t('参照波动幅度')}{t('：')}{pctPoint(path.sector_median_atr_pct)}</span>
@@ -182,7 +182,7 @@ function PathCard({ path, sources }: {
           </div>
         </div>
         <div>
-          <h5 className="font-semibold text-ink-800">{t('资格与成交额')}</h5>
+          <h5 className="font-medium text-ink-800">{t('资格与成交额')}</h5>
           <p className="mt-1 text-micro text-ink-500">{t('二十日平均成交额')}{t('：')}{money(path.adv20)} · {t('成交额数据可作参考，但代理口径尚未认证，不代表已通过流动性门。')}</p>
           <p className="mt-1 text-micro text-ink-500">{t('成交额资格')}{t('：')}{verifiedText(flags.dollar_liquidity_verified)} · {t('成交量时段')}{t('：')}{verifiedText(flags.volume_session_verified)}</p>
           {Object.keys(gates).length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">
@@ -265,7 +265,6 @@ export default function SecurityDiagnostics({ profile, timeframe, publicationKey
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-h3 text-ink-900">{t('按代码查询选股诊断')}</h3>
-          <p className="mt-1 text-body-s text-ink-500">{t('输入证券代码，查看本批次所有主题与家族的评分和筛选原因；未上榜也可查询。')}</p>
         </div>
         <span className="rounded border border-line px-2 py-1 text-micro text-ink-500">{t('偏好')}{t('：')}{profile === 'balanced' ? t('均衡') : profile === 'conservative' ? t('稳健') : t('进取')} · {t('周期')}{t('：')}{timeframe === 'short' ? t('短期') : timeframe === 'mid' ? t('中期') : t('长期')}</span>
       </div>
@@ -273,7 +272,7 @@ export default function SecurityDiagnostics({ profile, timeframe, publicationKey
         <label className="min-w-[140px] flex-1 text-body-s text-ink-700">
           <span className="mb-1 block">{t('证券代码')}</span>
           <input value={fixedTicker || input} onChange={(event) => { if (!fixedTicker) { seq.current += 1; setPending(null); setResult(null); setFailure(null); setInput(event.target.value); } }} readOnly={Boolean(fixedTicker)}
-            autoComplete="off" spellCheck={false} maxLength={32} placeholder={t('例如 AAPL 或 SPY')}
+            autoComplete="off" spellCheck={false} maxLength={32} placeholder={t('例如 AAPL，未上榜也可查询')}
             className="h-11 w-full rounded-md border border-line-strong bg-card px-3 font-mono text-body-s text-ink-800 outline-none transition-[box-shadow,border-color] duration-fast focus:border-brand-600 focus:shadow-focus-ring" />
         </label>
         <button type="submit" disabled={loading} aria-busy={loading} className="btn-primary"><TextSwap swapKey={loading ? 'busy' : 'idle'}>{loading ? t('查询中') : t('查询诊断')}</TextSwap></button>
@@ -306,7 +305,7 @@ export default function SecurityDiagnostics({ profile, timeframe, publicationKey
           {shown._stale && <p className="mt-2 text-body-s text-ink-700">{t('此结果不是最新收盘批次，请核对截止日期。')}</p>}
         </div>
         <div>
-          <h4 className="text-body-s font-semibold text-ink-800">{t('完整评分路径')} <span className="font-mono">{paths.length}</span></h4>
+          <h4 className="text-body-s font-medium text-ink-800">{t('完整评分路径')} <span className="font-mono">{paths.length}</span></h4>
           {paths.length ? <div className="mt-3 space-y-2">{paths.map((path, index) => <PathCard key={pathKey(path, index)} path={path} sources={sources} />)}</div>
             : <p className="mt-3 rounded-md border border-line p-3 text-body-s text-ink-500">{t('本批次没有这只证券的评分路径。请查看上方目录状态和数据截止日。')}</p>}
         </div>

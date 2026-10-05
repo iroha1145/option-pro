@@ -407,8 +407,16 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                   <Icon name="x" size={12} />
                 </button>
               ) : (
-                <Kbd>ESC</Kbd>
+                <span className="hidden md:inline-flex"><Kbd>ESC</Kbd></span>
               )}
+              {/* 手机没有 Esc 键：给一个点得到的「取消」；键盘提示只在桌面显示 */}
+              <button
+                type="button"
+                onClick={onClose}
+                className="touch-target -mr-2 shrink-0 px-2 text-body-s text-brand-600 md:hidden"
+              >
+                {__t('取消')}
+              </button>
             </div>
 
             {/* listbox/option + activedescendant（审计 2.5.3）：读屏跟随高亮播报，
@@ -512,7 +520,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
               ))}
             </div>
 
-            <div className="flex items-center gap-3 border-t border-line bg-card-warm px-4 py-2 text-micro text-ink-400">
+            <div className="hidden items-center gap-3 border-t border-line bg-card-warm px-4 py-2 text-micro text-ink-400 md:flex">
               <span className="flex items-center gap-1.5"><Kbd>↑↓</Kbd> {__t('选择')}</span>
               <span className="flex items-center gap-1.5"><Kbd>Enter</Kbd> {__t('打开')}</span>
               <span className="flex items-center gap-1.5"><Kbd>Esc</Kbd> {__t('关闭')}</span>

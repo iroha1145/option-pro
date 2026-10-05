@@ -82,7 +82,7 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
                     ) : (
                       <span className="mt-0.5 flex flex-wrap gap-1">
                         {d.rows.slice(0, MAX_TOOLTIP_TICKERS).map((r) => (
-                          <span key={r.ticker} className="font-mono text-micro font-semibold text-ink-800">
+                          <span key={r.ticker} className="font-mono text-micro font-medium text-ink-800">
                             {r.ticker}
                           </span>
                         ))}

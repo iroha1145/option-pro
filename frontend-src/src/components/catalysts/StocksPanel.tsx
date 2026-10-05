@@ -142,7 +142,7 @@ export default function StocksPanel({ filters }: { filters: CatalystFilters; ref
             <span className="flex min-w-0 flex-1 items-center gap-2.5 sm:w-40 sm:flex-none">
               <TickerLogo ticker={r.ticker} size={28} />
               <span className="min-w-0 flex-1">
-                <span className="block font-mono text-body-s font-semibold text-ink-800">{r.ticker}</span>
+                <span className="block font-mono text-body-s font-medium text-ink-800">{r.ticker}</span>
                 {(r.name !== r.ticker || r.sector) && (
                   <span className="flex min-w-0 items-center gap-1.5">
                     {r.name !== r.ticker && (

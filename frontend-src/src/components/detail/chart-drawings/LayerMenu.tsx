@@ -253,7 +253,6 @@ export default function LayerMenu({
   /* shadcn Dialog 语义：标题走 aria-labelledby、副标题走 aria-describedby，
      比光秃秃一个 aria-label 多给读屏一句「这窗是干什么的」。 */
   const titleId = useId();
-  const descId = useId();
   const closeMs = readRootDurationMs('--modal-close-dur', 150);
   const phase = useOverlayPhase(open, closeMs);
   const mounted = overlayVisible(open, phase);
@@ -323,7 +322,6 @@ export default function LayerMenu({
           aria-modal="true"
           data-focus-overlay={titleId}
           aria-labelledby={titleId}
-          aria-describedby={descId}
           className={cn(
             't-modal flex max-h-[86vh] flex-col overflow-hidden rounded-xl border border-line bg-paper-2 shadow-sh-3',
             overlayClassName(phase),
@@ -332,7 +330,6 @@ export default function LayerMenu({
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-card px-5 py-3">
             <div className="min-w-0">
               <h2 id={titleId} className="truncate text-body font-medium leading-tight text-ink-900">{t('算法与图层')}</h2>
-              <p id={descId} className="mt-0.5 truncate text-micro text-ink-400">{t('选择预设，或逐层微调算法与图层。')}</p>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
               <button

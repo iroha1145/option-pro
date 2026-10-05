@@ -3,7 +3,7 @@
  * 列最近 5 次：时间（Mono）/ 参数摘要 / 结果数
  */
 import SoftBadge from '@/components/shared/SoftBadge';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { DUR_FAST, SPRING_POP } from '@/lib/motion';
@@ -19,6 +19,17 @@ export default function ScanHistoryPopover({ history }: { history: ScanHistoryEn
   const ref = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   useFocusTrap(popoverRef, open);
+
+  /* 浮层右对齐按钮；手机上按钮在行中间，320 宽的浮层左缘会出屏，打开时按视口夹回 16px 边距。
+     量 offsetWidth（不受入场 scale 影响），直接写行内 right，不触发重渲染。 */
+  useLayoutEffect(() => {
+    const wrap = ref.current;
+    const pop = popoverRef.current;
+    if (!open || !wrap || !pop) return;
+    const gutter = 16;
+    const left = wrap.getBoundingClientRect().right - pop.offsetWidth;
+    pop.style.right = left < gutter ? `${left - gutter}px` : '';
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;

@@ -132,7 +132,7 @@ function LifecycleTrack({ ev }: { ev: BreakoutEventFull }) {
                 )}
                 aria-hidden="true"
               />
-              <span className={cn('mt-1.5 whitespace-nowrap text-[11px] leading-[15px]', last ? 'font-semibold text-ink-800' : 'text-ink-400')}>
+              <span className={cn('mt-1.5 whitespace-nowrap text-[11px] leading-[15px]', last ? 'font-medium text-ink-800' : 'text-ink-400')}>
                 {LIFECYCLE_CN[t.state] ?? t.state}
               </span>
               <span className="whitespace-nowrap font-mono text-[11px] leading-[15px] text-ink-400 tnum">{hhmm(t.at)}</span>
@@ -270,7 +270,7 @@ export default function EventDetail({
               <TickerLogo ticker={event.ticker} size={36} />
               <div className="min-w-0 flex-1">
                 <p className="flex items-baseline gap-2">
-                  <span className="font-mono text-[17px] font-semibold leading-[24px] text-ink-900">{event.ticker}</span>
+                  <span className="font-mono text-[17px] font-medium leading-[24px] text-ink-900">{event.ticker}</span>
                   <span className="truncate text-body-s text-ink-500">{event.name}</span>
                 </p>
                 <p className="mt-0.5 font-mono text-micro text-ink-400 tnum">
@@ -369,11 +369,11 @@ export default function EventDetail({
               </section>
             </div>
 
-            {/* 底部操作 */}
-            <div className="flex items-center gap-2 border-t border-line bg-card-warm px-5 py-3">
+            {/* 底部操作：两个按钮不折字，事件 ID（32 位十六进制）放不下就另起一行、可在字间断开 */}
+            <div className="flex flex-wrap items-center gap-2 border-t border-line bg-card-warm px-5 py-3">
               <button
                 onClick={() => onOpenTicker(event.ticker)}
-                className="btn-primary"
+                className="btn-primary whitespace-nowrap"
               >
                 {__t('查看个股详情')}
                 <Icon name="arrow-up-right" size={13} />
@@ -384,7 +384,7 @@ export default function EventDetail({
               >
                 {__t('该代码全部事件')}
               </button>
-              <span className="ml-auto font-mono text-micro text-ink-400 tnum">{event.event_id}</span>
+              <span className="ml-auto min-w-0 max-w-full break-all text-right font-mono text-micro text-ink-400 tnum">{event.event_id}</span>
             </div>
           </motion.div>
         </div>

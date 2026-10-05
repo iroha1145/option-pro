@@ -76,18 +76,20 @@
     --shadow-sh-2: 0 1px 2px rgba(16, 24, 40, .03), 0 12px 32px -14px rgba(16, 24, 40, .10);
     --shadow-sh-3: 0 2px 4px rgba(16, 24, 40, .04), 0 24px 56px -16px rgba(16, 24, 40, .16);
     /* 按钮/控件立体阴影（暗色模式下内高光转为极微弱暗部高光或去除，避免白边） */
-    --btn-shadow: 0 1px 2px rgba(16, 24, 40, .07), inset 0 1px 0 rgba(255, 255, 255, .75);
-    --btn-hi-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), 0 1px 2px rgba(16, 24, 40, .18), 0 4px 12px -4px rgba(16, 24, 40, .34);
-    --chip-shadow: inset 0 1px 0 rgba(255, 255, 255, .14), 0 1px 3px -1px rgba(16, 24, 40, .25);
-    --card-hover-shadow: 0 1px 2px rgba(16, 24, 40, .03), 0 12px 32px -14px rgba(16, 24, 40, .10), inset 0 1px 0 rgba(255, 255, 255, .7);
-    --inset-hi-shadow: inset 0 1px 0 rgba(255, 255, 255, .7);
+    /* 2026-10-06 平面化：卡片、按钮静止时不投影，只靠发丝边分层；选中的分段滑块
+       与芯片留一圈淡描边。真正浮起的下拉、抽屉、对话框、提示仍有阴影。 */
+    --btn-shadow: none;
+    --btn-hi-shadow: none;
+    --chip-shadow: 0 0 0 1px rgba(16, 24, 40, .07), 0 1px 2px rgba(16, 24, 40, .05);
+    --card-hover-shadow: none;
+    --inset-hi-shadow: none;
     --zone-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 1px 2px rgba(16, 24, 40, .10);
-    --btn-primary-highlight: 0 1px 0 rgba(255, 255, 255, .18) inset;
-    --insight-frame-shadow: inset 0 1px 0 rgba(255, 255, 255, .7);
+    --btn-primary-highlight: 0 0 0 transparent;
+    --insight-frame-shadow: none;
     /* Cloud Monitor 的细节层次，保留 Optix 的纸面与群青。 */
     --control-track: #F2F4F7;
-    --control-selected-shadow: 0 2px 4px rgba(24, 43, 68, .045), 0 5px 12px -4px rgba(24, 43, 68, .09);
-    --card-shadow: 0 2px 4px rgba(24, 43, 68, .02), 0 9px 25px -12px rgba(24, 43, 68, .12);
+    --control-selected-shadow: 0 0 0 1px rgba(16, 24, 40, .07), 0 1px 2px rgba(16, 24, 40, .05);
+    --card-shadow: none;
     --popover-shadow: 0 2px 5px rgba(24, 43, 68, .045), 0 10px 28px -10px rgba(24, 43, 68, .15);
     --knob-shadow: 0 1px 3px rgba(16, 24, 40, .18), 0 1px 1px rgba(16, 24, 40, .10);
     --shadow-xs: 0 1px 2px 0 rgba(16, 24, 40, .05);
@@ -172,8 +174,8 @@
     --ai-600: #4EC4D4;
     --ai-50: #12353A;
     --control-track: #21242B;
-    --control-selected-shadow: 0 2px 4px rgba(0, 0, 0, .28), 0 5px 12px -4px rgba(0, 0, 0, .36);
-    --card-shadow: 0 2px 4px rgba(0, 0, 0, .28), 0 9px 25px -12px rgba(0, 0, 0, .45);
+    --control-selected-shadow: 0 0 0 1px var(--line-strong);
+    --card-shadow: none;
     --popover-shadow: 0 2px 5px rgba(0, 0, 0, .32), 0 10px 28px -10px rgba(0, 0, 0, .5);
     --knob-shadow: 0 1px 3px rgba(0, 0, 0, .45), 0 1px 1px rgba(0, 0, 0, .28);
     --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, .35);
@@ -184,10 +186,10 @@
     --shadow-sh-2: 0 1px 2px rgba(0, 0, 0, .35), 0 12px 32px -14px rgba(0, 0, 0, .55);
     --shadow-sh-3: 0 2px 4px rgba(0, 0, 0, .4), 0 24px 56px -16px rgba(0, 0, 0, .62);
     /* 按钮/控件立体阴影夜间重定：去除白色内高光白边，使用纯暗部外投影 */
-    --btn-shadow: 0 1px 2px rgba(0, 0, 0, .35);
-    --btn-hi-shadow: 0 1px 2px rgba(0, 0, 0, .45), 0 4px 12px -4px rgba(0, 0, 0, .55);
-    --chip-shadow: 0 1px 3px -1px rgba(0, 0, 0, .4);
-    --card-hover-shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 12px 32px -14px rgba(0, 0, 0, .55);
+    --btn-shadow: none;
+    --btn-hi-shadow: none;
+    --chip-shadow: 0 0 0 1px var(--line-strong);
+    --card-hover-shadow: none;
     --inset-hi-shadow: none;
     --zone-shadow: 0 1px 2px rgba(0, 0, 0, .3);
     --btn-primary-highlight: 0 0 0 transparent;
@@ -243,6 +245,20 @@
     pointer-events: none;
     background-image: radial-gradient(circle, rgba(13, 22, 38, .02) 1px, transparent 1px);
     background-size: 22px 22px;
+  }
+
+  /* 2026-10-06 正文段落避免末行孤字（手机上「…显著放/大」）：pretty 只调整段落最后几行的断点，
+     单行文字不受影响；不支持的浏览器照常折行。 */
+  p, li, dd, blockquote, figcaption {
+    text-wrap: pretty;
+  }
+
+  /* 大标题词内不断行：日文「ブレイクアウト・レ/ーダー」这类片假名词不从中间断开，改在「・」或空格处换行；
+     strict 禁止在长音符「ー」和小假名前断行；整词放不下时 anywhere 兜底任意断开。中文页面标题都短，不受影响。 */
+  h1 {
+    line-break: strict;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
   }
 
   ::selection {
@@ -345,7 +361,7 @@
     font-weight: 500;
     line-height: 1.25;
     color: var(--on-accent);
-    box-shadow: var(--shadow-sh-1), var(--btn-primary-highlight);
+    box-shadow: none;
     transition:
       transform var(--duration-quick) var(--ease-smooth-out),
       background-color var(--duration-quick) var(--ease-smooth-out),
@@ -358,7 +374,6 @@
   }
   .btn-primary:not(:disabled):active {
     transform: scale(0.98);
-    box-shadow: inset 0 1.5px 3px rgba(13, 22, 38, .28), 0 1px 2px rgba(16, 24, 40, .10);
   }
   @media (hover: hover) and (pointer: fine) {
     .btn-primary:not(:disabled):hover {
@@ -468,23 +483,17 @@
   }
   /* 悬停抬起（transitions-polish：进场快而直接，fast 档 + smooth-out）。此前两类
      卡片各用 260ms/paper 与 240ms/(.23,1,.32,1)，同一种手势三条曲线。 */
-  .card-hover {
-    transition: transform var(--duration-fast) var(--ease-smooth-out), box-shadow var(--duration-fast) var(--ease-smooth-out);
-  }
-  /* v8 清新上浮卡：hover 抬升 3px + sh-2 */
+  /* 2026-10-06：可点卡片悬停时描边加深，不再上浮投影（平面表面没有高度可抬）。 */
+  .card-hover,
   .card-lift {
-    transition: transform var(--duration-fast) var(--ease-smooth-out), box-shadow var(--duration-fast) var(--ease-smooth-out);
+    transition: border-color var(--duration-fast) var(--ease-smooth-out);
   }
   /* v8.3 触屏 hover 粘滞全局修：:hover 上浮/阴影只在「可悬停的精确指针」
      （鼠标/触控板）下生效；触屏 tap 后 :hover 会粘住不解除，卡片一直浮着。 */
   @media (hover: hover) and (pointer: fine) {
-    .card-hover:hover {
-      transform: translateY(-2px);
-      box-shadow: var(--card-hover-shadow);
-    }
+    .card-hover:hover,
     .card-lift:hover {
-      transform: translateY(-2px);
-      box-shadow: var(--shadow-sh-2);
+      border-color: var(--line-strong);
     }
   }
 
@@ -780,7 +789,7 @@
 .metric-value {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -.035em;
 }
 .soft-badge { border-radius: var(--r-chip); }

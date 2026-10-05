@@ -63,7 +63,7 @@ export default function DetailBand({
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line pb-3">
           <div>
             <p className="eyebrow">{t('板块详情')}</p>
-            <h2 className="mt-1 font-display text-[18px] font-semibold leading-[24px] text-ink-900">
+            <h2 className="mt-1 font-display text-[18px] font-medium leading-[24px] text-ink-900">
               {sector.name}
             </h2>
           </div>
@@ -151,13 +151,13 @@ export default function DetailBand({
                         {String(index + 1).padStart(2, '0')}
                       </span>
                       <TickerLogo ticker={leader.ticker} size={26} />
-                      <span className="font-mono text-body-s font-semibold text-ink-800">
+                      <span className="font-mono text-body-s font-medium text-ink-800">
                         {leader.ticker}
                       </span>
                       <span className="ml-auto text-micro text-ink-400">
                         {t('强度')}
                       </span>
-                      <span className="w-12 text-right text-data-m font-semibold text-ink-800 tnum">
+                      <span className="w-12 text-right text-data-m font-medium text-ink-800 tnum">
                         {leader.score?.toFixed(1) ?? '—'}
                       </span>
                       <Icon
@@ -192,7 +192,7 @@ export default function DetailBand({
                     key={ticker}
                     type="button"
                     onClick={() => onOpenTicker(ticker)}
-                    className="min-w-0 rounded-md border border-line bg-card-warm px-2 py-2 text-center font-mono text-caption font-semibold text-ink-700 transition-colors duration-fast hover:border-brand-400 hover:text-brand-700"
+                    className="min-w-0 rounded-md border border-line bg-card-warm px-2 py-2 text-center font-mono text-caption font-medium text-ink-700 transition-colors duration-fast hover:border-brand-400 hover:text-brand-700"
                   >
                     <span className="block truncate">{ticker}</span>
                   </button>

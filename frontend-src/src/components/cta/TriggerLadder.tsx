@@ -125,7 +125,7 @@ export default function TriggerLadder({ row }: { row: CtaInstrumentEstimate }) {
             {zone.distance_pct > 0 ? '+' : ''}{zone.distance_pct.toFixed(1)}%
           </span>
           {/* 4 估算 Δ（右对齐定宽）——手机竖屏留在第一行 */}
-          <span className={cn('order-4 w-12 shrink-0 text-right text-caption font-semibold tnum sm:order-5', tone)}>
+          <span className={cn('order-4 w-12 shrink-0 text-right text-caption font-medium tnum sm:order-5', tone)}>
             {signed(zone.est_position_change)}
           </span>
           {/* 5+6 价格区间 & 权重计量条：手机竖屏 basis-full 强制折到第二行；

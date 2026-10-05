@@ -252,7 +252,7 @@ export default function InfoHint({
           >
             {/* scoreHints 的 title/body/note 在定义处已经 t() 过：再包一层会在
                 EN/JA 下拿译文回查词典，DEV 的缺译告警被几十条假警报淹没。 */}
-            <span className="block text-caption font-semibold text-ink-800">{hint.title}</span>
+            <span className="block text-caption font-medium text-ink-800">{hint.title}</span>
             <span className="mt-1 block whitespace-normal text-micro leading-relaxed text-ink-600">
               {hint.body}
             </span>

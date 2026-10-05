@@ -111,7 +111,7 @@ export default function ThemeSwitcher({ className }: { className?: string }) {
           aria-labelledby="theme-appearance-label"
           data-origin="top-right"
           className={cn(
-            't-dropdown absolute right-0 top-10 z-40 w-[176px] rounded-md border border-line bg-card p-1.5 shadow-sh-2',
+            't-dropdown absolute right-0 top-full z-40 mt-2 w-[176px] rounded-md border border-line bg-card p-1.5 shadow-sh-2',
             overlayClassName(phase),
           )}
         >

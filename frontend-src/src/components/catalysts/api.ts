@@ -467,6 +467,8 @@ const EVENT_TYPE_CN: Record<string, string> = {
   guidance: __t('指引'),
   legal: __t('法务'),
   calendar: __t('日历'),
+  commodity: __t('大宗商品'),
+  company: __t('公司'),
 };
 
 function nHotspot(r: Rec): HotspotGroup {

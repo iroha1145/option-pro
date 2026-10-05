@@ -149,6 +149,26 @@ function PriorityRing({ score }: { score: number | null }) {
   );
 }
 
+/* 风险提醒：后端事件 warnings 里混着中文说明（大盘形态降权等）和英文原因码。
+   原因码在这里换成中文；表里没有的照原样显示，不丢信息。码值见后端
+   breakouts/breakout_detector.py、service.py、feature_engine.py、normalizer.py、
+   range_interactions.py 与 strength/market_shape.py。 */
+const WARNING_LABELS: Record<string, string> = {
+  premarket_not_confirmed: t('盘前跳空，待盘中确认'),
+  no_valid_base: t('无有效整理平台'),
+  extended_from_pivot: t('距突破位过远'),
+  carryover_recheck: t('延续上一轮信号，已复核'),
+  carryover_recheck_deferred: t('延续信号，暂未复核'),
+  carryover_ttl_expired: t('延续信号已过期'),
+  intraday_snapshot_unavailable: t('盘中快照不可用'),
+  market_confirmation_tightened: t('大盘偏弱，确认要求提高'),
+  no_complete_intraday_bars: t('暂无完整盘中 K 线'),
+  no_complete_current_session_bars: t('本时段暂无完整 K 线'),
+  provider_relative_volume_missing: t('数据源缺相对量能'),
+  range_persistence_fading_near_high: t('高位附近动能减弱'),
+  range_persistence_calculation_failed: t('区间持续性计算失败'),
+};
+
 /* ---------------- 生命周期步进条（五节点 + FAILED/EXPIRED 末端标记） ---------------- */
 const STEPS = [
   { key: 'DISCOVERED', label: t('已发现') },
@@ -201,10 +221,10 @@ function LifecycleStepper({ state }: { state: string }) {
       <span
         className={cn(
           'mt-1.5 whitespace-nowrap text-[11px] leading-[16px]',
-          tone === 'current' && 'font-semibold text-brand-700',
+          tone === 'current' && 'font-medium text-brand-700',
           (tone === 'past' || tone === 'future') && 'text-ink-400',
-          tone === 'down' && 'font-semibold text-danger-700',
-          tone === 'ink-end' && 'font-semibold text-ink-500',
+          tone === 'down' && 'font-medium text-danger-700',
+          tone === 'ink-end' && 'font-medium text-ink-500',
         )}
       >
         {label}
@@ -303,6 +323,8 @@ function buildMiniOption(bars: MiniBar[], levels: MiniLevels): ChartOption {
       ...(levelPrices.length > 0 && {
         min: (extent: { min: number }) => Math.min(extent.min, ...levelPrices),
         max: (extent: { max: number }) => Math.max(extent.max, ...levelPrices),
+        // 撑开后两端是原始价位（如 258.88），和中间的整刻度（240、250）位数不齐：两端不标数。
+        axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: MONO, showMinLabel: false, showMaxLabel: false },
       }),
     },
     tooltip: glassTooltip({
@@ -642,7 +664,9 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
   const shapeRec = (e.market_shape && typeof e.market_shape === 'object' ? e.market_shape : {}) as Record<string, unknown>;
   const shapeRules = (shapeRec.rules && typeof shapeRec.rules === 'object' ? shapeRec.rules : {}) as Record<string, unknown>;
   const shapeTxt = str(e.market_shape) ?? str(shapeRules.state_label) ?? str(shapeRec.state) ?? str(e.versions) ?? '—';
-  const warnings = Array.isArray(e.warnings) ? e.warnings.filter((w): w is string => typeof w === 'string' && !!w) : [];
+  const warnings = Array.isArray(e.warnings)
+    ? [...new Set(e.warnings.filter((w): w is string => typeof w === 'string' && !!w).map((w) => WARNING_LABELS[w] ?? w))]
+    : [];
 
   const gap = num(e.gap_pct);
   const rvol = num(e.rvol_time_of_day);
@@ -734,10 +758,11 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
         <div className="grid flex-1 grid-cols-1 gap-2.5 sm:grid-cols-3">
           <div className="radar-value-cell px-3 py-2.5">
             <p className="text-micro text-ink-400">{t('当前价')}</p>
-            <p className="mt-0.5 flex items-center gap-2">
+            {/* 1024 一档三格各约 130px：放不下时涨跌徽标折到价格下一行，不压到相邻格。 */}
+            <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
               <span
                 className={cn(
-                  'tick-flash rounded-xs px-1 font-mono text-data-l text-ink-900 tnum',
+                  'tick-flash min-w-0 rounded-xs px-1 font-mono text-data-l text-ink-900 tnum',
                   !preferLiveQuote(quote, Number.isFinite(e.current_price)) && flash === 'up' && 'tick-flash-up',
                   !preferLiveQuote(quote, Number.isFinite(e.current_price)) && flash === 'down' && 'tick-flash-down',
                 )}
@@ -824,7 +849,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
           </button>
           <Link
             to={`/stock/${encodeURIComponent(e.ticker)}`}
-            className="btn-primary"
+            className="btn-primary btn-sm"
           >
             {t('打开研究页')}
             <Icon name="arrow-up-right" size={13} />

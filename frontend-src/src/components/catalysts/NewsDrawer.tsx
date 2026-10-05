@@ -677,7 +677,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
           </div>
 
           {/* 标题 */}
-          <h2 className="mt-3 font-display text-[22px] leading-[30px] font-semibold text-ink-900">{item.titleZh}</h2>
+          <h2 className="mt-3 font-display text-[22px] leading-[30px] font-medium text-ink-900">{item.titleZh}</h2>
           {(item.sourceTitle ?? item.title).trim() && (item.sourceTitle ?? item.title).trim() !== item.titleZh.trim() && (
             <p className="mt-2 break-words text-micro leading-relaxed text-ink-500">
               <span className="font-medium">{__t('原始标题：')}</span>{item.sourceTitle ?? item.title}

@@ -40,7 +40,7 @@ export function ScoreCell({
         {/* 固定宽度 + 右对齐 + 统一一位小数：分数字符数不一（84 是两位、84.4 是四位）
             会把后面的横条推到各行不同的 x 上，整列看起来歪歪扭扭。tnum 只保证数字等宽，
             管不了字符个数，所以既要定宽也要定小数位（JS 数字 84.0 会打印成 84）。 */}
-        <SoftBadge tone={strength.badgeTone} className="metric-value w-[3.25rem] shrink-0 justify-end text-[15px] leading-[20px] font-semibold tnum">
+        <SoftBadge tone={strength.badgeTone} className="metric-value w-[3.25rem] shrink-0 justify-end text-[15px] leading-[20px] font-medium tnum">
           {score.toFixed(1)}
         </SoftBadge>
         <span

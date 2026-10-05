@@ -1,5 +1,5 @@
 /** 过滤器条：ticker / window_hours / classification / analysis_status / min_confidence / min_abs_impact / multi_source_only */
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { motion } from 'framer-motion';
 import Segmented from '@/components/shared/Segmented';
 import MenuSelect from '@/components/shared/MenuSelect';
@@ -54,6 +54,8 @@ function LabeledSlider({
   format: (v: number) => string;
   onChange: (v: number) => void;
 }) {
+  /* 外观与「算法与图层」的滑杆同一套 .ft-range（原生 range 只换皮，保住 role=slider）。 */
+  const fill = max > min ? ((value - min) / (max - min)) * 100 : 0;
   return (
     <div className="flex items-center gap-2">
       <span className="whitespace-nowrap text-micro text-ink-400">{label}</span>
@@ -64,7 +66,8 @@ function LabeledSlider({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="h-1 w-24 cursor-pointer accent-brand-600"
+        className="ft-range w-24 shrink-0 cursor-pointer"
+        style={{ '--fill': `${fill}%` } as CSSProperties}
         aria-label={label}
       />
       <span className={cn('w-14 whitespace-nowrap font-mono text-micro tnum', value > 0 ? 'text-brand-600' : 'text-ink-400')}>

@@ -113,7 +113,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
           <div key={date} className={cn(gi > 0 && 'border-t border-line')}>
             {/* 日期分组头 */}
             <div className={cn('flex items-center justify-between px-5 py-2.5', isToday ? 'bg-brand-50' : 'bg-card-warm')}>
-              <p className={cn('font-mono text-caption font-semibold tnum', isToday ? 'text-brand-700' : 'text-ink-600')}>
+              <p className={cn('font-mono text-caption font-medium tnum', isToday ? 'text-brand-700' : 'text-ink-600')}>
                 {fmtLocaleDate(`${date}T00:00:00`, { month: '2-digit', day: '2-digit', weekday: 'short' })}
                 {isToday && <span className="ml-2 rounded-xs bg-brand-600 px-1.5 py-0.5 text-micro font-medium text-on-accent">{__t('今日')}</span>}
               </p>

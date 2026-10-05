@@ -370,7 +370,7 @@ export default function EarningsList({
                   {fmtMDCN(g.date)} · {weekdayCN(g.date)}
                 </span>
                 {isToday && (
-                  <span className="rounded-xs bg-brand-600 px-1.5 py-px text-micro font-semibold leading-4 text-on-accent">{t('今天')}</span>
+                  <span className="rounded-xs bg-brand-600 px-1.5 py-px text-micro font-medium leading-4 text-on-accent">{t('今天')}</span>
                 )}
               </p>
               <p className="font-mono text-micro text-ink-400 tnum">
@@ -418,7 +418,7 @@ export default function EarningsList({
                     <span className="flex min-w-0 items-center gap-2.5">
                       <TickerLogo ticker={row.ticker} />
                       <span className="min-w-0 flex-1">
-                        <span className="block font-mono text-body-s font-semibold text-ink-800">{row.ticker}</span>
+                        <span className="block font-mono text-body-s font-medium text-ink-800">{row.ticker}</span>
                         <span className="flex min-w-0 items-center gap-1.5">
                           <span className="min-w-0 truncate text-micro text-ink-400" title={row.name}>{row.name}</span>
                           {sector && (
@@ -437,7 +437,7 @@ export default function EarningsList({
                       <span className="text-data-m tnum">
                         <span className="text-ink-500">{est != null ? est.toFixed(2) : '—'}</span>
                         <span className="mx-1 text-ink-400">/</span>
-                        <span className={cn('whitespace-nowrap', act != null ? 'font-semibold text-ink-900' : 'text-ink-400')}>
+                        <span className={cn('whitespace-nowrap', act != null ? 'font-medium text-ink-900' : 'text-ink-400')}>
                           {act != null ? act.toFixed(2) : t('未公布')}
                         </span>
                       </span>
@@ -472,7 +472,7 @@ export default function EarningsList({
                     <span className="flex items-center gap-2.5">
                       <TickerLogo ticker={row.ticker} size={28} />
                       <span className="min-w-0 flex-1">
-                        <span className="block font-mono text-body-s font-semibold text-ink-800">{row.ticker}</span>
+                        <span className="block font-mono text-body-s font-medium text-ink-800">{row.ticker}</span>
                         <span className="flex min-w-0 items-center gap-1.5">
                           <span className="min-w-0 truncate text-micro text-ink-400" title={row.name}>{row.name}</span>
                           {sector && (

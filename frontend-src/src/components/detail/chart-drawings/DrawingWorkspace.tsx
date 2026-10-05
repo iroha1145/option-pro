@@ -43,7 +43,8 @@ export default function DrawingWorkspace({
   const closeMs = readRootDurationMs('--modal-close-dur', 150);
   const phase = useOverlayPhase(open, reducedMotion ? 0 : closeMs);
   const mounted = overlayVisible(open, phase);
-  useFocusTrap(panelRef, open);
+  // 初始焦点落在对话框本身：落到第一个工具按钮会让它的说明浮层一打开就盖在图上。
+  useFocusTrap(panelRef, open, { initialFocusRef: panelRef });
   useBodyScrollLock(mounted);
   if (!mounted) return <>{children}</>;
   const panel = (
@@ -52,10 +53,11 @@ export default function DrawingWorkspace({
       role="dialog"
       aria-modal="true"
       aria-label={t('绘图工作区')}
+      tabIndex={-1}
       className={cn(
         // bg-paper is the real page token; bg-page is not a color and left
         // the overlay transparent so the stock header/volume showed through.
-        'fixed inset-0 z-[70] flex flex-col bg-paper p-3 md:p-4',
+        'fixed inset-0 z-[70] flex flex-col bg-paper p-3 outline-none md:p-4',
         !reducedMotion && 't-modal',
         !reducedMotion && overlayClassName(phase),
       )}
@@ -80,7 +82,8 @@ export default function DrawingWorkspace({
         onTakeServer={() => void controller.takeServerConflict()}
       />
       <div className="mt-3 flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden md:flex-row">
-        <div className="min-h-[240px] min-w-0 flex-1 overflow-hidden rounded-md border border-line bg-card md:min-h-[320px]">
+        {/* 图表自身不带外边距（页内由卡片供给），这里补一圈，免得周期分段和右上按钮贴着边框 */}
+        <div className="min-h-[240px] min-w-0 flex-1 overflow-hidden rounded-md border border-line bg-card p-2 md:min-h-[320px] md:p-3">
           {children}
         </div>
         <aside className="max-h-[40vh] w-full shrink-0 overflow-x-hidden overflow-y-auto rounded-md border border-line bg-card p-3 md:max-h-none md:w-72">

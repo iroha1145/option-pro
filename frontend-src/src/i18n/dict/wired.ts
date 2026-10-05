@@ -110,6 +110,8 @@ export const WIRED: Dict = {
   '周期 {tf}': ['Timeframe {tf}', '期間 {tf}'],
   '偏好 {profile}': ['Profile {profile}', 'プロファイル {profile}'],
   '价格 {lo}–{hi}': ['Price {lo}–{hi}', '価格 {lo}–{hi}'],
+  '价格 ≥{v}': ['Price ≥{v}', '価格 ≥{v}'],
+  '价格 ≤{v}': ['Price ≤{v}', '価格 ≤{v}'],
   '成交额 {v}': ['Dollar volume {v}', '売買代金 {v}'],
   '强度 ≥{n}': ['Strength ≥{n}', '強度 ≥{n}'],
   '预设 {name}': ['Preset {name}', 'プリセット {name}'],

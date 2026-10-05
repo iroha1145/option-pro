@@ -29,7 +29,7 @@ export default class RouteErrorBoundary extends Component<Props, State> {
     if (!this.state.error) return this.props.children;
     return (
       <div className="mx-auto mt-10 max-w-xl rounded-lg border border-danger-600/25 bg-danger-50/60 p-6 text-center">
-        <p className="font-display text-[18px] font-semibold text-ink-900">{t('页面显示失败')}</p>
+        <p className="font-display text-[18px] font-medium text-ink-900">{t('页面显示失败')}</p>
         <p className="mt-1 text-micro text-ink-400">{t('请重新加载页面。若仍无法显示，请稍后再试。')}</p>
         <button
           onClick={() => window.location.reload()}

@@ -162,16 +162,17 @@ module.exports = {
       },
       fontSize: {
         /* design.md §2.2 字阶（size/lineHeight，weight 由工具类控制） */
-        /* v8 display 字阶：tracking -0.02em · lineHeight 1.15 · 700/700/600（sans 大标） */
-        'display-xl': ['56px', { lineHeight: '64px', fontWeight: '700', letterSpacing: '-0.02em' }],
-        'display-l': ['40px', { lineHeight: '46px', fontWeight: '700', letterSpacing: '-0.02em' }],
-        'display-m': ['28px', { lineHeight: '32px', fontWeight: '600', letterSpacing: '-0.02em' }],
-        h2: ['20px', { lineHeight: '26px', fontWeight: '600' }],
-        h3: ['15px', { lineHeight: '22px', fontWeight: '600' }],
+        /* 2026-10-06 字重只用 400/500：标题与数字中等，其余常规（中文 550 以上会落到
+           苹方「中粗」，整页发重）。display 字阶 tracking -0.02em · lineHeight 1.15。 */
+        'display-xl': ['56px', { lineHeight: '64px', fontWeight: '500', letterSpacing: '-0.02em' }],
+        'display-l': ['40px', { lineHeight: '46px', fontWeight: '500', letterSpacing: '-0.02em' }],
+        'display-m': ['28px', { lineHeight: '32px', fontWeight: '500', letterSpacing: '-0.02em' }],
+        h2: ['20px', { lineHeight: '26px', fontWeight: '500' }],
+        h3: ['15px', { lineHeight: '22px', fontWeight: '500' }],
         body: ['14px', { lineHeight: '22px', fontWeight: '400' }],
         'body-s': ['13px', { lineHeight: '20px', fontWeight: '400' }],
-        caption: ['12px', { lineHeight: '16px', fontWeight: '500' }],
-        eyebrow: ['11px', { lineHeight: '14px', fontWeight: '600', letterSpacing: '0.08em' }], // v8 字距收紧 0.14→0.08em
+        caption: ['12px', { lineHeight: '16px', fontWeight: '400' }],
+        eyebrow: ['11px', { lineHeight: '14px', fontWeight: '500', letterSpacing: '0.08em' }], // v8 字距收紧 0.14→0.08em
         'data-xxl': ['44px', { lineHeight: '48px', fontWeight: '500', letterSpacing: '-0.02em' }],
         'data-xl': ['30px', { lineHeight: '36px', fontWeight: '500' }],
         'data-l': ['20px', { lineHeight: '26px', fontWeight: '500' }],
