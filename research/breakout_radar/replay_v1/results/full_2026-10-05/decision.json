@@ -1,0 +1,551 @@
+{
+ "baseline": "baseline",
+ "rules": {
+  "1": "h20 mean higher than the baseline in P1 and in P2 (paired on common days)",
+  "2": "better in at least 3 of the 4 complete years (2022-2025); a year with fewer than 60 paired days is reported, not counted (\u4fee\u8ba2 5)",
+  "3": "h5 not below the baseline by more than 0.5 pp; h63 not by more than 1 pp",
+  "4": "triggers per day at least half the baseline's",
+  "5": "paired h20 difference has the same sign under the legacy, zero and loss bounds",
+  "6": "funnel candidates (disc5, adv25): removed events must have a lower h20 than the kept ones",
+  "stage2": "a combination is adopted only if it passes 1-5 and is within 0.2 pp of the best single in both periods"
+ },
+ "variants": {
+  "confirm3": {
+   "paired_days": 1212,
+   "h20_diff_pp": {
+    "ALL": 0.058,
+    "P1": 0.074,
+    "P2": 0.028
+   },
+   "years_diff_pp": {
+    "2022": 0.02,
+    "2023": 0.012,
+    "2024": 0.16,
+    "2025": -0.024
+   },
+   "years_reported": {
+    "2022": {
+     "diff_pp": 0.02,
+     "paired_days": 249
+    },
+    "2023": {
+     "diff_pp": 0.012,
+     "paired_days": 250
+    },
+    "2024": {
+     "diff_pp": 0.16,
+     "paired_days": 252
+    },
+    "2025": {
+     "diff_pp": -0.024,
+     "paired_days": 250
+    }
+   },
+   "h5_diff_pp": 0.048,
+   "h63_diff_pp": 0.019,
+   "bounds_diff_pp": {
+    "legacy": 0.057,
+    "zero": 0.059,
+    "loss": 0.053
+   },
+   "triggers_per_day": {
+    "candidate": 34.471,
+    "baseline": 35.191
+   },
+   "rule1_both_periods_up": true,
+   "rule2_years_better": 3,
+   "rule2_years_compared": 4,
+   "rule2_ok": true,
+   "rule3_ok": true,
+   "rule4_ok": true,
+   "rule5_ok": true,
+   "adopt": true,
+   "metric_view": "confirmed",
+   "confirmed_share": {
+    "candidate": 0.8698,
+    "baseline": 0.8879
+   }
+  },
+  "chase15": {
+   "paired_days": 1212,
+   "h20_diff_pp": {
+    "ALL": -0.004,
+    "P1": -0.01,
+    "P2": 0.007
+   },
+   "years_diff_pp": {
+    "2022": -0.029,
+    "2023": 0.043,
+    "2024": -0.029,
+    "2025": 0.038
+   },
+   "years_reported": {
+    "2022": {
+     "diff_pp": -0.029,
+     "paired_days": 249
+    },
+    "2023": {
+     "diff_pp": 0.043,
+     "paired_days": 250
+    },
+    "2024": {
+     "diff_pp": -0.029,
+     "paired_days": 252
+    },
+    "2025": {
+     "diff_pp": 0.038,
+     "paired_days": 250
+    }
+   },
+   "h5_diff_pp": -0.004,
+   "h63_diff_pp": 0.074,
+   "bounds_diff_pp": {
+    "legacy": -0.008,
+    "zero": -0.004,
+    "loss": -0.012
+   },
+   "triggers_per_day": {
+    "candidate": 34.794,
+    "baseline": 36.17
+   },
+   "rule1_both_periods_up": false,
+   "rule2_years_better": 2,
+   "rule2_years_compared": 4,
+   "rule2_ok": false,
+   "rule3_ok": true,
+   "rule4_ok": true,
+   "rule5_ok": true,
+   "rule6_removed_mean_pp": -0.373,
+   "rule6_kept_mean_pp": -1.096,
+   "rule6_ok": false,
+   "adopt": false,
+   "metric_view": "chaseable",
+   "extended_share": {
+    "candidate": 0.122,
+    "baseline": 0.0873
+   }
+  },
+  "orb15": {
+   "paired_days": 1212,
+   "h20_diff_pp": {
+    "ALL": -0.057,
+    "P1": -0.086,
+    "P2": -0.003
+   },
+   "years_diff_pp": {
+    "2022": -0.059,
+    "2023": -0.161,
+    "2024": 0.061,
+    "2025": 0.115
+   },
+   "years_reported": {
+    "2022": {
+     "diff_pp": -0.059,
+     "paired_days": 249
+    },
+    "2023": {
+     "diff_pp": -0.161,
+     "paired_days": 250
+    },
+    "2024": {
+     "diff_pp": 0.061,
+     "paired_days": 252
+    },
+    "2025": {
+     "diff_pp": 0.115,
+     "paired_days": 250
+    }
+   },
+   "h5_diff_pp": -0.048,
+   "h63_diff_pp": -0.019,
+   "bounds_diff_pp": {
+    "legacy": -0.061,
+    "zero": -0.06,
+    "loss": -0.035
+   },
+   "triggers_per_day": {
+    "candidate": 41.556,
+    "baseline": 39.646
+   },
+   "rule1_both_periods_up": false,
+   "rule2_years_better": 2,
+   "rule2_years_compared": 4,
+   "rule2_ok": false,
+   "rule3_ok": true,
+   "rule4_ok": true,
+   "rule5_ok": true,
+   "adopt": false,
+   "metric_view": "all"
+  },
+  "orb60": {
+   "paired_days": 1212,
+   "h20_diff_pp": {
+    "ALL": 0.03,
+    "P1": 0.061,
+    "P2": -0.029
+   },
+   "years_diff_pp": {
+    "2022": -0.057,
+    "2023": 0.057,
+    "2024": 0.18,
+    "2025": -0.127
+   },
+   "years_reported": {
+    "2022": {
+     "diff_pp": -0.057,
+     "paired_days": 249
+    },
+    "2023": {
+     "diff_pp": 0.057,
+     "paired_days": 250
+    },
+    "2024": {
+     "diff_pp": 0.18,
+     "paired_days": 252
+    },
+    "2025": {
+     "diff_pp": -0.127,
+     "paired_days": 250
+    }
+   },
+   "h5_diff_pp": 0.022,
+   "h63_diff_pp": 0.055,
+   "bounds_diff_pp": {
+    "legacy": 0.021,
+    "zero": 0.029,
+    "loss": 0.029
+   },
+   "triggers_per_day": {
+    "candidate": 36.993,
+    "baseline": 39.646
+   },
+   "rule1_both_periods_up": false,
+   "rule2_years_better": 2,
+   "rule2_years_compared": 4,
+   "rule2_ok": false,
+   "rule3_ok": true,
+   "rule4_ok": true,
+   "rule5_ok": true,
+   "adopt": false,
+   "metric_view": "all"
+  },
+  "disc5": {
+   "paired_days": 1212,
+   "h20_diff_pp": {
+    "ALL": -0.04,
+    "P1": -0.068,
+    "P2": 0.015
+   },
+   "years_diff_pp": {
+    "2022": -0.272,
+    "2023": 0.012,
+    "2024": 0.214,
+    "2025": 0.083
+   },
+   "years_reported": {
+    "2022": {
+     "diff_pp": -0.272,
+     "paired_days": 249
+    },
+    "2023": {
+     "diff_pp": 0.012,
+     "paired_days": 250
+    },
+    "2024": {
+     "diff_pp": 0.214,
+     "paired_days": 252
+    },
+    "2025": {
+     "diff_pp": 0.083,
+     "paired_days": 250
+    }
+   },
+   "h5_diff_pp": -0.016,
+   "h63_diff_pp": -0.039,
+   "bounds_diff_pp": {
+    "legacy": -0.055,
+    "zero": -0.047,
+    "loss": 0.02
+   },
+   "triggers_per_day": {
+    "candidate": 35.334,
+    "baseline": 39.646
+   },
+   "rule1_both_periods_up": false,
+   "rule2_years_better": 3,
+   "rule2_years_compared": 4,
+   "rule2_ok": true,
+   "rule3_ok": true,
+   "rule4_ok": true,
+   "rule5_ok": false,
+   "rule6_removed_mean_pp": -0.944,
+   "rule6_kept_mean_pp": -1.001,
+   "rule6_ok": false,
+   "adopt": false,
+   "metric_view": "all"
+  },
+  "adv25": {
+   "paired_days": 1210,
+   "h20_diff_pp": {
+    "ALL": 0.044,
+    "P1": 0.148,
+    "P2": -0.156
+   },
+   "years_diff_pp": {
+    "2022": 0.284,
+    "2023": 0.031,
+    "2024": 0.193,
+    "2025": -0.048
+   },
+   "years_reported": {
+    "2022": {
+     "diff_pp": 0.284,
+     "paired_days": 249
+    },
+    "2023": {
+     "diff_pp": 0.031,
+     "paired_days": 249
+    },
+    "2024": {
+     "diff_pp": 0.193,
+     "paired_days": 252
+    },
+    "2025": {
+     "diff_pp": -0.048,
+     "paired_days": 250
+    }
+   },
+   "h5_diff_pp": -0.105,
+   "h63_diff_pp": 0.073,
+   "bounds_diff_pp": {
+    "legacy": 0.041,
+    "zero": 0.069,
+    "loss": -0.066
+   },
+   "triggers_per_day": {
+    "candidate": 30.245,
+    "baseline": 39.646
+   },
+   "rule1_both_periods_up": false,
+   "rule2_years_better": 3,
+   "rule2_years_compared": 4,
+   "rule2_ok": true,
+   "rule3_ok": true,
+   "rule4_ok": true,
+   "rule5_ok": false,
+   "rule6_removed_mean_pp": -1.204,
+   "rule6_kept_mean_pp": -0.921,
+   "rule6_ok": true,
+   "adopt": false,
+   "metric_view": "all"
+  },
+  "basemin15": {
+   "paired_days": 1212,
+   "h20_diff_pp": {
+    "ALL": -0.002,
+    "P1": -0.01,
+    "P2": 0.012
+   },
+   "years_diff_pp": {
+    "2022": -0.016,
+    "2023": 0.007,
+    "2024": -0.022,
+    "2025": -0.001
+   },
+   "years_reported": {
+    "2022": {
+     "diff_pp": -0.016,
+     "paired_days": 249
+    },
+    "2023": {
+     "diff_pp": 0.007,
+     "paired_days": 250
+    },
+    "2024": {
+     "diff_pp": -0.022,
+     "paired_days": 252
+    },
+    "2025": {
+     "diff_pp": -0.001,
+     "paired_days": 250
+    }
+   },
+   "h5_diff_pp": 0.001,
+   "h63_diff_pp": -0.001,
+   "bounds_diff_pp": {
+    "legacy": -0.002,
+    "zero": -0.002,
+    "loss": -0.004
+   },
+   "triggers_per_day": {
+    "candidate": 39.586,
+    "baseline": 39.646
+   },
+   "rule1_both_periods_up": false,
+   "rule2_years_better": 1,
+   "rule2_years_compared": 4,
+   "rule2_ok": false,
+   "rule3_ok": true,
+   "rule4_ok": true,
+   "rule5_ok": true,
+   "adopt": false,
+   "metric_view": "all"
+  }
+ },
+ "filters": {
+  "noorb": {
+   "paired_days": 1212,
+   "h20_diff_pp": {
+    "ALL": -0.19,
+    "P1": -0.177,
+    "P2": -0.217
+   },
+   "years_diff_pp": {
+    "2022": -0.347,
+    "2023": -0.096,
+    "2024": -0.081,
+    "2025": -0.17
+   },
+   "years_reported": {
+    "2022": {
+     "diff_pp": -0.347,
+     "paired_days": 249
+    },
+    "2023": {
+     "diff_pp": -0.096,
+     "paired_days": 250
+    },
+    "2024": {
+     "diff_pp": -0.081,
+     "paired_days": 252
+    },
+    "2025": {
+     "diff_pp": -0.17,
+     "paired_days": 250
+    }
+   },
+   "h5_diff_pp": -0.065,
+   "h63_diff_pp": -0.115,
+   "bounds_diff_pp": {
+    "legacy": -0.189,
+    "zero": -0.185,
+    "loss": -0.204
+   },
+   "triggers_per_day": {
+    "candidate": 23.926,
+    "baseline": 39.646
+   },
+   "rule1_both_periods_up": false,
+   "rule2_years_better": 0,
+   "rule2_years_compared": 4,
+   "rule2_ok": false,
+   "rule3_ok": true,
+   "rule4_ok": true,
+   "rule5_ok": true,
+   "adopt": false
+  },
+  "mkt_gate": {
+   "paired_days": 1194,
+   "h20_diff_pp": {
+    "ALL": -0.153,
+    "P1": 0.126,
+    "P2": -0.682
+   },
+   "years_diff_pp": {
+    "2022": 0.308,
+    "2023": 0.545,
+    "2024": -0.43,
+    "2025": -0.793
+   },
+   "years_reported": {
+    "2022": {
+     "diff_pp": 0.308,
+     "paired_days": 242
+    },
+    "2023": {
+     "diff_pp": 0.545,
+     "paired_days": 242
+    },
+    "2024": {
+     "diff_pp": -0.43,
+     "paired_days": 251
+    },
+    "2025": {
+     "diff_pp": -0.793,
+     "paired_days": 248
+    }
+   },
+   "h5_diff_pp": -0.034,
+   "h63_diff_pp": 1.443,
+   "bounds_diff_pp": {
+    "legacy": -0.153,
+    "zero": -0.148,
+    "loss": -0.1
+   },
+   "triggers_per_day": {
+    "candidate": 32.628,
+    "baseline": 39.646
+   },
+   "rule1_both_periods_up": false,
+   "rule2_years_better": 2,
+   "rule2_years_compared": 4,
+   "rule2_ok": false,
+   "rule3_ok": true,
+   "rule4_ok": true,
+   "rule5_ok": true,
+   "adopt": false
+  },
+  "tod": {
+   "paired_days": 1212,
+   "h20_diff_pp": {
+    "ALL": -0.013,
+    "P1": -0.061,
+    "P2": 0.08
+   },
+   "years_diff_pp": {
+    "2022": -0.149,
+    "2023": -0.108,
+    "2024": 0.141,
+    "2025": -0.001
+   },
+   "years_reported": {
+    "2022": {
+     "diff_pp": -0.149,
+     "paired_days": 249
+    },
+    "2023": {
+     "diff_pp": -0.108,
+     "paired_days": 250
+    },
+    "2024": {
+     "diff_pp": 0.141,
+     "paired_days": 252
+    },
+    "2025": {
+     "diff_pp": -0.001,
+     "paired_days": 250
+    }
+   },
+   "h5_diff_pp": -0.021,
+   "h63_diff_pp": 0.051,
+   "bounds_diff_pp": {
+    "legacy": 0.015,
+    "zero": -0.003,
+    "loss": 0.034
+   },
+   "triggers_per_day": {
+    "candidate": 31.183,
+    "baseline": 39.646
+   },
+   "rule1_both_periods_up": false,
+   "rule2_years_better": 1,
+   "rule2_years_compared": 4,
+   "rule2_ok": false,
+   "rule3_ok": true,
+   "rule4_ok": true,
+   "rule5_ok": false,
+   "adopt": false
+  }
+ },
+ "stage2": {}
+}
