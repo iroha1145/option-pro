@@ -212,15 +212,13 @@ MacroFit*  = 50 + (MacroFit_i - 50) · confidence_i
 
 ### 影子字段，不改任何生产分数
 
-扫描结果每行附加：`macro_fit_shadow` / `macro_fit_confidence` /
+个股概览（`GET /api/stocks/{t}`）附加：`macro_fit_shadow` / `macro_fit_confidence` /
 `macro_fit_version` / `macro_tailwind` / `macro_supporting_factors` /
-`macro_opposing_factors` / `ranking_score_macro_shadow` / `macro_technical_gap`。
+`macro_opposing_factors` / `macro_shadow_status` / `macro_snapshot_date`。
 
-`ranking_score_macro_shadow = clip(ranking_score + clip((MacroFit*-50)/50×3, -3, +3), 0, 100)`
-
-内在强度、突破质量、市场适配、风格适配、`ranking_score` 一律不动，
-默认排序仍用 `ranking_score`。附加发生在 `_sort_scored` 之后，
-避免它有机会渗进排序键。
+收盘选股（`eod-limited-v1`）的扫描行**不带**宏观字段。旧扫描器在排序后附加的
+`ranking_score_macro_shadow` 与 `macro_technical_gap` 随旧扫描器一起删除，选股页的
+宏观列与筛选也已移除（2026-10-05）。
 
 ### 结构性宏观 vs 市场隐含确认
 
@@ -228,14 +226,14 @@ MacroFit*  = 50 + (MacroFit_i - 50) · confidence_i
 信用与风险模块用的 HYG、LQD、KRE、VIX、SPY/TLT、IWM/SPY 与技术市场形态
 读的是同一批价格，再算一次等于把一个信号按两个名字计两次权。
 
-`macro_technical_gap = 技术市场适配 - 结构性宏观`：
-差值大为正说明价格跑在环境前面，大为负说明宏观先行改善而价格没跟上。
-任一侧缺失时为 null，而不是 0。
+`/api/macro/conditions` 下发 `structural_score`，大盘页的「技术 × 结构性宏观」卡片
+用它和技术市场适配在前端求差：大为正说明价格跑在环境前面，大为负说明宏观先行
+改善而价格没跟上；任一侧缺失时为 null，而不是 0。
 
 ### 一次快照读，三个消费方共享（`linkage_reader.py`）
 
-选股行、板块雷达、突破列表要的是同样三件东西：已发布的宏观快照、按板块的一份
-适配分、结构性综合分。各自开一次仓库不只是重复读同一个文件，还可能**跨过一次
+个股概览、板块雷达、突破列表要的是同样两件东西：已发布的宏观快照、按板块的一份
+适配分。各自开一次仓库不只是重复读同一个文件，还可能**跨过一次
 发布** —— 同一个页面上的三块面板于是会描述两个不同的宏观环境。因此每个请求
 构造一个 `MacroFitReader`，`fit_for(sector_id)` 按板块记忆化。
 
@@ -298,24 +296,19 @@ AI/云），「首次出现者胜」是确定的但在**语义上是任意的**�
 
 ### 界面口径
 
-- 选股表的宏观适配是**可选列，默认关**，并配顺风/中性/逆风筛选；默认排序仍是
-  确定性排序，宏观不出现在任何排序键里。没有读数的行被筛选**排除**而不是当中性
-  留下，并明确说出被排除多少只。
 - 二维象限（技术 × 结构性宏观）以 **50 分**为界，而顺风/逆风的分界线是
   **65 / 35**。两套线不同，所以象限措辞用「偏强 / 偏弱」而不复用「顺风 / 逆风」：
   否则一个 53 分的读数会在徽标上显示「中性」、正下方象限说「宏观顺风」。
 - 驱动因素由后端下发 `{factor_id, label}`，中文名在 registry 解析。前端刻意不留
   第二份 id → 中文名的映射表：那样因子改名之后界面会继续显示旧名字，而且什么都
   不会失败。
-- 移动端卡片流与桌面表格共用同一个 `showMacro`。漏传它的话筛选照样生效、列表照样
-  被过滤，但卡片上一个读数都不显示 —— 用户看不出这些票为什么留下来了。
 
 ### 个股抽屉：不把两期快照拼成一份（`mergeMacroFields`）
 
 抽屉同时拿两份数据：**实时概览**（`GET /api/stocks/{t}`，对每只在主题表里的票都
 算得出分）和**落库的扫描行**（`GET /api/strength/stocks/{t}`，只回答公开快照 top
 切片里的代码，其余 404）。合并规则收在 `components/detail/api.ts` 的
-`mergeMacroFields` 里，两条：
+`mergeMacroFields` 里：
 
 1. **概览一旦回答了，它就是权威**，不再逐字段回填扫描行。逐字段 `??` 会犯两个方向
    相反的错：概览说「本次没有读数」（`macro_snapshot_unavailable` /
@@ -323,11 +316,5 @@ AI/云），「首次出现者胜」是确定的但在**语义上是任意的**�
    为 0，旧的负面因子被补回来。两者都是拿一份已经不成立的解释冒充当前读数 ——
    后端专门为此返回 null 而不是 50，前端不能在这一步把它抵消掉。概览必然带
    `macro_shadow_status`（四种取值都写），所以它非空就等于「答过了」；只有对接不带
-   该字段的旧后端时才整组回退扫描行。
-2. **`macro_technical_gap` 只在同期时才显示。** 差值只有扫描行算得出（它要该股的
-   `market_fit_score`），而分数来自实时概览，扫描可能比最新一期宏观旧几个小时。
-   两个数字各自都对，凑在一起却不是同一个测量时点。
-
-为此 `macro_snapshot_date` 必须两边都有：概览在有快照可指名时随读数一起下发
-（`ok` 与 `exposure_coverage_low` 两条路径都带），`/api/strength/stocks/{t}` 的信封
-带上扫描当时的 `macro_linkage`（owner 与匿名两个分支都带）。
+   该字段的旧后端时才整组回退扫描行；收盘选股的扫描行不带宏观字段，回退的结果是
+   「没有读数」。

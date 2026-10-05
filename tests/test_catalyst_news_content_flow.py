@@ -280,21 +280,6 @@ def test_fetch_finishing_cannot_attach_a_new_page_to_a_superseded_revision(story
         assert connection.execute("SELECT COUNT(*) FROM ai_jobs").fetchone()[0] == 0
 
 
-def test_v6_database_upgrades_without_rewriting_paid_history(tmp_path):
-    _etl, _ai, engine = _stack(tmp_path)
-    with sqlite3.connect(engine.db_path) as connection:
-        connection.execute("ALTER TABLE catalyst_local_news_revisions DROP COLUMN article_json")
-        connection.execute("ALTER TABLE catalyst_local_news_revisions DROP COLUMN article_checked_at")
-        connection.execute("ALTER TABLE catalyst_local_analysis_links DROP COLUMN input_context_json")
-        connection.execute("DELETE FROM catalyst_local_schema WHERE version=?", (local.SCHEMA_VERSION,))
-        connection.execute("INSERT INTO catalyst_local_schema VALUES('optix-local-catalyst-v6','prior-checksum','2026-09-01T00:00:00Z')")
-    engine.initialize()
-    engine.initialize()
-    with sqlite3.connect(engine.db_path) as connection:
-        assert connection.execute("SELECT checksum FROM catalyst_local_schema WHERE version='optix-local-catalyst-v6'").fetchone()[0] == "prior-checksum"
-        assert {r[1] for r in connection.execute("PRAGMA table_info(catalyst_local_news_revisions)")} >= {"article_json", "article_checked_at"}
-
-
 def test_previous_prompt_remains_readable_without_refetch_or_repayment(story):
     _etl, ai, engine = story
     job = engine.request_analysis(1, force=False)

@@ -768,19 +768,6 @@ def _normalize_earnings_output_row(value: Mapping[str, Any]) -> dict[str, Any]:
     return {field: normalized[field] for field in _EARNINGS_OUTPUT_FIELDS}
 
 
-def _expected_move_from_chain_snapshot(snapshot: Any) -> float | None:
-    """Calculate the at-the-money straddle move from one real option chain.
-
-    委托共享实现（app.services.earnings_enrichment）：只认 bid/ask 派生的
-    报价中值，宽价差按低质量报价拒绝，绝不用 last price 伪装成功。
-    """
-
-    if not isinstance(snapshot, dict):
-        return None
-    move = earnings_enrichment.compute_straddle_move(snapshot)
-    return None if move is None else move["move_pct"]
-
-
 def _expected_move_for_report(
     ticker: str,
     report_date: date,

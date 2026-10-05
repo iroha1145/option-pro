@@ -180,7 +180,7 @@ def test_invalid_receive_messages_do_not_reach_the_router(message):
 
 def test_authentication_still_precedes_body_reading_and_validation():
     sent = asyncio.run(_request(
-        _messages(), path="/api/settings", owner=False,
+        _messages(), path="/api/runtime-settings", owner=False,
         headers=[(b"content-length", b"-1")],
     ))
     assert sent[0]["status"] == 401

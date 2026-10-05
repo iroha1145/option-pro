@@ -41,7 +41,7 @@ Owner 能看到所有日常按钮，并可在页头手动关闭或开启模型�
 
 ## 配置清单
 
-`.env.example` 不再含正式配置，只保留迁移兼容说明；`machine.env.example` 有七个机器字段，`secrets.env.example` 有五个服务端密钥，合计 12 项。模型、推理等级、访问模式、功能模式、任务频率、定时时刻、并发、每日词元（Token）上限和保留期均由 `config/personal.toml` 管理。
+`.env.example` 是空模板，`.env` 只放部署级覆盖（例如突破雷达读取的 `RANGE_PERSISTENCE_VERSION`）；`machine.env.example` 有七个机器字段，`secrets.env.example` 有五个服务端密钥，合计 12 项。模型、推理等级、访问模式、功能模式、任务频率、定时时刻、并发、每日词元（Token）上限和保留期均由 `config/personal.toml` 管理。
 
 MacroLens 连接只有：
 

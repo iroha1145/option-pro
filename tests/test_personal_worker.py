@@ -2417,9 +2417,9 @@ def test_personal_catalyst_task_uses_https_bearer_etl_and_closes_client(
         def initialize(self) -> None:
             local_calls.append("initialize")
 
-        def consume_refresh_requested(self) -> bool:
+        def consume_refresh_requested(self) -> dict | None:
             local_calls.append("consume_refresh_requested")
-            return True
+            return {"request_id": "refresh-1", "operation_type": "source_health"}
 
         def reconcile(self, *, allow_scheduled_jobs: bool = False) -> dict:
             assert allow_scheduled_jobs is False
@@ -2477,6 +2477,8 @@ def test_personal_catalyst_task_uses_https_bearer_etl_and_closes_client(
         "local_intelligence",
     ]
     assert result.details["refresh_requested"] is True
+    assert result.details["refresh_operation_type"] == "source_health"
+    assert result.details["refresh_request_id"] == "refresh-1"
     assert set(result.details["streams"]) == {"news", "calendar"}
     assert [request.url.path for request in requests] == [
         "/internal/v1/news/changes",
@@ -2567,8 +2569,8 @@ def test_personal_catalyst_task_prunes_journal_when_due(
         def initialize(self) -> None:
             return None
 
-        def consume_refresh_requested(self) -> bool:
-            return False
+        def consume_refresh_requested(self) -> dict | None:
+            return None
 
         def reconcile(self, *, allow_scheduled_jobs: bool = False) -> dict:
             assert allow_scheduled_jobs is False
@@ -2635,8 +2637,8 @@ def test_personal_catalyst_task_isolates_stream_failure(tmp_path: Path) -> None:
             )
 
     class FakeIntelligence:
-        def consume_refresh_requested(self) -> bool:
-            return False
+        def consume_refresh_requested(self) -> dict | None:
+            return None
 
         def reconcile(self, *, allow_scheduled_jobs: bool = False) -> dict:
             assert allow_scheduled_jobs is False
@@ -2681,9 +2683,9 @@ def test_personal_catalyst_task_makes_no_calls_when_runtime_settings_are_invalid
             calls.append("sync_calendar")
 
     class LocalWorkForbidden:
-        def consume_refresh_requested(self) -> bool:
+        def consume_refresh_requested(self) -> dict | None:
             calls.append("consume_refresh_requested")
-            return True
+            return {"request_id": "refresh-1", "operation_type": "source_health"}
 
         def reconcile(self, *, allow_scheduled_jobs: bool = False) -> dict:
             calls.append("reconcile")
@@ -2798,8 +2800,8 @@ def test_catalyst_intelligence_failure_keeps_sync_and_caches_no_half_state(
             if attempts == 1:
                 raise OSError("local initialization failed")
 
-        def consume_refresh_requested(self) -> bool:
-            return False
+        def consume_refresh_requested(self) -> dict | None:
+            return None
 
         def reconcile(self, *, allow_scheduled_jobs: bool = False) -> dict:
             assert allow_scheduled_jobs is False
@@ -3011,8 +3013,8 @@ def test_focus_waits_for_first_catalyst_sync_attempt(
                 return sync_result()
 
         class FakeCatalystIntelligence:
-            def consume_refresh_requested(self) -> bool:
-                return False
+            def consume_refresh_requested(self) -> dict | None:
+                return None
 
             def reconcile(self, *, allow_scheduled_jobs: bool = False) -> dict:
                 assert allow_scheduled_jobs is False

@@ -160,7 +160,8 @@ NEWS_ARTICLE_MAX_BYTES = 28_000
 NEWS_SUMMARY_WITH_ARTICLE_MAX_BYTES = 10_000
 ARTICLE_RETRY_SECONDS = 30 * 60
 SCHEDULED_ARTICLE_PROBE_LIMIT = 12
-# 旧库升级时给热点条目补上计划级分数列（v6）。定义与 _SCHEMA 里的建表语句一致。
+# 热点条目的计划级分数列（v6 起在 _SCHEMA 建表语句里）。读路径按这组列名判断
+# 能否直接读计划分数。
 _HOTSPOT_ITEM_SCORE_COLUMNS = (
     (
         "hot_score",
@@ -363,6 +364,8 @@ CREATE TABLE IF NOT EXISTS catalyst_local_legacy_import_audit (
     observed_at TEXT NOT NULL
 );
 """.strip()
+# The checksum covers the whole script, so retired tables keep their CREATE
+# statement: catalyst_local_legacy_import_audit is no longer read or written.
 SCHEMA_CHECKSUM = hashlib.sha256(_SCHEMA.encode("utf-8")).hexdigest()
 TIMESTAMP_NORMALIZATION_VERSION = "optix-local-catalyst-timestamps-v1"
 TIMESTAMP_NORMALIZATION_CHECKSUM = hashlib.sha256(
@@ -929,10 +932,10 @@ def _paid_runtime_configuration_change(
 
 
 def _hotspot_plan_score_columns(connection: sqlite3.Connection) -> str:
-    """Plan-score select list, NULL until the worker has added the columns.
+    """Plan-score select list, NULL when the table lacks the v6 score columns.
 
-    Only the worker's initialize() upgrades the schema; the web process reads
-    the same file and may start first, so it falls back to group scores.
+    Stores created since v6 always have them; the NULL branch makes callers
+    fall back to group scores.
     """
 
     columns = {
@@ -1629,50 +1632,21 @@ class LocalCatalystIntelligence:
             ).fetchone()
             if row is not None and str(row["checksum"]) != SCHEMA_CHECKSUM:
                 raise RuntimeError("local_catalyst_schema_checksum_mismatch")
-            # Several worker tasks initialize their own instance at startup;
-            # the write lock serializes the check-then-ALTER column upgrade.
-            connection.execute("BEGIN IMMEDIATE")
-            self._add_missing_columns(
-                connection, "catalyst_local_hotspot_items", _HOTSPOT_ITEM_SCORE_COLUMNS,
-            )
-            self._add_missing_columns(
-                connection,
-                "catalyst_local_news_revisions",
-                (("article_json", "TEXT"), ("article_checked_at", "TEXT")),
-            )
-            self._add_missing_columns(
-                connection, "catalyst_local_analysis_links", (("input_context_json", "TEXT"),),
-            )
-            connection.execute(
+            # The timestamp row marks a retired one-shot normalization; new
+            # stores record it too so their registry matches production.
+            connection.executemany(
                 """INSERT OR IGNORE INTO catalyst_local_schema(
                        version,checksum,applied_at
                    ) VALUES(?,?,?)""",
-                (SCHEMA_VERSION, SCHEMA_CHECKSUM, _iso()),
-            )
-            timestamp_row = connection.execute(
-                "SELECT checksum FROM catalyst_local_schema WHERE version=?",
-                (TIMESTAMP_NORMALIZATION_VERSION,),
-            ).fetchone()
-            if (
-                timestamp_row is not None
-                and str(timestamp_row["checksum"])
-                != TIMESTAMP_NORMALIZATION_CHECKSUM
-            ):
-                raise RuntimeError(
-                    "local_catalyst_timestamp_normalization_checksum_mismatch"
-                )
-            if timestamp_row is None:
-                self._normalize_local_news_timestamps(connection)
-                connection.execute(
-                    """INSERT OR IGNORE INTO catalyst_local_schema(
-                           version,checksum,applied_at
-                       ) VALUES(?,?,?)""",
+                (
+                    (SCHEMA_VERSION, SCHEMA_CHECKSUM, _iso()),
                     (
                         TIMESTAMP_NORMALIZATION_VERSION,
                         TIMESTAMP_NORMALIZATION_CHECKSUM,
                         _iso(),
                     ),
-                )
+                ),
+            )
             connection.commit()
         self._local_schema_ready = True
 
@@ -1681,20 +1655,6 @@ class LocalCatalystIntelligence:
 
         if not self._local_schema_ready:
             self.initialize()
-
-    @staticmethod
-    def _add_missing_columns(
-        connection: sqlite3.Connection,
-        table: str,
-        columns: Iterable[tuple[str, str]],
-    ) -> None:
-        existing = {
-            str(row["name"])
-            for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
-        }
-        for name, definition in columns:
-            if name not in existing:
-                connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
 
     def prune_journal(
         self,
@@ -1852,52 +1812,6 @@ class LocalCatalystIntelligence:
             ).rowcount
             connection.commit()
         return totals
-
-    @staticmethod
-    def _normalize_local_news_timestamps(
-        connection: sqlite3.Connection,
-    ) -> int:
-        rows = connection.execute(
-            """SELECT news_id,change_sequence,content_hash,published_at,
-                      fetched_at,source_available_at
-               FROM catalyst_local_news_revisions
-               WHERE (published_at IS NOT NULL AND published_at NOT LIKE '%Z')
-                  OR fetched_at NOT LIKE '%Z'
-                  OR source_available_at NOT LIKE '%Z'"""
-        ).fetchall()
-        updates: list[tuple[str | None, str, str, int, int, str]] = []
-        for row in rows:
-            updates.append(
-                (
-                    _normalize_utc_timestamp(
-                        row["published_at"],
-                        field="published_at",
-                        optional=True,
-                    ),
-                    str(
-                        _normalize_utc_timestamp(
-                            row["fetched_at"],
-                            field="fetched_at",
-                        )
-                    ),
-                    str(
-                        _normalize_utc_timestamp(
-                            row["source_available_at"],
-                            field="source_available_at",
-                        )
-                    ),
-                    int(row["news_id"]),
-                    int(row["change_sequence"]),
-                    str(row["content_hash"]),
-                )
-            )
-        connection.executemany(
-            """UPDATE catalyst_local_news_revisions
-               SET published_at=?,fetched_at=?,source_available_at=?
-               WHERE news_id=? AND change_sequence=? AND content_hash=?""",
-            updates,
-        )
-        return len(updates)
 
     def validate_tickers(self, values: Iterable[Any]) -> list[str]:
         output: list[str] = []
@@ -4501,7 +4415,6 @@ class LocalCatalystIntelligence:
             except Exception:
                 connection.rollback()
                 raise
-        legacy = self._import_legacy_from_database()
         for _plan_attempt in range(3):
             plan_now = max(now, _utc_now())
             with self._connect() as connection:
@@ -4546,8 +4459,6 @@ class LocalCatalystIntelligence:
             "focus_links_recovered": recovered_focus_links,
             "analyses_published": analyses,
             "focus_results_published": focus_results,
-            "legacy_imported": int(legacy["imported"]),
-            "legacy_rejected": int(legacy["rejected"]),
             "prepared_revision": revision,
             "hotspots": hotspots,
             "queued": queued,
@@ -7619,60 +7530,6 @@ class LocalCatalystIntelligence:
             "warnings": [],
         }
 
-    def cancel_market_focus_cycle(self, cycle_id: str) -> dict[str, Any] | None:
-        for _attempt in range(5):
-            with self._connect() as connection:
-                target = connection.execute(
-                    """SELECT job_id,status FROM catalyst_local_focus_cycles
-                       WHERE cycle_id=?""",
-                    (cycle_id,),
-                ).fetchone()
-            if target is None:
-                return None
-            target_job_id = str(target["job_id"])
-            updated = self.ai_repository.request_cancel(target_job_id)
-            with self._connect() as connection:
-                connection.execute("BEGIN IMMEDIATE")
-                try:
-                    current = connection.execute(
-                        """SELECT job_id,status
-                           FROM catalyst_local_focus_cycles
-                           WHERE cycle_id=?""",
-                        (cycle_id,),
-                    ).fetchone()
-                    if current is None:
-                        connection.commit()
-                        return None
-                    if str(current["job_id"]) != target_job_id:
-                        connection.commit()
-                        continue
-                    if (
-                        updated is not None
-                        and str(current["status"])
-                        in {"pending", "queued", "in_progress"}
-                    ):
-                        changed = connection.execute(
-                            """UPDATE catalyst_local_focus_cycles SET
-                                   status=?,updated_at=?
-                               WHERE cycle_id=? AND job_id=?""",
-                            (
-                                str(updated["status"]),
-                                str(updated["updated_at"]),
-                                cycle_id,
-                                target_job_id,
-                            ),
-                        ).rowcount
-                        if changed != 1:
-                            raise RuntimeError(
-                                "market_focus_cancel_contention"
-                            )
-                    connection.commit()
-                except Exception:
-                    connection.rollback()
-                    raise
-            return self.market_focus_cycle(cycle_id)
-        raise RuntimeError("market_focus_cancel_contention")
-
     @staticmethod
     def _manual_operation_public(
         row: sqlite3.Row | dict[str, Any],
@@ -7955,282 +7812,6 @@ class LocalCatalystIntelligence:
             if row is not None
             else None
         )
-
-    def import_verified_legacy_rows(self, rows: Iterable[dict[str, Any]]) -> dict[str, int]:
-        """Import only exact current-identity, current-schema Chinese results."""
-
-        self.initialize()
-        candidates = [dict(row) for row in rows if isinstance(row, dict)]
-        latest: dict[tuple[int, int, str], tuple[datetime, str]] = {}
-        for raw in candidates:
-            news_id = raw.get("news_id")
-            sequence = raw.get("change_sequence")
-            content_hash = raw.get("content_hash")
-            completed_at = _parse_time(str(raw.get("completed_at") or ""))
-            if (
-                type(news_id) is not int
-                or type(sequence) is not int
-                or not isinstance(content_hash, str)
-                or completed_at is None
-            ):
-                continue
-            identity = str(raw.get("legacy_identity") or _sha(raw))
-            key = (news_id, sequence, content_hash)
-            rank = (completed_at, identity)
-            if key not in latest or rank > latest[key]:
-                latest[key] = rank
-        expected_schema, expected_schema_hash = ai_runtime.schema_identity(
-            "news_impact"
-        )
-        imported = 0
-        rejected = 0
-        with self._connect() as connection:
-            for raw in candidates:
-                identity = str(raw.get("legacy_identity") or _sha(raw))
-                news_id = raw.get("news_id")
-                sequence = raw.get("change_sequence")
-                content_hash = raw.get("content_hash")
-                result = raw.get("result")
-                outcome = "rejected"
-                reason = "identity_or_language_invalid"
-                completed_at = _parse_time(str(raw.get("completed_at") or ""))
-                key = (
-                    (news_id, sequence, content_hash)
-                    if type(news_id) is int
-                    and type(sequence) is int
-                    and isinstance(content_hash, str)
-                    else None
-                )
-                is_latest = bool(
-                    key is not None
-                    and completed_at is not None
-                    and latest.get(key) == (completed_at, identity)
-                    and raw.get("_is_latest", True) is not False
-                )
-                metadata_matches = (
-                    raw.get("model") == self.model
-                    and raw.get("reasoning") == self.reasoning
-                    and raw.get("prompt_version") in ai_runtime.NEWS_READABLE_PROMPT_VERSIONS
-                    and (
-                        raw.get("schema_version")
-                        or raw.get("analysis_schema_version")
-                    )
-                    == expected_schema
-                    and (
-                        raw.get("schema_sha256") in {None, expected_schema_hash}
-                    )
-                )
-                if not is_latest:
-                    reason = "superseded_legacy_result"
-                elif not metadata_matches:
-                    reason = "legacy_metadata_mismatch"
-                elif type(news_id) is int and type(sequence) is int and isinstance(content_hash, str) and isinstance(result, dict):
-                    revision = connection.execute(
-                        """SELECT r.canonical_tickers_json
-                           FROM catalyst_local_news_revisions r
-                           JOIN macrolens_etl_news current
-                             ON current.news_id=r.news_id
-                            AND current.change_sequence=r.change_sequence
-                            AND current.content_hash=r.content_hash
-                            AND current.deleted=0
-                           WHERE r.news_id=? AND r.change_sequence=?
-                             AND r.content_hash=?""",
-                        (news_id, sequence, content_hash),
-                    ).fetchone()
-                    allowed_tickers = self.validate_tickers(
-                        raw.get("allowed_tickers") or []
-                    )
-                    if revision is not None and allowed_tickers != self.validate_tickers(
-                        _loads(revision["canonical_tickers_json"], [])
-                    ):
-                        revision = None
-                    fake_job = {
-                        "job_type": "news_impact",
-                        "model": raw.get("model"),
-                        "reasoning": raw.get("reasoning"),
-                        "execution_mode": EXECUTION_MODE,
-                        "prompt_version": raw.get("prompt_version"),
-                        "schema_version": raw.get("schema_version")
-                        or raw.get("analysis_schema_version"),
-                        "schema_sha256": raw.get("schema_sha256")
-                        or expected_schema_hash,
-                        "payload_json": _json(
-                            {
-                                "news_id": news_id,
-                                "change_sequence": sequence,
-                                "content_hash": content_hash,
-                                "allowed_tickers": allowed_tickers,
-                            }
-                        ),
-                        "result_json": _json(result),
-                        "status": "completed",
-                        "job_id": "legacy_" + hashlib.sha256(identity.encode()).hexdigest()[:32],
-                        "submitted_at": raw.get("completed_at"),
-                        "updated_at": str(raw.get("completed_at") or _iso()),
-                        "completed_at": str(raw.get("completed_at") or _iso()),
-                        "error_code": None,
-                    }
-                    public = self._verified_public_job(fake_job, expected_type="news_impact") if revision else None
-                    if public is not None:
-                        job_id = str(fake_job["job_id"])
-                        inserted = connection.execute(
-                            """INSERT OR IGNORE INTO catalyst_local_analysis_links(
-                                   news_id,change_sequence,content_hash,job_id,result_json,
-                                   result_available_at,verified_at,created_at
-                               ) VALUES(?,?,?,?,?,?,?,?)""",
-                            (
-                                news_id,
-                                sequence,
-                                content_hash,
-                                job_id,
-                                _json(public["result"]),
-                                fake_job["completed_at"],
-                                _iso(),
-                                _iso(),
-                            ),
-                        ).rowcount
-                        outcome = "imported"
-                        reason = None
-                        imported += int(inserted)
-                if outcome == "rejected":
-                    rejected += 1
-                connection.execute(
-                    """INSERT OR REPLACE INTO catalyst_local_legacy_import_audit(
-                           legacy_identity,outcome,reason,observed_at
-                       ) VALUES(?,?,?,?)""",
-                    (identity, outcome, reason, _iso()),
-                )
-            connection.commit()
-        return {"imported": imported, "rejected": rejected}
-
-    def _import_legacy_from_database(self) -> dict[str, int]:
-        """Audit same-database legacy projections once and import only zh-CN rows."""
-
-        source_candidates: list[dict[str, Any]] = []
-        with self._connect() as connection:
-            tables = {
-                str(row["name"])
-                for row in connection.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table'"
-                ).fetchall()
-            }
-            audited = {
-                str(row["legacy_identity"])
-                for row in connection.execute(
-                    "SELECT legacy_identity FROM catalyst_local_legacy_import_audit"
-                ).fetchall()
-            }
-            definitions = (
-                (
-                    "catalyst_analysis_projections",
-                    "projection_id",
-                    "item_change_sequence",
-                ),
-                (
-                    "catalyst_analysis_revisions",
-                    "analysis_revision_id",
-                    "item_change_sequence",
-                ),
-            )
-            for table, identity_column, sequence_column in definitions:
-                if table not in tables:
-                    continue
-                columns = {
-                    str(row["name"])
-                    for row in connection.execute(
-                        f"PRAGMA table_info({table})"
-                    ).fetchall()
-                }
-                metadata_select = ",".join(
-                    (
-                        name
-                        if name in columns
-                        else f"NULL AS {name}"
-                    )
-                    for name in (
-                        "model",
-                        "reasoning",
-                        "prompt_version",
-                        "analysis_schema_version",
-                    )
-                )
-                rows = connection.execute(
-                    f"""SELECT {identity_column} AS legacy_id,news_id,
-                                {sequence_column} AS change_sequence,
-                                content_hash,available_at,raw_json,
-                                {metadata_select}
-                         FROM {table} ORDER BY available_at DESC"""
-                ).fetchall()
-                for row in rows:
-                    legacy_identity = f"{table}:{row['legacy_id']}"
-                    raw_result = _loads(row["raw_json"], None)
-                    if not isinstance(raw_result, dict):
-                        raw_result = {}
-                    nested = raw_result.get("result")
-                    if isinstance(nested, dict):
-                        raw_result = nested
-                    revision = connection.execute(
-                        """SELECT canonical_tickers_json
-                           FROM catalyst_local_news_revisions
-                           WHERE news_id=? AND change_sequence=? AND content_hash=?""",
-                        (
-                            row["news_id"],
-                            row["change_sequence"],
-                            row["content_hash"],
-                        ),
-                    ).fetchone()
-                    source_candidates.append(
-                        {
-                            "legacy_identity": legacy_identity,
-                            "news_id": int(row["news_id"]),
-                            "change_sequence": int(row["change_sequence"]),
-                            "content_hash": str(row["content_hash"]),
-                            "allowed_tickers": (
-                                _loads(revision["canonical_tickers_json"], [])
-                                if revision is not None
-                                else []
-                            ),
-                            "completed_at": str(row["available_at"]),
-                            "result": raw_result,
-                            "model": row["model"],
-                            "reasoning": row["reasoning"],
-                            "prompt_version": row["prompt_version"],
-                            "schema_version": row["analysis_schema_version"],
-                            "_already_audited": legacy_identity in audited,
-                        }
-                    )
-        latest: dict[tuple[int, int, str], tuple[datetime, str]] = {}
-        for candidate in source_candidates:
-            completed_at = _parse_time(str(candidate.get("completed_at") or ""))
-            if completed_at is None:
-                continue
-            key = (
-                int(candidate["news_id"]),
-                int(candidate["change_sequence"]),
-                str(candidate["content_hash"]),
-            )
-            rank = (completed_at, str(candidate["legacy_identity"]))
-            if key not in latest or rank > latest[key]:
-                latest[key] = rank
-        candidates: list[dict[str, Any]] = []
-        for candidate in source_candidates:
-            if candidate.pop("_already_audited", False):
-                continue
-            completed_at = _parse_time(str(candidate.get("completed_at") or ""))
-            key = (
-                int(candidate["news_id"]),
-                int(candidate["change_sequence"]),
-                str(candidate["content_hash"]),
-            )
-            candidate["_is_latest"] = bool(
-                completed_at is not None
-                and latest.get(key)
-                == (completed_at, str(candidate["legacy_identity"]))
-            )
-            candidates.append(candidate)
-        if not candidates:
-            return {"imported": 0, "rejected": 0}
-        return self.import_verified_legacy_rows(candidates)
 
 
 __all__ = [

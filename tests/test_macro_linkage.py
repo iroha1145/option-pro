@@ -20,11 +20,8 @@ from app.services.macro_conditions.exposures import (
 from app.services.macro_conditions.linkage import (
     BREAKOUT_PRIORITY_SHADOW_CAP,
     MIN_EXPOSURE_COVERAGE,
-    STRENGTH_SHADOW_CAP,
     compute_macro_fit,
-    macro_technical_gap,
     shadow_alert_priority_adjustment,
-    shadow_ranking_adjustment,
     structural_macro_score,
     tailwind_label,
 )
@@ -202,24 +199,19 @@ def test_shadow_adjustments_never_exceed_their_caps(score: float) -> None:
         [{"factor_id": f, "score": score, "confidence": 1.0} for f in betas],
         sector_id="software",
     )
-    assert abs(shadow_ranking_adjustment(fit)) <= STRENGTH_SHADOW_CAP
     assert abs(shadow_alert_priority_adjustment(fit)) <= BREAKOUT_PRIORITY_SHADOW_CAP
 
 
 def test_an_unavailable_fit_moves_nothing() -> None:
     fit = compute_macro_fit(_rows(wti_oil=10.0), sector_id="etfs")
-    assert shadow_ranking_adjustment(fit) == 0.0
     assert shadow_alert_priority_adjustment(fit) == 0.0
 
 
 def test_the_cap_is_small_enough_not_to_overrule_price_evidence() -> None:
-    """Three points cannot reorder stocks that differ meaningfully on their own."""
-
-    assert STRENGTH_SHADOW_CAP <= 3.0
     assert BREAKOUT_PRIORITY_SHADOW_CAP <= 4.0
 
 
-# ---------------- structural macro, and the two-dimensional read ----------------
+# ---------------- structural macro ----------------
 
 
 def test_structural_macro_excludes_credit_and_risk() -> None:
@@ -252,14 +244,6 @@ def test_structural_macro_excludes_credit_and_risk() -> None:
 def test_structural_macro_is_none_when_nothing_structural_is_scored() -> None:
     assert structural_macro_score([{"module_id": "credit", "score": 70.0}]) is None
     assert structural_macro_score([]) is None
-
-
-def test_the_gap_separates_price_running_ahead_from_macro_leading() -> None:
-    assert macro_technical_gap(80.0, 40.0) == 40.0
-    assert macro_technical_gap(35.0, 70.0) == -35.0
-    # A missing side is not a zero gap.
-    assert macro_technical_gap(None, 70.0) is None
-    assert macro_technical_gap(80.0, None) is None
 
 
 def test_tailwind_labels_are_bucketed_not_invented() -> None:
@@ -312,7 +296,6 @@ def _reader(score: float = 90.0, **overrides):
         "snapshot_date": "2026-07-24",
         "scoring_version": "optix-macro-score-v1",
         "available_at": "2026-07-24T22:30:00+00:00",
-        "structural_score": score,
         "factors": _all_factor_rows(score),
     }
     fields.update(overrides)
@@ -826,23 +809,3 @@ def test_a_database_that_cannot_be_stated_is_never_cached(monkeypatch) -> None:
     assert linkage_reader.load_macro_fit_reader().available is True
     assert calls["n"] == 2, "cached a snapshot whose freshness cannot be checked"
     linkage_reader.reset_macro_fit_reader_cache()
-
-
-def test_the_per_ticker_strength_endpoint_names_its_macro_snapshot() -> None:
-    """The scan row's shadow fields belong to a specific snapshot.
-
-    Without this the drawer cannot tell whether the row's gap and the live fit
-    describe the same moment, and it would show a precise-looking number built
-    from two different macro environments.
-    """
-
-    import inspect
-
-    from app.api import strength as strength_api
-
-    for source in (
-        inspect.getsource(strength_api.stock),
-    ):
-        assert '"macro_linkage": payload.get("macro_linkage")' in source, (
-            "the per-ticker envelope drops the macro provenance the drawer needs"
-        )

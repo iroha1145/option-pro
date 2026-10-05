@@ -42,7 +42,7 @@ from app.access import (
     require_public_read_or_owner_access,
     require_same_origin_action,
 )
-from app.deployment_boundary import canonicalize_hostname, normalize_allowed_hosts
+from app.deployment_boundary import canonicalize_hostname
 from app.document_policy import is_stock_document_path, static_cache_control
 from app.request_limits import BodyRejected, ClientDisconnected, bounded_api_receive
 from app.api import (
@@ -59,7 +59,6 @@ from app.api import (
     quotes,
     runtime_settings,
     sectors,
-    settings,
     signals,
     stocks,
     strength,
@@ -82,10 +81,6 @@ _FRONTEND_MANIFEST_REQUIRED = (
     _os.environ.get("FRONTEND_MANIFEST_REQUIRED", "").strip().lower() in _TRUTHY_VALUES
 )
 _FRONTEND_MANIFEST_PATH = _os.environ.get("FRONTEND_MANIFEST_PATH", "").strip()
-
-
-def _configured_allowed_hosts(host_bind: str, raw: str) -> list[str]:
-    return list(normalize_allowed_hosts(host_bind, raw))
 
 
 _ACCESS_RUNTIME = get_access_runtime()
@@ -238,7 +233,7 @@ _CACHED_MARKET_READ_PATTERNS = tuple(
     _re.compile(pattern, _re.IGNORECASE)
     for pattern in (
         r"^/api/stocks/[^/]+$",
-        r"^/api/stocks/[^/]+/(?:signals|chart|technical)$",
+        r"^/api/stocks/[^/]+/(?:chart|technical)$",
         r"^/api/options/[^/]+/(?:expirations|chain)$",
         r"^/api/signals/stock/[^/]+$",
         r"^/api/strength/stocks/[^/]+$",
@@ -295,7 +290,6 @@ _PUBLIC_READ_API_PATHS = {
     "/api/stocks/watchlist",
     "/api/stocks/search",
     "/api/stocks/data/status",
-    "/api/options/unusual",
     "/api/earnings/upcoming",
     "/api/sectors",
     "/api/market/indices",
@@ -326,12 +320,11 @@ _PUBLIC_READ_API_PATTERNS = tuple(
     _re.compile(pattern, _re.IGNORECASE)
     for pattern in (
         r"^/api/stocks/[^/]+$",
-        r"^/api/stocks/[^/]+/(?:signals|logo|chart|technical)$",
+        r"^/api/stocks/[^/]+/(?:logo|chart|technical)$",
         r"^/api/options/[^/]+/(?:expirations|chain)$",
-        r"^/api/sectors/[^/]+/(?:iv-ranking|heatmap)$",
+        r"^/api/sectors/[^/]+/iv-ranking$",
         r"^/api/signals/stock/[^/]+$",
         r"^/api/macro/conditions/modules/[a-z_]{1,32}$",
-        r"^/api/macro/conditions/factors/[a-z0-9_]{1,64}/history$",
         r"^/api/catalysts/news/[1-9][0-9]*$",
         r"^/api/catalysts/tickers/(?!batch$)[A-Z0-9][A-Z0-9.-]{0,19}$",
         r"^/api/strength/stocks/[^/]+$",
@@ -764,7 +757,6 @@ app.include_router(access.router)
 # own cookie and can only reach that caller's rows.
 app.include_router(accounts.router)
 app.include_router(view_preferences.router)
-app.include_router(settings.router)
 
 # Docker-compose runs from /app/backend; local runs may be from repo root.
 # Allow override via FRONTEND_DIR env var for unusual deployments.

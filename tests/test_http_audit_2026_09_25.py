@@ -199,7 +199,6 @@ def _served_while_blocked(
     [
         ("POST", "/api/worker/actions/retention", {"json": {}}, "request_action", 202),
         ("GET", "/api/worker/status", {}, "health", 200),
-        ("GET", "/api/worker/actions", {}, "action_requests", 200),
         ("GET", "/api/worker/actions/req-1", {}, "action_request", 200),
     ],
 )

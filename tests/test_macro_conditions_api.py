@@ -24,7 +24,7 @@ from app.access import (
 )
 from app.api import macro_conditions as macro_api
 from app.personal_config import AccessConfig
-from app.services.macro_conditions.registry import FACTORS, MODULES, SCORING_VERSION
+from app.services.macro_conditions.registry import MODULES, SCORING_VERSION
 from app.services.macro_conditions.repository import MacroRepository
 from app.services.macro_conditions.service import (
     MacroConditionsService,
@@ -262,45 +262,11 @@ def test_module_detail_lists_every_factor_with_units_and_formulas(
         assert factor["source"]
 
 
-def test_unknown_module_and_factor_return_not_found(tmp_path, monkeypatch) -> None:
+def test_unknown_module_returns_not_found(tmp_path, monkeypatch) -> None:
     _seeded_store(tmp_path)
     _environment(monkeypatch, tmp_path, fred_key="a" * 32)
     with TestClient(_app(), base_url="https://testserver") as client:
         assert client.get("/api/macro/conditions/modules/nope").status_code == 404
-        assert (
-            client.get("/api/macro/conditions/factors/nope/history").status_code == 404
-        )
-
-
-def test_factor_history_returns_only_that_factor(tmp_path, monkeypatch) -> None:
-    _seeded_store(tmp_path)
-    _environment(monkeypatch, tmp_path, fred_key="a" * 32)
-    with TestClient(_app(), base_url="https://testserver") as client:
-        response = client.get("/api/macro/conditions/factors/vix/history?days=60")
-    payload = response.json()
-    assert payload["factor_id"] == "vix"
-    assert payload["module_id"] == "risk"
-    assert payload["points"]
-    assert all(set(point) == {
-        "date",
-        "raw_value",
-        "signed_value",
-        "score",
-        "status",
-        "data_through",
-        "history_basis",
-    } for point in payload["points"])
-
-
-def test_every_registered_factor_is_addressable(tmp_path, monkeypatch) -> None:
-    _seeded_store(tmp_path)
-    _environment(monkeypatch, tmp_path, fred_key="a" * 32)
-    with TestClient(_app(), base_url="https://testserver") as client:
-        for factor in FACTORS:
-            response = client.get(
-                f"/api/macro/conditions/factors/{factor.factor_id}/history?days=30"
-            )
-            assert response.status_code == 200, factor.factor_id
 
 
 def test_macro_responses_never_contain_a_secret_or_a_database_path(
@@ -315,7 +281,6 @@ def test_macro_responses_never_contain_a_secret_or_a_database_path(
             client.get("/api/macro/conditions").text,
             client.get("/api/macro/conditions/history?days=30").text,
             client.get("/api/macro/conditions/modules/risk").text,
-            client.get("/api/macro/conditions/factors/vix/history").text,
         ]
     for body in bodies:
         assert secret not in body

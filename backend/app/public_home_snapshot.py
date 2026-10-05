@@ -37,10 +37,8 @@ PUBLIC_HOME_RESOURCE_ORDER = (
     "indices",
     "focus_overview",
     "focus_chart",
-    "focus_signals",
     "market_signals",
     "earnings",
-    "unusual",
 )
 # cta_trend 是可选资源：不进 release 闸门（首次部署时 worker 尚未发布过
 # 它的快照，设为必需会让部署在第一次发布前永远过不了验证）。
@@ -268,6 +266,9 @@ PUBLIC_HOME_RESOURCE_SPECS: dict[str, PublicHomeResourceSpec] = {
     # the same ticker already use 7 days, which is what the comment above intends.
     "focus_overview": PublicHomeResourceSpec("focus-overview-v2", 7 * 24 * 60 * 60),
     "focus_chart": PublicHomeResourceSpec("focus-chart-v1", 7 * 24 * 60 * 60),
+    # focus_signals 与 unusual 已停产（没有读者），worker 不再刷新它们。
+    # 生产快照里还留着这两项；规格、参数和校验器暂留，否则整份文档会因
+    # 出现未知资源名被拒绝。
     "focus_signals": PublicHomeResourceSpec("focus-signals-v1", 7 * 24 * 60 * 60),
     "market_signals": PublicHomeResourceSpec("market-signals-v1", 7 * 24 * 60 * 60),
     "breakout_lead_chart": PublicHomeResourceSpec(

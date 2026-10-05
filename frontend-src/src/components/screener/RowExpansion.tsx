@@ -19,7 +19,6 @@ import Sparkline from '@/components/charts/Sparkline';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import { strengthBarClass } from '@/lib/strengthColor';
 import InfoHint from '@/components/shared/InfoHint';
-import MacroFitPanel from '@/components/shared/MacroFitPanel';
 import { SCORE_HINTS, type ScoreHint } from '@/lib/scoreHints';
 import { subscoreDimsOf,
   type RowSignalsState,
@@ -262,17 +261,6 @@ export default function RowExpansion({ row, dollarVolume, signals, onOpenDetail 
             )}
           </div>
         )}
-        {/* 宏观适配放在分项下面：它是这些分数的背景，不是其中一项。 */}
-        <div className="mt-4 border-t border-line pt-3">
-          <MacroFitPanel
-            score={row.macroFit}
-            tailwind={row.macroTailwind}
-            confidence={row.macroFitConfidence}
-            supporting={row.macroSupporting}
-            opposing={row.macroOpposing}
-            technicalGap={row.macroTechnicalGap}
-          />
-        </div>
       </div>
 
       {/* ② 迷你点阵面积图（真实日 K / mock sparkline；空态诚实） */}

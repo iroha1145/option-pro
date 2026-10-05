@@ -153,13 +153,12 @@ relative_return_63d = 100 × [ ln(A_t / A_{t-63}) − ln(B_t / B_{t-63}) ]
 - FRED 对形态错误或未注册的 key 回 HTTP 400，客户端映射为 `fred_api_key_invalid`
   而不是 `fred_unavailable`——密钥问题与上游故障必须分开报。
 
-必须同步的五面镜子（漏一处 CI 或 CLI 就拒）：
+必须同步的四面镜子（漏一处 CI 或 CLI 就拒）：
 
 1. `personal.sh` 的 `select_affected_services()` case 连续字面量
-2. `backend/app/tools/personal_secrets.py::SECRET_KEYS`
-3. `backend/app/legacy_env_adapter.py::SECRET_KEYS`
-4. `tests/test_personal_secrets.py` 的精确集合断言
-5. `tests/test_personal_secrets.py` 的 shell 连续字面量断言
+2. `backend/app/secret_keys.py::SECRET_KEYS`（`tools/personal_secrets.py` 与 `runtime_environment.py` 都从这里导入）
+3. `tests/test_personal_secrets.py` 的精确集合断言
+4. `tests/test_personal_secrets.py` 的 shell 连续字面量断言
 
 外加 `secrets.env.example`、`backend/app/config.py`、`backend/app/api/settings.py`、
 `tests/test_personal_compose.py` 的模板清单。

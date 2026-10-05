@@ -5,9 +5,9 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.strength import (
@@ -182,24 +182,6 @@ def worker_status() -> dict[str, Any]:
             _public_action(item) for item in list(worker.get("actions") or [])
         ],
     }
-
-
-@router.get("/actions")
-def list_actions(
-    action_type: ActionType | None = None,
-    limit: Annotated[int, Query(ge=1, le=100)] = 30,
-) -> dict[str, Any]:
-    try:
-        items = _repository().action_requests(
-            action_type=action_type,
-            limit=limit,
-        )
-    except (OSError, sqlite3.Error, TypeError, ValueError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "worker_state_unavailable"},
-        ) from exc
-    return {"actions": [_public_action(item) for item in items]}
 
 
 @router.get("/actions/{request_id}")

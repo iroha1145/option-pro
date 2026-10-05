@@ -94,38 +94,6 @@ release_identity() {
     export APP_COMMIT APP_VERSION
 }
 
-stop_legacy_workers() {
-    local project_name service container_id running
-    local -a legacy_services legacy_ids
-    legacy_services=(ai-worker catalyst-sync-worker focus-context-producer breakout-worker)
-    project_name="$(
-        compose config --format json |
-            python3 -c 'import json,sys; print(json.load(sys.stdin)["name"])'
-    )"
-    legacy_ids=()
-    for service in "${legacy_services[@]}"; do
-        while IFS= read -r container_id; do
-            [ -n "$container_id" ] && legacy_ids+=("$container_id")
-        done < <(
-            docker ps --quiet \
-                --filter "label=com.docker.compose.project=${project_name}" \
-                --filter "label=com.docker.compose.service=${service}"
-        )
-    done
-    if [ "${#legacy_ids[@]}" -eq 0 ]; then
-        return
-    fi
-    echo "Stopping legacy workers before the unified worker starts."
-    docker stop --time 2100 "${legacy_ids[@]}" >/dev/null
-    for container_id in "${legacy_ids[@]}"; do
-        running="$(
-            docker inspect --format '{{.State.Running}}' "$container_id" \
-                2>/dev/null || printf 'false'
-        )"
-        [ "$running" != true ] || fail "Legacy worker ${container_id} is still running."
-    done
-}
-
 verify_backend() {
     compose exec -T -e "EXPECTED_APP_COMMIT=${APP_COMMIT}" backend python - <<'PY'
 import json
@@ -279,7 +247,6 @@ main() {
     echo "Building Optix Pro ${APP_VERSION} (${APP_COMMIT})."
     compose build --pull backend
     validate_runtime_boundary
-    stop_legacy_workers
 
     if ! compose up -d --no-build --force-recreate --remove-orphans --wait --wait-timeout 180; then
         compose ps >&2 || true

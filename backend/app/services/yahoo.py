@@ -315,14 +315,6 @@ def _get_expirations_cached(ticker: str, *, with_metadata: bool = False) -> Any:
     )
 
 
-def get_expirations(ticker: str) -> list[str]:
-    """Get available option expiration dates (compatibility list form)."""
-    symbol = canonicalize_option_symbol(ticker)
-    if is_declared_unsupported(symbol):
-        return []
-    return _get_expirations_cached(symbol, with_metadata=False)
-
-
 def get_expirations_snapshot(ticker: str) -> dict[str, Any]:
     """Get expirations with explicit cache freshness and capability metadata."""
     symbol = canonicalize_option_symbol(ticker)

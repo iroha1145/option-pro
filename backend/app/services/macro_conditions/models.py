@@ -9,9 +9,9 @@ stock ranking.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Any, Literal, Mapping, Optional
+from typing import Any, Literal, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -287,20 +287,6 @@ class SnapshotBundle:
     warnings: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
-class SyncRun:
-    run_id: str
-    status: str
-    trigger: str
-    started_at: str
-    completed_at: Optional[str] = None
-    data_through: Optional[str] = None
-    series_succeeded: int = 0
-    series_failed: int = 0
-    error_codes: tuple[str, ...] = ()
-    details: Mapping[str, Any] = field(default_factory=dict)
-
-
 # ---------------------------------------------------------------------------
 # Time helpers
 # ---------------------------------------------------------------------------
@@ -313,10 +299,6 @@ def iso_instant(value: datetime) -> str:
 
     normalized = value.astimezone(timezone.utc).replace(microsecond=0)
     return normalized.isoformat().replace("+00:00", "Z")
-
-
-def iso_date(value: date) -> str:
-    return value.isoformat()
 
 
 __all__ = [
@@ -337,11 +319,9 @@ __all__ = [
     "SeriesMetadata",
     "SeriesObservation",
     "SnapshotBundle",
-    "SyncRun",
     "SyncStatus",
     "SyncTrigger",
     "finite",
-    "iso_date",
     "iso_instant",
     "require_finite",
 ]

@@ -4,16 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Protocol
-
 import pandas as pd
 
-from app.services.breakouts.models import (
-    DiscoveryProfile,
-    DiscoverySnapshot,
-    MarketSession,
-    TemporalCutoff,
-)
+from app.services.breakouts.models import MarketSession, TemporalCutoff
 
 
 @dataclass(frozen=True)
@@ -68,13 +61,3 @@ class PriceDataSnapshot:
         object.__setattr__(self, "data_through", data_through)
         object.__setattr__(self, "feature_cutoff_at", feature_cutoff)
         object.__setattr__(self, "raw_as_of", data_through)
-
-
-class DiscoveryProvider(Protocol):
-    async def scan(
-        self,
-        *,
-        session: MarketSession,
-        as_of: datetime,
-        profile: DiscoveryProfile,
-    ) -> DiscoverySnapshot: ...

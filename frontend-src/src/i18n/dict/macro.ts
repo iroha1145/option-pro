@@ -215,9 +215,7 @@ export const MACRO: Dict = {
   '：': [': ', '：'],
   '负面': ['Negative', 'ネガティブ'],
   '该板块各宏观因子方向不明显': ["No clear directional signal from this sector's macro factors", 'このセクターのマクロファクターに明確な方向性はありません'],
-  '技术 − 结构性宏观 =': ['Technical − structural macro =', 'テクニカル − 構造的マクロ ='],
   ' · 价格明显跑在环境前面': [' · Price is clearly running ahead of the backdrop', ' · 価格が環境に明らかに先行'],
-  ' · 宏观先行改善，价格未跟上': [" · Macro improving first, price hasn't caught up", ' · マクロが先に改善、価格が追いついていない'],
   '· 不按中性计': ['· not treated as neutral', '· 中立扱いにはしません'],
   '宏观评分单独展示': ['Macro score shown separately', 'マクロスコアを別途表示'],
 

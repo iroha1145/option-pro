@@ -551,39 +551,3 @@ def test_stock_overview_survives_yahoo_failure_with_massive_quote(
     assert payload["price_provider"] == "Massive"
     assert payload["profile_provider"] is None
     assert payload["name_en"] == "AAOI"
-
-
-def test_stock_technical_signals_use_massive_daily_history_first(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    index = pd.date_range("2026-01-01", periods=100, freq="B", tz="UTC")
-    frame = pd.DataFrame(
-        {
-            "Open": [100.0 + i * 0.2 for i in range(100)],
-            "High": [101.0 + i * 0.2 for i in range(100)],
-            "Low": [99.0 + i * 0.2 for i in range(100)],
-            "Close": [100.5 + i * 0.2 for i in range(100)],
-            "Volume": [10_000 + i * 100 for i in range(100)],
-        },
-        index=index,
-    )
-    monkeypatch.setattr(massive, "configured", lambda: True)
-    monkeypatch.setattr(
-        stocks,
-        "_massive_chart_history",
-        lambda *_args, **_kwargs: frame,
-    )
-    monkeypatch.setattr(
-        stocks.yf,
-        "Ticker",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("Massive signal history fell through to Yahoo")
-        ),
-    )
-
-    payload = asyncio.run(stocks._build_stock_signals("AAOI"))
-
-    assert payload["ticker"] == "AAOI"
-    assert payload["price_provider"] == "Massive"
-    assert payload["price"] == pytest.approx(120.3)
-    assert set(payload["signals"]) == {"rsi", "macd", "ema20", "sma50", "volume"}
