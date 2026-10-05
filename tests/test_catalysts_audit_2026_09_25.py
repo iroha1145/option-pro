@@ -828,24 +828,10 @@ def test_time_alone_does_not_open_a_new_hotspot_revision(tmp_path, monkeypatch):
     assert second == first
 
 
-def test_v5_store_gains_plan_score_columns_and_old_items_fall_back(tmp_path):
+def test_v5_registry_row_survives_and_unscored_items_fall_back(tmp_path):
     cache_path = tmp_path / "catalyst-cache.db"
     CatalystEtlRepository(cache_path).initialize()
     with sqlite3.connect(cache_path) as connection:
-        connection.execute(
-            """CREATE TABLE catalyst_local_hotspot_items (
-                   prepared_revision INTEGER NOT NULL
-                     REFERENCES catalyst_local_hotspot_revisions(prepared_revision),
-                   ordinal INTEGER NOT NULL CHECK(ordinal >= 1),
-                   event_group_id TEXT NOT NULL,
-                   event_group_version INTEGER NOT NULL,
-                   PRIMARY KEY(prepared_revision,ordinal),
-                   UNIQUE(prepared_revision,event_group_id),
-                   FOREIGN KEY(event_group_id,event_group_version)
-                     REFERENCES catalyst_local_event_groups(
-                       event_group_id,event_group_version)
-               )"""
-        )
         connection.execute(
             """CREATE TABLE catalyst_local_schema (
                    version TEXT PRIMARY KEY,
@@ -917,7 +903,7 @@ def test_v5_store_gains_plan_score_columns_and_old_items_fall_back(tmp_path):
     assert {"hot_score", "component_scores_json", "reasons_json"} <= columns
     assert versions["optix-local-catalyst-v5"] == "v5-checksum"
     assert versions[local_module.SCHEMA_VERSION] == local_module.SCHEMA_CHECKSUM
-    # Items written before the upgrade keep the score stored with their group.
+    # Items without plan scores keep the score stored with their group.
     assert items[0]["hot_score"] == 61.5
     assert items[0]["reasons"] == ["单一来源"]
     # Preparing the local store never touches the AI job store (AI-10).

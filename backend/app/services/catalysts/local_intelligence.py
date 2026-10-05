@@ -160,7 +160,8 @@ NEWS_ARTICLE_MAX_BYTES = 28_000
 NEWS_SUMMARY_WITH_ARTICLE_MAX_BYTES = 10_000
 ARTICLE_RETRY_SECONDS = 30 * 60
 SCHEDULED_ARTICLE_PROBE_LIMIT = 12
-# 旧库升级时给热点条目补上计划级分数列（v6）。定义与 _SCHEMA 里的建表语句一致。
+# 热点条目的计划级分数列（v6 起在 _SCHEMA 建表语句里）。读路径按这组列名判断
+# 能否直接读计划分数。
 _HOTSPOT_ITEM_SCORE_COLUMNS = (
     (
         "hot_score",
@@ -931,10 +932,10 @@ def _paid_runtime_configuration_change(
 
 
 def _hotspot_plan_score_columns(connection: sqlite3.Connection) -> str:
-    """Plan-score select list, NULL until the worker has added the columns.
+    """Plan-score select list, NULL when the table lacks the v6 score columns.
 
-    Only the worker's initialize() upgrades the schema; the web process reads
-    the same file and may start first, so it falls back to group scores.
+    Stores created since v6 always have them; the NULL branch makes callers
+    fall back to group scores.
     """
 
     columns = {
@@ -1631,50 +1632,21 @@ class LocalCatalystIntelligence:
             ).fetchone()
             if row is not None and str(row["checksum"]) != SCHEMA_CHECKSUM:
                 raise RuntimeError("local_catalyst_schema_checksum_mismatch")
-            # Several worker tasks initialize their own instance at startup;
-            # the write lock serializes the check-then-ALTER column upgrade.
-            connection.execute("BEGIN IMMEDIATE")
-            self._add_missing_columns(
-                connection, "catalyst_local_hotspot_items", _HOTSPOT_ITEM_SCORE_COLUMNS,
-            )
-            self._add_missing_columns(
-                connection,
-                "catalyst_local_news_revisions",
-                (("article_json", "TEXT"), ("article_checked_at", "TEXT")),
-            )
-            self._add_missing_columns(
-                connection, "catalyst_local_analysis_links", (("input_context_json", "TEXT"),),
-            )
-            connection.execute(
+            # The timestamp row marks a retired one-shot normalization; new
+            # stores record it too so their registry matches production.
+            connection.executemany(
                 """INSERT OR IGNORE INTO catalyst_local_schema(
                        version,checksum,applied_at
                    ) VALUES(?,?,?)""",
-                (SCHEMA_VERSION, SCHEMA_CHECKSUM, _iso()),
-            )
-            timestamp_row = connection.execute(
-                "SELECT checksum FROM catalyst_local_schema WHERE version=?",
-                (TIMESTAMP_NORMALIZATION_VERSION,),
-            ).fetchone()
-            if (
-                timestamp_row is not None
-                and str(timestamp_row["checksum"])
-                != TIMESTAMP_NORMALIZATION_CHECKSUM
-            ):
-                raise RuntimeError(
-                    "local_catalyst_timestamp_normalization_checksum_mismatch"
-                )
-            if timestamp_row is None:
-                self._normalize_local_news_timestamps(connection)
-                connection.execute(
-                    """INSERT OR IGNORE INTO catalyst_local_schema(
-                           version,checksum,applied_at
-                       ) VALUES(?,?,?)""",
+                (
+                    (SCHEMA_VERSION, SCHEMA_CHECKSUM, _iso()),
                     (
                         TIMESTAMP_NORMALIZATION_VERSION,
                         TIMESTAMP_NORMALIZATION_CHECKSUM,
                         _iso(),
                     ),
-                )
+                ),
+            )
             connection.commit()
         self._local_schema_ready = True
 
@@ -1683,20 +1655,6 @@ class LocalCatalystIntelligence:
 
         if not self._local_schema_ready:
             self.initialize()
-
-    @staticmethod
-    def _add_missing_columns(
-        connection: sqlite3.Connection,
-        table: str,
-        columns: Iterable[tuple[str, str]],
-    ) -> None:
-        existing = {
-            str(row["name"])
-            for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
-        }
-        for name, definition in columns:
-            if name not in existing:
-                connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
 
     def prune_journal(
         self,
@@ -1854,52 +1812,6 @@ class LocalCatalystIntelligence:
             ).rowcount
             connection.commit()
         return totals
-
-    @staticmethod
-    def _normalize_local_news_timestamps(
-        connection: sqlite3.Connection,
-    ) -> int:
-        rows = connection.execute(
-            """SELECT news_id,change_sequence,content_hash,published_at,
-                      fetched_at,source_available_at
-               FROM catalyst_local_news_revisions
-               WHERE (published_at IS NOT NULL AND published_at NOT LIKE '%Z')
-                  OR fetched_at NOT LIKE '%Z'
-                  OR source_available_at NOT LIKE '%Z'"""
-        ).fetchall()
-        updates: list[tuple[str | None, str, str, int, int, str]] = []
-        for row in rows:
-            updates.append(
-                (
-                    _normalize_utc_timestamp(
-                        row["published_at"],
-                        field="published_at",
-                        optional=True,
-                    ),
-                    str(
-                        _normalize_utc_timestamp(
-                            row["fetched_at"],
-                            field="fetched_at",
-                        )
-                    ),
-                    str(
-                        _normalize_utc_timestamp(
-                            row["source_available_at"],
-                            field="source_available_at",
-                        )
-                    ),
-                    int(row["news_id"]),
-                    int(row["change_sequence"]),
-                    str(row["content_hash"]),
-                )
-            )
-        connection.executemany(
-            """UPDATE catalyst_local_news_revisions
-               SET published_at=?,fetched_at=?,source_available_at=?
-               WHERE news_id=? AND change_sequence=? AND content_hash=?""",
-            updates,
-        )
-        return len(updates)
 
     def validate_tickers(self, values: Iterable[Any]) -> list[str]:
         output: list[str] = []
