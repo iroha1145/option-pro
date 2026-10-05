@@ -60,3 +60,42 @@ for (const width of [320, 390]) {
     });
   }
 }
+
+// 行情带在触屏上加高到 44px：按钮整格可点，内容（含基金的涨跌徽标）要在按钮里垂直居中，
+// 不能因为基线对齐贴到上沿（2026-10-05 生产手机截图）。
+for (const funds of [true, false]) {
+  test(`touch tape items are 44px and vertically centred (${funds ? 'funds' : 'indices'})`, async ({ browser }, testInfo) => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, reducedMotion: 'reduce' });
+    const page = await context.newPage();
+    const at = new Date().toISOString();
+    const status = { enabled: true, configured: true, allowed: funds, public_enabled: true, connected: true, connection_status: 'connected', market_session: 'closed' };
+    await page.addInitScript(() => {
+      window.EventSource = class { addEventListener() {} close() {} };
+      localStorage.setItem('optix:locale', 'zh');
+    });
+    await page.route('**/*', route => ['localhost', '127.0.0.1'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
+    await page.route('**/api/**', route => {
+      const url = new URL(route.request().url());
+      if (!url.pathname.startsWith('/api/')) return route.continue();
+      if (url.pathname === '/api/access/status') return route.fulfill({ json: { access_mode: 'password', logged_in: false, account: null } });
+      if (url.pathname === '/api/quotes') return route.fulfill({ json: { status, quotes: funds ? (url.searchParams.get('symbols') ?? '').split(',').filter(Boolean).map(symbol => ({
+        symbol, price: 281.52, previous_close: 279, change: 2.52, change_pct: 0.9, trade_at: at, received_at: at, source: 'finnhub', session: 'closed', freshness: 'live', subscription_status: 'live',
+      })) : [] } });
+      if (url.pathname === '/api/market/indices') return route.fulfill({ json: { indices: [{ code: 'SPX', symbol: '^GSPC', price: 7722.72, change_percent: 0.73 }] } });
+      return route.fulfill({ status: 503, json: { message: 'fixture unavailable' } });
+    });
+    await page.goto(`${testInfo.project.use.baseURL}/`);
+    const item = page.locator('.marquee-track button').first();
+    await expect(item).toBeVisible();
+    if (funds) await expect(item).toContainText('+0.90%');
+    const gaps = await item.evaluate((button) => {
+      const box = button.getBoundingClientRect();
+      const rects = [...button.children].filter(child => child.getAttribute('aria-hidden') !== 'true').map(child => child.getBoundingClientRect());
+      return { height: box.height, top: Math.min(...rects.map(r => r.top)) - box.top, bottom: box.bottom - Math.max(...rects.map(r => r.bottom)) };
+    });
+    expect(gaps.height).toBeGreaterThanOrEqual(44);
+    expect(Math.abs(gaps.top - gaps.bottom)).toBeLessThanOrEqual(4);
+    await page.locator('.marquee-track').screenshot({ path: testInfo.outputPath(`touch-tape-${funds ? 'funds' : 'indices'}.png`) });
+    await context.close();
+  });
+}
