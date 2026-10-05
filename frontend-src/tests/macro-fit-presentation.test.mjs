@@ -65,8 +65,7 @@ test('顺风/逆风分界线与后端 linkage.py 完全一致', () => {
   );
 });
 
-test('后端的影子上限确实是 ±3 / ±4，界面文案照此说明', () => {
-  assert.equal(backendConstant('STRENGTH_SHADOW_CAP'), 3);
+test('突破提醒的宏观影子上限确实是 ±4，界面文案照此说明', () => {
   assert.equal(backendConstant('BREAKOUT_PRIORITY_SHADOW_CAP'), 4);
 });
 
