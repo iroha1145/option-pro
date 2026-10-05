@@ -109,10 +109,10 @@ export function macroQuadrant(
 }
 
 /**
- * 技术领先宏观多少分。正数＝价格跑在环境前面。
+ * 技术领先宏观多少分（技术 − 宏观）。正数＝价格跑在环境前面。
  *
- * 后端已经算了 macro_technical_gap（技术市场适配 − 结构性宏观），这个函数只在
- * 后端没下发时按同一定义补算，用于板块页的技术强度 vs 宏观适配。
+ * 后端不下发这个差值；市场页「技术 × 结构性宏观」卡（MacroTechnicalMatrix）用它
+ * 在前端自己算：市场形态六维均值 − 结构性宏观分。
  */
 export function macroGap(
   technical: number | null | undefined,

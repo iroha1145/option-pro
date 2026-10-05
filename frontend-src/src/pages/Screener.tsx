@@ -27,18 +27,11 @@ import { useShell } from '@/hooks/useShell';
 import { cn } from '@/lib/utils';
 import { DUR_FAST, DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { fmtCompact, fmtLocaleDateTime, fmtTimeHHMMSS } from '@/lib/format';
-import {
-  MACRO_SHADOW_HINT,
-  MACRO_TONE_LABEL,
-  macroToneOf,
-  type MacroTone,
-} from '@/lib/macroFit';
 import Icon from '@/components/icons';
 import { BusyIcon } from '@/components/shared/IconSwap';
 import Spinner from '@/components/shared/Spinner';
 import PageHeader from '@/components/shared/PageHeader';
 import Segmented from '@/components/shared/Segmented';
-import FilterButton from '@/components/shared/FilterButton';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonCard, SkeletonRows } from '@/components/shared/Skeleton';
 import FilterWorkbench from '@/components/screener/FilterWorkbench';
@@ -147,10 +140,6 @@ export default function Screener() {
   const [scanDurationMs, setScanDurationMs] = useState(0);
   const [history, setHistory] = useState<ScanHistoryEntry[]>([]);
   const [sortMode, setSortMode] = useState<SortMode>('deterministic');
-  // 宏观适配是**可选列**，默认关：它是影子字段，不该占据默认视图。开关同时决定
-  // 是否显示分档筛选 —— 一个不显示的列没法解释筛掉的行是按什么筛的。
-  const [showMacro, setShowMacro] = useState(false);
-  const [macroToneFilter, setMacroToneFilter] = useState<MacroTone | 'all'>('all');
   const [page, setPage] = useState(1);
   const [expanded, setExpanded] = useState<string | null>(null);
   const flashes = useTickFlash(rows, screenerKey, screenerPrice);
@@ -542,18 +531,12 @@ export default function Screener() {
     return out;
   }, [rows, applied, scanMeta?.filterSupport?.minAvgDollarVolume]);
 
-  // Missing macro data is not neutral.
-  const macroFilteredBase = useMemo(() => macroToneFilter === 'all'
-    ? filteredBase
-    : filteredBase.filter((r) => macroToneOf(r.macroFit, r.macroTailwind) === macroToneFilter),
-  [filteredBase, macroToneFilter]);
-
   const filtered = useMemo(() => {
-    let out = macroFilteredBase;
+    let out = filteredBase;
     if (applied.tier !== 'all') out = out.filter((r) => tierOf(r.strengthScore) === applied.tier);
     if (applied.topN > 0) out = out.slice(0, applied.topN);
     return out;
-  }, [macroFilteredBase, applied.tier, applied.topN]);
+  }, [filteredBase, applied.tier, applied.topN]);
 
   /**
    * 催化排序的前置条件（审计 P1-06）。
@@ -564,15 +547,6 @@ export default function Screener() {
    *
    * 因此：切到催化排序时先为全部候选股票批量取摘要，取齐之前不参与正式排名。
    */
-  /** 宏观筛选打开时被排除的行数：算在 tier 之后、宏观之前的那一层上。 */
-  const macroUnreadCount = useMemo(() => {
-    const tierPool =
-      applied.tier === 'all'
-        ? filteredBase
-        : filteredBase.filter((r) => tierOf(r.strengthScore) === applied.tier);
-    return tierPool.filter((r) => macroToneOf(r.macroFit, r.macroTailwind) === null).length;
-  }, [filteredBase, applied.tier]);
-
   const catalystSortActive = sortMode !== 'deterministic';
   const catalystReadiness = catalystSortReadiness(catalystSortActive ? filtered.map((row) => row.ticker) : [], catalysts, Date.now());
   const missingCatalystTickers = catalystReadiness.missing;
@@ -771,7 +745,6 @@ export default function Screener() {
       ...DEFAULT_FILTERS,
       sectors: [],
     });
-    setMacroToneFilter('all');
     setDraft(filters);
     // Defaults include server-side profile/timeframe. Keep the old result's
     // applied identity until the corresponding default scan succeeds.
@@ -1018,36 +991,6 @@ export default function Screener() {
               <h2 className="font-display text-[18px] leading-[24px] text-ink-900">{__t('扫描结果')}</h2>
             )}
             <div className="ml-auto flex flex-wrap items-center gap-2">
-              {/* 可选列开关。关掉时同时清掉宏观筛选：否则行会按一个看不见的条件被筛掉。 */}
-              <FilterButton
-                active={showMacro}
-                onClick={() => {
-                  setShowMacro((on) => {
-                    if (on) setMacroToneFilter('all');
-                    return !on;
-                  });
-                  setPage(1);
-                }}
-                title={__t('{title}：{body}{note}', { title: __t(MACRO_SHADOW_HINT.title), body: __t(MACRO_SHADOW_HINT.body), note: __t(MACRO_SHADOW_HINT.note) })}
-              >
-                <Icon name="layers" size={13} />
-                {__t('宏观适配')}
-              </FilterButton>
-              {showMacro && (
-                <Segmented<MacroTone | 'all'>
-                  options={[
-                    { value: 'all' as const, label: __t('全部') },
-                    { value: 'tailwind' as const, label: __t(MACRO_TONE_LABEL.tailwind) },
-                    { value: 'neutral' as const, label: __t(MACRO_TONE_LABEL.neutral) },
-                    { value: 'headwind' as const, label: __t(MACRO_TONE_LABEL.headwind) },
-                  ]}
-                  value={macroToneFilter}
-                  onChange={(value) => {
-                    setMacroToneFilter(value);
-                    setPage(1);
-                  }}
-                />
-              )}
               <Segmented<'observation' | 'composite'>
                 options={[
                   { value: 'observation', label: __t('技术观察') },
@@ -1072,12 +1015,6 @@ export default function Screener() {
               />
             </div>
           </div>
-          {/* 宏观筛选会排除没有读数的行；数量说清楚，别让人以为那些股票不存在。 */}
-          {showMacro && macroToneFilter !== 'all' && macroUnreadCount > 0 && (
-            <p className="mt-2 text-micro text-ink-400">
-              {macroUnreadCount} {__t('只缺少宏观数据，已从当前筛选结果中排除')}
-            </p>
-          )}
 
           {/* 结果主体 */}
           <div className="mt-4">
@@ -1176,7 +1113,6 @@ export default function Screener() {
                         signals={signalsMap}
                         onOpenDetail={openTicker}
                         animKey={animKey}
-                        showMacro={showMacro}
                         stale
                       />
                     </div>
@@ -1193,7 +1129,6 @@ export default function Screener() {
                         onOpenDetail={openTicker}
                         animKey={animKey}
                         page={safePage}
-                        showMacro={showMacro}
                       />
                     </div>
                   </div>
@@ -1243,7 +1178,6 @@ export default function Screener() {
                     signals={signalsMap}
                     onOpenDetail={openTicker}
                     animKey={animKey}
-                    showMacro={showMacro}
                   />
                 </div>
                 <div className={cn('md:hidden', scanState === 'scanning' && 'opacity-60')}>
@@ -1257,10 +1191,6 @@ export default function Screener() {
                     onOpenDetail={openTicker}
                     animKey={animKey}
                     page={safePage}
-                    /* 移动端也要给：漏掉它的话「宏观顺风」筛选照样生效、列表照样
-                       被过滤，但卡片上一个宏观读数都不显示 —— 用户看不出这些票
-                       为什么留下来了。 */
-                    showMacro={showMacro}
                   />
                   {/* 移动端分页 */}
                   {totalPages > 1 && (

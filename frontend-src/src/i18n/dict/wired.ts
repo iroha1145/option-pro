@@ -147,7 +147,6 @@ export const WIRED: Dict = {
   '{ticker} 不在当前股票目录中': ['{ticker} is not in the current stock directory', '{ticker} は現在の銘柄ディレクトリにありません'],
   '评分{label}': ['Score {label}', 'スコア {label}'],
   '清除代码聚焦 {ticker}': ['Clear ticker focus {ticker}', 'ティッカー絞り込み {ticker} を解除'],
-  '{title}：{body}{note}': ['{title}: {body}{note}', '{title}：{body}{note}'],
 
   // ── 后端下发：市场信号指标名（services/signals.py 的 add() 清单）──────────
   'SPY距20日线偏离%': ['SPY vs 20-day MA %', 'SPY 20日線乖離%'],

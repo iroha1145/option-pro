@@ -202,29 +202,11 @@ test('口径说明写明了三件必须说的事', () => {
   assert.match(all, /数据不足时留空/, '没说明数据不足时不评分');
 });
 
-test('宏观筛选排除没有读数的行，而不是把它们当中性留下', () => {
+test('选股默认排序仍是确定性排序，排序键里没有宏观字段', () => {
   const source = readFileSync(
     resolve(repoRoot, 'frontend-src/src/pages/Screener.tsx'),
     'utf8',
   );
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-  assert.match(
-    code,
-    /macroToneOf\(r\.macroFit, r\.macroTailwind\) === macroToneFilter/,
-    '筛选必须比较分档结果；null 分档不等于任何一档，因此自然被排除',
-  );
-  // 被排除的数量要说出来，否则看起来像那些股票不存在。
-  assert.match(code, /macroUnreadCount/);
-  // 列关掉时必须清掉筛选，否则行按一个看不见的条件被筛。
-  assert.match(code, /if \(on\) setMacroToneFilter\('all'\)/);
-});
-
-test('宏观列默认关闭，且默认排序仍是原来的确定性排序', () => {
-  const source = readFileSync(
-    resolve(repoRoot, 'frontend-src/src/pages/Screener.tsx'),
-    'utf8',
-  );
-  assert.match(source, /useState\(false\);?\s*$/m);
   assert.match(source, /useState<SortMode>\('deterministic'\)/);
   const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
   // 排序键里不能出现宏观字段：它是影子字段，不参与排名。
@@ -380,14 +362,13 @@ const overviewScored = {
   macroSnapshotDate: '2026-07-25',
 };
 
-/** 一份**较旧**的扫描行读数：分数、负面因子、差值都有。 */
+/** 一份**较旧**的扫描行读数：分数、负面因子都有。 */
 const staleScanRow = {
   macroFit: 68,
   macroTailwind: 'tailwind',
   macroFitConfidence: 0.91,
   macroSupporting: [{ id: 'ism', label: 'ISM 制造业' }],
   macroOpposing: [{ id: 'real_rate', label: '实际利率' }],
-  macroTechnicalGap: -12.4,
   macroSnapshotDate: '2026-07-24',
 };
 
@@ -437,34 +418,17 @@ test('概览本期没有负面因子时，不把旧的负面因子补回来', ()
   assert.equal(merged.macroFit, 60.9);
 });
 
-test('两边快照不同期时不显示技术 − 宏观差值', () => {
-  // 差值只有扫描行算得出（要该股的 market_fit_score），而分数来自实时概览。
-  // 各自都对，凑在一起却不是同一个测量时点。
-  const merged = mergeMacroFields(overviewScored, staleScanRow);
-  assert.equal(merged.macroTechnicalGap, null, '差值和分数来自两期快照却照样显示了');
-});
-
-test('两边同期时差值照常显示', () => {
-  const merged = mergeMacroFields(overviewScored, {
-    ...staleScanRow,
-    macroSnapshotDate: overviewScored.macroSnapshotDate,
-  });
-  assert.equal(merged.macroTechnicalGap, -12.4);
-});
-
 test('概览没有 macro_shadow_status 时整组回退扫描行', () => {
-  // 对接不带这个字段的旧后端：此时分数和差值都出自同一行，同期是构造保证的，
-  // 差值可以显示。
+  // 对接不带这个字段的旧后端：整组字段出自同一行，不逐字段拼接。
   const merged = mergeMacroFields({}, staleScanRow);
   assert.equal(merged.macroFit, 68);
   assert.deepEqual(plain(merged.macroOpposing), staleScanRow.macroOpposing);
-  assert.equal(merged.macroTechnicalGap, -12.4);
+  assert.equal(merged.macroSnapshotDate, staleScanRow.macroSnapshotDate);
 });
 
 test('两边都没有宏观读数时保持 null，不兜中性 50', () => {
   const merged = mergeMacroFields({}, null);
   assert.equal(merged.macroFit, null);
-  assert.equal(merged.macroTechnicalGap, null);
   assert.equal(merged.macroShadowStatus, null);
   assert.deepEqual(plain(merged.macroSupporting), []);
 });

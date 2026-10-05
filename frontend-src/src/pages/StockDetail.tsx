@@ -333,7 +333,6 @@ export default function StockDetail() {
             confidence={detail.macroFitConfidence}
             supporting={detail.macroSupporting}
             opposing={detail.macroOpposing}
-            technicalGap={detail.macroTechnicalGap}
             status={detail.macroShadowStatus}
           />
         </div>

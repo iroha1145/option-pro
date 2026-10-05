@@ -211,7 +211,6 @@ export const SCREENER: Dict = {
   '数据时间待核验': ['Data time unverified', 'データ時刻は未検証'],
   '历史结果': ['Historical result', '履歴結果'],
   '排队中': ['Queued', 'キュー待ち'],
-  '只缺少宏观数据，已从当前筛选结果中排除': ['stocks lack macro data and are excluded from these results', '銘柄はマクロデータがないため、今回の結果から除外しています'],
   '设定条件，开始一次扫描': ['Set your filters and run a scan', '条件を設定してスキャンを開始'],
   '或从预设策略一键开始': ['Or start instantly from a preset strategy', 'またはプリセット戦略からワンクリックで開始'],
   '扫描数据不可用': ['Scan data unavailable', 'スキャンデータが利用できません'],
