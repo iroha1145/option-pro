@@ -165,8 +165,6 @@ _SAME_ORIGIN_JSON_ONLY_OPERATIONS = {
     # and can only reach that account's rows — so they carry same-origin proof
     # without demanding owner access.
     ("POST", "/api/account/register"),
-    ("POST", "/api/account/watchlist"),
-    ("PUT", "/api/account/watchlist"),
     ("PATCH", "/api/account/watchlist"),
     ("POST", "/api/account/watchlist/removals"),
     ("POST", "/api/account/watchlist/restore"),
@@ -184,7 +182,6 @@ _SAME_ORIGIN_JSON_ONLY_OPERATIONS = {
 _SAME_ORIGIN_REQUEST_ONLY_OPERATIONS = {
     ("POST", "/api/sectors/{sector_id}/iv-refresh"),
     ("POST", "/api/account/logout"),
-    ("DELETE", "/api/account/watchlist/{ticker}"),
     ("DELETE", "/api/account/chart-drawings"),
     ("DELETE", "/api/account/chart-drawings/{drawing_id}"),
 }

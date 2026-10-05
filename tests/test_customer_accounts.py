@@ -403,9 +403,9 @@ def test_expired_session_is_rejected(tmp_path) -> None:
 
 def test_batch_edit_is_atomic_and_preserves_concurrent_membership(client, store):
     _register(client, "batch-editor", "fixture-password-for-tests")
-    client.put("/api/account/watchlist", json={"tickers": ["AAPL", "NVDA"]}, headers=HEADERS)
+    client.patch("/api/account/watchlist", json={"add": ["AAPL", "NVDA"]}, headers=HEADERS)
     # Another page adds AMD after the editor opened its original draft.
-    client.post("/api/account/watchlist", json={"ticker": "AMD"}, headers=HEADERS)
+    client.patch("/api/account/watchlist", json={"add": ["AMD"]}, headers=HEADERS)
     response = client.patch("/api/account/watchlist", json={"add": ["msft", "ＭＳＦＴ"], "remove": ["NVDA"]}, headers=HEADERS)
     assert response.status_code == 200
     assert response.json()["tickers"] == ["AAPL", "AMD", "MSFT"]
@@ -422,7 +422,7 @@ def test_batch_cap_rolls_back_removals_and_retains_other_accounts(store):
     second = store.register("second-editor", "fixture-password-for-tests").account.user_id
     original = [f"T{i}" for i in range(WATCHLIST_MAX_TICKERS)]
     store.replace_watchlist(first, original)
-    store.add_ticker(second, "AAPL")
+    store.edit_watchlist(second, add=["AAPL"], remove=[])
     with pytest.raises(AccountError, match="watchlist_full"):
         store.edit_watchlist(first, add=["AAPL", "MSFT"], remove=["T0"])
     assert store.watchlist(first) == original
@@ -440,7 +440,7 @@ def test_batch_edit_requires_account_and_same_origin_json(client):
 def test_owner_batch_can_delete_last_ticker_without_reseeding(owner_client):
     _owner_login(owner_client)
     assert owner_client.patch("/api/account/watchlist", json={"add": ["AAPL"]}, headers=HEADERS).json()["tickers"] == ["AAPL"]
-    assert owner_client.delete("/api/account/watchlist/AAPL", headers=HEADERS).json()["tickers"] == []
+    assert owner_client.patch("/api/account/watchlist", json={"remove": ["AAPL"]}, headers=HEADERS).json()["tickers"] == []
     assert owner_client.get("/api/account/watchlist").json()["tickers"] == []
 
 
@@ -450,31 +450,31 @@ def test_watchlist_requires_a_session(client: TestClient) -> None:
 
 def test_watchlist_round_trips_and_keeps_order(client: TestClient) -> None:
     _register(client, "ivan", "fixture-password-for-tests")
-    add = client.post(
+    add = client.patch(
         "/api/account/watchlist",
-        json={"ticker": "nvda"},
+        json={"add": ["nvda"]},
         headers=HEADERS,
     )
     assert add.status_code == 200
     assert add.json()["tickers"] == ["NVDA"]
-    client.post("/api/account/watchlist", json={"ticker": "AAPL"}, headers=HEADERS)
+    client.patch("/api/account/watchlist", json={"add": ["AAPL"]}, headers=HEADERS)
     assert client.get("/api/account/watchlist").json()["tickers"] == ["NVDA", "AAPL"]
     # Adding twice is a no-op rather than an error.
-    again = client.post(
+    again = client.patch(
         "/api/account/watchlist",
-        json={"ticker": "NVDA"},
+        json={"add": ["NVDA"]},
         headers=HEADERS,
     )
     assert again.json()["tickers"] == ["NVDA", "AAPL"]
-    removed = client.delete("/api/account/watchlist/NVDA", headers=HEADERS)
+    removed = client.patch("/api/account/watchlist", json={"remove": ["NVDA"]}, headers=HEADERS)
     assert removed.json()["tickers"] == ["AAPL"]
 
 
 def test_watchlist_rejects_malformed_tickers(client: TestClient) -> None:
     _register(client, "judy", "fixture-password-for-tests")
-    response = client.post(
+    response = client.patch(
         "/api/account/watchlist",
-        json={"ticker": "not a ticker"},
+        json={"add": ["not a ticker"]},
         headers=HEADERS,
     )
     assert response.status_code == 400
@@ -484,21 +484,21 @@ def test_watchlist_rejects_malformed_tickers(client: TestClient) -> None:
 def test_watchlist_is_capped(store: AccountStore) -> None:
     session = store.register("ken", "fixture-password-for-tests")
     for index in range(WATCHLIST_MAX_TICKERS):
-        store.add_ticker(session.account.user_id, f"T{index:04d}")
+        store.edit_watchlist(session.account.user_id, add=[f"T{index:04d}"], remove=[])
     with pytest.raises(AccountError) as excinfo:
-        store.add_ticker(session.account.user_id, "OVER")
+        store.edit_watchlist(session.account.user_id, add=["OVER"], remove=[])
     assert excinfo.value.code == "watchlist_full"
 
 
 def test_watchlists_are_isolated_between_accounts(store: AccountStore) -> None:
     first = store.register("leo", "fixture-password-for-tests")
     second = store.register("mia", "fixture-password-for-tests")
-    store.add_ticker(first.account.user_id, "NVDA")
-    store.add_ticker(second.account.user_id, "TSLA")
+    store.edit_watchlist(first.account.user_id, add=["NVDA"], remove=[])
+    store.edit_watchlist(second.account.user_id, add=["TSLA"], remove=[])
     assert store.watchlist(first.account.user_id) == ["NVDA"]
     assert store.watchlist(second.account.user_id) == ["TSLA"]
     # Removing another account's ticker cannot touch it.
-    store.remove_ticker(second.account.user_id, "NVDA")
+    store.edit_watchlist(second.account.user_id, add=[], remove=["NVDA"])
     assert store.watchlist(first.account.user_id) == ["NVDA"]
 
 
@@ -553,16 +553,16 @@ def test_owner_session_can_keep_a_watchlist(owner_client: TestClient) -> None:
     assert empty.status_code == 200
     assert empty.json()["tickers"] == []
 
-    added = owner_client.post(
+    added = owner_client.patch(
         "/api/account/watchlist",
-        json={"ticker": "nvda"},
+        json={"add": ["nvda"]},
         headers=HEADERS,
     )
     assert added.status_code == 200
     assert added.json()["tickers"] == ["NVDA"]
     assert owner_client.get("/api/account/watchlist").json()["tickers"] == ["NVDA"]
 
-    removed = owner_client.delete("/api/account/watchlist/NVDA", headers=HEADERS)
+    removed = owner_client.patch("/api/account/watchlist", json={"remove": ["NVDA"]}, headers=HEADERS)
     assert removed.status_code == 200
     assert removed.json()["tickers"] == []
 
@@ -571,9 +571,9 @@ def test_owner_watchlist_is_not_a_customer_identity(owner_client: TestClient) ->
     """Provisioning the owner's row must not make the owner look like a customer."""
 
     _owner_login(owner_client)
-    owner_client.post(
+    owner_client.patch(
         "/api/account/watchlist",
-        json={"ticker": "MSFT"},
+        json={"add": ["MSFT"]},
         headers=HEADERS,
     )
     status_response = owner_client.get("/api/access/status")
@@ -586,9 +586,9 @@ def test_owner_and_customer_watchlists_stay_separate(
     store: AccountStore,
 ) -> None:
     _owner_login(owner_client)
-    owner_client.post(
+    owner_client.patch(
         "/api/account/watchlist",
-        json={"ticker": "OWNR"},
+        json={"add": ["OWNR"]},
         headers=HEADERS,
     )
 
@@ -599,9 +599,9 @@ def test_owner_and_customer_watchlists_stay_separate(
     assert customer.status_code == 200
     assert customer.json()["tickers"] == []
 
-    added = owner_client.post(
+    added = owner_client.patch(
         "/api/account/watchlist",
-        json={"ticker": "CUST"},
+        json={"add": ["CUST"]},
         headers=HEADERS,
     )
     assert added.json()["tickers"] == ["CUST"]
@@ -629,7 +629,7 @@ def test_ensure_owner_account_is_idempotent(store: AccountStore) -> None:
     first = store.ensure_owner_account()
     second = store.ensure_owner_account()
     assert first == second
-    store.add_ticker(first.user_id, "AAPL")
+    store.edit_watchlist(first.user_id, add=["AAPL"], remove=[])
     assert store.watchlist(second.user_id) == ["AAPL"]
 
 
@@ -913,10 +913,10 @@ def test_watchlist_undo_http_roundtrip_normalizes_removal_and_rejects_wrong_user
 
 def test_watchlist_undo_rejects_cookie_switch_and_cross_principal_replay(client, store):
     _register(client, "alice", "fixture-password-for-tests")
-    client.put("/api/account/watchlist", json={"tickers": ["AAPL", "MSFT"]}, headers=HEADERS)
+    client.patch("/api/account/watchlist", json={"add": ["AAPL", "MSFT"]}, headers=HEADERS)
     undo = client.post("/api/account/watchlist/removals", json={"ticker": "AAPL", "expected_username": "alice"}, headers=HEADERS).json()["undo"]
     _register(client, "bob", "fixture-password-for-bob")
-    client.put("/api/account/watchlist", json={"tickers": ["NVDA"]}, headers=HEADERS)
+    client.patch("/api/account/watchlist", json={"add": ["NVDA"]}, headers=HEADERS)
     wrong_delete = client.post("/api/account/watchlist/removals", json={"ticker": "NVDA", "expected_username": "alice"}, headers=HEADERS)
     wrong_restore = client.post("/api/account/watchlist/restore", json=undo, headers=HEADERS)
     for response in (wrong_delete, wrong_restore):
@@ -927,11 +927,11 @@ def test_watchlist_undo_rejects_cookie_switch_and_cross_principal_replay(client,
 
 def test_watchlist_undo_owner_customer_principal_priority(owner_client, store):
     _owner_login(owner_client)
-    owner_client.put("/api/account/watchlist", json={"tickers": ["AAPL", "MSFT"]}, headers=HEADERS)
+    owner_client.patch("/api/account/watchlist", json={"add": ["AAPL", "MSFT"]}, headers=HEADERS)
     owner_undo = owner_client.post("/api/account/watchlist/removals", json={"ticker": "AAPL", "expected_username": "admin"}, headers=HEADERS).json()["undo"]
     assert owner_undo["principal_id"] == store.ensure_owner_account().user_id
     assert _register(owner_client, "alice", "fixture-password-for-tests").status_code == 201
-    owner_client.put("/api/account/watchlist", json={"tickers": ["NVDA", "SPY"]}, headers=HEADERS)
+    owner_client.patch("/api/account/watchlist", json={"add": ["NVDA", "SPY"]}, headers=HEADERS)
     wrong_name = owner_client.post("/api/account/watchlist/removals", json={"ticker": "NVDA", "expected_username": "admin"}, headers=HEADERS)
     assert wrong_name.status_code == 409
     assert owner_client.post("/api/account/watchlist/restore", json=owner_undo, headers=HEADERS).status_code == 409
@@ -951,7 +951,7 @@ def test_watchlist_undo_http_requires_authentication_and_same_origin_json(client
     path = "/api/account/watchlist/" + route
     assert client.post(path, json=payload, headers=HEADERS).status_code == 401
     _register(client, "alice", "fixture-password-for-tests")
-    client.put("/api/account/watchlist", json={"tickers": ["AAPL"]}, headers=HEADERS)
+    client.patch("/api/account/watchlist", json={"add": ["AAPL"]}, headers=HEADERS)
     for headers in ({**HEADERS, "Origin": "https://elsewhere.test"}, {"Origin": "https://localhost"}, {"X-Optix-Action": "1"}):
         assert client.post(path, json=payload, headers=headers).status_code == 403
     assert client.post(path, content="{}", headers={**HEADERS, "Content-Type": "text/plain"}).status_code == 415
@@ -960,7 +960,7 @@ def test_watchlist_undo_http_requires_authentication_and_same_origin_json(client
 
 def test_watchlist_undo_http_metadata_validation_and_full_error_shape(client, store):
     _register(client, "alice", "fixture-password-for-tests")
-    client.put("/api/account/watchlist", json={"tickers": ["AAPL", "MSFT"]}, headers=HEADERS)
+    client.patch("/api/account/watchlist", json={"add": ["AAPL", "MSFT"]}, headers=HEADERS)
     undo = client.post("/api/account/watchlist/removals", json={"ticker": "AAPL", "expected_username": "alice"}, headers=HEADERS).json()["undo"]
     for update in ({"original_order": ["AAPL", "AAPL"]}, {"original_order": ["aapl"]}, {"ticker": "BAD!"}):
         response = client.post("/api/account/watchlist/restore", json={**undo, **update}, headers=HEADERS)

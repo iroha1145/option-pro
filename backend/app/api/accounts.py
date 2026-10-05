@@ -213,12 +213,6 @@ class TickerRequest(BaseModel):
     ticker: str = Field(min_length=1, max_length=16)
 
 
-class WatchlistRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    tickers: list[str] = Field(default_factory=list, max_length=WATCHLIST_MAX_TICKERS)
-
-
 class WatchlistEditRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -416,28 +410,6 @@ def read_watchlist(request: Request) -> Response:
     )
 
 
-@router.put(
-    "/watchlist",
-    dependencies=[Depends(require_same_origin_json)],
-)
-def replace_watchlist(
-    request: Request,
-    payload: Annotated[WatchlistRequest, Body()],
-) -> Response:
-    account = require_watchlist_account(request)
-    try:
-        tickers = get_account_store().replace_watchlist(
-            account.user_id,
-            payload.tickers,
-        )
-    except AccountError as exc:
-        raise account_http_error(exc) from exc
-    return JSONResponse(
-        {"tickers": tickers, "max_tickers": WATCHLIST_MAX_TICKERS},
-        headers={"Cache-Control": "no-store"},
-    )
-
-
 @router.patch("/watchlist", dependencies=[Depends(require_same_origin_json)])
 def edit_watchlist(
     request: Request,
@@ -448,44 +420,6 @@ def edit_watchlist(
         tickers = get_account_store().edit_watchlist(
             account.user_id, add=payload.add, remove=payload.remove,
         )
-    except AccountError as exc:
-        raise account_http_error(exc) from exc
-    return JSONResponse(
-        {"tickers": tickers, "max_tickers": WATCHLIST_MAX_TICKERS},
-        headers={"Cache-Control": "no-store"},
-    )
-
-
-@router.post(
-    "/watchlist",
-    dependencies=[Depends(require_same_origin_json)],
-)
-def add_watchlist_ticker(
-    request: Request,
-    payload: Annotated[TickerRequest, Body()],
-) -> Response:
-    account = require_watchlist_account(request)
-    try:
-        tickers = get_account_store().add_ticker(account.user_id, payload.ticker)
-    except AccountError as exc:
-        raise account_http_error(exc) from exc
-    return JSONResponse(
-        {"tickers": tickers, "max_tickers": WATCHLIST_MAX_TICKERS},
-        headers={"Cache-Control": "no-store"},
-    )
-
-
-@router.delete(
-    "/watchlist/{ticker}",
-    dependencies=[Depends(require_same_origin_request)],
-)
-def remove_watchlist_ticker(
-    request: Request,
-    ticker: Annotated[str, Path(min_length=1, max_length=16)],
-) -> Response:
-    account = require_watchlist_account(request)
-    try:
-        tickers = get_account_store().remove_ticker(account.user_id, ticker)
     except AccountError as exc:
         raise account_http_error(exc) from exc
     return JSONResponse(
