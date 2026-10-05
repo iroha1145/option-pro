@@ -29,6 +29,6 @@
 | `MACROLENS_BASE_URL`、`MACROLENS_INTERNAL_TOKEN` 及旧式读取、动作、焦点凭据 | MacroLens 连接名称与方向不统一 | `machine.env` 中的`MACROLENS_URL`与`secrets.env`中的`INTERNAL_API_TOKEN`，仅限 Option Pro 读取 MacroLens |
 | `OPENAI_JOB_DB_PATH`、`MACROLENS_CACHE_DB_PATH`、`BREAKOUT_DB_PATH`、`WATCHLIST_SNAPSHOT_PATH` | 同一数据卷内的文件路径可分别漂移 | 只配置`DATA_DIR`，数据库、锁、快照与备份均由程序派生 |
 | `ai-worker`等旧工作服务的独立部署、检查和停止逻辑 | 发布脚本需同时理解多套工作进程 | `backend`+`worker`的两服务发布，统一核对十类任务 |
-| 旧变量的运行时兼容读取层 | 迁移后仍可能被旧配置影响 | 运行时只读新配置；旧名称只留在迁移说明与回归断言中 |
+| 旧变量的运行时兼容读取层 | 迁移后仍可能被旧配置影响 | 运行时只读新配置；旧名称只留在启动拒绝校验与回归断言中 |
 
 本阶段不删除业务数据。数据卷、数据库文件和历史任务保留原位；删除的是运行时入口、变量别名与重复权限链。
