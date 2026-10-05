@@ -372,7 +372,6 @@ export const stocksApi = {
           `/stocks/${encoded}`,
           `/stocks/${encoded}/chart?range=1d&adjustment=raw`,
           `/signals/stock/${encoded}`,
-          `/stocks/${encoded}/signals`,
           `/stocks/${encoded}/technical`,
         ]);
         return result;

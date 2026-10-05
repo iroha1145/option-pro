@@ -6,8 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import pytest
 
-from app.api import options
-from app.services import signals, yahoo
+from app.services import quote_quality, signals, yahoo
 
 
 class bool_:
@@ -15,7 +14,7 @@ class bool_:
         return True
 
 
-@pytest.mark.parametrize("classify", [options._moneyness, yahoo._option_moneyness])
+@pytest.mark.parametrize("classify", [quote_quality.option_moneyness, yahoo._option_moneyness])
 @pytest.mark.parametrize("side,strike,price,expected", [
     ("call", 110, 100, "otm"), ("put", 110, 100, "itm"),
     ("call", 90, 100, "itm"), ("put", 90, 100, "otm"),
@@ -27,7 +26,7 @@ def test_option_moneyness_boundaries(classify, side, strike, price, expected):
     assert classify(side, strike, price) == expected
 
 
-@pytest.mark.parametrize("classify", [options._in_the_money, yahoo._option_in_the_money])
+@pytest.mark.parametrize("classify", [quote_quality.option_in_the_money, yahoo._option_in_the_money])
 @pytest.mark.parametrize("side,strike,price,provider,expected", [
     ("call", 90, 100, False, True), ("put", 110, 100, False, True),
     ("call", 110, 100, True, False), ("put", 90, 100, True, False),

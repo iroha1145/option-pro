@@ -16,7 +16,7 @@ from app.access import (
     request_owner_access_context,
     require_public_read_or_owner_access,
 )
-from app.api import earnings, market, options, sectors, signals, stocks, strength
+from app.api import earnings, market, sectors, signals, stocks, strength
 from app.personal_config import AccessConfig
 from app.services import signals as signal_service
 from app.services.sector_iv_refresh import run_refresh_batch
@@ -134,7 +134,6 @@ def test_public_cold_cache_never_calls_market_data_providers(
     monkeypatch.setattr(stocks, "_stock_overview_impl", unexpected_async("stock-overview"))
     monkeypatch.setattr(stocks, "_stock_chart_impl", unexpected_async("stock-chart"))
     monkeypatch.setattr(stocks.yf, "Ticker", unexpected("stock-search"))
-    monkeypatch.setattr(options, "_unusual_activity_impl", unexpected_async("unusual-options"))
     monkeypatch.setattr(earnings, "_build_upcoming_earnings", unexpected_async("earnings"))
     monkeypatch.setattr(market, "_build_indices", unexpected_async("market-indices"))
     monkeypatch.setattr(
@@ -159,11 +158,9 @@ def test_public_cold_cache_never_calls_market_data_providers(
                 await stocks.search_stocks("ZZZZUNLISTED")
             assert captured.value.status_code == 503
             assert captured.value.detail["code"] == "stock_directory_unavailable"
-            await _expect_unavailable(stocks.stock_signals("AAPL"))
             await _expect_unavailable(stocks.stock_logo("AAPL"))
             await _expect_unavailable(stocks.stock_overview("AAPL"))
             await _expect_unavailable(stocks.stock_chart("AAPL", "1d", "raw"))
-            await _expect_unavailable(options.unusual_activity(_request(), type="all", min_vol_oi=1.0))
             await _expect_unavailable(earnings.upcoming_earnings(_request()))
             await _expect_unavailable(market.market_indices(_request()))
             await _expect_unavailable(signals.market_signals(_request()))
@@ -261,7 +258,6 @@ def test_public_endpoints_never_read_the_owner_process_cache(
     today = earnings._market_today()
     cache.set(f"earnings:upcoming:{today.isoformat()}", {"items": ["saved"]}, 60)
     cache.set("market:indices", {"indices": ["saved"]}, 60)
-    cache.set(options._unusual_key("all", 1.0), {"items": ["saved"]}, 60)
     sector_id = next(iter(sectors.SECTORS))
     sectors._cache[f"iv:{sector_id}"] = (
         now + 60,
@@ -271,7 +267,6 @@ def test_public_endpoints_never_read_the_owner_process_cache(
 
     monkeypatch.setattr(earnings, "_build_upcoming_earnings", lambda *_args: pytest.fail("loader called"))
     monkeypatch.setattr(market, "_build_indices", lambda: pytest.fail("loader called"))
-    monkeypatch.setattr(options, "_unusual_activity_impl", lambda *_args: pytest.fail("loader called"))
     monkeypatch.setattr(sectors, "_iv_ranking_payload", lambda *_args: pytest.fail("loader called"))
     # No published public-home snapshot on disk.
     from app import public_home_snapshot as phs
@@ -296,9 +291,6 @@ def test_public_endpoints_never_read_the_owner_process_cache(
             with pytest.raises(HTTPException) as idx_exc:
                 await market.market_indices(_request())
             assert idx_exc.value.status_code == 503
-            with pytest.raises(HTTPException) as unusual_exc:
-                await options.unusual_activity(_request(), type="all", min_vol_oi=1.0)
-            assert unusual_exc.value.status_code == 503
             # The sector IV process cache is deliberately shared: it only ever
             # holds data that is simultaneously published to disk.
             assert (

@@ -20,7 +20,7 @@ from app.access import (
     request_owner_access_context,
     require_public_read_or_owner_access,
 )
-from app.api import earnings, market, options, signals, stocks
+from app.api import earnings, market, signals, stocks
 from app.data_paths import get_data_paths
 from app.public_home_snapshot import (
     PUBLIC_HOME_INDEX_SYMBOLS,
@@ -427,7 +427,6 @@ def _task_config() -> SimpleNamespace:
         chart_seconds=300,
         signals_seconds=900,
         earnings_seconds=21_600,
-        unusual_seconds=1800,
         cta_seconds=1800,
         failure_retry_seconds=300,
     )
@@ -760,23 +759,20 @@ def test_worker_publishes_quick_resources_before_heavy_failure(tmp_path: Path) -
     result = asyncio.run(task())
 
     assert result.status == "degraded"
-    assert result.details["deferred"] == ["unusual"]
     assert result.details["failed"] == ["earnings"]
     assert calls == [
         "watchlist",
         "indices",
-            "focus_overview",
-            "focus_chart",
-            "focus_signals",
-            "market_signals",
-            "earnings",
-            "cta_trend",
-        ]
+        "focus_overview",
+        "focus_chart",
+        "market_signals",
+        "earnings",
+        "cta_trend",
+    ]
     assert set(read_public_home_entries(path, now=now)) == {
         "indices",
         "focus_overview",
         "focus_chart",
-        "focus_signals",
         "market_signals",
         "cta_trend",
     }
@@ -825,7 +821,7 @@ def test_worker_keeps_complete_earnings_snapshot_when_refresh_is_limited(
     assert calls == 1
 
 
-def test_worker_staggers_heavy_resources_and_skips_not_due_providers(
+def test_worker_skips_not_due_providers(
     tmp_path: Path,
 ) -> None:
     current = [_regular_time()]
@@ -849,19 +845,13 @@ def test_worker_staggers_heavy_resources_and_skips_not_due_providers(
         clock=lambda: current[0],
     )
     first = asyncio.run(task())
-    assert first.details["deferred"] == ["unusual"]
-    assert "earnings" in calls  # cta_trend 在重资源之后构建，占据末位
+    assert first.status == "idle"
+    assert calls == ["watchlist", *PUBLIC_HOME_RESOURCE_ORDER, "cta_trend"]
 
     current[0] += 30
     calls.clear()
     second = asyncio.run(task())
-    assert calls == ["unusual"]
-    assert second.details["deferred"] == []
-
-    current[0] += 30
-    calls.clear()
-    third = asyncio.run(task())
-    assert third.status == "idle"
+    assert second.status == "idle"
     assert calls == []
     assert set(read_public_home_entries(path, now=current[0])) == {
         *PUBLIC_HOME_RESOURCE_ORDER,
@@ -869,13 +859,13 @@ def test_worker_staggers_heavy_resources_and_skips_not_due_providers(
     }
 
 
-def test_worker_retries_failed_heavy_resource_after_cooldown_only(
+def test_worker_retries_failed_resource_after_cooldown_only(
     tmp_path: Path,
 ) -> None:
     current = [_regular_time()]
     path = tmp_path / "public-home-snapshot-v1.json"
     entries = _entries(current[0])
-    entries["unusual"]["saved_at"] = current[0] - 1801
+    entries["market_signals"]["saved_at"] = current[0] - 901
     write_public_home_snapshot(path, entries, now=current[0])
     _seed_watchlist(path, current[0])
     calls = 0
@@ -894,7 +884,7 @@ def test_worker_retries_failed_heavy_resource_after_cooldown_only(
     task = PublicHomeTask(
         _task_config(),
         builders={
-            resource: fail if resource == "unusual" else refresh(resource)
+            resource: fail if resource == "market_signals" else refresh(resource)
             for resource in ("watchlist", *PUBLIC_HOME_RESOURCE_ORDER, "cta_trend")
         },
         snapshot_path=path,
@@ -902,30 +892,28 @@ def test_worker_retries_failed_heavy_resource_after_cooldown_only(
     )
     first = asyncio.run(task())
     assert first.status == "degraded"
-    assert first.details["retry_after_seconds"]["unusual"] == 300
+    assert first.details["retry_after_seconds"]["market_signals"] == 300
     current[0] += 30
     cooling = asyncio.run(task())
     assert cooling.status == "degraded"
     assert cooling.error_code == "public_home_refresh_cooling"
-    assert cooling.details["cooling"] == ["unusual"]
+    assert cooling.details["cooling"] == ["market_signals"]
     assert calls == 1
 
     current[0] += 270
     second = asyncio.run(task())
     assert second.status == "degraded"
-    assert second.details["retry_after_seconds"]["unusual"] == 600
+    assert second.details["retry_after_seconds"]["market_signals"] == 600
     assert calls == 2
 
+    # The doubling backoff is capped at the resource's own interval (900s).
     current[0] += 600
     third = asyncio.run(task())
-    assert third.details["retry_after_seconds"]["unusual"] == 1200
-    current[0] += 1200
-    fourth = asyncio.run(task())
-    assert fourth.details["retry_after_seconds"]["unusual"] == 1800
-    current[0] += 1800
+    assert third.details["retry_after_seconds"]["market_signals"] == 900
+    current[0] += 900
     capped = asyncio.run(task())
-    assert capped.details["retry_after_seconds"]["unusual"] == 1800
-    assert calls == 5
+    assert capped.details["retry_after_seconds"]["market_signals"] == 900
+    assert calls == 4
 
 
 def test_worker_cancelled_round_keeps_single_flight_and_later_harvests(
@@ -1051,7 +1039,7 @@ def test_worker_watchlist_failure_preserves_last_good_file(tmp_path: Path) -> No
     assert watchlist_path.read_bytes() == original
 
 
-def test_weekend_uses_closed_windows_and_keeps_unusual_servable(
+def test_weekend_uses_closed_windows(
     tmp_path: Path,
 ) -> None:
     now = _weekend_time()
@@ -1095,55 +1083,16 @@ def test_weekend_uses_closed_windows_and_keeps_unusual_servable(
         "cta_trend",
     ]
     assert result.details["unavailable"] == []
-    assert result.details["deferred"] == ["unusual"]
     assert calls == []
 
 
-@pytest.mark.parametrize("expired", [False, True], ids=["missing", "hard-expired"])
-def test_weekend_allows_one_unusual_first_fill_when_not_servable(
-    tmp_path: Path,
-    expired: bool,
-) -> None:
-    now = _weekend_time()
-    path = tmp_path / "public-home-snapshot-v1.json"
-    entries = _entries(now)
-    if expired:
-        entries["unusual"]["saved_at"] = (
-            now - PUBLIC_HOME_RESOURCE_SPECS["unusual"].max_age - 1
-        )
-    else:
-        entries.pop("unusual")
-    write_public_home_snapshot(path, entries, now=now)
-    _seed_watchlist(path, now)
-    calls = 0
-
-    async def build(_parameters: dict) -> dict:
-        nonlocal calls
-        calls += 1
-        return _payload("unusual", now)
-
-    task = PublicHomeTask(
-        _task_config(),
-        builders={"unusual": build},
-        snapshot_path=path,
-        clock=lambda: now,
-    )
-    first = asyncio.run(task())
-    second = asyncio.run(task())
-
-    assert first.status == "idle"
-    assert first.details["refreshed"] == ["unusual"]
-    assert second.details["deferred"] == ["unusual"]
-    assert calls == 1
-
-
-def test_weekend_retries_only_unusual_persistence_after_write_failure(
+def test_worker_retries_only_persistence_after_write_failure(
     tmp_path: Path,
 ) -> None:
-    current = [_weekend_time()]
+    current = [_regular_time()]
     path = tmp_path / "public-home-snapshot-v1.json"
     entries = _entries(current[0])
-    entries.pop("unusual")
+    entries.pop("market_signals")
     write_public_home_snapshot(path, entries, now=current[0])
     _seed_watchlist(path, current[0])
     builder_calls = 0
@@ -1152,7 +1101,7 @@ def test_weekend_retries_only_unusual_persistence_after_write_failure(
     async def build(_parameters: dict) -> dict:
         nonlocal builder_calls
         builder_calls += 1
-        return _payload("unusual", current[0])
+        return _payload("market_signals", current[0])
 
     def fail_once_writer(
         destination: Path,
@@ -1167,32 +1116,33 @@ def test_weekend_retries_only_unusual_persistence_after_write_failure(
         write_public_home_snapshot(destination, bundle, now=now)
 
     config = _task_config()
+    # signals_seconds stays at 900s: market_signals is the resource under test,
+    # and its 300s write retry must come before its next refresh falls due.
     for field in (
         "watchlist_seconds",
         "indices_seconds",
         "overview_seconds",
         "chart_seconds",
-        "signals_seconds",
         "earnings_seconds",
     ):
         setattr(config, field, 7 * 24 * 60 * 60)
-    config.cta_seconds = 86_400  # 本用例只考察 unusual：6 小时跳变不得把 cta 拖入轮次
+    config.cta_seconds = 86_400
     task = PublicHomeTask(
         config,
-        builders={"unusual": build},
+        builders={"market_signals": build},
         writer=fail_once_writer,
         snapshot_path=path,
         clock=lambda: current[0],
     )
     failed = asyncio.run(task())
-    current[0] += 6 * 60 * 60
+    current[0] += 300
     repaired = asyncio.run(task())
 
     assert failed.status == "degraded"
-    assert failed.details["failed"] == ["unusual"]
+    assert failed.details["failed"] == ["market_signals"]
     assert repaired.status == "idle"
-    assert repaired.details["refreshed"] == ["unusual"]
-    assert "unusual" in repaired.details["available"]
+    assert repaired.details["refreshed"] == ["market_signals"]
+    assert "market_signals" in repaired.details["available"]
     assert builder_calls == 1
     assert writer_calls == 2
 
@@ -1329,123 +1279,6 @@ def test_external_fresh_generation_clears_local_failure(tmp_path: Path) -> None:
     assert calls == 1
 
 
-def test_unusual_uses_options_close_on_early_close_day(tmp_path: Path) -> None:
-    before = datetime(2026, 11, 27, 17, 55, tzinfo=timezone.utc).timestamp()
-    after = datetime(2026, 11, 27, 18, 5, tzinfo=timezone.utc).timestamp()
-
-    def run_at(observed: float, name: str) -> tuple[object, list[str]]:
-        path = tmp_path / name
-        entries = _entries(observed)
-        entries["unusual"]["saved_at"] = observed - 1801
-        write_public_home_snapshot(path, entries, now=observed)
-        _seed_watchlist(path, observed)
-        calls: list[str] = []
-
-        async def build(_parameters: dict) -> dict:
-            calls.append("unusual")
-            return _payload("unusual", observed)
-
-        task = PublicHomeTask(
-            _task_config(),
-            builders={"unusual": build},
-            snapshot_path=path,
-            clock=lambda: observed,
-        )
-        return asyncio.run(task()), calls
-
-    before_result, before_calls = run_at(before, "before.json")
-    after_result, after_calls = run_at(after, "after.json")
-
-    assert before_result.details["refreshed"] == ["unusual"]
-    assert before_calls == ["unusual"]
-    assert after_result.details["deferred"] == ["unusual"]
-    assert after_calls == []
-
-
-def test_worker_default_signal_builder_bypasses_stale_public_snapshot(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    now = _regular_time()
-    path = tmp_path / "public-home-snapshot-v1.json"
-    entries = _entries(now)
-    entries["focus_signals"]["saved_at"] = now - 901
-    write_public_home_snapshot(path, entries, now=now)
-    _seed_watchlist(path, now)
-    calls: list[str] = []
-
-    async def live_signals(ticker: str) -> dict:
-        calls.append(ticker)
-        return _payload("focus_signals", now, price=222.0)
-
-    async def cached_api_must_not_run(_ticker: str) -> dict:
-        raise AssertionError("worker reused the cache-aware API endpoint")
-
-    monkeypatch.setattr(stocks, "_build_stock_signals", live_signals)
-    monkeypatch.setattr(stocks, "stock_signals", cached_api_must_not_run)
-    task = PublicHomeTask(
-        _task_config(),
-        snapshot_path=path,
-        clock=lambda: now,
-    )
-    async def scenario() -> object:
-        with request_owner_access_context(False):
-            return await task()
-
-    result = asyncio.run(scenario())
-
-    assert result.status == "idle"
-    assert result.details["refreshed"] == ["focus_signals"]
-    assert result.details["failed"] == []
-    assert calls == ["NVDA"]
-    stored_entry = read_public_home_entries(path, now=now)["focus_signals"]
-    stored = stored_entry["payload"]
-    assert stored_entry["saved_at"] == now
-    assert stored["price"] == 222.0
-    # Reference the declared set rather than restating it: an inlined copy here
-    # is exactly the kind of mirror that let price_provider slip through.
-    from app.public_home_snapshot import _SIGNALS_FIELDS
-
-    assert set(stored) == set(_SIGNALS_FIELDS)
-
-
-def test_owner_endpoint_and_worker_share_live_signal_builder(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    now = time.time()
-    calls: list[str] = []
-
-    async def live_signals(ticker: str) -> dict:
-        calls.append(ticker)
-        payload = _payload("focus_signals", now, price=180.0)
-        payload["ticker"] = ticker
-        return payload
-
-    monkeypatch.setattr(stocks, "_build_stock_signals", live_signals)
-    stocks._endpoint_cache.pop("technical-signals:AAPL", None)
-    try:
-        with request_owner_access_context(True):
-            api_payload = asyncio.run(stocks.stock_signals("AAPL"))
-    finally:
-        stocks._endpoint_cache.pop("technical-signals:AAPL", None)
-        stocks._endpoint_locks.pop("technical-signals:AAPL", None)
-    task = PublicHomeTask(_task_config(), clock=lambda: now)
-    worker_payload = asyncio.run(
-        task._default_build(
-            "focus_signals",
-            {"ticker": "NVDA", "period": "100d"},
-        )
-    )
-
-    assert calls == ["AAPL", "NVDA"]
-    assert api_payload["ticker"] == "AAPL"
-    assert api_payload["_stale"] is False
-    assert api_payload["source_status"] == "active"
-    assert worker_payload["ticker"] == "NVDA"
-    assert "_stale" not in worker_payload
-    assert "source_status" not in worker_payload
-
-
 def test_public_home_worker_does_not_block_on_massive_symbol_directory(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -1546,7 +1379,6 @@ def test_public_cold_process_reads_file_without_provider_or_write(
     monkeypatch.setattr(stocks, "_stock_chart_impl", unexpected)
     monkeypatch.setattr(stocks.yf, "Ticker", unexpected_ticker)
     monkeypatch.setattr(earnings, "_build_upcoming_earnings", unexpected)
-    monkeypatch.setattr(options, "_unusual_activity_impl", unexpected)
     monkeypatch.setattr(signals, "compute_market_signals", unexpected_ticker)
 
     async def scenario() -> None:
@@ -1554,11 +1386,7 @@ def test_public_cold_process_reads_file_without_provider_or_write(
             assert _rp(await market.market_indices(_areq()))["_stale"] is True
             assert (await stocks.stock_overview("NVDA"))["price"] == 100.0
             assert (await stocks.stock_chart("NVDA", "1d", "raw"))["_stale"] is True
-            assert (await stocks.stock_signals("NVDA"))["_stale"] is True
             assert _rp(await earnings.upcoming_earnings(_areq()))["_stale"] is True
-            assert _rp(
-                await options.unusual_activity(_areq(), type="all", min_vol_oi=1.0)
-            )["_stale"] is True
 
     asyncio.run(scenario())
     assert path.read_bytes() == original
@@ -1587,11 +1415,8 @@ def test_public_snapshot_parameter_scope_never_leaks_default_data(
     async def scenario() -> None:
         with request_owner_access_context(False):
             await unavailable(stocks.stock_overview("AAPL"))
-            await unavailable(stocks.stock_signals("AAPL"))
             await unavailable(stocks.stock_chart("NVDA", "15m", "raw"))
             await unavailable(stocks.stock_chart("NVDA", "1d", "adjusted"))
-            await unavailable(options.unusual_activity(_areq(), type="call", min_vol_oi=1.0))
-            await unavailable(options.unusual_activity(_areq(), type="all", min_vol_oi=2.0))
 
     asyncio.run(scenario())
 
@@ -1675,7 +1500,7 @@ def test_owner_closed_cold_process_reuses_two_hour_disk_generation(
             )
         }
     )
-    for module in (market, stocks, earnings, options):
+    for module in (market, stocks, earnings):
         monkeypatch.setattr(
             module,
             "get_personal_config",
@@ -1701,7 +1526,6 @@ def test_owner_closed_cold_process_reuses_two_hour_disk_generation(
     )
     cache.clear()
     stocks._endpoint_cache.clear()
-    options._unusual_failure_deadlines.clear()
     monkeypatch.setattr(stocks, "_WATCHLIST_SNAPSHOT_PATH", watchlist_path)
     calls: list[str] = []
 
@@ -1719,7 +1543,6 @@ def test_owner_closed_cold_process_reuses_two_hour_disk_generation(
     monkeypatch.setattr(stocks, "_stock_chart_impl", unexpected)
     monkeypatch.setattr(stocks.yf, "Ticker", unexpected_ticker)
     monkeypatch.setattr(earnings, "_build_upcoming_earnings", unexpected)
-    monkeypatch.setattr(options, "_unusual_activity_impl", unexpected)
 
     async def scenario() -> list[dict]:
         with request_owner_access_context(True):
@@ -1728,19 +1551,17 @@ def test_owner_closed_cold_process_reuses_two_hour_disk_generation(
                 await stocks.watchlist(),
                 await stocks.stock_overview("NVDA"),
                 await stocks.stock_chart("NVDA", "1d", "raw"),
-                await stocks.stock_signals("NVDA"),
                 _rp(await earnings.upcoming_earnings(_areq())),
-                _rp(await options.unusual_activity(_areq(), type="all", min_vol_oi=1.0)),
             ]
 
     payloads = asyncio.run(scenario())
 
     assert calls == []
-    for payload in (*payloads[:5], payloads[6]):
+    for payload in payloads[:4]:
         assert payload["_stale"] is True
         assert payload["source_status"] == "degraded"
-    assert payloads[5].get("_stale") is not True
-    assert payloads[5]["source_status"] == "active"
+    assert payloads[4].get("_stale") is not True
+    assert payloads[4]["source_status"] == "active"
 
 
 def test_password_mode_anonymous_dependency_reads_snapshot_without_provider(
@@ -1769,7 +1590,6 @@ def test_password_mode_anonymous_dependency_reads_snapshot_without_provider(
     monkeypatch.setattr(stocks, "_stock_chart_impl", unexpected)
     monkeypatch.setattr(stocks.yf, "Ticker", unexpected_ticker)
     monkeypatch.setattr(earnings, "_build_upcoming_earnings", unexpected)
-    monkeypatch.setattr(options, "_unusual_activity_impl", unexpected)
     monkeypatch.setattr(signals, "compute_market_signals", unexpected_ticker)
 
     app = FastAPI()
@@ -1782,7 +1602,6 @@ def test_password_mode_anonymous_dependency_reads_snapshot_without_provider(
         market.router,
         stocks.router,
         earnings.router,
-        options.router,
         signals.router,
     ):
         app.include_router(router, dependencies=dependency)
@@ -1792,13 +1611,11 @@ def test_password_mode_anonymous_dependency_reads_snapshot_without_provider(
             client.get("/api/market/indices"),
             client.get("/api/stocks/NVDA"),
             client.get("/api/stocks/NVDA/chart?range=1d&adjustment=raw"),
-            client.get("/api/stocks/NVDA/signals"),
             client.get("/api/earnings/upcoming"),
-            client.get("/api/options/unusual?type=all&min_vol_oi=1.0"),
             client.get("/api/signals/market"),
         ]
 
-    assert [response.status_code for response in responses] == [200] * 7
+    assert [response.status_code for response in responses] == [200] * 5
     assert all(response.json()["_stale"] is True for response in responses)
     assert calls == []
     assert path.read_bytes() == original
@@ -2022,6 +1839,99 @@ def test_frontend_default_focus_contract_matches_worker_snapshot() -> None:
     }
 
 
+_RETIRED_RESOURCES = ("focus_signals", "unusual")
+
+
+@pytest.mark.parametrize("expired", [False, True], ids=["fresh", "expired"])
+def test_retired_entries_in_an_existing_snapshot_stay_inert(
+    tmp_path: Path,
+    expired: bool,
+) -> None:
+    """Production snapshots still hold focus_signals and unusual entries.
+
+    The worker no longer refreshes them, so they age past max_age. Until their
+    names leave PUBLIC_HOME_RESOURCE_SPECS, the document must keep parsing,
+    every live resource must stay readable, the worker must not report
+    degraded, and a publish carries the retired entries forward unchanged.
+    """
+
+    now = _regular_time()
+    path = tmp_path / "public-home-snapshot-v1.json"
+    entries = _entries(now)
+    for resource in _RETIRED_RESOURCES:
+        saved_at = (
+            now - PUBLIC_HOME_RESOURCE_SPECS[resource].max_age - 1
+            if expired
+            else now
+        )
+        entries[resource] = create_public_home_entry(
+            resource,
+            _payload(resource, saved_at),
+            saved_at=saved_at,
+            parameters=public_home_resource_parameters(resource, now=now),
+        )
+    write_public_home_snapshot(path, entries, now=now)
+    _seed_watchlist(path, now)
+    retired_on_disk = {
+        resource: json.loads(path.read_text(encoding="utf-8"))["resources"][resource]
+        for resource in _RETIRED_RESOURCES
+    }
+
+    loaded = read_public_home_entries(path, now=now)
+    assert set(loaded) == {*PUBLIC_HOME_RESOURCE_ORDER, "cta_trend", *_RETIRED_RESOURCES}
+    for resource in PUBLIC_HOME_RESOURCE_ORDER:
+        assert read_public_home_resource(
+            resource,
+            parameters=public_home_resource_parameters(resource, now=now),
+            path=path,
+            now=now,
+        ) is not None, resource
+    for resource in _RETIRED_RESOURCES:
+        served = read_public_home_resource(
+            resource,
+            parameters=public_home_resource_parameters(resource, now=now),
+            path=path,
+            now=now,
+        )
+        assert (served is None) is expired, resource
+
+    current = [now]
+    calls: list[str] = []
+
+    def builder(resource: str):
+        async def run(_parameters: dict) -> dict:
+            calls.append(resource)
+            return _payload(resource, current[0], price=150.0)
+
+        return run
+
+    task = PublicHomeTask(
+        _task_config(),
+        builders={
+            resource: builder(resource)
+            for resource in ("watchlist", *PUBLIC_HOME_RESOURCE_ORDER, "cta_trend")
+        },
+        snapshot_path=path,
+        clock=lambda: current[0],
+    )
+    idle = asyncio.run(task())
+    assert idle.status == "idle"
+    assert calls == []
+    assert idle.details["unavailable"] == []
+    assert not set(_RETIRED_RESOURCES) & set(idle.details["available"])
+
+    # indices/focus_overview/focus_chart (300s) fall due and get published.
+    current[0] += 301
+    published = asyncio.run(task())
+    assert published.status == "idle"
+    assert "indices" in published.details["refreshed"]
+    assert not set(_RETIRED_RESOURCES) & set(calls)
+    on_disk = json.loads(path.read_text(encoding="utf-8"))["resources"]
+    assert on_disk["indices"]["payload"]["indices"][0]["price"] == 150.0
+    for resource in _RETIRED_RESOURCES:
+        assert on_disk[resource] == retired_on_disk[resource], resource
+
+
 def test_release_gate_blocks_on_missing_but_not_on_stale(tmp_path, monkeypatch):
     """A weekend-stale entry must not stall a rollout; a broken one must.
 
@@ -2113,6 +2023,26 @@ def test_release_gate_blocks_on_missing_but_not_on_stale(tmp_path, monkeypatch):
     assert report["ready"] is True, report
     assert report["missing"] == []
     assert report["stale"] == []
+
+    # Retired entries still sitting in the production file, long expired, are
+    # not part of the gate.
+    def _with_retired(built):
+        for resource in ("focus_signals", "unusual"):
+            spec = PUBLIC_HOME_RESOURCE_SPECS[resource]
+            built[resource] = {
+                "schema": spec.schema,
+                "max_age": spec.max_age,
+                "parameters": public_home_resource_parameters(resource, now=now),
+                "saved_at": now - spec.max_age - 60,
+                "payload": {},
+            }
+
+    state["entries"] = _entries(_with_retired)
+    report = gate.release_data_report(now=now)
+    assert report["ready"] is True, report
+    assert report["missing"] == []
+    assert report["stale"] == []
+    assert not {"focus_signals", "unusual"} & set(report["available"])
 
     # Aged past its window -> reported as stale, still ready.
     state["entries"] = _entries(

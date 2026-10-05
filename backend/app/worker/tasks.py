@@ -1284,14 +1284,11 @@ class PublicHomeTask:
         "indices": "indices_seconds",
         "focus_overview": "overview_seconds",
         "focus_chart": "chart_seconds",
-        "focus_signals": "signals_seconds",
         "market_signals": "signals_seconds",
         "breakout_lead_chart": "chart_seconds",
         "earnings": "earnings_seconds",
-        "unusual": "unusual_seconds",
         "cta_trend": "cta_seconds",
     }
-    _HEAVY_RESOURCES = ("earnings", "unusual")
 
     def __init__(
         self,
@@ -1325,14 +1322,13 @@ class PublicHomeTask:
         self._clock = clock
         self._failures: dict[str, _PublicHomeFailure] = {}
         self._inflight: dict[str, _PublicHomeInflight] = {}
-        self._next_heavy = "earnings"
 
     async def _default_build(
         self,
         resource: str,
         parameters: Mapping[str, Any],
     ) -> Any:
-        from app.api import earnings, market, options, signals, stocks
+        from app.api import earnings, market, signals, stocks
 
         if resource == "watchlist":
             return await stocks._build_watchlist()
@@ -1346,8 +1342,6 @@ class PublicHomeTask:
                 str(parameters["range"]),
                 str(parameters["adjustment"]),
             )
-        if resource == "focus_signals":
-            return await stocks._build_stock_signals(str(parameters["ticker"]))
         if resource == "market_signals":
             return await signals._build_market_signals_payload()
         if resource == "cta_trend":
@@ -1363,11 +1357,6 @@ class PublicHomeTask:
                 str(parameters["market_date"])
             ).date()
             return await earnings._build_upcoming_earnings(market_date)
-        if resource == "unusual":
-            return await options._unusual_activity_impl(
-                str(parameters["type"]),
-                float(parameters["min_vol_oi"]),
-            )
         raise ValueError("unknown public home resource")
 
     @staticmethod
@@ -1452,24 +1441,18 @@ class PublicHomeTask:
         )
 
     @staticmethod
-    def _market_phase(observed: float, *, resource: str | None = None) -> str:
+    def _market_phase(observed: float) -> str:
         from app.services.market_calendar import (
             ET,
             early_close_minutes,
             is_trading_day,
-            options_close_minutes,
         )
 
         local = datetime.fromtimestamp(observed, ET)
         if not is_trading_day(local.date()):
             return "closed"
         minutes = local.hour * 60 + local.minute
-        close = (
-            options_close_minutes(local.date())
-            if resource == "unusual"
-            else early_close_minutes(local.date()) or 16 * 60
-        )
-        close = close or 16 * 60
+        close = early_close_minutes(local.date()) or 16 * 60
         if 9 * 60 + 30 <= minutes < close:
             return "regular"
         if 4 * 60 <= minutes < 9 * 60 + 30:
@@ -1484,8 +1467,6 @@ class PublicHomeTask:
             return interval
         if resource == "earnings":
             return max(interval, 12 * 60 * 60)
-        if resource == "unusual":
-            return max(interval, 6 * 60 * 60)
         return max(interval, 6 * 60 * 60)
 
     @staticmethod
@@ -1533,7 +1514,7 @@ class PublicHomeTask:
         attempts = (previous.attempts if previous is not None else 0) + 1
         base = float(self._config.failure_retry_seconds)
         delay = min(self._interval(resource), base * (2 ** min(attempts - 1, 10)))
-        phase = self._market_phase(float(self._clock()), resource=resource)
+        phase = self._market_phase(float(self._clock()))
         if phase == "closed":
             delay = max(delay, self._effective_interval(resource, phase))
         state = _PublicHomeFailure(
@@ -1726,7 +1707,6 @@ class PublicHomeTask:
         entries: Mapping[str, Any],
         refreshed: list[str],
         failed: list[str],
-        deferred: list[str],
         in_flight: list[str],
         cooling: list[str],
     ) -> TaskResult:
@@ -1756,7 +1736,6 @@ class PublicHomeTask:
             "watchlist_snapshot": watchlist_path.name,
             "refreshed": refreshed,
             "failed": failed,
-            "deferred": deferred,
             "in_flight": sorted(set(in_flight)),
             "cooling": sorted(set(cooling)),
             "retry_after_seconds": retry_after,
@@ -1892,10 +1871,7 @@ class PublicHomeTask:
                 )
             )
         )
-        market_phases = {
-            resource: self._market_phase(observed, resource=resource)
-            for resource in resource_order
-        }
+        market_phase = self._market_phase(observed)
         entries = await self._read_entries(path, watchlist_path, now=observed)
         if self._option_data_refresh is not None:
             try:
@@ -1925,7 +1901,6 @@ class PublicHomeTask:
         }
         refreshed: list[str] = []
         failed: list[str] = []
-        deferred: list[str] = []
         in_flight: list[str] = []
         cooling: list[str] = []
 
@@ -1980,21 +1955,6 @@ class PublicHomeTask:
         for resource in resource_order:
             if resource in self._inflight:
                 continue
-            if (
-                resource == "unusual"
-                and market_phases[resource] != "regular"
-                and (
-                    resource in self._failures
-                    or self._is_hard_servable(
-                        resource,
-                        entries.get(resource),
-                        parameters[resource],
-                        observed,
-                    )
-                )
-            ):
-                deferred.append(resource)
-                continue
             if not self._is_due(
                 resource,
                 entries.get(resource),
@@ -2002,7 +1962,7 @@ class PublicHomeTask:
                 observed,
                 interval_seconds=self._effective_interval(
                     resource,
-                    market_phases[resource],
+                    market_phase,
                 ),
             ):
                 self._failures.pop(resource, None)
@@ -2012,27 +1972,6 @@ class PublicHomeTask:
                 cooling.append(resource)
                 continue
             due.append(resource)
-
-        heavy_due = [item for item in self._HEAVY_RESOURCES if item in due]
-        heavy_in_flight = any(
-            resource in self._HEAVY_RESOURCES
-            and not attempt.task.done()
-            for resource, attempt in self._inflight.items()
-        )
-        if heavy_in_flight:
-            deferred.extend(heavy_due)
-            due = [item for item in due if item not in self._HEAVY_RESOURCES]
-        elif len(heavy_due) > 1:
-            selected = (
-                self._next_heavy
-                if self._next_heavy in heavy_due
-                else heavy_due[0]
-            )
-            self._next_heavy = (
-                "unusual" if selected == "earnings" else "earnings"
-            )
-            deferred = [item for item in heavy_due if item != selected]
-            due = [item for item in due if item not in deferred]
 
         for resource in due:
             baseline = self._saved_at(entries.get(resource))
@@ -2090,7 +2029,6 @@ class PublicHomeTask:
             entries=entries,
             refreshed=refreshed,
             failed=failed,
-            deferred=deferred,
             in_flight=in_flight,
             cooling=cooling,
         )

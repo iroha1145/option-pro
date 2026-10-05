@@ -29,12 +29,10 @@ from tests.http_response_support import anonymous_get_request as _areq
 
 @pytest.fixture(autouse=True)
 def _clear_state() -> None:
-    options._unusual_failure_deadlines.clear()
     options._option_failure_cache.clear()
     options.cache.clear()
     yahoo._cache.clear()
     yield
-    options._unusual_failure_deadlines.clear()
     options._option_failure_cache.clear()
     options.cache.clear()
     yahoo._cache.clear()
@@ -177,109 +175,6 @@ def test_er07_failure_cache_is_capped(monkeypatch: pytest.MonkeyPatch) -> None:
     assert len(options._option_failure_cache) <= 3
 
 
-def test_fl01_quality_mid_premium_is_estimated_notional(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    chain = SimpleNamespace(
-        calls=pd.DataFrame(
-            [
-                {
-                    "contractSymbol": "AAA-CALL",
-                    "strike": 100.0,
-                    "volume": 100,
-                    "openInterest": 10,
-                    "lastPrice": 9.0,
-                    "bid": 1.9,
-                    "ask": 2.1,
-                    "impliedVolatility": 0.2,
-                    "inTheMoney": False,
-                }
-            ]
-        ),
-        puts=pd.DataFrame(),
-    )
-    ticker = SimpleNamespace(
-        options=["2030-08-16"],
-        fast_info=SimpleNamespace(last_price=100.0),
-        option_chain=lambda _expiration: chain,
-    )
-    monkeypatch.setattr(options, "POPULAR_TICKERS", ["AAA"])
-    monkeypatch.setattr(options.yf, "Ticker", lambda _symbol: ticker)
-    payload = asyncio.run(options._unusual_activity_impl("all", 1.0))
-    row = payload["results"][0]
-    assert row["premium"] == 20_000.0
-    assert row["premium_basis"] == "quality_mid"
-    assert row["premium_kind"] == "estimated_notional"
-    assert payload["premium_kind"] == "estimated_notional"
-    assert payload["contract_multiplier"] == 100
-
-
-def test_fl02_last_price_estimate_is_traceable(monkeypatch: pytest.MonkeyPatch) -> None:
-    chain = SimpleNamespace(
-        calls=pd.DataFrame(
-            [
-                {
-                    "contractSymbol": "BBB-CALL",
-                    "strike": 100.0,
-                    "volume": 100,
-                    "openInterest": 10,
-                    "lastPrice": 3.5,
-                    "bid": 0.0,
-                    "ask": 0.0,
-                    "impliedVolatility": 0.2,
-                    "inTheMoney": False,
-                }
-            ]
-        ),
-        puts=pd.DataFrame(),
-    )
-    ticker = SimpleNamespace(
-        options=["2030-08-16"],
-        fast_info=SimpleNamespace(last_price=100.0),
-        option_chain=lambda _expiration: chain,
-    )
-    monkeypatch.setattr(options, "POPULAR_TICKERS", ["BBB"])
-    monkeypatch.setattr(options.yf, "Ticker", lambda _symbol: ticker)
-    payload = asyncio.run(options._unusual_activity_impl("all", 1.0))
-    row = payload["results"][0]
-    assert row["premium"] == 35_000.0
-    assert row["premium_basis"] == "last_price"
-    assert row["last_price"] == 3.5
-
-
-def test_fl03_wide_spread_without_last_leaves_premium_missing(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    chain = SimpleNamespace(
-        calls=pd.DataFrame(
-            [
-                {
-                    "contractSymbol": "WIDE",
-                    "strike": 100.0,
-                    "volume": 100,
-                    "openInterest": 10,
-                    "lastPrice": float("nan"),
-                    "bid": 1.0,
-                    "ask": 8.0,
-                    "impliedVolatility": 0.2,
-                    "inTheMoney": False,
-                }
-            ]
-        ),
-        puts=pd.DataFrame(),
-    )
-    ticker = SimpleNamespace(
-        options=["2030-08-16"],
-        fast_info=SimpleNamespace(last_price=100.0),
-        option_chain=lambda _expiration: chain,
-    )
-    monkeypatch.setattr(options, "POPULAR_TICKERS", ["WIDE"])
-    monkeypatch.setattr(options.yf, "Ticker", lambda _symbol: ticker)
-    payload = asyncio.run(options._unusual_activity_impl("all", 1.0))
-    assert payload["results"][0]["premium"] is None
-    assert payload["results"][0]["premium_basis"] is None
-
-
 def test_fl04_does_not_infer_opening_or_infinite_ratio(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -312,63 +207,6 @@ def test_fl04_does_not_infer_opening_or_infinite_ratio(
     assert "开仓" not in reasons or "无法" in reasons
     assert payload["alerts"][0]["direction"] is None
     assert payload["alerts"][0]["vol_oi_ratio"] == 500.0
-
-
-def test_fl05_partial_scan_coverage_matches_success(
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    from app import failure_diagnostics
-
-    monkeypatch.setattr(failure_diagnostics, "_seen", {})
-    good = SimpleNamespace(
-        options=["2030-08-16"],
-        fast_info=SimpleNamespace(last_price=100.0),
-        option_chain=lambda _expiration: SimpleNamespace(
-            calls=pd.DataFrame(
-                [
-                    {
-                        "contractSymbol": "GOOD",
-                        "strike": 110.0,
-                        "volume": 100,
-                        "openInterest": 10,
-                        "lastPrice": 2.5,
-                        "bid": 2.4,
-                        "ask": 2.6,
-                        "impliedVolatility": 0.2,
-                        "inTheMoney": False,
-                    }
-                ]
-            ),
-            puts=pd.DataFrame(),
-        ),
-    )
-
-    def factory(symbol: str):
-        if symbol == "BROKEN":
-            raise RuntimeError("https://provider.example/?token=private")
-        return good
-
-    monkeypatch.setattr(options, "POPULAR_TICKERS", ["GOOD", "BROKEN"])
-    monkeypatch.setattr(options.yf, "Ticker", factory)
-    payload = asyncio.run(options._unusual_activity_impl("all", 1.0))
-    assert payload["planned_tickers"] == 2
-    assert payload["successful_tickers"] == 1
-    assert payload["attempted"] == 2
-    assert payload["succeeded"] == 1
-    assert payload["failed_symbols"] == ["BROKEN"]
-    assert payload["source_status"] == "degraded"
-    assert payload["data_limited"] is True
-    asyncio.run(options._unusual_activity_impl("all", 1.0))
-    records = [
-        record for record in caplog.records
-        if record.name == "app.failure_diagnostics"
-        and "stage=options_unusual_ticker" in record.getMessage()
-    ]
-    assert len(records) == 1
-    assert "symbol=BROKEN error_type=RuntimeError" in records[0].getMessage()
-    assert "private" not in records[0].getMessage()
-    assert records[0].exc_info is None
 
 
 def test_ac04_worker_task_gets_explicit_owner_context(tmp_path) -> None:

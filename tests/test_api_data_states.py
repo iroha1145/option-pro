@@ -4,7 +4,6 @@ import asyncio
 from datetime import date
 import json
 import time
-from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -203,52 +202,6 @@ def test_logo_invalid_variants_cannot_bypass_the_canonical_negative_cache(monkey
     assert calls == 1
 
 
-def test_unusual_options_reports_total_provider_failure(monkeypatch):
-    class BrokenTicker:
-        def __init__(self, _symbol):
-            raise RuntimeError("provider unavailable")
-
-    monkeypatch.setattr(options, "POPULAR_TICKERS", ["AAA", "BBB"])
-    monkeypatch.setattr(options.yf, "Ticker", BrokenTicker)
-
-    with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(options._unusual_activity_impl("all", 1.0))
-    assert exc_info.value.status_code == 503
-
-
-def test_unusual_options_treats_empty_expiration_payload_as_provider_failure(monkeypatch):
-    class EmptyTicker:
-        options = []
-
-    monkeypatch.setattr(options, "POPULAR_TICKERS", ["AAA", "BBB"])
-    monkeypatch.setattr(options.yf, "Ticker", lambda _symbol: EmptyTicker())
-
-    with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(options._unusual_activity_impl("all", 1.0))
-    assert exc_info.value.status_code == 503
-
-
-def test_unusual_options_allows_a_valid_chain_with_no_matching_activity(monkeypatch):
-    class UsableTicker:
-        options = ["2026-08-21"]
-        fast_info = SimpleNamespace(last_price=100.0)
-
-        def option_chain(self, _expiration):
-            return SimpleNamespace(
-                calls=pd.DataFrame([{"volume": 0, "openInterest": 100}]),
-                puts=pd.DataFrame(),
-            )
-
-    monkeypatch.setattr(options, "POPULAR_TICKERS", ["AAA", "BBB"])
-    monkeypatch.setattr(options.yf, "Ticker", lambda _symbol: UsableTicker())
-
-    payload = asyncio.run(options._unusual_activity_impl("all", 1.0))
-
-    assert payload["results"] == []
-    assert payload["succeeded"] == 2
-    assert payload["source_status"] == "active"
-
-
 def test_expirations_route_preserves_freshness_metadata(monkeypatch):
     monkeypatch.setattr(
         options.yahoo,
@@ -351,88 +304,6 @@ def test_earnings_fetches_full_info_only_for_tickers_with_a_date(monkeypatch):
     assert table_accesses == ["MISS"]
     assert payload["source_status"] == "degraded"
     assert payload["failed_symbols"] == ["MISS"]
-
-
-def test_legacy_stock_signals_reports_provider_failure(monkeypatch):
-    class BrokenTicker:
-        def __init__(self, _symbol):
-            raise RuntimeError("provider unavailable")
-
-    monkeypatch.setattr(stocks.yf, "Ticker", BrokenTicker)
-
-    with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(stocks.stock_signals("AAA"))
-    assert exc_info.value.status_code == 503
-
-
-def test_legacy_stock_signals_accepts_indices_but_rejects_invalid_symbols(monkeypatch):
-    called = False
-
-    class RecordingTicker:
-        def __init__(self, _symbol):
-            nonlocal called
-            called = True
-
-    monkeypatch.setattr(stocks.yf, "Ticker", RecordingTicker)
-
-    with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(stocks.stock_signals("../../secret"))
-
-    assert exc_info.value.status_code == 400
-    assert called is False
-    assert stocks._WATCHLIST_TICKER_PATTERN.fullmatch("^GSPC")
-
-
-def test_legacy_stock_signals_ignores_incomplete_daily_bar(monkeypatch):
-    completed_closes = [100.0 + index * 0.5 for index in range(60)]
-    history = pd.DataFrame(
-        {
-            "Close": completed_closes + [float("nan")],
-            "Volume": [1_000_000 + index for index in range(60)] + [5_000_000],
-        },
-        index=pd.date_range("2026-04-01", periods=61, freq="B"),
-    )
-
-    class IncompleteTicker:
-        def __init__(self, _symbol):
-            pass
-
-        def history(self, *, period):
-            assert period == "100d"
-            return history
-
-    monkeypatch.setattr(stocks.yf, "Ticker", IncompleteTicker)
-    stocks._endpoint_cache.pop("technical-signals:NANBAR", None)
-
-    payload = asyncio.run(stocks.stock_signals("NANBAR"))
-
-    assert payload["price"] == completed_closes[-1]
-    assert payload["signals"]["rsi"]["value"] == 100.0
-    assert payload["signals"]["volume"]["value"] < 2
-
-
-def test_stock_signals_rsi_is_the_value_the_chart_rsi_pane_plots(monkeypatch):
-    from app.services.technical.indicators import rsi_series
-
-    closes = [100.0 + ((index * 7) % 11) - index * 0.1 for index in range(80)]
-    history = pd.DataFrame(
-        {"Close": closes, "Volume": [1_000_000] * len(closes)},
-        index=pd.date_range("2026-03-02", periods=len(closes), freq="B"),
-    )
-
-    class FixedTicker:
-        def __init__(self, _symbol):
-            pass
-
-        def history(self, *, period):
-            return history
-
-    monkeypatch.setattr(stocks.yf, "Ticker", FixedTicker)
-    stocks._endpoint_cache.pop("technical-signals:RSIX", None)
-
-    payload = asyncio.run(stocks.stock_signals("RSIX"))
-
-    assert payload["signals"]["rsi"]["value"] == round(rsi_series(closes)[-1], 1)
 
 
 def test_watchlist_reports_provider_failure_without_unbounded_stale_data(monkeypatch):
