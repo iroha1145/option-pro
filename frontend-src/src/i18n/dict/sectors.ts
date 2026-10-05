@@ -24,7 +24,6 @@ export const SECTORS: Dict = {
   /* HeatMatrix.tsx —— 板块平均收益热力矩阵 */
   '暂无': ['N/A', 'データなし'],
   '未覆盖': ['No coverage', 'カバレッジなし'],
-  '平均收益': ['Avg return', '平均リターン'],
   '· 成分股汇总': ['· Constituent summary', '· 構成銘柄サマリー'],
   '强度领先': ['Strength leader', '強度上位'],
   '板块平均收益热力矩阵': ['Sector average return heatmap', 'セクター平均リターン・ヒートマップ'],
@@ -91,8 +90,6 @@ export const SECTORS: Dict = {
   /* Sectors.tsx —— 页面：头部、统计周期条、总览、IV 横截面区、侧栏区 */
   '比较各板块的平均涨跌幅、个股强度与数据覆盖情况。': ['Compare sector returns, stock strength, and data coverage.', 'セクターごとの平均騰落率、銘柄の強弱、データの取得状況を比較できます。'],
   '统计时间 —': ['Stats as of —', '統計時点 —'],
-  '热力': ['Heat', 'ヒート'],
-  '列表': ['List', 'リスト'],
   '收益统计周期': ['Return period', 'リターン集計期間'],
   '数值由板块成分股汇总得出': ['Figures are aggregated from sector constituent stocks.', '数値はセクターの構成銘柄を集計して算出しています。'],
   '板块列表已加载，涨跌幅与强度数据暂不可用。': ['The sector list is loaded, but return and strength data are unavailable.', 'セクター一覧は読み込み済みですが、騰落率と強度のデータを取得できません。'],

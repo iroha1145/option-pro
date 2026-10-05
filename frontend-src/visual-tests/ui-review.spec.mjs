@@ -130,10 +130,8 @@ test('stock and sector tables retain independent keyboard actions', async ({ pag
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/stock\//);
   await page.goto('/sectors');
-  const list = page.getByRole('tab', { name: '列表', exact: true });
-  await expect(list).toBeVisible();
-  await list.click();
-  const sector = page.locator('table tbody button[aria-pressed]').first();
+  const sector = page.getByRole('button', { name: /平均收益/ }).first();
+  await expect(sector).toBeVisible();
   await sector.focus();
   await page.keyboard.press('Enter');
   await expect(sector).toHaveAttribute('aria-pressed', 'true');
