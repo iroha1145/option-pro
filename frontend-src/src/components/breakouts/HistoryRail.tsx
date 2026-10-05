@@ -132,7 +132,7 @@ export default function HistoryRail({
             </span>
           </span>
           {stale && (
-            <span className="radar-chip radar-chip-volume">{t('已过期')}</span>
+            <span className="radar-chip radar-chip-warn">{t('已过期')}</span>
           )}
         </p>
         <p className="mt-1 text-micro text-ink-400">
