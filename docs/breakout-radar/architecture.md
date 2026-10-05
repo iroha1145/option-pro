@@ -56,12 +56,12 @@ service.py。旧模块只增加必要的窄入口。
 
 ## 冻结协议
 
-DiscoveryProvider
+以下名称描述实现职责，代码里没有对应的 Protocol 类型。
+
+发现层
 
 - scan(session, as_of, profile) 返回 DiscoverySnapshot。
 - 只发现粗候选，不确认结构、不计算最终分、不调用 LLM。
-
-以下四组名称描述实现职责，不代表额外的 Protocol 类型。
 
 价格数据适配器
 

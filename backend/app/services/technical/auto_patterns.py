@@ -64,12 +64,6 @@ def compute_display_priority(
     return round(_clamp01(value), 4)
 
 
-def apply_volume_confirmation(row: Mapping[str, Any], volume_confirmation: float | None) -> dict[str, Any]:
-    """Change displayPriority from volumeConfirmation without touching geometry."""
-
-    return apply_display_evidence(row, volume_confirmation, float(row.get("trendAlignment") or 0.0))
-
-
 def apply_display_evidence(
     row: Mapping[str, Any],
     volume_confirmation: float | None,
@@ -1007,7 +1001,6 @@ def detect_auto_patterns(
 __all__ = [
     "ALGORITHM_VERSION",
     "DISPLAY_PRIORITY_WEIGHTS",
-    "apply_volume_confirmation",
     "compute_display_priority",
     "detect_auto_patterns",
 ]

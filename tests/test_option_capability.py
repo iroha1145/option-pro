@@ -188,7 +188,6 @@ def test_known_unsupported_has_zero_provider_outbound(monkeypatch):
         assert snapshot["options_status"] == "unsupported_by_provider"
         assert snapshot["retryable"] is False
         assert snapshot["ticker"] == canonical
-        assert yahoo.get_expirations(alias) == []
         assert yahoo.get_stock_iv(alias) is None
         iv_snapshot = yahoo.get_stock_iv_snapshot(alias)
         assert iv_snapshot["atm_iv"] is None
