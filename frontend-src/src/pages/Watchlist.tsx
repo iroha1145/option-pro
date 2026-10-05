@@ -84,6 +84,10 @@ function AdvanceDeclineBar({
   );
 }
 
+/* 概览统计条：手机两列（不再横向滑动、把第二张卡截在屏外），张数为奇数时最后一张占满一行；
+   sm 两列、xl 四列 */
+const STAT_GRID = 'grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2';
+
 const watchKey = (item: WatchlistItem) => item.ticker;
 const watchPrice = (item: WatchlistItem) => item.price;
 
@@ -93,9 +97,10 @@ function ScoreDonut({ score }: { score: number }) {
   const C = 2 * Math.PI * R;
   const target = C * (1 - score / 100);
   return (
-    <div className="flex items-center gap-4">
-      <p className="metric-value text-data-xl text-ink-900 tnum">{score.toFixed(1)}</p>
-      <svg width="72" height="72" viewBox="0 0 72 72" aria-label={t('平均强度分 {score}', { score: score.toFixed(1) })}>
+    <div className="mt-2 flex items-center gap-4 sm:mt-0">
+      <p className="metric-value text-data-l text-ink-900 tnum sm:text-data-xl">{score.toFixed(1)}</p>
+      {/* 手机两列时卡宽约 165px，放不下 72px 的环；环只是读数的图形化，手机上让位 */}
+      <svg width="72" height="72" viewBox="0 0 72 72" className="hidden sm:block" aria-label={t('平均强度分 {score}', { score: score.toFixed(1) })}>
         <circle cx="36" cy="36" r={R} fill="none" stroke="var(--line)" strokeWidth="6" />
         <motion.circle
           cx="36"
@@ -744,15 +749,11 @@ export default function Watchlist() {
       {/* B1 概览统计条 */}
       <section className="mt-6" aria-label={t("市场概览")}>
         {statsLoading ? (
-          /* 占位必须和真实内容占同样的空间。
-             旧写法在移动端是 grid-cols-1 —— 四张卡竖着堆起来，而真实内容是一行
-             横向滚动条（130px）。两者高度差直接产生 CLS 0.200，是这个页面最差的
-             一项指标。这里用与下方 motion.div 完全相同的布局类。 */
-          <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-1 no-scrollbar sm:grid sm:grid-cols-2 sm:overflow-visible xl:grid-cols-4">
-            {/* 与真实卡片同宽（240px）——220 会让骨架→真实切换时 snap 落点
-                左右错位（审计 2.4.9） */}
+          /* 占位必须和真实内容占同样的空间（骨架与真实内容高度差曾造成 CLS 0.200），
+             所以用与下方 motion.div 完全相同的栅格类。 */
+          <div className={STAT_GRID}>
             {Array.from({ length: 4 }, (_, i) => (
-              <SkeletonCard key={i} className="min-w-[240px] shrink-0 snap-start sm:min-w-0" />
+              <SkeletonCard key={i} />
             ))}
           </div>
         ) : (
@@ -760,7 +761,7 @@ export default function Watchlist() {
             initial="hidden"
             animate="show"
             variants={{ show: { transition: { staggerChildren: 0.045 } } }}
-            className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-1 no-scrollbar sm:grid sm:grid-cols-2 sm:overflow-visible xl:grid-cols-4"
+            className={STAT_GRID}
           >
             {[
               ...(signalsQ.data?.topScore !== null && signalsQ.data?.topScore !== undefined
@@ -769,7 +770,7 @@ export default function Watchlist() {
               ...(signalsQ.data?.bottomScore !== null && signalsQ.data?.bottomScore !== undefined
                 ? [<StatCard key="bottom-repair" label={t("底部修复分")} icon="target" value={signalsQ.data.bottomScore} sub={signalsQ.data.bottomLabel ?? t('市场信号模型')} className="card-lift" />]
                 : []),
-              <div key="ad" className="card-surface min-w-[220px] snap-start p-5 sm:min-w-0">
+              <div key="ad" className="card-surface h-full p-4 sm:p-5">
                 <div className="flex items-start justify-between">
                   <p className="eyebrow">{t('上涨 / 下跌')}</p>
                   <Icon name="candle" size={18} className="text-ink-400" />
@@ -787,7 +788,7 @@ export default function Watchlist() {
               </div>,
               ...(strengthQ.data?.aggregateAvailable
                 ? [
-                    <div key="avg" className="card-surface min-w-[220px] snap-start p-5 sm:min-w-0">
+                    <div key="avg" className="card-surface h-full p-4 sm:p-5">
                       <div className="flex items-start justify-between">
                         <p className="eyebrow">
                           {t('全市场平均强度')}
@@ -803,7 +804,7 @@ export default function Watchlist() {
               <motion.div
                 key={i}
                 variants={{ hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { duration: DUR_SECTION, ease: EASE_PAPER } } }}
-                className="min-w-[240px] snap-start sm:min-w-0"
+                className="min-w-0"
               >
                 {node}
               </motion.div>
@@ -812,7 +813,7 @@ export default function Watchlist() {
         )}
       </section>
 
-      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <div className="mt-6 grid grid-cols-1 gap-6 sm:mt-8 lg:grid-cols-12">
         {/* B2 自选主区（8 列） */}
         <section
           className="lg:col-span-8"
@@ -894,16 +895,6 @@ export default function Watchlist() {
               >
                 {t('重试')}
               </button>
-            </p>
-          )}
-
-          {showingDefaultPool && (
-            <p
-              className="mt-3 flex flex-wrap items-center gap-1.5 text-caption text-ink-500"
-              role="status"
-            >
-              <SoftBadge className="whitespace-normal">{t('默认关注 AAPL、MSFT、NVDA、SPY，共 4 只。')}</SoftBadge>
-              <span className="ml-1 text-ink-400">{t('登录后可保存自己的自选列表。')}</span>
             </p>
           )}
 

@@ -2414,8 +2414,6 @@ export const EN: Record<string, string> = {
   "自选已保存": "Watchlist saved",
   "登录后管理自选": "Sign in to manage watchlist",
   "暂时读不到你的自选列表，请重试。": "Unable to load your watchlist. Please retry.",
-  "默认关注 AAPL、MSFT、NVDA、SPY，共 4 只。": "Default coverage: AAPL, MSFT, NVDA and SPY — 4 tickers.",
-  "登录后可保存自己的自选列表。": "Sign in to save your own watchlist.",
   "自选读取失败": "Unable to load watchlist",
   "点击管理自选，添加股票或一次导入多个代码。": "Open Manage watchlist to add stocks or import multiple tickers.",
   "暂无行情": "No quotes yet",

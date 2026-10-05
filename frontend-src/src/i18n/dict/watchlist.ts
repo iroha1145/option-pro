@@ -34,8 +34,6 @@ export const WATCHLIST: Dict = {
   "自选已保存": ["Watchlist saved", "ウォッチリストを保存しました"],
   "登录后管理自选": ["Sign in to manage watchlist", "ログインしてウォッチリストを管理"],
   "暂时读不到你的自选列表，请重试。": ["Unable to load your watchlist. Please retry.", "ウォッチリストを読み込めません。再試行してください。"],
-  "默认关注 AAPL、MSFT、NVDA、SPY，共 4 只。": ["Default coverage: AAPL, MSFT, NVDA and SPY — 4 tickers.", "既定の注目銘柄は AAPL、MSFT、NVDA、SPY の4銘柄です。"],
-  "登录后可保存自己的自选列表。": ["Sign in to save your own watchlist.", "ログインすると自分のウォッチリストを保存できます。"],
   "自选读取失败": ["Unable to load watchlist", "ウォッチリストの読み込みに失敗しました"],
   "点击管理自选，添加股票或一次导入多个代码。": ["Open Manage watchlist to add stocks or import multiple tickers.", "「ウォッチリストを管理」から銘柄の追加やコードの一括入力ができます。"],
   "暂无行情": ["No quotes yet", "相場データなし"],
