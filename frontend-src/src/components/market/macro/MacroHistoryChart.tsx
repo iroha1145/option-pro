@@ -6,6 +6,7 @@
 import { useMemo, useState } from 'react';
 import type { ApiError } from '@/api/client';
 import ReactECharts from '@/components/charts/ReactECharts';
+import { useChartCursor } from '@/components/charts/useChartCursor';
 import {
   CH,
   INSIGHT_FRAME,
@@ -77,6 +78,12 @@ export default function MacroHistoryChart({
   const [shownModules, setShownModules] = useState<MacroModuleId[]>([]);
   const colorMode = useColorMode();
   const appearance = useAppearance();
+  const scoreText = (score: number | null) => (score === null ? '—' : score.toFixed(1));
+  const { index, onInit, sliderProps } = useChartCursor(points.length, (i) =>
+    t('{date}：综合分 {v}', { date: points[i].date, v: scoreText(points[i].score) }),
+  );
+  /* 图上方的读数跟着游标走：默认最新一天，指针或方向键指到哪天就读哪天 */
+  const readout = points[index ?? points.length - 1];
 
   const option = useMemo(() => {
     // 图表构造器读取涨跌色与浅/深外观，变化时需重新取值。
@@ -231,7 +238,20 @@ export default function MacroHistoryChart({
       )}
       {/* 大屏与左列（综合分 + 对照卡）并排：图随栏高拉伸，两列底边齐平，至少 240px */}
       <div className={cn(INSIGHT_FRAME, 'mt-4 flex flex-col lg:flex-1')}>
-        <div className="h-[240px] w-full lg:h-auto lg:min-h-[240px] lg:flex-1">
+        {readout && (
+          <p className="flex items-baseline justify-between gap-3 px-1.5 pb-1 pt-0.5 text-caption text-ink-500">
+            <span className="font-mono tnum">{readout.date}</span>
+            <span className="tnum">
+              {t('综合分')} <span className="font-medium text-ink-900">{scoreText(readout.score)}</span>
+              {readout.regime ? ` · ${t(readout.regime)}` : ''}
+            </span>
+          </p>
+        )}
+        <div
+          {...(points.length > 0 ? sliderProps : {})}
+          aria-label={points.length > 0 ? t('综合分历史，左右键逐日查看') : undefined}
+          className="h-[240px] w-full rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-600 lg:h-auto lg:min-h-[240px] lg:flex-1"
+        >
         {loading && points.length === 0 ? (
           <SkeletonBlock className="h-full w-full" />
         ) : error && points.length === 0 ? (
@@ -252,7 +272,7 @@ export default function MacroHistoryChart({
             {t('历史数据积累中，记录足够后将显示综合分曲线。')}
           </div>
         ) : (
-          <ReactECharts option={option} ariaLabel={t("宏观环境综合分历史曲线")} />
+          <ReactECharts option={option} onInit={onInit} ariaLabel={t("宏观环境综合分历史曲线")} />
         )}
         </div>
       </div>

@@ -137,3 +137,22 @@ test('stock and sector tables retain independent keyboard actions', async ({ pag
   await expect(sector).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('table th button button, table th button [role="button"]')).toHaveCount(0);
 });
+
+test('history charts expose a keyboard cursor that drives the header readout', async ({ page }) => {
+  await page.goto('/cta');
+  const chart = page.getByRole('slider', { name: '估算仓位历史，左右键逐日查看' });
+  await expect(chart).toBeVisible();
+  const frame = chart.locator('xpath=..');
+  await expect(frame).toContainText('0 为多空分界 · 最新');
+  const last = await chart.getAttribute('aria-valuemax');
+  await expect(chart).toHaveAttribute('aria-valuenow', last);
+  await chart.focus();
+  await page.keyboard.press('Home');
+  await expect(chart).toHaveAttribute('aria-valuenow', '0');
+  await expect(frame).toContainText('0 为多空分界 · 当日');
+  await page.keyboard.press('ArrowRight');
+  await expect(chart).toHaveAttribute('aria-valuenow', '1');
+  await page.keyboard.press('Escape');
+  await expect(chart).toHaveAttribute('aria-valuenow', last);
+  await expect(frame).toContainText('0 为多空分界 · 最新');
+});
