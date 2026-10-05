@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router';
+import { useWatchlistUndo } from '@/hooks/useWatchlistUndo';
 import { usePersonalWatchlist } from '@/hooks/usePersonalWatchlist';
 import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/hooks/useToast';
@@ -13,6 +14,7 @@ import TextSwap from '@/components/shared/TextSwap';
 
 export default function WatchlistToggle({ ticker }: { ticker: string }) {
   const personal = usePersonalWatchlist();
+  const removeWithUndo = useWatchlistUndo();
   const { canManageWatchlist } = useAccess();
   const location = useLocation();
   const toast = useToast();
@@ -30,20 +32,10 @@ export default function WatchlistToggle({ ticker }: { ticker: string }) {
     if (personal.error) { await personal.refresh(); return; }
     setJustAdded(!selected);
     try {
-      await personal.edit(selected ? [] : [ticker], selected ? [ticker] : []);
       if (selected) {
-        toast.success(t('已移出自选'), ticker, {
-          action: {
-            label: t('撤销'),
-            onClick: () => {
-              personal.edit([ticker], []).then(
-                () => toast.success(t('已恢复到自选'), ticker),
-                (error) => toast.error(t('恢复失败'), watchlistErrorMessage(error, personal.maxTickers)),
-              );
-            },
-          },
-        });
+        await removeWithUndo(ticker, personal.key);
       } else {
+        await personal.add(ticker);
         toast.success(t('已加入自选'), ticker);
       }
     } catch (error) {

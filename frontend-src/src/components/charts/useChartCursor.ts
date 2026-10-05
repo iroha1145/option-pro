@@ -9,33 +9,57 @@
  *   失焦时收起。
  * 只用于类目横轴的折线图；K 线图有自己的十字线与提示，不走这里。
  */
-import { useCallback, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import type { EChartsInstance } from '@/lib/chart';
 
-export function useChartCursor(count: number, valueText: (index: number) => string) {
+export function useChartCursor(dates: readonly string[], valueText: (index: number) => string) {
+  const count = dates.length;
+  const sequenceKey = JSON.stringify(dates);
   const chartRef = useRef<EChartsInstance | null>(null);
-  const [index, setIndex] = useState<number | null>(null);
+  const [cursor, setCursor] = useState<{ sequenceKey: string; count: number; index: number | null }>({
+    sequenceKey, count, index: null,
+  });
+  // 日期序列换了，旧下标在本轮渲染就失效。不能等 effect：调用方此刻就要读日期和数值。
+  // 同样点数的新区间也要复位；日期不变、仅分数刷新时则保留正在查看的那一天。
+  const index = cursor.sequenceKey === sequenceKey ? cursor.index : null;
+  if (cursor.sequenceKey !== sequenceKey) setCursor({ sequenceKey, count, index: null });
+
+  const clearPointer = useCallback(() => {
+    const chart = chartRef.current;
+    if (!chart || chart.isDisposed()) return;
+    // hideTip 只收起提示框；leave 同时隐藏轴游标，并取消它留下的点高亮。
+    chart.dispatchAction({ type: 'updateAxisPointer', currTrigger: 'leave' });
+    chart.dispatchAction({ type: 'hideTip' });
+  }, []);
+
+  useEffect(() => {
+    clearPointer();
+  }, [sequenceKey, clearPointer]);
 
   const onInit = useCallback((chart: EChartsInstance) => {
     chartRef.current = chart;
     chart.on('updateAxisPointer', (event: unknown) => {
       const value = (event as { axesInfo?: { value?: unknown }[] }).axesInfo?.[0]?.value;
-      if (typeof value === 'number' && Number.isInteger(value)) setIndex(value);
+      if (typeof value === 'number' && Number.isInteger(value)) {
+        setCursor((previous) => value >= 0 && value < previous.count && previous.index !== value
+          ? { ...previous, index: value }
+          : previous);
+      }
     });
-    chart.getZr().on('globalout', () => setIndex(null));
+    chart.getZr().on('globalout', () => setCursor((previous) => previous.index === null ? previous : { ...previous, index: null }));
   }, []);
 
   const moveTo = useCallback((next: number | null) => {
     const chart = chartRef.current;
-    setIndex(next);
+    setCursor((previous) => previous.index === next ? previous : { ...previous, index: next });
     if (!chart || chart.isDisposed()) return;
     if (next === null) {
-      chart.dispatchAction({ type: 'hideTip' });
+      clearPointer();
       return;
     }
     const x = chart.convertToPixel({ xAxisIndex: 0 }, next);
     if (typeof x === 'number' && Number.isFinite(x)) chart.dispatchAction({ type: 'showTip', x, y: chart.getHeight() / 2 });
-  }, []);
+  }, [clearPointer]);
 
   const last = count - 1;
   const current = index ?? last;

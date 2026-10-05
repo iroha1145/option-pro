@@ -117,7 +117,7 @@ export default function PositionHistoryChart({ history }: { history: { date: str
     void appearance;
     return historyOption(history);
   }, [history, colorMode, appearance]);
-  const { index, onInit, sliderProps } = useChartCursor(history.length, (i) =>
+  const { index, onInit, sliderProps } = useChartCursor(history.map((point) => point.date), (i) =>
     t('{date}：估算目标仓位 {v}', { date: history[i].date, v: signed(history[i].position) }),
   );
   if (!option) return <p className="mt-2 text-caption text-ink-400">{t('暂无数据')}</p>;

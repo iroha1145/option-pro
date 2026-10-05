@@ -79,7 +79,7 @@ export default function MacroHistoryChart({
   const colorMode = useColorMode();
   const appearance = useAppearance();
   const scoreText = (score: number | null) => (score === null ? '—' : score.toFixed(1));
-  const { index, onInit, sliderProps } = useChartCursor(points.length, (i) =>
+  const { index, onInit, sliderProps } = useChartCursor(points.map((point) => point.date), (i) =>
     t('{date}：综合分 {v}', { date: points[i].date, v: scoreText(points[i].score) }),
   );
   /* 图上方的读数跟着游标走：默认最新一天，指针或方向键指到哪天就读哪天 */

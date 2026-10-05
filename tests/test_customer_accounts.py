@@ -730,3 +730,243 @@ def test_bucket_overflow_of_live_entries_drops_the_oldest_only() -> None:
     assert "live0" in bucket, "the newest entry must be kept"
     oldest = f"live{accounts_api._RATE_BUCKET_LIMIT - 1}"
     assert oldest not in bucket, "eviction must start from the oldest entry"
+
+
+# ---------------- atomic watchlist removal and undo ----------------
+
+
+def _saved_watchlist_rows(store, user_id):
+    with sqlite3.connect(store.path) as connection:
+        return connection.execute(
+            "SELECT user_id,ticker,position,added_at FROM account_watchlist "
+            "WHERE user_id=? ORDER BY position,ticker", (user_id,),
+        ).fetchall()
+
+
+@pytest.mark.parametrize("ticker", ["AAPL", "MSFT", "SPY"])
+def test_watchlist_undo_restores_first_middle_last_and_preserves_other_rows(store, ticker):
+    user_id = store.ensure_owner_account().user_id
+    original = ["AAPL", "MSFT", "NVDA", "SPY"]
+    store.replace_watchlist(user_id, original)
+    with sqlite3.connect(store.path) as connection:
+        connection.executemany(
+            "UPDATE account_watchlist SET added_at=? WHERE user_id=? AND ticker=?",
+            [(f"2020-01-0{index + 1}T00:00:00Z", user_id, value) for index, value in enumerate(original)],
+        )
+    before = _saved_watchlist_rows(store, user_id)
+    remaining, undo = store.remove_ticker_with_undo(user_id, ticker)
+    assert remaining == [value for value in original if value != ticker]
+    assert undo == {"ticker": ticker, "original_order": original, "principal_id": user_id}
+    assert _saved_watchlist_rows(store, user_id) == [row for row in before if row[1] != ticker]
+    assert store.restore_ticker(user_id, **undo) == original
+    assert [row for row in _saved_watchlist_rows(store, user_id) if row[1] != ticker] == [row for row in before if row[1] != ticker]
+
+
+def test_watchlist_undo_missing_removal_does_not_issue_undo_or_write(store):
+    user_id = store.ensure_owner_account().user_id
+    store.replace_watchlist(user_id, ["AAPL", "MSFT"])
+    before = _saved_watchlist_rows(store, user_id)
+    assert store.remove_ticker_with_undo(user_id, "NVDA") == (["AAPL", "MSFT"], None)
+    assert _saved_watchlist_rows(store, user_id) == before
+    _, undo = store.remove_ticker_with_undo(user_id, "AAPL")
+    after = _saved_watchlist_rows(store, user_id)
+    assert store.remove_ticker_with_undo(user_id, "AAPL") == (["MSFT"], None)
+    assert _saved_watchlist_rows(store, user_id) == after
+    assert store.restore_ticker(user_id, **undo) == ["AAPL", "MSFT"]
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_watchlist_adjacent_removals_restore_in_either_order(store, reverse):
+    user_id = store.ensure_owner_account().user_id
+    original = ["AAPL", "MSFT", "NVDA", "SPY"]
+    store.replace_watchlist(user_id, original)
+    _, first = store.remove_ticker_with_undo(user_id, "MSFT")
+    _, second = store.remove_ticker_with_undo(user_id, "NVDA")
+    assert second["original_order"] == ["AAPL", "NVDA", "SPY"]
+    for undo in ([second, first] if reverse else [first, second]):
+        store.restore_ticker(user_id, **undo)
+    assert store.watchlist(user_id) == original
+
+
+@pytest.mark.parametrize("current,expected", [
+    (["SPY", "AAPL", "NVDA", "AMD"], ["SPY", "AAPL", "MSFT", "NVDA", "AMD"]),
+    (["SPY", "AAPL", "AMD"], ["MSFT", "SPY", "AAPL", "AMD"]),
+    (["AMD", "AAPL", "TSLA"], ["AMD", "AAPL", "MSFT", "TSLA"]),
+    (["AMD", "TSLA"], ["AMD", "MSFT", "TSLA"]),
+    ([], ["MSFT"]),
+])
+def test_watchlist_undo_merges_surviving_neighbours_without_replacing_current_list(store, current, expected):
+    user_id = store.ensure_owner_account().user_id
+    store.replace_watchlist(user_id, ["AAPL", "MSFT", "NVDA", "SPY"])
+    _, undo = store.remove_ticker_with_undo(user_id, "MSFT")
+    store.replace_watchlist(user_id, current)
+    attributes = {row[1]: row[3] for row in _saved_watchlist_rows(store, user_id)}
+    assert store.restore_ticker(user_id, **undo) == expected
+    assert {row[1]: row[3] for row in _saved_watchlist_rows(store, user_id) if row[1] != "MSFT"} == attributes
+    assert [value for value in store.watchlist(user_id) if value != "MSFT"] == current
+
+
+def test_watchlist_undo_already_readded_is_noop_even_when_full(store):
+    user_id = store.ensure_owner_account().user_id
+    store.replace_watchlist(user_id, ["AAPL", "MSFT"])
+    _, undo = store.remove_ticker_with_undo(user_id, "AAPL")
+    current = [f"T{index}" for index in range(49)] + ["AAPL"]
+    store.replace_watchlist(user_id, current)
+    before = _saved_watchlist_rows(store, user_id)
+    assert store.restore_ticker(user_id, **undo) == current
+    assert store.restore_ticker(user_id, **undo) == current
+    assert _saved_watchlist_rows(store, user_id) == before
+
+
+def test_watchlist_undo_full_list_rejects_without_any_row_change(store):
+    user_id = store.ensure_owner_account().user_id
+    store.replace_watchlist(user_id, ["AAPL", "MSFT"])
+    _, undo = store.remove_ticker_with_undo(user_id, "AAPL")
+    store.replace_watchlist(user_id, [f"T{index}" for index in range(50)])
+    before = _saved_watchlist_rows(store, user_id)
+    with pytest.raises(AccountError, match="watchlist_full"):
+        store.restore_ticker(user_id, **undo)
+    assert _saved_watchlist_rows(store, user_id) == before
+
+
+@pytest.mark.parametrize("ticker,order", [
+    ("aapl", ["AAPL"]), ("AAPL", ["aapl"]), ("AAPL", ["ＡＡＰＬ"]),
+    ("AAPL", ["AAPL", "AAPL"]), ("AAPL", []), ("AAPL", ["MSFT"]),
+    ("AAPL", ["AAPL", "BAD!"]), ("AAPL", ["AAPL", 123]),
+    ("AAPL", ["AAPL"] + [f"T{index}" for index in range(50)]),
+    ("AAPL", "AAPL"), (None, ["AAPL"]),
+])
+def test_watchlist_undo_invalid_metadata_never_writes(store, ticker, order):
+    user_id = store.ensure_owner_account().user_id
+    store.replace_watchlist(user_id, ["MSFT", "NVDA"])
+    before = _saved_watchlist_rows(store, user_id)
+    with pytest.raises(AccountError, match="invalid_watchlist_undo"):
+        store.restore_ticker(user_id, ticker=ticker, original_order=order, principal_id=user_id)
+    assert _saved_watchlist_rows(store, user_id) == before
+
+
+@pytest.mark.parametrize("operation", ["remove", "restore"])
+def test_watchlist_undo_reads_after_writer_lock_and_preserves_concurrent_addition(store, monkeypatch, operation):
+    from concurrent.futures import ThreadPoolExecutor
+    from contextlib import contextmanager
+    from threading import Event
+
+    user_id = store.ensure_owner_account().user_id
+    store.replace_watchlist(user_id, ["AAPL", "MSFT"])
+    _, undo = store.remove_ticker_with_undo(user_id, "AAPL") if operation == "restore" else (None, None)
+    begin_requested = Event()
+    connect = store._connect
+
+    @contextmanager
+    def traced_connection():
+        with connect() as connection:
+            connection.set_trace_callback(lambda sql: begin_requested.set() if sql == "BEGIN IMMEDIATE" else None)
+            yield connection
+
+    monkeypatch.setattr(store, "_connect", traced_connection)
+    with sqlite3.connect(store.path, timeout=5) as other_tab, ThreadPoolExecutor(max_workers=1) as pool:
+        other_tab.execute("BEGIN IMMEDIATE")
+        other_tab.execute(
+            "INSERT INTO account_watchlist(user_id,ticker,position,added_at) VALUES(?,?,?,?)",
+            (user_id, "NVDA", 2, "2020-01-01T00:00:00Z"),
+        )
+        if operation == "remove":
+            future = pool.submit(store.remove_ticker_with_undo, user_id, "AAPL")
+        else:
+            future = pool.submit(store.restore_ticker, user_id, **undo)
+        try:
+            assert begin_requested.wait(3), "operation must request a writer transaction"
+        finally:
+            other_tab.commit()
+        result = future.result(timeout=5)
+    if operation == "remove":
+        remaining, captured = result
+        assert captured["original_order"] == ["AAPL", "MSFT", "NVDA"]
+        assert remaining == ["MSFT", "NVDA"]
+    else:
+        assert result == ["AAPL", "MSFT", "NVDA"]
+    assert next(row for row in _saved_watchlist_rows(store, user_id) if row[1] == "NVDA")[3] == "2020-01-01T00:00:00Z"
+
+
+def test_watchlist_undo_http_roundtrip_normalizes_removal_and_rejects_wrong_username(client, store):
+    assert _register(client, "alice", "fixture-password-for-tests").status_code == 201
+    account = accounts_api.get_account_store().resolve_session(client.cookies[accounts_api.ACCOUNT_COOKIE_NAME])
+    store.replace_watchlist(account.user_id, ["AAPL", "MSFT"])
+    before = _saved_watchlist_rows(store, account.user_id)
+    mismatch = client.post("/api/account/watchlist/removals", json={"ticker": "AAPL", "expected_username": "Alice"}, headers=HEADERS)
+    assert mismatch.status_code == 409 and mismatch.json()["detail"]["code"] == "watchlist_identity_changed"
+    assert _saved_watchlist_rows(store, account.user_id) == before
+    removed = client.post("/api/account/watchlist/removals", json={"ticker": "ａａｐｌ", "expected_username": "alice"}, headers=HEADERS)
+    assert removed.status_code == 200 and removed.headers["cache-control"] == "no-store"
+    assert removed.json() == {"tickers": ["MSFT"], "max_tickers": 50, "undo": {
+        "ticker": "AAPL", "original_order": ["AAPL", "MSFT"], "principal_id": account.user_id,
+    }}
+    restored = client.post("/api/account/watchlist/restore", json=removed.json()["undo"], headers=HEADERS)
+    assert restored.status_code == 200 and restored.headers["cache-control"] == "no-store"
+    assert restored.json() == {"tickers": ["AAPL", "MSFT"], "max_tickers": 50}
+    missing = client.post("/api/account/watchlist/removals", json={"ticker": "TSLA", "expected_username": "alice"}, headers=HEADERS)
+    assert missing.json()["undo"] is None
+
+
+def test_watchlist_undo_rejects_cookie_switch_and_cross_principal_replay(client, store):
+    _register(client, "alice", "fixture-password-for-tests")
+    client.put("/api/account/watchlist", json={"tickers": ["AAPL", "MSFT"]}, headers=HEADERS)
+    undo = client.post("/api/account/watchlist/removals", json={"ticker": "AAPL", "expected_username": "alice"}, headers=HEADERS).json()["undo"]
+    _register(client, "bob", "fixture-password-for-bob")
+    client.put("/api/account/watchlist", json={"tickers": ["NVDA"]}, headers=HEADERS)
+    wrong_delete = client.post("/api/account/watchlist/removals", json={"ticker": "NVDA", "expected_username": "alice"}, headers=HEADERS)
+    wrong_restore = client.post("/api/account/watchlist/restore", json=undo, headers=HEADERS)
+    for response in (wrong_delete, wrong_restore):
+        assert response.status_code == 409 and response.json()["detail"]["code"] == "watchlist_identity_changed"
+    assert client.get("/api/account/watchlist").json()["tickers"] == ["NVDA"]
+    assert store.watchlist(undo["principal_id"]) == ["MSFT"]
+
+
+def test_watchlist_undo_owner_customer_principal_priority(owner_client, store):
+    _owner_login(owner_client)
+    owner_client.put("/api/account/watchlist", json={"tickers": ["AAPL", "MSFT"]}, headers=HEADERS)
+    owner_undo = owner_client.post("/api/account/watchlist/removals", json={"ticker": "AAPL", "expected_username": "admin"}, headers=HEADERS).json()["undo"]
+    assert owner_undo["principal_id"] == store.ensure_owner_account().user_id
+    assert _register(owner_client, "alice", "fixture-password-for-tests").status_code == 201
+    owner_client.put("/api/account/watchlist", json={"tickers": ["NVDA", "SPY"]}, headers=HEADERS)
+    wrong_name = owner_client.post("/api/account/watchlist/removals", json={"ticker": "NVDA", "expected_username": "admin"}, headers=HEADERS)
+    assert wrong_name.status_code == 409
+    assert owner_client.post("/api/account/watchlist/restore", json=owner_undo, headers=HEADERS).status_code == 409
+    customer_undo = owner_client.post("/api/account/watchlist/removals", json={"ticker": "NVDA", "expected_username": "alice"}, headers=HEADERS).json()["undo"]
+    assert customer_undo["principal_id"] != owner_undo["principal_id"]
+    assert owner_client.post("/api/account/watchlist/restore", json=customer_undo, headers=HEADERS).json()["tickers"] == ["NVDA", "SPY"]
+    owner_client.cookies.delete(accounts_api.ACCOUNT_COOKIE_NAME)
+    assert owner_client.post("/api/account/watchlist/restore", json=customer_undo, headers=HEADERS).status_code == 409
+    assert owner_client.post("/api/account/watchlist/restore", json=owner_undo, headers=HEADERS).json()["tickers"] == ["AAPL", "MSFT"]
+
+
+@pytest.mark.parametrize("route,payload", [
+    ("removals", {"ticker": "AAPL", "expected_username": "alice"}),
+    ("restore", {"ticker": "AAPL", "original_order": ["AAPL"], "principal_id": "fixture"}),
+])
+def test_watchlist_undo_http_requires_authentication_and_same_origin_json(client, route, payload):
+    path = "/api/account/watchlist/" + route
+    assert client.post(path, json=payload, headers=HEADERS).status_code == 401
+    _register(client, "alice", "fixture-password-for-tests")
+    client.put("/api/account/watchlist", json={"tickers": ["AAPL"]}, headers=HEADERS)
+    for headers in ({**HEADERS, "Origin": "https://elsewhere.test"}, {"Origin": "https://localhost"}, {"X-Optix-Action": "1"}):
+        assert client.post(path, json=payload, headers=headers).status_code == 403
+    assert client.post(path, content="{}", headers={**HEADERS, "Content-Type": "text/plain"}).status_code == 415
+    assert client.get("/api/account/watchlist").json()["tickers"] == ["AAPL"]
+
+
+def test_watchlist_undo_http_metadata_validation_and_full_error_shape(client, store):
+    _register(client, "alice", "fixture-password-for-tests")
+    client.put("/api/account/watchlist", json={"tickers": ["AAPL", "MSFT"]}, headers=HEADERS)
+    undo = client.post("/api/account/watchlist/removals", json={"ticker": "AAPL", "expected_username": "alice"}, headers=HEADERS).json()["undo"]
+    for update in ({"original_order": ["AAPL", "AAPL"]}, {"original_order": ["aapl"]}, {"ticker": "BAD!"}):
+        response = client.post("/api/account/watchlist/restore", json={**undo, **update}, headers=HEADERS)
+        assert response.status_code == 400 and response.json()["detail"]["code"] == "invalid_watchlist_undo"
+    for update in ({"extra": True}, {"original_order": []}, {"original_order": ["AAPL"] * 51}, {"principal_id": None}):
+        assert client.post("/api/account/watchlist/restore", json={**undo, **update}, headers=HEADERS).status_code == 422
+    assert client.post("/api/account/watchlist/removals", json={"ticker": "MSFT"}, headers=HEADERS).status_code == 422
+    assert store.watchlist(undo["principal_id"]) == ["MSFT"]
+    store.replace_watchlist(undo["principal_id"], [f"T{index}" for index in range(50)])
+    response = client.post("/api/account/watchlist/restore", json=undo, headers=HEADERS)
+    assert response.status_code == 409 and response.json()["detail"]["code"] == "watchlist_full"
+    assert len(store.watchlist(undo["principal_id"])) == 50

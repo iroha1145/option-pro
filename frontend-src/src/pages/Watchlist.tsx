@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { motion } from 'framer-motion';
 import { stocksApi } from '@/api/modules/stocks';
+import { useWatchlistUndo } from '@/hooks/useWatchlistUndo';
 import { usePersonalWatchlist } from '@/hooks/usePersonalWatchlist';
 import { watchlistErrorMessage } from '@/api/modules/account';
 import { DEFAULT_WATCHLIST_TICKERS, personalWatchlistRows } from '@/lib/personalWatchlist';
@@ -432,6 +433,7 @@ export default function Watchlist() {
   const [forceRefreshing, setForceRefreshing] = useState(false);
 
   const personal = usePersonalWatchlist();
+  const removeWithUndo = useWatchlistUndo();
   const { tickers: myTickers, maxTickers, edit: editPersonal } = personal;
   const [managerKey, setManagerKey] = useState<string | null>(null);
   const closeManager = useCallback(() => setManagerKey(null), []);
@@ -456,23 +458,11 @@ export default function Watchlist() {
   }, [wl.data, canManageWatchlist, myTickers, personal.loading, personal.error]);
   const onRemoveTicker = useCallback(async (symbol: string) => {
     try {
-      await editPersonal([], [symbol]);
-      // 卡片上的移除一点就生效，误点的代价最大：提示条带「撤销」，原样加回
-      toast.info(t('已移出自选'), symbol, {
-        action: {
-          label: t('撤销'),
-          onClick: () => {
-            editPersonal([symbol], []).then(
-              () => toast.success(t('已恢复到自选'), symbol),
-              (error) => toast.error(t('恢复失败'), watchlistErrorMessage(error, maxTickers)),
-            );
-          },
-        },
-      });
+      await removeWithUndo(symbol, personal.key);
     } catch (error) {
       toast.error(t('移除失败'), watchlistErrorMessage(error, maxTickers));
     }
-  }, [editPersonal, maxTickers, toast]);
+  }, [removeWithUndo, personal.key, maxTickers, toast]);
   const savePersonal = useCallback(async (add: string[], remove: string[]) => {
     const next = await editPersonal(add, remove);
     selectedTickersRef.current = next.tickers;

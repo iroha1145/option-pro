@@ -5,6 +5,8 @@
 import type { Dict } from './types';
 
 export const WATCHLIST: Dict = {
+  '撤销信息无效，请重新读取自选': ['Undo data is invalid. Please reload your watchlist.', '元に戻す情報が無効です。ウォッチリストを再読み込みしてください。'],
+  '登录身份已变化，请重新操作': ['Your sign-in identity has changed. Please try again.', 'ログイン情報が変わりました。もう一度操作してください。'],
   '已恢复到自选': ['Restored to watchlist', 'ウォッチリストに戻しました'],
   '恢复失败': ['Could not restore', '元に戻せませんでした'],
   '行情暂时读取失败，自选名单已保留。': ['Quotes could not be loaded. Your watchlist is still saved.', '相場を読み込めません。ウォッチリストは保存されています。'],

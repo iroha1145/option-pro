@@ -3,30 +3,57 @@ import { mkdir } from 'node:fs/promises';
 
 const defaults = ['AAPL', 'MSFT', 'NVDA', 'SPY'];
 async function fixture(page, tickers = [], owner = true) {
-  const state = { tickers: [...tickers], owner, username: null, writes: [], quoteReads: [], errors: [], failRead: false, failWrite: false, malformedWrite: false, holdRead: null, holdWrite: null };
+  const state = { tickers: [...tickers], owner, username: null, writes: [], quoteReads: [], errors: [], failIdentity: false, failRead: false, failWrite: false, malformedWrite: false, holdRead: null, holdWrite: null, holdRemovalResponse: null };
   page.on('pageerror', (error) => state.errors.push(error.message));
-  await page.addInitScript(() => localStorage.setItem('optix:locale', 'zh'));
+  await page.addInitScript(() => {
+    localStorage.setItem('optix:locale', 'zh');
+    window.watchlistChanges = [];
+    window.addEventListener('optix:personal-watchlist-changed', (event) => window.watchlistChanges.push(event.detail));
+  });
   await page.route('**/*', (route) => ['localhost', '127.0.0.1'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
   await page.route('**/api/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;
     if (!path.startsWith('/api/')) return route.continue();
-    if (path === '/api/access/status') return route.fulfill({ json: { access_mode: 'password', logged_in: state.owner, account: state.username ? { logged_in: true, username: state.username } : null } });
+    if (path === '/api/access/status') return route.fulfill(state.failIdentity ? { status: 503, json: { message: '身份暂不可用' } } : { json: { access_mode: 'password', logged_in: state.owner, account: state.username ? { logged_in: true, username: state.username } : null } });
+    if (path === '/api/access/logout') { state.owner = false; state.username = null; return route.fulfill({ json: { ok: true } }); }
+    if (path === '/api/access/login') { state.owner = true; state.username = null; return route.fulfill({ json: { ok: true } }); }
     if (path === '/api/ai/status') return route.fulfill({ json: { enabled: false } });
     if (path === '/api/runtime-settings') return route.fulfill({ json: { settings: { ai: { manual_analysis_enabled: false } } } });
-    if (path === '/api/account/watchlist') {
+    if (['/api/account/watchlist', '/api/account/watchlist/removals', '/api/account/watchlist/restore'].includes(path)) {
       if (request.method() === 'GET') {
         const result = { tickers: [...state.tickers], max_tickers: 50 };
         if (state.holdRead) { const hold = state.holdRead; state.holdRead = null; await hold(); }
         return route.fulfill(state.failRead ? { status: 503, json: { message: '自选暂不可用' } } : { json: result });
       }
-      expect(request.method()).toBe('PATCH');
+      expect(request.method()).toBe(path === '/api/account/watchlist' ? 'PATCH' : 'POST');
       const body = request.postDataJSON();
       state.writes.push(body);
       if (state.holdWrite) await state.holdWrite();
       if (state.failWrite) return route.fulfill({ status: 503, json: { message: '保存失败，请重试' } });
       if (state.malformedWrite) return route.fulfill({ json: {} });
+      const principalId = state.username ? `usr_${state.username}` : 'own_local';
+      if (path === '/api/account/watchlist/removals') {
+        if (body.expected_username !== (state.username ?? 'admin')) return route.fulfill({ status: 409, json: { code: 'watchlist_identity_changed', message: '登录身份已变化' } });
+        const undo = state.tickers.includes(body.ticker) ? { ticker: body.ticker, original_order: [...state.tickers], principal_id: principalId } : null;
+        state.tickers = state.tickers.filter((symbol) => symbol !== body.ticker);
+        const response = { tickers: [...state.tickers], max_tickers: 50, undo };
+        if (state.holdRemovalResponse) await state.holdRemovalResponse();
+        return route.fulfill({ json: response });
+      }
+      if (path === '/api/account/watchlist/restore') {
+        if (body.principal_id !== principalId) return route.fulfill({ status: 409, json: { code: 'watchlist_identity_changed', message: '登录身份已变化' } });
+        if (!state.tickers.includes(body.ticker)) {
+          if (state.tickers.length >= 50) return route.fulfill({ status: 409, json: { code: 'watchlist_full', message: '自选已满' } });
+          const index = body.original_order.indexOf(body.ticker);
+          const following = body.original_order.slice(index + 1).find((symbol) => state.tickers.includes(symbol));
+          const preceding = body.original_order.slice(0, index).reverse().find((symbol) => state.tickers.includes(symbol));
+          const insertion = following ? state.tickers.indexOf(following) : preceding ? state.tickers.indexOf(preceding) + 1 : Math.min(index, state.tickers.length);
+          state.tickers.splice(insertion, 0, body.ticker);
+        }
+        return route.fulfill({ json: { tickers: state.tickers, max_tickers: 50 } });
+      }
       state.tickers = [...new Set([...state.tickers.filter((symbol) => !body.remove.includes(symbol)), ...body.add])];
       return route.fulfill({ json: { tickers: state.tickers, max_tickers: 50 } });
     }
@@ -206,19 +233,188 @@ test('quote failures preserve membership and a visible retry restores quotes', a
   expect(state.errors).toEqual([]);
 });
 
-test('removing a card offers undo, and undo puts the ticker back', async ({ page }) => {
+test('removing a non-final card offers undo and restores its exact order', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  const state = await fixture(page, ['AAPL', 'MSFT']);
+  const state = await fixture(page, ['AAPL', 'MSFT', 'NVDA']);
   await page.goto('/watchlist');
   // 卡片上的移除钮悬停或键盘聚焦才显形；用键盘走一遍
   await remove(page, 'MSFT').focus();
   await page.keyboard.press('Enter');
   const notice = page.getByRole('status').filter({ hasText: '已移出自选' });
   await expect(notice).toBeVisible();
-  await expect.poll(() => state.tickers).toEqual(['AAPL']);
+  await expect.poll(() => state.tickers).toEqual(['AAPL', 'NVDA']);
   await notice.getByRole('button', { name: '撤销', exact: true }).click();
-  await expect.poll(() => state.tickers).toEqual(['AAPL', 'MSFT']);
+  await expect.poll(() => state.tickers).toEqual(['AAPL', 'MSFT', 'NVDA']);
   await expect(page.getByRole('status').filter({ hasText: '已恢复到自选' })).toBeVisible();
-  expect(state.writes.at(-1)).toEqual({ add: ['MSFT'], remove: [] });
+  expect(state.writes.at(-1)).toEqual({ ticker: 'MSFT', original_order: ['AAPL', 'MSFT', 'NVDA'], principal_id: 'own_local' });
   expect(state.errors).toEqual([]);
 });
+
+
+async function deleteWithNotice(page, symbol) {
+  await remove(page, symbol).focus();
+  await page.keyboard.press('Enter');
+  const notice = page.getByRole('status').filter({ hasText: '已移出自选' });
+  await expect(notice).toBeVisible();
+  await notice.getByRole('button', { name: '撤销', exact: true }).focus();
+  return notice;
+}
+
+test('undo survives navigation and preserves another tab addition', async ({ page }) => {
+  const state = await fixture(page, ['AAPL', 'MSFT', 'NVDA']);
+  await page.goto('/watchlist');
+  const notice = await deleteWithNotice(page, 'MSFT');
+  await page.locator('a[href="/"]').first().click();
+  await expect(page).toHaveURL(/\/$/);
+  state.tickers.push('AMD');
+  await notice.getByRole('button', { name: '撤销', exact: true }).click();
+  await expect.poll(() => state.tickers).toEqual(['AAPL', 'MSFT', 'NVDA', 'AMD']);
+  await expect(page.getByRole('status').filter({ hasText: '已恢复到自选' })).toBeVisible();
+  await page.getByRole('link', { name: '自选', exact: true }).first().click();
+  await expect(remove(page, 'MSFT')).toBeAttached();
+  expect(state.errors).toEqual([]);
+});
+
+for (const identity of ['unavailable', 'changed', 'signed-out']) {
+  test(`old undo makes no write when identity is ${identity}`, async ({ page }) => {
+    const state = await fixture(page, ['AAPL', 'MSFT', 'NVDA']);
+    await page.goto('/watchlist');
+    const notice = await deleteWithNotice(page, 'MSFT');
+    const writes = state.writes.length;
+    if (identity === 'unavailable') state.failIdentity = true;
+    else { state.owner = false; state.username = identity === 'changed' ? 'second-account' : null; state.tickers = []; }
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    if (identity === 'unavailable') await expect(page.getByText('身份暂时无法确认，请稍后重试', { exact: true })).toBeVisible();
+    else if (identity === 'changed') await expect(page.getByText('清单还是空的', { exact: true })).toBeVisible();
+    else await expect(page.getByRole('link', { name: '登录后管理自选', exact: true })).toBeVisible();
+    await notice.getByRole('button', { name: '撤销', exact: true }).click();
+    await expect(page.getByRole('alert').filter({ hasText: '恢复失败' })).toBeVisible();
+    expect(state.writes).toHaveLength(writes);
+    expect(state.errors).toEqual([]);
+  });
+}
+
+for (const failure of ['server', 'full', 'malformed']) {
+  test(`undo reports ${failure} failure without false success`, async ({ page }) => {
+    const state = await fixture(page, ['AAPL', 'MSFT', 'NVDA']);
+    await page.goto('/watchlist');
+    const notice = await deleteWithNotice(page, 'MSFT');
+    if (failure === 'server') state.failWrite = true;
+    if (failure === 'malformed') state.malformedWrite = true;
+    if (failure === 'full') state.tickers = Array.from({ length: 50 }, (_, index) => `T${index}`);
+    const before = [...state.tickers];
+    await notice.getByRole('button', { name: '撤销', exact: true }).click();
+    await expect(page.getByRole('alert').filter({ hasText: '恢复失败' })).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: '已恢复到自选' })).toHaveCount(0);
+    expect(state.tickers).toEqual(before);
+    expect(state.errors).toEqual([]);
+  });
+}
+
+test('detail deletion can be undone after leaving the stock route', async ({ page }) => {
+  const state = await fixture(page, ['AAPL', 'MSFT', 'NVDA']);
+  await page.goto('/stock/MSFT');
+  await page.getByRole('button', { name: '已加入自选', exact: true }).click();
+  const notice = page.getByRole('status').filter({ hasText: '已移出自选' });
+  await expect(notice).toBeVisible();
+  await page.getByRole('link', { name: '自选', exact: true }).first().click();
+  await notice.getByRole('button', { name: '撤销', exact: true }).click();
+  await expect.poll(() => state.tickers).toEqual(['AAPL', 'MSFT', 'NVDA']);
+  await expect(remove(page, 'MSFT')).toBeAttached();
+  expect(state.errors).toEqual([]);
+});
+
+
+for (const navigate of [false, true]) {
+  test(`first ticker undo restores order with concurrent addition after navigation=${navigate}`, async ({ page }) => {
+    const state = await fixture(page, ['AAPL', 'MSFT', 'NVDA']);
+    await page.goto('/watchlist');
+    const notice = await deleteWithNotice(page, 'AAPL');
+    if (navigate) await page.locator('a[href="/"]').first().click();
+    state.tickers.push('AMD');
+    await notice.getByRole('button', { name: '撤销', exact: true }).click();
+    await expect.poll(() => state.tickers).toEqual(['AAPL', 'MSFT', 'NVDA', 'AMD']);
+    expect(state.writes.at(-1).original_order).toEqual(['AAPL', 'MSFT', 'NVDA']);
+    expect(state.errors).toEqual([]);
+  });
+}
+
+test('server refuses undo after cookie account changes before the UI refreshes identity', async ({ page }) => {
+  const state = await fixture(page, ['AAPL', 'MSFT', 'NVDA']);
+  await page.goto('/watchlist');
+  const notice = await deleteWithNotice(page, 'MSFT');
+  state.owner = false; state.username = 'second-account'; state.tickers = ['AMD'];
+  await notice.getByRole('button', { name: '撤销', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: '恢复失败' })).toBeVisible();
+  expect(state.writes.at(-1).principal_id).toEqual('own_local');
+  expect(state.tickers).toEqual(['AMD']);
+  await expect(page.getByRole('status').filter({ hasText: '已恢复到自选' })).toHaveCount(0);
+  expect(state.errors).toEqual([]);
+});
+
+test('duplicate synchronous undo clicks issue just one restore request', async ({ page }) => {
+  const state = await fixture(page, ['AAPL', 'MSFT', 'NVDA']);
+  await page.goto('/watchlist');
+  const notice = await deleteWithNotice(page, 'MSFT');
+  await notice.getByRole('button', { name: '撤销', exact: true }).evaluate((button) => { button.click(); button.click(); });
+  await expect.poll(() => state.tickers).toEqual(['AAPL', 'MSFT', 'NVDA']);
+  expect(state.writes).toHaveLength(2);
+  expect(state.errors).toEqual([]);
+});
+
+test('an old removal response is not offered as undo to a new confirmed account', async ({ page }) => {
+  const state = await fixture(page, ['AAPL', 'MSFT', 'NVDA']);
+  await page.goto('/watchlist');
+  let releaseWrite;
+  state.holdRemovalResponse = () => new Promise((resolve) => { releaseWrite = resolve; });
+  await remove(page, 'MSFT').focus();
+  await page.keyboard.press('Enter');
+  await expect.poll(() => state.writes.length).toBe(1);
+  state.owner = false; state.username = 'second-account'; state.tickers = ['AMD'];
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(remove(page, 'AMD')).toBeAttached();
+  const completed = page.waitForResponse((response) => response.url().endsWith('/account/watchlist/removals'));
+  releaseWrite();
+  const oldResponse = await completed;
+  expect((await oldResponse.json()).undo.principal_id).toBe('own_local');
+  await expect.poll(() => page.evaluate(() => window.watchlistChanges.length)).toBe(2);
+  await expect(page.getByRole('status').filter({ hasText: '已移出自选' })).toHaveCount(0);
+  expect(state.tickers).toEqual(['AMD']);
+  expect(state.errors).toEqual([]);
+});
+
+
+for (const interruption of ['signed-out', 'identity-unavailable']) {
+  test(`pending removal is retired after ${interruption} even when the same principal returns`, async ({ page }) => {
+    const state = await fixture(page, ['AAPL', 'MSFT', 'NVDA']);
+    await page.goto('/watchlist');
+    let releaseResponse;
+    state.holdRemovalResponse = () => new Promise((resolve) => { releaseResponse = resolve; });
+    await remove(page, 'MSFT').focus();
+    await page.keyboard.press('Enter');
+    await expect.poll(() => state.writes.length).toBe(1);
+    if (interruption === 'signed-out') await page.getByRole('button', { name: '退出', exact: true }).click();
+    else { state.failIdentity = true; await page.evaluate(() => window.dispatchEvent(new Event('focus'))); }
+    if (interruption === 'signed-out') await expect(page.getByRole('link', { name: '登录后管理自选', exact: true })).toBeVisible();
+    else await expect(page.getByText('身份暂时无法确认，请稍后重试', { exact: true })).toBeVisible();
+    if (interruption === 'signed-out') {
+      await page.getByRole('link', { name: '登录', exact: true }).first().click();
+      await page.getByLabel('用户名', { exact: true }).fill('admin');
+      await page.getByLabel('密码', { exact: true }).fill('fixture-only-password');
+      await page.locator('button[type="submit"]').click();
+      await expect(page.getByRole('button', { name: '退出', exact: true })).toBeVisible();
+    } else {
+      state.failIdentity = false;
+      await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+      await expect(manage(page)).toBeAttached();
+    }
+    await expect(page.getByText('身份暂时无法确认，请稍后重试', { exact: true })).toHaveCount(0);
+    releaseResponse();
+    await expect(page.getByRole('alert').filter({ hasText: '移除失败' })).toBeVisible();
+    await expect(remove(page, 'MSFT')).toHaveCount(0);
+    await expect(page.getByRole('status').filter({ hasText: '已移出自选' })).toHaveCount(0);
+    expect(state.tickers).toEqual(['AAPL', 'NVDA']);
+    expect(state.writes).toHaveLength(1);
+    expect(state.errors).toEqual([]);
+  });
+}
