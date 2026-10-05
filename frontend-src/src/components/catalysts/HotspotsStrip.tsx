@@ -31,7 +31,7 @@ function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: number; onO
       }`}
     >
       <div className="flex min-w-0 items-center gap-2">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-warn-50 text-warn-700">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-paper-2 text-ink-500">
           <Icon name="flame-line" size={15} />
         </span>
         {h.eventType && (
