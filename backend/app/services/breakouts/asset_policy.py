@@ -1,4 +1,4 @@
-"""Radar excludes amplified fund exposure, while retaining ordinary ETFs.
+"""Radar excludes amplified fund exposure whatever BREAKOUT_ALLOW_ETF says (ordinary ETFs are off by default).
 
 Use explicit instrument metadata, never the size of a price move or a ticker
 suffix. ProShares' Ultra / UltraShort / UltraPro series encode leverage even

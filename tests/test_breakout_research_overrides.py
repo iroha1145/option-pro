@@ -72,8 +72,9 @@ def _features(rvol: float) -> dict:
     }
 
 
-def test_overrides_do_not_touch_model_dump_or_config_hash() -> None:
-    plain = _settings()
+def test_overrides_do_not_touch_model_dump_or_config_hash(tmp_path) -> None:
+    db_path = tmp_path / "research-variant.sqlite"
+    plain = BreakoutSettings(_env_file=None, BREAKOUT_RADAR_ENABLED=True, db_path=str(db_path))
     tuned = plain.with_research_overrides(
         strong_single_rvol_min=2.0, rvol_lookback_sessions=10
     )
@@ -86,7 +87,8 @@ def test_overrides_do_not_touch_model_dump_or_config_hash() -> None:
     assert _stable_hash(tuned.model_dump(mode="json")) == _stable_hash(
         plain.model_dump(mode="json")
     )
-    assert tuned.db_path == plain.db_path
+    # A research variant must keep writing to its own database, not production's.
+    assert tuned.db_path == plain.db_path == db_path
 
 
 def test_default_detector_path_is_unchanged_and_override_raises_the_bar() -> None:

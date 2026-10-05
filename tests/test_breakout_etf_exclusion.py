@@ -47,9 +47,8 @@ def test_every_query_profile_keeps_only_stocks_and_receipts_before_the_result_wi
         ):
             payload = provider._payload(session, profile)
             type_filters = [item for item in payload["filter"] if item["left"] == "type"]
-            assert type_filters == [ETF_FILTER], (session, profile)
             # The exclusion sits in the same request whose range TradingView cuts.
-            assert payload["range"][0] == 0
+            assert type_filters == [ETF_FILTER], (session, profile)
     finally:
         asyncio.run(provider.aclose())
 
@@ -83,6 +82,15 @@ def test_normalization_drops_ordinary_etfs_by_default_and_keeps_them_when_allowe
         [etf, stock], settings=_settings(BREAKOUT_ALLOW_ETF=True), session=MarketSession.REGULAR
     )
     assert [item.ticker for item in kept] == ["XLK", "AAPL"]
+    assert warnings == []
+
+
+def test_depositary_receipts_stay_in_the_default_universe() -> None:
+    # Live TradingView rows type ADRs as "dr" with an empty typespec (checked 2026-10-05).
+    receipt = _candidate("TSM", "Taiwan Semiconductor Manufacturing Co. Ltd.", "dr", [""], 4.5)
+    assert receipt.asset_type is AssetType.ADR
+    kept, warnings = filter_and_deduplicate([receipt], settings=_settings(), session=MarketSession.REGULAR)
+    assert [item.ticker for item in kept] == ["TSM"]
     assert warnings == []
 
 

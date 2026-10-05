@@ -217,6 +217,8 @@ def test_baseline_hashes_like_production_and_variants_do_not(tmp_path) -> None:
     assert baseline.range_persistence_mode == "enabled" and baseline.allow_otc is False and baseline.allow_etf is False
     # What production publishes after deploy is the hash of every field's actual value.
     assert full_hash(baseline) == _stable_hash(baseline.model_dump(mode="json")) != PRODUCTION_CONFIG_HASH
+    # breakout_scan_runs.config_hash must equal this after the OTC/ETF fixes are deployed.
+    assert full_hash(baseline) == "76cf81ce3da0f09b30cd8aa81decbb31ef8eb88007ece722b69fdbbabf2ecb12"
     assert production_field_hash(build_settings("confirm3", tmp_path / "c.sqlite")) != PRODUCTION_CONFIG_HASH
     tuned = build_settings("rvol2", tmp_path / "r.sqlite")
     assert production_field_hash(tuned) == PRODUCTION_CONFIG_HASH
