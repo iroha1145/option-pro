@@ -83,14 +83,6 @@ test('演示链和真实链使用同一隐波单位，演示值不被放大100�
   }
 });
 
-test('演示异动不从看涨或看跌合约类型推断交易方向', async () => {
-  const rows = await optionsRuntime({}, true).unusual();
-  assert.ok(rows.length > 0);
-  assert.ok(rows.some(row => row.side === 'call'));
-  assert.ok(rows.some(row => row.side === 'put'));
-  assert.ok(rows.every(row => row.sentiment === 'neutral'));
-});
-
 test('链映射保留获取时间语义，不把链时间标成逐合约已验证报价', async () => {
   const chain = await optionsRuntime({
     underlying_price: 100,

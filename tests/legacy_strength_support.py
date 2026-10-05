@@ -7,7 +7,7 @@ API and worker tests use the unmodified production entry points.
 from __future__ import annotations
 
 from unittest.mock import patch
-from typing import Any
+from typing import Any, Callable
 
 from app.data_paths import get_data_paths
 from app.worker.runtime import TaskResult
@@ -36,11 +36,16 @@ async def read_legacy_snapshot(_request=None, **parameters):
 class LegacySnapshotTask(StrengthRefreshTask):
     """Exercise the historical publisher through shared task bookkeeping."""
 
-    async def _run(self, parameters: dict[str, Any]) -> TaskResult:
-        """Historical snapshot implementation retained for compatibility tests.
+    def __init__(
+        self, *, scanner: Callable[..., Any],
+        writer: Callable[..., Any] | None = None, **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self._scanner = scanner
+        self._writer = writer
 
-        Scheduled and queued work only enters _run, which executes EOD.
-        """
+    async def _run(self, parameters: dict[str, Any]) -> TaskResult:
+        """Publish supplied historical data through the retained persistence policy."""
         from app.api.strength import (
             _existing_strength_publication,
             _strength_snapshot_path,
@@ -52,12 +57,12 @@ class LegacySnapshotTask(StrengthRefreshTask):
             decide_published_snapshot_replacement,
             strength_payload_is_publishable,
         )
-        from app.services.strength.scanner import STRENGTH_SCORE_VERSION, scan_strength
+        from app.services.strength.scanner import STRENGTH_SCORE_VERSION
         from app.services.utils import sanitize
 
         from app.services.algorithm_modes import EOD_LIMITED_V1
 
-        scanner = self._scanner or scan_strength
+        scanner = self._scanner
         writer = self._writer or _write_strength_snapshot
         base_path = self._snapshot_path or get_data_paths().strength_snapshot
         parameters = normalize_strength_scan_parameters(parameters)

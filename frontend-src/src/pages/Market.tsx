@@ -1,8 +1,8 @@
 /**
  * §MKT 大盘强弱（/market，从指数 tape ?index= 进入）
  * B1 指数概览 6 卡 · B2 市场状态 · B3 形态六维 · B4 宏观环境 · B5 信号解读
- * B6 强度分布 · B7 联动卡
- * 轮询：indices+status 60s / 形态+信号+强度 300s / 宏观 15min（visibility 暂停，usePolling）
+ * B7 联动卡
+ * 轮询：indices+status 60s / 形态+信号 300s / 宏观 15min（visibility 暂停，usePolling）
  */
 import { useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router';
@@ -10,7 +10,6 @@ import { useShell } from '@/hooks/useShell';
 import { marketApi } from '@/api/modules/market';
 import Icon from '@/components/icons';
 import { signalsApi } from '@/api/modules/signals';
-import { strengthApi } from '@/api/modules/strength';
 import { marketPulseApi } from '@/components/market/api';
 import { usePolling } from '@/hooks/usePolling';
 import { fmtTimeHHMMSS } from '@/lib/format';
@@ -23,7 +22,6 @@ import StatusCard from '@/components/market/StatusCard';
 import RegimePanel from '@/components/market/RegimePanel';
 import { regimeMean } from '@/lib/regime';
 import SignalsReading, { type TrendBias } from '@/components/market/SignalsReading';
-import BreadthHistogram from '@/components/market/BreadthHistogram';
 import LinkCards from '@/components/market/LinkCards';
 import MacroConditionsPanel from '@/components/market/macro/MacroConditionsPanel';
 import { pageRegionProps } from '@/lib/pageRegion';
@@ -39,10 +37,9 @@ export default function Market() {
   /* 60s：指数 + 市场状态 */
   const indicesQ = usePolling(() => marketApi.indices(), 60_000);
   const statusQ = usePolling(() => marketPulseApi.statusDetail(), 60_000);
-  /* 300s：形态六维 + 信号 + 强度（CTA 趋势资金已剥离为独立页 /cta） */
+  /* 300s：形态六维 + 信号（CTA 趋势资金已剥离为独立页 /cta） */
   const regimeQ = usePolling(() => marketPulseApi.regime(), 300_000);
   const signalsQ = usePolling(() => signalsApi.market(), 300_000);
-  const strengthQ = usePolling(() => strengthApi.market(), 300_000);
 
   const status = statusQ.data;
   /* 时段读不到时显示「时段未知」，不落回「休市」（审计 P2-9）：加载中或状态接口
@@ -59,10 +56,6 @@ export default function Market() {
     }
     return null;
   }, [mean]);
-  const hasStrengthAggregate =
-    strengthQ.data?.aggregateAvailable === true &&
-    strengthQ.data.histogram.length > 0;
-
   return (
     <div>
       {/* B0 页头带 */}
@@ -167,42 +160,20 @@ export default function Market() {
         </Link>
       </section>
 
-      {/* B5 信号解读 + B6 强度分布 */}
-      {/* 加载中与失败也要挂载 B6（审计 2.2.9）：否则组件自带的骨架与
-        * 错误态+重试永远走不到，失败时整块静默消失、布局悄悄重排。只有
-        * 后端明确说「无聚合数据」（成功但 aggregateAvailable=false）才收起。 */}
-      {(() => {
-        const showStrengthPanel =
-          strengthQ.loading || !!strengthQ.error || hasStrengthAggregate;
-        return (
-          <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">
-            <div className={showStrengthPanel ? 'lg:col-span-8' : 'lg:col-span-12'}>
-              <SignalsReading
-                signals={signalsQ.data}
-                loading={signalsQ.loading}
-                error={signalsQ.error}
-                onRetry={() => signalsQ.refresh()}
-                refreshing={signalsQ.refreshing}
-                indices={indicesQ.data}
-                regimeMean={mean}
-                status={status}
-                bias={bias}
-              />
-            </div>
-            {showStrengthPanel && (
-              <div className="lg:col-span-4">
-                <BreadthHistogram
-                  data={strengthQ.data}
-                  loading={strengthQ.loading}
-                  error={strengthQ.error}
-                  onRetry={() => strengthQ.refresh()}
-                  refreshing={strengthQ.refreshing}
-                />
-              </div>
-            )}
-          </div>
-        );
-      })()}
+      {/* B5 信号解读 */}
+      <div className="mt-8">
+        <SignalsReading
+          signals={signalsQ.data}
+          loading={signalsQ.loading}
+          error={signalsQ.error}
+          onRetry={() => signalsQ.refresh()}
+          refreshing={signalsQ.refreshing}
+          indices={indicesQ.data}
+          regimeMean={mean}
+          status={status}
+          bias={bias}
+        />
+      </div>
 
       {/* B7 联动卡 */}
       <section className="mt-8" aria-label={t("联动视图")}>

@@ -349,7 +349,6 @@ export default function FilterWorkbench({
                     <FilterButton
                       key={preset.id}
                       onClick={() => applyPreset(preset.id)}
-                      title={preset.description}
                       active={active}
                     >
                       <Icon name="spark-ai" size={13} className={active ? 'text-brand-600' : 'text-ink-400'} />

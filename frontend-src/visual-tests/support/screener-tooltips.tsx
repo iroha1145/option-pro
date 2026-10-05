@@ -12,7 +12,7 @@ import '../../src/styles/transitions-catalog.css';
 const rows: ScreenerRow[] = Array.from({ length: 16 }, (_, i) => ({
   ticker: ['AAA', 'BBB', 'CCC'][i] ?? `T${i}`, name: `测试股票 ${i + 1}`, sector: '半导体',
   price: 123.45 + i, changePct: 1.5, strengthScore: 84.5, band: 'strong',
-  subscores: { trend: 90, momentum: 82, volume: 75, volatility: null }, sparkline: [2, 3, 5],
+  sparkline: [2, 3, 5],
   subscoreDims: [
     { key: 'short', label: '短期', value: 81 }, { key: 'mid', label: '中期', value: 73 },
     { key: 'long', label: '长期', value: null }, { key: 'breakout', label: '突破质量', value: 92 },
@@ -33,7 +33,7 @@ export function ScreenerTooltipHarness() {
   useEffect(() => { Object.assign(window, { tooltipHarness: { setVisible } }); }, []);
   const shared = {
     rows: visible ? rows : [], expanded: null, onToggle: () => setToggles((value) => value + 1),
-    catalysts, details: {}, weights: null, signals: {}, onOpenDetail: noop, animKey: 'static', page: 2,
+    catalysts, details: {}, signals: {}, onOpenDetail: noop, animKey: 'static', page: 2,
   };
   return <main className="p-5" style={{ minHeight: '180vh' }}>
     <h1 className="mb-4 text-h2">选股扫描提示回归</h1>

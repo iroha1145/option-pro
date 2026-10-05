@@ -1,12 +1,8 @@
 import type { Dict } from './types';
 
 export const MARKET: Dict = {
-  /* src/components/market/BreadthHistogram.tsx */
   '加载失败': ['Failed to load', '読み込みに失敗'],
   '数据暂不可用': ['Data temporarily unavailable', 'データは一時的に利用できません'],
-  '暂无强度分布数据': ['No strength-distribution data available', '強度分布データがありません'],
-  '强度分布': ['Strength distribution', '強度分布'],
-  '强度分布 · 全市场': ['Strength distribution · market-wide', '強度分布 · 全市場'],
   '只': ['stock||stocks', '銘柄'],
   '均值': ['Average', '平均'],
 
@@ -24,7 +20,6 @@ export const MARKET: Dict = {
   '上涨': ['Advancers', '値上がり'],
   '下跌': ['Decliners', '値下がり'],
   '平盘': ['Unchanged', '変わらず'],
-  '平均强度 {avg} · ≥85 {n} 只': ['Avg strength {avg} · {n} names ≥85', '平均強度 {avg} · ≥85 は {n} 銘柄'],
   'EPS 预期 {v}': ['EPS est. {v}', 'EPS予想 {v}'],
 
   /* src/components/market/LinkCards.tsx */

@@ -22,12 +22,10 @@ from app.services import scoring, signals, yahoo
 from app.services.cache import TTLCache
 from app.services.strength import (
     market_regime,
-    marketdata,
+    features,
     relative_spreads,
     scanner,
-    yahoo_options,
 )
-from app.services.breakouts.config import BreakoutSettings
 
 
 def _history(size: int = 260) -> pd.DataFrame:
@@ -72,7 +70,7 @@ def _massive_bars(count: int, *, end: date) -> list[dict[str, float]]:
 def test_rsi_handles_one_sided_and_flat_series(values: list[float], expected: float) -> None:
     close = pd.Series(values, dtype=float)
     assert signals.compute_rsi(close, 14) == expected
-    assert scanner._rsi(close, 14) == expected
+    assert features._rsi(close, 14) == expected
 
 
 def test_n_day_returns_use_exact_number_of_intervals() -> None:
@@ -80,30 +78,13 @@ def test_n_day_returns_use_exact_number_of_intervals() -> None:
     expected = 20.0
 
     assert signals.compute_period_return(close, 20) == expected
-    assert scanner._ret(close, 20) == expected
+    assert features._ret(close, 20) == expected
     assert market_regime._ret(close, 20) == expected
     assert relative_spreads._ret(close, 20) == expected
 
     too_short = close.iloc[1:]
     assert signals.compute_period_return(too_short, 20) is None
-    assert scanner._ret(too_short, 20) is None
-
-
-def test_cross_sectional_percentiles_use_midranks_for_ties() -> None:
-    all_tied = [
-        {"ticker": "AAA", "value": 1.0},
-        {"ticker": "BBB", "value": 1.0},
-        {"ticker": "CCC", "value": 1.0},
-    ]
-    partially_tied = [
-        {"ticker": "AAA", "value": 1.0},
-        {"ticker": "BBB", "value": 1.0},
-        {"ticker": "CCC", "value": 2.0},
-    ]
-
-    for ranker in (scanner._pct_rank, yahoo_options._pct_rank):
-        assert ranker(all_tied, "value") == {"AAA": 50.0, "BBB": 50.0, "CCC": 50.0}
-        assert ranker(partially_tied, "value") == {"AAA": 25.0, "BBB": 25.0, "CCC": 100.0}
+    assert features._ret(too_short, 20) is None
 
 
 def test_relative_spread_20d_feature_uses_21_observations() -> None:
@@ -335,53 +316,6 @@ def test_sector_periods_map_to_20_63_and_126_day_returns() -> None:
     assert one_month["avg_return_3m"] == 30.0
 
 
-def test_scan_uses_server_fixed_cache_ttl(monkeypatch: pytest.MonkeyPatch) -> None:
-    keys: list[tuple[str, int]] = []
-    values: dict[str, tuple[dict, float]] = {}
-    scan_calls = 0
-
-    class FakeCache:
-        async def get_or_set_with_meta(self, key, ttl, producer):
-            keys.append((key, ttl))
-            if key in values:
-                value, expires_at = values[key]
-                return value, True, expires_at
-            value = await producer()
-            expires_at = time.time() + ttl
-            values[key] = (value, expires_at)
-            return value, False, expires_at
-
-    def fake_scan(**kwargs):
-        nonlocal scan_calls
-        scan_calls += 1
-        return {"as_of": "now", "sectors": [], "market_regime": {}, "rows": [], "results": []}
-
-    monkeypatch.setattr(scanner, "cache", FakeCache())
-    monkeypatch.setattr(scanner, "_scan_sync", fake_scan)
-    monkeypatch.setattr(
-        scanner,
-        "_download_history",
-        lambda _symbols, period="1y": _history(5),
-    )
-
-    first = asyncio.run(scanner.scan_strength(include_options=False))
-    second = asyncio.run(scanner.scan_strength(include_options=False))
-
-    view_keys = [item for item in keys if item[0].startswith("strength:themes:")]
-    history_keys = [item for item in keys if item[0].startswith("strength-history:")]
-    assert len(view_keys) == 2
-    assert view_keys[0][0] == view_keys[1][0]
-    assert ":ttl:" not in view_keys[0][0]
-    assert all(ttl == scanner.STRENGTH_CACHE_TTL_SECONDS for _key, ttl in view_keys)
-    assert len(history_keys) == 1
-    assert history_keys[0][1] == scanner.STRENGTH_CACHE_TTL_SECONDS
-    assert scan_calls == 1
-    assert first["_cached"] is False
-    assert second["_cached"] is True
-    assert first["cache_ttl_seconds"] == scanner.STRENGTH_CACHE_TTL_SECONDS
-    assert second["cache_ttl_seconds"] == scanner.STRENGTH_CACHE_TTL_SECONDS
-
-
 @pytest.mark.parametrize(
     "invalid",
     ["missing_ohl", "nan_ohl", "duplicate_session", "future_session", "bool_timestamp"],
@@ -405,7 +339,7 @@ def test_massive_history_rejects_incomplete_or_non_distinct_ohlcv(
     else:
         bars[-1]["t"] = True
 
-    assert not scanner._massive_history_is_complete(
+    assert not scanner._validated_massive_history(
         bars,
         period="1mo",
         end=observed,
@@ -480,35 +414,6 @@ def test_yahoo_history_uses_the_split_only_basis_of_massive(
     assert frame["Close"].iloc[-1] == history[("AAA", "Close")].iloc[-1]
 
 
-def test_unusable_strength_history_is_not_cached_as_a_valid_scan(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    attempts = 0
-    benchmark_only = pd.concat({"SPY": _history(300)}, axis=1)
-
-    def unusable_history(*_args, **_kwargs):
-        nonlocal attempts
-        attempts += 1
-        return benchmark_only.copy()
-
-    monkeypatch.setattr(scanner, "cache", TTLCache())
-    monkeypatch.setattr(scanner, "_download_history", unusable_history)
-    monkeypatch.setattr(
-        scanner,
-        "_theme_universe",
-        lambda sector_id=None: (
-            ["AAA"],
-            {"AAA": {"sector_id": "software", "sector_name": "软件"}},
-        ),
-    )
-
-    for _ in range(2):
-        with pytest.raises(RuntimeError, match="strength_price_history_unavailable"):
-            asyncio.run(scanner.scan_strength(include_options=False))
-
-    assert attempts == 2
-
-
 @pytest.mark.parametrize("history_shape", ["empty", "all_nan"])
 def test_unusable_market_history_is_not_cached_as_a_valid_regime(
     monkeypatch: pytest.MonkeyPatch,
@@ -539,132 +444,15 @@ def test_unusable_market_history_is_not_cached_as_a_valid_regime(
     assert attempts == 2
 
 
-def test_yahoo_option_enrichment_caps_pool_and_uses_small_parallel_batches(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    rows = [{"ticker": f"T{index:02d}", "final_score": 100 - index} for index in range(30)]
-    settings = SimpleNamespace(
-        yahoo_options_enabled=True,
-        yahoo_options_enrich_limit=90,
-        yahoo_options_failure_limit=100,
-        yahoo_option_target_dte=30,
-        yahoo_option_strike_window_pct=0.16,
-    )
-    state = {"active": 0, "max_active": 0, "calls": 0}
-    lock = Lock()
-
-    def slow_empty(_row, _settings):
-        with lock:
-            state["active"] += 1
-            state["calls"] += 1
-            state["max_active"] = max(state["max_active"], state["active"])
-        time.sleep(0.02)
-        with lock:
-            state["active"] -= 1
-        return None
-
-    monkeypatch.setattr(yahoo_options, "_load_raw_metrics", slow_empty)
-    status = yahoo_options.enrich_rows_with_yahoo_options(rows, display_top=30, settings=settings)
-
-    assert status["candidate_pool"] == 20
-    assert state["calls"] == 20
-    assert 2 <= state["max_active"] <= 4
-
-
-def test_yahoo_option_heat_does_not_inject_a_fake_iv_value_when_missing() -> None:
-    scored = yahoo_options._score_metrics(
-        [
-            {
-                "ticker": "TEST",
-                "total_volume": 100,
-                "total_open_interest": 100,
-                "premium_flow": 1_000,
-                "call_volume": 50,
-                "put_volume": 50,
-                "call_open_interest": 50,
-                "put_open_interest": 50,
-                "iv_average": None,
-                "unusual_count": 0,
-                "source_status": "active",
-            }
-        ]
-    )["TEST"]
-
-    assert scored["atm_iv_percent"] is None
-    assert scored["option_pool_iv_rank"] is None
-    assert scored["iv_rank"] is None
-    assert scored["iv_label"] == "隐波缺失"
-    # 单票池没有可辩护的横截面分位：热度分如实缺失而不是伪造 50 中位
-    # （与 scanner._pct_rank 的口径一致，审计 2.1.12）。
-    assert scored["option_heat_score"] is None
-    assert scored["source_status"] == "insufficient_data"
-    assert "volume_rank" in scored["heat_missing_components"]
-
-
-def test_marketdata_option_heat_reweights_missing_iv_and_preserves_real_iv() -> None:
-    base_payload = {
-        "optionSymbol": ["TEST-C", "TEST-P"],
-        "side": ["call", "put"],
-        "volume": [100, 200],
-        "openInterest": [300, 400],
-        "dte": [30, 30],
-        "updated": [1_700_000_000, 1_700_000_000],
-    }
-    missing = marketdata._score_option_payload(
-        {**base_payload, "iv": [None, None]}
-    )
-    assert missing is not None
-    assert missing["iv_average"] is None
-    assert missing["iv_rank"] is None
-    assert missing["iv_label"] == "隐波缺失"
-    assert missing["active_weight"] == 0.76
-    assert missing["coverage"] == 0.76
-    assert missing["missing_components"] == ["iv_average"]
-
-    volume_score = marketdata._clamp(math.log10(301) * 20)
-    oi_score = marketdata._clamp(math.log10(701) * 13)
-    imbalance = abs(math.log(101 / 201))
-    imbalance_score = marketdata._clamp(50 + imbalance * 12, 50, 85)
-    expected_without_iv = round(
-        (volume_score * .34 + oi_score * .30 + imbalance_score * .12) / .76,
-        1,
-    )
-    assert missing["option_heat_score"] == expected_without_iv
-
-    observed = marketdata._score_option_payload(
-        {**base_payload, "iv": [0.35, 0.35]}
-    )
-    assert observed is not None
-    assert observed["iv_average"] == 0.35
-    assert observed["iv_label"] == "中性IV"
-    assert observed["active_weight"] == 1.0
-    assert observed["coverage"] == 1.0
-    assert observed["missing_components"] == []
-
-
-def test_marketdata_error_status_never_returns_upstream_body() -> None:
-    sentinel = "upstream-secret-response-sentinel"
-    request = httpx.Request("GET", "https://example.invalid/options")
-    response = httpx.Response(500, text=sentinel, request=request)
-    error = httpx.HTTPStatusError("provider failure", request=request, response=response)
-
-    message = marketdata._request_error_message(error)
-
-    assert message == "HTTP 500"
-    assert sentinel not in message
-
-
 def test_expiry_clock_uses_new_york_1600_and_fractional_dte() -> None:
     ny = ZoneInfo("America/New_York")
     now = datetime(2026, 7, 10, 10, 0, tzinfo=ny)
 
     expiry = yahoo.option_expiry_metrics("2026-07-10", now=now)
-    parsed = yahoo_options._parse_expiration("2026-07-10", now=now)
 
     assert expiry["expiration_at"].endswith("16:00:00-04:00")
     assert expiry["dte"] == 0.25
     assert math.isclose(expiry["time_to_expiry_years"], 0.25 / 365.0)
-    assert parsed == ("2026-07-10", 0.25)
 
 
 def test_expiry_clock_uses_equity_option_early_close() -> None:
@@ -867,121 +655,24 @@ def test_price_action_dimension_survives_feature_and_scoring_pipeline() -> None:
     row = scanner._feature_row("TEST", hist, hist, {"sector_id": "test", "sector_name": "Test"})
     assert row is not None
     assert isinstance(row["price_action"], dict)
-
-    scored = scanner._score_rows(
-        [row],
-        {"status": "insufficient_data", "score": None, "rules": {}, "risk_on_spread_score": None},
-        "balanced",
-        0,
-    )[0]
-    assert scored["price_action_score"] == scored["breakdown"]["price_action"]
-    assert scored["market_regime_score"] is None
-    assert "市场行情不足，市场维度暂不计入评分" in scored["warnings"]
-    assert scored["breakdown"]["market_regime_scoring_value"] is None
-    assert "market" not in scored["breakdown"]["market_rules"]
+    scored = scanner._intrinsic_row(
+        row, hist, range_feature={"status": "disabled", "version": "fixture"}, range_mode="disabled",
+    )
+    assert scored["price_action_score"] == row["price_action"]["score"]
+    assert scored["intrinsic_score"] is not None
 
 
-def test_public_strength_scan_exposes_range_persistence_shadow(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_explicit_ticker_scoring_exposes_range_persistence_shadow(monkeypatch) -> None:
     history = _history(300)
     history.index = pd.date_range("2025-05-19", periods=len(history), freq="B")
-    history.attrs["price_source"] = {
-        "provider": "fixture",
-        "status": "active",
-        "message": "fixture",
-    }
-    monkeypatch.setattr(
-        "app.services.breakouts.config.get_breakout_settings",
-        lambda: BreakoutSettings(
-            _env_file=None,
-            RANGE_PERSISTENCE_MODE="shadow",
-        ),
+    monkeypatch.setattr(scanner, "_theme_universe", lambda: (["AAA"], {"AAA": {"sector_id": "software"}}))
+    payload = scanner._score_ticker_frames_sync(
+        ["AAA"], frames={"AAA": history, "SPY": history},
+        as_of=datetime.now(ZoneInfo("UTC")), range_mode="shadow",
     )
-    monkeypatch.setattr(
-        scanner,
-        "_theme_universe",
-        lambda sector_id=None: (
-            ["AAA"],
-            {"AAA": {"sector_id": "software", "sector_name": "软件"}},
-        ),
-    )
-    monkeypatch.setattr(scanner, "_download_history", lambda *args, **kwargs: history)
-    monkeypatch.setattr(
-        scanner,
-        "enrich_rows_with_yahoo_options",
-        lambda rows, display_top: {"status": "skipped"},
-    )
-    monkeypatch.setattr(
-        scanner,
-        "enrich_rows_with_finnhub",
-        lambda rows: {"status": "skipped"},
-    )
-    monkeypatch.setattr(
-        scanner,
-        "enrich_rows_with_marketdata_options",
-        lambda rows: {"status": "skipped"},
-    )
-
-    payload = scanner._scan_sync(
-        universe="themes",
-        timeframe="all",
-        profile="balanced",
-        top=1,
-        sector_id=None,
-        min_price=1,
-        min_avg_dollar_volume=0,
-        include_options=False,
-    )
-
-    assert payload["range_persistence_mode"] == "shadow"
-    assert payload["results"][0]["range_persistence"]["status"] == "active"
-    assert payload["results"][0]["range_persistence_shadow"]["mode"] == "shadow"
-    assert payload["results"][0]["range_persistence_score_delta"] is not None
-
-
-def test_range_shadow_failure_does_not_remove_legacy_strength_candidate(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    history = _history(300).drop(columns=["High", "Low"])
-    history.index = pd.date_range("2025-05-19", periods=len(history), freq="B")
-    monkeypatch.setattr(
-        "app.services.breakouts.config.get_breakout_settings",
-        lambda: BreakoutSettings(
-            _env_file=None,
-            RANGE_PERSISTENCE_MODE="shadow",
-        ),
-    )
-    monkeypatch.setattr(
-        scanner,
-        "_theme_universe",
-        lambda sector_id=None: (
-            ["AAA"],
-            {"AAA": {"sector_id": "software", "sector_name": "软件"}},
-        ),
-    )
-    monkeypatch.setattr(scanner, "_download_history", lambda *args, **kwargs: history)
-    monkeypatch.setattr(
-        scanner,
-        "enrich_rows_with_finnhub",
-        lambda rows: {"status": "skipped"},
-    )
-
-    payload = scanner._scan_sync(
-        universe="themes",
-        timeframe="all",
-        profile="balanced",
-        top=1,
-        sector_id=None,
-        min_price=1,
-        min_avg_dollar_volume=0,
-        include_options=False,
-    )
-
-    assert payload["count"] == 1
-    assert payload["results"][0]["ticker"] == "AAA"
-    assert payload["results"][0]["range_persistence"]["status"] == "unavailable"
-    assert payload["skipped"]["range_persistence_error"] == 1
+    assert payload["rows"][0]["range_persistence"]["status"] == "active"
+    assert payload["rows"][0]["range_persistence_shadow"]["mode"] == "shadow"
+    assert payload["rows"][0]["intrinsic_score"] is not None
 
 
 def test_strength_api_returns_typed_preparing_without_running_provider_scan(
@@ -991,7 +682,7 @@ def test_strength_api_returns_typed_preparing_without_running_provider_scan(
     def fail(**_kwargs):
         raise AssertionError("the read endpoint must not run a provider scan")
 
-    monkeypatch.setattr(scanner, "scan_strength", fail)
+    monkeypatch.setattr(scanner, "_download_history", fail)
     monkeypatch.setattr("app.services.eod_limited.worker.run_eod_limited_job", fail)
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     with pytest.raises(HTTPException) as captured:

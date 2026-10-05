@@ -1,16 +1,10 @@
-/** 期权域：unusual / expirations / chain */
-import { get, mockOr, toQuery } from '../client';
+/** 期权域：expirations / chain */
+import { mockOr } from '../client';
 import { marketGet } from '../marketRead';
 import { asRec, pickN, pickS, unwrap } from '../live';
 import * as fx2 from '@/mocks/fixtures2';
 import { isDeclaredUnsupported } from '@/lib/optionCapability';
-import type { OptionChain, OptionChainRow, UnusualOption } from '../types';
-
-export interface UnusualParams {
-  type?: 'all' | 'call' | 'put';
-  /** 契约参数名 min_vol_oi（下划线），默认 1.0 */
-  minVolOi?: number;
-}
+import type { OptionChain, OptionChainRow } from '../types';
 
 export interface OptionExpirationReadOptions {
   force?: boolean;
@@ -20,34 +14,6 @@ export interface OptionExpirationsRead {
   expirations: string[];
   optionsStatus: string | null;
   retryable: boolean | null;
-}
-
-/**
- * 契约 {results:[{ticker,contract_type,strike,expiration,volume,open_interest,vol_oi_ratio,premium,...}]} → UI
- * 缺少 ticker 或行权价的记录无法定位到具体合约，直接丢弃；数值字段缺失保留 null。
- */
-function mapUnusual(body: unknown): UnusualOption[] {
-  const rows: UnusualOption[] = [];
-  unwrap(body, 'results', 'items').forEach((r, i) => {
-    const ticker = pickS(r, 'ticker');
-    const strike = pickN(r, 'strike');
-    if (!ticker || strike === null) return;
-    const expiration = pickS(r, 'expiration') ?? '';
-    rows.push({
-      id: pickS(r, 'id') ?? `${ticker}-${strike}-${expiration}-${i}`,
-      ticker,
-      side: (pickS(r, 'side', 'contract_type') as UnusualOption['side']) ?? 'call',
-      strike,
-      expiration,
-      volume: pickN(r, 'volume'),
-      openInterest: pickN(r, 'openInterest', 'open_interest'),
-      premium: pickN(r, 'premium'),
-      // 契约 §3：direction 字段恒 null（direction_deprecated）—— 不复活方向推断，情绪恒 neutral
-      sentiment: 'neutral',
-      at: pickS(r, 'at', 'as_of') ?? '',
-    });
-  });
-  return rows;
 }
 
 /**
@@ -114,15 +80,6 @@ function mapChain(body: unknown, ticker: string, expiration: string): OptionChai
 }
 
 export const optionsApi = {
-  unusual: (params: UnusualParams = {}): Promise<UnusualOption[]> =>
-    mockOr(
-      () => fx2.getUnusualOptions(),
-      // 契约：GET /api/options/unusual?type=all|call|put&min_vol_oi=1.0
-      () => {
-        const qs = toQuery({ type: params.type, min_vol_oi: params.minVolOi });
-        return get(`/options/unusual${qs ? `?${qs}` : ''}`).then(mapUnusual);
-      },
-    ),
   expirations: (
     ticker: string,
     readOptions: OptionExpirationReadOptions = {},

@@ -19,7 +19,6 @@ from tests.http_response_support import (
     lock_screener_admin_production,
     response_payload,
 )
-from tests.test_screener_freshness_task_chain import _install_provider_boundary
 from tests.test_strength_variant_lifecycle import _payload
 
 
@@ -95,61 +94,38 @@ def test_future_input_rejected_by_policy_is_not_reintroduced_by_get(snapshot_pat
     assert result.get("score_data_through") is None
 
 
-def _install_history(monkeypatch):
-    _install_provider_boundary(monkeypatch)
-    panel = scanner._download_history(["NVDA", "AAPL", "MSFT"])
-
-    class FixedDatetime(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return OBSERVED.astimezone(tz) if tz else OBSERVED.replace(tzinfo=None)
-
-    monkeypatch.setattr(scanner, "datetime", FixedDatetime)
-    monkeypatch.setattr(scanner, "_download_history", lambda *_args, **_kwargs: panel)
-    return panel
-
-
-def test_real_scanner_does_not_use_a_different_sectors_newer_daily_date(
+def test_total_history_failure_payload_keeps_the_previous_snapshot(
     snapshot_path: Path, monkeypatch,
 ) -> None:
-    panel = _install_history(monkeypatch)
-    panel.loc[panel.index.date > datetime(2026, 7, 2).date(), "NVDA"] = float("nan")
-    parameters = {
-        **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS,
-        "sector_id": "semiconductors", "include_options": False,
-        "min_price": 0.0, "min_avg_dollar_volume": 0.0,
-    }
-    payload = asyncio.run(scanner.scan_strength(**parameters, force_refresh=True))
-    assert [row["ticker"] for row in payload["rows"]] == ["NVDA"]
-    assert payload["rows"][0]["daily_data_through"] == OLD_THROUGH
-    assert payload["score_data_through"] == OLD_THROUGH
-
-
-def test_provider_truncated_all_histories_keeps_the_previous_snapshot(
-    snapshot_path: Path, monkeypatch,
-) -> None:
-    panel = _install_history(monkeypatch)
-    for symbol in ("NVDA", "AAPL", "MSFT"):
-        panel.loc[panel.index[:-4], symbol] = float("nan")
+    async def rejected_history(**_kwargs):
+        return {
+            **_payload(through=CURRENT_THROUGH),
+            "rows": [], "results": [], "count": 0, "universe_count": 3,
+            "skipped": {"insufficient_history": 3},
+        }
     old = _payload(through=CURRENT_THROUGH)
     old["score_version"] = scanner.STRENGTH_SCORE_VERSION
     _publish(snapshot_path, old)
     before = snapshot_path.read_bytes()
     result = asyncio.run(LegacySnapshotTask(
-        snapshot_path=snapshot_path, clock=lambda: OBSERVED.timestamp(),
+        scanner=rejected_history, snapshot_path=snapshot_path, clock=lambda: OBSERVED.timestamp(),
     )())
     assert result.status == "degraded"
     assert result.details["result"] == "kept_previous_snapshot"
     assert snapshot_path.read_bytes() == before
 
 
-def test_partial_missing_history_still_publishes_the_other_scored_rows(
+def test_partial_history_payload_publishes_valid_rows(
     snapshot_path: Path, monkeypatch,
 ) -> None:
-    panel = _install_history(monkeypatch)
-    panel.loc[panel.index[:-4], "NVDA"] = float("nan")
+    async def partial_history(**_kwargs):
+        body = _payload(through=CURRENT_THROUGH)
+        rows = [{**body["rows"][0], "ticker": ticker} for ticker in ("AAPL", "MSFT")]
+        return {**body, "rows": rows, "results": rows, "count": 2,
+                "universe_count": 3, "skipped": {"insufficient_history": 1}}
+
     result = asyncio.run(LegacySnapshotTask(
-        snapshot_path=snapshot_path, clock=lambda: OBSERVED.timestamp(),
+        scanner=partial_history, snapshot_path=snapshot_path, clock=lambda: OBSERVED.timestamp(),
     )())
     assert result.status == "idle"
     payload = _read()
@@ -158,31 +134,28 @@ def test_partial_missing_history_still_publishes_the_other_scored_rows(
     assert payload["source_status"] == "active"
 
 
-def test_cancelled_provider_thread_cannot_publish_after_a_newer_scan(
+def test_cancelled_fixture_thread_cannot_publish_after_a_newer_snapshot(
     snapshot_path: Path, monkeypatch,
 ) -> None:
-    panel = _install_history(monkeypatch)
-    older_panel = panel.loc[panel.index.date <= datetime(2026, 7, 2).date()].copy()
     started, release, finished = Event(), Event(), Event()
     calls = 0
 
-    def download(*_args, **_kwargs):
+    def delayed_fixture(*_args, **_kwargs):
         nonlocal calls
         calls += 1
         if calls == 1:
             started.set()
             try:
                 assert release.wait(5), "test must release the provider thread"
-                return older_panel
+                return _payload(through=OLD_THROUGH)
             finally:
                 finished.set()
-        return panel
+        return _payload(through=CURRENT_THROUGH)
 
-    monkeypatch.setattr(scanner, "_download_history", download)
 
     async def scenario():
         task = LegacySnapshotTask(
-            snapshot_path=snapshot_path, clock=lambda: OBSERVED.timestamp(),
+            scanner=delayed_fixture, snapshot_path=snapshot_path, clock=lambda: OBSERVED.timestamp(),
         )
         cancelled = asyncio.create_task(task())
         try:

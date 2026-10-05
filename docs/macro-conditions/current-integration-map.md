@@ -61,18 +61,19 @@
 
 ## 2. 当前市场页面结构
 
-`frontend-src/src/pages/Market.tsx`（159 行，注释里自带区块编号）：
+`frontend-src/src/pages/Market.tsx`（当前结构）：
 
 ```
 B0 PageHeader（section="MKT"，SessionLED + 更新时间）
-B1 指数概览 6 卡        IndexCards        indices 60s
+B1 指数概览            IndexCards        indices 60s
 B2 市场状态 + B3 形态六维  StatusCard / RegimePanel   status 60s / regime 300s
-B4 信号解读 + B5 强度分布  SignalsReading / BreadthHistogram  300s
-B6 联动卡              LinkCards
-SourceNote
+B4 宏观环境            MacroConditionsPanel
+CTA 趋势资金入口        链接到独立 /cta 页面
+B5 信号解读            SignalsReading    300s
+B7 联动卡              LinkCards
 ```
 
-宏观面板插入位置：**B3 之后、B4 之前**，成为新的 B4，原 B4/B5/B6 顺延为 B5/B6/B7。
+宏观面板位于形态六维之后。当前 `/strength/market` 只提供市场形态及快照状态；已移除没有数据来源的旧全市场强度分布组件和对应重复轮询，信号解读占据完整内容宽度。
 
 现有可复用件（全部已核对签名）：
 

@@ -4,9 +4,6 @@
 - 52 周高位必须有接近一年的真实样本（审计 2.6.3）；
 - 板块聚合与板块筛选共用完整 theme_ids 成员口径（审计 2.6.4）；
 - 市场广度有最低覆盖门槛（审计 2.6.2）；
-- Finnhub 基本面补充不再抬高整行 data_quality（审计 2.1.2）；
-- put/call 在 call 侧为 0 时是 None 而不是 99.0（审计 2.1.8）；
-- 期权热度在无量无仓时如实缺失（审计 2.1.9）；
 - 量价匹配把缺失成交量当未观测处理（审计 2.1.11）；
 - 「1年分位」标签背后的分布确实取最近一年且有最低样本量（审计 2.6.11）。
 """
@@ -19,7 +16,7 @@ import pandas as pd
 import pytest
 
 from app.services import signals as signal_service
-from app.services.strength import finnhub, market_regime, marketdata, scanner
+from app.services.strength import market_regime, scanner
 from app.services.strength import vol_price_match as vpm
 from app.services.strength.price_action import compute_price_action
 
@@ -68,27 +65,6 @@ def test_full_year_history_still_reports_ath_proximity() -> None:
     assert row is not None
     assert row["ath_proximity"] is not None
     assert row["ath_proximity"] == pytest.approx(100.0, abs=1.5)
-
-
-def test_missing_ath_does_not_produce_the_52w_tag() -> None:
-    hist = _history(130)
-    feature = scanner._feature_row(
-        "YOUNG",
-        hist,
-        hist,
-        {"sector_id": "software", "sector_name": "软件"},
-    )
-    assert feature is not None
-    intrinsic = scanner._intrinsic_row(
-        feature,
-        hist,
-        range_feature={"status": "disabled", "version": "fixture"},
-        range_mode="disabled",
-    )
-    market = {"score": None, "status": "insufficient_data", "confidence": 0.0}
-    scored = scanner._score_rows([intrinsic], market, "balanced", 0.0)
-    assert scored, "row must survive scoring"
-    assert "接近52周高位" not in (scored[0].get("tags") or [])
 
 
 # ── 板块聚合成员口径（2.6.4） ────────────────────────────────
@@ -147,116 +123,6 @@ def test_breadth_percentages_require_minimum_coverage() -> None:
     assert market_regime.MIN_BREADTH_COVERAGE == math.ceil(
         len(market_regime.SECTOR_ETFS) * 0.6
     )
-
-
-# ── Finnhub data_quality（2.1.2） ────────────────────────────
-
-
-def test_finnhub_metrics_do_not_lift_row_data_quality(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    row = {
-        "ticker": "TEST",
-        "data_quality": 40,
-        "breakdown": {},
-        "data_sources": {},
-    }
-
-    class _Response:
-        status_code = 200
-
-        @staticmethod
-        def json() -> dict:
-            return {
-                "metric": {
-                    "marketCapitalization": 1000.0,
-                    "peTTM": 25.0,
-                    "revenueGrowthTTMYoy": 12.0,
-                    "epsGrowthTTMYoy": 10.0,
-                    "netProfitMarginTTM": 20.0,
-                    "roeTTM": 18.0,
-                }
-            }
-
-        @staticmethod
-        def raise_for_status() -> None:
-            return None
-
-    class _Client:
-        def __init__(self, *args, **kwargs) -> None:
-            pass
-
-        def __enter__(self) -> "_Client":
-            return self
-
-        def __exit__(self, *exc) -> bool:
-            return False
-
-        def get(self, *args, **kwargs) -> "_Response":
-            return _Response()
-
-    monkeypatch.setattr(finnhub.httpx, "Client", _Client)
-    monkeypatch.setattr(finnhub, "_CACHE", {})
-    monkeypatch.setattr(
-        finnhub,
-        "get_settings",
-        lambda: type(
-            "S",
-            (),
-            {
-                "finnhub_api_key": "test-key",
-                "finnhub_enrich_limit": 5,
-                "finnhub_base_url": "https://finnhub.test/api/v1",
-                "request_timeout": 5.0,
-            },
-        )(),
-    )
-
-    status = finnhub.enrich_rows_with_finnhub([row])
-
-    assert status["enriched"] == 1
-    assert row["fundamental_score"] is not None
-    # 基本面没有填补任何价格/量能因子：整行数据质量保持真实覆盖率。
-    assert row["data_quality"] == 40
-
-
-# ── put/call 与期权热度哨兵（2.1.8 / 2.1.9） ─────────────────
-
-
-def test_put_call_ratio_is_none_when_call_side_is_zero() -> None:
-    payload = {
-        "optionSymbol": ["T-P1", "T-P2"],
-        "side": ["put", "put"],
-        "volume": [200, 300],
-        "openInterest": [0, 0],
-        "iv": [0.4, 0.4],
-        "dte": [30, 30],
-        "updated": [1_700_000_000, 1_700_000_000],
-    }
-    metrics = marketdata._score_option_payload(payload)
-    assert metrics is not None
-    assert metrics["put_call_volume"] is None, "99.0 哨兵不得再出现"
-    assert metrics["call_volume"] == 0
-    assert metrics["put_volume"] == 500
-
-
-def test_option_heat_is_missing_without_volume_or_open_interest() -> None:
-    payload = {
-        "optionSymbol": ["T-C", "T-P"],
-        "side": ["call", "put"],
-        "volume": [0, 0],
-        "openInterest": [0, 0],
-        "iv": [0.35, 0.35],
-        "dte": [30, 30],
-        "updated": [1_700_000_000, 1_700_000_000],
-    }
-    metrics = marketdata._score_option_payload(payload)
-    assert metrics is not None
-    assert metrics["option_heat_score"] is None
-    assert metrics["source_status"] == "insufficient_data"
-    assert "volume" in metrics["missing_components"]
-    assert "open_interest" in metrics["missing_components"]
-    assert "flow_imbalance" in metrics["missing_components"]
 
 
 # ── 量价匹配缺失成交量（2.1.11） ─────────────────────────────

@@ -262,14 +262,11 @@ def test_every_admin_default_schedules_only_current_engine(tmp_path, monkeypatch
         "algorithms": {"screener_ranking_algorithm": admin_choice},
     })
 
-    def old_scanner(**kwargs):
-        raise AssertionError("The retired scanner must not execute")
-
     def eod_runner(**kwargs):
         calls.append(kwargs)
         return success()
 
-    result = asyncio.run(StrengthRefreshTask(scanner=old_scanner, eod_runner=eod_runner)())
+    result = asyncio.run(StrengthRefreshTask(eod_runner=eod_runner)())
     assert result.status == "idle"
     assert calls == [{"profile": "balanced", "horizon": "mid", "purpose": "live_eod_inference", "all_variants": True}]
     assert result.details["parameters"]["ranking_algorithm"] == EOD_LIMITED_V1

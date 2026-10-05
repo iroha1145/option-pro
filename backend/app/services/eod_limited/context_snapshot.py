@@ -115,7 +115,7 @@ def read_context_snapshot(*, root: Path | None = None, now: datetime | None = No
 
 def build_context_snapshot(*, as_of: datetime) -> dict[str, Any]:
     # These helpers load adjusted market data and descriptive returns only.
-    # Do not use sector_strength(), which invokes the old full ranking scan.
+    # Context refreshes must stay independent of candidate scoring.
     from app.services.strength.scanner import (
         _complete_daily_frame, _download_history, _load_macro_reader,
         _sector_strength, _slice_ticker, _theme_universe,

@@ -2142,16 +2142,12 @@ class StrengthRefreshTask:
     def __init__(
         self,
         *,
-        scanner: Callable[..., Any] | None = None,
-        writer: Callable[..., Any] | None = None,
         snapshot_path: Path | None = None,
         clock: Callable[[], float] = time.time,
         scheduled_interval_seconds: float = 86_400.0,
         refresh_times_et: Sequence[str] = (),
         eod_runner: Callable[..., Any] | None = None,
     ) -> None:
-        self._scanner = scanner
-        self._writer = writer
         self._eod_runner = eod_runner
         # Each public task invocation owns its successful all-variant batch.
         # Context-local state also prevents overlapping invocations from

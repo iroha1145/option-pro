@@ -18,18 +18,19 @@ test('market signals map the real metric dictionary and never invent time-series
   assert.doesNotMatch(reading, /今日信号总数|较昨日|7 日均值|7日均值/);
 });
 
-test('market strength does not substitute regime score for unavailable aggregates', async () => {
-  const [api, market, watchlist] = await Promise.all([
-    read('src/api/modules/strength.ts'),
-    read('src/pages/Market.tsx'),
-    read('src/pages/Watchlist.tsx'),
+test('market pages only expose supported market shape and signals', async () => {
+  const [api, market, watchlist, home, regime] = await Promise.all([
+    read('src/api/modules/strength.ts'), read('src/pages/Market.tsx'),
+    read('src/pages/Watchlist.tsx'), read('src/pages/Home.tsx'),
+    read('src/components/screener/MarketRegimeCard.tsx'),
   ]);
-
-  assert.doesNotMatch(api, /regime\?\.score\s*\?\?/);
-  assert.match(api, /aggregateAvailable/);
-  assert.match(market, /hasStrengthAggregate/);
-  assert.match(watchlist, /strengthQ\.data\?\.aggregateAvailable/);
-  assert.doesNotMatch(watchlist, /label="高强度标的 ≥85"/);
+  for (const source of [api, market, watchlist, home, regime]) {
+    assert.doesNotMatch(source, /aggregateAvailable|histogram|ge85Count|avgScore/);
+  }
+  assert.match(api, /mapRegime/);
+  assert.match(regime, /liveDims/);
+  assert.match(market, /<RegimePanel/);
+  assert.match(market, /<SignalsReading/);
 });
 
 test('market status normalizes backend hyphenated extended-hours values', async () => {

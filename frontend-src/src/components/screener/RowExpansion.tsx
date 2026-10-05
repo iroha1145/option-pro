@@ -27,7 +27,7 @@ import { subscoreDimsOf,
 import ManualStockPull from '@/components/detail/ManualStockPull';
 import { t } from '../../i18n/core.ts';
 
-/* live 契约分项键 → 评分解释（mock 四维 trend/momentum/… 无对应文案则不渲染图标） */
+/* 评分因子键与说明共用；缺少对应说明的旧快照不显示提示图标。 */
 const DIM_HINTS: Record<string, ScoreHint> = {
   score_short: SCORE_HINTS.strengthShort,
   score_mid: SCORE_HINTS.strengthMid,
@@ -195,18 +195,17 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
 
 export interface RowExpansionProps {
   row: ScreenerRow;
-  weights: { trend: number; momentum: number; volume: number; volatility: number } | null;
   dollarVolume: number | null;
   signals: RowSignalsState | null;
   onOpenDetail: (ticker: string) => void;
 }
 
-export default function RowExpansion({ row, weights, dollarVolume, signals, onOpenDetail }: RowExpansionProps) {
+export default function RowExpansion({ row, dollarVolume, signals, onOpenDetail }: RowExpansionProps) {
   const dims = subscoreDimsOf(row);
   const weightOf = (key: string): number | null => {
     const effective = row.effectiveWeights?.[key.replace(/^factor_/, '')];
     if (effective != null) return effective * 100;
-    return weights && key in weights ? weights[key as keyof typeof weights] : null;
+    return null;
   };
   return (
     <div className="grid grid-cols-1 gap-x-8 gap-y-5 border-t border-line bg-card-warm/60 px-4 py-4 md:grid-cols-3">

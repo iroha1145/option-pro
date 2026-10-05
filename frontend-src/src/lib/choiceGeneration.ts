@@ -4,10 +4,6 @@ export function nextChoiceGeneration(current: number): number {
   return current + 1;
 }
 
-export function shouldCommitChoiceGeneration(started: number, current: number): boolean {
-  return started === current;
-}
-
 export function shouldApplyRemoteAlgorithmPreference(input: {
   startedGeneration: number;
   currentGeneration: number;

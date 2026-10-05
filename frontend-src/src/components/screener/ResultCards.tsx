@@ -31,7 +31,6 @@ export interface ResultCardsProps {
   onToggle: (ticker: string) => void;
   catalysts: Record<string, CatalystSummary | undefined>;
   details: DetailCache;
-  weights: { trend: number; momentum: number; volume: number; volatility: number } | null;
   signals: Record<string, RowSignalsState | undefined>;
   onOpenDetail: (ticker: string) => void;
   animKey: string;
@@ -47,7 +46,6 @@ export default function ResultCards({
   onToggle,
   catalysts,
   details,
-  weights,
   signals,
   onOpenDetail,
   animKey,
@@ -162,7 +160,6 @@ export default function ResultCards({
                 >
                   <RowExpansion
                     row={r}
-                    weights={weights}
                     dollarVolume={details[r.ticker]?.dollarVolume ?? null}
                     signals={signals[r.ticker] ?? null}
                     onOpenDetail={onOpenDetail}

@@ -287,71 +287,6 @@ def test_the_payload_names_its_version() -> None:
     }
 
 
-# ---------------- the shadow attachment changes nothing ----------------
-
-
-def test_shadow_attachment_leaves_every_production_field_untouched() -> None:
-    """The one property that makes this safe to ship.
-
-    Intrinsic strength, market fit, profile fit and ranking_score are the
-    production numbers. Macro is an annotation until forward validation says
-    otherwise, so the attachment may only add fields.
-    """
-
-    from app.services.strength import scanner
-
-    production_fields = {
-        "ranking_score": 72.5,
-        "final_score": 72.5,
-        "strength_score": 72.5,
-        "intrinsic_strength_score": 68.0,
-        "market_fit_score": 60.0,
-        "profile_fit_score": 55.0,
-        "score_short": 70.0,
-        "breakout_quality_score": 64.0,
-    }
-    rows = [
-        {"ticker": "XOM", "primary_sector_id": "energy", **production_fields},
-        {"ticker": "DAL", "primary_sector_id": "airlines", **production_fields},
-    ]
-    before = [dict(row) for row in rows]
-
-    scanner._attach_macro_fit_shadow(rows)
-
-    for original, updated in zip(before, rows):
-        for field, value in production_fields.items():
-            assert updated[field] == value, (
-                f"{field} changed on {updated['ticker']}: {value} -> {updated[field]}"
-            )
-        assert set(original) <= set(updated), "the attachment may only add fields"
-
-
-def test_shadow_attachment_degrades_quietly_when_macro_is_unreadable() -> None:
-    """A screener scan must not fail because the macro snapshot is missing.
-
-    Rows carry no fit, which the interface shows as "no macro read" rather than
-    as a neutral 50.
-    """
-
-    from app.services.strength import scanner
-
-    rows = [{"ticker": "NVDA", "primary_sector_id": "semiconductors", "ranking_score": 80.0}]
-    meta = scanner._attach_macro_fit_shadow(rows)
-
-    assert meta["available"] is False
-    assert meta["reason"], "an unavailable linkage has to say why"
-    assert rows[0]["ranking_score"] == 80.0
-
-
-def test_shadow_ranking_score_stays_inside_the_score_range() -> None:
-    from app.services.strength import scanner
-
-    assert scanner._shadow_ranking_score(99.5, 3.0) == 100.0
-    assert scanner._shadow_ranking_score(1.0, -3.0) == 0.0
-    assert scanner._shadow_ranking_score(None, 3.0) is None
-    assert scanner._shadow_ranking_score(70.0, 0.0) == 70.0
-
-
 # ---------------- one snapshot read, shared by every surface ----------------
 
 
@@ -904,11 +839,9 @@ def test_the_per_ticker_strength_endpoint_names_its_macro_snapshot() -> None:
     import inspect
 
     from app.api import strength as strength_api
-    from app.services.strength import scanner
 
     for source in (
         inspect.getsource(strength_api.stock),
-        inspect.getsource(scanner.stock_strength),
     ):
         assert '"macro_linkage": payload.get("macro_linkage")' in source, (
             "the per-ticker envelope drops the macro provenance the drawer needs"

@@ -7,9 +7,9 @@ import pytest
 
 
 ROUNDED_MODULES = (
-    "strength.features", "strength.finnhub", "strength.market_regime",
-    "strength.marketdata", "strength.price_action", "strength.relative_spreads",
-    "strength.vol_price_match", "strength.yahoo_options", "signals",
+    "strength.features", "strength.market_regime",
+    "strength.price_action", "strength.relative_spreads",
+    "strength.vol_price_match", "signals",
 )
 FINITE_MODULES = (
     ("breakouts.normalizer", "finite_number"),
@@ -58,7 +58,7 @@ def test_finite_values_accept_numeric_strings_but_keep_conversion_errors(module,
         finite(BrokenNumber())
 
 
-@pytest.mark.parametrize("module", ("market_regime", "marketdata", "relative_spreads", "vol_price_match", "yahoo_options"))
+@pytest.mark.parametrize("module", ("market_regime", "relative_spreads", "vol_price_match"))
 def test_clamp_keeps_each_callers_default_and_bounds(module):
     clamp = load("strength." + module, "_clamp")
     default = 50.0
@@ -68,16 +68,6 @@ def test_clamp_keeps_each_callers_default_and_bounds(module):
     assert clamp(-10) == 0.0
     assert clamp(300) == 100.0
     assert clamp("3", lo=4, hi=8) == 4
-
-
-@pytest.mark.parametrize("module", ("marketdata", "yahoo_options"))
-def test_option_aggregation_ignores_unusable_quotes_without_inventing_values(module):
-    total = load("strength." + module, "_sum")
-    average = load("strength." + module, "_weighted_average")
-    assert total([None, -2, 0, float("nan"), "1.23456", 2]) == 3.2346
-    assert average([2, 4, None, -1], [1, 3, 100, 100]) == 3.5
-    assert average([None, -1], [1, 1]) is None
-    assert average([2, 4], [0, -1]) is None
 
 
 @pytest.mark.parametrize("module", ("features", "market_regime", "relative_spreads"))

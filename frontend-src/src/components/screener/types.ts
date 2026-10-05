@@ -215,21 +215,9 @@ export interface ScanHistoryEntry {
   summary: string;
 }
 
-/** 分项元数据（mock ScreenerRow.subscores 键 → 中文名；live 行自带 subscoreDims 真实标签） */
-export const SUBSCORE_META: { key: keyof ScreenerRow['subscores']; label: string }[] = [
-  { key: 'trend', label: __t('趋势') },
-  { key: 'momentum', label: __t('动量') },
-  { key: 'volume', label: __t('量能') },
-  { key: 'volatility', label: __t('波动') },
-];
-
-/**
- * 行分项统一读取：live 优先契约 subscoreDims（短期/中期/长期/突破质量，值可为 null），
- * mock 回退 subscores 四维（趋势/动量/量能/波动）。行内与展开区共用，保证两处同源。
- */
+/** Row and expanded detail read the same real factor dimensions. */
 export function subscoreDimsOf(row: ScreenerRow): ScreenerSubscoreDim[] {
-  if (row.subscoreDims && row.subscoreDims.length > 0) return row.subscoreDims;
-  return SUBSCORE_META.map(({ key, label }) => ({ key, label, value: row.subscores[key] }));
+  return row.subscoreDims ?? [];
 }
 
 export const TOPN_OPTIONS: { value: number; label: string }[] = [

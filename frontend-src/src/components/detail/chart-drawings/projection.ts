@@ -1,6 +1,6 @@
 /** Bar-key projection: persist time + price, re-resolve by identity, never migrate. */
 import { nudgePoint } from './geometry.ts';
-import type { ChartAdjustment, ChartRange, DrawingAnchor } from './types.ts';
+import type { ChartRange, DrawingAnchor } from './types.ts';
 
 export interface TimedBar {
   t: string;
@@ -22,24 +22,6 @@ export function nySessionDate(iso: string): string {
 export function barKeyOf(bar: TimedBar, range: ChartRange): string {
   if (range === '1d' || range === '1w') return nySessionDate(bar.t);
   return bar.t;
-}
-
-export function drawingScopeKey(
-  ticker: string,
-  range: ChartRange,
-  adjustment: ChartAdjustment = 'raw',
-): string {
-  return `${ticker.toUpperCase()}|${range}|${adjustment}`;
-}
-
-export function sameScope(
-  drawing: { ticker: string; range: ChartRange; adjustment: ChartAdjustment },
-  ticker: string,
-  range: ChartRange,
-  adjustment: ChartAdjustment = 'raw',
-): boolean {
-  return drawingScopeKey(drawing.ticker, drawing.range, drawing.adjustment)
-    === drawingScopeKey(ticker, range, adjustment);
 }
 
 export function resolveBarKey(
@@ -72,15 +54,6 @@ export function snapBarIndex(x: number, barCount: number): number | null {
   const idx = Math.round(x);
   if (idx < 0 || idx >= barCount) return null;
   return idx;
-}
-
-export function drawingsInScope<T extends { ticker: string; range: ChartRange; adjustment: ChartAdjustment }>(
-  drawings: T[],
-  ticker: string,
-  range: ChartRange,
-  adjustment: ChartAdjustment = 'raw',
-): T[] {
-  return drawings.filter((item) => sameScope(item, ticker, range, adjustment));
 }
 
 /**

@@ -145,9 +145,8 @@ def test_public_cold_cache_never_calls_market_data_providers(
     monkeypatch.setattr(signals, "compute_market_signals", unexpected("market-signals"))
     monkeypatch.setattr(signals, "compute_stock_signals", unexpected("stock-signals"))
     monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", tmp_path / "missing-strength.json")
-    monkeypatch.setattr(strength, "stock_strength", unexpected_async("stock-strength"))
-    monkeypatch.setattr(strength, "sector_strength", unexpected_async("sector-strength"))
-    monkeypatch.setattr(strength, "market_strength", unexpected_async("market-strength"))
+    monkeypatch.setattr("app.services.strength.scanner._download_history", unexpected("stock-strength"))
+    monkeypatch.setattr("app.services.strength.scanner.market_strength", unexpected_async("market-strength"))
 
     async def scenario() -> None:
         with request_owner_access_context(False):

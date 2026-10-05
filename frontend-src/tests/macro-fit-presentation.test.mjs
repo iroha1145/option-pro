@@ -200,9 +200,6 @@ test('口径说明写明了三件必须说的事', () => {
   assert.match(all, /板块/, '没说暴露画像是板块级的');
   assert.match(all, /不预测股价/, '没说明分数不预测股价');
   assert.match(all, /数据不足时留空/, '没说明数据不足时不评分');
-  // 原生 title 属性只能放字符串，两者内容一致。
-  assert.equal(typeof macroFit.MACRO_SHADOW_TITLE_ATTR, 'string');
-  assert.ok(macroFit.MACRO_SHADOW_TITLE_ATTR.includes(hint.body));
 });
 
 test('宏观筛选排除没有读数的行，而不是把它们当中性留下', () => {

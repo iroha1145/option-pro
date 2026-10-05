@@ -543,7 +543,7 @@ test('the market page places macro between the regime panel and the signal readi
   assert.ok(regime > -1 && macro > -1 && signals > -1);
   assert.ok(regime < macro && macro < signals, 'macro sits at B4');
   assert.match(text, /B4 宏观环境/);
-  assert.match(text, /B5 信号解读 \+ B6 强度分布/);
+  assert.match(text, /B5 信号解读/);
   assert.match(text, /B7 联动卡/);
 });
 

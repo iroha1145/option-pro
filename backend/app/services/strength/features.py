@@ -5,8 +5,8 @@ score_intrinsic 因子，所以特征行只能有一份实现——手抄的第�
 follow_through 口径不同、atr_pct 与 avg_dollar_volume_20d 直接缺失，
 同一支票同一天两个界面给出不同分数。
 
-这个模块是中立层：它不认识扫描器的全市场管线（scan_strength / 排名 /
-market-fit），所以详情图路径 import 它不违反「个股图不跑 Strength Scanner」。
+这个模块只提取单股特征，不进行全市场排名；详情图与雷达可以共享因子，
+不必触发股票池扫描。
 """
 
 from __future__ import annotations

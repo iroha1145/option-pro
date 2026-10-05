@@ -6,13 +6,6 @@
 import type { OptionChain } from '@/api/types';
 import { midpoint, volOiState, type VolOiState } from '../optionAnalysis.ts';
 
-/** 成交量达到持仓量三倍，或零持仓有成交；不推断开平仓方向。 */
-export function isAlerting(state: VolOiState): boolean {
-  return (
-    (state.kind === 'ratio' && state.ratio >= 3) || state.kind === 'new_opening'
-  );
-}
-
 function premiumOf(
   volume: number | null,
   bid: number | null,

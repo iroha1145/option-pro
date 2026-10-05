@@ -16,7 +16,7 @@ async function fixture(page, options = {}) {
     if (path === '/api/quotes') return route.fulfill({ json: { quotes: [], status: { allowed: false, enabled: false, connected: false } } });
     if (path === '/api/market/status') return route.fulfill({ json: { market: 'open', session: 'regular', is_open: true, next_close: '2026-09-14T20:00:00Z' } });
     if (path === '/api/market/indices') return route.fulfill({ json: { indices: [] } });
-    if (path === '/api/strength/market') return route.fulfill({ json: state.marketPayload ?? { avg_score: 80, stocks: [] } });
+    if (path === '/api/strength/market') return route.fulfill({ json: state.marketPayload ?? { market_regime: { score: 57.1, index_trend_score: 80, market_momentum_score: 51.8, market_breadth_score: 24.2, market_volume_score: 54, risk_appetite_score: 69.7, risk_on_spread_score: 62.6 } } });
     if (path === '/api/strength/profiles') return route.fulfill({ json: { profiles: ['balanced', 'aggressive', 'conservative'], sectors: [] } });
     if (path === '/api/strength/scan') {
       state.scans.push(Object.fromEntries(url.searchParams));
@@ -705,7 +705,7 @@ test('reset all clears the macro filter that caused an empty result', async ({ p
   expect(state.errors).toEqual([]);
 });
 
-test('macro filtering keeps other tier counts available for comparison', async ({ page }) => {
+test('removed comparison card leaves tier filtering and scoring explanation available', async ({ page }) => {
   const rows = [
     { ticker: 'S', final_score: 95, macro_fit_shadow: 80 },
     { ticker: 'A', final_score: 85, macro_fit_shadow: 80 },
@@ -717,13 +717,47 @@ test('macro filtering keeps other tier counts available for comparison', async (
   await scan(page, 'S');
   await page.getByRole('button', { name: '宏观适配', exact: true }).click();
   await page.getByRole('tab', { name: '顺风', exact: true }).click();
-  const tierHit = (tier) => page.locator(`button[title="只看 ${tier} 档"] .metric-value`);
-  await expect(tierHit('S')).toHaveText('1');
-  await expect(tierHit('A')).toHaveText('1');
-  await expect(tierHit('B')).toHaveText('0');
-  await page.locator('button[title="只看 S 档"]').click();
+  await expect(page.getByText('强度分布 · 候选比较', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '只看 S 档', exact: true })).toHaveCount(0);
+  const tiers = page.getByRole('tablist', { name: /强度分档/ });
+  await tiers.getByRole('tab', { name: /^S/ }).click();
+  await scan(page, 'S');
+  await expect(tiers.getByRole('tab', { name: /^S/ })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('table').getByText('S', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('table').getByText('A', { exact: true })).toHaveCount(0);
+  const method = page.getByRole('button', { name: /评分方法/ });
+  await method.click();
+  await expect(method).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByText(/观察分取各家族与主题路径中的最高分/)).toBeVisible();
+  await tiers.getByRole('tab', { name: /^A/ }).click();
+  await page.locator('button.scan-trigger').click();
+  await expect(page.getByRole('table').getByText('A', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('table').getByText('S', { exact: true })).toHaveCount(0);
+  expect(state.errors).toEqual([]);
+});
+
+test('narrow screener keeps scoring details and real factor weights after card removal', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const keys = ['T', 'M', 'S', 'B', 'P', 'V', 'R', 'G'];
+  const state = await fixture(page, { rows: [{ ticker: 'AAA', name: '甲公司', price: 100,
+    final_score: 95, change_pct: 1, avg_dollar_volume_20d: 25_000_000,
+    factor_dims: keys.map((key, index) => ({ key: `factor_${key}`, label: key, value: index === 7 ? null : 80 })),
+    effective_weights: { T: 0.2, M: 0.3, S: 0.1, B: 0.1, P: 0.1, V: 0.1, R: 0.1 },
+  }] });
+  await page.locator('button.scan-trigger').click();
+  const row = page.getByRole('button', { name: /^AAA/ });
+  await expect(row).toBeVisible();
+  await expect(page.getByText('强度分布 · 候选比较', { exact: true })).toHaveCount(0);
+  await row.click();
+  await expect(page.getByText('×20.0%', { exact: true }).filter({ visible: true })).toBeVisible();
+  await expect(page.getByText('×30.0%', { exact: true }).filter({ visible: true })).toBeVisible();
+  const method = page.getByRole('button', { name: /评分方法/ });
+  await method.click();
+  await expect(method).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByText(/观察分取各家族与主题路径中的最高分/)).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await mkdir('test-results/audit-screener-time', { recursive: true });
+  await page.screenshot({ path: 'test-results/audit-screener-time/runtime-cleanup-mobile.png', fullPage: true });
   expect(state.errors).toEqual([]);
 });
 

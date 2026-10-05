@@ -62,10 +62,7 @@ from app.services.strength.scanner import (
     STRENGTH_SCORE_VERSION,
     TIMEFRAMES,
     UNIVERSES,
-    market_strength,
     profiles,
-    sector_strength,
-    stock_strength,
 )
 from app.services.strength.variant_demand import (
     register_strength_variant_demand,

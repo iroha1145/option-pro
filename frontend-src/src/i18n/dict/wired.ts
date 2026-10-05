@@ -85,9 +85,6 @@ export const WIRED: Dict = {
   '{md}，{n} 条财报': ['{md}, {n} earnings report||{md}, {n} earnings reports', '{md}、決算 {n}件'],
   '{ticker} {timing}财报，查看 AI 影响': ['{ticker} {timing} earnings, view AI impact', '{ticker} {timing}決算、AI影響を見る'],
   '{weekday} {md}，{n} 条财报': ['{weekday} {md}, {n} earnings report||{weekday} {md}, {n} earnings reports', '{weekday} {md}、決算 {n}件'],
-
-  // ── 市场 / 板块（market · sectors）───────────────────────────────────
-  '强度 {lo}–{hi}：{n} 只': ['Strength {lo}–{hi}: {n} stock||Strength {lo}–{hi}: {n} stocks', '強度 {lo}–{hi}：{n}銘柄'],
   '{name} {code} 详情': ['{name} {code} details', '{name} {code} の詳細'],
   '信用与风险不计入结构性宏观：它们与技术形态读的是同一批工具（HYG/LQD/KRE/VIX/SPY-TLT/IWM-SPY），再算一次等于同一个信号计两次权。此卡仅展示，不改变任何评分，也不参与突破的六状态分类。': ['Credit and risk are excluded from the structural macro score: they read the same instruments as the technical setup (HYG/LQD/KRE/VIX/SPY-TLT/IWM-SPY), so counting them again would weight one signal twice. This card is display-only — it changes no score and takes no part in the breakout six-state classification.', '信用とリスクは構造的マクロには算入しません。テクニカル形態と同じ指標群（HYG/LQD/KRE/VIX/SPY-TLT/IWM-SPY）を参照するため、再度算入すると同一シグナルを二重に重み付けすることになります。このカードは表示専用で、いかなるスコアも変更せず、ブレイクアウトの6状態分類にも関与しません。'],
   '{name} 板块详情': ['{name} sector details', '{name} セクターの詳細'],
@@ -120,7 +117,6 @@ export const WIRED: Dict = {
   '成交额≥{v}': ['Dollar volume ≥{v}', '売買代金 ≥{v}'],
   '强度≥{n}': ['Strength ≥{n}', '強度 ≥{n}'],
   '统计截至 {time}': ['As of {time}', '{time} 時点の集計'],
-  '平均强度分 {score}': ['Average strength score {score}', '平均強度スコア {score}'],
   '将 {ticker} 移出自选': ['Remove {ticker} from watchlist', '{ticker} をウォッチリストから削除'],
   '自选保存在账号 {username} 下': ['Watchlist saved under account {username}', 'ウォッチリストはアカウント {username} に保存されます'],
 
@@ -145,7 +141,6 @@ export const WIRED: Dict = {
   '进攻型与防守型资产之间的强弱差。': ['The strength gap between offensive and defensive assets.', '攻めと守りの資産間の強弱差。'],
   '{tierA}–{tierB}（{range}）': ['{tierA}–{tierB} ({range})', '{tierA}–{tierB}（{range}）'],
   '近 {count} 日 · 点阵面积': ['Last {count} days · dot-matrix area', '直近 {count} 日 · ドットマトリクス面積'],
-  '只看 {tier} 档': ['{tier} tier only', '{tier} ランクのみ'],
 
   // ── 抽屉 / 雷达 / 选股（范围外收尾）────────────────────────────────
   '{label} · 延迟 15 分钟': ['{label} · delayed 15 min', '{label} · 15分遅延'],

@@ -72,13 +72,8 @@ def test_worker_direct_requests_never_execute_old_math(monkeypatch, algorithm):
         raw["ranking_algorithm"] = algorithm
     calls = []
 
-    def old_scan(*_args, **_kwargs):
-        raise AssertionError("Retired ranking mathematics must not execute")
-
-    # Guard the real retired entry points; an injected stand-in the task never
-    # reads would pass whatever the worker executed.
-    monkeypatch.setattr(retired_scanner, "scan_strength", old_scan)
-    monkeypatch.setattr(retired_scanner, "_scan_sync", old_scan)
+    assert not hasattr(retired_scanner, "scan_strength")
+    assert not hasattr(retired_scanner, "_scan_sync")
 
     def eod(**kwargs):
         calls.append(kwargs)
