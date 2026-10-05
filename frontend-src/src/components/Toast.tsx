@@ -10,13 +10,14 @@ import Icon from '@/components/icons';
 import { readRootDurationMs } from '@/lib/transitions';
 import { t as __t } from '../i18n/core.ts';
 
-import { ToastContext, type ToastKind, type ToastContextValue } from '@/hooks/useToast';
+import { ToastContext, type ToastAction, type ToastKind, type ToastContextValue, type ToastOptions } from '@/hooks/useToast';
 
 interface ToastItem {
   id: number;
   kind: ToastKind;
   title: string;
   description?: string;
+  action?: ToastAction;
   hiding?: boolean;
 }
 
@@ -51,9 +52,10 @@ function ToastCard({ t, onDismiss, onRemove }: { t: ToastItem; onDismiss: (id: n
       return () => window.clearTimeout(timer);
     }
     if (hovered || focused) return;
-    const timer = window.setTimeout(() => onDismiss(t.id), t.kind === 'error' ? 8000 : 4000);
+    // 错误和带操作（如撤销）的提示多留一会儿，给人时间读完或点到
+    const timer = window.setTimeout(() => onDismiss(t.id), t.kind === 'error' || t.action ? 8000 : 4000);
     return () => window.clearTimeout(timer);
-  }, [t.id, t.kind, t.hiding, hovered, focused, onDismiss, onRemove]);
+  }, [t.id, t.kind, t.action, t.hiding, hovered, focused, onDismiss, onRemove]);
 
   return (
     <div
@@ -85,6 +87,18 @@ function ToastCard({ t, onDismiss, onRemove }: { t: ToastItem; onDismiss: (id: n
               <p className="text-body-s font-medium text-ink-800">{t.title}</p>
               {t.description && <p className="mt-0.5 text-caption text-ink-500">{t.description}</p>}
             </div>
+            {t.action && (
+              <button
+                type="button"
+                onClick={() => {
+                  t.action?.onClick();
+                  onDismiss(t.id);
+                }}
+                className="control-button shrink-0 self-center"
+              >
+                {t.action.label}
+              </button>
+            )}
             <button
               onClick={() => onDismiss(t.id)}
               className="flex size-8 shrink-0 items-center justify-center rounded-sm text-ink-400 transition-[transform,color,background-color] duration-fast hover:bg-paper-2 hover:text-ink-600 active:scale-95"
@@ -108,20 +122,20 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const dismiss = useCallback((id: number) => {
     setItems((prev) => prev.map((item) => item.id === id ? { ...item, hiding: true } : item));
   }, []);
-  const toast = useCallback((kind: ToastKind, title: string, description?: string) => {
+  const toast = useCallback((kind: ToastKind, title: string, description?: string, options?: ToastOptions) => {
     const id = ++nextId.current;
     // The state updater sees every queued addition, including a same-tick burst.
     setItems((prev) => {
-      return [...prev.slice(-3), { id, kind, title, description }];
+      return [...prev.slice(-3), { id, kind, title, description, action: options?.action }];
     });
   }, []);
 
   const value = useMemo<ToastContextValue>(
     () => ({
       toast,
-      success: (t, d) => toast('success', t, d),
-      error: (t, d) => toast('error', t, d),
-      info: (t, d) => toast('info', t, d),
+      success: (t, d, o) => toast('success', t, d, o),
+      error: (t, d, o) => toast('error', t, d, o),
+      info: (t, d, o) => toast('info', t, d, o),
     }),
     [toast],
   );

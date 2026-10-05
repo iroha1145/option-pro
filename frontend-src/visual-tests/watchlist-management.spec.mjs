@@ -205,3 +205,20 @@ test('quote failures preserve membership and a visible retry restores quotes', a
   await expect(page.getByRole('button', { name: /AAPL Company/ })).toBeVisible();
   expect(state.errors).toEqual([]);
 });
+
+test('removing a card offers undo, and undo puts the ticker back', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const state = await fixture(page, ['AAPL', 'MSFT']);
+  await page.goto('/watchlist');
+  // 卡片上的移除钮悬停或键盘聚焦才显形；用键盘走一遍
+  await remove(page, 'MSFT').focus();
+  await page.keyboard.press('Enter');
+  const notice = page.getByRole('status').filter({ hasText: '已移出自选' });
+  await expect(notice).toBeVisible();
+  await expect.poll(() => state.tickers).toEqual(['AAPL']);
+  await notice.getByRole('button', { name: '撤销', exact: true }).click();
+  await expect.poll(() => state.tickers).toEqual(['AAPL', 'MSFT']);
+  await expect(page.getByRole('status').filter({ hasText: '已恢复到自选' })).toBeVisible();
+  expect(state.writes.at(-1)).toEqual({ add: ['MSFT'], remove: [] });
+  expect(state.errors).toEqual([]);
+});

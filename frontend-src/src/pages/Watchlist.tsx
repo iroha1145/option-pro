@@ -457,7 +457,18 @@ export default function Watchlist() {
   const onRemoveTicker = useCallback(async (symbol: string) => {
     try {
       await editPersonal([], [symbol]);
-      toast.info(t('已移出自选'), symbol);
+      // 卡片上的移除一点就生效，误点的代价最大：提示条带「撤销」，原样加回
+      toast.info(t('已移出自选'), symbol, {
+        action: {
+          label: t('撤销'),
+          onClick: () => {
+            editPersonal([symbol], []).then(
+              () => toast.success(t('已恢复到自选'), symbol),
+              (error) => toast.error(t('恢复失败'), watchlistErrorMessage(error, maxTickers)),
+            );
+          },
+        },
+      });
     } catch (error) {
       toast.error(t('移除失败'), watchlistErrorMessage(error, maxTickers));
     }

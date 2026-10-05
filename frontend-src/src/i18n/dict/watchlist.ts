@@ -5,6 +5,8 @@
 import type { Dict } from './types';
 
 export const WATCHLIST: Dict = {
+  '已恢复到自选': ['Restored to watchlist', 'ウォッチリストに戻しました'],
+  '恢复失败': ['Could not restore', '元に戻せませんでした'],
   '行情暂时读取失败，自选名单已保留。': ['Quotes could not be loaded. Your watchlist is still saved.', '相場を読み込めません。ウォッチリストは保存されています。'],
   "管理自选": ["Manage watchlist", "ウォッチリストを管理"],
   "添加股票代码": ["Add stock tickers", "銘柄コードを追加"],

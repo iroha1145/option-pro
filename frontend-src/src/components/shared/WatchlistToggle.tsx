@@ -31,7 +31,21 @@ export default function WatchlistToggle({ ticker }: { ticker: string }) {
     setJustAdded(!selected);
     try {
       await personal.edit(selected ? [] : [ticker], selected ? [ticker] : []);
-      toast.success(selected ? t('已移出自选') : t('已加入自选'), ticker);
+      if (selected) {
+        toast.success(t('已移出自选'), ticker, {
+          action: {
+            label: t('撤销'),
+            onClick: () => {
+              personal.edit([ticker], []).then(
+                () => toast.success(t('已恢复到自选'), ticker),
+                (error) => toast.error(t('恢复失败'), watchlistErrorMessage(error, personal.maxTickers)),
+              );
+            },
+          },
+        });
+      } else {
+        toast.success(t('已加入自选'), ticker);
+      }
     } catch (error) {
       setJustAdded(false);
       toast.error(selected ? t('移除失败') : t('加入失败'), watchlistErrorMessage(error, personal.maxTickers));

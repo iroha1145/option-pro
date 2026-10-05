@@ -2385,6 +2385,8 @@ export const EN: Record<string, string> = {
   "加载中": "Loading",
   "页面不存在": "Page not found",
   "返回首页": "Back to home",
+  "已恢复到自选": "Restored to watchlist",
+  "恢复失败": "Could not restore",
   "行情暂时读取失败，自选名单已保留。": "Quotes could not be loaded. Your watchlist is still saved.",
   "管理自选": "Manage watchlist",
   "添加股票代码": "Add stock tickers",
