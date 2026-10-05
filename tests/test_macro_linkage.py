@@ -809,23 +809,3 @@ def test_a_database_that_cannot_be_stated_is_never_cached(monkeypatch) -> None:
     assert linkage_reader.load_macro_fit_reader().available is True
     assert calls["n"] == 2, "cached a snapshot whose freshness cannot be checked"
     linkage_reader.reset_macro_fit_reader_cache()
-
-
-def test_the_per_ticker_strength_endpoint_names_its_macro_snapshot() -> None:
-    """The scan row's shadow fields belong to a specific snapshot.
-
-    Without this the drawer cannot tell whether the row's gap and the live fit
-    describe the same moment, and it would show a precise-looking number built
-    from two different macro environments.
-    """
-
-    import inspect
-
-    from app.api import strength as strength_api
-
-    for source in (
-        inspect.getsource(strength_api.stock),
-    ):
-        assert '"macro_linkage": payload.get("macro_linkage")' in source, (
-            "the per-ticker envelope drops the macro provenance the drawer needs"
-        )

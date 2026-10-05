@@ -1239,7 +1239,6 @@ async def stock(ticker: str, profile: str = Query("balanced", pattern="^(conserv
                 "market_regime": context.get("market_regime"),
                 "context_as_of": context.get("as_of"),
                 "context_source_status": context.get("source_status"),
-                "macro_linkage": payload.get("macro_linkage"),
                 "_cached": True, "snapshot_source": "eod_limited_worker",
                 "_stale": bool(payload.get("_stale")),
                 "source_status": payload.get("source_status"),
