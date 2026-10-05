@@ -29,6 +29,7 @@ import Segmented from '@/components/shared/Segmented';
 import Switch from '@/components/shared/Switch';
 import { fmtRelative } from '@/lib/format';
 import { t as __t } from '../../i18n/core.ts';
+import TextSwap from '@/components/shared/TextSwap';
 
 const REFRESH_OPS: { op: RefreshOperation; label: string }[] = [
   { op: 'news', label: __t('新闻流') },
@@ -393,12 +394,9 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
                       <button
                         onClick={() => void saveSettings()}
                         disabled={saving || !dirty}
-                        className={cn(
-                          'rounded-md px-3 py-1.5 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] duration-fast',
-                          dirty ? 'bg-brand-600 hover:brightness-105' : 'bg-ink-300',
-                        )}
+                        className="btn-primary btn-sm"
                       >
-                        {saving ? __t('保存中…') : __t('保存设置')}
+                        <TextSwap swapKey={saving ? 'busy' : 'idle'}>{saving ? __t('保存中…') : __t('保存设置')}</TextSwap>
                       </button>
                     </div>
                   </div>

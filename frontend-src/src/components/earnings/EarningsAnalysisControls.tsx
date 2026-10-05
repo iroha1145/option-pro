@@ -11,6 +11,7 @@ import Spinner from '@/components/shared/Spinner';
 import SoftBadge from '@/components/shared/SoftBadge';
 import { cn } from '@/lib/utils';
 import { t } from '../../i18n/core.ts';
+import TextSwap from '@/components/shared/TextSwap';
 
 function errorText(error: unknown): string {
   if (error instanceof ApiError && error.code === 401) return t('登录状态已失效，请重新登录');
@@ -222,7 +223,7 @@ export default function EarningsAnalysisControls() {
             className="btn-ai"
           >
             <IconSwap state={running ? 'b' : 'a'} a={<AnalysisIcon size={14} />} b={<Spinner size={12} tone="muted" />} />
-            {running ? t('正在检查财报…') : t('立即分析新的财报')}
+            <TextSwap swapKey={running ? 'busy' : 'idle'}>{running ? t('正在检查财报…') : t('立即分析新的财报')}</TextSwap>
           </button>
         </div>
 

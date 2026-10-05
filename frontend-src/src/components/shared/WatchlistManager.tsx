@@ -7,6 +7,7 @@ import { watchlistErrorMessage } from '@/api/modules/account';
 import { DEFAULT_WATCHLIST_TICKERS, parseWatchlistInput, watchlistDelta } from '@/lib/personalWatchlist';
 import Icon from '@/components/icons';
 import { getLocale, t } from '@/i18n/core';
+import TextSwap from '@/components/shared/TextSwap';
 
 interface Props {
   tickers: string[];
@@ -111,7 +112,7 @@ export default function WatchlistManager({ tickers, maxTickers, busy, onSave, on
             <p className="text-caption text-ink-500" aria-live="polite">{t('新增 {add} · 移除 {remove}', { add: delta.add.length, remove: delta.remove.length })}</p>
             <div className="ml-auto flex gap-2">
               <button className={secondary} onClick={onClose} disabled={busy}>{t('取消')}</button>
-              <button className="btn-primary" onClick={() => void save()} disabled={busy || !changed} aria-busy={busy}>{busy ? t('正在保存…') : t('保存自选')}</button>
+              <button className="btn-primary" onClick={() => void save()} disabled={busy || !changed} aria-busy={busy}><TextSwap swapKey={busy ? 'busy' : 'idle'}>{busy ? t('正在保存…') : t('保存自选')}</TextSwap></button>
             </div>
           </footer>
         </div>

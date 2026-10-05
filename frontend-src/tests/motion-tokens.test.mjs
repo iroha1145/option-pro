@@ -426,3 +426,16 @@ test('page enter and chrome polish ride transitions.dev / shadcn tokens', async 
   assert.match(css, /var\(--learn-shift\)/);
   assert.match(css, /var\(--tilt-glare-opacity\)/);
 });
+
+test('state labels swap in place with the 04-text-swap tokens', async () => {
+  const catalog = await source('styles/transitions-catalog.css');
+  assert.match(catalog, /\.t-text-swap \{[^}]*animation: t-text-swap-in var\(--text-swap-dur\) var\(--text-swap-ease\) both;/s);
+  assert.match(catalog, /@keyframes t-text-swap-in \{\s*from \{[^}]*translateY\(var\(--text-swap-translate-y\)\)[^}]*blur\(var\(--text-swap-blur\)\)/s);
+  assert.match(catalog, /\.t-text-swap \{ animation: none !important; \}/, 'reduced motion swaps instantly');
+  const swap = await code('components/shared/TextSwap.tsx');
+  assert.match(swap, /key=\{swapKey\}/, 'a new key remounts the label so the entry plays once');
+  for (const file of ['components/shared/WatchlistToggle.tsx', 'components/earnings/EarningsRefreshButton.tsx', 'components/shared/WatchlistManager.tsx']) {
+    assert.match(await code(file), /<TextSwap swapKey=/, file);
+  }
+});
+

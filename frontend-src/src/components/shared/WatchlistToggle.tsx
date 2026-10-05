@@ -9,6 +9,7 @@ import Icon from '@/components/icons';
 import IconSwap from '@/components/shared/IconSwap';
 import Spinner from '@/components/shared/Spinner';
 import { t } from '@/i18n/core';
+import TextSwap from '@/components/shared/TextSwap';
 
 export default function WatchlistToggle({ ticker }: { ticker: string }) {
   const personal = usePersonalWatchlist();
@@ -50,6 +51,8 @@ export default function WatchlistToggle({ ticker }: { ticker: string }) {
       a={<IconSwap state={selected ? 'b' : 'a'} a={<Icon name="plus" size={15} />} b={check} />}
       b={<Spinner size={13} tone="brand" />}
     />
-    {personal.loading ? t('正在读取自选…') : personal.error ? t('重试读取自选') : selected ? t('已加入自选') : t('加入自选')}
+    <TextSwap swapKey={personal.loading ? 'loading' : personal.error ? 'error' : selected ? 'in' : 'out'}>
+      {personal.loading ? t('正在读取自选…') : personal.error ? t('重试读取自选') : selected ? t('已加入自选') : t('加入自选')}
+    </TextSwap>
   </button>;
 }

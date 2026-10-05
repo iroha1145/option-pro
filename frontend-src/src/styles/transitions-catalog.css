@@ -636,6 +636,23 @@
   .t-icon-swap .t-icon { transition: none !important; }
 }
 
+/* —— 04-text-swap.md（进场半程，见 components/shared/TextSwap.tsx）—— */
+.t-text-swap {
+  display: inline-block;
+  animation: t-text-swap-in var(--text-swap-dur) var(--text-swap-ease) both;
+}
+@keyframes t-text-swap-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--text-swap-translate-y));
+    filter: blur(var(--text-swap-blur));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-text-swap { animation: none !important; }
+}
+
 /* —— 10-success-check.md —— */
 .t-success-check {
   display: inline-block;

@@ -23,6 +23,7 @@ import {
   type SecurityDiagnosticPath,
 } from '../../lib/eodDiagnostics.ts';
 import { t } from '../../i18n/core.ts';
+import TextSwap from '@/components/shared/TextSwap';
 
 export interface SecurityDiagnosticsProps {
   profile: DiagnosticProfile;
@@ -275,7 +276,7 @@ export default function SecurityDiagnostics({ profile, timeframe, publicationKey
             autoComplete="off" spellCheck={false} maxLength={32} placeholder={t('例如 AAPL 或 SPY')}
             className="h-11 w-full rounded-md border border-line-strong bg-card px-3 font-mono text-body-s text-ink-800 outline-none transition-[box-shadow,border-color] duration-fast focus:border-brand-600 focus:shadow-focus-ring" />
         </label>
-        <button type="submit" disabled={loading} aria-busy={loading} className="btn-primary">{loading ? t('查询中') : t('查询诊断')}</button>
+        <button type="submit" disabled={loading} aria-busy={loading} className="btn-primary"><TextSwap swapKey={loading ? 'busy' : 'idle'}>{loading ? t('查询中') : t('查询诊断')}</TextSwap></button>
       </form>
       {loading && <p className="mt-4 text-body-s text-ink-500" role="status">{t('正在读取本批次诊断…')}</p>}
       {shownError && <p className="mt-4 rounded-md border border-line bg-paper-2 p-3 text-body-s text-ink-700" role="alert">{shownError}</p>}

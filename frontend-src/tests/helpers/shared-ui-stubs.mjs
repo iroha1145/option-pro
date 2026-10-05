@@ -19,6 +19,7 @@ export const SHARED_UI_STUBS = {
   '@/lib/retryDelay': retryDelay,
   '@/components/shared/Spinner': { default: 'Spinner' },
   '@/components/shared/IconSwap': { default: 'IconSwap', BusyIcon: 'BusyIcon' },
+  '@/components/shared/TextSwap': { default: ({ children }) => children },
   '@/components/shared/ThinkingLabel': { default: 'ThinkingLabel' },
   '@/components/shared/CollapsePresence': { default: 'CollapsePresence' },
   '@/components/shared/AutoHeight': { default: 'AutoHeight' },
