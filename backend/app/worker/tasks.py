@@ -1598,7 +1598,11 @@ class PublicHomeTask:
         path: Path,
         watchlist_path: Path,
     ) -> dict[str, dict[str, Any]]:
-        from app.public_home_snapshot import write_public_home_snapshot
+        from app.public_home_snapshot import (
+            PUBLIC_HOME_OPTIONAL_RESOURCE_ORDER,
+            PUBLIC_HOME_RESOURCE_ORDER,
+            write_public_home_snapshot,
+        )
 
         if resource == "watchlist":
             from app.api import stocks
@@ -1620,7 +1624,10 @@ class PublicHomeTask:
             watchlist_path,
             now=float(self._clock()),
         )
-        bundle = {key: value for key, value in latest.items() if key != "watchlist"}
+        # Only resources the worker still produces are carried forward, so
+        # entries for retired resources leave the file on the next publish.
+        produced = {*PUBLIC_HOME_RESOURCE_ORDER, *PUBLIC_HOME_OPTIONAL_RESOURCE_ORDER}
+        bundle = {key: value for key, value in latest.items() if key in produced}
         candidate = {**bundle, resource: entry}
         writer = self._writer or write_public_home_snapshot
         await _call_local(

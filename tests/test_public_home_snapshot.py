@@ -1843,7 +1843,7 @@ _RETIRED_RESOURCES = ("focus_signals", "unusual")
 
 
 @pytest.mark.parametrize("expired", [False, True], ids=["fresh", "expired"])
-def test_retired_entries_in_an_existing_snapshot_stay_inert(
+def test_retired_entries_stay_inert_until_the_next_publish_drops_them(
     tmp_path: Path,
     expired: bool,
 ) -> None:
@@ -1852,7 +1852,7 @@ def test_retired_entries_in_an_existing_snapshot_stay_inert(
     The worker no longer refreshes them, so they age past max_age. Until their
     names leave PUBLIC_HOME_RESOURCE_SPECS, the document must keep parsing,
     every live resource must stay readable, the worker must not report
-    degraded, and a publish carries the retired entries forward unchanged.
+    degraded, and the next publish drops the retired entries.
     """
 
     now = _regular_time()
@@ -1872,10 +1872,6 @@ def test_retired_entries_in_an_existing_snapshot_stay_inert(
         )
     write_public_home_snapshot(path, entries, now=now)
     _seed_watchlist(path, now)
-    retired_on_disk = {
-        resource: json.loads(path.read_text(encoding="utf-8"))["resources"][resource]
-        for resource in _RETIRED_RESOURCES
-    }
 
     loaded = read_public_home_entries(path, now=now)
     assert set(loaded) == {*PUBLIC_HOME_RESOURCE_ORDER, "cta_trend", *_RETIRED_RESOURCES}
@@ -1928,8 +1924,8 @@ def test_retired_entries_in_an_existing_snapshot_stay_inert(
     assert not set(_RETIRED_RESOURCES) & set(calls)
     on_disk = json.loads(path.read_text(encoding="utf-8"))["resources"]
     assert on_disk["indices"]["payload"]["indices"][0]["price"] == 150.0
-    for resource in _RETIRED_RESOURCES:
-        assert on_disk[resource] == retired_on_disk[resource], resource
+    assert not set(_RETIRED_RESOURCES) & set(on_disk)
+    assert set(on_disk) >= {*PUBLIC_HOME_RESOURCE_ORDER, "cta_trend"}
 
 
 def test_release_gate_blocks_on_missing_but_not_on_stale(tmp_path, monkeypatch):

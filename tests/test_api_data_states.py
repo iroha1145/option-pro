@@ -48,46 +48,6 @@ def _watchlist_payload(label: str, *, succeeded: int = 1):
     }
 
 
-def test_endpoint_cache_uses_only_bounded_marked_stale_data(monkeypatch):
-    async def scenario():
-        clock = [1_000.0]
-        monkeypatch.setattr(stocks.time, "time", lambda: clock[0])
-        stocks._endpoint_cache.clear()
-        stocks._endpoint_locks.clear()
-        stocks._endpoint_lock_users.clear()
-
-        async def healthy_loader():
-            return {"value": 42}
-
-        fresh = await stocks._cached_endpoint(
-            "test:bounded-stale", 10, healthy_loader, stale_ttl=20
-        )
-        assert fresh["value"] == 42
-        assert fresh["_stale"] is False
-        assert fresh["source_status"] == "active"
-
-        async def failed_loader():
-            raise RuntimeError("provider unavailable")
-
-        clock[0] = 1_011.0
-        stale = await stocks._cached_endpoint(
-            "test:bounded-stale", 10, failed_loader, stale_ttl=20
-        )
-        assert stale["value"] == 42
-        assert stale["_stale"] is True
-        assert stale["source_status"] == "degraded"
-        assert stale["stale_reason"] == "upstream_refresh_failed"
-
-        clock[0] = 1_031.0
-        with pytest.raises(RuntimeError, match="provider unavailable"):
-            await stocks._cached_endpoint(
-                "test:bounded-stale", 10, failed_loader, stale_ttl=20
-            )
-        assert "test:bounded-stale" not in stocks._endpoint_cache
-
-    asyncio.run(scenario())
-
-
 def test_endpoint_cache_has_a_hard_capacity_limit():
     stocks._endpoint_cache.clear()
     stocks._endpoint_locks.clear()
@@ -104,7 +64,7 @@ def test_endpoint_cache_has_a_hard_capacity_limit():
     async def load():
         return {"value": "new"}
 
-    result = asyncio.run(stocks._cached_endpoint("full:new", 60, load))
+    result = asyncio.run(stocks._stale_while_revalidate_endpoint("full:new", 60, 120, load))
 
     assert result["value"] == "new"
     assert len(stocks._endpoint_cache) == stocks._ENDPOINT_MAX_ENTRIES
@@ -122,7 +82,7 @@ def test_endpoint_cache_failed_unique_loads_do_not_retain_locks():
 
         for index in range(20):
             with pytest.raises(RuntimeError, match="provider down"):
-                await stocks._cached_endpoint(f"failure:{index}", 60, fail)
+                await stocks._stale_while_revalidate_endpoint(f"failure:{index}", 60, 60, fail)
 
     asyncio.run(scenario())
 
@@ -843,7 +803,6 @@ def test_targeted_watchlist_uses_normalized_tickers_without_provider_fetches(mon
 
     monkeypatch.setattr(stocks, "_cached_selected_watchlist", cached)
     monkeypatch.setattr(stocks, "_build_watchlist", forbidden)
-    monkeypatch.setattr(stocks, "_cached_endpoint", forbidden)
     monkeypatch.setattr(stocks, "_stale_while_revalidate_endpoint", forbidden)
     assert asyncio.run(stocks.watchlist(" msft,AAPL,msft "))["attempted"] == 2
     assert asyncio.run(stocks.watchlist("AAPL,MSFT"))["attempted"] == 2

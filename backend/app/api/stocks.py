@@ -369,51 +369,6 @@ async def _hydrate_stock_pull_resource(
     return current
 
 
-async def _cached_endpoint(
-    key: str,
-    ttl: int,
-    loader,
-    *,
-    stale_ttl: int | None = None,
-    allow_refresh: bool = True,
-):
-    stale_ttl = ttl if stale_ttl is None else max(0, stale_ttl)
-    now = time.time()
-    hit = _usable_hit(key, now)
-    if hit and hit.expires_at > now:
-        return _cache_result(hit, stale=False)
-    if not allow_refresh:
-        if hit is not None:
-            return _cache_result(hit, stale=True)
-        raise public_snapshot_unavailable(key)
-    # Serialize cold-cache fills per key
-    lock = _lock_for(key)
-    try:
-        async with lock:
-            # Re-check after acquiring lock (another waiter may have filled it)
-            now = time.time()
-            hit = _usable_hit(key, now)
-            if hit and hit.expires_at > now:
-                return _cache_result(hit, stale=False)
-            try:
-                value = await loader()
-            except Exception:
-                if hit and now <= hit.stale_until:
-                    return _cache_result(hit, stale=True)
-                raise
-            _maybe_purge_endpoint_cache(now)
-            entry = _EndpointCacheEntry(
-                expires_at=now + ttl,
-                stale_until=now + ttl + stale_ttl,
-                fetched_at=now,
-                value=value,
-            )
-            _endpoint_cache[key] = entry
-            return _cache_result(entry, stale=False)
-    finally:
-        _release_lock(key, lock)
-
-
 def _run_endpoint_success_callback(key: str, callback, value: Any, fetched_at: float) -> None:
     if callback is None:
         return
