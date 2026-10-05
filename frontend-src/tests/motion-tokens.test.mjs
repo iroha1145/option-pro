@@ -438,4 +438,3 @@ test('state labels swap in place with the 04-text-swap tokens', async () => {
     assert.match(await code(file), /<TextSwap swapKey=/, file);
   }
 });
-
