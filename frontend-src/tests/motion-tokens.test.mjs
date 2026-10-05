@@ -293,7 +293,7 @@ test('toast rows collapse on the toast clocks so the stack never jumps', async (
 test('tabs ride the beui spring indicator with Paper Terminal geometry, focus ring restored', async () => {
   /* 几何仍是 catalog 的纸面分段控件（8px 条 / 26px 高），指示器是
      beui.dev components/motion/tabs 的 layoutId 弹簧（SPRING_INDICATOR，
-     170/24/1.2）；弹簧与 reduced-motion 归零都在 GlidePill 里，调用点不再包
+     上游 2026-09-18 版 245/36/1.2，阻尼比约 1.05，不过冲）；弹簧与 reduced-motion 归零都在 GlidePill 里，调用点不再包
      MotionConfig。审查 #113 修正确认：layout="position" 只动位置、宽度瞬跳，
      禁用；可横向滚动的条用 layoutScroll，其余（含 MobileDock 的 fixed 容器）
      用 layoutRoot；指示器与按钮同级，方向键从最近的 tablist 查全体标签
@@ -306,8 +306,8 @@ test('tabs ride the beui spring indicator with Paper Terminal geometry, focus ri
   /* 滑块归 framer 之后本仓再没有 .t-tabs-pill 标记，几何适配是死样式 */
   assert.doesNotMatch(adaptation, /\.t-tabs-pill/, '无人渲染的 pill 不留适配块');
   const motion = await code('lib/motion.ts');
-  assert.match(motion, /stiffness: 170/);
-  assert.match(motion, /damping: 24/);
+  assert.match(motion, /stiffness: 245/);
+  assert.match(motion, /damping: 36/);
   assert.match(motion, /mass: 1\.2/);
   const pill = await code('components/shared/GlidePill.tsx');
   assert.doesNotMatch(pill, /layout="position"/, 'position-only 投影让宽度瞬跳');
