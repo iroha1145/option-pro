@@ -860,6 +860,87 @@ class AccountStore:
     def remove_ticker(self, user_id: str, ticker: str) -> list[str]:
         return self.edit_watchlist(user_id, add=[], remove=[ticker])
 
+    def remove_ticker_with_undo(
+        self, user_id: str, ticker: str,
+    ) -> tuple[list[str], dict[str, Any] | None]:
+        """Capture the undo order and remove under the same writer transaction."""
+        symbol = normalize_ticker(ticker)
+        self.initialize()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            original = [str(row["ticker"]) for row in connection.execute(
+                "SELECT ticker FROM account_watchlist WHERE user_id=? ORDER BY position,ticker",
+                (user_id,),
+            )]
+            if symbol not in original:
+                connection.rollback()
+                return original, None
+            connection.execute(
+                "DELETE FROM account_watchlist WHERE user_id=? AND ticker=?",
+                (user_id, symbol),
+            )
+            connection.commit()
+        return [value for value in original if value != symbol], {
+            "ticker": symbol, "original_order": original, "principal_id": user_id,
+        }
+
+    def restore_ticker(
+        self, user_id: str, *, ticker: str, original_order: Sequence[str], principal_id: str,
+    ) -> list[str]:
+        """Reinsert one symbol among surviving neighbours, retaining concurrent edits."""
+        if principal_id != user_id:
+            raise AccountError("watchlist_identity_changed")
+        if (
+            not isinstance(ticker, str)
+            or not isinstance(original_order, (list, tuple))
+            or not 1 <= len(original_order) <= WATCHLIST_MAX_TICKERS
+            or not all(isinstance(value, str) for value in original_order)
+        ):
+            raise AccountError("invalid_watchlist_undo")
+        try:
+            canonical = [normalize_ticker(value) for value in original_order]
+            symbol = normalize_ticker(ticker)
+        except AccountError as exc:
+            raise AccountError("invalid_watchlist_undo") from exc
+        if (
+            ticker != symbol or canonical != list(original_order)
+            or len(set(canonical)) != len(canonical) or symbol not in canonical
+        ):
+            raise AccountError("invalid_watchlist_undo")
+        self.initialize()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            current = [str(row["ticker"]) for row in connection.execute(
+                "SELECT ticker FROM account_watchlist WHERE user_id=? ORDER BY position,ticker",
+                (user_id,),
+            )]
+            if symbol in current:
+                connection.rollback()
+                return current
+            if len(current) >= WATCHLIST_MAX_TICKERS:
+                raise AccountError("watchlist_full")
+            original_index = canonical.index(symbol)
+            successor = next((value for value in canonical[original_index + 1:] if value in current), None)
+            predecessor = next((value for value in reversed(canonical[:original_index]) if value in current), None)
+            index = (
+                current.index(successor) if successor is not None
+                else current.index(predecessor) + 1 if predecessor is not None
+                else min(original_index, len(current))
+            )
+            result = current[:index] + [symbol] + current[index:]
+            # Only positions change on existing rows; preserve their added_at
+            # and every unrelated member rather than replacing the old list.
+            connection.executemany(
+                "UPDATE account_watchlist SET position=? WHERE user_id=? AND ticker=?",
+                [(position, user_id, value) for position, value in enumerate(result) if value != symbol],
+            )
+            connection.execute(
+                "INSERT INTO account_watchlist(user_id,ticker,position,added_at) VALUES(?,?,?,?)",
+                (user_id, symbol, index, _utcnow_iso()),
+            )
+            connection.commit()
+        return result
+
     def edit_watchlist(
         self, user_id: str, *, add: Iterable[str], remove: Iterable[str]
     ) -> list[str]:

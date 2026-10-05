@@ -79,7 +79,7 @@ function SignalRow({ label, signal }: { label: string; signal: number }) {
           transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
         />
       </div>
-      <span className="w-12 shrink-0 text-right font-mono text-micro text-ink-700 tnum">
+      <span className="w-12 shrink-0 text-right text-micro text-ink-700 tnum">
         {signed(signal, 2)}
       </span>
     </div>
@@ -163,7 +163,7 @@ export default function CtaDeepDive({
                   {t('估算目标仓位')}
                   <InfoHint hint={CTA_HINTS.position} size={10} />
                 </p>
-                <p className="mt-1 font-mono text-data-xl text-ink-900 tnum">
+                <p className="mt-1 metric-value text-data-xl text-ink-900">
                   {signed(row.position_score)}
                   <span className="ml-2 text-micro font-normal text-ink-400">
                     {t('前值 {v}', { v: signed(row.previous_position_score) })}
@@ -194,10 +194,10 @@ export default function CtaDeepDive({
                     {t('今日仓位变化')}
                     <InfoHint hint={CTA_HINTS.flow} size={10} />
                   </p>
-                  <p className={cn('mt-0.5 font-mono text-body font-semibold tnum', (row.flow_score ?? 0) >= 0 ? 'text-up-700' : 'text-down-700')}>
+                  <p className={cn('mt-0.5 text-body font-semibold tnum', (row.flow_score ?? 0) >= 0 ? 'text-up-700' : 'text-down-700')}>
                     {signed(row.flow_score)}
                   </p>
-                  <p className="font-mono text-micro text-ink-400 tnum">
+                  <p className="text-micro text-ink-400 tnum">
                     {t('趋势 {a} · 波动率 {b}', { a: signed(row.trend_flow), b: signed(row.volatility_flow) })}
                   </p>
                 </div>
@@ -208,10 +208,10 @@ export default function CtaDeepDive({
                   </p>
                   {/* 审计口径：大号 100% 视觉像「高置信度」，实际只表方向同向。
                       主读数改趋势强度（波动率缩放前，±100），方向/覆盖/缩放小字并列。 */}
-                  <p className="mt-0.5 font-mono text-body font-semibold text-ink-900 tnum">
+                  <p className="mt-0.5 text-body font-semibold text-ink-900 tnum">
                     {t('强度 {v}', { v: signed(row.trend_strength) })}
                   </p>
-                  <p className="font-mono text-micro text-ink-400 tnum">
+                  <p className="text-micro text-ink-400 tnum">
                     {t('{d} 同向 · 覆盖 {c} · 缩放 ×{s}', {
                       d: directionCount(row),
                       c: row.active_model_weight !== null ? `${Math.round(row.active_model_weight * 100)}%` : '—',
@@ -238,7 +238,7 @@ export default function CtaDeepDive({
               {row.volatility && (
                 <div className="rounded-md bg-paper-2 px-3 py-2">
                   <p className="text-micro text-ink-400">{t('波动率缩放')}</p>
-                  <p className="mt-0.5 font-mono text-micro text-ink-600 tnum">
+                  <p className="mt-0.5 text-micro text-ink-600 tnum">
                     {t('已实现波动 {rv}% · 目标 {tv}% → 缩放 ×{s}', {
                       rv: row.volatility.realized_annual !== null ? (row.volatility.realized_annual * 100).toFixed(1) : '—',
                       tv: (row.volatility.target_annual * 100).toFixed(0),

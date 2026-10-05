@@ -137,3 +137,71 @@ test('stock and sector tables retain independent keyboard actions', async ({ pag
   await expect(sector).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('table th button button, table th button [role="button"]')).toHaveCount(0);
 });
+
+test('history charts expose a keyboard cursor that drives the header readout', async ({ page }) => {
+  await page.goto('/cta');
+  const chart = page.getByRole('slider', { name: '估算仓位历史，左右键逐日查看' });
+  await expect(chart).toBeVisible();
+  const frame = chart.locator('xpath=..');
+  await expect(frame).toContainText('0 为多空分界 · 最新');
+  const last = await chart.getAttribute('aria-valuemax');
+  await expect(chart).toHaveAttribute('aria-valuenow', last);
+  await chart.focus();
+  await page.keyboard.press('Home');
+  await expect(chart).toHaveAttribute('aria-valuenow', '0');
+  await expect(frame).toContainText('0 为多空分界 · 当日');
+  await page.keyboard.press('ArrowRight');
+  await expect(chart).toHaveAttribute('aria-valuenow', '1');
+  await page.keyboard.press('Escape');
+  await expect(chart).toHaveAttribute('aria-valuenow', last);
+  await expect(frame).toContainText('0 为多空分界 · 最新');
+});
+
+for (const kind of ['macro', 'position']) {
+  test(`${kind} history replaces shorter and same-length dates safely while the cursor is active`, async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.goto('/visual-tests/support/history-cursor.html');
+    const frame = page.getByTestId(`${kind}-chart`);
+    const chart = frame.getByRole('slider');
+    await expect(chart).toHaveAttribute('aria-valuemax', '119');
+    const pixel = await page.evaluate((kind) => window.historyCursorHarness.pixel(kind, 100), kind);
+    await page.mouse.move(pixel.x, pixel.y);
+    await expect(chart).toHaveAttribute('aria-valuenow', '100');
+    const lastShort = await page.evaluate(() => window.historyCursorHarness.replace(30, 90));
+    await expect(chart).toHaveAttribute('aria-valuemax', '29');
+    await expect(chart).toHaveAttribute('aria-valuenow', '29');
+    await expect(chart).toHaveAttribute('aria-valuetext', new RegExp(lastShort));
+    await expect(frame).toContainText(lastShort);
+    await expect.poll(() => page.evaluate((kind) => window.historyCursorHarness.inspect(kind).pointerStatus, kind)).toBe('hide');
+
+    await chart.focus();
+    await chart.press('Home');
+    await expect(chart).toHaveAttribute('aria-valuenow', '0');
+    const lastShifted = await page.evaluate(() => window.historyCursorHarness.replace(30, 120));
+    await expect(chart).toHaveAttribute('aria-valuenow', '29');
+    await expect(chart).toHaveAttribute('aria-valuetext', new RegExp(lastShifted));
+    await expect(frame).toContainText(lastShifted);
+    await expect.poll(() => page.evaluate((kind) => window.historyCursorHarness.inspect(kind).pointerStatus, kind)).toBe('hide');
+    expect(errors).toEqual([]);
+  });
+
+  test(`${kind} history Escape and blur release the visible axis pointer and point emphasis`, async ({ page }) => {
+    await page.goto('/visual-tests/support/history-cursor.html');
+    const chart = page.getByTestId(`${kind}-chart`).getByRole('slider');
+    await expect(chart).toBeVisible();
+    // Keep the real mouse outside the chart so only the keyboard owns this cursor.
+    await page.mouse.move(0, 0);
+    for (const release of ['Escape', 'blur']) {
+      await chart.focus();
+      await chart.press('Home');
+      await expect(chart).toHaveAttribute('aria-valuenow', '0');
+      await expect.poll(() => page.evaluate((kind) => window.historyCursorHarness.inspect(kind).pointerStatus, kind)).toBe('show');
+      await expect.poll(() => page.evaluate((kind) => window.historyCursorHarness.inspect(kind).emphasized, kind)).toBe(true);
+      if (release === 'Escape') await chart.press('Escape');
+      else await page.getByRole('button', { name: '离开图表', exact: true }).focus();
+      await expect(chart).toHaveAttribute('aria-valuenow', '119');
+      await expect.poll(() => page.evaluate((kind) => window.historyCursorHarness.inspect(kind), kind)).toEqual({ pointerStatus: 'hide', emphasized: false });
+    }
+  });
+}

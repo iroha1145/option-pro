@@ -138,7 +138,7 @@ export function TickerChip({ ticker, onClick, className }: { ticker: string; onC
   );
 }
 
-/* ---------------- 热度计（5 段弧条，grow-bar  stagger） ---------------- */
+/* ---------------- 热度计（5 段弧条）：热度是强弱，不是警示，填充用中性墨色 ---------------- */
 export function HeatMeter({ level, heat, className }: { level: number; heat: number; className?: string }) {
   return (
     <span className={cn('inline-flex items-end gap-[3px]', className)} role="img" aria-label={t('热度 {heat}，{level} / 5 段', { heat, level })}>
@@ -148,11 +148,11 @@ export function HeatMeter({ level, heat, className }: { level: number; heat: num
           initial={{ scaleY: 0 }}
           animate={{ scaleY: 1 }}
           transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: 0.15 + i * 0.07 }}
-          className={cn('w-[4px] origin-bottom rounded-[2px]', i < level ? (level >= 4 ? 'bg-warn-700' : level === 3 ? 'bg-warn-600' : 'bg-brand-500') : 'bg-line')}
+          className={cn('w-[4px] origin-bottom rounded-[2px]', i < level ? 'bg-ink-500' : 'bg-line')}
           style={{ height: 6 + i * 3 }}
         />
       ))}
-      <span className="ml-1 font-mono text-micro text-ink-500 tnum">{heat}</span>
+      <span className="ml-1 text-micro text-ink-500 tnum">{heat}</span>
     </span>
   );
 }

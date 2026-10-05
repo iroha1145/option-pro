@@ -19,7 +19,6 @@ export const CATALYSTS: Dict = {
   '定时批次': ['Scheduled batch', '定時バッチ'],
   '手动任务': ['Manual job', '手動ジョブ'],
   '尚无批次': ['No batch yet', 'バッチなし'],
-  'NEWS ANALYSIS · 新闻分析进度': ['NEWS ANALYSIS · News analysis progress', 'NEWS ANALYSIS · ニュース分析の進捗'],
   '已结束': ['Finished', '終了'],
   '最近一批新闻分析完成比例': ['Completion rate of the latest news-analysis batch', '直近のニュース分析バッチの完了率'],
   '总任务': ['Total jobs', '総ジョブ数'],
@@ -146,7 +145,6 @@ export const CATALYSTS: Dict = {
   /* ---------------- HotspotsStrip.tsx ---------------- */
   '查看代表新闻': ['View representative news', '代表ニュースを見る'],
   '热点主题带': ['Hotspot theme strip', '注目テーマ帯'],
-  'HOT THEMES · 热点带': ['HOT THEMES · Hotspot strip', 'HOT THEMES · 注目テーマ帯'],
   '市场关注的主题': ['Themes drawing market attention', '市場で注目されているテーマ'],
   '热点扫描': ['Hotspot scan', '注目テーマスキャン'],
   '活跃': ['Active', '稼働中'],
@@ -216,7 +214,6 @@ export const CATALYSTS: Dict = {
   '强制重新分析': ['Forced re-analysis', '強制再分析'],
   '可在本页查看进度': ['View progress on this page', 'このページで進捗を確認できます'],
   '取消失败': ['Cancel failed', 'キャンセルに失敗しました'],
-  'NEWS DETAIL · 新闻详情': ['NEWS DETAIL · News detail', 'NEWS DETAIL · ニュース詳細'],
   '详情不可用': ['Details unavailable', '詳細を取得できません'],
   '详情更新失败': ['Could not refresh details', '詳細の更新に失敗しました'],
   '任务状态暂时读不到': ['Job status is temporarily unavailable', 'ジョブ状態を一時的に取得できません'],

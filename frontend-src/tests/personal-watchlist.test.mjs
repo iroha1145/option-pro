@@ -20,6 +20,8 @@ const bundle = await build({
       getAccountWatchlist,
       editAccountWatchlist,
       replaceAccountWatchlist,
+      removeAccountWatchlist,
+      restoreAccountWatchlist,
     } from './src/mocks/session.ts';
   `, resolveDir: root },
   bundle: true, write: false, platform: 'node', format: 'esm',
@@ -156,5 +158,49 @@ test('a malformed successful write cannot be mistaken for deleting the entire wa
     await assert.rejects(api.accountApi.watchlist(), /自选列表返回异常/);
     body = { tickers: [], max_tickers: 50 };
     assert.deepEqual(await api.accountApi.edit([], ['AAPL']), { tickers: [], maxTickers: 50 });
+  } finally { globalThis.fetch = original; }
+});
+
+
+test('removal restores exact order, preserves independent edits and is idempotent', () => {
+  api.mockLogin('any');
+  api.replaceAccountWatchlist(['AAPL', 'MSFT', 'NVDA']);
+  const removed = api.removeAccountWatchlist('MSFT', 'admin');
+  assert.deepEqual(removed.undo, { ticker: 'MSFT', original_order: ['AAPL', 'MSFT', 'NVDA'], principal_id: 'own_local' });
+  api.editAccountWatchlist(['AMD'], []);
+  assert.deepEqual(api.restoreAccountWatchlist(removed.undo).tickers, ['AAPL', 'MSFT', 'NVDA', 'AMD']);
+  assert.deepEqual(api.restoreAccountWatchlist(removed.undo).tickers, ['AAPL', 'MSFT', 'NVDA', 'AMD']);
+  const again = api.removeAccountWatchlist('MSFT', 'admin');
+  api.replaceAccountWatchlist(Array.from({ length: 50 }, (_, index) => `T${index}`));
+  assert.throws(() => api.restoreAccountWatchlist(again.undo), (error) => error.bizCode === 'watchlist_full');
+  assert.equal(api.getAccountWatchlist().tickers.length, 50);
+  assert.throws(() => api.removeAccountWatchlist('T0', 'another'), (error) => error.bizCode === 'watchlist_identity_changed');
+  assert.throws(() => api.restoreAccountWatchlist({ ...again.undo, principal_id: 'usr_other' }), (error) => error.bizCode === 'watchlist_identity_changed');
+  api.replaceAccountWatchlist([]);
+  api.mockLogout();
+});
+
+test('removal validates undo metadata and sends identity; restore sends server metadata', async () => {
+  const original = globalThis.fetch;
+  const requests = [];
+  let body;
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url: String(url), body: JSON.parse(options.body) });
+    return new Response(JSON.stringify(body));
+  };
+  const undo = { ticker: 'MSFT', original_order: ['AAPL', 'MSFT', 'NVDA'], principal_id: 'own_local' };
+  try {
+    for (const invalid of [undefined, { ...undo, principal_id: 1 }, { ...undo, principal_id: '' }, { ...undo, original_order: ['AAPL'] }, { ...undo, original_order: ['MSFT', 'MSFT'] }]) {
+      body = { tickers: ['AAPL', 'NVDA'], max_tickers: 50, undo: invalid };
+      await assert.rejects(api.accountApi.remove('MSFT', 'admin'), /自选列表返回异常/);
+    }
+    body = { tickers: ['AAPL', 'NVDA'], max_tickers: 50, undo };
+    assert.deepEqual((await api.accountApi.remove('MSFT', 'admin')).undo, undo);
+    assert.deepEqual(requests.at(-1), { url: '/api/account/watchlist/removals', body: { ticker: 'MSFT', expected_username: 'admin' } });
+    body = { tickers: ['AAPL', 'MSFT', 'NVDA'], max_tickers: 50 };
+    assert.deepEqual((await api.accountApi.restore(undo)).tickers, body.tickers);
+    assert.deepEqual(requests.at(-1), { url: '/api/account/watchlist/restore', body: undo });
+    body = { tickers: ['AAPL', 'NVDA'], max_tickers: 50, undo: null };
+    assert.equal((await api.accountApi.remove('MSFT', 'admin')).undo, null);
   } finally { globalThis.fetch = original; }
 });

@@ -226,6 +226,18 @@ class WatchlistEditRequest(BaseModel):
     remove: list[str] = Field(default_factory=list, max_length=WATCHLIST_MAX_TICKERS)
 
 
+class WatchlistRemovalRequest(TickerRequest):
+    expected_username: str = Field(min_length=1, max_length=64, strict=True)
+
+
+class WatchlistRestoreRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ticker: str = Field(min_length=1, max_length=16, strict=True)
+    original_order: list[str] = Field(min_length=1, max_length=WATCHLIST_MAX_TICKERS)
+    principal_id: str = Field(min_length=1, max_length=128, strict=True)
+
+
 # 绘图相关的码全部落在这里：客户端按 code 分支，不按状态码。409 上挤着配额和
 # 版本冲突两类语义，只有 revision_conflict 才是「别的设备改过了」，配额满不能走
 # 重载对话框那条路——那条路会重放注定失败的创建。
@@ -234,6 +246,7 @@ _ERROR_STATUS = {
     "registration_closed": status.HTTP_503_SERVICE_UNAVAILABLE,
     "invalid_credentials": status.HTTP_401_UNAUTHORIZED,
     "watchlist_full": status.HTTP_409_CONFLICT,
+    "watchlist_identity_changed": status.HTTP_409_CONFLICT,
     "revision_conflict": status.HTTP_409_CONFLICT,
     "scope_revision_conflict": status.HTTP_409_CONFLICT,
     "drawing_id_conflict": status.HTTP_409_CONFLICT,
@@ -258,6 +271,8 @@ _ERROR_MESSAGE = {
     "invalid_credentials": "用户名或密码不正确",
     "invalid_ticker": "股票代码格式不正确",
     "watchlist_full": f"自选最多 {WATCHLIST_MAX_TICKERS} 只股票",
+    "watchlist_identity_changed": "登录身份已改变，请重新读取自选",
+    "invalid_watchlist_undo": "撤销信息无效，请重新读取自选",
     "invalid_range": "图表周期不受支持",
     "invalid_adjustment": "复权口径不受支持",
     "invalid_kind": "绘图类型不受支持",
@@ -482,6 +497,47 @@ def remove_watchlist_ticker(
     account = require_watchlist_account(request)
     try:
         tickers = get_account_store().remove_ticker(account.user_id, ticker)
+    except AccountError as exc:
+        raise account_http_error(exc) from exc
+    return JSONResponse(
+        {"tickers": tickers, "max_tickers": WATCHLIST_MAX_TICKERS},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@router.post("/watchlist/removals", dependencies=[Depends(require_same_origin_json)])
+def remove_watchlist_with_undo(
+    request: Request,
+    payload: Annotated[WatchlistRemovalRequest, Body()],
+) -> Response:
+    account = require_personal_account(request)
+    try:
+        if payload.expected_username != account.username:
+            raise AccountError("watchlist_identity_changed")
+        tickers, undo = get_account_store().remove_ticker_with_undo(
+            account.user_id, payload.ticker,
+        )
+    except AccountError as exc:
+        raise account_http_error(exc) from exc
+    return JSONResponse(
+        {"tickers": tickers, "max_tickers": WATCHLIST_MAX_TICKERS, "undo": undo},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@router.post("/watchlist/restore", dependencies=[Depends(require_same_origin_json)])
+def restore_watchlist_ticker(
+    request: Request,
+    payload: Annotated[WatchlistRestoreRequest, Body()],
+) -> Response:
+    account = require_personal_account(request)
+    try:
+        tickers = get_account_store().restore_ticker(
+            account.user_id,
+            ticker=payload.ticker,
+            original_order=payload.original_order,
+            principal_id=payload.principal_id,
+        )
     except AccountError as exc:
         raise account_http_error(exc) from exc
     return JSONResponse(

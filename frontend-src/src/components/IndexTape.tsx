@@ -153,7 +153,8 @@ export default function IndexTape() {
       </div>
       <span className="marquee-label absolute inset-y-0 right-0 z-10 flex items-stretch">
         <span className="pointer-events-none w-8 bg-gradient-to-r from-transparent to-paper-2" aria-hidden="true" />
-        <span className="glass flex items-center border-l border-line bg-paper-2/95 px-3 text-micro font-medium text-ink-400">
+        {/* 不用 .glass：底色已是 95% 不透明，磨砂看不出来，却要随下面一直滚动的跑马灯逐帧重算模糊 */}
+        <span className="flex items-center border-l border-line bg-paper-2/95 px-3 text-micro font-medium text-ink-400">
           {useFunds ? (quoteStatus.connected ? t('基金行情 · 美元') : t('行情连接中')) : t('延迟行情')}
         </span>
       </span>

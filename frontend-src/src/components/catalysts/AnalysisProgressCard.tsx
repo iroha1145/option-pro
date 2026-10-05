@@ -111,10 +111,10 @@ function OwnerAnalysisProgressCard() {
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="eyebrow flex items-center gap-2">
-            <AnalysisIcon size={13} className="text-ai-600" />
-            {t('NEWS ANALYSIS · 新闻分析进度')}
-          </p>
+          <h3 className="flex items-center gap-2 text-h3 text-ink-900">
+            <AnalysisIcon size={14} className="text-ai-600" />
+            {t('新闻分析进度')}
+          </h3>
           <div className="mt-1.5 flex items-center gap-2">
             <Led
               tone={processing ? 'ai' : validating ? 'warn' : progress.total > 0 ? 'ok' : 'muted'}

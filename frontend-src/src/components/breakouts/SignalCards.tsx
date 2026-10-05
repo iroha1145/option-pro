@@ -44,7 +44,7 @@ function ChipRow({ ev, showT1 }: { ev: BreakoutCurrentEvent; showT1: boolean }) 
         {LIFECYCLE_CN[ev.lifecycle_state] ?? ev.lifecycle_state ?? '—'}
       </span>
       {showT1 && <T1StatusChip status={ev.t1_status} />}
-      <span className="radar-chip radar-chip-volume ml-auto tnum">
+      <span className="radar-chip radar-chip-neutral ml-auto tnum">
         {t('量能')} {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}
       </span>
     </div>

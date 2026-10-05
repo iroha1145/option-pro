@@ -139,7 +139,7 @@ function HeatRow({
                 backgroundColor: tone,
               }}
               variants={GROW_X}
-              transition={{ duration: 0.7, ease: EASE_PAPER, delay: Math.min(rank * 0.03, 0.3) }}
+              transition={{ duration: 0.7, ease: EASE_PAPER }}
             />
           ) : (
             <span className="absolute inset-x-0 top-1/2 border-t border-dashed border-line-strong" />

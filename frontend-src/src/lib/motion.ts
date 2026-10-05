@@ -11,15 +11,17 @@ export const DUR_UI = 0.24;
 export const DUR_SECTION = 0.56;
 
 /**
- * 共享布局滑行弹簧（参考 beui.dev tabs，为密集数据导航适配的项目参数）。
- * 指示器类（tabs pill / 列表高亮）统一用它：一点过冲让滑块落定带活气，
- * 而不是生硬贴上去；reduced-motion 归零由 GlidePill 自持（唯一会动的就是
- * 那个 span，不需要每个调用点再包一层 MotionConfig）。
+ * 共享布局滑行弹簧（beui.dev components/motion/tabs 的 layoutId 弹簧）。
+ * 2026-09-18 上游从 170/24/1.2 改为 245/36/1.2：阻尼比约 0.84 → 1.05，不再过冲。
+ * 理由是可横向滚动的标签条里，哪怕一点过冲也会把滚动条闪出来——本项目的
+ * Segmented 正放在 HorizontalScroller 里。指示器类（tabs pill / 列表高亮）统一用它；
+ * reduced-motion 归零由 GlidePill 自持（唯一会动的就是那个 span，不需要每个
+ * 调用点再包一层 MotionConfig）。
  */
 export const SPRING_INDICATOR: Transition = {
   type: 'spring',
-  stiffness: 170,
-  damping: 24,
+  stiffness: 245,
+  damping: 36,
   mass: 1.2,
 };
 

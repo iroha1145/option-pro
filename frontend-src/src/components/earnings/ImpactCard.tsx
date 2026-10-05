@@ -38,6 +38,7 @@ import PulseDot from './PulseDot';
 import type { EarningsRow } from './types';
 import { exNum } from './types';
 import { t as __t } from '../../i18n/core.ts';
+import TextSwap from '@/components/shared/TextSwap';
 
 /* ---------------- 报告级公开分析状态机 ---------------- */
 const ACTIVE_STATUSES = new Set(['preparing', 'pending', 'queued', 'in_progress', 'processing', 'running', 'cancel_requested']);
@@ -643,7 +644,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                       className="btn-ai flex-1"
                     >
                       <AnalysisIcon size={13} />
-                      {submitting ? __t('正在提交…') : __t('生成分析')}
+                      <TextSwap swapKey={submitting ? 'busy' : 'idle'}>{submitting ? __t('正在提交…') : __t('生成分析')}</TextSwap>
                     </button>
                     <button
                       onClick={() => setConfirming(false)}

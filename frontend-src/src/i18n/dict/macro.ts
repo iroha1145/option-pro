@@ -51,6 +51,8 @@ export const MACRO: Dict = {
   '混合：部分区间按当前修订值回算': ['Mixed: part of the range is recomputed on latest revisions', '混在：一部区間は最新修正値による遡及計算'],
   '宏观环境综合分': ['Macro conditions composite score', 'マクロ環境総合スコア'],
   '综合分': ['Composite', '総合スコア'],
+  '{date}：综合分 {v}': ['{date}: composite {v}', '{date}：総合スコア {v}'],
+  '综合分历史，左右键逐日查看': ['Composite history, use the arrow keys to step through days', '総合スコア履歴。左右キーで日ごとに確認'],
   '历史分位': ['Historical percentile', 'ヒストリカル・パーセンタイル'],
   '环境标签暂不可用': ['Regime label unavailable', '環境ラベルは利用できません'],
   '7 日变化': ['7-day change', '7日間の変化'],

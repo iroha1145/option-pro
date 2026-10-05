@@ -803,7 +803,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
           {warnings.map((w, i) => (
             <span
               key={i}
-              className="radar-chip radar-chip-volume"
+              className="radar-chip radar-chip-warn"
             >
               <Icon name="flag" size={11} />
               {w}

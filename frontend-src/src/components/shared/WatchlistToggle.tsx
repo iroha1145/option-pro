@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router';
+import { useWatchlistUndo } from '@/hooks/useWatchlistUndo';
 import { usePersonalWatchlist } from '@/hooks/usePersonalWatchlist';
 import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/hooks/useToast';
@@ -9,9 +10,11 @@ import Icon from '@/components/icons';
 import IconSwap from '@/components/shared/IconSwap';
 import Spinner from '@/components/shared/Spinner';
 import { t } from '@/i18n/core';
+import TextSwap from '@/components/shared/TextSwap';
 
 export default function WatchlistToggle({ ticker }: { ticker: string }) {
   const personal = usePersonalWatchlist();
+  const removeWithUndo = useWatchlistUndo();
   const { canManageWatchlist } = useAccess();
   const location = useLocation();
   const toast = useToast();
@@ -29,8 +32,12 @@ export default function WatchlistToggle({ ticker }: { ticker: string }) {
     if (personal.error) { await personal.refresh(); return; }
     setJustAdded(!selected);
     try {
-      await personal.edit(selected ? [] : [ticker], selected ? [ticker] : []);
-      toast.success(selected ? t('已移出自选') : t('已加入自选'), ticker);
+      if (selected) {
+        await removeWithUndo(ticker, personal.key);
+      } else {
+        await personal.add(ticker);
+        toast.success(t('已加入自选'), ticker);
+      }
     } catch (error) {
       setJustAdded(false);
       toast.error(selected ? t('移除失败') : t('加入失败'), watchlistErrorMessage(error, personal.maxTickers));
@@ -50,6 +57,8 @@ export default function WatchlistToggle({ ticker }: { ticker: string }) {
       a={<IconSwap state={selected ? 'b' : 'a'} a={<Icon name="plus" size={15} />} b={check} />}
       b={<Spinner size={13} tone="brand" />}
     />
-    {personal.loading ? t('正在读取自选…') : personal.error ? t('重试读取自选') : selected ? t('已加入自选') : t('加入自选')}
+    <TextSwap swapKey={personal.loading ? 'loading' : personal.error ? 'error' : selected ? 'in' : 'out'}>
+      {personal.loading ? t('正在读取自选…') : personal.error ? t('重试读取自选') : selected ? t('已加入自选') : t('加入自选')}
+    </TextSwap>
   </button>;
 }
