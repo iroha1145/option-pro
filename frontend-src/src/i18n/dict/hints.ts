@@ -5,66 +5,23 @@
 import type { Dict } from './types';
 
 export const HINTS: Dict = {
-  '评分综合趋势、动量、结构、突破、回踩、量能、相对表现与行业等已收盘日线因子。不同风险偏好会调整门槛；观察名单可包含数据资格尚未核实的标的，合格综合还要求多种方法形成共识。': [
-    'The score combines closed-daily-bar factors such as trend, momentum, structure, breakouts, pullbacks, volume, relative performance, and industry context. Risk profiles adjust thresholds; the watch list may include names with unverified eligibility, while the eligible composite also requires agreement across methods.',
-    'スコアは、確定日足のトレンド、モメンタム、構造、ブレイクアウト、押し目、出来高、相対パフォーマンス、業種などを総合します。リスク設定で閾値が変わり、観察リストには適格性未確認の銘柄を含む場合があります。適格総合には複数手法の合意も必要です。',
-  ],
   '趋势因子：衡量价格方向与均线结构。': ['Trend factor: measures price direction and moving-average structure.', 'トレンド要因：価格方向と移動平均の構造を測ります。'],
   '动量因子：按当前周期衡量收益变化。': ['Momentum factor: measures return changes over the selected timeframe.', 'モメンタム要因：選択した期間のリターン変化を測ります。'],
   '结构因子：观察高低点与价格形态是否相互支持。': ['Structure factor: checks whether highs, lows, and price patterns support one another.', '構造要因：高値・安値と価格パターンが整合しているかを確認します。'],
   '突破因子：衡量突破确认与首日跟进情况。': ['Breakout factor: measures breakout confirmation and first-day follow-through.', 'ブレイクアウト要因：ブレイクの確認と初日の追随を測ります。'],
   '回踩因子：衡量趋势内的回撤位置与承接情况。': ['Pullback factor: measures retracement location and support within the trend.', '押し目要因：トレンド内の下落位置と支えを測ります。'],
   '量能因子：使用日线成交量；成交额资格未核实时只进入观察。': ['Volume factor: uses daily volume; names with unverified dollar-volume eligibility remain on watch.', '出来高要因：日足の出来高を使い、売買代金の適格性が未確認の銘柄は観察扱いになります。'],
-  '相对因子：衡量相对基准的表现；缺少行业分类时不推断行业相对强弱。': ['Relative factor: measures performance versus a benchmark and does not infer industry-relative strength without classification.', '相対要因：ベンチマーク比の成績を測り、業種分類がない場合は業種内の相対強度を推定しません。'],
-  '行业因子：衡量行业内相对表现；没有可靠分类时保持未知。': ['Industry factor: measures relative performance within an industry and stays unknown without reliable classification.', '業種要因：業種内の相対成績を測り、信頼できる分類がない場合は不明のままにします。'],
   "缺失项不计入评分，其余项重新分配权重；数据越少，置信度越低。": ["Missing components are excluded and the remaining weights are rescaled. Less data means lower confidence.", "欠測項目を除き、残りの項目で重みを調整します。データが少ないほど信頼度は下がります。"],
 
   '趋势 T': ['Trend T', 'トレンド T'],
-  '收盘技术趋势因子：方向与均线结构。不是原版短期/中期/长期槽位。': [
-    'EOD technical trend factor: direction and moving-average structure. It is not the original short/mid/long slot.',
-    '終値テクニカルのトレンド因子：方向と移動平均の構造です。従来の短期・中期・長期スロットではありません。',
-  ],
   '动量 M': ['Momentum M', 'モメンタム M'],
-  '收盘技术动量因子：按当前周期定义的收益混合。不是原版短期分。': [
-    'EOD technical momentum factor: the return blend defined for the current horizon. It is not the original short-term score.',
-    '終値テクニカルのモメンタム因子：現在の期間定義によるリターン混合です。従来の短期スコアではありません。',
-  ],
   '结构 S': ['Structure S', '構造 S'],
-  '收盘技术结构因子：高低点与形态是否支撑当前家族设定。': [
-    'EOD technical structure factor: whether highs, lows, and pattern support the current family setup.',
-    '終値テクニカルの構造因子：高値・安値と形状が現在のファミリー設定を支えるかです。',
-  ],
   '突破 B': ['Breakout B', 'ブレイクアウト B'],
-  '收盘技术突破因子：突破确认与第一日跟进，不是原版突破质量槽。': [
-    'EOD technical breakout factor: confirmation and first-day follow-through, not the original breakout-quality slot.',
-    '終値テクニカルのブレイクアウト因子：確認と初日の追随であり、従来のブレイクアウト品質スロットではありません。',
-  ],
   '回踩 P': ['Pullback P', '押し目 P'],
-  '收盘技术回踩因子：趋势内回撤位置，不是原版中期分。': [
-    'EOD technical pullback factor: retracement location inside the trend, not the original mid-term score.',
-    '終値テクニカルの押し目因子：トレンド内の押し位置であり、従来の中期スコアではありません。',
-  ],
   '量能 V': ['Volume V', '出来高 V'],
-  '收盘技术量能因子：仅用供应商日线量，未核实成交额门时保持观察。': [
-    'EOD technical volume factor: vendor daily volume only. Unverified dollar-volume gates stay on watch.',
-    '終値テクニカルの出来高因子：ベンダー日次出来高のみを使います。売買代金ゲート未確認の場合は観察に留めます。',
-  ],
-  '相对 R': ['Relative R', '相対 R'],
-  '收盘技术相对因子：对基准的相对表现，缺行业分类时不假装行业相对。': [
-    'EOD technical relative factor: performance versus the benchmark. Missing industry classification is not treated as sector-relative.',
-    '終値テクニカルの相対因子：ベンチマークに対する相対パフォーマンスです。業種分類が無い場合に業種相対を装いません。',
-  ],
   '行业 G': ['Industry G', '業種 G'],
-  '收盘技术行业因子：无独立行业分类时保持未知，不编造板块强度。': [
-    'EOD technical industry factor: stays unknown without an independent industry classification and does not invent sector strength.',
-    '終値テクニカルの業種因子：独立した業種分類が無い場合は未知のままにし、セクター強度を作りません。',
-  ],
 
   '综合评分（0–100）': ['Composite score (0–100)', '総合スコア（0–100）'],
-  '排序分 = 个股自身强度 78% + 市场契合 8% + 风格契合 14%。个股自身强度只用该股价格/量能与对 SPY 的相对表现，由六个族加权：中期 24% / 短期 16% / 趋势 16% / 长期 14% / 突破质量 15% / 价格行为 15%。': [
-    "Ranking score = the stock's own strength 78% + market fit 8% + style fit 14%. The stock's own strength uses only its price and volume plus its performance relative to SPY, weighted across six families: mid-term 24% / short-term 16% / trend 16% / long-term 14% / breakout quality 15% / price action 15%.",
-    'ランキングスコア = 個別銘柄の強度 78% + 市場適合度 8% + スタイル適合度 14%。個別銘柄の強度は、その銘柄の価格・出来高と SPY に対する相対パフォーマンスのみを使い、6つのファミリーで加重します：中期 24% / 短期 16% / トレンド 16% / 長期 14% / ブレイクアウトの質 15% / プライスアクション 15%。',
-  ],
 
   '短期分（0–100）': ['Short-term score (0–100)', '短期スコア（0–100）'],
   '五项加权：20 日收益 25%、5 日收益 20%、距 20 日均线 20%、RSI14 20%、相对量能 15%。RSI 用折线映射：68 附近得分最高（≈88），越过后逐步回落、78 以上明显走低；相对量能以 1 倍为中性。': [
@@ -211,10 +168,6 @@ export const HINTS: Dict = {
   "模型对本次判断的把握程度，范围 0–100。信息较少或含糊时，置信度通常较低。": ["The model’s confidence in this assessment, from 0 to 100. Sparse or ambiguous information usually lowers confidence.", "今回の判断に対するモデルの確信度を0〜100で示します。情報が少ない場合や曖昧な場合は、通常低くなります。"],
 
   '净影响（−5 ～ +5）': ['Net impact (−5 to +5)', 'ネット・インパクト（−5 〜 +5）'],
-  '它是新闻面的方向倾向，不是收益预测。': [
-    'It is the directional lean of the news flow, not a return forecast.',
-    'ニュースフローの方向性の傾きであり、リターン予測ではありません。',
-  ],
   '把窗口内该股全部已分析新闻的影响分聚合成一个净方向：正=利多证据占优，负=利空占优。它衡量新闻面的倾向强度，与股价涨跌幅无关。': [
     'Aggregates the impact scores of every analyzed news item for the stock within the window into a single net direction: positive means bullish evidence dominates, negative means bearish. It measures how the news flow leans, not how far the share price moved.',
     '対象期間内に分析済みのニュースのインパクトスコアを集約し、1つのネット方向にまとめます。プラスは好材料の証拠が優勢、マイナスは悪材料が優勢です。ニュースフローの傾きの強さを示すもので、株価の騰落率とは無関係です。',
@@ -263,59 +216,12 @@ export const HINTS: Dict = {
 
   /* 顶底证据指标逐条口径 */
   '距 20 日均线': ['Distance from the 20-day MA', '20日移動平均との乖離'],
-  '现价相对 20 日均线的偏离（%）。大幅高于→顶部证据（×8），大幅低于→底部证据。': [
-    'Deviation of the current price from the 20-day MA (%). Far above it counts as top evidence (×8); far below it counts as bottom evidence.',
-    '現在値の20日移動平均からの乖離（%）です。大きく上にあれば天井証拠（×8）、大きく下にあれば底証拠として計上します。',
-  ],
   '距 50 日均线': ['Distance from the 50-day MA', '50日移動平均との乖離'],
-  '现价相对 50 日均线的偏离（%）。映射系数 ×5，方向同上。': [
-    'Deviation of the current price from the 50-day MA (%). Mapping factor ×5; direction as above.',
-    '現在値の50日移動平均からの乖離（%）です。マッピング係数は×5で、向きは上と同じです。',
-  ],
   '距 200 日均线': ['Distance from the 200-day MA', '200日移動平均との乖離'],
-  '现价相对 200 日均线的偏离（%）。映射系数 ×2.5，衡量长期趋势的过热/超卖。': [
-    'Deviation of the current price from the 200-day MA (%). Mapping factor ×2.5; gauges long-term overheating or oversold conditions.',
-    '現在値の200日移動平均からの乖離（%）です。マッピング係数は×2.5で、長期トレンドの過熱・売られ過ぎを測ります。',
-  ],
-  '高于 50 每一点计 3 分顶部证据，低于 50 每一点计 3 分底部证据；80 附近顶部证据即打满。': [
-    'Each point above 50 adds 3 points of top evidence, and each point below 50 adds 3 points of bottom evidence; top evidence maxes out around 80.',
-    '50を1ポイント上回るごとに天井証拠を3点、50を1ポイント下回るごとに底証拠を3点計上します。80付近で天井証拠は上限に達します。',
-  ],
   '20 日涨跌': ['20-day change', '20日騰落率'],
-  '近 20 个交易日涨跌幅（%）。上涨×3.5 计入顶部证据，下跌×3.5 计入底部证据。': [
-    'Change over the last 20 trading days (%). Gains count toward top evidence at ×3.5; losses count toward bottom evidence at ×3.5.',
-    '直近20営業日の騰落率（%）です。上昇分は×3.5で天井証拠、下落分は×3.5で底証拠に計上します。',
-  ],
-  'ATR 波动分位': ['ATR volatility percentile', 'ATR ボラティリティのパーセンタイル'],
-  '当前波动率在一年中的分位。高分位（>60/70）时顶底证据同时上升——高波动常出现在拐点附近。': [
-    'Where current volatility sits within the past year. At a high percentile (above 60–70) both top and bottom evidence rise — high volatility tends to cluster around turning points.',
-    '現在のボラティリティが過去1年のどのパーセンタイルにあるかを示します。高パーセンタイル（60〜70超）では天井証拠と底証拠が同時に上がります。高いボラティリティは転換点付近で現れやすいためです。',
-  ],
-  '成交量 Z 分数': ['Volume z-score', '出来高の Z スコア'],
-  '当日量相对 20 日均量的标准化偏离。放量同时增加顶部（×20）与底部（×10）证据：极端量能常伴随顶或底。': [
-    "The standardized deviation of today's volume from the 20-day average. A volume surge raises both top (×20) and bottom (×10) evidence: extreme volume tends to accompany tops and bottoms alike.",
-    '当日の出来高が20日平均からどれだけ標準化して離れているかを示します。出来高の急増は天井証拠（×20）と底証拠（×10）の両方を増やします。極端な出来高は天井にも底にも伴いやすいためです。',
-  ],
-  'OBV 背离': ['OBV divergence', 'OBV のダイバージェンス'],
-  '20 日内 OBV 与价格的背离度。量在价先弱（正值）计顶部证据，量先强于价计底部证据。': [
-    'How far OBV has diverged from price over 20 days. Volume weakening ahead of price (a positive value) counts as top evidence; volume strengthening ahead of price counts as bottom evidence.',
-    '20日間の OBV と価格のダイバージェンスの度合いです。出来高が価格に先行して弱まる（プラス値）場合は天井証拠、出来高が価格より先に強まる場合は底証拠として計上します。',
-  ],
   '相对 SPY 强度': ['Relative strength versus SPY', 'SPY に対する相対強度'],
-  '对 SPY 的相对涨跌（%）。持续跑赢×6 计顶部证据（拥挤/过热），持续跑输计底部证据。': [
-    'Change relative to SPY (%). Sustained outperformance counts toward top evidence at ×6 (crowding / overheating); sustained underperformance counts toward bottom evidence.',
-    'SPY に対する相対騰落率（%）です。継続的なアウトパフォームは×6で天井証拠（過密・過熱）、継続的なアンダーパフォームは底証拠として計上します。',
-  ],
   '收盘位置': ['Closing position', '終値の位置'],
-  '收盘价在当日高低区间中的位置（0–100）。收在区间低位（<35）计顶部/转弱证据，收在区间高位（>65）计底部反转确认证据。': [
-    "Where the close sits within the day's high–low range (0–100). Closing in the lower part of the range (below 35) counts as top / weakening evidence; closing in the upper part (above 65) counts as confirmation of a reversal off a bottom.",
-    '終値が当日の高値〜安値レンジのどこに位置するか（0–100）です。レンジ下方（35未満）で引けた場合は天井・弱化の証拠、レンジ上方（65超）で引けた場合は底からの反転を確認する証拠として計上します。',
-  ],
   'MACD 柱': ['MACD histogram', 'MACD ヒストグラム'],
-  'MACD 柱状值。转负（动能向下）×150 计顶部证据，转正计底部证据。': [
-    'The MACD histogram value. Turning negative (momentum rolling over) counts as top evidence at ×150; turning positive counts as bottom evidence.',
-    'MACD ヒストグラムの値です。マイナスへ転じた（モメンタムが下向き）場合は×150で天井証拠、プラスへ転じた場合は底証拠として計上します。',
-  ],
   'SPY 距 20 日线': ['SPY distance from its 20-day MA', 'SPY と20日線の乖離'],
   '大盘对 20 日均线的偏离（%）。高于→顶部证据（×8），低于→底部证据。': [
     'The index’s deviation from its 20-day MA (%). Above it counts as top evidence (×8); below it counts as bottom evidence.',

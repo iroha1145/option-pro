@@ -134,6 +134,7 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
       alive = false;
       manualReadRef.current += 1;
     };
+    // 按代码重读日线；每轮轮询都会换一份 sparkline 数组，跟着它会重复请求。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [row.ticker, hasSpark]);
 
@@ -161,13 +162,13 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
   return (
     <div>
       <p className="eyebrow">{title}</p>
-      <div className="mt-3 rounded-[10px] border border-line/70 bg-card p-3">
+      <div className="mt-3 rounded-lg border border-line/70 bg-card p-3">
         {closes === undefined ? (
           <SkeletonBlock className="h-[72px] w-full rounded-sm" />
         ) : closes === null ? (
           /* 接口拿不到日线：如实留空，严禁 Infinity/编造 */
           <div className="flex min-h-[96px] flex-col items-center justify-center gap-1.5 text-center">
-            <Icon name="candle" size={16} className="text-ink-300" />
+            <Icon name="candle" size={16} className="text-ink-400" />
             <p className="text-caption text-ink-400">{loadError ?? t('日线数据暂不可用')}</p>
             <ManualStockPull ticker={row.ticker} onPulled={refreshAfterPull} compact />
           </div>
@@ -211,7 +212,7 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
     <div className="grid grid-cols-1 gap-x-8 gap-y-5 border-t border-line bg-card-warm/60 px-4 py-4 md:grid-cols-3">
       {/* ① 分项强度 breakdown（与行内微条同源） */}
       <div>
-        <p className="eyebrow">{t('分项强度 · BREAKDOWN')}</p>
+        <p className="eyebrow">{t('分项强度')}</p>
         <div className="mt-3 grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-2.5">
           {dims.map(({ key, label, value }) => {
             const w = weightOf(key);
@@ -231,13 +232,12 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
                 </span>
                 <span className="text-right font-mono text-caption text-ink-800 tnum">
                   {value !== null ? value : '—'}
-                  {w !== null && <span className="ml-1 text-micro text-ink-300">×{w.toFixed(1)}%</span>}
+                  {w !== null && <span className="ml-1 text-micro text-ink-400">×{w.toFixed(1)}%</span>}
                 </span>
               </div>
             );
           })}
         </div>
-        {weights && <p className="mt-2.5 text-micro text-ink-400">{t('权重来自当前评分方法（右侧栏）')}</p>}
         {(row.status || row.qualification || (row.rejectionReasons && row.rejectionReasons.length > 0)) && (
           <div className="mt-4 space-y-1.5 border-t border-line pt-3" data-testid="screener-eod-row-details">
             <p className="eyebrow">{t('技术详情')}</p>
@@ -257,9 +257,6 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
               <p className="font-mono text-micro text-ink-500 tnum">
                 {t('支撑')} {row.knownSupport ?? '—'} · {t('失效')} {row.plannedInvalidation ?? '—'}
               </p>
-            )}
-            {row.observationOnly && (
-              <p className="text-micro text-ink-400">{t('观察分取各家族与主题路径中的最高分，不代表多家族共识。')}</p>
             )}
             {!row.dollarLiquidityVerified && (
               <p className="text-micro text-ink-400">{t('成交额口径未核实，不能当作已通过流动性门')}</p>
@@ -288,14 +285,14 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
         <div className="mt-3 flex flex-col items-start gap-2">
           <button
             onClick={() => onOpenDetail(row.ticker)}
-            className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+            className="control-button"
           >
             <Icon name="arrow-up-right" size={13} />
             {t('打开详情')}
           </button>
           <Link
             to="/breakouts"
-            className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+            className="control-button"
           >
             <Icon name="radar" size={13} />
             {t('相关突破事件')}

@@ -1,15 +1,16 @@
-/** SignalChip：无描边的柔和语义标签，文字同时保留状态含义。 */
+/** SignalChip：无描边的中性标签。突破、放量、跳空这些是技术事件的类别，不是状态，
+    不借品牌、警示或 AI 色；靠文字区分，突破略深一档便于扫读。 */
 import { cn } from '@/lib/utils';
 import type { SignalType } from '@/api/types';
 import SoftBadge from './SoftBadge';
 
 const STYLE: Record<SignalType, string> = {
-  breakout: 'text-brand-700 bg-brand-50',
-  volume: 'text-warn-700 bg-warn-50',
-  pullback: 'text-ink-500 bg-paper',
-  'ma-touch': 'text-ink-500 bg-paper',
-  gap: 'text-ai-600 bg-ai-50',
-  'iv-spike': 'text-down-700 bg-down-50',
+  breakout: 'text-ink-800 bg-paper-2',
+  volume: 'text-ink-600 bg-paper-2',
+  pullback: 'text-ink-600 bg-paper-2',
+  'ma-touch': 'text-ink-600 bg-paper-2',
+  gap: 'text-ink-600 bg-paper-2',
+  'iv-spike': 'text-ink-600 bg-paper-2',
 };
 
 export default function SignalChip({ type, label, className }: { type: SignalType | string; label: string; className?: string }) {

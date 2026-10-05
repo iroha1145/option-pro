@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from typing import Any
 
 import pandas as pd
@@ -106,7 +106,3 @@ def fetch_current_universe_bars(
 def last_bar_session(bars: dict[str, list[ResearchBar]]) -> date | None:
     dates = [row.session_date for rows in bars.values() for row in rows]
     return max(dates) if dates else None
-
-
-def now_utc() -> datetime:
-    return datetime.now(timezone.utc)

@@ -26,9 +26,9 @@ from .research_validation import (
     DEFAULT_FORWARD_HORIZONS,
     PRICE_DATA_SCHEMA_VERSION,
     RESEARCH_VALIDATION_VERSION,
-    _finite_number,
     _pearson as _raw_pearson,
     run_range_persistence_validation,
+    strict_finite_number,
 )
 
 
@@ -310,12 +310,12 @@ def summarize_shadows(records: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     score_deltas: list[float] = []
     rank_deltas: list[int] = []
     for row in rows:
-        production_score = _finite_number(row.get("production_score"))
-        hypothetical_score = _finite_number(row.get("hypothetical_score"))
+        production_score = strict_finite_number(row.get("production_score"))
+        hypothetical_score = strict_finite_number(row.get("hypothetical_score"))
         if production_score is not None and hypothetical_score is not None:
             score_pairs.append((production_score, hypothetical_score))
             score_deltas.append(hypothetical_score - production_score)
-        rank_delta = _finite_number(row.get("rank_delta"))
+        rank_delta = strict_finite_number(row.get("rank_delta"))
         if rank_delta is not None and rank_delta.is_integer():
             rank_deltas.append(int(rank_delta))
 
@@ -378,26 +378,26 @@ def summarize_shadows(records: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
 
 def _correlation_value(row: Mapping[str, Any], field: str) -> float | None:
     if field == "score_delta":
-        explicit = _finite_number(row.get(field))
+        explicit = strict_finite_number(row.get(field))
         if explicit is not None:
             return explicit
-        production = _finite_number(row.get("production_score"))
-        hypothetical = _finite_number(row.get("hypothetical_score"))
+        production = strict_finite_number(row.get("production_score"))
+        hypothetical = strict_finite_number(row.get("hypothetical_score"))
         if production is not None and hypothetical is not None:
             return hypothetical - production
 
-    value = _finite_number(row.get(field))
+    value = strict_finite_number(row.get(field))
     if value is not None:
         return value
     shadow = row.get("shadow")
     if not isinstance(shadow, Mapping):
         return None
-    value = _finite_number(shadow.get(field))
+    value = strict_finite_number(shadow.get(field))
     if value is not None:
         return value
     feature = shadow.get("feature")
     if isinstance(feature, Mapping):
-        return _finite_number(feature.get(field))
+        return strict_finite_number(feature.get(field))
     return None
 
 

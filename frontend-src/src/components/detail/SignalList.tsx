@@ -19,8 +19,8 @@ import ManualStockPull from './ManualStockPull';
 import { t } from '../../i18n/core.ts';
 
 const RESULT_META = {
-  hit: { text: t('已达成'), cls: 'bg-up-50 text-up-700' },
-  failed: { text: t('已失效'), cls: 'bg-down-50 text-down-700' },
+  hit: { text: t('已达成'), cls: 'bg-ok-50 text-ok-700' },
+  failed: { text: t('已失效'), cls: 'bg-danger-50 text-danger-700' },
   pending: { text: t('进行中'), cls: 'bg-brand-50 text-brand-700' },
 } as const;
 
@@ -73,7 +73,7 @@ export default function SignalList({
               signalsQ.refresh();
               eventsQ.refresh();
             }}
-            className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+            className="control-button mt-3"
           >
             <BusyIcon busy={signalsQ.refreshing || eventsQ.refreshing} size={13} tone="brand" />
             {t('重试')}
@@ -109,7 +109,7 @@ export default function SignalList({
             <SignalChip type={e.type} label={e.label} />
             <div className="min-w-0 flex-1">
               {/* 盘前跳空等事件可无成交价（event_price=null）——显「—」，不崩页 */}
-              <p className="font-mono text-body-s text-ink-800 tnum">
+              <p className="text-body-s text-ink-800 tnum">
                 {t('触发')} {typeof e.price === 'number' && Number.isFinite(e.price) ? fmtPrice(e.price) : '—'}
               </p>
               <p className="text-micro text-ink-400">{fmtRelative(e.at)}</p>

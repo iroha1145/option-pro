@@ -125,7 +125,7 @@ function StockNewsPanel({ ticker }: { ticker: string }) {
                 <p className="mt-1 flex items-center gap-2 text-micro text-ink-400">
                   <span>{n.source}</span>
                   <span aria-hidden="true">·</span>
-                  <span className="font-mono tnum">{fmtRelative(n.publishedAt)}</span>
+                  <span className="tnum">{fmtRelative(n.publishedAt)}</span>
                 </p>
               </li>
             );

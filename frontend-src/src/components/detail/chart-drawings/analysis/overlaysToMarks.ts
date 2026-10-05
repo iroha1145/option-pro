@@ -15,11 +15,6 @@ export interface OverlaySeriesLine {
   data: Array<number | null>;
 }
 
-export interface OverlayRender {
-  marks: DrawingMarks;
-  series: OverlaySeriesLine[];
-}
-
 export interface LayoutGrid {
   left: number;
   right: number;

@@ -142,6 +142,7 @@ export function usePolling<T>(
       if (timer) clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisible);
     };
+    // 调用方的 deps 以展开形式传入，规则无法静态核对。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intervalMs, tick, enabled, ...deps]);
 

@@ -20,8 +20,8 @@ from app.execution_limits import BREAKOUT_TASK_TIMEOUT_SECONDS
 from app.personal_config import get_personal_config
 
 from .inventory import DEFAULT_TASK_NAMES
-from .runtime import TaskResult, TaskSpec, _backoff_seconds, _public_error_code
-from .state import _iso
+from .runtime import TaskResult, TaskSpec, _public_error_code, backoff_seconds
+from .state import utc_iso
 
 from app.personal_config import personal_analysis_permissions as _personal_analysis_permissions
 
@@ -111,7 +111,7 @@ async def _close_optional(resource: Any) -> None:
 
 
 def _timestamp_text(value: float) -> str:
-    return _iso(datetime.fromtimestamp(value, timezone.utc))
+    return utc_iso(datetime.fromtimestamp(value, timezone.utc))
 
 
 def _publication_refusal(publication: Mapping[str, Any]) -> dict[str, Any]:
@@ -187,12 +187,15 @@ async def _build_local_intelligence(
         get_effective_runtime_settings,
     )
 
+    content_options: dict[str, Any] = {}
     if factory is None:
+        from app.services.catalysts.article_content import fetch_article
         from app.services.catalysts.local_intelligence import (
             LocalCatalystIntelligence,
         )
 
         factory = LocalCatalystIntelligence
+        content_options["article_fetcher"] = fetch_article
     database_path = settings.macrolens_cache_db_path
     ai_repository = AIJobRepository(settings.openai_job_db_path)
     try:
@@ -239,6 +242,7 @@ async def _build_local_intelligence(
         reasoning=config.ai.reasoning,
         max_queued=settings.openai_job_max_queued,
         manual_refresh_cooldown_seconds=refresh_cooldown,
+        **content_options,
     )
     await _call_local(intelligence.initialize)
     return intelligence
@@ -2252,6 +2256,7 @@ class StrengthRefreshTask:
     async def _run_eod_limited(self, parameters: dict[str, Any]) -> TaskResult:
         from app.api.strength import strength_scan_parameters_hash
         from app.services.eod_limited import PURPOSE_LIVE
+        from app.services.eod_limited.market_data import AllMarketDataError
         from app.services.eod_limited.worker import run_eod_limited_job
         from app.services.research_eod_v1.constants import HORIZONS
 
@@ -2304,17 +2309,17 @@ class StrengthRefreshTask:
             }
             # AllMarketDataError names the trading days that failed, so the
             # status API can show which session blocks the full-market input.
-            reason_code = getattr(exc, "reason_code", None)
-            if isinstance(reason_code, str) and reason_code:
-                details["reason_code"] = reason_code[:120]
-            failed_sessions = list(getattr(exc, "failed_sessions", None) or ())
-            if failed_sessions:
-                details["failed_session_count"] = len(failed_sessions)
-                # Bounded for the 16 KiB status row and 128-item action lists.
-                details["failed_sessions"] = [
-                    {"session": str(session)[:32], "reason_code": str(code)[:120]}
-                    for session, code in failed_sessions[:_FAILED_SESSIONS_SHOWN]
-                ]
+            if isinstance(exc, AllMarketDataError):
+                if isinstance(exc.reason_code, str) and exc.reason_code:
+                    details["reason_code"] = exc.reason_code[:120]
+                failed_sessions = list(exc.failed_sessions)
+                if failed_sessions:
+                    details["failed_session_count"] = len(failed_sessions)
+                    # Bounded for the 16 KiB status row and 128-item action lists.
+                    details["failed_sessions"] = [
+                        {"session": str(session)[:32], "reason_code": str(code)[:120]}
+                        for session, code in failed_sessions[:_FAILED_SESSIONS_SHOWN]
+                    ]
             return TaskResult(
                 status="degraded",
                 error_code="eod_limited_input_unavailable",
@@ -3282,7 +3287,7 @@ class MaintenanceTask:
                     failures=failures,
                     retry_at=self._now()
                     + timedelta(
-                        seconds=_backoff_seconds(
+                        seconds=backoff_seconds(
                             self.failure_backoff_seconds,
                             self.max_backoff_seconds,
                             failures,
@@ -3335,7 +3340,7 @@ class RetentionTask:
         settings_factory: Callable[[], Any] | None = None,
         repository_factory: Callable[[Path], Any] | None = None,
         ai_repository_factory: Callable[[], Any] | None = None,
-        ai_history_retain_days: int = 30,
+        ai_history_retain_days: int = AI_HISTORY_MIN_RETAIN_DAYS,
         now: Callable[[], datetime] | None = None,
     ) -> None:
         self.owner_id = f"{owner_id}:retention"
@@ -3363,7 +3368,7 @@ class RetentionTask:
                 details={
                     "backup": dict(backup_result.details),
                     "retention": {"status": "skipped_backup_failed"},
-                    "completed_at": _iso(self._now()),
+                    "completed_at": utc_iso(self._now()),
                 },
             )
 
@@ -3375,7 +3380,7 @@ class RetentionTask:
         if self._ai_repository_factory is not None:
             details["ai_history"], ai_error = await self._prune_ai_history()
             error_code = error_code or ai_error
-        details["completed_at"] = _iso(self._now())
+        details["completed_at"] = utc_iso(self._now())
         if error_code:
             return TaskResult(status="degraded", error_code=error_code, details=details)
         return TaskResult(status="idle", details=details)
@@ -3532,10 +3537,7 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         owner_id,
         retention_backup,
         ai_repository_factory=ai_history_repository,
-        ai_history_retain_days=max(
-            int(config.catalyst.journal_retention_days),
-            AI_HISTORY_MIN_RETAIN_DAYS,
-        ),
+        ai_history_retain_days=config.catalyst.journal_retention_days,
     )
     from app.public_stock_data import PublicStockDataRefresh
     from app.public_option_data import PublicOptionDataRefresh

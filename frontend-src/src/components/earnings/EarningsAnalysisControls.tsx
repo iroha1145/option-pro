@@ -11,6 +11,7 @@ import Spinner from '@/components/shared/Spinner';
 import SoftBadge from '@/components/shared/SoftBadge';
 import { cn } from '@/lib/utils';
 import { t } from '../../i18n/core.ts';
+import TextSwap from '@/components/shared/TextSwap';
 
 function errorText(error: unknown): string {
   if (error instanceof ApiError && error.code === 401) return t('登录状态已失效，请重新登录');
@@ -222,7 +223,7 @@ export default function EarningsAnalysisControls() {
             className="btn-ai"
           >
             <IconSwap state={running ? 'b' : 'a'} a={<AnalysisIcon size={14} />} b={<Spinner size={12} tone="muted" />} />
-            {running ? t('正在检查财报…') : t('立即分析新的财报')}
+            <TextSwap swapKey={running ? 'busy' : 'idle'}>{running ? t('正在检查财报…') : t('立即分析新的财报')}</TextSwap>
           </button>
         </div>
 
@@ -239,11 +240,11 @@ export default function EarningsAnalysisControls() {
         </p>
         {(lastRun || lastRunNote) && (
           <p className="mt-2 border-t border-line pt-2 text-micro text-ink-500" role="status" aria-live="polite">
-            <span className="mr-2 text-ink-300">{t('最近检查')}</span>
+            <span className="mr-2 text-ink-400">{t('最近检查')}</span>
             {lastRun ? summaryText(lastRun) : lastRunNote}
           </p>
         )}
-        {error && <p className="mt-1 text-micro text-down-700">{error}</p>}
+        {error && <p className="mt-1 text-micro text-danger-700">{error}</p>}
         {workerStatusError && <p className="mt-1 text-micro text-warn-700" role="status">{workerStatusError}</p>}
       </div>
     </section>

@@ -16,6 +16,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ApiError } from '@/api/client';
+import { AI_JOB_DEFERRAL_CODES } from '@/api/aiJobNormalize';
 import { earningsApi } from '@/api/modules/earnings';
 import type {
   EarningsImpactDirection,
@@ -26,6 +27,7 @@ import type {
 import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/hooks/useToast';
 import { useShell } from '@/hooks/useShell';
+import { AI_JOB_POLL_WAITS_MS, boundedReadRetryDelayMs } from '@/lib/boundedReadRetry';
 import { cn } from '@/lib/utils';
 import { DUR_FAST, DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import Icon from '@/components/icons';
@@ -36,13 +38,12 @@ import PulseDot from './PulseDot';
 import type { EarningsRow } from './types';
 import { exNum } from './types';
 import { t as __t } from '../../i18n/core.ts';
+import TextSwap from '@/components/shared/TextSwap';
 
 /* ---------------- 报告级公开分析状态机 ---------------- */
 const ACTIVE_STATUSES = new Set(['preparing', 'pending', 'queued', 'in_progress', 'processing', 'running', 'cancel_requested']);
 const FAILED_STATUSES = new Set(['failed', 'cancelled', 'canceled', 'budget_blocked']);
 const isActive = (s: string) => ACTIVE_STATUSES.has(s);
-
-const BACKOFF_MS = [2000, 3000, 5000, 8000, 10000];
 
 /**
  * 后端错误码 → 读者能看懂的说法。
@@ -67,9 +68,6 @@ const ANALYSIS_ERROR_TEXT: Record<string, string> = {
   ai_job_result_too_large: __t('分析结果过大，无法保存'),
 };
 
-/* 排队期的推迟码：任务还会自动继续。已结束的任务残留这些码时不是失败原因。 */
-const DEFERRAL_CODES = new Set(['global_concurrency_limit', 'analysis_cooldown_active', 'provider_poll_deferred']);
-
 /**
  * 按任务状态解读原因码：进行中只说明认得的推迟原因，认不出的码不能说成「没有完成」；
  * 已结束的任务不拿排队期的残留码当失败原因。
@@ -78,7 +76,7 @@ function analysisErrorText(code: string | undefined | null, status: string): str
   const key = String(code ?? '').trim();
   if (!key) return '';
   if (isActive(status)) return ANALYSIS_ERROR_TEXT[key] ?? '';
-  if (DEFERRAL_CODES.has(key)) return __t('这次分析没有完成');
+  if (AI_JOB_DEFERRAL_CODES.has(key)) return __t('这次分析没有完成');
   return ANALYSIS_ERROR_TEXT[key] ?? __t('这次分析没有完成');
 }
 const FINAL_STAGES = new Set([
@@ -160,7 +158,7 @@ function QuotedSummary({ text, onOpenTicker }: { text: string; onOpenTicker: (t:
   return (
     /* 引文左线是印刷传统，但引文线不该比正文响：满饱和彩条会读成「AI 装饰条」 */
     <blockquote className="rounded-sm border-l-2 border-ai-600/40 bg-ai-50/50 py-3 pl-4 pr-3">
-      <p className="font-quote text-[15px] leading-[26px] text-ink-800">
+      <p className="text-[15px] leading-[26px] text-ink-800">
         {parts.map((p, i) =>
           /^\$[A-Z]/.test(p) ? (
             <button
@@ -230,6 +228,8 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
   const [pollPaused, setPollPaused] = useState(false);
   /* 轮询中的一次读取失败：保持当前阶段，只说明在自动重试（审计 4-C）。 */
   const [pollNotice, setPollNotice] = useState<string | null>(null);
+  /* 上一次后台读取被限流时服务端要求的等待（秒）；读到新状态后清零。 */
+  const pollRetryAfterRef = useRef<number | null>(null);
   /* stale-response 守卫（同 ManualStockPull.requestSequenceRef）：快速连点
      AAPL→MSFT 时若 AAPL 响应后到，没有序号校验它会把整卡写回 AAPL 的内容，
      而左侧高亮已是 MSFT，且不会自行纠正。 */
@@ -257,6 +257,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
     setAnalysis(resolvedAnalysis);
     setImpact(resolvedResult);
     setPollNotice(null);
+    pollRetryAfterRef.current = null;
     setErrorMsg(analysisErrorText(resolvedAnalysis.errorCode, normalizedStage(resolvedAnalysis.status)));
     if (ticker) onAnalyzed(ticker, resolvedAnalysis);
     if (resolvedResult) {
@@ -315,6 +316,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
         const transient = !err || err.code === 0 || err.code === 408 || err.code === 429 || err.code >= 500;
         if (options?.background && transient) {
           // 任务还在跑：一次读取失败不翻成「数据暂不可用」，下一轮按退避继续查。
+          pollRetryAfterRef.current = err?.retryAfter ?? null;
           setPollNotice(__t('暂时读不到最新状态，正在自动重试'));
           return null;
         }
@@ -411,9 +413,10 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
       return;
     }
     const serverDelay = analysis?.retryAfterSeconds;
-    const base = serverDelay != null && serverDelay > 0
+    const scheduled = serverDelay != null && serverDelay > 0
       ? Math.max(1_000, serverDelay * 1_000)
-      : BACKOFF_MS[Math.min(pollAttempt, BACKOFF_MS.length - 1)];
+      : AI_JOB_POLL_WAITS_MS[Math.min(pollAttempt, AI_JOB_POLL_WAITS_MS.length - 1)];
+    const base = boundedReadRetryDelayMs(0, { retryAfter: pollRetryAfterRef.current }, [scheduled]);
     const delay = typeof document !== 'undefined' && document.visibilityState !== 'visible' ? base * 3 : base;
     const timer = window.setTimeout(async () => {
       const next = await loadImpact(ticker, { background: true });
@@ -445,7 +448,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
       </button>
     </div>
   ) : pollNotice ? (
-    <p className="mt-3 text-micro leading-5 text-warn-600" role="status">{pollNotice}</p>
+    <p className="mt-3 text-micro leading-5 text-warn-700" role="status">{pollNotice}</p>
   ) : null;
 
   /* 报告级 POST 的正文固定为 {confirm:true}，全部财务事实由服务端当前快照绑定。 */
@@ -549,7 +552,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
           {/* ---------- AI 关闭锁定态 ---------- */}
           {phase === 'locked-ai' && (
             <LockedPanel
-              iconClass="text-ink-300"
+              iconClass="text-ink-400"
               title={aiEnabled ? __t('AI 分析暂不可用') : __t('AI 分析未启用')}
               description={
                 aiEnabled
@@ -562,7 +565,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
           {/* ---------- 公开入口异常 ---------- */}
           {phase === 'public-unavailable' && (
             <LockedPanel
-              iconClass="text-ink-300"
+              iconClass="text-ink-400"
               title={__t("公开分析入口暂不可用")}
               description={errorMsg || __t('暂时无法为 {name} 生成分析，请稍后重试。', { name: ticker ?? __t('该标的') })}
             />
@@ -599,7 +602,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
           {/* ---------- 最终结果锁定，禁止重复请求 ---------- */}
           {phase === 'final-locked' && (
             <div className="flex flex-col items-center py-9 text-center">
-              <span className="flex size-12 items-center justify-center rounded-lg bg-up-50 text-up-700">
+              <span className="flex size-12 items-center justify-center rounded-lg bg-ok-50 text-ok-700">
                 <AnalysisIcon size={22} />
               </span>
               <SoftBadge tone="up" className="mt-3">
@@ -641,7 +644,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                       className="btn-ai flex-1"
                     >
                       <AnalysisIcon size={13} />
-                      {submitting ? __t('正在提交…') : __t('生成分析')}
+                      <TextSwap swapKey={submitting ? 'busy' : 'idle'}>{submitting ? __t('正在提交…') : __t('生成分析')}</TextSwap>
                     </button>
                     <button
                       onClick={() => setConfirming(false)}
@@ -669,7 +672,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               <div className="flex items-center gap-2">
                 <PulseDot className="bg-ai-600" size={8} />
                 <h3 className="text-h3 text-ink-800">{__t('正在分析 ·')} {ticker}</h3>
-                <span className="ml-auto font-mono text-micro text-ai-600 tnum">
+                <span className="ml-auto text-micro text-ai-600">
                   <ThinkingLabel live={!pollPaused}>
                     {['queued', 'pending', 'preparing'].includes(normalizedStage(analysis.status))
                       ? __t('排队中')
@@ -681,7 +684,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                 <JobSteps analysis={analysis} />
               </div>
               {errorMsg && (
-                <p className="mt-3 text-micro leading-5 text-warn-600">{errorMsg}</p>
+                <p className="mt-3 text-micro leading-5 text-warn-700">{errorMsg}</p>
               )}
               {pollStatusNote}
               {!pollPaused && (
@@ -701,8 +704,8 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                   <p className="mt-0.5 text-micro text-ink-500">{__t('可以重新生成分析')}</p>
                 </div>
               ) : (
-                <div className="rounded-md border border-down-600/30 bg-down-50 p-3">
-                  <p className="text-caption font-medium text-down-700">{__t('分析任务失败')}</p>
+                <div className="rounded-md border border-danger-600/30 bg-danger-50 p-3">
+                  <p className="text-caption font-medium text-danger-700">{__t('分析任务失败')}</p>
                   <p className="mt-0.5 text-micro text-ink-500">{errorMsg || __t('未知原因')}</p>
                 </div>
               )}
@@ -786,7 +789,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                   </div>
                 )}
                 {isFinalImpact(impact) && (
-                  <p className="mt-3 rounded-md border border-up-600/20 bg-up-50 px-3 py-2 text-micro leading-5 text-up-700">
+                  <p className="mt-3 rounded-md border border-ok-600/20 bg-ok-50 px-3 py-2 text-micro leading-5 text-ok-700">
                     {__t('已根据公布后的实际业绩更新。')}
                   </p>
                 )}
@@ -810,7 +813,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               <Section>
                 <div className="flex items-baseline justify-between">
                   <p className="eyebrow">{__t('关联标的')}</p>
-                  <span className="text-micro text-ink-300">{impact.impacted.length} {__t('项')}</span>
+                  <span className="text-micro text-ink-400">{impact.impacted.length} {__t('项')}</span>
                 </div>
                 <div className="mt-2.5 space-y-2">
                   {impact.impacted.map((item) => {

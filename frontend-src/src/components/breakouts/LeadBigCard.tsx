@@ -30,7 +30,7 @@ import { SkeletonBlock } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import Spinner from '@/components/shared/Spinner';
 import { cn } from '@/lib/utils';
-import { DUR_SECTION, DUR_UI, EASE_PAPER } from '@/lib/motion';
+import { DUR_SECTION, DUR_UI, EASE_PAPER, GROW_X } from '@/lib/motion';
 import { fmtNyEventTime, fmtPrice, fmtRelative } from '@/lib/format';
 import { MACRO_TONE_LABEL, macroToneOf } from '@/lib/macroFit';
 import { baseAnimation, CH, CHART_MONO_FONT, glassTooltip, type ChartOption } from '@/lib/chart';
@@ -61,7 +61,7 @@ const fmtEventTime = fmtNyEventTime;
 /* ---------------- 时段 chip（§1.6 LED 色） ---------------- */
 const SESSION_DOT: Record<BreakoutSession, string> = {
   premarket: 'bg-warn-600',
-  regular: 'bg-up-600',
+  regular: 'bg-ok-600',
   postmarket: 'bg-ai-600',
   closed: 'bg-ink-400',
 };
@@ -193,7 +193,7 @@ function LifecycleStepper({ state }: { state: string }) {
           tone === 'current' && 'bg-brand-600 ring-4 ring-brand-100',
           tone === 'past' && 'bg-ink-300',
           tone === 'future' && 'border border-line-strong bg-card',
-          tone === 'down' && 'bg-down-600 ring-2 ring-down-600/25',
+          tone === 'down' && 'bg-danger-600 ring-2 ring-danger-600/25',
           tone === 'ink-end' && 'bg-ink-400 ring-2 ring-ink-400/25',
         )}
         aria-hidden="true"
@@ -203,7 +203,7 @@ function LifecycleStepper({ state }: { state: string }) {
           'mt-1.5 whitespace-nowrap text-[11px] leading-[16px]',
           tone === 'current' && 'font-semibold text-brand-700',
           (tone === 'past' || tone === 'future') && 'text-ink-400',
-          tone === 'down' && 'font-semibold text-down-700',
+          tone === 'down' && 'font-semibold text-danger-700',
           tone === 'ink-end' && 'font-semibold text-ink-500',
         )}
       >
@@ -258,11 +258,29 @@ function LifecycleStepper({ state }: { state: string }) {
 /** mapBar 运行时携带契约 quote_only（可选字段，Candle 类型未声明，此处宽松扩展读取） */
 type MiniBar = Candle & { quote_only?: boolean };
 
-function buildMiniOption(bars: MiniBar[]): ChartOption {
+/** 卡片下方写着枢轴与失效位，图上画出同两条水平线，读者不必自己换算位置。 */
+interface MiniLevels { pivot: number | null; invalidation: number | null }
+
+function buildMiniOption(bars: MiniBar[], levels: MiniLevels): ChartOption {
   // Daily bars carry a session date: retain date-only values without shifting them to yesterday.
   const fmtBarTime = (iso: string) => /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso
     : Number.isFinite(Date.parse(iso)) ? new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(iso)) : '—';
   const labels = bars.map((b) => fmtBarTime(b.t).slice(5));
+  const levelPrices = [levels.pivot, levels.invalidation].filter((v): v is number => v !== null);
+  const levelLine = (price: number, name: string, color: string, type: 'solid' | number[]) => ({
+    yAxis: price,
+    lineStyle: { color, width: 1, type },
+    label: {
+      formatter: `${name} ${fmtPrice(price)}`,
+      color,
+      fontFamily: MONO,
+      fontSize: 11,
+      position: 'insideStartTop' as const,
+      backgroundColor: CH.tooltipBg,
+      padding: [1, 4],
+      borderRadius: 3,
+    },
+  });
   return {
     ...baseAnimation,
     grid: { left: 6, right: 6, top: 10, bottom: 4, containLabel: true },
@@ -281,6 +299,11 @@ function buildMiniOption(bars: MiniBar[]): ChartOption {
       axisTick: { show: false },
       axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: MONO },
       splitLine: { lineStyle: { color: CH.lineChart, width: 1, type: [2, 4], opacity: 0.7 } },
+      // 参考线不计入自动刻度范围，价位落在 30 根 K 线之外时要把轴撑开，否则线被裁掉。
+      ...(levelPrices.length > 0 && {
+        min: (extent: { min: number }) => Math.min(extent.min, ...levelPrices),
+        max: (extent: { max: number }) => Math.max(extent.max, ...levelPrices),
+      }),
     },
     tooltip: glassTooltip({
       trigger: 'axis',
@@ -330,12 +353,23 @@ function buildMiniOption(bars: MiniBar[]): ChartOption {
         },
         barMaxWidth: 10,
         z: 3,
+        ...(levelPrices.length > 0 && {
+          markLine: {
+            silent: true,
+            symbol: 'none',
+            animation: false,
+            data: [
+              ...(levels.pivot !== null ? [levelLine(levels.pivot, t('突破枢轴'), CH.brand600, 'solid')] : []),
+              ...(levels.invalidation !== null ? [levelLine(levels.invalidation, t('失效位置'), CH.ink400, [4, 3])] : []),
+            ],
+          },
+        }),
       },
     ],
   } as ChartOption;
 }
 
-function MiniKline({ ticker, dailyVersion, preparation, statusReadFailed }: { ticker: string; dailyVersion: string; preparation?: StockDataStatus; statusReadFailed: boolean }) {
+function MiniKline({ ticker, dailyVersion, preparation, statusReadFailed, pivot, invalidation }: { ticker: string; dailyVersion: string; preparation?: StockDataStatus; statusReadFailed: boolean; pivot: number | null; invalidation: number | null }) {
   useEffect(() => {
     if (dailyVersion) stocksApi.invalidatePreparedDaily(ticker);
   }, [ticker, dailyVersion]);
@@ -349,8 +383,8 @@ function MiniKline({ ticker, dailyVersion, preparation, statusReadFailed }: { ti
     void colorMode;
     void appearance;
     if (!data || data.candles.length <= 1) return null;
-    return buildMiniOption(data.candles.slice(-30));
-  }, [data, colorMode, appearance]);
+    return buildMiniOption(data.candles.slice(-30), { pivot, invalidation });
+  }, [data, colorMode, appearance, pivot, invalidation]);
   /* 突破标的常不在常规覆盖范围内：503 时可手动拉取（与详情页 ManualStockPull 同一预算通道） */
   const [pulling, setPulling] = useState(false);
   const [pullError, setPullError] = useState<string | null>(null);
@@ -400,7 +434,7 @@ function MiniKline({ ticker, dailyVersion, preparation, statusReadFailed }: { ti
                   : t('正在获取日线，完成后自动显示')}
           </p>
           {pullError && (
-            <p role="alert" className="text-micro text-down-700">
+            <p role="alert" className="text-micro text-danger-700">
               {pullError}
             </p>
           )}
@@ -418,7 +452,7 @@ function MiniKline({ ticker, dailyVersion, preparation, statusReadFailed }: { ti
             )}
             <button
               onClick={() => refresh()}
-              className="rounded-md border border-line bg-card px-2.5 py-1 text-micro font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+              className="control-button"
             >
               {t('重试')}
             </button>
@@ -450,20 +484,23 @@ function BigScoreBars({ ev }: { ev: BreakoutEventFull }) {
               {d.label}
               <InfoHint hint={d.hint} size={11} className="ml-0.5" />
             </span>
-            <div className="radar-bar-track h-[5px] overflow-hidden rounded-pill bg-line">
+            <motion.div
+              className="radar-bar-track h-[5px] overflow-hidden rounded-pill bg-line"
+              initial="hidden"
+              whileInView="shown"
+              viewport={{ once: true, amount: 0.4 }}
+            >
               {/* 缺失值保持空轨道，与 ScoreBars 的 fin(v) 口径一致（审计 2.2.15）：
                 * 3% 的实心条会被读成「有分，只是很低」，与右侧的「—」矛盾。 */}
               {raw !== null && (
                 <motion.div
                   className={cn('h-full origin-left rounded-pill', d.key === 'chase_risk_score' ? riskBarClass(raw) : scoreBarClass(raw))}
-                  initial={{ scaleX: 0 }}
-                  whileInView={{ scaleX: 1 }}
-                  viewport={{ once: true, amount: 0.4 }}
+                  variants={GROW_X}
                   transition={{ duration: 0.7, ease: EASE_PAPER, delay: 0.1 + i * 0.06 }}
                   style={{ width: `${Math.max(3, Math.min(100, raw))}%` }}
                 />
               )}
-            </div>
+            </motion.div>
             <span className="text-right font-mono text-caption text-ink-600 tnum">{raw !== null ? raw.toFixed(1) : '—'}</span>
           </div>
         );
@@ -481,7 +518,7 @@ const CONTRIB_DEFS = [
   { key: 'breakout_quality', label: t('突破质量'), cls: 'bg-brand-600' },
   { key: 'intrinsic_strength', label: t('内在强度'), cls: 'bg-brand-400' },
   { key: 'market_fit', label: t('市场契合'), cls: 'bg-ai-600' },
-  { key: 'sector_fit', label: t('板块契合'), cls: 'bg-up-600' },
+  { key: 'sector_fit', label: t('板块契合'), cls: 'bg-ink-500' },
   { key: 'data_confidence', label: t('数据置信'), cls: 'bg-ink-300' },
   { key: 'event_freshness', label: t('事件新鲜度'), cls: 'bg-warn-600' },
 ] as const;
@@ -509,19 +546,22 @@ function ContributionBar({ ev }: { ev: BreakoutEventFull }) {
 
   return (
     <div aria-label={t("评分构成")}>
-      <div className="flex radar-bar-track h-[5px] overflow-hidden rounded-pill bg-line">
+      <motion.div
+        className="flex radar-bar-track h-[5px] overflow-hidden rounded-pill bg-line"
+        initial="hidden"
+        whileInView="shown"
+        viewport={{ once: true, amount: 0.4 }}
+      >
         {parts.map((p, i) => (
           <motion.div
             key={p.d.key}
             className={cn('h-full origin-left', p.d.cls)}
-            initial={{ scaleX: 0 }}
-            whileInView={{ scaleX: 1 }}
-            viewport={{ once: true, amount: 0.4 }}
+            variants={GROW_X}
             transition={{ duration: 0.7, ease: EASE_PAPER, delay: 0.15 + i * 0.06 }}
             style={{ width: `${p.pct}%` }}
           />
         ))}
-      </div>
+      </motion.div>
       <ul className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
         {parts.map((p) => (
           <li key={p.d.key} className="inline-flex items-center gap-1.5">
@@ -618,7 +658,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
       className={cn('radar-lead-card card-surface p-5', locate && 'bk-locate')}
     >
       {detailFailed && (
-        <div role="status" className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-warn-600/25 bg-warn-50 px-3 py-2 text-caption text-warn-600">
+        <div role="status" className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-warn-600/25 bg-warn-50 px-3 py-2 text-caption text-warn-700">
           <Icon name="flag" size={13} />
           <span>{t('补充详情暂时读不到，当前显示基础信号。')}</span>
           <button type="button" onClick={() => {
@@ -686,7 +726,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
       {/* K线迷你图 */}
       <div className="mt-3">
         <p className="mb-1 text-micro text-ink-400">{t('日线 · 最多 30 个交易日')}</p>
-        <MiniKline key={e.ticker} ticker={e.ticker} dailyVersion={dailyVersion} preparation={preparation} statusReadFailed={statusReadFailed} />
+        <MiniKline key={e.ticker} ticker={e.ticker} dailyVersion={dailyVersion} preparation={preparation} statusReadFailed={statusReadFailed} pivot={num(e.pivot_price)} invalidation={invalid} />
       </div>
 
       {/* 三价位行 + 告警优先级环（右上同排） */}
@@ -763,7 +803,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
           {warnings.map((w, i) => (
             <span
               key={i}
-              className="radar-chip radar-chip-volume"
+              className="radar-chip radar-chip-warn"
             >
               <Icon name="flag" size={11} />
               {w}
@@ -777,7 +817,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <button
             onClick={() => onOpen(e)}
-            className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3.5 py-2 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+            className="control-button"
           >
             <Icon name="doc-quote" size={13} />
             {t('查看完整证据')}

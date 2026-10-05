@@ -17,10 +17,10 @@ import { t } from '../../i18n/core.ts';
 
 const PHASE_LABEL: Record<string, string> = {
   regular: t('常规交易时段 · 9:30–16:00 ET'),
-  'pre-market': t('盘前交易 · 流动性较薄，报价点差偏大'),
-  premarket: t('盘前交易 · 流动性较薄，报价点差偏大'),
-  'after-hours': t('盘后交易 · 留意财报与公告驱动'),
-  postmarket: t('盘后交易 · 留意财报与公告驱动'),
+  'pre-market': t('盘前交易 · 4:00–9:30 ET'),
+  premarket: t('盘前交易 · 4:00–9:30 ET'),
+  'after-hours': t('盘后交易 · 16:00–20:00 ET'),
+  postmarket: t('盘后交易 · 16:00–20:00 ET'),
   overnight: t('隔夜休市 · 等待下一交易时段'),
   weekend: t('周末休市 · 等待下一个交易日'),
   holiday: t('节假日休市'),
@@ -86,7 +86,7 @@ export default function StatusCard({
       aria-label={t("市场状态")}
     >
       <div className="flex items-start justify-between">
-        <p className="eyebrow">{t('市场状态 · MARKET STATUS')}</p>
+        <h3 className="text-h3 text-ink-900">{t('市场状态')}</h3>
         <Icon name="clock-ny" size={18} className="text-ink-400" />
       </div>
       <div className="mt-4 flex items-center gap-2.5">
@@ -104,7 +104,7 @@ export default function StatusCard({
         <CountdownRow label={t("距下一收盘")} at={data.next_close} now={now} />
         <div className="flex items-center justify-between border-y border-line py-2.5">
           <span className="text-caption text-ink-500">{t('节假日')}</span>
-          <span className="font-mono text-data-m text-ink-600 tnum">{data.holiday ?? '—'}</span>
+          <span className="text-data-m text-ink-600">{data.holiday ?? '—'}</span>
         </div>
       </div>
       <p className="mt-3 text-caption text-ink-500">

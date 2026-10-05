@@ -586,3 +586,147 @@ def test_case_distinct_daily_and_split_rows_never_cross_security_identity(
             ("2026-09-14",),
         ).fetchall()
     assert cached == [("BCPC", 166.0), ("BCpC", 23.52), ("TPC", 23.18), ("TpC", 19.07)]
+
+
+def _serve_pages(monkeypatch: pytest.MonkeyPatch, pages: list) -> list[tuple[str, dict]]:
+    """Answer successive provider requests with ``pages``; an exception entry is raised."""
+
+    calls: list[tuple[str, dict]] = []
+
+    def provider_get(path: str, params: dict) -> dict:
+        calls.append((path, dict(params)))
+        page = pages[len(calls) - 1]
+        if isinstance(page, Exception):
+            raise page
+        return page
+
+    monkeypatch.setattr(market_data, "_provider_get", provider_get)
+    return calls
+
+
+DIRECTORY_PATH = "/v3/reference/tickers"
+SPLIT_PATH = "/stocks/v1/splits"
+
+
+def _next_url(path: str, cursor: str) -> str:
+    return f"https://api.massive.com{path}?cursor={cursor}&apiKey=discard"
+
+
+def _split(ticker: str, execution_date: str = "2026-09-15", split_id: str = "s") -> dict:
+    return {"id": split_id, "ticker": ticker, "execution_date": execution_date, "split_from": 1, "split_to": 4}
+
+
+@pytest.mark.parametrize(
+    ("pages", "requests", "code", "message"),
+    [
+        ([{"status": "ERROR", "results": []}], 1, "protocol", "status was not OK"),
+        ([{"status": "OK", "results": {"ticker": "AAAA"}}], 1, "protocol", None),
+        # A bad row ends the read before the next page is requested, so a later
+        # transport failure cannot replace the protocol error.
+        (
+            [
+                {"status": "OK", "results": [{"ticker": "bad ticker"}], "next_url": _next_url(DIRECTORY_PATH, "p2")},
+                massive.MassiveError("timed out", code="timeout"),
+            ],
+            1, "protocol", "invalid ticker",
+        ),
+        (
+            [
+                {"status": "OK", "results": [_directory_row("AAAA")], "next_url": _next_url(DIRECTORY_PATH, "p2")},
+                {"status": "OK", "results": [_directory_row("AAAA")]},
+            ],
+            2, "protocol", "duplicate ticker",
+        ),
+        (
+            [
+                {"status": "OK", "results": [_directory_row("AAAA")], "next_url": _next_url(DIRECTORY_PATH, "p2")},
+                {"status": "OK", "results": [_directory_row("BBBB")], "next_url": _next_url(DIRECTORY_PATH, "p2")},
+            ],
+            2, "protocol", "did not advance",
+        ),
+        (
+            [
+                {"status": "OK", "results": [_directory_row("AAAA")], "next_url": _next_url(DIRECTORY_PATH, "p2")},
+                massive.MassiveError("timed out", code="timeout"),
+            ],
+            2, "timeout", "timed out",
+        ),
+    ],
+)
+def test_directory_paging_fails_at_the_first_bad_page(monkeypatch, pages, requests, code, message) -> None:
+    calls = _serve_pages(monkeypatch, pages)
+    with pytest.raises(massive.MassiveError, match=message) as captured:
+        market_data._fetch_directory()
+    assert captured.value.code == code
+    assert len(calls) == requests
+    assert all(path == DIRECTORY_PATH for path, _params in calls)
+
+
+def test_directory_paging_stops_at_fifty_pages(monkeypatch) -> None:
+    pages = [
+        {"status": "OK", "results": [_directory_row(f"T{index:03d}")], "next_url": _next_url(DIRECTORY_PATH, f"c{index}")}
+        for index in range(60)
+    ]
+    calls = _serve_pages(monkeypatch, pages)
+    with pytest.raises(massive.MassiveError, match="safety limit") as captured:
+        market_data._fetch_directory()
+    assert captured.value.code == "protocol"
+    assert len(calls) == 50
+
+
+def test_split_pages_are_merged_deduplicated_and_sorted(monkeypatch) -> None:
+    calls = _serve_pages(monkeypatch, [
+        {"results": [_split("BBBB"), _split("AAAA", "2026-09-14")], "next_url": _next_url(SPLIT_PATH, "p2")},
+        {"status": "OK", "results": [_split("AAAA", "2026-09-14", "again")]},
+    ])
+    fetched = market_data._fetch_splits(date(2026, 9, 1), END)
+    assert fetched["rows"] == [
+        ("AAAA", "2026-09-14", 1.0, 4.0, "again"),
+        ("BBBB", "2026-09-15", 1.0, 4.0, "s"),
+    ]
+    assert fetched["result_count"] == 2
+    assert fetched["provider_status"] == "OK"
+    assert calls == [
+        (SPLIT_PATH, {
+            "execution_date.gte": "2026-09-01",
+            "execution_date.lte": "2026-09-16",
+            "limit": 1000,
+            "sort": "execution_date.desc",
+        }),
+        (SPLIT_PATH, {"cursor": "p2"}),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("pages", "requests", "message"),
+    [
+        (
+            [
+                {"status": "OK", "results": [_split("AAAA")], "next_url": _next_url(SPLIT_PATH, "p2")},
+                {"status": "DELAYED", "results": []},
+            ],
+            2, "status was not OK",
+        ),
+        (
+            [
+                {"status": "OK", "results": [_split("AAAA", "2020-01-02")], "next_url": _next_url(SPLIT_PATH, "p2")},
+                massive.MassiveError("timed out", code="timeout"),
+            ],
+            1, "outside the requested window",
+        ),
+        ([{"status": "OK", "results": None}], 1, None),
+        (
+            [
+                {"status": "OK", "results": [], "next_url": _next_url(SPLIT_PATH, "p2")},
+                {"status": "OK", "results": [], "next_url": _next_url(SPLIT_PATH, "p2")},
+            ],
+            2, "did not advance",
+        ),
+    ],
+)
+def test_split_paging_fails_at_the_first_bad_page(monkeypatch, pages, requests, message) -> None:
+    calls = _serve_pages(monkeypatch, pages)
+    with pytest.raises(massive.MassiveError, match=message) as captured:
+        market_data._fetch_splits(date(2026, 9, 1), END)
+    assert captured.value.code == "protocol"
+    assert len(calls) == requests

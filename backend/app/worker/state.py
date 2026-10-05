@@ -139,7 +139,7 @@ def bump_action_retry(
     merged["retry"] = {
         "attempt": attempt,
         "max_attempts": cap,
-        "next_eligible_at": _iso(next_at),
+        "next_eligible_at": utc_iso(next_at),
         "reason": reason,
         "exhausted": False,
     }
@@ -152,7 +152,7 @@ def _as_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-def _iso(value: datetime) -> str:
+def utc_iso(value: datetime) -> str:
     return _as_utc(value).isoformat().replace("+00:00", "Z")
 
 
@@ -305,7 +305,7 @@ class WorkerStateRepository:
                 INSERT OR IGNORE INTO optix_worker_schema(version,checksum,applied_at)
                 VALUES(?,?,?)
                 """,
-                (SCHEMA_VERSION, SCHEMA_CHECKSUM, _iso(observed)),
+                (SCHEMA_VERSION, SCHEMA_CHECKSUM, utc_iso(observed)),
             )
             connection.commit()
 
@@ -352,7 +352,7 @@ class WorkerStateRepository:
                     heartbeat_at=excluded.heartbeat_at,
                     expires_at=excluded.expires_at
                 """,
-                (LOCK_NAME, owner_id, token, _iso(observed), _iso(expires)),
+                (LOCK_NAME, owner_id, token, utc_iso(observed), utc_iso(expires)),
             )
             connection.commit()
             return token
@@ -387,7 +387,7 @@ class WorkerStateRepository:
                 UPDATE optix_worker_lock SET heartbeat_at=?,expires_at=?
                 WHERE lock_name=? AND owner_id=? AND fencing_token=?
                 """,
-                (_iso(observed), _iso(expires), LOCK_NAME, owner_id, fencing_token),
+                (utc_iso(observed), utc_iso(expires), LOCK_NAME, owner_id, fencing_token),
             )
             connection.commit()
             return True
@@ -408,7 +408,7 @@ class WorkerStateRepository:
                 SET owner_id=NULL,heartbeat_at=?,expires_at=?
                 WHERE lock_name=? AND owner_id=? AND fencing_token=?
                 """,
-                (_iso(observed), _iso(observed), LOCK_NAME, owner_id, fencing_token),
+                (utc_iso(observed), utc_iso(observed), LOCK_NAME, owner_id, fencing_token),
             )
             connection.commit()
             return cursor.rowcount == 1
@@ -448,7 +448,7 @@ class WorkerStateRepository:
                 SET status='interrupted',error_code='worker_restarted',updated_at=?
                 WHERE status IN ('starting','running','stopping')
                 """,
-                (_iso(observed),),
+                (utc_iso(observed),),
             )
             connection.execute(
                 """
@@ -457,7 +457,7 @@ class WorkerStateRepository:
                     error_code='worker_restarted',updated_at=?
                 WHERE status='running'
                 """,
-                (_iso(observed),),
+                (utc_iso(observed),),
             )
             connection.commit()
             return cursor.rowcount
@@ -508,7 +508,7 @@ class WorkerStateRepository:
             "SELECT * FROM optix_worker_lock WHERE lock_name=?",
             (LOCK_NAME,),
         ).fetchone()
-        observed_text = _iso(observed)
+        observed_text = utc_iso(observed)
         if WorkerStateRepository._live(lock, observed):
             return int(
                 connection.execute(
@@ -578,7 +578,7 @@ class WorkerStateRepository:
             raise ValueError("worker action cooldown is invalid")
         details_json = _action_details_json(details)
         observed = _as_utc(now or utc_now())
-        observed_text = _iso(observed)
+        observed_text = utc_iso(observed)
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             self._recover_orphaned_running_actions_on(connection, observed)
@@ -703,7 +703,7 @@ class WorkerStateRepository:
         now: datetime | None = None,
     ) -> list[dict[str, Any]]:
         observed = _as_utc(now or utc_now())
-        observed_text = _iso(observed)
+        observed_text = utc_iso(observed)
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             self._assert_fence(connection, owner_id, fencing_token, observed)
@@ -804,7 +804,7 @@ class WorkerStateRepository:
                     """,
                     (
                         _action_details_json(details),
-                        _iso(observed),
+                        utc_iso(observed),
                         row["request_id"],
                         owner_id,
                         int(fencing_token),
@@ -830,7 +830,7 @@ class WorkerStateRepository:
         if error_code is not None and not _ACTION_NAME.fullmatch(error_code):
             raise ValueError("worker action error code is invalid")
         observed = _as_utc(now or utc_now())
-        observed_text = _iso(observed)
+        observed_text = utc_iso(observed)
         completion = dict(details or {})
         _validate_action_detail(completion)
         unique_request_ids = list(dict.fromkeys(request_ids))
@@ -982,13 +982,13 @@ class WorkerStateRepository:
                     int(enabled),
                     status,
                     max(0, int(consecutive_failures)),
-                    _iso(last_started_at) if last_started_at else None,
-                    _iso(last_completed_at) if last_completed_at else None,
-                    _iso(last_success_at) if last_success_at else None,
-                    _iso(next_run_at) if next_run_at else None,
+                    utc_iso(last_started_at) if last_started_at else None,
+                    utc_iso(last_completed_at) if last_completed_at else None,
+                    utc_iso(last_success_at) if last_success_at else None,
+                    utc_iso(next_run_at) if next_run_at else None,
                     error_code,
                     body,
-                    _iso(observed),
+                    utc_iso(observed),
                 ),
             )
             connection.commit()
@@ -1089,7 +1089,7 @@ class WorkerStateRepository:
             "schema_version": SCHEMA_VERSION,
             "schema_checksum_valid": checksum_ok,
             "lock_live": lock_live,
-            "heartbeat_at": _iso(heartbeat) if heartbeat else None,
+            "heartbeat_at": utc_iso(heartbeat) if heartbeat else None,
             "heartbeat_age_seconds": heartbeat_age,
             "task_inventory_complete": task_inventory_complete,
             "tasks": tasks,

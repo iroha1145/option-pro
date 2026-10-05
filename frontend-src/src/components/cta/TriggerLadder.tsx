@@ -3,7 +3,7 @@
  *
  * - 行序=价格降序：上方触发区（高→低）→ 现价虚线行 → 下方触发区（高→低，
  *   离现价最近的紧贴现价行）；方向符 ▲/▼ 表示触发区在现价上方/下方。
- * - 数字一律 font-mono tnum 右对齐表列：价格区间 / 距离 / 估算 Δ / 权重计量条
+ * - 数字用正文字体加等宽数字（tnum）右对齐成列：价格区间 / 距离 / 估算 Δ / 权重计量条
  *   （bg-line 轨道 + ink-500 填充，宽=weight_share/maxWeight）。
  * - 触发位全部「需收盘确认」：盘中穿越的区间在标签后挂脉动圆点，展开详情里
  *   再给「盘中已穿越 · 待收盘确认」暂定章，不构成正式触发。
@@ -59,7 +59,7 @@ function WeightMeter({ share, maxWeight }: { share: number; maxWeight: number })
           style={{ width: `${Math.max(4, (share / maxWeight) * 100)}%` }}
         />
       </span>
-      <span className="font-mono text-micro text-ink-500 tnum">{Math.round(share * 100)}%</span>
+      <span className="text-micro text-ink-500 tnum">{Math.round(share * 100)}%</span>
     </span>
   );
 }
@@ -121,17 +121,17 @@ export default function TriggerLadder({ row }: { row: CtaInstrumentEstimate }) {
             {crossed && <PulseDot className="shrink-0" />}
           </span>
           {/* 3 距离（右对齐定宽）——价格位置读数用中性色，红绿只留给净 Δ */}
-          <span className="order-3 w-12 shrink-0 text-right font-mono text-caption text-ink-600 tnum sm:order-4">
+          <span className="order-3 w-12 shrink-0 text-right text-caption text-ink-600 tnum sm:order-4">
             {zone.distance_pct > 0 ? '+' : ''}{zone.distance_pct.toFixed(1)}%
           </span>
           {/* 4 估算 Δ（右对齐定宽）——手机竖屏留在第一行 */}
-          <span className={cn('order-4 w-12 shrink-0 text-right font-mono text-caption font-semibold tnum sm:order-5', tone)}>
+          <span className={cn('order-4 w-12 shrink-0 text-right text-caption font-semibold tnum sm:order-5', tone)}>
             {signed(zone.est_position_change)}
           </span>
           {/* 5+6 价格区间 & 权重计量条：手机竖屏 basis-full 强制折到第二行；
               桌面 sm:contents 拆平包装器，子列恢复 价格区间→…→权重 的列序 */}
           <span className="order-5 flex basis-full items-center gap-2 pl-[18px] sm:contents">
-            <span className="shrink-0 font-mono text-micro text-ink-500 tnum sm:order-3 sm:text-caption sm:text-ink-800">
+            <span className="shrink-0 text-micro text-ink-500 tnum sm:order-3 sm:text-caption sm:text-ink-800">
               {fmtPrice(zone.price_low)} – {fmtPrice(zone.price_high)}
             </span>
             <span className="shrink-0 sm:order-6">
@@ -159,7 +159,7 @@ export default function TriggerLadder({ row }: { row: CtaInstrumentEstimate }) {
                     {t('需收盘确认')}
                   </span>
                   {crossed && (
-                    <span className="inline-flex items-center gap-1 rounded-pill border border-warn-600/40 px-1.5 py-0.5 text-micro text-warn-600">
+                    <span className="inline-flex items-center gap-1 rounded-pill border border-warn-600/40 px-1.5 py-0.5 text-micro text-warn-700">
                       <PulseDot />
                       {t('盘中已穿越 · 待收盘确认')}
                     </span>
@@ -167,16 +167,16 @@ export default function TriggerLadder({ row }: { row: CtaInstrumentEstimate }) {
                 </div>
                 {/* 状态迁移读数：标签的生成依据，让「翻空/减仓」可当场核验 */}
                 {zone.position_before !== null && zone.position_after !== null && (
-                  <p className="mt-1.5 font-mono text-micro text-ink-600 tnum">
+                  <p className="mt-1.5 text-micro text-ink-600 tnum">
                     {t('仓位 {a} → {b}', { a: signed(zone.position_before), b: signed(zone.position_after) })}
                   </p>
                 )}
-                <p className="mt-0.5 font-mono text-micro text-ink-500 tnum">
+                <p className="mt-0.5 text-micro text-ink-500 tnum">
                   {t('估算 Δ{v}', { v: signed(zone.est_position_change) })}
                   {' · '}
                   {t('趋势 {a} · 波动率 {b}', { a: signed(zone.trend_change), b: signed(zone.vol_change) })}
                 </p>
-                <p className="mt-0.5 font-mono text-micro text-ink-400 tnum">
+                <p className="mt-0.5 text-micro text-ink-400 tnum">
                   {zone.models.map((m) => MODEL_SHORT[m] ?? m).join('/')}
                   {' · '}
                   {t('权重 {w}%', { w: Math.round(zone.weight_share * 100) })}
@@ -209,9 +209,9 @@ export default function TriggerLadder({ row }: { row: CtaInstrumentEstimate }) {
       <div className="mt-2 border-b border-line" role="group" aria-label={t('触发阶梯')}>
         {above.map((zone) => renderZone(zone, true))}
 
-        {/* 现价行：虚线发丝分隔，mono 品牌色读数 */}
+        {/* 现价行：虚线发丝分隔，品牌色读数 */}
         <div className="flex items-center justify-center border-t border-dashed border-ink-400 bg-paper-2 py-2">
-          <span className="font-mono text-caption text-brand-700 tnum">
+          <span className="text-caption text-brand-700 tnum">
             {t('现价 {p}', { p: fmtPrice(row.reference_price) })}
           </span>
         </div>

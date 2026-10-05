@@ -3,12 +3,23 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from app.public_stock_data import read_public_stock_resource, read_public_stock_summary
 from app.stock_pull_snapshot import read_stock_pull_resource, read_stock_pull_summary
 from app.stock_pull_snapshot import STOCK_CHART_RESOURCE_RANGES
 from app.stock_chart_snapshot import read_stock_chart_resource
+
+
+def _newer_source(
+    manual: Mapping[str, Any] | None,
+    public: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    if public is not None and (
+        manual is None or float(public["saved_at"]) > float(manual["saved_at"])
+    ):
+        return {**public, "source": "public_stock_data"}
+    return {**manual, "source": "manual_pull"} if manual is not None else None
 
 
 def read_latest_stock_resource(
@@ -31,11 +42,7 @@ def read_latest_stock_resource(
     public = None if path is not None else read_public_stock_resource(
         ticker, resource, root=root, now=now,
     )
-    if public is not None and (
-        manual is None or float(public["saved_at"]) > float(manual["saved_at"])
-    ):
-        return {**public, "source": "public_stock_data"}
-    return {**manual, "source": "manual_pull"} if manual is not None else None
+    return _newer_source(manual, public)
 
 
 def read_latest_stock_summary(
@@ -47,14 +54,7 @@ def read_latest_stock_summary(
     """The same newest-source choice as above for every daily resource, payload-free."""
     manual = read_stock_pull_summary(ticker, now=now)
     public = read_public_stock_summary(ticker, root=root, now=now)
-    latest: dict[str, dict[str, Any]] = {}
-    for resource in manual.keys() | public.keys():
-        manual_item, public_item = manual.get(resource), public.get(resource)
-        if public_item is not None and (
-            manual_item is None
-            or float(public_item["saved_at"]) > float(manual_item["saved_at"])
-        ):
-            latest[resource] = {**public_item, "source": "public_stock_data"}
-        else:
-            latest[resource] = {**manual_item, "source": "manual_pull"}
-    return latest
+    return {
+        resource: _newer_source(manual.get(resource), public.get(resource))
+        for resource in manual.keys() | public.keys()
+    }

@@ -5,7 +5,9 @@ import { cn } from '@/lib/utils';
 import { fmtPct } from '@/lib/format';
 import TickerLogo from '@/components/shared/TickerLogo';
 import InfoHint from '@/components/shared/InfoHint';
-import { SCORE_HINTS } from '@/lib/scoreHints';
+import MacroFitBadge from '@/components/shared/MacroFitBadge';
+import { SCORE_HINTS, macroShadowHint } from '@/lib/scoreHints';
+import { MACRO_QUADRANT_LABEL, macroQuadrant } from '@/lib/macroFit';
 import { diagnosticCoverageStatus } from '@/lib/eodDiagnostics';
 import Icon from '@/components/icons';
 import type { SectorVm } from './model';
@@ -31,7 +33,7 @@ function Metric({
       <dt className="text-micro text-ink-400">{label}</dt>
       <dd
         className={cn(
-          'mt-1 truncate font-mono text-data-l font-semibold text-ink-800 tnum',
+          'mt-1 truncate metric-value text-data-l text-ink-800',
           tone === 'up' && 'text-up-700',
           tone === 'down' && 'text-down-700',
         )}
@@ -46,6 +48,7 @@ export default function DetailBand({
   sector,
   onOpenTicker,
 }: DetailBandProps) {
+  const quadrant = macroQuadrant(sector.avgStrength, sector.macroFit);
   return (
     <motion.section
       key={sector.id}
@@ -59,7 +62,7 @@ export default function DetailBand({
       <div className="card-surface mt-6 p-4 md:p-6">
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line pb-3">
           <div>
-            <p className="eyebrow">{t('板块详情 · 成分股汇总')}</p>
+            <p className="eyebrow">{t('板块详情')}</p>
             <h2 className="mt-1 font-display text-[18px] font-semibold leading-[24px] text-ink-900">
               {sector.name}
             </h2>
@@ -73,7 +76,7 @@ export default function DetailBand({
           </Link>
         </div>
 
-        <dl className="mt-4 grid grid-cols-3 gap-2 sm:gap-4">
+        <dl className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-4">
           <Metric
             label={t('{period}平均收益', { period: periodLabel(sector.period) })}
             value={sector.avgReturn !== null ? fmtPct(sector.avgReturn) : '—'}
@@ -98,6 +101,18 @@ export default function DetailBand({
             label={t("统计覆盖")}
             value={`${sector.coveredCount ?? '—'} / ${sector.memberCount}`}
           />
+          {/* 与平均强度并列、不合成一个数：技术强但宏观逆风、宏观先改善而价格没跟上，
+              正是两者分开看才看得出来。不传 status：没有强度聚合不等于宏观快照缺失。 */}
+          <div className="col-span-3 min-w-0 border-t border-line pt-3 sm:col-span-1 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
+            <dt className="flex items-center text-micro text-ink-400">
+              {t('宏观适配')}
+              <InfoHint hint={macroShadowHint()} side="bottom" size={11} className="ml-1" />
+            </dt>
+            <dd className="mt-1.5 flex flex-col items-start gap-1">
+              <MacroFitBadge score={sector.macroFit} tailwind={sector.macroTailwind} />
+              {quadrant && <span className="text-micro text-ink-400">{t(MACRO_QUADRANT_LABEL[quadrant])}</span>}
+            </dd>
+          </div>
         </dl>
         <p className="mt-2 text-micro text-ink-400">
           {t('有评分 {scored} / {total}', { scored: sector.scoredCount ?? '—', total: sector.memberCount })}
@@ -132,7 +147,7 @@ export default function DetailBand({
                       onClick={() => onOpenTicker(leader.ticker)}
                       className="group flex min-h-11 w-full items-center gap-3 py-2 text-left transition-colors duration-fast hover:bg-paper-2"
                     >
-                      <span className="w-5 shrink-0 font-mono text-micro text-ink-300 tnum">
+                      <span className="w-5 shrink-0 font-mono text-micro text-ink-400 tnum">
                         {String(index + 1).padStart(2, '0')}
                       </span>
                       <TickerLogo ticker={leader.ticker} size={26} />
@@ -142,13 +157,13 @@ export default function DetailBand({
                       <span className="ml-auto text-micro text-ink-400">
                         {t('强度')}
                       </span>
-                      <span className="w-12 text-right font-mono text-data-m font-semibold text-ink-800 tnum">
+                      <span className="w-12 text-right text-data-m font-semibold text-ink-800 tnum">
                         {leader.score?.toFixed(1) ?? '—'}
                       </span>
                       <Icon
                         name="arrow-up-right"
                         size={12}
-                        className="text-ink-300 transition-colors duration-fast group-hover:text-brand-600"
+                        className="text-ink-400 transition-colors duration-fast group-hover:text-brand-600"
                       />
                     </button>
                   </li>
@@ -160,7 +175,7 @@ export default function DetailBand({
           <div>
             <div className="flex items-center justify-between gap-3">
               <p className="eyebrow">{t('板块目录成分')}</p>
-              <span className="font-mono text-micro text-ink-400 tnum">
+              <span className="text-micro text-ink-400 tnum">
                 {sector.memberCount} {t('只')}
               </span>
             </div>

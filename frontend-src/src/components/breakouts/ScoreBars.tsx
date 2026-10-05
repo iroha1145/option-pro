@@ -6,7 +6,7 @@
  */
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { EASE_PAPER } from '@/lib/motion';
+import { EASE_PAPER, GROW_X } from '@/lib/motion';
 import { SCORE_DEFS, riskBarClass, scoreBarClass } from './types';
 import type { BreakoutEventFull, RangePersistence } from './types';
 import { t } from '../../i18n/core.ts';
@@ -30,18 +30,21 @@ export function ScoreBarsMini({ event, className }: { event: BreakoutEventFull; 
               <span className="text-[11px] leading-[16px] text-ink-500">{d.label}</span>
               <span className="font-mono text-[11px] leading-[16px] text-ink-700 tnum">{disp(v)}</span>
             </p>
-            <div className="mt-0.5 radar-bar-track h-[5px] overflow-hidden rounded-pill bg-line">
+            <motion.div
+              className="mt-0.5 radar-bar-track h-[5px] overflow-hidden rounded-pill bg-line"
+              initial="hidden"
+              whileInView="shown"
+              viewport={{ once: true, amount: 0.4 }}
+            >
               {fin(v) && (
                 <motion.div
                   className={cn('h-full origin-left rounded-pill', barCls(d.key, v))}
-                  initial={{ scaleX: 0 }}
-                  whileInView={{ scaleX: 1 }}
-                  viewport={{ once: true, amount: 0.4 }}
+                  variants={GROW_X}
                   transition={{ duration: 0.7, ease: EASE_PAPER, delay: i * 0.03 }}
                   style={{ width: `${Math.max(3, Math.min(100, v))}%` }}
                 />
               )}
-            </div>
+            </motion.div>
           </div>
         );
       })}

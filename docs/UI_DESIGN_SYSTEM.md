@@ -1,6 +1,6 @@
 # 界面与动效规范
 
-核验日期：2026-09-05（第 5 节于 2026-09-26 补充）。适用于研究概览、自选、筛选器、个股详情与移动端。本文说明共享组件的使用规则与验收标准；测试结果以本次审查报告为准。产品定位沿用根目录 `.impeccable.md`：冷静、清楚的市场研究工作台，持续说明行情时间、来源与降级状态。
+核验日期：2026-09-05（第 5 节于 2026-09-26、第 6 节于 2026-10-04 补充）。适用于研究概览、自选、筛选器、个股详情与移动端。本文说明共享组件的使用规则与验收标准；测试结果以本次审查报告为准。产品定位沿用根目录 `.impeccable.md`：冷静、清楚的市场研究工作台，持续说明行情时间、来源与降级状态。
 
 ## 1. 统一实现入口
 
@@ -13,7 +13,7 @@
 | 过渡样式与适配 | `frontend-src/src/styles/transitions-catalog.css` | 保留来源样式，项目适配集中书写 |
 | JavaScript 动效 | `frontend-src/src/lib/motion.ts`、`frontend-src/src/lib/transitions.ts` | 共享参数与计时读取，不在调用处随意新增时长 |
 | 选择与提示 | `FilterButton`、`Segmented`、`GlidePill`、`MenuSelect`、`InfoHint` | 复用键盘行为、定位与减少动态效果处理 |
-| 信息展示 | `DataTable`、`InsightCard`、`StatCard`、`SourceNote` | 信息结构和数据口径在页面间一致 |
+| 信息展示 | `DataTable`、`InsightFrame` / `InsightValue`、`StatCard`、`SourceNote` | 信息结构和数据口径在页面间一致 |
 | 浮层与反馈 | `Drawer`、`ConfirmDialog`、`Toast`、`CommandPalette` | 统一焦点、关闭、背景滚动与状态表达 |
 | 加载与异常 | `SkeletonReveal`、`EmptyState`、`InlineFallback`、`StaleStrip` | 加载、空结果、错误和旧数据分别呈现 |
 | 按钮与进行中反馈 | `.btn-primary`、`.btn-primary.btn-sm`、`Spinner`、`BusyIcon` / `IconSwap`、`ThinkingLabel` | 主操作不再手写样式；请求在途用同格切换的加载圈，模型任务在途用扫光文字 |
@@ -25,17 +25,17 @@
 
 ### Beautiful UI：信息层次与搜索反馈
 
-采用其洞察卡片（Insight Cards）的组织方式：标题和口径在上，图形居中，读数、变化与比较基准相邻。现有 `InsightCard`、`InsightFrame`、`InsightValue` 和 `Sparkline` 承接此规则。搜索沿用其内嵌空态、清除按钮与轻量淡入方式，对应 `CommandPalette`。
+采用其洞察卡片（Insight Cards）的组织方式：标题和口径在上，图形居中，读数、变化与比较基准相邻。现有 `InsightFrame`、`InsightValue` 和 `Sparkline` 承接此规则。搜索沿用其内嵌空态、清除按钮与轻量淡入方式，对应 `CommandPalette`。
 
 价格和涨跌必须说明比较基准；来源和时间不藏在悬停操作里。卡片布局用来解释数据，不增加虚构置信度、示例值或自动推断出的交易建议。
 
-核验来源：[官方组件展示](https://www.beautifului.dev/)、[洞察卡片源码](https://github.com/slev12397/beautiful-ui/blob/06557d7ff33a1eb70d5987bae9ac4c70fa0e20c4/components/primitives/InsightCards.tsx)、[搜索源码](https://github.com/slev12397/beautiful-ui/blob/06557d7ff33a1eb70d5987bae9ac4c70fa0e20c4/components/primitives/SearchList.tsx)。官方仓库没有正式组件注册源；不要使用名称相似的第三方注册源冒充官方。其原始样式依赖 Tailwind CSS 4 的 `@theme inline`，现有项目采用设计模式与本地组件适配，不整份覆盖全局样式。
+核验来源：[官方组件展示](https://www.beautifului.dev/)、[洞察卡片源码](https://github.com/slev12397/beautiful-ui/blob/06557d7ff33a1eb70d5987bae9ac4c70fa0e20c4/components/primitives/InsightCards.tsx)、[搜索源码](https://github.com/slev12397/beautiful-ui/blob/06557d7ff33a1eb70d5987bae9ac4c70fa0e20c4/components/primitives/SearchList.tsx)。官方站点自 2026-08-28 起提供注册源 `https://www.beautifului.dev/r/registry.json`（27 项，用法 `npx shadcn add https://www.beautifului.dev/r/<名>.json`）；不要使用名称相似的第三方注册源冒充官方。其原始样式依赖 Tailwind CSS 4 的 `@theme inline`，现有项目采用设计模式与本地组件适配，不整份覆盖全局样式。
 
 ### beUI：选择控件的连续反馈
 
 采用标签页（Tabs）的共享位置指示器、按钮按压反馈与触控区分。现有 `Segmented`、`GlidePill`、主导航和主按钮继续复用。选中项的文字必须即时可读，滑块位于文字下方，且不能遮挡相邻标签。
 
-滑块动画保持项目已验证的参数。当前官网 `SPRING_LAYOUT` 为 `stiffness: 360`、`damping: 32`、`mass: 0.6`，与项目历史参数不同；项目参数属于适配值，不能标成当前官方原值。仅在实际体验与回归检查支持时调整弹性，不因官网更新机械同步。
+滑块弹簧取标签页组件自己的参数（它不引用 `lib/ease.ts` 的 `SPRING_LAYOUT`）。项目原先的 170/24/1.2 是 2026-09 初审查时的上游原值；上游 2026-09-18 改为 245/36/1.2（阻尼比约 1.05，不过冲），理由是可滚动标签条里过冲会闪出滚动条，本项目的 `Segmented` 正在 `HorizontalScroller` 里，于是 2026-10-05 同步为 `lib/motion.ts` 的 `SPRING_INDICATOR`。上游 `layout="position"` 有意不采用（审查 #113，宽度会瞬跳）。
 
 核验来源：[官方注册目录](https://beui.dev/r/registry.json)、[标签页注册项](https://beui.dev/r/tabs.json)、[按钮注册项](https://beui.dev/r/button-base.json)、[官方动效参数](https://github.com/starc007/ui-components/blob/04d6f76e9e67e35cded996b1b8d08a5ddcebc13a/lib/ease.ts)。需要新增源码时先检查注册项，再使用 `npx shadcn@latest view @beui/<组件名>`；安装前核对对现有工具函数和全局样式的影响。已有 Framer Motion，不并行引入另一套动画运行依赖。
 
@@ -140,6 +140,34 @@
 - **跑马灯**（2026-09-27，参考 ObsidianUI 的 draggable-marquee）：动画元素只含第一套内容，其余副本绝对定位在它后面，每轮平移 `-100%`，正好是一套的宽度（含尾部间距），接缝不跳。副本数由 `lib/marquee.ts` 的 `marqueeCopies` 按轨道宽度计算，至多六套，覆盖常见屏宽的完整循环。键盘焦点进入时暂停，并把焦点项挪到轨道起点；焦点停留期间暂时隐藏右侧标签的视觉层，保留布局占位，离开后恢复。减少动态时副本隐藏，轨道改为可横向滑动，并主动滚动到键盘焦点项，避免原生滚动只露出被标签遮住的部分。运行中切换动态偏好时清除旧的手动滚动偏移，并保持当前键盘焦点可见。
 - **测试镜子**：沙箱编译组件的测试对未声明依赖一律报错。组件新增上述共享依赖时，在 `frontend-src/tests/helpers/shared-ui-stubs.mjs` 补桩（令牌用真实模块，展示件桩成元素类型并保留子节点文字），不要在各测试里各抄一份。
 
-## 6. 来源维护
+## 6. 2026-10-04 执行精度整理
+
+本轮按「获奖级执行精度」逐页审查后收口了几条系统规则，均有测试或源码约束：
+
+- **状态色与涨跌色分开**：成功、正常、在线、强度高档用 `ok`，错误、失败、删除、高追高风险用 `danger`。两组令牌的默认取值与绿涨红跌下的涨跌色相同，但红涨绿跌模式不互换，「操作成功」不会因行情偏好变红。`up` / `down` 只用于价格、涨跌幅和多空解读。`color-scale-contract` 测试禁止在红涨绿跌样式块里覆盖 `ok` / `danger`。
+- **类别不借语义色**：盘前盘后、经济事件重要度、热度、IV 异动这类类别信息用中性墨色深浅或图标区分，不借用警示琥珀色或 AI 青瓷色。
+- **文字对比度**：`ink-300` 只用于线条、轨道、圆点、拖拽把手和装饰分隔符，文字最低用 `ink-400`。警示文字用 `warn-700`（浅色 #935B00，在 warn-50 上 5.1:1），`warn-600` 只用于圆点、图标和填充。
+- **字阶**：不再使用 8 到 10 像素的文字，最小为 `micro`（11/14）。`color-scale-contract` 同时检查字阶类名是否都在 `tailwind.config.js` 里定义。
+- **圆角三档**：`--r-chip` 4（组内小件、徽章）、`--r-control` 6（普通控件、下拉触发器）、`--r-group` 8（控件组外框、主按钮、浮层）；组内滑块用 `calc(var(--r-group) - 3px)` 与外框同心。卡片 12、抽屉 16 沿用 Tailwind 的 `rounded-lg` / `rounded-xl`。
+- **焦点环**：需要用 ring 代替全局 outline 的地方（被裁切的表格行、轨道）一律用不透明的 `ring-brand-600`，不用半透明品牌色。
+- **数据条入场**：数据条用 `lib/motion` 的 `GROW_X` / `GROW_Y` 变体，`initial="hidden"`、`whileInView="shown"` 挂在轨道或外层容器上，不让缩放到 0 的条自己观察视口（零面积元素有一部分永远判不进视口，条会一直空着）。
+- **公司标志底板**：标志图片垫 `--logo-plate`（白天白色、夜间 #E6E8EC），首字母兜底仍用卡片色。
+- **次级操作**：查看全部、重试、显示更多、刷新等普通操作一律用 `.control-button`，只保留外边距和固定行高这类布局类。
+- **数字字体**：价格、涨跌幅、分数、倍数、数量用正文字体加等宽数字（`tnum`），大读数用 `.metric-value`；时间、倒计时、日期、代码、序号和图表坐标用 `font-mono`。同一种数字在不同卡片上不换字体。
+- **卡片标题**：每张卡只有一个中文标题（`text-h3 text-ink-900`），不在卡片上叠「中文 · ENGLISH」眉题，也不在中文名旁边重复大写英文名。页面级眉题（`§04 SECTORS · LIVE AGGREGATES` 这类页头）是全站统一的页头格式，保留。
+- **成对的卡片**：同一行两列的卡片由栅格拉伸到同高，卡片本身用纵向弹性布局，底部的更新时间行用 `mt-auto` 贴底。某一列内容天然偏短时，把相关的卡叠进这一列，或让图表随栏高拉伸，而不是留出半张空卡。
+- **`cn()` 与字阶**：`lib/utils.ts` 把 `tailwind.config.js` 的自定义字阶登记进 tailwind-merge 的字号组，否则 `cn('text-micro', 'text-ink-400')` 会把字号当颜色合并掉。新增字阶要两处同时加，`cn-font-size` 测试按配置逐个核对。
+- **指数卡**：首页与大盘页共用 `components/shared/IndexCard`，手机三列；页面只负责栅格、闪烁、空态和定位。
+- **文案**：不写免责与合规腔（仅供参考、不构成建议、以公告为准、不是预测之类），也不写复述屏幕内容的说明（页头一句话描述、卡片副标题、显而易见的图例句子）。保留的是读者靠界面本身看不出来的东西：数据状态与陈旧提示、估算口径、数据来源、时区与单位、图上两种线型的含义、AI 生成标注。页头 `PageHeader` 不再有描述行。
+- **触屏行情带**：粗指针下行情带与每个按钮 44px，按钮内各段仍按基线对齐，用 `flex-wrap: wrap; align-content: center` 把这一行放在按钮正中；`audit-touch-targets` 同时检查基金与指数两种模式。
+- **类别不借语义色（补）**：技术信号（突破、放量、跳空、IV 异动等）、热点热度、IV 排位都是类别或强弱，用纸面底加墨色，靠文字或段数区分；警示琥珀只给真正的提醒（已过期、风险提醒），AI 青瓷只给模型状态。
+- **状态文字原位切换**：按钮与状态文字在阶段之间换句时包 `TextSwap`（transitions.dev 04-text-swap 的进场半程，`--text-swap-*`），按 `swapKey` 只在阶段变化时播；倒计时数字留在同一个 key 里。
+- **可撤销的即时操作**：一点就生效、误点代价大的操作（移除自选）在提示条上给「撤销」；带操作的提示停留 8 秒，切换页面后仍可使用。移除开始时绑定当前登录身份；身份变化或暂时无法确认后，旧操作失效。服务器在删除时记录原顺序，恢复单个代码时保留其他页面同时新增的成员及其相对顺序，不用旧清单覆盖当前清单。
+- **图表读数游标**：类目横轴的历史折线（宏观综合分、CTA 仓位）用 `useChartCursor`：指针或方向键指到哪天，表头读数就换成哪天，离开或 Esc 回到最新，并清除旧游标和点高亮；日期序列变化时当次渲染即复位。绘图区是 `role="slider"`，`aria-valuetext` 写日期与数值。K 线图沿用自己的十字线。
+- **排序表**：正在排序的列整列垫浅底、表头加深；右对齐数值列的排序箭头放在标签前。
+
+## 7. 来源维护
+
+2026-10-05 另参考了两个站点，只借做法、未复制源码：[Arc UI](https://uiarc.dev/)（图表读数随游标变化、排序列标识、可撤销提示条；其全站去焦点环、缺失值按零、系列色随强调色旋转与本项目规则冲突，不采用）与 [60fps](https://60fps.design/)（移动端应用动效录屏库，没有公开参数；用来核对「跟手、即时反馈、只动 transform 与 opacity」的做法）。
 
 许可与核验版本记录见根目录 `THIRD_PARTY_NOTICES.md`。上游提交号表示本次审查参考的版本，并不反推历史代码的原始复制版本。复制源码时保留完整许可，记录适配点；设计借鉴与直接复制代码分别说明。不得把样例交互、虚构数据、付费图标或新的远程资源直接带入产品。

@@ -6,7 +6,6 @@ export const SCREENER: Dict = {
   "估": ["est.", "推計"],
   "20 日均成交额代理": ["20-day average dollar-volume proxy", "20日平均売買代金の推計"],
   "按原始收盘价乘日成交量估算；成交额与成交时段资格仍需核实。": ["Estimated from raw close times daily volume; dollar-volume and session eligibility remain unverified.", "未調整終値と日次出来高から推計。売買代金と取引時間帯の適格性は未確認です。"],
-  "观察分取各家族与主题路径中的最高分，不代表多家族共识。": ["The observation score is the highest family/theme path score, not a multi-family consensus.", "観察スコアは各手法・テーマ経路の最高値であり、複数手法の合意ではありません。"],
   "观察分取各家族与主题路径中的最高分，不代表多家族共识。评分使用收盘日线的趋势、动量、结构、突破、回踩、量能与稳定性；行业因子当前停用。风险偏好调整权重和门槛，合格综合另需资格核实与家族共识。": ["Observation uses the highest family/theme path score. It combines daily-close trend, momentum, structure, breakout, pullback, volume, and stability; the industry factor is disabled. Profiles adjust weights and gates. Qualified consensus also requires verified eligibility and agreement between families.", "観察スコアは各手法・テーマ経路の最高値です。日足のトレンド、モメンタム、構造、ブレイク、押し目、出来高、安定性を用い、業種因子は無効です。リスク設定で重みと条件が変わり、適格な総合候補には資格確認と手法間の合意も必要です。"],
   "稳定性 R": ["Stability R", "安定性 R"],
   "稳定性因子：低波动占45%、低跳空占35%、低回撤占20%；分数高表示走势较平稳，不表示跑赢市场。": ["Stability: 45% low volatility, 35% small gaps, and 20% low drawdown. A high score means smoother prices, not market outperformance.", "安定性：低変動45%、小さな窓35%、低ドローダウン20%。高得点は値動きが安定していることを示し、市場超過収益を意味しません。"],
@@ -24,7 +23,6 @@ export const SCREENER: Dict = {
   '筛选后候选': ['Filtered candidates', '絞り込み後の候補'],
   '已应用其他筛选，分档和数量上限不影响此图': ['Other filters apply; tier selection and the result limit do not affect this chart.', '他の絞り込み条件を反映しています。階層の選択と表示件数の上限はこの図に影響しません。'],
   '更多筛选': ['More filters', '詳細フィルター'],
-  '辅助读数': ['Supporting metrics', '補助指標'],
   '辅助指标': ['Additional indicators', '補助指標'],
   /* ---------------- FilterWorkbench.tsx ---------------- */
   '全部': ['All', '全て'],
@@ -48,10 +46,6 @@ export const SCREENER: Dict = {
   '最低价格': ['Minimum price', '最低価格'],
   '最高价格': ['Maximum price', '最高価格'],
   '成交额下限': ['Min dollar volume', '売買代金下限'],
-  '按技术评分、板块与可用资格条件筛选股票。': [
-    'Screen stocks by technical score, sector, and available eligibility checks.',
-    'テクニカルスコア、セクター、利用可能な適格条件で銘柄を絞り込みます。',
-  ],
   '选股数据正在后台生成，请稍候。': [
     'Screener data is being prepared in the background. Please wait.',
     'スクリーナーデータをバックグラウンドで生成しています。しばらくお待ちください。',
@@ -67,34 +61,17 @@ export const SCREENER: Dict = {
   ],
   '排序算法': ['Ranking algorithm', '順位アルゴリズム'],
   '跟随默认': ['Follow default', 'デフォルトに従う'],
-  '原版排序': ['Original ranking', '従来の順位'],
-  '中长期趋势（试用）': ['Mid/long trend (trial)', '中長期トレンド（試用）'],
   '收盘技术（受限）': ['EOD technical (limited)', '終値テクニカル（制限）'],
-  '当前选股默认是收盘技术（受限），周期缺省为中期。数据资格未核实时进入观察，不把成交额门标成已通过。可显式切回原版。': [
-    'The screener now defaults to limited EOD technical ranking with a Mid timeframe. Unverified data qualifications stay on the watch list and do not pass dollar-volume gates. You can switch back to the original ranking.',
-    'スクリーナーの既定は制限付き終値テクニカルで、期間は中期です。データ資格が未確認の場合は観察に留め、売買代金ゲートを通過扱いしません。従来の順位へ明示的に戻せます。',
-  ],
-  '收盘技术仅支持短、中、长期，不能使用全部周期。': [
-    'EOD technical ranking only supports short, mid, and long timeframes.',
-    '終値テクニカルは短期・中期・長期のみ対応で、全期間は使えません。',
-  ],
   '收盘技术（受限）快照正在后台生成，请稍候。': [
     'The limited EOD snapshot is being prepared in the background. Please wait.',
     '制限付き終値スナップショットをバックグラウンドで生成しています。しばらくお待ちください。',
   ],
-  '收盘技术暂不可用': ['Limited EOD ranking is unavailable', '制限付き終値順位は利用できません'],
-  '新模式没有可用收盘快照。可切回原版排序，或等后台完成后重试。': [
-    'This mode has no published EOD snapshot yet. Switch back to original ranking, or retry after the worker finishes.',
-    'このモードには公開済みの終値スナップショットがありません。従来の順位に戻すか、バックエンド完了後に再試行してください。',
-  ],
-  '切回原版排序': ['Switch back to original ranking', '従来の順位に戻す'],
   '技术观察': ['Technical watch', 'テクニカル観察'],
   '合格综合': ['Eligible composite', '適格総合'],
   '结果集': ['Result set', '結果セット'],
   '合格': ['Eligible', '適格'],
   '历史示例': ['Historical example', '履歴サンプル'],
   'SYNTHETIC': ['SYNTHETIC', 'SYNTHETIC'],
-  '收盘技术详情': ['EOD technical details', '終値テクニカル詳細'],
   '多家族观察': ['Multi-family watch', '複数ファミリー観察'],
   '支撑': ['Support', 'サポート'],
   '失效': ['Invalidation', '無効化'],
@@ -121,26 +98,7 @@ export const SCREENER: Dict = {
     'Eligible composite is empty: there are no complete candidates.',
     '適格総合は空です。完全な候補がありません。',
   ],
-  '中长期趋势排序仅支持周期=全部且偏好=均衡。请改回兼容视图，或改用原版排序。': [
-    'Mid/long trend ranking only supports timeframe=all and profile=balanced. Switch back to a compatible view, or use original ranking.',
-    '中長期トレンド順位は期間=すべて・スタイル=均衡のみ対応です。互換ビューに戻すか、従来の順位を使ってください。',
-  ],
-  '当前试用固定中长期组合：0.5×中期 + 0.5×长期。原综合分仍可查看，不作为本模式名次。': [
-    'This trial uses a fixed mid/long blend: 0.5× mid + 0.5× long. The original composite score remains visible and does not set rank in this mode.',
-    'この試用は固定の中長期組み合わせ（0.5×中期 + 0.5×長期）です。従来の総合点は表示されますが、このモードの順位には使いません。',
-  ],
-  '排序分': ['Sort score', '並び替えスコア'],
   '数据不足': ['Insufficient data', 'データ不足'],
-  '排序分 ·': ['Sort score ·', '並び替えスコア ·'],
-  '当前视图不支持中长期趋势排序，已回退原版。': [
-    'The current view does not support mid/long trend ranking; original ranking was used.',
-    '現在のビューは中長期トレンド順位に未対応のため、従来の順位に戻しました。',
-  ],
-  '中长期趋势分数不可用，已回退原版。': [
-    'Mid/long trend scores were unavailable; original ranking was used.',
-    '中長期トレンドスコアを計算できないため、従来の順位に戻しました。',
-  ],
-  '已回退原版排序': ['Fell back to original ranking', '従来の順位に戻しました'],
 
   /* ---------------- MarketRegimeCard.tsx ---------------- */
   '暂无数据': ['No data', 'データなし'],
@@ -174,16 +132,8 @@ export const SCREENER: Dict = {
     'The gap between the average score of the high group (70+) and the low group (below 40) — the wider the gap, the more polarized market leadership is.',
     '高スコア群（70以上）と低スコア群（40未満）の平均点の差。差が大きいほど相場のスタイルが二極化していることを示します。',
   ],
-  '市场形态 · MARKET REGIME': ['Market regime', '市場形態 · MARKET REGIME'],
+  '市场形态': ['Market regime', '市場形態'],
   '6 维': ['6 factors', '6軸'],
-  '综合大盘趋势、动量与风险指标 · 每 5 分钟更新': [
-    'Blends index trend, momentum, and risk indicators · updates every 5 minutes',
-    '指数トレンド・モメンタム・リスク指標を総合 · 5分ごとに更新',
-  ],
-  '由全市场强度分布推导 · 每 5 分钟更新': [
-    'Derived from the market-wide strength distribution · updates every 5 minutes',
-    '全市場の強度分布から算出 · 5分ごとに更新',
-  ],
 
   /* ---------------- ResultCards.tsx ---------------- */
   '强度分 ·': ['Strength score ·', '強度スコア ·'],
@@ -208,8 +158,6 @@ export const SCREENER: Dict = {
   '近 5 日 · 点阵面积': ['Last 5 days · dot-matrix area', '直近5日 · ドットマトリクス面'],
   '日线 · 点阵面积': ['Daily · dot-matrix area', '日足 · ドットマトリクス面'],
   '日线数据暂不可用': ['Daily data unavailable', '日足データが利用できません'],
-  '分项强度 · BREAKDOWN': ['Subscores · BREAKDOWN', 'サブスコア · BREAKDOWN'],
-  '权重来自当前评分方法（右侧栏）': ['Weights come from the current scoring method (sidebar, right).', 'ウェイトは現在の評価方法（右側のサイドバー）に基づきます。'],
   '操作与信号': ['Actions & signals', '操作とシグナル'],
   '打开详情': ['Open details', '詳細を開く'],
   '相关突破事件': ['Related breakout events', '関連ブレイクアウトイベント'],
@@ -224,18 +172,10 @@ export const SCREENER: Dict = {
   '尚无扫描记录': ['No scans yet', 'まだスキャン履歴がありません'],
 
   /* ---------------- SideCards.tsx ---------------- */
-  '强度分布 · 筛选结果': ['Strength distribution · results', '強度分布 · 絞り込み結果'],
   'D 档（<60）计入「全部」': ['Tier D (below 60) counts toward "All"', 'D階層（60未満）は「全部」に含まれます'],
-  '本次命中': ['This scan', '今回の結果'],
   '全市场参照': ['Market reference', '全市場参照'],
-  '仅统计本次筛选命中的标的': ['Counts only the names that matched this scan.', '今回の絞り込みで該当した銘柄のみを集計しています。'],
   '评分方法 ·': ['Scoring method ·', '評価方法 ·'],
   '默认权重': ['Default weights', 'デフォルトウェイト'],
-  '最终强度分为四因子加权合成（0–100），≥85 为高强度区。': [
-    'The final strength score is a weighted blend of four factors (0–100), and 85 or above is the high-strength zone.',
-    '最終的な強度スコアは4つの要因を加重合成したもので（0〜100）、85以上が高強度ゾーンです。',
-  ],
-  '权重取自当前选用的评分档位': ['Weights are taken from the currently selected scoring profile.', 'ウェイトは現在選択中の評価プロファイルに基づきます。'],
 
   /* ---------------- cells.tsx ---------------- */
   '催化剂数据暂不可用': ['Catalyst data temporarily unavailable', 'カタリストデータは一時的に利用できません'],
@@ -277,7 +217,6 @@ export const SCREENER: Dict = {
   '已读取最新扫描结果': ['Loaded the latest scan results.', '最新のスキャン結果を読み込みました。'],
   '扫描服务暂不可用': ['The scan service is temporarily unavailable.', 'スキャンサービスは一時的に利用できません。'],
   '选股扫描': ['Screener', 'スクリーナー'],
-  '按强度、板块与成交额筛选股票。': ['Screen stocks by strength, sector, and trading value.', '強度、セクター、売買代金で銘柄を絞り込めます。'],
   '上次扫描': ['Last scan', '前回のスキャン'],
   '读取': ['Checked', '確認'],
   '使用已有评分': ['Using existing scores', '既存スコアを使用'],
@@ -295,7 +234,6 @@ export const SCREENER: Dict = {
   '当日日线完整': ['Complete daily bars', '当日の日足完備'],
   '缺少当日日线': ['Daily bars missing', '当日の日足なし'],
   '历史不足 252 日': ['History below 252 sessions', '履歴252営業日未満'],
-  '/ 条件通过': ['/ matched', '／条件一致'],
   '仅在强度前': ['Filtering to just the top', '強度上位'],
   '名内筛选': ['by strength', '位に絞り込み中'],
   '正在准备排序数据 · 剩余': ['Preparing sort data · remaining:', '並び替えデータを準備中 · 残り'],

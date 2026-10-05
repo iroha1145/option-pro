@@ -21,7 +21,6 @@ import CompositeCard from './CompositeCard';
 import DriverList from './DriverList';
 import FactorDetails from './FactorDetails';
 import MacroHistoryChart, { HISTORY_RANGES, type HistoryRangeKey } from './MacroHistoryChart';
-import ModuleGrid from './ModuleGrid';
 import MacroTechnicalMatrix from '@/components/market/MacroTechnicalMatrix';
 import { t } from '../../../i18n/core.ts';
 
@@ -31,15 +30,15 @@ const REFRESH_FOLLOW_INTERVAL_MS = 5_000;
 const REFRESH_FOLLOW_TIMEOUT_MS = 3 * 60_000;
 
 export const MACRO_SOURCE_NOTE =
-  t('宏观数据来自 FRED、纽约联储、联储理事会、芝加哥联储和 Cboe；跨资产代理使用 Option Pro 当前股票日线数据源。分数为过去 5 年历史分位，不是预测。');
+  t('宏观数据来自 FRED、纽约联储、联储理事会、芝加哥联储和 Cboe；跨资产代理使用 Option Pro 当前股票日线数据源。');
 
 const STATUS_CHIP: Record<
   MacroConditionsResponse['status'],
   { label: string; tone: string } | null
 > = {
   active: null,
-  degraded: { label: t('部分数据缺失'), tone: 'border-warn-600 bg-warn-50 text-warn-600' },
-  stale: { label: t('数据陈旧'), tone: 'border-warn-600 bg-warn-50 text-warn-600' },
+  degraded: { label: t('部分数据缺失'), tone: 'border-warn-600 bg-warn-50 text-warn-700' },
+  stale: { label: t('数据陈旧'), tone: 'border-warn-600 bg-warn-50 text-warn-700' },
   unavailable: { label: t('暂无快照'), tone: 'border-line bg-paper-2 text-ink-500' },
   disabled: { label: t('未启用'), tone: 'border-line bg-paper-2 text-ink-500' },
   insufficient_history: { label: t('历史不足'), tone: 'border-line bg-paper-2 text-ink-500' },
@@ -224,10 +223,7 @@ export default function MacroConditionsPanel({
       {/* A. 标题行 */}
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
-          <p className="eyebrow">{t('宏观环境 · MACRO CONDITIONS')}</p>
-          <p className="mt-1 text-body-s text-ink-500">
-            {t('联储流动性、融资、国债、利率、信用、风险与外部冲击的 5 年历史分位。')}
-          </p>
+          <p className="eyebrow">{t('宏观环境')}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-caption text-ink-400 tnum">
@@ -272,30 +268,39 @@ export default function MacroConditionsPanel({
       )}
 
       {data.warnings.length > 0 && status !== 'active' && (
-        <p className="rounded-md border border-warn-600 bg-warn-50 px-3 py-2 text-micro leading-relaxed text-warn-600">
+        <p className="rounded-md border border-warn-600 bg-warn-50 px-3 py-2 text-micro leading-relaxed text-warn-700">
           {t('数据更新提示：')}{data.warnings.slice(0, 4).join('、')}
           {data.warnings.length > 4 ? t(' 等 {count} 项', { count: data.warnings.length }) : ''}{t('。当前显示上次成功更新的数据。')}
         </p>
       )}
 
-      {/* B. 综合卡 + C. 历史图 */}
+      {/* B. 综合卡 + D2. 技术 × 结构性宏观（左列上下叠放）与 C. 历史图并排：
+          综合卡单独一列时比历史图矮一大截，对照卡整行铺开时右半边是空的，
+          叠在一起两列底边齐平。D2 仅展示（增量任务 Phase 1）。 */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <div className="lg:col-span-5">
-          {hasComposite && data.composite ? (
-            <CompositeCard
-              composite={data.composite}
-              historyBasis={data.historyBasis}
-              dataThrough={data.dataThrough}
-            />
-          ) : (
-            <div className="card-surface h-full">
-              <EmptyState
-                icon="doc-quote"
-                title={t("暂无正式综合分")}
-                description={t("至少需要 5 类有效指标才能计算综合分。")}
+        <div className="flex flex-col gap-4 lg:col-span-5">
+          <div className="flex-1">
+            {hasComposite && data.composite ? (
+              <CompositeCard
+                composite={data.composite}
+                historyBasis={data.historyBasis}
+                dataThrough={data.dataThrough}
               />
-            </div>
-          )}
+            ) : (
+              <div className="card-surface h-full">
+                <EmptyState
+                  icon="doc-quote"
+                  title={t("暂无正式综合分")}
+                  description={t("至少需要 5 类有效指标才能计算综合分。")}
+                />
+              </div>
+            )}
+          </div>
+          <MacroTechnicalMatrix
+            technical={technicalScore ?? null}
+            structural={data.structuralScore}
+            structuralModules={data.structuralModules}
+          />
         </div>
         <div className="lg:col-span-7">
           <MacroHistoryChart
@@ -310,36 +315,24 @@ export default function MacroConditionsPanel({
         </div>
       </div>
 
-      {/* D. 七模块网格 */}
-      <ModuleGrid modules={data.modules} />
-
-      {/* D2. 技术 × 结构性宏观二维状态（增量任务 Phase 1，仅展示） */}
-      <MacroTechnicalMatrix
-        technical={technicalScore ?? null}
-        structural={data.structuralScore}
-        structuralModules={data.structuralModules}
-      />
+      {/* D. 七模块分数与因子详情：模块只在这一处列出，点开一行看因子 */}
+      <FactorDetails modules={data.modules} snapshotKey={snapshotStamp ?? ''} dataThrough={data.dataThrough} />
 
       {/* E. 驱动因素 */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <DriverList
-          eyebrow={t("改善最多 · IMPROVING")}
           title={t("7 日分数改善最多")}
           drivers={data.drivers.improving}
           emptyText={t("暂无 7 日前的数据可供比较，或本期没有评分上升的指标。")}
         />
         <DriverList
-          eyebrow={t("恶化最多 · DETERIORATING")}
           title={t("7 日分数恶化最多")}
           drivers={data.drivers.deteriorating}
           emptyText={t("暂无 7 日前的数据可供比较，或本期没有评分下降的指标。")}
         />
       </div>
 
-      {/* F. 因子详情 */}
-      <FactorDetails modules={data.modules} snapshotKey={snapshotStamp ?? ''} />
-
-      {/* G. 来源说明 */}
+      {/* F. 来源说明 */}
       <details className="group border-t border-line pt-3">
         <summary className="cursor-pointer text-caption text-ink-500">{t('数据源')}</summary>
         <SourceNote className="border-0 pt-3" text={MACRO_SOURCE_NOTE + (data.scoringVersion ? t(' 评分版本 {version}。', { version: data.scoringVersion }) : '')} />

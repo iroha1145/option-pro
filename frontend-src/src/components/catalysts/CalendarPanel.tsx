@@ -13,10 +13,10 @@ import { fmtLocaleDate, fmtLocaleTime } from '@/lib/format';
 import { t as __t } from '../../i18n/core.ts';
 
 const IMPACT_STYLE: Record<EconomicEvent['impact'], { bar: string; tone: BadgeTone; dots: number }> = {
-  high: { bar: 'bg-down-600', tone: 'down', dots: 3 },
-  medium: { bar: 'bg-warn-600', tone: 'warn', dots: 2 },
-  low: { bar: 'bg-brand-400', tone: 'brand', dots: 1 },
-  holiday: { bar: 'bg-ink-300', tone: 'neutral', dots: 0 },
+  high: { bar: 'bg-ink-800', tone: 'neutral', dots: 3 },
+  medium: { bar: 'bg-ink-500', tone: 'neutral', dots: 2 },
+  low: { bar: 'bg-ink-300', tone: 'neutral', dots: 1 },
+  holiday: { bar: 'bg-line-strong', tone: 'neutral', dots: 0 },
 };
 
 function ImpactChip({ ev }: { ev: EconomicEvent }) {
@@ -115,7 +115,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
             <div className={cn('flex items-center justify-between px-5 py-2.5', isToday ? 'bg-brand-50' : 'bg-card-warm')}>
               <p className={cn('font-mono text-caption font-semibold tnum', isToday ? 'text-brand-700' : 'text-ink-600')}>
                 {fmtLocaleDate(`${date}T00:00:00`, { month: '2-digit', day: '2-digit', weekday: 'short' })}
-                {isToday && <span className="ml-2 rounded-xs bg-brand-600 px-1.5 py-0.5 text-[10px] font-medium text-on-accent">{__t('今日')}</span>}
+                {isToday && <span className="ml-2 rounded-xs bg-brand-600 px-1.5 py-0.5 text-micro font-medium text-on-accent">{__t('今日')}</span>}
               </p>
               <span className="font-mono text-micro text-ink-400 tnum">{events.length} {__t('项')}</span>
             </div>
@@ -136,7 +136,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
                       <span className="font-mono text-[11px] leading-[14px] text-ink-500 tnum">
                         {allDay ? __t('全天') : fmtLocaleTime(ev.scheduledAt)}
                       </span>
-                      <span className="mt-1 self-start break-words rounded border border-line bg-paper-2 px-1.5 py-0.5 text-[10px] leading-[14px] text-ink-500">{flatCountry(ev.country)}</span>
+                      <span className="mt-1 self-start break-words rounded border border-line bg-paper-2 px-1.5 py-0.5 text-micro leading-[14px] text-ink-500">{flatCountry(ev.country)}</span>
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -153,7 +153,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
                           ) : (ev.releaseStatus === 'awaiting_source' || Date.parse(ev.scheduledAt) <= q.now.getTime()) ? (
                             <SoftBadge tone="warn">{__t('数据源未回填')}</SoftBadge>
                           ) : (
-                            <span className="text-ink-300">{__t('待公布')}</span>
+                            <span className="text-ink-400">{__t('待公布')}</span>
                           )}
                         </span>
                       </p>

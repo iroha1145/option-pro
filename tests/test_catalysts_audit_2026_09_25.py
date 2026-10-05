@@ -630,7 +630,7 @@ def test_oversized_news_is_truncated_and_does_not_block_the_round(tmp_path):
         assert bounded["truncated_fields"] == ["summary"]
         assert oversized.startswith(bounded["summary"])
         assert (
-            local_module._untrusted_json_bytes(bounded["summary"])
+            ai_runtime.untrusted_json_size(bounded["summary"])
             <= local_module.NEWS_SUMMARY_MAX_BYTES
         )
         # The bounded payload also passes the runtime's submission gate.
@@ -672,7 +672,7 @@ def test_ticker_hint_budget_keeps_whole_leading_items():
     assert fields["summary"] == "short summary"
     assert kept == hints[: len(kept)] and 0 < len(kept) < len(hints)
     assert (
-        local_module._untrusted_json_bytes(kept)
+        ai_runtime.untrusted_json_size(kept)
         <= local_module.NEWS_TICKER_HINTS_MAX_BYTES
     )
     normal = local_module._news_request_source_fields(
@@ -1738,7 +1738,7 @@ def test_job_enqueued_before_the_byte_budget_still_binds_and_is_not_rebought(tmp
             ).fetchone()
         engine.run_scheduled(now=now + timedelta(hours=1))
 
-    assert local_module._untrusted_json_bytes(summary) > local_module.NEWS_SUMMARY_MAX_BYTES
+    assert ai_runtime.untrusted_json_size(summary) > local_module.NEWS_SUMMARY_MAX_BYTES
     assert published == (1,)
     # The paid verbatim job counts for its revision: no second news job.
     assert _ai_job_ids(ai, "news_impact") == [legacy_job["job_id"]]

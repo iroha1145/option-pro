@@ -18,7 +18,7 @@ export default function ColorModeSwitcher({ className }: { className?: string })
       title={asian ? t('当前：红涨绿跌（点击切换绿涨红跌）') : t('当前：绿涨红跌（点击切换红涨绿跌）')}
       aria-label={t('切换涨跌色彩模式')}
       className={cn(
-        'color-mode-control inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-card px-2.5 text-ink-500 transition-colors duration-fast hover:bg-paper hover:text-ink-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-400',
+        'color-mode-control inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-card px-2.5 text-ink-500 transition-colors duration-fast hover:bg-paper hover:text-ink-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
         className,
       )}
     >

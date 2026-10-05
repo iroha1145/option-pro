@@ -1151,7 +1151,7 @@ def test_common_simplified_finance_vocabulary_is_not_flagged_traditional():
             "news_impact",
             (
                 "news_impact_zh_cn_v6",
-                "e35f6bc0b8d55cf0c8343e5fde84223b565ada5204be51bfdb956bfac652e3aa",
+                "d0e6936d8749cc96ed7fa8b3bf07bc64bd4cc1f5fb70d18ec0b0fbe3c35576fe",
             ),
         ),
         (

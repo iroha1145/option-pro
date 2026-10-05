@@ -1,4 +1,5 @@
 /** Mock 会话 / 运行时状态（写操作在此落盘于内存） */
+import type { WatchlistUndo } from '@/api/modules/account';
 import type { AccessStatus } from '@/api/types';
 import { ApiError } from '@/api/client';
 import { parseWatchlistInput } from '@/lib/personalWatchlist';
@@ -51,6 +52,42 @@ export function editAccountWatchlist(add: string[], remove: string[]) {
     throw new ApiError(409, t('最多保存 {count} 只股票，请先移除一些代码', { count: MOCK_WATCHLIST_MAX }), { bizCode: 'watchlist_full' });
   }
   watchlistTickers = next;
+  return watchlistPayload();
+}
+
+export function removeAccountWatchlist(ticker: string, expectedUsername: string) {
+  requireWatchlistPrincipal();
+  if (expectedUsername !== (session.username ?? 'admin')) {
+    throw new ApiError(409, t('登录身份已变化，请重新操作'), { bizCode: 'watchlist_identity_changed' });
+  }
+  const symbol = normalizeMockTicker(ticker);
+  const original = [...watchlistTickers];
+  const undo = original.includes(symbol) ? { ticker: symbol, original_order: original, principal_id: 'own_local' } : null;
+  watchlistTickers = original.filter((value) => value !== symbol);
+  return { ...watchlistPayload(), undo };
+}
+
+export function restoreAccountWatchlist(undo: WatchlistUndo) {
+  requireWatchlistPrincipal();
+  if (undo.principal_id !== 'own_local') {
+    throw new ApiError(409, t('登录身份已变化，请重新操作'), { bizCode: 'watchlist_identity_changed' });
+  }
+  if (!Array.isArray(undo.original_order) || undo.original_order.length < 1 || undo.original_order.length > MOCK_WATCHLIST_MAX
+    || !undo.original_order.every((value) => typeof value === 'string' && parseWatchlistInput(value).tickers[0] === value)
+    || new Set(undo.original_order).size !== undo.original_order.length || !undo.original_order.includes(undo.ticker)) {
+    throw new ApiError(400, t('撤销信息无效，请重新读取自选'), { bizCode: 'invalid_watchlist_undo' });
+  }
+  const symbol = normalizeMockTicker(undo.ticker);
+  if (symbol !== undo.ticker) throw new ApiError(400, t('撤销信息无效，请重新读取自选'), { bizCode: 'invalid_watchlist_undo' });
+  if (watchlistTickers.includes(symbol)) return watchlistPayload();
+  if (watchlistTickers.length >= MOCK_WATCHLIST_MAX) {
+    throw new ApiError(409, t('最多保存 {count} 只股票，请先移除一些代码', { count: MOCK_WATCHLIST_MAX }), { bizCode: 'watchlist_full' });
+  }
+  const oldIndex = undo.original_order.indexOf(symbol);
+  const following = undo.original_order.slice(oldIndex + 1).find((value) => watchlistTickers.includes(value));
+  const preceding = undo.original_order.slice(0, oldIndex).reverse().find((value) => watchlistTickers.includes(value));
+  const insertion = following ? watchlistTickers.indexOf(following) : preceding ? watchlistTickers.indexOf(preceding) + 1 : Math.min(oldIndex, watchlistTickers.length);
+  watchlistTickers = [...watchlistTickers.slice(0, insertion), symbol, ...watchlistTickers.slice(insertion)];
   return watchlistPayload();
 }
 

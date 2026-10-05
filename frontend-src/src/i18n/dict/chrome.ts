@@ -5,7 +5,6 @@ export const CHROME: Dict = {
   '跳到主要内容': ['Skip to main content', 'メインコンテンツへ移動'],
   '演示模式 · 当前行情与信号为示例数据': ['Demo mode · Prices and signals are sample data', 'デモモード · 価格とシグナルはサンプルデータです'],
   '打开 {ticker} 详情': ['Open {ticker} details', '{ticker}の詳細を開く'],
-  /* InfoHint（评分口径浮层，几乎每个分数旁边都有一个） */
 
   /* 导航与页面名 */
   '首页': ['Home', 'ホーム'],
@@ -16,9 +15,7 @@ export const CHROME: Dict = {
   '财报': ['Earnings', '決算'],
   '催化': ['Catalysts', 'カタリスト'],
   '财报日历': ['Earnings calendar', '決算カレンダー'],
-  '即将公布 × AI 影响': ['Upcoming reports × AI impact', '発表予定 × AI インパクト'],
   '新闻催化': ['News catalysts', 'ニュース・カタリスト'],
-  '热点 · 情绪新闻流': ['Hotspots · sentiment news feed', '注目テーマ · センチメント付きニュース'],
   'Optix Pro 首页': ['Optix Pro home', 'Optix Pro ホーム'],
   '主导航': ['Main navigation', 'メインナビゲーション'],
   '移动端导航': ['Mobile navigation', 'モバイルナビゲーション'],
@@ -42,22 +39,16 @@ export const CHROME: Dict = {
   '浅色': ['Light', 'ライト'],
   '深色': ['Dark', 'ダーク'],
   '当前外观：{mode}': ['Current appearance: {mode}', '現在の外観：{mode}'],
-  '外观：跟随系统': ['Appearance: match system', '外観：システムに合わせる'],
-  '外观：浅色': ['Appearance: light', '外観：ライト'],
-  '外观：深色': ['Appearance: dark', '外観：ダーク'],
   '绿涨': ['Green ↑', '緑高'],
   '红涨': ['Red ↑', '赤高'],
 
   /* 登录状态 */
   '登录': ['Sign in', 'サインイン'],
   '大盘': ['Market', '地合い'],
-  '指数 · 宽度 · 宏观环境': ['Indices · breadth · macro conditions', '指数 · 幅 · マクロ環境'],
   'CTA': ['CTA', 'CTA'],
-  '趋势资金 · 触发位': ['Trend money · trigger levels', 'トレンド資金 · トリガー水準'],
   '退出': ['Sign out', 'サインアウト'],
   "管理员已登录": ["Administrator signed in", "管理者としてログイン中"],
   '访客只读模式': ['Guest · read-only', 'ゲスト · 閲覧のみ'],
-  '可执行写操作': ['Write actions enabled', '書き込み操作が可能'],
   "登录后可保存自选股、手动更新数据": ["Sign in to save your watchlist and update data", "ログインしてウォッチリストを保存し、データを手動更新"],
   "已退出管理员账号": ["Signed out of the administrator account", "管理者アカウントからログアウトしました"],
   '当前为访客只读模式': ['Now browsing as a read-only guest', '現在はゲストの閲覧のみモードです'],
@@ -102,10 +93,7 @@ export const CHROME: Dict = {
   '已退出登录': ['Signed out', 'サインアウトしました'],
   '退出失败': ['Sign-out failed', 'サインアウトに失敗しました'],
   "管理员或个人账号": ["Admin or personal account", "管理者または個人アカウント"],
-  '自选保存在账号里': ['Watchlist is saved to your account', 'ウォッチリストはアカウントに保存されます'],
   "退出此设备上的登录": ["Sign out on this device", "この端末からログアウト"],
-  '登录 Owner': ['Sign in as Owner', 'オーナーとしてサインイン'],
-  '解锁写操作与 AI 分析': ['Unlock write actions and AI analysis', '書き込み操作と AI 分析を解除'],
   '搜索请求较多，请稍后重试': ['Too many searches. Please try again shortly.', '検索リクエストが多すぎます。しばらくしてから再試行してください。'],
   '搜索请求较多，请 {n} 秒后重试': [
     'Too many searches. Please try again in {n} second.||Too many searches. Please try again in {n} seconds.',
@@ -117,7 +105,6 @@ export const CHROME: Dict = {
   '前往{label}': ['Go to {label}', '{label}へ移動'],
 
   /* 页脚 / 数据来源声明 */
-  '内容仅供研究参考': ['For research purposes', '調査・分析用の情報です'],
   "延迟行情": ["Delayed quotes", "遅延気配値"],
   '查看大盘强弱 · {code}': ['View market strength · {code}', '市場の強弱を見る · {code}'],
   '查看大盘强弱，{code} 最新价 {price}，{flat}': [
@@ -132,11 +119,6 @@ export const CHROME: Dict = {
   /* 通用空态 / 错误态 */
   '稍后刷新再试': ['Refresh again shortly', '後で更新して再試行してください'],
   '页面加载中': ['Loading page…', 'ページを読み込み中…'],
-  '页面渲染出错了': ['This page failed to render', 'このページの表示中にエラーが発生しました'],
-  '已拦截为错误卡而非白屏;控制台保留了完整堆栈。': [
-    'Caught and shown as an error card instead of a blank screen; the full stack trace is in the console.',
-    '白画面にせずエラーカードとして表示しています。完全なスタックトレースはコンソールに出力済みです。',
-  ],
   '重新加载': ['Reload', '再読み込み'],
   '未知错误': ['Unknown error', '不明なエラー'],
   '请求失败': ['Request failed', 'リクエストに失敗しました'],
@@ -245,5 +227,4 @@ export const CHROME: Dict = {
   '语言': ['Language', '言語'],
   '界面语言': ['Interface language', '表示言語'],
   '切换界面语言': ['Change interface language', '表示言語を変更'],
-  "切换语言后将重新加载页面": ["Changing the language reloads the page", "言語を変更するとページを再読み込みします"],
 };

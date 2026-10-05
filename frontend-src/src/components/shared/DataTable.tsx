@@ -1,5 +1,6 @@
 import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
-/** DataTable：发丝线行、r-lg 容器、表头 Eyebrow 化、行 hover paper-2 底、可排序 */
+/** DataTable：发丝线行、r-lg 容器、表头 Eyebrow 化、行 hover paper-2 底、可排序；
+    正在排序的列整列垫一层浅底、表头加深，一眼看出按哪列排 */
 import { useMemo, useState, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -94,7 +95,8 @@ export default function DataTable<T>({
                 scope="col"
                 style={c.width ? { width: c.width } : undefined}
                 className={cn(
-                  'border-b border-line px-4 py-2.5 text-eyebrow font-sans uppercase tracking-[0.14em] text-ink-400',
+                  'border-b border-line px-4 py-2.5 text-eyebrow font-sans uppercase tracking-[0.14em] transition-colors duration-fast',
+                  sort?.key === c.key ? 'bg-paper-2 text-ink-700' : 'text-ink-400',
                   c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left',
                   c.sortable && 'select-none',
                 )}
@@ -104,10 +106,14 @@ export default function DataTable<T>({
                     既不可聚焦也没有键盘事件，纯鼠标操作。 */}
                 <span className="inline-flex items-center gap-1">
                   {c.sortable ? (
+                    /* 右对齐的数值列把箭头放在标签前，标签的右缘才能和下面的数字对齐 */
                     <button
                       type="button"
                       onClick={() => toggleSort(c.key)}
-                      className="inline-flex items-center gap-1 rounded-xs transition-colors duration-fast hover:text-ink-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30"
+                      className={cn(
+                        'inline-flex items-center gap-1 rounded-xs transition-colors duration-fast hover:text-ink-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600',
+                        c.align === 'right' && 'flex-row-reverse',
+                      )}
                     >
                       {c.title}
                       <span className={cn('inline-flex transition-[transform,opacity] duration-ui ease-paper', sort?.key === c.key && !sort.desc && 'rotate-180', sort?.key !== c.key && 'opacity-30')}>
@@ -139,7 +145,7 @@ export default function DataTable<T>({
                 } : undefined}
                 className={cn(
                   'group border-b border-line last:border-0 transition-colors duration-fast',
-                  onRowClick && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500/30',
+                  onRowClick && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600',
                   'hover:bg-paper-2',
                   rowClassName?.(row),
                 )}
@@ -149,7 +155,8 @@ export default function DataTable<T>({
                   <td
                     key={c.key}
                     className={cn(
-                      'px-4 py-2 text-body-s text-ink-600',
+                      'px-4 py-2 text-body-s text-ink-600 transition-colors duration-fast',
+                      sort?.key === c.key && 'bg-paper-2/60',
                       c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left',
                       c.className,
                     )}

@@ -3,7 +3,7 @@
  * 10 桶直方图：grow-bar 错峰 + 均值标线 + ≥85 计数徽章
  */
 import { motion } from 'framer-motion';
-import { EASE_PAPER } from '@/lib/motion';
+import { EASE_PAPER, GROW_Y } from '@/lib/motion';
 import type { ApiError } from '@/api/client';
 import type { MarketStrength } from '@/api/types';
 import { cn } from '@/lib/utils';
@@ -60,8 +60,8 @@ export default function BreadthHistogram({
       aria-label={t("强度分布")}
     >
       <div className="flex items-start justify-between">
-        <p className="eyebrow">{t('强度分布 · 全市场')}</p>
-        <span className="inline-flex items-center gap-1 rounded-xs bg-up-50 px-1.5 py-0.5 font-mono text-micro text-up-700 tnum">
+        <h3 className="text-h3 text-ink-900">{t('强度分布 · 全市场')}</h3>
+        <span className="inline-flex items-center gap-1 rounded-xs bg-ok-50 px-1.5 py-0.5 text-micro text-ok-700 tnum">
           <Icon name="target" size={12} strokeWidth={1.45} />
           ≥85 · {data.ge85Count} {t('只')}
         </span>
@@ -74,11 +74,16 @@ export default function BreadthHistogram({
           style={{ left: `${Math.max(1, Math.min(99, data.avgScore))}%` }}
           aria-hidden="true"
         >
-          <span className="absolute -left-8 -top-0.5 whitespace-nowrap font-mono text-[9px] text-ink-400 tnum">
+          <span className="absolute -left-8 -top-0.5 whitespace-nowrap font-mono text-micro text-ink-400 tnum">
             {t('均值')} {data.avgScore.toFixed(1)}
           </span>
         </div>
-        <div className="flex h-28 items-end gap-1.5 pt-4">
+        <motion.div
+          className="flex h-28 items-end gap-1.5 pt-4"
+          initial="hidden"
+          whileInView="shown"
+          viewport={{ once: true, amount: 0.4 }}
+        >
           {data.histogram.map((n, i) => {
             const score = i * 10 + 5;
             return (
@@ -88,9 +93,7 @@ export default function BreadthHistogram({
                 </div>
                 <motion.div
                   className={cn('w-full origin-bottom rounded-t-[3px]', strengthBarClass(score))}
-                  initial={{ scaleY: 0 }}
-                  whileInView={{ scaleY: 1 }}
-                  viewport={{ once: true, amount: 0.4 }}
+                  variants={GROW_Y}
                   transition={{ duration: 0.7, ease: EASE_PAPER, delay: i * 0.04 }}
                   style={{ height: `${Math.max(4, (n / max) * 96)}px` }}
                   aria-label={t('强度 {lo}–{hi}：{n} 只', { lo: i * 10, hi: i === 9 ? 100 : i * 10 + 9, n })}
@@ -98,19 +101,13 @@ export default function BreadthHistogram({
               </div>
             );
           })}
-        </div>
-        <div className="mt-1.5 flex justify-between font-mono text-[9px] text-ink-300">
+        </motion.div>
+        <div className="mt-1.5 flex justify-between font-mono text-micro text-ink-400">
           <span>0</span>
           <span>50</span>
           <span>100</span>
         </div>
       </div>
-
-      <p className="mt-auto pt-4 text-micro leading-relaxed text-ink-400">
-        {t('每组 10 分 · 颜色由弱到强')}
-        {/* 「全市场」指扫描股票池整体，与上方选中的指数无关——不标出来读者会以为它跟着指数变。 */}
-        <span className="mt-1 block">{t('统计全部扫描股票，不按指数划分。')}</span>
-      </p>
     </section>
   );
 }

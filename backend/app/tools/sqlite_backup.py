@@ -912,18 +912,15 @@ def _backup_database_locked(
     source: Path,
     destination: Path,
     *,
-    label: str | None = None,
-    keep: int = 7,
-    created_at: datetime | None = None,
-    lock_timeout_seconds: float = 30.0,
+    label: str,
+    keep: int,
+    created_at: datetime | None,
+    lock_timeout_seconds: float,
 ) -> BackupResult:
-    """Create and verify one online SQLite backup, then apply retention."""
+    """Create and verify one online SQLite backup, then apply retention.
 
-    source = _resolve_source(source)
-    if keep < 1:
-        raise BackupError("keep must be at least 1")
-    backup_label = _validate_label(label or source.stem)
-    destination = _prepare_destination(destination)
+    ``backup_database`` has already resolved and validated every argument.
+    """
 
     def copy(temporary_path: Path) -> dict[str, object]:
         _copy_database(source, temporary_path)
@@ -943,7 +940,7 @@ def _backup_database_locked(
     return _publish_backup_locked(
         source,
         destination,
-        label=backup_label,
+        label=label,
         keep=keep,
         suffix=DATABASE_SUFFIX,
         created_at=created_at,

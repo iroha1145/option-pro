@@ -2,9 +2,9 @@
 import type { Dict } from './types';
 
 export const SECTORS: Dict = {
+  '板块详情': ['Sector detail', 'セクター詳細'],
   '仅展示前 12 个 · 共 {n} 只成分': ['Showing the first 12 of {n} constituents', '先頭12件のみ表示 · 全{n}銘柄'],
   /* DetailBand.tsx —— 板块详情展开带 */
-  '板块详情 · 成分股汇总': ['Sector detail · Constituent summary', 'セクター詳細 · 構成銘柄サマリー'],
   '查看该板块扫描结果': ["View this sector's scan results", 'このセクターのスキャン結果を見る'],
   '平均强度': ['Avg strength', '平均強度'],
   '统计覆盖': ['Stats coverage', '統計カバレッジ'],
@@ -24,8 +24,6 @@ export const SECTORS: Dict = {
   /* HeatMatrix.tsx —— 板块平均收益热力矩阵 */
   '暂无': ['N/A', 'データなし'],
   '未覆盖': ['No coverage', 'カバレッジなし'],
-  '平均收益': ['Avg return', '平均リターン'],
-  '· 成分股汇总': ['· Constituent summary', '· 構成銘柄サマリー'],
   '强度领先': ['Strength leader', '強度上位'],
   '板块平均收益热力矩阵': ['Sector average return heatmap', 'セクター平均リターン・ヒートマップ'],
 
@@ -35,8 +33,6 @@ export const SECTORS: Dict = {
   '降序': ['Descending', '降順'],
   '升序': ['Ascending', '昇順'],
   '排位': ['Rank', '順位'],
-  '按平值期权的隐含波动率从高到低排列': ['At-the-money implied volatility, highest first', '現在値付近のオプションの予想変動率が高い銘柄から表示'],
-  '按平值期权的隐含波动率从低到高排列': ['At-the-money implied volatility, lowest first', '現在値付近のオプションの予想変動率が低い銘柄から表示'],
   '数据暂未刷新，以下为最近一次结果': ['Data has not refreshed yet — showing the most recent result.', 'データはまだ更新されていません。以下は直近の結果です。'],
   '更新 IV': ['Update IV', 'IV を更新'],
   '正在提交': ['Submitting', '送信中'],
@@ -89,12 +85,8 @@ export const SECTORS: Dict = {
   '数据过期': ['Stale data', 'データ期限切れ'],
 
   /* Sectors.tsx —— 页面：头部、统计周期条、总览、IV 横截面区、侧栏区 */
-  '比较各板块的平均涨跌幅、个股强度与数据覆盖情况。': ['Compare sector returns, stock strength, and data coverage.', 'セクターごとの平均騰落率、銘柄の強弱、データの取得状況を比較できます。'],
   '统计时间 —': ['Stats as of —', '統計時点 —'],
-  '热力': ['Heat', 'ヒート'],
-  '列表': ['List', 'リスト'],
   '收益统计周期': ['Return period', 'リターン集計期間'],
-  '数值由板块成分股汇总得出': ['Figures are aggregated from sector constituent stocks.', '数値はセクターの構成銘柄を集計して算出しています。'],
   '板块列表已加载，涨跌幅与强度数据暂不可用。': ['The sector list is loaded, but return and strength data are unavailable.', 'セクター一覧は読み込み済みですが、騰落率と強度のデータを取得できません。'],
   '部分板块数据已过期，请结合各项数据日期查看。': [
     'Some sector data is stale. Check the date shown for each metric.',

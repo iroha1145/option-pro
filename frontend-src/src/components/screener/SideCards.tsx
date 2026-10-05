@@ -1,7 +1,7 @@
 /**
  * B3 右侧栏卡片
  * 1. TierHistogram 强度剖面卡：S/A/B/C/D 五档 hatch 柱（命中=实心 brand-600，全市场参照=斜纹 ink-400），点击联动 B1 分档
- * 2. MethodCard 评分方法卡（可折叠 accordion）：四因子权重条 + 说明 + SourceNote
+ * 2. MethodCard 评分方法卡（可折叠 accordion）：四因子权重条 + 档位说明
  */
 import { useId, useState } from 'react';
 import { motion } from 'framer-motion';
@@ -10,7 +10,6 @@ import type { MarketStrength, StrengthProfile } from '@/api/types';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
 import HatchLegend from '@/components/shared/HatchLegend';
-import SourceNote from '@/components/shared/SourceNote';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import { SUBSCORE_META, type Tier, type TierFilter } from './types';
 import { t as __t } from '../../i18n/core.ts';
@@ -77,7 +76,7 @@ export function TierHistogram({
                   style={{
                     height: `${Math.max(4, (refN / maxRef) * 72)}px`,
                     transformOrigin: 'bottom',
-                    backgroundImage: 'repeating-linear-gradient(45deg, rgba(138,148,176,.28) 0 1px, transparent 1px 4px)',
+                    backgroundImage: 'repeating-linear-gradient(45deg, color-mix(in srgb, var(--ink-400) 28%, transparent) 0 1px, transparent 1px 4px)',
                   }}
                   aria-hidden="true"
                 />
@@ -94,7 +93,7 @@ export function TierHistogram({
       </div>
       <div className="mt-1.5 flex gap-2.5">
         {TIERS.map((t) => (
-          <span key={t} className={cn('flex-1 text-center font-mono text-[10px] tnum', activeTier === t ? 'text-brand-600' : 'text-ink-400')}>
+          <span key={t} className={cn('flex-1 text-center font-mono text-micro tnum', activeTier === t ? 'text-brand-600' : 'text-ink-400')}>
             {t}
           </span>
         ))}
@@ -165,7 +164,7 @@ export function MethodCard({
                 {onRetry && (
                   <button
                     onClick={onRetry}
-                    className="mt-2 flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+                    className="control-button mt-2"
                   >
                     <Icon name="refresh" size={12} />
                     {__t('重试')}
@@ -202,13 +201,8 @@ export function MethodCard({
                 })}
               </div>
             )}
-            {profile?.weights && (
-              <p className="mt-3 text-caption leading-[18px] text-ink-500">
-                {profile.description || __t('最终强度分为四因子加权合成（0–100），≥85 为高强度区。')}
-              </p>
-            )}
-            {profile?.weights && (
-              <SourceNote className="mt-3" text={__t("权重取自当前选用的评分档位")} />
+            {profile?.weights && profile.description && (
+              <p className="mt-3 text-caption leading-[18px] text-ink-500">{profile.description}</p>
             )}
           </div>
       </div>

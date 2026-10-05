@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { motion } from 'framer-motion';
 import { stocksApi } from '@/api/modules/stocks';
+import { useWatchlistUndo } from '@/hooks/useWatchlistUndo';
 import { usePersonalWatchlist } from '@/hooks/usePersonalWatchlist';
 import { watchlistErrorMessage } from '@/api/modules/account';
 import { DEFAULT_WATCHLIST_TICKERS, personalWatchlistRows } from '@/lib/personalWatchlist';
@@ -67,7 +68,7 @@ function AdvanceDeclineBar({
     <div className="mt-2">
       <p className="flex flex-wrap items-center gap-y-1 metric-value text-data-xl tnum">
         <SoftBadge tone="up" size="md" className="metric-value text-data-l">{advancers}</SoftBadge>
-        <span className="mx-1.5 text-ink-300">/</span>
+        <span className="mx-1.5 text-ink-400">/</span>
         <SoftBadge tone="down" size="md" className="metric-value text-data-l">{decliners}</SoftBadge>
         {unchanged > 0 && (
           <span className="ml-1.5 align-middle text-caption text-ink-400">
@@ -84,6 +85,10 @@ function AdvanceDeclineBar({
   );
 }
 
+/* 概览统计条：手机两列（不再横向滑动、把第二张卡截在屏外），张数为奇数时最后一张占满一行；
+   sm 两列、xl 四列 */
+const STAT_GRID = 'grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2';
+
 const watchKey = (item: WatchlistItem) => item.ticker;
 const watchPrice = (item: WatchlistItem) => item.price;
 
@@ -93,9 +98,10 @@ function ScoreDonut({ score }: { score: number }) {
   const C = 2 * Math.PI * R;
   const target = C * (1 - score / 100);
   return (
-    <div className="flex items-center gap-4">
-      <p className="metric-value text-data-xl text-ink-900 tnum">{score.toFixed(1)}</p>
-      <svg width="72" height="72" viewBox="0 0 72 72" aria-label={t('平均强度分 {score}', { score: score.toFixed(1) })}>
+    <div className="mt-2 flex items-center gap-4 sm:mt-0">
+      <p className="metric-value text-data-l text-ink-900 tnum sm:text-data-xl">{score.toFixed(1)}</p>
+      {/* 手机两列时卡宽约 165px，放不下 72px 的环；环只是读数的图形化，手机上让位 */}
+      <svg width="72" height="72" viewBox="0 0 72 72" className="hidden sm:block" aria-label={t('平均强度分 {score}', { score: score.toFixed(1) })}>
         <circle cx="36" cy="36" r={R} fill="none" stroke="var(--line)" strokeWidth="6" />
         <motion.circle
           cx="36"
@@ -179,7 +185,7 @@ function StrengthHistogram({ histogram }: { histogram: number[] }) {
           const score = i * 10 + 5;
           return (
             <div key={i} className="group relative flex-1">
-              <div className="cloud-popover pointer-events-none absolute -top-7 left-1/2 z-10 hidden -translate-x-1/2 px-1.5 py-0.5 font-mono text-[10px] text-ink-600 group-hover:block">
+              <div className="cloud-popover pointer-events-none absolute -top-7 left-1/2 z-10 hidden -translate-x-1/2 px-1.5 py-0.5 font-mono text-micro text-ink-600 group-hover:block">
                 {n}
               </div>
               <div
@@ -190,7 +196,7 @@ function StrengthHistogram({ histogram }: { histogram: number[] }) {
           );
         })}
       </div>
-      <div className="mt-1.5 flex justify-between font-mono text-[9px] text-ink-300">
+      <div className="mt-1.5 flex justify-between font-mono text-micro text-ink-400">
         <span>0</span><span>50</span><span>100</span>
       </div>
     </div>
@@ -406,7 +412,7 @@ function WatchCard({
           /* opacity-0 不影响命中测试：必须同步 pointer-events-none，否则这颗
              压在整卡按钮之上的隐形 × 会把「点卡片开详情」变成静默删除。
              触屏没有 hover，永远进不了 group-hover —— 无 hover 环境改为常驻可见。 */
-          className="pointer-events-none absolute right-1 top-1 z-10 inline-flex size-11 cursor-pointer items-center justify-center rounded-xs text-ink-300 opacity-0 outline-none transition-[opacity,color] duration-fast hover:bg-paper-2 hover:text-down-700 focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover/card:pointer-events-auto group-hover/card:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:text-ink-400"
+          className="pointer-events-none absolute right-1 top-1 z-10 inline-flex size-11 cursor-pointer items-center justify-center rounded-xs text-ink-400 opacity-0 outline-none transition-[opacity,color] duration-fast hover:bg-paper-2 hover:text-danger-700 focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover/card:pointer-events-auto group-hover/card:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:text-ink-400"
         >
           <Icon name="x" size={13} />
         </button>
@@ -427,6 +433,7 @@ export default function Watchlist() {
   const [forceRefreshing, setForceRefreshing] = useState(false);
 
   const personal = usePersonalWatchlist();
+  const removeWithUndo = useWatchlistUndo();
   const { tickers: myTickers, maxTickers, edit: editPersonal } = personal;
   const [managerKey, setManagerKey] = useState<string | null>(null);
   const closeManager = useCallback(() => setManagerKey(null), []);
@@ -451,12 +458,11 @@ export default function Watchlist() {
   }, [wl.data, canManageWatchlist, myTickers, personal.loading, personal.error]);
   const onRemoveTicker = useCallback(async (symbol: string) => {
     try {
-      await editPersonal([], [symbol]);
-      toast.info(t('已移出自选'), symbol);
+      await removeWithUndo(symbol, personal.key);
     } catch (error) {
       toast.error(t('移除失败'), watchlistErrorMessage(error, maxTickers));
     }
-  }, [editPersonal, maxTickers, toast]);
+  }, [removeWithUndo, personal.key, maxTickers, toast]);
   const savePersonal = useCallback(async (add: string[], remove: string[]) => {
     const next = await editPersonal(add, remove);
     selectedTickersRef.current = next.tickers;
@@ -640,7 +646,7 @@ export default function Watchlist() {
                   event.stopPropagation();
                   void onRemoveTicker(r.ticker);
                 }}
-                className="inline-flex size-7 items-center justify-center rounded-sm border border-line bg-card text-ink-400 opacity-0 transition-[opacity,color] duration-fast hover:border-down-600/40 hover:text-down-600 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30 group-hover:opacity-100 disabled:cursor-wait disabled:opacity-40"
+                className="inline-flex size-7 items-center justify-center rounded-sm border border-line bg-card text-ink-400 opacity-0 transition-[opacity,color] duration-fast hover:border-danger-600/40 hover:text-danger-600 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 group-hover:opacity-100 disabled:cursor-wait disabled:opacity-40"
               >
                 <Icon name="x" size={13} />
               </button>
@@ -717,7 +723,6 @@ export default function Watchlist() {
         section="01"
         eyebrow="WATCHLIST"
         title={t("自选观察")}
-        description={t("跟踪自选股的价格、走势与市场信号。")}
         meta={
           <>
             {username && (
@@ -745,15 +750,11 @@ export default function Watchlist() {
       {/* B1 概览统计条 */}
       <section className="mt-6" aria-label={t("市场概览")}>
         {statsLoading ? (
-          /* 占位必须和真实内容占同样的空间。
-             旧写法在移动端是 grid-cols-1 —— 四张卡竖着堆起来，而真实内容是一行
-             横向滚动条（130px）。两者高度差直接产生 CLS 0.200，是这个页面最差的
-             一项指标。这里用与下方 motion.div 完全相同的布局类。 */
-          <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-1 no-scrollbar sm:grid sm:grid-cols-2 sm:overflow-visible xl:grid-cols-4">
-            {/* 与真实卡片同宽（240px）——220 会让骨架→真实切换时 snap 落点
-                左右错位（审计 2.4.9） */}
+          /* 占位必须和真实内容占同样的空间（骨架与真实内容高度差曾造成 CLS 0.200），
+             所以用与下方 motion.div 完全相同的栅格类。 */
+          <div className={STAT_GRID}>
             {Array.from({ length: 4 }, (_, i) => (
-              <SkeletonCard key={i} className="min-w-[240px] shrink-0 snap-start sm:min-w-0" />
+              <SkeletonCard key={i} />
             ))}
           </div>
         ) : (
@@ -761,7 +762,7 @@ export default function Watchlist() {
             initial="hidden"
             animate="show"
             variants={{ show: { transition: { staggerChildren: 0.045 } } }}
-            className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-1 no-scrollbar sm:grid sm:grid-cols-2 sm:overflow-visible xl:grid-cols-4"
+            className={STAT_GRID}
           >
             {[
               ...(signalsQ.data?.topScore !== null && signalsQ.data?.topScore !== undefined
@@ -770,7 +771,7 @@ export default function Watchlist() {
               ...(signalsQ.data?.bottomScore !== null && signalsQ.data?.bottomScore !== undefined
                 ? [<StatCard key="bottom-repair" label={t("底部修复分")} icon="target" value={signalsQ.data.bottomScore} sub={signalsQ.data.bottomLabel ?? t('市场信号模型')} className="card-lift" />]
                 : []),
-              <div key="ad" className="card-surface min-w-[220px] snap-start p-5 sm:min-w-0">
+              <div key="ad" className="card-surface h-full p-4 sm:p-5">
                 <div className="flex items-start justify-between">
                   <p className="eyebrow">{t('上涨 / 下跌')}</p>
                   <Icon name="candle" size={18} className="text-ink-400" />
@@ -788,7 +789,7 @@ export default function Watchlist() {
               </div>,
               ...(strengthQ.data?.aggregateAvailable
                 ? [
-                    <div key="avg" className="card-surface min-w-[220px] snap-start p-5 sm:min-w-0">
+                    <div key="avg" className="card-surface h-full p-4 sm:p-5">
                       <div className="flex items-start justify-between">
                         <p className="eyebrow">
                           {t('全市场平均强度')}
@@ -804,7 +805,7 @@ export default function Watchlist() {
               <motion.div
                 key={i}
                 variants={{ hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { duration: DUR_SECTION, ease: EASE_PAPER } } }}
-                className="min-w-[240px] snap-start sm:min-w-0"
+                className="min-w-0"
               >
                 {node}
               </motion.div>
@@ -813,7 +814,7 @@ export default function Watchlist() {
         )}
       </section>
 
-      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <div className="mt-6 grid grid-cols-1 gap-6 sm:mt-8 lg:grid-cols-12">
         {/* B2 自选主区（8 列） */}
         <section
           className="lg:col-span-8"
@@ -861,7 +862,7 @@ export default function Watchlist() {
               )}
               {/* 默认池是站点的池子：拿它的规模对照「上限 50」等于把它冒充成用户自选 */}
               {canManageWatchlist && !showingDefaultPool && (
-                <span className="ml-1 text-ink-300">{t('/ 上限')} {maxTickers}</span>
+                <span className="ml-1 text-ink-400">{t('/ 上限')} {maxTickers}</span>
               )}
               {wl.lastUpdatedAt && (
                 <span className="ml-2 hidden font-mono text-micro tnum sm:inline">{t('更新')} {fmtTimeHHMMSS(wl.lastUpdatedAt)}</span>
@@ -895,16 +896,6 @@ export default function Watchlist() {
               >
                 {t('重试')}
               </button>
-            </p>
-          )}
-
-          {showingDefaultPool && (
-            <p
-              className="mt-3 flex flex-wrap items-center gap-1.5 text-caption text-ink-500"
-              role="status"
-            >
-              <SoftBadge className="whitespace-normal">{t('默认关注 AAPL、MSFT、NVDA、SPY，共 4 只。')}</SoftBadge>
-              <span className="ml-1 text-ink-400">{t('登录后可保存自己的自选列表。')}</span>
             </p>
           )}
 
@@ -1056,7 +1047,7 @@ export default function Watchlist() {
               <p className="mt-3 text-caption text-ink-400">{t('市场信号读取失败')}</p>
               <button
                 onClick={() => signalsQ.refresh()}
-                className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+                className="control-button mt-3"
               >
                 <Icon name="refresh" size={13} />
                 {t('重试')}

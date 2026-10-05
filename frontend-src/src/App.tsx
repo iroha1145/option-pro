@@ -4,6 +4,7 @@ import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 import { Route, Routes } from 'react-router';
 import Layout from '@/components/Layout';
 import { AccessProvider } from '@/hooks/useAccess';
+import { WatchlistUndoProvider } from '@/hooks/useWatchlistUndo';
 import { ToastProvider } from '@/components/Toast';
 import AppErrorBoundary from '@/components/shared/AppErrorBoundary';
 import PageFallback from '@/components/shared/PageFallback';
@@ -34,26 +35,28 @@ export default function App() {
       <MotionConfig reducedMotion={reducedMotion ? 'always' : 'never'}>
       <AccessProvider>
         <ToastProvider>
-          <Suspense fallback={<PageFallback />}>
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route element={<Layout />}>
-                <Route index element={<Home />} />
-                <Route path="/watchlist" element={<Watchlist />} />
-                <Route path="/screener" element={<Screener />} />
-                <Route path="/breakouts" element={<Breakouts />} />
-                <Route path="/sectors" element={<Sectors />} />
-                <Route path="/earnings" element={<Earnings />} />
-                <Route path="/catalysts" element={<Catalysts />} />
-                <Route path="/market" element={<Market />} />
-                <Route path="/cta" element={<CtaTrend />} />
-                <Route path="/stock/:ticker" element={<StockDetail />} />
-                {/* 未知路由显示 404，不再静默重定向到自选（审计 P3-6）：
-                    重定向会掩盖失效链接与部署缺页，也会让自动化测试看不出路由问题。 */}
-                <Route path="*" element={<NotFound />} />
-              </Route>
-            </Routes>
-          </Suspense>
+          <WatchlistUndoProvider>
+            <Suspense fallback={<PageFallback />}>
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route element={<Layout />}>
+                  <Route index element={<Home />} />
+                  <Route path="/watchlist" element={<Watchlist />} />
+                  <Route path="/screener" element={<Screener />} />
+                  <Route path="/breakouts" element={<Breakouts />} />
+                  <Route path="/sectors" element={<Sectors />} />
+                  <Route path="/earnings" element={<Earnings />} />
+                  <Route path="/catalysts" element={<Catalysts />} />
+                  <Route path="/market" element={<Market />} />
+                  <Route path="/cta" element={<CtaTrend />} />
+                  <Route path="/stock/:ticker" element={<StockDetail />} />
+                  {/* 未知路由显示 404，不再静默重定向到自选（审计 P3-6）：
+                      重定向会掩盖失效链接与部署缺页，也会让自动化测试看不出路由问题。 */}
+                  <Route path="*" element={<NotFound />} />
+                </Route>
+              </Routes>
+            </Suspense>
+          </WatchlistUndoProvider>
         </ToastProvider>
       </AccessProvider>
       </MotionConfig>

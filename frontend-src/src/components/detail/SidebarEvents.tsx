@@ -14,8 +14,7 @@ import { t as __t } from '../../i18n/core.ts';
 export default function SidebarEvents({ ticker }: { ticker: string }) {
   if (isIndexSymbol(ticker)) {
     return <div className="card-surface p-5">
-      <p className="eyebrow">BREAKOUT EVENTS</p>
-      <h3 className="mt-1.5 text-h3 text-ink-900">{__t('相关突破事件')}</h3>
+      <h3 className="text-h3 text-ink-900">{__t('相关突破事件')}</h3>
       <p className="mt-3 text-body-s text-ink-400">{__t('股票雷达暂不覆盖指数，指数行情与技术研究仍可查看。')}</p>
     </div>;
   }
@@ -27,8 +26,7 @@ function StockSidebarEvents({ ticker }: { ticker: string }) {
   const items = (data ?? []).slice(0, 3);
   return (
     <div className="card-surface p-5">
-      <p className="eyebrow">BREAKOUT EVENTS</p>
-      <h3 className="mt-1.5 text-h3 text-ink-900">{__t('相关突破事件')}</h3>
+      <h3 className="text-h3 text-ink-900">{__t('相关突破事件')}</h3>
       {loading && !data ? (
         <div className="mt-3 space-y-2" aria-hidden="true">
           <span className="skeleton-shimmer block h-4 w-full rounded-xs" />
@@ -36,18 +34,18 @@ function StockSidebarEvents({ ticker }: { ticker: string }) {
         </div>
       ) : error && !data ? (
         <p className="mt-3 flex items-center gap-2 text-body-s text-ink-400">
-          <Icon name="doc-quote" size={16} className="text-ink-300" />
+          <Icon name="doc-quote" size={16} className="text-ink-400" />
           {__t('突破事件读取失败')}
           <button
             onClick={() => refresh()}
-            className="ml-auto rounded-md border border-line px-2 py-0.5 text-micro text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+            className="control-button ml-auto"
           >
             {__t('重试')}
           </button>
         </p>
       ) : items.length === 0 ? (
         <p className="mt-3 flex items-center gap-2 text-body-s text-ink-400">
-          <Icon name="radar" size={16} className="text-ink-300" />
+          <Icon name="radar" size={16} className="text-ink-400" />
           {__t('暂无突破事件记录')}
         </p>
       ) : (
@@ -56,7 +54,7 @@ function StockSidebarEvents({ ticker }: { ticker: string }) {
             <li key={e.id} className="flex items-center gap-2.5">
               <SignalChip type={e.type} label={e.label} />
               {/* 盘前跳空等事件可无成交价（event_price=null）——显「—」，不崩页 */}
-              <span className="font-mono text-caption text-ink-800 tnum">
+              <span className="text-caption text-ink-800 tnum">
                 {typeof e.price === 'number' && Number.isFinite(e.price) ? fmtPrice(e.price) : '—'}
               </span>
               <span className="ml-auto text-micro text-ink-400">{fmtRelative(e.at)}</span>

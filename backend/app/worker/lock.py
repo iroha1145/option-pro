@@ -13,10 +13,6 @@ class ProcessFileLock:
         self.path = Path(path)
         self._descriptor: int | None = None
 
-    @property
-    def held(self) -> bool:
-        return self._descriptor is not None
-
     def acquire(self, owner_id: str) -> bool:
         if self._descriptor is not None:
             return True

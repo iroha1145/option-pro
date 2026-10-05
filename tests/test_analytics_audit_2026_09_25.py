@@ -242,10 +242,10 @@ def test_m_low_alignment_and_service_share_one_as_date() -> None:
 
     from app.services.macro_conditions import alignment, service
 
-    assert service._as_date is alignment._as_date
-    assert alignment._as_date("2026-07-24") == date(2026, 7, 24)
-    assert alignment._as_date("not-a-date") is None
-    assert alignment._as_date(date(2026, 7, 24)) == date(2026, 7, 24)
+    assert service.as_date is alignment.as_date
+    assert alignment.as_date("2026-07-24") == date(2026, 7, 24)
+    assert alignment.as_date("not-a-date") is None
+    assert alignment.as_date(date(2026, 7, 24)) == date(2026, 7, 24)
 
 
 # ---------------------------------------------------------------------------

@@ -234,12 +234,19 @@ test('宏观列默认关闭，且默认排序仍是原来的确定性排序', ()
   assert.doesNotMatch(code, /out\.sort\([^)]*macro/i);
 });
 
-test('板块表默认排序没有被宏观列改掉', () => {
-  const source = readFileSync(
-    resolve(repoRoot, 'frontend-src/src/components/sectors/SectorList.tsx'),
+test('板块排名只按收益与强度排序，宏观适配只在详情里并列展示', () => {
+  const ranking = readFileSync(
+    resolve(repoRoot, 'frontend-src/src/components/sectors/HeatMatrix.tsx'),
     'utf8',
   );
-  assert.match(source, /defaultSort=\{\{ key: 'avgReturn', desc: true \}\}/);
+  const sort = ranking.slice(ranking.indexOf('.sort('), ranking.indexOf('.sort(') + 400);
+  assert.match(sort, /right\.avgReturn - left\.avgReturn/);
+  assert.doesNotMatch(sort, /macro/i);
+  const detail = readFileSync(
+    resolve(repoRoot, 'frontend-src/src/components/sectors/DetailBand.tsx'),
+    'utf8',
+  );
+  assert.match(detail, /<MacroFitBadge score=\{sector\.macroFit\} tailwind=\{sector\.macroTailwind\} \/>/);
 });
 
 test('象限措辞不复用顺风/逆风：两套分界线不同，同屏会互相打脸', () => {

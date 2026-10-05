@@ -22,6 +22,7 @@ from app.failure_diagnostics import record_fallback_failure
 from app.services.cache import cache, estimate_size
 from app.services.numeric import finite_number_or_none as _to_optional_float
 from app.public_home_snapshot import (
+    earnings_resource_parameters,
     public_home_resource_parameters,
     read_owner_public_home_entry,
     read_owner_public_home_entry_async,
@@ -148,7 +149,7 @@ async def _read_current_upcoming_earnings_snapshot(
             "earnings",
             # The caller's market date: the cache key above is keyed by it, and
             # the worker may pass a date other than the current one.
-            parameters={"market_date": observed.isoformat()},
+            parameters=earnings_resource_parameters(observed),
             fresh_for_seconds=fresh_for_seconds,
             now=now,
         )

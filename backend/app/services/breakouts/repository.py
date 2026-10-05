@@ -20,9 +20,10 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import quote
-from zoneinfo import ZoneInfo
 
 from app.services.breakouts.asset_policy import is_leveraged_etf
+from app.services.breakouts.models import enum_value
+from app.services.market_calendar import ET
 
 
 LEGACY_SCHEMA_VERSION = "breakout-db-v1"
@@ -117,17 +118,10 @@ def _timestamp(value: datetime | str) -> str:
     return _aware_utc(value).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
-_MARKET_TIMEZONE = ZoneInfo("America/New_York")
-
-
 def _market_date(value: datetime | str) -> str:
     """Trading dates follow the New York session, not the UTC calendar day."""
 
-    return _aware_utc(value).astimezone(_MARKET_TIMEZONE).date().isoformat()
-
-
-def _enum_value(value: Any) -> Any:
-    return value.value if isinstance(value, Enum) else value
+    return _aware_utc(value).astimezone(ET).date().isoformat()
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -1400,7 +1394,7 @@ class BreakoutRepository:
             return
         for value in events:
             event = _mapping(value)
-            event["lifecycle_state"] = str(_enum_value(event["lifecycle_state"]))
+            event["lifecycle_state"] = str(enum_value(event["lifecycle_state"]))
             event_id = str(event["event_id"])
             row = connection.execute(
                 "SELECT state_version,evidence_at,event_json FROM breakout_live_events WHERE event_id=?",
@@ -2212,8 +2206,8 @@ class BreakoutRepository:
             unknown = ", ".join(sorted(aliases))
             raise TypeError(f"unexpected begin_scan arguments: {unknown}")
         provider = str(provider).strip()
-        session_text = str(_enum_value(session) or "").strip()
-        profile_text = str(_enum_value(profile) or "").strip() or None
+        session_text = str(enum_value(session) or "").strip()
+        profile_text = str(enum_value(profile) or "").strip() or None
         if not provider or not session_text:
             raise ValueError("provider and session are required")
         current = self._now(now)
@@ -2724,9 +2718,9 @@ class BreakoutRepository:
             safe_candidates.append(candidate)
         body["candidates"] = safe_candidates
         warnings = list(body.get("warnings") or ())
-        status = str(_enum_value(body.get("status")) or "unavailable")
+        status = str(enum_value(body.get("status")) or "unavailable")
         as_of = body.get("as_of") or run["scheduled_at"]
-        session = str(_enum_value(body.get("session")) or run["session"])
+        session = str(enum_value(body.get("session")) or run["session"])
         provider = str(body.get("provider") or run["provider"])
         schema_version = str(body.get("schema_version") or "unknown")
         is_stale = status == "stale" or bool(body.get("is_stale", False))
@@ -2847,7 +2841,7 @@ class BreakoutRepository:
         aliases: dict[str, str] = {}
         trigger_hints: dict[str, str] = {}
         for transition in transitions:
-            if str(_enum_value(transition.get("to_state")) or "") != "TRIGGERED":
+            if str(enum_value(transition.get("to_state")) or "") != "TRIGGERED":
                 continue
             transition_event_id = str(transition.get("event_id") or "")
             evidence = transition.get("evidence_at") or transition.get("event_at")
@@ -2865,7 +2859,7 @@ class BreakoutRepository:
                 raise ValueError("event_at or first_seen_at is required")
             incoming_event_at = _timestamp(incoming_event_at)
             ticker = str(event.get("ticker") or "").strip().upper()
-            setup = str(_enum_value(event.get("setup_type")) or "")
+            setup = str(enum_value(event.get("setup_type")) or "")
             pivot_id = str(event.get("pivot_id") or "")
             if not ticker or not setup or not pivot_id:
                 raise ValueError("event ticker, setup_type and pivot_id are required")
@@ -2910,7 +2904,7 @@ class BreakoutRepository:
             event["setup_type"] = setup
             event["trading_date"] = trading_date
             event["lifecycle_state"] = str(
-                _enum_value(event.get("lifecycle_state")) or "DISCOVERED"
+                enum_value(event.get("lifecycle_state")) or "DISCOVERED"
             )
             incoming_first_seen_at = _timestamp(
                 event.get("first_seen_at") or incoming_event_at
@@ -2929,7 +2923,7 @@ class BreakoutRepository:
                 else None
             )
             incoming_trigger_hint = trigger_hints.get(incoming_id)
-            previous_state = str(_enum_value(event.get("previous_state")) or "")
+            previous_state = str(enum_value(event.get("previous_state")) or "")
             safe_transition_anchor = (
                 incoming_trigger_hint
                 or (
@@ -3127,15 +3121,15 @@ class BreakoutRepository:
         }
         terminal_by_event_id = {
             str(event.get("event_id") or ""): str(
-                _enum_value(event.get("lifecycle_state")) or ""
+                enum_value(event.get("lifecycle_state")) or ""
             )
             for event in events
-            if str(_enum_value(event.get("lifecycle_state")) or "")
+            if str(enum_value(event.get("lifecycle_state")) or "")
             in {"FAILED", "EXPIRED"}
         }
         for event in events:
-            previous = _enum_value(event.get("previous_state"))
-            current = _enum_value(event.get("lifecycle_state"))
+            previous = enum_value(event.get("previous_state"))
+            current = enum_value(event.get("lifecycle_state"))
             if (
                 previous is not None
                 and str(previous) != str(current)
@@ -3158,8 +3152,8 @@ class BreakoutRepository:
                 continue
             if not event_id:
                 raise ValueError("transition event_id is required")
-            from_state = str(_enum_value(transition.get("from_state")) or "")
-            to_state = str(_enum_value(transition.get("to_state")) or "")
+            from_state = str(enum_value(transition.get("from_state")) or "")
+            to_state = str(enum_value(transition.get("to_state")) or "")
             terminal_state = terminal_by_event_id.get(event_id)
             if terminal_state is not None and to_state != terminal_state:
                 # _upsert_events may have preserved an older terminal row when
@@ -3257,7 +3251,7 @@ class BreakoutRepository:
                     event["event_id"],
                     rank,
                     event["ticker"],
-                    str(_enum_value(event.get("session")) or session),
+                    str(enum_value(event.get("session")) or session),
                     event["setup_type"],
                     event["lifecycle_state"],
                     event["event_at"],
@@ -3320,7 +3314,7 @@ class BreakoutRepository:
     def _health_from_snapshot(
         snapshot: Mapping[str, Any], provider: str, now: datetime
     ) -> dict[str, Any]:
-        status = str(_enum_value(snapshot.get("status")) or "unavailable")
+        status = str(enum_value(snapshot.get("status")) or "unavailable")
         active = status == "active"
         return {
             "provider": str(snapshot.get("provider") or provider),
@@ -3341,7 +3335,7 @@ class BreakoutRepository:
         provider = str(health.get("provider") or "")
         if not provider:
             return
-        status = str(_enum_value(health.get("status")) or "unavailable")
+        status = str(enum_value(health.get("status")) or "unavailable")
         details = health.get("details") or {}
         connection.execute(
             """
@@ -3694,11 +3688,11 @@ class BreakoutRepository:
         normalized_filters = {
             "date": str(date) if date is not None else None,
             "ticker": str(ticker).strip().upper() if ticker is not None else None,
-            "setup_type": str(_enum_value(setup_type)) if setup_type is not None else None,
-            "lifecycle_state": str(_enum_value(lifecycle_state))
+            "setup_type": str(enum_value(setup_type)) if setup_type is not None else None,
+            "lifecycle_state": str(enum_value(lifecycle_state))
             if lifecycle_state is not None
             else None,
-            "session": str(_enum_value(session)) if session is not None else None,
+            "session": str(enum_value(session)) if session is not None else None,
             "min_priority": float(min_priority) if min_priority is not None else None,
         }
         if sort_algorithm and str(sort_algorithm) not in {"", "production"}:
@@ -3761,13 +3755,13 @@ class BreakoutRepository:
                 params.append(str(ticker).strip().upper())
             if setup_type is not None:
                 clauses.append("setup_type=?")
-                params.append(str(_enum_value(setup_type)))
+                params.append(str(enum_value(setup_type)))
             if lifecycle_state is not None:
                 clauses.append("lifecycle_state=?")
-                params.append(str(_enum_value(lifecycle_state)))
+                params.append(str(enum_value(lifecycle_state)))
             if session is not None:
                 clauses.append("session=?")
-                params.append(str(_enum_value(session)))
+                params.append(str(enum_value(session)))
             if min_priority is not None:
                 clauses.append("alert_priority_score>=?")
                 params.append(float(min_priority))

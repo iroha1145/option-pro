@@ -50,11 +50,6 @@ export interface Point {
   y: number;
 }
 
-export interface DataPoint {
-  timeIndex: number;
-  price: number;
-}
-
 export interface VisibleRect {
   xMin: number;
   xMax: number;

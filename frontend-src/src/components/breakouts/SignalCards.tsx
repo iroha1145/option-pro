@@ -44,7 +44,7 @@ function ChipRow({ ev, showT1 }: { ev: BreakoutCurrentEvent; showT1: boolean }) 
         {LIFECYCLE_CN[ev.lifecycle_state] ?? ev.lifecycle_state ?? '—'}
       </span>
       {showT1 && <T1StatusChip status={ev.t1_status} />}
-      <span className="radar-chip radar-chip-volume ml-auto tnum">
+      <span className="radar-chip radar-chip-neutral ml-auto tnum">
         {t('量能')} {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}
       </span>
     </div>
@@ -129,7 +129,7 @@ function SignalCard({ ev: initialEvent, index, flash, locate, onOpen, showT1 = f
       {/* chip 行 */}
       <div className="mt-2.5">
         <ChipRow ev={ev} showT1={showT1} />
-        {ev.trigger_source === 'finnhub' && ev.lifecycle_state === 'TRIGGERED' && <p className="mt-1 text-[10px] text-ink-400">{t('实时成交触发 · 完整行情确认中')}</p>}
+        {ev.trigger_source === 'finnhub' && ev.lifecycle_state === 'TRIGGERED' && <p className="mt-1 text-micro text-ink-400">{t('实时成交触发 · 完整行情确认中')}</p>}
       </div>
 
       {/* 现价行（tick-flash） */}

@@ -42,16 +42,12 @@ def json_default(value: Any) -> Any:
     return str(value)
 
 
-def _atomic_write(path: Path, payload: Mapping[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    encoded = json.dumps(payload, ensure_ascii=False, default=json_default, separators=(",", ":"), allow_nan=False)
+def atomic_write_bytes(path: Path, data: bytes) -> None:
+    """Replace ``path`` with ``data`` through an fsynced temp file in its existing directory."""
     fd, tmp_name = tempfile.mkstemp(prefix=path.name, suffix=".tmp", dir=str(path.parent))
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(encoded)
-            handle.write("\n")
-            # batch.json marks an already durable diagnostics generation as
-            # published; after a power loss it must not come back empty.
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(tmp_name, path)
@@ -70,6 +66,14 @@ def _atomic_write(path: Path, payload: Mapping[str, Any]) -> None:
     except OSError as exc:
         # The new file is already visible; only the rename's durability is unconfirmed.
         record_fallback_failure("eod_snapshot_dir_fsync", exc)
+
+
+def _atomic_write(path: Path, payload: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    encoded = json.dumps(payload, ensure_ascii=False, default=json_default, separators=(",", ":"), allow_nan=False)
+    # batch.json marks an already durable diagnostics generation as
+    # published; after a power loss it must not come back empty.
+    atomic_write_bytes(path, (encoded + "\n").encode("utf-8"))
 
 
 def read_batch(root: Path | None = None) -> dict[str, Any] | None:

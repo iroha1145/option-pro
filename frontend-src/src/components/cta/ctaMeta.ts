@@ -16,7 +16,7 @@ import { t } from '../../i18n/core.ts';
 export const POSITION_META: Record<string, { label: string; cls: string }> = {
   strong_long: { label: t('强净多'), cls: 'bg-up-50 text-up-700' },
   net_long: { label: t('净多'), cls: 'bg-up-50 text-up-700' },
-  divergent: { label: t('模型分歧'), cls: 'bg-warn-50 text-warn-600' },
+  divergent: { label: t('模型分歧'), cls: 'bg-warn-50 text-warn-700' },
   neutral: { label: t('中性'), cls: 'bg-paper-2 text-ink-600' },
   net_short: { label: t('净空'), cls: 'bg-down-50 text-down-700' },
   strong_short: { label: t('强净空'), cls: 'bg-down-50 text-down-700' },

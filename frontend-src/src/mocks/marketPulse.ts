@@ -92,13 +92,13 @@ export function getMarketStatusDetail(nowMs = Date.now()): MarketStatusDetail {
   let phase: string;
   if (isWeekday && mins >= 240 && mins < 570) {
     market = 'premarket';
-    phase = '盘前交易 · 流动性较薄，报价点差偏大';
+    phase = '盘前交易 · 4:00–9:30 ET';
   } else if (isWeekday && mins >= 570 && mins < 960) {
     market = 'open';
     phase = '常规交易时段 · 9:30–16:00 ET';
   } else if (isWeekday && mins >= 960 && mins < 1200) {
     market = 'postmarket';
-    phase = '盘后交易 · 留意财报与公告驱动';
+    phase = '盘后交易 · 16:00–20:00 ET';
   } else {
     phase = isWeekday ? __t('常规时段已收盘 · 等待下一交易时段') : __t('周末休市 · 下一个交易日 9:30 ET 开盘');
   }

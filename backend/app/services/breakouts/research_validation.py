@@ -38,7 +38,8 @@ _VALIDATION_LIMITATIONS = (
 )
 
 
-def _finite_number(value: Any) -> float | None:
+def strict_finite_number(value: Any) -> float | None:
+    """A finite ``int``/``float`` (bools excluded) as ``float``; any other type is None."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
     number = float(value)
@@ -46,7 +47,7 @@ def _finite_number(value: Any) -> float | None:
 
 
 def _positive_number(value: Any) -> float | None:
-    number = _finite_number(value)
+    number = strict_finite_number(value)
     return number if number is not None and number > 0 else None
 
 
@@ -644,11 +645,11 @@ def _model_metrics(
 ) -> dict[str, Any]:
     grouped: dict[date, list[tuple[float, float, str]]] = defaultdict(list)
     for row in rows:
-        score = _finite_number(row.get(score_field))
+        score = strict_finite_number(row.get(score_field))
         labels = row.get("labels")
         label = labels.get(str(horizon), {}) if isinstance(labels, Mapping) else {}
         forward_return = (
-            _finite_number(label.get("forward_return"))
+            strict_finite_number(label.get("forward_return"))
             if isinstance(label, Mapping) and label.get("status") == "active"
             else None
         )
@@ -715,8 +716,8 @@ def _model_metrics(
 
 
 def _metric_delta(left: Any, right: Any) -> float | None:
-    baseline = _finite_number(left)
-    augmented = _finite_number(right)
+    baseline = strict_finite_number(left)
+    augmented = strict_finite_number(right)
     return (
         round(augmented - baseline, 10)
         if baseline is not None and augmented is not None
@@ -734,9 +735,9 @@ def _ablation_metrics(
         if (
             isinstance(label, Mapping)
             and label.get("status") == "active"
-            and _finite_number(label.get("forward_return")) is not None
-            and _finite_number(row.get("production_score")) is not None
-            and _finite_number(row.get("hypothetical_score")) is not None
+            and strict_finite_number(label.get("forward_return")) is not None
+            and strict_finite_number(row.get("production_score")) is not None
+            and strict_finite_number(row.get("hypothetical_score")) is not None
         ):
             paired_rows.append(row)
     baseline = _model_metrics(
@@ -784,10 +785,10 @@ def _ablation_metrics(
 
 
 def _selection_metric(model: Mapping[str, Any]) -> float | None:
-    rank_ic = _finite_number(model.get("rank_ic_mean"))
+    rank_ic = strict_finite_number(model.get("rank_ic_mean"))
     if rank_ic is not None:
         return rank_ic
-    return _finite_number(model.get("top_k_excess_return"))
+    return strict_finite_number(model.get("top_k_excess_return"))
 
 
 def build_walk_forward_ablation(
@@ -836,14 +837,14 @@ def build_walk_forward_ablation(
             eligibility_reasons["label_unavailable"] += 1
             continue
         if (
-            _finite_number(label.get("forward_return")) is None
+            strict_finite_number(label.get("forward_return")) is None
             or not label.get("end_date")
         ):
             eligibility_reasons["invalid_active_label"] += 1
             continue
         if (
-            _finite_number(row.get("production_score")) is None
-            or _finite_number(row.get("hypothetical_score")) is None
+            strict_finite_number(row.get("production_score")) is None
+            or strict_finite_number(row.get("hypothetical_score")) is None
         ):
             eligibility_reasons["unpaired_model_scores"] += 1
             continue
@@ -1027,7 +1028,7 @@ def build_walk_forward_ablation(
 
     active_windows = [window for window in windows if window["status"] == "active"]
     test_ic_deltas = [
-        _finite_number(
+        strict_finite_number(
             window["test"]["same_family_replacement_minus_baseline"].get(
                 "rank_ic_mean"
             )
@@ -1170,11 +1171,11 @@ def run_range_persistence_validation(
         warnings.append("price_dataset_content_hash_unavailable")
     warnings.append("production_mode_remains_shadow")
     baseline_available = any(
-        _finite_number(row.get("production_score")) is not None
+        strict_finite_number(row.get("production_score")) is not None
         for row in labeled["observations"]
     )
     replacement_available = any(
-        _finite_number(row.get("hypothetical_score")) is not None
+        strict_finite_number(row.get("hypothetical_score")) is not None
         for row in labeled["observations"]
     )
     trading_dates = sorted(

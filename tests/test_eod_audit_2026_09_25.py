@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
+from fractions import Fraction
 import json
 import os
 from pathlib import Path
@@ -669,12 +671,15 @@ def test_split_and_directory_pages_share_one_cursor_validator(monkeypatch) -> No
     assert captured.value.code == "protocol"
 
 
-def test_finite_number_has_one_definition() -> None:
-    assert diagnostics.finite_number is full_market_tuning.finite_number
-    finite = full_market_tuning.finite_number
+def test_finite_real_has_one_definition() -> None:
+    assert diagnostics.finite_real is full_market_tuning.finite_real
+    finite = full_market_tuning.finite_real
     assert finite(np.float32(1.5)) == 1.5 and finite(np.int64(3)) == 3.0
-    for value in (True, np.bool_(True), "1.0", None, float("nan"), float("inf")):
+    assert finite(Fraction(1, 4)) == 0.25 and finite(-2) == -2.0
+    for value in (True, np.bool_(True), "1.0", None, float("nan"), float("inf"), -float("inf"), Decimal("1.5")):
         assert finite(value) is None
+    with pytest.raises(OverflowError):
+        finite(10 ** 400)
 
 
 @pytest.mark.parametrize(

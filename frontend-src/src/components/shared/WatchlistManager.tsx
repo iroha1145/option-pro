@@ -7,6 +7,7 @@ import { watchlistErrorMessage } from '@/api/modules/account';
 import { DEFAULT_WATCHLIST_TICKERS, parseWatchlistInput, watchlistDelta } from '@/lib/personalWatchlist';
 import Icon from '@/components/icons';
 import { getLocale, t } from '@/i18n/core';
+import TextSwap from '@/components/shared/TextSwap';
 
 interface Props {
   tickers: string[];
@@ -76,13 +77,10 @@ export default function WatchlistManager({ tickers, maxTickers, busy, onSave, on
     <>
       <div className="fixed inset-0 z-[85] bg-[var(--scrim)] backdrop-blur-[2px]" data-focus-backdrop={id} aria-hidden="true" onClick={() => !busy && onClose()} />
       <div className="pointer-events-none fixed inset-0 z-[86] flex items-center justify-center p-3 sm:p-6">
-        <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={`${id}-title`} aria-describedby={`${id}-description`} data-focus-overlay={id}
+        <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={`${id}-title`} data-focus-overlay={id}
           className="pointer-events-auto flex max-h-[90dvh] w-full max-w-[640px] flex-col overflow-hidden rounded-xl border border-line bg-card shadow-sh-3">
           <header className="flex shrink-0 items-start justify-between gap-3 border-b border-line p-4 sm:px-6">
-            <div className="min-w-0">
-              <h2 id={`${id}-title`} className="text-h3 text-ink-900">{t('管理自选')}</h2>
-              <p id={`${id}-description`} className="mt-1 text-caption leading-relaxed text-ink-500">{t('批量添加或移除股票，保存后生效。')}</p>
-            </div>
+            <h2 id={`${id}-title`} className="min-w-0 text-h3 text-ink-900">{t('管理自选')}</h2>
             <button className="inline-flex size-11 shrink-0 items-center justify-center rounded-md text-ink-400 hover:bg-paper-2 disabled:opacity-50" aria-label={t('关闭')} onClick={onClose} disabled={busy}><Icon name="x" size={18} /></button>
           </header>
           <div className="min-h-0 overflow-y-auto overscroll-contain p-4 sm:px-6">
@@ -108,13 +106,13 @@ export default function WatchlistManager({ tickers, maxTickers, busy, onSave, on
                 <span className="truncate font-mono font-medium">{symbol}</span>
               </label>)}
             </div> : <p className="py-6 text-center text-caption text-ink-400">{t('保存后自选列表将为空。')}</p>}
-            {error && <p role="alert" className="mt-3 break-words rounded-md bg-down-50 px-3 py-2 text-caption text-down-700">{error}</p>}
+            {error && <p role="alert" className="mt-3 break-words rounded-md bg-danger-50 px-3 py-2 text-caption text-danger-700">{error}</p>}
           </div>
           <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-line bg-card-warm p-4 sm:px-6">
             <p className="text-caption text-ink-500" aria-live="polite">{t('新增 {add} · 移除 {remove}', { add: delta.add.length, remove: delta.remove.length })}</p>
             <div className="ml-auto flex gap-2">
               <button className={secondary} onClick={onClose} disabled={busy}>{t('取消')}</button>
-              <button className="btn-primary" onClick={() => void save()} disabled={busy || !changed} aria-busy={busy}>{busy ? t('正在保存…') : t('保存自选')}</button>
+              <button className="btn-primary" onClick={() => void save()} disabled={busy || !changed} aria-busy={busy}><TextSwap swapKey={busy ? 'busy' : 'idle'}>{busy ? t('正在保存…') : t('保存自选')}</TextSwap></button>
             </div>
           </footer>
         </div>

@@ -98,10 +98,10 @@ test('自选卡片不再使用 layout 投影，首屏之外不做入场动画', 
 
 test('概览统计条的占位与真实内容布局一致', async () => {
   const page = await source('pages/Watchlist.tsx');
-  const layout = 'flex snap-x snap-mandatory gap-4 overflow-x-auto pb-1 no-scrollbar sm:grid sm:grid-cols-2 sm:overflow-visible xl:grid-cols-4';
-  const occurrences = page.split(layout).length - 1;
+  // 占位与真实内容共用同一个栅格常量；两处都引用它，高度才一致
+  assert.match(page, /const STAT_GRID = '[^']+'/);
   assert.equal(
-    occurrences,
+    page.split('className={STAT_GRID}').length - 1,
     2,
     '占位与真实内容必须用同一组布局类，否则两者高度不同就是 CLS',
   );

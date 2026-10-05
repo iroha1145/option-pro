@@ -441,11 +441,3 @@ export function heatColor(pct: number, span = 3): string {
   const mid = stops[2].rgb;
   return `rgb(${mid[0]},${mid[1]},${mid[2]})`;
 }
-
-/** 强度分色阶（§6-5） */
-export function strengthColor(score: number): string {
-  if (score >= 85) return CH.up600;
-  if (score >= 70) return CH.brand600;
-  if (score >= 50) return CH.brand400;
-  return CH.ink300;
-}

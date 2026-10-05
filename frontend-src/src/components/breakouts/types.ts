@@ -4,11 +4,8 @@
  */
 import type {
   BreakoutEventFull as ApiBreakoutEventFull,
-  BreakoutStatusFull as ApiBreakoutStatusFull,
   BreakoutSession as ApiBreakoutSession,
   BreakoutRangePersistence,
-  BreakoutRangePersistenceLive,
-  BreakoutPriceZone,
 } from '@/api/types';
 export { strengthBarClass as scoreBarClass } from '@/lib/strengthColor';
 import { t } from '../../i18n/core.ts';
@@ -93,11 +90,9 @@ export const SCORE_DEFS = [
   { key: 'alert_priority_score', label: t('警示优先级') },
   { key: 'data_confidence_score', label: t('数据置信') },
 ] as const;
-export type ScoreKey = (typeof SCORE_DEFS)[number]['key'];
 
 /* ---------------- range_persistence 五维 ---------------- */
 export type RangePersistence = BreakoutRangePersistence;
-export type RangePersistenceLive = BreakoutRangePersistenceLive;
 export const RANGE_PERSISTENCE_DEFS = [
   { key: 'trend', label: t('趋势持续') },
   { key: 'hold', label: t('区间保持') },
@@ -107,21 +102,14 @@ export const RANGE_PERSISTENCE_DEFS = [
 ] as const;
 
 /* ---------------- 富事件形状 ---------------- */
-export type PriceZone = BreakoutPriceZone;
-
-export interface BreakoutTransition { state: string; at: string; note?: string }
-
 export type BreakoutEventFull = ApiBreakoutEventFull;
 
 /** 当日信号（/breakouts/current 的 events[]，叠加 BreakoutSignal 展示字段） */
 export type BreakoutCurrentEvent = BreakoutEventFull;
 
-/** /breakouts/status 契约全字段 */
-export type BreakoutStatusFull = ApiBreakoutStatusFull;
-
 /** 追高风险反向（越高越危险）；普通评分使用公共强度色阶。 */
 export function riskBarClass(score: number): string {
-  if (score >= 70) return 'bg-down-600';
+  if (score >= 70) return 'bg-danger-600';
   if (score >= 50) return 'bg-warn-600';
   return 'bg-ink-300';
 }

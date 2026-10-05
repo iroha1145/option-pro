@@ -443,8 +443,6 @@ test('no third-party product name appears in the macro frontend sources', async 
     'components/market/macro/MacroConditionsPanel.tsx',
     'components/market/macro/CompositeCard.tsx',
     'components/market/macro/MacroHistoryChart.tsx',
-    'components/market/macro/ModuleCard.tsx',
-    'components/market/macro/ModuleGrid.tsx',
     'components/market/macro/DriverList.tsx',
     'components/market/macro/FactorDetails.tsx',
     'components/market/macro/FactorRow.tsx',
@@ -462,8 +460,6 @@ test('macro components use design tokens only — no hardcoded colours', async (
   const files = [
     'MacroConditionsPanel.tsx',
     'CompositeCard.tsx',
-    'ModuleCard.tsx',
-    'ModuleGrid.tsx',
     'DriverList.tsx',
     'FactorDetails.tsx',
     'FactorRow.tsx',
@@ -522,7 +518,7 @@ test('the panel polls macro data at fifteen minutes, not sixty seconds', async (
   assert.match(text, /登录后可手动刷新/);
 });
 
-test('the source note states the real sources and the percentile disclaimer', async () => {
+test('the source note states the real sources', async () => {
   const text = await readFile(
     path.join(srcDir, 'components', 'market', 'macro', 'MacroConditionsPanel.tsx'),
     'utf8',
@@ -534,7 +530,6 @@ test('the source note states the real sources and the percentile disclaimer', as
     '芝加哥联储',
     'Cboe',
     'Option Pro 当前股票日线数据源',
-    '过去 5 年历史分位，不是预测',
   ]) {
     assert.ok(text.includes(phrase), `source note must mention ${phrase}`);
   }
@@ -560,7 +555,6 @@ test('the macro panel adds no high-frequency flashing for score changes', async 
   for (const file of [
     'MacroConditionsPanel.tsx',
     'CompositeCard.tsx',
-    'ModuleCard.tsx',
     'DriverList.tsx',
     'FactorDetails.tsx',
     'FactorRow.tsx',

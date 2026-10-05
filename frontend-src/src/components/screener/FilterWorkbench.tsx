@@ -66,7 +66,7 @@ function TierSegmented({
       renderLabel={(o, active) => (
         <span className="flex items-center gap-1.5">
           {o.label}
-          <span className={cn('min-w-4 rounded-[5px] px-1 py-px font-mono text-[11px] leading-[14px] tnum', active ? 'bg-paper-2 text-ink-600' : 'text-ink-400')}>
+          <span className={cn('min-w-4 rounded-sm px-1 py-px font-mono text-[11px] leading-[14px] tnum', active ? 'bg-paper-2 text-ink-600' : 'text-ink-400')}>
             {counts[o.value]}
           </span>
         </span>
@@ -103,7 +103,7 @@ function PriceInput({
   }
   return (
     <div className="relative">
-      <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 font-mono text-caption text-ink-300">$</span>
+      <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 font-mono text-caption text-ink-400">$</span>
       <input
         value={text}
         inputMode="decimal"
@@ -118,7 +118,7 @@ function PriceInput({
           const n = Number(t);
           onCommit(t === '' || !Number.isFinite(n) ? null : n);
         }}
-        className="screener-price-input h-8 w-[88px] rounded-[9px] border border-line/70 bg-paper-2/50 pl-6 pr-2 font-mono text-caption text-ink-800 tnum placeholder:text-ink-300 hover:border-line-strong focus-visible:border-brand-400"
+        className="screener-price-input h-8 w-[88px] rounded-md border border-line/70 bg-paper-2/50 pl-6 pr-2 font-mono text-caption text-ink-800 tnum placeholder:text-ink-400 hover:border-line-strong focus-visible:border-brand-400"
       />
     </div>
   );
@@ -152,8 +152,8 @@ export function ScanButton({
       }
       transition={dirty && !scanning ? { duration: 1.2, repeat: 2 } : { duration: DUR_FAST }}
       className={cn(
-        'scan-trigger relative h-9 min-w-[168px] overflow-hidden rounded-[9px] bg-brand-600 px-4 text-on-accent shadow-btn-hi transition-[filter] duration-fast',
-        scanning ? 'cursor-wait' : 'hover:brightness-105',
+        // 与同行下拉框同为 36px；粗指针下 .scan-trigger 仍放大到 44px。
+        'btn-primary scan-trigger relative h-9 min-h-0 min-w-[168px] overflow-hidden',
         className,
       )}
       aria-live="polite"

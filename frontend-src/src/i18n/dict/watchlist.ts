@@ -5,9 +5,12 @@
 import type { Dict } from './types';
 
 export const WATCHLIST: Dict = {
+  '撤销信息无效，请重新读取自选': ['Undo data is invalid. Please reload your watchlist.', '元に戻す情報が無効です。ウォッチリストを再読み込みしてください。'],
+  '登录身份已变化，请重新操作': ['Your sign-in identity has changed. Please try again.', 'ログイン情報が変わりました。もう一度操作してください。'],
+  '已恢复到自选': ['Restored to watchlist', 'ウォッチリストに戻しました'],
+  '恢复失败': ['Could not restore', '元に戻せませんでした'],
   '行情暂时读取失败，自选名单已保留。': ['Quotes could not be loaded. Your watchlist is still saved.', '相場を読み込めません。ウォッチリストは保存されています。'],
   "管理自选": ["Manage watchlist", "ウォッチリストを管理"],
-  "批量添加或移除股票，保存后生效。": ["Add or remove stocks in bulk. Changes take effect when saved.", "銘柄をまとめて追加・削除し、保存すると反映されます。"],
   "添加股票代码": ["Add stock tickers", "銘柄コードを追加"],
   "用逗号、空格或换行分隔，重复代码会自动合并。": ["Separate with commas, spaces or new lines. Duplicates are merged.", "コンマ、空白、改行で区切って入力。重複は自動でまとめられます。"],
   "加入列表": ["Add to list", "リストに追加"],
@@ -35,8 +38,6 @@ export const WATCHLIST: Dict = {
   "自选已保存": ["Watchlist saved", "ウォッチリストを保存しました"],
   "登录后管理自选": ["Sign in to manage watchlist", "ログインしてウォッチリストを管理"],
   "暂时读不到你的自选列表，请重试。": ["Unable to load your watchlist. Please retry.", "ウォッチリストを読み込めません。再試行してください。"],
-  "默认关注 AAPL、MSFT、NVDA、SPY，共 4 只。": ["Default coverage: AAPL, MSFT, NVDA and SPY — 4 tickers.", "既定の注目銘柄は AAPL、MSFT、NVDA、SPY の4銘柄です。"],
-  "登录后可保存自己的自选列表。": ["Sign in to save your own watchlist.", "ログインすると自分のウォッチリストを保存できます。"],
   "自选读取失败": ["Unable to load watchlist", "ウォッチリストの読み込みに失敗しました"],
   "点击管理自选，添加股票或一次导入多个代码。": ["Open Manage watchlist to add stocks or import multiple tickers.", "「ウォッチリストを管理」から銘柄の追加やコードの一括入力ができます。"],
   "暂无行情": ["No quotes yet", "相場データなし"],
@@ -52,7 +53,6 @@ export const WATCHLIST: Dict = {
   "只（默认关注）": ["stocks (default watchlist)", "銘柄（標準リスト）"],
   /* ---------------- B0 页头带 ---------------- */
   '自选观察': ['Your watchlist', 'マイウォッチリスト'],
-  "跟踪自选股的价格、走势与市场信号。": ["Track prices, trends and signals for your watchlist.", "ウォッチリストの株価、トレンド、シグナルを確認。"],
   "更新自选行情与评分": ["Update watchlist quotes and scores", "ウォッチリストの株価とスコアを更新"],
   "管理员登录后可更新数据": ["Sign in as an administrator to update data", "管理者としてログインするとデータを更新できます"],
   '强制刷新': ['Force refresh', '強制更新'],
@@ -115,7 +115,6 @@ export const WATCHLIST: Dict = {
   /* ---------------- 表格列标题 ---------------- */
   '最新价': ['Last price', '現在値'],
   '涨跌幅': ['Change %', '騰落率'],
-  '今日分时': ['Intraday', '日中値動き'],
 
   /* ---------------- 侧栏：市场信号 / 市场时钟 ---------------- */
   '市场时钟 · 纽约': ['Market clock · New York', 'マーケットクロック · ニューヨーク'],

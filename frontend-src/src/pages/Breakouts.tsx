@@ -94,7 +94,7 @@ const WATCH_SCOPE_OPTIONS = [
 /* ---------------- 市场时段 chip（§1.6 色） ---------------- */
 const SESSION_DOT: Record<BreakoutSession, string> = {
   premarket: 'bg-warn-600',
-  regular: 'bg-up-600',
+  regular: 'bg-ok-600',
   postmarket: 'bg-ai-600',
   closed: 'bg-ink-400',
 };
@@ -114,6 +114,19 @@ function SessionChip({ session }: { session: BreakoutSession }) {
   );
 }
 
+function NextScanCountdown({ nextSessionAt }: { nextSessionAt: string }) {
+  const now = useNow(1000);
+  const ms = Math.max(0, new Date(nextSessionAt).getTime() - now);
+  const m = Math.floor(ms / 60_000);
+  const s = Math.floor((ms % 60_000) / 1000);
+  const countdown = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return (
+    <span className="font-mono tnum">
+      {__t('下次扫描')} <span className="text-brand-600">{countdown}</span>
+    </span>
+  );
+}
+
 /* ================= 页面主体 ================= */
 const HISTORY_PAGE_SIZE = 100;
 
@@ -125,7 +138,6 @@ export default function Breakouts() {
   const principal = `${isOwner ? 'owner' : 'visitor'}:${username ?? ''}`;
   const { openTicker } = useShell();
   const toast = useToast();
-  const now = useNow(1000);
 
   const [radarSort, setRadarSort] = useState<RadarSortChoice>(
     () => readAlgorithmPreferences(principal).radarSortAlgorithm,
@@ -333,6 +345,7 @@ export default function Breakouts() {
   const matchWatch = (ticker: string) => !onlyWatch || !watchReady || watchSet.has(ticker);
   const current = useMemo(
     () => currentAll.filter((e) => matchFilters(e) && matchWatch(e.ticker)),
+    // matchFilters、matchWatch 每次渲染重建，这里列出的是它们实际读取的值。
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [currentAll, onlyWatch, watchSet, watchReady, statusFilter, minScore, tickerFilter],
   );
@@ -340,6 +353,7 @@ export default function Breakouts() {
      同一个开关在一个页面里有两种语义（审计 P2-17）。 */
   const filteredEvents = useMemo(
     () => events.filter((e) => matchFilters(e) && matchWatch(e.ticker)),
+    // 同上：列出的是两个过滤函数实际读取的值。
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [events, onlyWatch, watchSet, watchReady, statusFilter, minScore, tickerFilter],
   );
@@ -446,15 +460,6 @@ export default function Breakouts() {
     }
   };
 
-  /* 下次扫描倒计时 mm:ss */
-  const nextCountdown = useMemo(() => {
-    if (!status?.next_session_at) return null;
-    const ms = Math.max(0, new Date(status.next_session_at).getTime() - now);
-    const m = Math.floor(ms / 60_000);
-    const s = Math.floor((ms % 60_000) / 1000);
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  }, [status?.next_session_at, now]);
-
   /* 快照时间取契约 as_of（数据截至时间），读取时间单独显示（审计 P2-16）：
      两者混用会把「重新读到一份旧快照」显示成「刚刚更新」。 */
   const snapshotAt = currentQ.data?.asOf
@@ -497,12 +502,11 @@ export default function Breakouts() {
             <span className="eyebrow">BREAKOUT RADAR · INTRADAY</span>
           </p>
           <h1 className="mt-2 font-display text-display-l text-ink-900">{__t('突破雷达')}</h1>
-          <p className="mt-1.5 text-body-s text-ink-500">{__t('发现突破机会，跟踪确认与回踩过程。')}</p>
         </div>
         {/* 紧凑状态条：启用 LED · 快照与活跃条数（副标合并至此去重）· 最近扫描 · 时段 chip · 扫描服务 · 下次扫描倒计时 · 查看范围 */}
         <div className="radar-status flex flex-wrap items-center justify-end gap-x-4 gap-y-2 pb-1 text-caption text-ink-500">
           <span className="inline-flex items-center gap-1.5">
-            <span className={cn('size-2 rounded-full', status?.enabled ? 'bg-up-600 animate-led-pulse' : 'bg-ink-300')} aria-hidden="true" />
+            <span className={cn('size-2 rounded-full', status?.enabled ? 'bg-ok-600 animate-led-pulse' : 'bg-ink-300')} aria-hidden="true" />
             {status ? (status.enabled ? __t('扫描已启用') : __t('扫描已暂停')) : __t('状态读取中…')}
           </span>
           <span className="font-mono tnum">
@@ -520,9 +524,9 @@ export default function Breakouts() {
               size={13}
               className={
                 status?.worker?.healthy === true
-                  ? 'text-up-600'
+                  ? 'text-ok-600'
                   : status?.worker?.healthy === false
-                    ? 'text-warn-600'
+                    ? 'text-warn-700'
                     : 'text-ink-400'
               }
             />
@@ -535,11 +539,7 @@ export default function Breakouts() {
                   ? __t('异常')
                   : __t('状态未知')}
           </span>
-          {nextCountdown && (
-            <span className="font-mono tnum">
-              {__t('下次扫描')} <span className="text-brand-600">{nextCountdown}</span>
-            </span>
-          )}
+          {status?.next_session_at && <NextScanCountdown nextSessionAt={status.next_session_at} />}
           <div className="flex max-w-full flex-wrap items-center gap-1.5">
             <Segmented
               options={WATCH_SCOPE_OPTIONS}
@@ -631,9 +631,12 @@ export default function Breakouts() {
         </span>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-caption text-ink-500">
-        <span data-testid="radar-effective-algorithm">
-          {showT1 ? __t('日线量价条件优先（试用）') : __t('原雷达排序')}
-        </span>
+        {/* 只在「跟随默认」时说明实际生效的是哪种排序；手动选了的，分段控件上已经写着 */}
+        {radarSort === 'follow_default' && (
+          <span data-testid="radar-effective-algorithm">
+            {__t('默认排序：{name}', { name: showT1 ? __t('日线量价条件优先（试用）') : __t('原雷达排序') })}
+          </span>
+        )}
         {showT1 && (
           <span>{__t('满足固定日线量价条件的事件会在同一交易日组内优先。其余事件不删除。待收盘或数据不足时保持原顺序。')}</span>
         )}
@@ -661,10 +664,7 @@ export default function Breakouts() {
         )}
       >
         <div className="radar-section-heading mb-4 flex items-end justify-between pb-1">
-          <div>
-            <p className="eyebrow">TODAY&apos;S SIGNALS</p>
-            <h2 className="mt-1 text-h2 text-ink-900">{__t('当日信号')}</h2>
-          </div>
+          <h2 className="text-h2 text-ink-900">{__t('当日信号')}</h2>
           <p className="font-mono text-caption text-ink-400 tnum">
             {current.length} {__t('个活跃')}{onlyWatch ? __t(' · 只看自选') : ''}
           </p>
@@ -759,7 +759,6 @@ export default function Breakouts() {
                   <p className="text-body-s font-semibold text-ink-800">
                     {__t('其余当日信号 ·')} <span className="font-mono tnum">{current.length - 1}</span>
                   </p>
-                  <p className="text-micro text-ink-400">{__t('点击小卡查看事件详情 · 点击代码打开个股抽屉')}</p>
                 </div>
                 <SignalCards
                   events={current.slice(1)}

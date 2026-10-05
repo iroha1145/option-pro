@@ -279,7 +279,7 @@ def structural_macro_score(module_rows: Sequence[Mapping[str, Any]]) -> Optional
     """Equal-weight mean of the structural modules only.
 
     Every structural module counts the same; ``ModuleSpec`` has no per-module
-    weight field, so there is no other weighting to honour (M-8).
+    weight field, so there is no other weighting to honour.
     """
 
     total = 0.0

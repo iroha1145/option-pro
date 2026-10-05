@@ -4,7 +4,7 @@
  * 六条 grow-bar + 数值 + 毛玻璃 tooltip 解释；live 未覆盖 → 503「快照暂不可用」
  */
 import { motion } from 'framer-motion';
-import { EASE_PAPER } from '@/lib/motion';
+import { EASE_PAPER, GROW_X } from '@/lib/motion';
 import type { ApiError } from '@/api/client';
 import type { MarketRegime } from './api';
 import { cn } from '@/lib/utils';
@@ -33,10 +33,6 @@ const DIMS: { key: keyof MarketRegime; label: string; tip: string; hint: ScoreHi
   { key: 'risk_appetite_score', label: t('风险偏好'), tip: t('VIX 水平与一年分位、HYG−TLT 与 HYG−IEF 信用价差、10 年期利率变化、久期、SPY / QQQ 回撤。'), hint: SCORE_HINTS.regimeRiskAppetite },
   { key: 'risk_on_spread_score', label: t('风险利差'), tip: t('十组进攻／防守资产对的 20 日相对价差（QQQ/SPY、SOXX/XLK、HYG/IEF、XLY/XLP 等）。'), hint: SCORE_HINTS.regimeRiskOn },
 ];
-
-/** 面板级口径：说清这六个数算自什么、以及为什么它不随选中的指数变。 */
-const DIMS_SOURCE_NOTE =
-  t('六项指标共同反映美股市场情况，采用固定的股票指数、行业基金、波动率、债券与黄金数据，不随所选指数变化。');
 
 import { regimeMean } from '@/lib/regime';
 
@@ -87,9 +83,9 @@ export default function RegimePanel({
       aria-label={t("市场形态六维")}
     >
       <div className="flex items-start justify-between">
-        <p className="eyebrow">{t('市场形态六维 · MARKET REGIME')}</p>
+        <h3 className="text-h3 text-ink-900">{t('市场形态六维')}</h3>
         <p className="text-right">
-          <span className="font-mono text-data-l text-ink-900 tnum">{mean.toFixed(1)}</span>
+          <span className="metric-value text-data-l text-ink-900">{mean.toFixed(1)}</span>
           <span className="block text-micro text-ink-400">
             {t('综合均值')}
             <InfoHint hint={SCORE_HINTS.marketRegime} side="bottom" align="end" size={11} className="ml-1" />
@@ -106,31 +102,31 @@ export default function RegimePanel({
                   {d.label}
                   <InfoHint hint={d.hint} side="bottom" size={12} />
                 </span>
-                <span className="font-mono text-data-m text-ink-800 tnum">{score}</span>
+                <span className="text-data-m text-ink-800 tnum">{score}</span>
               </div>
-              <div className="mt-1.5 h-1 strength-track overflow-hidden rounded-pill bg-line" role="presentation">
+              <motion.div
+                className="mt-1.5 h-1 strength-track overflow-hidden rounded-pill bg-line"
+                role="presentation"
+                initial="hidden"
+                whileInView="shown"
+                viewport={{ once: true, amount: 0.4 }}
+              >
                 <motion.div
                   className={cn('h-full origin-left rounded-pill', strengthBarClass(score))}
-                  initial={{ scaleX: 0 }}
-                  whileInView={{ scaleX: 1 }}
-                  viewport={{ once: true, amount: 0.4 }}
+                  variants={GROW_X}
                   transition={{ duration: 0.7, ease: EASE_PAPER, delay: i * 0.045 }}
                   style={{ width: `${Math.max(2, Math.min(100, score))}%` }}
                 />
-              </div>
+              </motion.div>
               {/* 毛玻璃 tooltip */}
               <div className="cloud-popover pointer-events-none absolute -top-2 left-0 z-20 hidden w-56 -translate-y-full p-3 text-micro leading-relaxed text-ink-600 group-hover:block">
-                <p className="mb-1 font-mono text-[10px] uppercase tracking-wider text-ink-400">{d.key}</p>
+                <p className="mb-1 font-mono text-micro uppercase tracking-wider text-ink-400">{d.key}</p>
                 {d.tip}
               </div>
             </div>
           );
         })}
       </div>
-      <p className="mt-4 border-t border-line pt-3 text-micro leading-relaxed text-ink-400">
-        {t('色阶：<50 弱 · 50–69 中性 · 70–84 强 · ≥85 极强')}
-        <span className="mt-1 block">{DIMS_SOURCE_NOTE}</span>
-      </p>
     </section>
   );
 }

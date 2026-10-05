@@ -288,7 +288,6 @@ test('板块组件不再消费无后端依据的趋势、资金流和相关性�
   const files = [
     'components/sectors/DetailBand.tsx',
     'components/sectors/HeatMatrix.tsx',
-    'components/sectors/SectorList.tsx',
     'components/sectors/SideRail.tsx',
     'components/sectors/model.ts',
     'pages/Sectors.tsx',

@@ -7,6 +7,7 @@
  */
 import { useMemo } from 'react';
 import ReactECharts from '@/components/charts/ReactECharts';
+import { useChartCursor } from '@/components/charts/useChartCursor';
 import {
   baseAnimation,
   CH,
@@ -116,17 +117,29 @@ export default function PositionHistoryChart({ history }: { history: { date: str
     void appearance;
     return historyOption(history);
   }, [history, colorMode, appearance]);
+  const { index, onInit, sliderProps } = useChartCursor(history.map((point) => point.date), (i) =>
+    t('{date}：估算目标仓位 {v}', { date: history[i].date, v: signed(history[i].position) }),
+  );
   if (!option) return <p className="mt-2 text-caption text-ink-400">{t('暂无数据')}</p>;
-  const last = history[history.length - 1];
+  /* 表头读数跟着游标走：指着哪一天就读哪一天，离开回到最新值 */
+  const point = history[index ?? history.length - 1];
   return (
-    /* 图台表头写清参照口径：0 轴是多空分界，末值是这条线现在停的位置 */
+    /* 图台表头写清参照口径：0 轴是多空分界，读数是游标所在那天（默认最新）的位置 */
     <InsightFrame
-      label={t('0 为多空分界 · 最新 {v}', { v: signed(last.position) })}
-      action={<span className="font-mono text-micro text-ink-400 tnum">{last.date}</span>}
+      label={
+        index === null
+          ? t('0 为多空分界 · 最新 {v}', { v: signed(point.position) })
+          : t('0 为多空分界 · 当日 {v}', { v: signed(point.position) })
+      }
+      action={<span className="font-mono text-micro text-ink-400 tnum">{point.date}</span>}
       className="mt-1.5"
     >
-      <div className="h-56">
-        <ReactECharts option={option} ariaLabel={t('估算仓位历史曲线')} />
+      <div
+        {...sliderProps}
+        aria-label={t('估算仓位历史，左右键逐日查看')}
+        className="h-56 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+      >
+        <ReactECharts option={option} onInit={onInit} ariaLabel={t('估算仓位历史曲线')} />
       </div>
     </InsightFrame>
   );

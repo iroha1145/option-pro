@@ -13,9 +13,6 @@ from app.failure_diagnostics import record_fallback_failure
 
 YFINANCE_TICKER_BATCH_SIZE = 8
 YFINANCE_MAX_CONCURRENT_DOWNLOADS = 4
-# DataFrame.attrs key listing tickers whose batch raised. Without it a caller
-# cannot tell "no data for this symbol" from "the request for it failed".
-FAILED_TICKERS_ATTR = "yfinance_failed_tickers"
 _download_gate = threading.BoundedSemaphore(YFINANCE_MAX_CONCURRENT_DOWNLOADS)
 
 
@@ -60,9 +57,8 @@ def download_in_bounded_batches(
     downloader concurrently. Sequential batches keep the number of created
     threads bounded while preserving yfinance's ticker-grouped frame shape.
 
-    A failed batch does not fail the others. Its tickers are listed, in input
-    order, under ``frame.attrs[FAILED_TICKERS_ATTR]``; when every batch fails
-    the first error is raised.
+    A failed batch does not fail the others; when every batch fails the first
+    error is raised.
     """
 
     if isinstance(batch_size, bool) or batch_size < 1 or batch_size > 64:
@@ -78,13 +74,12 @@ def download_in_bounded_batches(
 
     symbols = _ticker_list(tickers)
     if not symbols:
-        return _with_failed_tickers(pd.DataFrame(), [])
+        return pd.DataFrame()
 
     if not _download_gate.acquire(blocking=False):
         raise YFinanceBatchBusy("yfinance batch capacity is busy")
     try:
         frames: list[pd.DataFrame] = []
-        failed_tickers: list[str] = []
         first_error: Exception | None = None
         for offset in range(0, len(symbols), batch_size):
             batch = symbols[offset : offset + batch_size]
@@ -97,7 +92,6 @@ def download_in_bounded_batches(
                 )
             except Exception as exc:
                 record_fallback_failure("yfinance_batch_download", exc)
-                failed_tickers.extend(batch)
                 if first_error is None:
                     first_error = exc
                 continue
@@ -120,23 +114,14 @@ def download_in_bounded_batches(
     if not frames:
         if first_error is not None:
             raise first_error
-        return _with_failed_tickers(pd.DataFrame(), failed_tickers)
+        return pd.DataFrame()
     if len(frames) == 1:
-        return _with_failed_tickers(frames[0], failed_tickers)
+        return frames[0]
     merged = pd.concat(frames, axis=1).sort_index()
-    return _with_failed_tickers(
-        merged.loc[:, ~merged.columns.duplicated()],
-        failed_tickers,
-    )
-
-
-def _with_failed_tickers(frame: pd.DataFrame, failed: list[str]) -> pd.DataFrame:
-    frame.attrs[FAILED_TICKERS_ATTR] = list(failed)
-    return frame
+    return merged.loc[:, ~merged.columns.duplicated()]
 
 
 __all__ = [
-    "FAILED_TICKERS_ATTR",
     "YFINANCE_MAX_CONCURRENT_DOWNLOADS",
     "YFINANCE_TICKER_BATCH_SIZE",
     "YFinanceBatchBusy",

@@ -617,7 +617,7 @@ def _massive_history_is_complete(
     return bool(_validated_massive_history(rows, period=period, end=end))
 
 
-def _download_massive_history(
+def download_massive_history(
     tickers: list[str],
     period: str,
 ) -> tuple[pd.DataFrame, list[str]]:
@@ -682,7 +682,7 @@ def _download_massive_history(
 def _download_history(tickers: list[str], period: str = "1y") -> pd.DataFrame:
     # Massive 为主源;未覆盖(未配置/指数/单票无数据)的余量走 Yahoo 链
     try:
-        massive_frame, massive_missing = _download_massive_history(tickers, period)
+        massive_frame, massive_missing = download_massive_history(tickers, period)
     except Exception:
         massive_frame, massive_missing = pd.DataFrame(), list(tickers)
     massive_used = not massive_frame.empty
@@ -1746,10 +1746,10 @@ def _scan_sync(
             )
             range_context[ticker]["price_as_of"] = range_context[ticker]["daily_data_through"]
         except Exception as exc:
-            # Business behaviour is unchanged (skip this ticker), but before
-            # this an upstream structural drift could silently drop a whole
-            # batch of tickers with nothing but a rising counter to show for
-            # it (M-10) -- record which ticker and which error type.
+            # Skip this ticker, but record which ticker and which error type:
+            # an upstream structural drift could otherwise silently drop a
+            # whole batch of tickers with nothing but a rising counter to
+            # show for it.
             record_fallback_failure("strength_scan_ticker", exc, symbol=ticker)
             skipped["data_error"] += 1
 

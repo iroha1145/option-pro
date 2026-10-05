@@ -822,18 +822,6 @@ export function getNewsByTicker(ticker: string): NewsItem[] {
   return newsPool.filter((n) => n.tickers.includes(t));
 }
 
-export function getCatalystsCalendar(): { date: string; items: { kind: string; label: string }[] }[] {
-  const r = new Rng(7788);
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(Date.now() + i * 86_400_000);
-    const items = [
-      { kind: 'macro', label: r.pick([__t('CPI 数据公布'), __t('FOMC 会议纪要'), __t('初请失业金人数'), __t('PPI 数据公布'), __t('零售销售月率')]) },
-      ...(r.chance(0.6) ? [{ kind: 'earnings', label: `${pickTicker(r).ticker} 财报` }] : []),
-    ];
-    return { date: d.toISOString().slice(0, 10), items };
-  });
-}
-
 /* ---------------- 期权 ---------------- */
 const OPTION_TICKERS = ['NVDA', 'TSLA', 'AAPL', 'AMD', 'AMZN', 'META', 'MSFT', 'SPY', 'QQQ', 'GOOGL'];
 

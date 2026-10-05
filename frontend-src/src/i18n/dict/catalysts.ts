@@ -19,7 +19,6 @@ export const CATALYSTS: Dict = {
   '定时批次': ['Scheduled batch', '定時バッチ'],
   '手动任务': ['Manual job', '手動ジョブ'],
   '尚无批次': ['No batch yet', 'バッチなし'],
-  'NEWS ANALYSIS · 新闻分析进度': ['NEWS ANALYSIS · News analysis progress', 'NEWS ANALYSIS · ニュース分析の進捗'],
   '已结束': ['Finished', '終了'],
   '最近一批新闻分析完成比例': ['Completion rate of the latest news-analysis batch', '直近のニュース分析バッチの完了率'],
   '总任务': ['Total jobs', '総ジョブ数'],
@@ -94,7 +93,6 @@ export const CATALYSTS: Dict = {
   '· 已过滤': ['· filtered', '· フィルター中'],
 
   /* ---------------- FocusCycleCard.tsx ---------------- */
-  '· 非胜率': ['· not a win rate', '· 勝率ではありません'],
   '萌芽': ['Emerging', '萌芽'],
   '发酵': ['Building', '醸成'],
   '主升': ['Surging', '本格上昇'],
@@ -131,8 +129,6 @@ export const CATALYSTS: Dict = {
   '提交失败': ['Submission failed', '送信に失敗しました'],
   '市场焦点周期': ['Market focus cycle', '市場フォーカスサイクル'],
   '逐股评估': ['Stock assessments', '銘柄別評価'],
-  '数据与分析说明': ['Data and analysis notes', 'データと分析について'],
-  'FOCUS CYCLE · 市场焦点周期': ['FOCUS CYCLE · Market focus cycle', 'FOCUS CYCLE · 市場フォーカスサイクル'],
   '周期计算中': ['Computing cycle', 'サイクル計算中'],
   '重试焦点周期': ['Retry focus cycle', 'フォーカスサイクルを再試行'],
   '触发新周期': ['Trigger new cycle', '新しいサイクルを実行'],
@@ -149,7 +145,6 @@ export const CATALYSTS: Dict = {
   /* ---------------- HotspotsStrip.tsx ---------------- */
   '查看代表新闻': ['View representative news', '代表ニュースを見る'],
   '热点主题带': ['Hotspot theme strip', '注目テーマ帯'],
-  'HOT THEMES · 热点带': ['HOT THEMES · Hotspot strip', 'HOT THEMES · 注目テーマ帯'],
   '市场关注的主题': ['Themes drawing market attention', '市場で注目されているテーマ'],
   '热点扫描': ['Hotspot scan', '注目テーマスキャン'],
   '活跃': ['Active', '稼働中'],
@@ -162,7 +157,6 @@ export const CATALYSTS: Dict = {
   /* ---------------- ManagePanel.tsx ---------------- */
   '新闻流': ['News feed', 'ニュースフィード'],
   '经济日历': ['Economic calendar', '経済カレンダー'],
-  '源健康': ['Source health', 'ソース健全性'],
   '焦点股票池': ['Focus stock pool', 'フォーカス銘柄プール'],
   '强势雷达': ['Strength radar', '強さレーダー'],
   '突破扫描': ['Breakout scan', 'ブレイクアウトスキャン'],
@@ -197,17 +191,10 @@ export const CATALYSTS: Dict = {
   '运行设置不可用 ·': ['Runtime settings unavailable ·', '実行設定を取得できません ·'],
   '允许手动分析': ['Allow manual analysis', '手動分析を許可'],
   '定时分析': ['Scheduled analysis', '定時分析'],
-  '选股默认算法': ['Default screener ranking', 'スクリーナーのデフォルト順位'],
   '雷达默认排序': ['Default radar sort', 'レーダーのデフォルト並び替え'],
-  '原版排序': ['Original ranking', '従来の順位'],
-  '中长期趋势（试用）': ['Mid/long trend (trial)', '中長期トレンド（試用）'],
   '收盘技术（受限）': ['EOD technical (limited)', '終値テクニカル（制限）'],
   '原雷达排序': ['Original radar sort', '従来のレーダー順'],
   '日线量价条件优先（试用）': ['Daily volume-price first (trial)', '日足の値嵩条件を優先（試用）'],
-  '只影响未指定算法或选择跟随默认的请求。用户已明确选择原版时不会被覆盖。': [
-    'This only affects requests that follow the default or omit an algorithm. An explicit original choice is never overwritten.',
-    '未指定またはデフォルトに従うリクエストにだけ影響します。従来版を明示した選択は上書きされません。',
-  ],
   '回滚上一版': ['Roll back to previous version', '前のバージョンに戻す'],
   '保存中…': ['Saving…', '保存中…'],
   '保存设置': ['Save settings', '設定を保存'],
@@ -227,7 +214,6 @@ export const CATALYSTS: Dict = {
   '强制重新分析': ['Forced re-analysis', '強制再分析'],
   '可在本页查看进度': ['View progress on this page', 'このページで進捗を確認できます'],
   '取消失败': ['Cancel failed', 'キャンセルに失敗しました'],
-  'NEWS DETAIL · 新闻详情': ['NEWS DETAIL · News detail', 'NEWS DETAIL · ニュース詳細'],
   '详情不可用': ['Details unavailable', '詳細を取得できません'],
   '详情更新失败': ['Could not refresh details', '詳細の更新に失敗しました'],
   '任务状态暂时读不到': ['Job status is temporarily unavailable', 'ジョブ状態を一時的に取得できません'],
@@ -240,7 +226,12 @@ export const CATALYSTS: Dict = {
   '· 列表摘要仍然有效': ["· the list summary is still valid", '· 一覧の要約は引き続き有効です'],
   '源确认': ['source confirmations', '件のソースで確認'],
   '原文': ['Original', '原文'],
+  '原始标题：': ['Original headline: ', '原文の見出し：'],
   '关联代码': ['Related tickers', '関連銘柄'],
+  '依据新闻正文分析': ['Analysis based on the article text', '記事本文に基づく分析'],
+  '依据新闻正文节选分析': ['Analysis based on an excerpt of the article text', '記事本文の抜粋に基づく分析'],
+  '仅依据标题与摘要分析': ['Analysis based only on the headline and summary', '見出しと要約のみに基づく分析'],
+  '未能取得正文': ['Article text unavailable', '記事本文を取得できませんでした'],
   '模型分析区': ['Model analysis section', 'モデル分析エリア'],
   '模型分析': ['Model analysis', 'モデル分析'],
   '取消任务': ['Cancel job', 'ジョブを取消'],
@@ -268,7 +259,6 @@ export const CATALYSTS: Dict = {
   '数据滞后': ['Data lag', 'データ遅延'],
   '近 24h 条数': ['Items in last 24h', '直近24時間の件数'],
   '最近抓取': ['Last fetched', '最終取得'],
-  '滞后时间表示数据的新旧程度；条数统计最近 24 小时收录的新闻与经济事件。': ['Lag indicates data freshness. Counts cover news and economic events collected in the last 24 hours.', '遅れ時間はデータの鮮度を示します。件数は直近24時間に取得したニュースと経済イベントの合計です。'],
 
   /* ---------------- StatusHero.tsx ---------------- */
   '需管理员登录': ['Administrator sign-in required', '管理者としてのログインが必要です'],
@@ -302,10 +292,8 @@ export const CATALYSTS: Dict = {
   '今日新闻': ['News today', '本日のニュース'],
   '条 / 24h': ['/ 24h', '件 / 24h'],
   '待中文': ['Awaiting Chinese', '中国語待ち'],
-  '新闻保留原始来源；影响分与置信度由模型估算。数据滞后时间反映来源的更新进度。': ['News retains its original source. Impact and confidence scores are model estimates. Data lag reflects source updates.', 'ニュースには元の出典を表示します。影響スコアと信頼度はモデルの推定値です。データの遅れは情報源の更新状況を示します。'],
 
   /* ---------------- StocksPanel.tsx ---------------- */
-  '· 非收益': ['· not a return', '· リターンではありません'],
   '净影响分': ['Net impact score', 'ネット・インパクトスコア'],
   '影响汇总暂不可用': ['Impact summary unavailable', 'インパクト集計を取得できません'],
   '当前窗口暂无已分析出方向性影响的股票': [
@@ -385,7 +373,6 @@ export const CATALYSTS: Dict = {
   '股票影响': ['Stock impact', '銘柄インパクト'],
   '数据源': ['Sources', 'データソース'],
   '新闻催化剂': ['News catalysts', 'ニュース・カタリスト'],
-  '追踪市场新闻、经济事件及其对股票的影响。': ['Track market news, economic events, and their effects on stocks.', '市場ニュースや経済イベント、銘柄への影響を確認できます。'],
   '刷新本页数据': ["Refresh this page's data", 'このページのデータを更新'],
   '刷新': ['Refresh', '更新'],
   '催化剂视图': ['Catalysts view', 'カタリストビュー'],

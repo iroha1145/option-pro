@@ -44,6 +44,37 @@ def finite_number(
     return number
 
 
+def option_moneyness(
+    side: str,
+    strike: float,
+    underlying_price: float | None,
+) -> str:
+    if underlying_price is None or underlying_price <= 0:
+        return "unavailable"
+    if strike == underlying_price:
+        return "atm"
+    if side == "call":
+        return "otm" if strike > underlying_price else "itm"
+    return "otm" if strike < underlying_price else "itm"
+
+
+def option_in_the_money(
+    side: str,
+    strike: float,
+    underlying_price: float | None,
+    provider_value: Any,
+) -> bool | None:
+    if underlying_price is not None and underlying_price > 0:
+        if side == "call":
+            return strike < underlying_price
+        return strike > underlying_price
+    if isinstance(provider_value, bool):
+        return provider_value
+    if type(provider_value).__name__ == "bool_":
+        return bool(provider_value)
+    return None
+
+
 def vendor_iv(value: Any) -> float | None:
     """Finite positive vendor IV that is not an empty-quote placeholder."""
 

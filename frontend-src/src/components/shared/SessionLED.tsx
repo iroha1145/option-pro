@@ -5,7 +5,7 @@ import { t } from '../../i18n/core.ts';
 
 const SESSION_STYLE: Record<MarketSession, { dot: string; text: string }> = {
   premarket: { dot: 'bg-warn-600', text: t('盘前') },
-  regular: { dot: 'bg-up-600', text: t('盘中') },
+  regular: { dot: 'bg-ok-600', text: t('盘中') },
   afterhours: { dot: 'bg-ai-600', text: t('盘后') },
   closed: { dot: 'bg-ink-400', text: t('休市') },
 };

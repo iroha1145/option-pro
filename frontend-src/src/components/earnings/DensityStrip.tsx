@@ -2,13 +2,11 @@
  * B5 补充带：本月财报密度条（earnings.md）
  * 30 天横向迷你柱（每日财报数，brand-400，grow-bar 错峰）
  * hover 日 → 当日代码列表 tooltip；点击日 → 跳转该周并选中日格
- * 右侧 SourceNote 一行说明数据口径。
  */
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { EASE_PAPER } from '@/lib/motion';
-import SourceNote from '@/components/shared/SourceNote';
+import { EASE_PAPER, GROW_Y } from '@/lib/motion';
 import type { EarningsRow } from './types';
 import { addDays, etToday, fmtMDCN, fmtMMDD, weekdayCN } from './types';
 import { t } from '../../i18n/core.ts';
@@ -43,7 +41,14 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
       <div className="min-w-0">
         <div className="w-full min-w-0">
           <p className="eyebrow">{t('本月财报密度 · 未来 30 天')}</p>
-          <div className="mt-3 flex h-16 items-end gap-[3px]" role="list" aria-label={t("每日财报数量")}>
+          <motion.div
+            className="mt-3 flex h-16 items-end gap-[3px]"
+            role="list"
+            aria-label={t("每日财报数量")}
+            initial="hidden"
+            whileInView="shown"
+            viewport={{ once: true, amount: 0.4 }}
+          >
             {days.map((d, i) => {
               const n = d.rows.length;
               const isToday = i === 0;
@@ -54,7 +59,7 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
                 <button
                   onClick={() => onJumpDay(d.date)}
                   aria-label={t('{date} {weekday}，{n} 条财报，跳转', { date: fmtMDCN(d.date), weekday: weekdayCN(d.date), n })}
-                  className="group relative flex h-full min-w-0 flex-1 items-end focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-400/60"
+                  className="group relative flex h-full min-w-0 flex-1 items-end focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600"
                 >
                   {/* tooltip：当日代码列表。首/尾三分之一改为贴边对齐（审计 2.4.6）：
                       纯居中在窄屏上会把浮层伸出视口，Layout 的 overflow-x-clip
@@ -69,20 +74,20 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
                           : 'left-1/2 -translate-x-1/2',
                     )}
                   >
-                    <span className="block font-mono text-[10px] text-ink-500">
+                    <span className="block font-mono text-micro text-ink-500">
                       {fmtMMDD(d.date)} {weekdayCN(d.date)}
                     </span>
                     {n === 0 ? (
-                      <span className="block text-[10px] text-ink-300">{t('无财报')}</span>
+                      <span className="block text-micro text-ink-400">{t('无财报')}</span>
                     ) : (
                       <span className="mt-0.5 flex flex-wrap gap-1">
                         {d.rows.slice(0, MAX_TOOLTIP_TICKERS).map((r) => (
-                          <span key={r.ticker} className="font-mono text-[10px] font-semibold text-ink-800">
+                          <span key={r.ticker} className="font-mono text-micro font-semibold text-ink-800">
                             {r.ticker}
                           </span>
                         ))}
                         {n > MAX_TOOLTIP_TICKERS && (
-                          <span className="font-mono text-[10px] text-ink-400">
+                          <span className="font-mono text-micro text-ink-400">
                             +{n - MAX_TOOLTIP_TICKERS}
                           </span>
                         )}
@@ -95,24 +100,21 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
                       n > 0 ? 'bg-brand-400 group-hover:bg-brand-600' : 'bg-line',
                       isToday && 'ring-1 ring-brand-600 ring-offset-1 ring-offset-card',
                     )}
-                    style={{ height: n > 0 ? `${Math.max(12, (n / max) * 100)}%` : '2px' }}
-                    initial={{ scaleY: 0, transformOrigin: 'bottom' }}
-                    whileInView={{ scaleY: 1 }}
-                    viewport={{ once: true, amount: 0.4 }}
+                    style={{ height: n > 0 ? `${Math.max(12, (n / max) * 100)}%` : '2px', transformOrigin: 'bottom' }}
+                    variants={GROW_Y}
                     transition={{ duration: 0.7, ease: EASE_PAPER, delay: i * 0.02 }}
                   />
                 </button>
                 </span>
               );
             })}
-          </div>
-          <div className="mt-1.5 flex justify-between font-mono text-[9px] text-ink-300">
+          </motion.div>
+          <div className="mt-1.5 flex justify-between font-mono text-micro text-ink-400">
             <span>{t('今天')}</span>
             <span>{t('+15 天')}</span>
             <span>{t('+30 天')}</span>
           </div>
         </div>
-        <SourceNote className="mt-4" text={t("财报日程 · 以公司公告为准")} />
       </div>
     </section>
   );

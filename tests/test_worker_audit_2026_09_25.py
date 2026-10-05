@@ -24,7 +24,7 @@ from pydantic import SecretStr
 import app.tools.sqlite_backup as backup_module
 from app import failure_diagnostics
 from app.access import request_owner_access_context
-from app.services.yfinance_batch import FAILED_TICKERS_ATTR, download_in_bounded_batches
+from app.services.yfinance_batch import download_in_bounded_batches
 from app.tools.sqlite_backup import BackupError, backup_database, backup_file
 from app.worker import tasks as worker_tasks
 from app.worker.lock import ProcessFileLock
@@ -785,7 +785,7 @@ def test_default_snapshot_follows_the_post_close_slot(_no_variant_work: None) ->
 
 
 # W-14: failed download batches vanished without a trace.
-def test_failed_download_batches_are_listed_on_the_frame(
+def test_failed_download_batches_are_skipped_and_logged(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     def download(*, tickers: str, **_kwargs: object) -> pd.DataFrame:
@@ -803,15 +803,8 @@ def test_failed_download_batches_are_listed_on_the_frame(
             group_by="ticker",
         )
 
-    assert frame.attrs[FAILED_TICKERS_ATTR] == ["T02", "T03"]
     assert list(frame.columns.get_level_values(0)) == ["T00", "T01", "T04"]
     assert "stage=yfinance_batch_download" in caplog.text
-    clean = download_in_bounded_batches(
-        download,
-        tickers=["T00"],
-        group_by="ticker",
-    )
-    assert clean.attrs[FAILED_TICKERS_ATTR] == []
 
 
 # W-17: retry reads ran synchronously on the event loop.

@@ -51,7 +51,7 @@ export default function IvRefreshControl({
         <span
           className={cn(
             'max-w-full text-right text-micro leading-5',
-            refresh.status === 'failed' || actionError ? 'text-down-600' : 'text-ink-400',
+            refresh.status === 'failed' || actionError ? 'text-danger-700' : 'text-ink-400',
           )}
           role={refresh.status === 'failed' || actionError ? 'alert' : 'status'}
           aria-live="polite"

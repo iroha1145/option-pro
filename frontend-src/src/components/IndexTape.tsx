@@ -31,7 +31,7 @@ function TapeItem({ q, flash, onOpen }: { q: IndexQuote; flash: 'up' | 'down' | 
           : t('查看大盘强弱，{code} 最新价 {price}，涨跌 {pct}', { code: q.code, price: fmtPrice(q.price), pct: fmtPct(q.changePct) })
       }
       className={cn(
-        'tick-flash inline-flex cursor-pointer items-baseline gap-2 rounded-xs px-1 transition-colors duration-fast hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30',
+        'tick-flash inline-flex cursor-pointer items-baseline gap-2 rounded-xs px-1 transition-colors duration-fast hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600',
         flash === 'up' && 'tick-flash-up',
         flash === 'down' && 'tick-flash-down',
       )}
@@ -67,7 +67,7 @@ const tapePrice = (q: IndexQuote) => q.price;
 const FUND_LABELS: Record<string, string> = { SPY: t('标普500基金'), QQQ: t('纳斯达克100基金'), DIA: t('道琼斯基金'), IWM: t('罗素2000基金') };
 function FundTapeItem({ symbol, onOpen }: { symbol: string; onOpen: () => void }) {
   const quote = useLiveQuote(symbol);
-  return <button type="button" onClick={onOpen} title={t('{fund} · 美元价格', { fund: FUND_LABELS[symbol] })} className="inline-flex items-baseline gap-2 rounded-xs px-1 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30">
+  return <button type="button" onClick={onOpen} title={t('{fund} · 美元价格', { fund: FUND_LABELS[symbol] })} className="inline-flex items-baseline gap-2 rounded-xs px-1 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">
     <span className="text-caption font-semibold text-ink-800">{FUND_LABELS[symbol]}</span>
     <span className="font-mono text-micro text-ink-400">{symbol}</span>
     <LivePrice symbol={symbol} prefix="$" indicator={false} className="font-mono text-caption text-ink-600" />
@@ -85,7 +85,8 @@ export default function IndexTape() {
      下一轮没有价格变化时状态就再也没人清除（审计 P2-5）。 */
   const flashes = useTickFlash(data, tapeKey, tapePrice);
   const navigate = useNavigate();
-  const openMarket = (code: string) => navigate(`/market?index=${encodeURIComponent(code)}`);
+  // 稳定引用，TapeRow 的 memo 才能在价格闪烁以外的重渲染里跳过各副本。
+  const openMarket = useCallback((code: string) => navigate(`/market?index=${encodeURIComponent(code)}`), [navigate]);
 
   const items = data ?? [];
   const innerRef = useRef<HTMLDivElement>(null);
@@ -152,7 +153,8 @@ export default function IndexTape() {
       </div>
       <span className="marquee-label absolute inset-y-0 right-0 z-10 flex items-stretch">
         <span className="pointer-events-none w-8 bg-gradient-to-r from-transparent to-paper-2" aria-hidden="true" />
-        <span className="glass flex items-center border-l border-line bg-paper-2/95 px-3 text-micro font-medium text-ink-400">
+        {/* 不用 .glass：底色已是 95% 不透明，磨砂看不出来，却要随下面一直滚动的跑马灯逐帧重算模糊 */}
+        <span className="flex items-center border-l border-line bg-paper-2/95 px-3 text-micro font-medium text-ink-400">
           {useFunds ? (quoteStatus.connected ? t('基金行情 · 美元') : t('行情连接中')) : t('延迟行情')}
         </span>
       </span>

@@ -62,7 +62,7 @@ export default function Switch({
         't-toggle relative shrink-0 rounded-pill shadow-track transition-transform duration-fast active:scale-95',
         'before:absolute before:-inset-2 before:content-[""] sm:before:hidden',
         init && 'is-init',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600',
         geo.track,
         checked ? 'bg-brand-600' : 'bg-ink-300',
         disabled && 'cursor-not-allowed opacity-40',

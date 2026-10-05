@@ -29,6 +29,7 @@ import Segmented from '@/components/shared/Segmented';
 import Switch from '@/components/shared/Switch';
 import { fmtRelative } from '@/lib/format';
 import { t as __t } from '../../i18n/core.ts';
+import TextSwap from '@/components/shared/TextSwap';
 
 const REFRESH_OPS: { op: RefreshOperation; label: string }[] = [
   { op: 'news', label: __t('新闻流') },
@@ -303,16 +304,13 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
       >
         <span className="flex items-center gap-2.5">
           <Icon name="shield" size={15} className="text-brand-600" />
-          <span>
-            <span className="eyebrow block">OWNER CONSOLE</span>
-            <span className="text-body-s font-medium text-ink-800">{__t('管理面板 · 数据刷新 / 后台任务 / 运行设置')}</span>
-          </span>
+          <span className="text-body-s font-medium text-ink-800">{__t('管理面板 · 数据刷新 / 后台任务 / 运行设置')}</span>
         </span>
         <span className="flex items-center gap-2.5">
           {worker && (
             <span className="hidden items-center gap-1.5 font-mono text-micro text-ink-400 sm:flex">
               {/* worker 健康是静态状态，不脉冲 */}
-              <Led tone={worker.healthy ? 'up' : 'down'} className="size-1.5" />
+              <Led tone={worker.healthy ? 'ok' : 'danger'} className="size-1.5" />
               worker {worker.healthy ? __t('正常') : worker.status}
             </span>
           )}
@@ -350,9 +348,9 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
                   <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1">
                     {worker.tasks.map((t) => (
                       <li key={t.name} className="flex items-center gap-1.5 font-mono text-micro text-ink-500 tnum">
-                        <Led tone={!t.enabled ? 'muted' : t.healthy ? 'up' : 'down'} className="size-1.5" />
+                        <Led tone={!t.enabled ? 'muted' : t.healthy ? 'ok' : 'danger'} className="size-1.5" />
                         <span className="truncate">{TASK_CN[t.name] ?? t.name}</span>
-                        {t.lastSuccessAt && <span className="ml-auto shrink-0 text-ink-300">{fmtRelative(t.lastSuccessAt)}</span>}
+                        {t.lastSuccessAt && <span className="ml-auto shrink-0 text-ink-400">{fmtRelative(t.lastSuccessAt)}</span>}
                       </li>
                     ))}
                   </ul>
@@ -389,19 +387,16 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
                       <button
                         onClick={() => void rollback()}
                         disabled={saving}
-                        className="rounded-md border border-line bg-card px-2.5 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-50"
+                        className="control-button"
                       >
                         {__t('回滚上一版')}
                       </button>
                       <button
                         onClick={() => void saveSettings()}
                         disabled={saving || !dirty}
-                        className={cn(
-                          'rounded-md px-3 py-1.5 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] duration-fast',
-                          dirty ? 'bg-brand-600 hover:brightness-105' : 'bg-ink-300',
-                        )}
+                        className="btn-primary btn-sm"
                       >
-                        {saving ? __t('保存中…') : __t('保存设置')}
+                        <TextSwap swapKey={saving ? 'busy' : 'idle'}>{saving ? __t('保存中…') : __t('保存设置')}</TextSwap>
                       </button>
                     </div>
                   </div>

@@ -16,7 +16,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
-from typing import Any
+from typing import Any, Callable, Iterator, Mapping
 from urllib.parse import parse_qs, unquote, urlsplit
 from zoneinfo import ZoneInfo
 
@@ -402,31 +402,48 @@ def _page_cursor(next_url: Any, *, path: str) -> str:
     return cursors[0]
 
 
-def _paged_results(path: str, params: dict[str, Any]) -> list[Any]:
-    """Every ``results`` row of a cursor-paginated endpoint.
+def result_pages(
+    path: str,
+    params: dict[str, Any],
+    *,
+    fetch: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None,
+    check: Callable[[Mapping[str, Any]], None] | None = None,
+) -> Iterator[list[Any]]:
+    """Each ``results`` page of a cursor-paginated endpoint, oldest request first.
 
-    A page cap, a repeated cursor, or a malformed page raises instead of
-    returning a silently truncated prefix.
+    ``fetch`` replaces the plain transport (for a caller with its own retries)
+    and ``check`` sees every payload before its rows. A page cap, a repeated
+    cursor, or a malformed page raises instead of ending with a silently
+    truncated prefix; the next page is requested only after the caller has
+    consumed the current one.
     """
 
-    rows: list[Any] = []
+    get = _get if fetch is None else fetch
     cursor: str | None = None
     seen_cursors: set[str] = set()
     for _page in range(_REFERENCE_MAX_PAGES):
-        payload = _get(path, params if cursor is None else {"cursor": cursor})
+        payload = get(path, params if cursor is None else {"cursor": cursor})
+        if check is not None:
+            check(payload)
         page = payload.get("results")
         if not isinstance(page, list):
             raise MassiveError(f"unexpected results shape for {path}", code="protocol")
-        rows.extend(page)
+        yield page
         next_url = payload.get("next_url")
         if next_url is None or next_url == "":
-            return rows
+            return
         next_cursor = _page_cursor(next_url, path=path)
         if next_cursor in seen_cursors or next_cursor == cursor:
             raise MassiveError(f"pagination did not advance for {path}", code="protocol")
         seen_cursors.add(next_cursor)
         cursor = next_cursor
     raise MassiveError(f"pagination exceeded safety limit for {path}", code="protocol")
+
+
+def _paged_results(path: str, params: dict[str, Any]) -> list[Any]:
+    """Every ``results`` row of a cursor-paginated endpoint."""
+
+    return [row for page in result_pages(path, params) for row in page]
 
 
 def reference_tickers(

@@ -7,14 +7,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import { fileURLToPath } from 'node:url';
 import { createReactStub } from './helpers/react-hooks.mjs';
-import {
-  ReadAttemptAborted,
-  boundedReadRetryDelayMs,
-  createCancellableSleep,
-  isAutoRetryableReadError,
-  runBoundedRead,
-  shouldApplyRecoveryJob,
-} from '../src/lib/boundedReadRetry.ts';
+import * as boundedReadRetry from '../src/lib/boundedReadRetry.ts';
 import * as analysisErrorText from '../src/components/catalysts/analysisErrorText.ts';
 import { SHARED_UI_STUBS } from './helpers/shared-ui-stubs.mjs';
 
@@ -118,14 +111,7 @@ function harness(DateImpl = Date) {
       if (id === '@/hooks/useShell') return { useShell: () => ({ openTicker() {} }) };
       if (id === '@/lib/format') return { fmtLocaleDateTime: () => 't', fmtLocaleTime: () => 't' };
       if (id === '@/api/queryRegistry') return { getQueryPrincipalGeneration: () => sessionGen };
-      if (id === '@/lib/boundedReadRetry') return {
-        ReadAttemptAborted,
-        boundedReadRetryDelayMs,
-        createCancellableSleep,
-        isAutoRetryableReadError,
-        runBoundedRead,
-        shouldApplyRecoveryJob,
-      };
+      if (id === '@/lib/boundedReadRetry') return boundedReadRetry;
       if (id === './api') return {
         catalystsContract: {
           news(id) { newsCalls.push(id); return newsImpl(id); },

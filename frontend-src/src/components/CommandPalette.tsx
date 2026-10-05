@@ -72,7 +72,7 @@ function searchErrorText(error: unknown): string {
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="rounded-xs border border-line bg-card-warm px-1.5 py-0.5 font-mono text-[10px] leading-[14px] text-ink-400">
+    <kbd className="rounded-xs border border-line bg-card-warm px-1.5 py-0.5 font-mono text-micro leading-[14px] text-ink-400">
       {children}
     </kbd>
   );
@@ -381,7 +381,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                   setActive(0);
                 }}
                 placeholder={__t("搜索股票代码、名称或功能…")}
-                className="h-full min-w-0 w-0 flex-1 bg-transparent text-body text-ink-800 outline-none placeholder:text-ink-300 focus-visible:!shadow-none"
+                className="h-full min-w-0 w-0 flex-1 bg-transparent text-body text-ink-800 outline-none placeholder:text-ink-400 focus-visible:!shadow-none"
                 role="combobox"
                 aria-expanded={open}
                 aria-autocomplete="list"
@@ -443,7 +443,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
               )}
               {!searching && searchError && (
                 <div className="flex flex-col items-center px-6 py-10 text-center" role="alert" aria-live="assertive">
-                  <span className="flex size-9 items-center justify-center rounded-full bg-down-50 text-down-700">
+                  <span className="flex size-9 items-center justify-center rounded-full bg-danger-50 text-danger-700">
                     <Icon name="x" size={15} />
                   </span>
                   <p className="mt-3 text-body-s font-medium text-ink-700">{__t('搜索未完成')}</p>
@@ -453,7 +453,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
               {!searching && !searchError && flat.length === 0 && (
                 <div className="anim-fade-in flex flex-col items-center py-10 text-center">
                   {/* beautifului Search 空态：内嵌图标砖 + 主文案 + 提示 */}
-                  <span className="flex size-9 items-center justify-center rounded-lg border border-line bg-card-warm text-ink-300 shadow-[inset_0_1px_2px_rgba(16,24,40,.05)]">
+                  <span className="flex size-9 items-center justify-center rounded-lg border border-line bg-card-warm text-ink-400 shadow-[inset_0_1px_2px_rgba(16,24,40,.05)]">
                     <Icon name="search" size={16} />
                   </span>
                   <p className="mt-3 text-body-s font-medium text-ink-700">{__t('没有匹配的结果')}</p>

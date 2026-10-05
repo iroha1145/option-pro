@@ -505,9 +505,9 @@
   transition-delay: var(--tt-delay);
 }
 
-/* Login/password error border uses Paper Terminal down-600. Catalog only owns the tween. */
+/* Login/password error border uses the Paper Terminal danger colour. Catalog only owns the tween. */
 .t-input.is-error {
-  border-color: var(--down-600);
+  border-color: var(--danger-600);
 }
 
 /* catalog 12 的 .t-input 只 transition border-color，会顶掉组件原有的
@@ -634,6 +634,23 @@
 
 @media (prefers-reduced-motion: reduce) {
   .t-icon-swap .t-icon { transition: none !important; }
+}
+
+/* —— 04-text-swap.md（进场半程，见 components/shared/TextSwap.tsx）—— */
+.t-text-swap {
+  display: inline-block;
+  animation: t-text-swap-in var(--text-swap-dur) var(--text-swap-ease) both;
+}
+@keyframes t-text-swap-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--text-swap-translate-y));
+    filter: blur(var(--text-swap-blur));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-text-swap { animation: none !important; }
 }
 
 /* —— 10-success-check.md —— */

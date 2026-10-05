@@ -312,7 +312,7 @@ def score_eod_session(
                 reapply_theme_gates=theme_raws is None,
                 already_session_clipped=True,
                 snapshot_cache=snapshot_cache,
-                **({} if overlay is None else {"industry_overlay": overlay}),
+                industry_overlay=overlay,
             )
             if options.industry_mode != INDUSTRY_OFF:
                 raw = _with_g(raw, None if track == PRICE_ONLY_DIAGNOSTIC else G_NEUTRAL_VALUE)

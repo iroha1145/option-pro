@@ -1,19 +1,15 @@
 from __future__ import annotations
 
-import argparse
 import asyncio
 import json
 import logging
-import os
 import sqlite3
 import threading
 import time
-import uuid
 from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
 from typing import Any
 
-from app.config import get_settings
 from app.execution_limits import BREAKOUT_TASK_TIMEOUT_SECONDS
 from app.failure_diagnostics import record_fallback_failure
 from app.services.ai_jobs import runtime
@@ -633,16 +629,20 @@ async def process_job(
             repository.fail(job["job_id"], owner, source_disabled_error)
             return
 
-        current_schema_version, current_schema_sha256 = runtime.schema_identity(
-            job["job_type"]
+        current_identity = runtime.schema_identity(job["job_type"])
+        schema_matches = runtime.schema_identity_current(
+            job["job_type"],
+            job.get("prompt_version"),
+            job["schema_version"],
+            job["schema_sha256"],
+            current_identity=current_identity,
         )
         if (
             job["model"] != runtime.OFFICIAL_OPENAI_MODEL
             or job["reasoning"] != runtime.OFFICIAL_REASONING_EFFORT
             or job["execution_mode"] != runtime.OFFICIAL_EXECUTION_MODE
             or not runtime.runtime_configuration_valid(settings)
-            or job["schema_version"] != current_schema_version
-            or job["schema_sha256"] != current_schema_sha256
+            or not schema_matches
         ):
             repository.fail(
                 job["job_id"],
@@ -882,107 +882,3 @@ async def run_configured_once(
         scheduled_analysis_enabled=scheduled_analysis_enabled,
     )
     return processed, "enabled" if analysis_enabled else "analysis_disabled"
-
-
-def _next_iteration_delay(processed: int, runtime_state: str) -> float:
-    if processed:
-        return 0.5
-    return 2.0 if runtime_state == "enabled" else 30.0
-
-
-def health_payload(repository: AIJobRepository, settings: Any) -> dict[str, Any]:
-    payload = repository.health()
-    configured = bool(settings.openai_api_key.get_secret_value().strip())
-    capability = runtime.capability_status(settings)
-    payload.update(
-        {
-            "status": (
-                payload["status"]
-                if not payload["healthy"]
-                else capability["status"]
-                if configured
-                else "disabled"
-            ),
-            "configured": configured,
-            "provider_capability_supported": bool(capability.get("supported")),
-            "sdk_capability_supported": bool(capability.get("sdk_supported")),
-            "methods": capability.get("methods", {}),
-            "model": runtime.OFFICIAL_OPENAI_MODEL,
-            "reasoning": runtime.OFFICIAL_REASONING_EFFORT,
-            "execution_mode": runtime.OFFICIAL_EXECUTION_MODE,
-        }
-    )
-    return payload
-
-
-async def run_forever() -> None:
-    settings = get_settings()
-    repository = AIJobRepository(settings.openai_job_db_path)
-    repository.initialize()
-    owner = f"{os.getpid()}-{uuid.uuid4().hex[:12]}"
-    while True:
-        if not settings.openai_api_key.get_secret_value().strip():
-            await asyncio.sleep(30)
-            continue
-        processed, runtime_state = await run_configured_once(
-            repository,
-            settings,
-            owner,
-        )
-        await asyncio.sleep(_next_iteration_delay(processed, runtime_state))
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Option Pro persistent AI worker")
-    parser.add_argument("--once", action="store_true")
-    parser.add_argument("--healthcheck", action="store_true")
-    args = parser.parse_args()
-    settings = get_settings()
-    repository = AIJobRepository(settings.openai_job_db_path)
-    if args.healthcheck:
-        payload = health_payload(repository, settings)
-        print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
-        raise SystemExit(0 if payload["healthy"] else 1)
-    if args.once:
-        if not settings.openai_api_key.get_secret_value().strip():
-            print(
-                json.dumps(
-                    {
-                        "status": "disabled",
-                        "processed": 0,
-                        "as_of": datetime.now(timezone.utc).isoformat(),
-                    },
-                    separators=(",", ":"),
-                )
-            )
-            return
-        owner = f"once-{os.getpid()}-{uuid.uuid4().hex[:8]}"
-        processed, runtime_state = asyncio.run(
-            run_configured_once(repository, settings, owner)
-        )
-        worker_status = (
-            "degraded"
-            if runtime_state == "runtime_settings_unavailable"
-            else "disabled"
-            if runtime_state == "analysis_disabled"
-            else "completed"
-        )
-        print(
-            json.dumps(
-                {
-                    "status": worker_status,
-                    "processed": processed,
-                    "runtime_state": runtime_state,
-                },
-                separators=(",", ":"),
-            )
-        )
-        return
-    try:
-        asyncio.run(run_forever())
-    except KeyboardInterrupt:
-        return
-
-
-if __name__ == "__main__":
-    main()

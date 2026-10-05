@@ -39,6 +39,11 @@ class _StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
 
+def enum_value(value: Any) -> Any:
+    """An Enum member's value; any other value unchanged."""
+    return value.value if isinstance(value, Enum) else value
+
+
 class MarketSession(str, Enum):
     PREMARKET = "premarket"
     REGULAR = "regular"

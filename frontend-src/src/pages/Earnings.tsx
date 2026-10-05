@@ -415,7 +415,7 @@ export default function Earnings() {
         ) : aiEnabled ? (
           <>
             <span className="size-2 rounded-full bg-warn-600" aria-hidden="true" />
-            <AnalysisIcon size={15} className="text-warn-600" />
+            <AnalysisIcon size={15} className="text-warn-700" />
             <span>
               {['analysis_in_progress', 'global_concurrency_limit', 'queue_busy'].includes(aiReason ?? '')
                 ? t('AI 处理中')
@@ -431,10 +431,10 @@ export default function Earnings() {
         )}
       </SoftBadge>
       {q.loading && q.data && (
-        <span className="font-mono text-micro text-ink-400">{t('正在检查更新…')}</span>
+        <span className="text-micro text-ink-500">{t('正在检查更新…')}</span>
       )}
       {!q.loading && q.error && q.data && (
-        <span className="font-mono text-micro text-warn-600">{t('刷新失败 · 显示已有数据')}</span>
+        <span className="text-micro text-warn-700">{t('刷新失败 · 显示已有数据')}</span>
       )}
       {isOwner && (
         <EarningsRefreshButton
@@ -455,7 +455,6 @@ export default function Earnings() {
         section="05"
         eyebrow="EARNINGS · AI IMPACT"
         title={t("财报日历")}
-        description={t("查看财报日程、业绩预期及对相关公司的影响。")}
         meta={headerMeta}
       />
 
@@ -464,12 +463,12 @@ export default function Earnings() {
           没有任何横幅，用户无从知道看到的是旧数据。 */}
       {refreshStatus !== 'failed_stale' && q.error && items.length > 0 && (
         <div className="mt-4 flex items-center justify-between gap-3 rounded-md border border-warn-600/30 bg-warn-50 px-4 py-2.5">
-          <p className="text-caption text-warn-600">
+          <p className="text-caption text-warn-700">
             {t('自动更新失败，显示上次数据。')}
           </p>
           <button
             onClick={() => q.refresh()}
-            className="shrink-0 rounded-sm border border-warn-600/40 px-2 py-1 text-caption text-warn-600 transition-colors hover:bg-warn-600 hover:text-on-accent"
+            className="shrink-0 rounded-sm border border-warn-600/40 px-2 py-1 text-caption text-warn-700 transition-colors hover:bg-warn-600 hover:text-on-accent"
           >
             {t('重试')}
           </button>
@@ -479,10 +478,10 @@ export default function Earnings() {
       {/* failed_stale：失败带缓存 → _stale 横幅 */}
       {refreshStatus === 'failed_stale' && (
         <div className="mt-4 flex items-center justify-between gap-3 rounded-md border border-warn-600/30 bg-warn-50 px-4 py-2.5">
-          <p className="text-caption text-warn-600">{t('更新失败，显示上次数据。')}</p>
+          <p className="text-caption text-warn-700">{t('更新失败，显示上次数据。')}</p>
           <button
             onClick={() => void onRefresh()}
-            className="shrink-0 rounded-sm border border-warn-600/40 px-2 py-1 text-caption text-warn-600 transition-colors hover:bg-warn-600 hover:text-on-accent"
+            className="shrink-0 rounded-sm border border-warn-600/40 px-2 py-1 text-caption text-warn-700 transition-colors hover:bg-warn-600 hover:text-on-accent"
           >
             {t('重试')}
           </button>
@@ -495,7 +494,7 @@ export default function Earnings() {
           role="status"
         >
           <div>
-            <p className="text-caption font-medium text-warn-600">{t('财报数据暂时不完整')}</p>
+            <p className="text-caption font-medium text-warn-700">{t('财报数据暂时不完整')}</p>
             <p className="mt-0.5 text-micro text-ink-500">
               {t('当前显示 {n} 家公司的财报，部分公司数据缺失。', { n: items.length })}
             </p>
@@ -512,7 +511,7 @@ export default function Earnings() {
             </div>
             <div className="grid grid-cols-7">
               {Array.from({ length: 7 }, (_, i) => (
-                <div key={i} className="min-h-[148px] space-y-2 border-r border-line p-2.5 last:border-r-0">
+                <div key={i} className="min-h-[96px] space-y-2 border-r border-line p-2.5 last:border-r-0">
                   <SkeletonBlock className="h-3 w-8" />
                   <SkeletonBlock className="h-2.5 w-10" />
                   <SkeletonBlock className="h-5 w-full" />
@@ -545,7 +544,7 @@ export default function Earnings() {
           <div>
             {/* 周 / 月视图切换（Segmented 滑块 260ms ease-paper；月历 accordion 320ms 展开） */}
             <div className="mb-3 flex items-center justify-between">
-              <p className="eyebrow">EARNINGS CALENDAR · ET</p>
+              <p className="eyebrow">{t('财报日程（美东时间）')}</p>
               <Segmented
                 options={[
                   { value: 'week' as const, label: t('周') },
@@ -672,32 +671,12 @@ export default function Earnings() {
                 filteredByDay={selectedDay != null}
                 featuredFilteredEmpty={listMode === 'featured' && listState.allCount > 0}
                 onShowAll={() => onListModeChange('all')}
+                totalCount={filteredItems.length}
+                moreCount={Math.min(LIST_PAGE_SIZE, Math.max(0, filteredItems.length - visibleItems.length))}
+                onShowMore={() => setVisibleLimit((limit) => limit + LIST_PAGE_SIZE)}
+                collapseTo={visibleLimit > LIST_PAGE_SIZE ? LIST_PAGE_SIZE : null}
+                onCollapse={() => setVisibleLimit(LIST_PAGE_SIZE)}
               />
-              {visibleItems.length < filteredItems.length && (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line bg-card px-4 py-3">
-                  <p className="text-caption text-ink-500">
-                    {t('已显示')} <span className="font-mono text-ink-800 tnum">{visibleItems.length}</span>
-                    {' / '}
-                    <span className="font-mono text-ink-800 tnum">{filteredItems.length}</span> {t('条')}
-                  </p>
-                  <button
-                    onClick={() => setVisibleLimit((limit) => limit + LIST_PAGE_SIZE)}
-                    className="h-8 rounded-md border border-line bg-card-warm px-3 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
-                  >
-                    {t('显示更多 ·')} {Math.min(LIST_PAGE_SIZE, filteredItems.length - visibleItems.length)} {t('条')}
-                  </button>
-                </div>
-              )}
-              {visibleLimit > LIST_PAGE_SIZE && (
-                <div className="flex justify-end">
-                  <button
-                    onClick={() => setVisibleLimit(LIST_PAGE_SIZE)}
-                    className="h-8 px-2 text-caption text-ink-400 transition-colors hover:text-brand-600"
-                  >
-                    {t('收起至前')} {LIST_PAGE_SIZE} {t('条')}
-                  </button>
-                </div>
-              )}
             </>
           )}
         </div>

@@ -7,7 +7,6 @@ import { catalystsContract } from './api';
 import { Led } from './bits';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonCard } from '@/components/shared/Skeleton';
-import SourceNote from '@/components/shared/SourceNote';
 import { fmtRelativeShort } from '@/lib/format';
 import { t } from '../../i18n/core.ts';
 
@@ -73,7 +72,7 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
               <p className="text-h3 text-ink-800">{s.source}</p>
               <SoftBadge tone={s.status === 'active' ? 'up' : 'warn'}>
                 {/* 源正常/异常是静态健康状态，不脉冲 */}
-                <Led tone={s.status === 'active' ? 'up' : 'warn'} className="size-1.5" />
+                <Led tone={s.status === 'active' ? 'ok' : 'warn'} className="size-1.5" />
                 {s.status === 'active' ? t('正常') : t('异常')}
               </SoftBadge>
             </div>
@@ -97,10 +96,6 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
           </motion.div>
         ))}
       </motion.div>
-      <SourceNote
-        className="mt-4"
-        text={t("滞后时间表示数据的新旧程度；条数统计最近 24 小时收录的新闻与经济事件。")}
-      />
     </div>
   );
 }

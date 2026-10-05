@@ -279,12 +279,7 @@ def _versions(settings: BreakoutSettings, stored: Any = None) -> dict[str, str]:
 
 
 def _finite_float_map(mapping: Any) -> dict[str, float]:
-    """Drop non-finite values while coercing the rest to ``float`` keyed by ``str``.
-
-    The same cleanup was written out four times in ``_public_event`` for
-    ``configured_weights``, ``effective_weights``, ``contribution_breakdown``
-    and ``penalties``.
-    """
+    """Drop non-finite values while coercing the rest to ``float`` keyed by ``str``."""
 
     return {
         str(key): float(value)
@@ -565,11 +560,10 @@ def _public_events(
     observed_at: Optional[datetime] = None,
     macro: Any = None,
 ) -> list[BreakoutEventResponse]:
-    """Build a page of public events, isolating each row's failure (M-11).
+    """Build a page of public events, isolating each row's failure.
 
-    A bare list comprehension over ``_public_event`` let one malformed row
-    (for example a stored timestamp with no timezone) take the whole page down
-    with it. Skip that one row instead, and record why.
+    One malformed row (for example a stored timestamp with no timezone) is
+    skipped and recorded instead of taking the whole page down with it.
     """
 
     built: list[BreakoutEventResponse] = []

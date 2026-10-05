@@ -226,9 +226,9 @@ test('screener result strength colors use stable score bands on mobile and deskt
     [79.9, 'B', 'b', 'bg-brand-400'],
     [80, 'A', 'a', 'bg-brand-600'],
     [84.9, 'A', 'a', 'bg-brand-600'],
-    [85, 'A', 'a-high', 'bg-up-600'],
-    [89.9, 'A', 'a-high', 'bg-up-600'],
-    [90, 'S', 's', 'bg-up-700'],
+    [85, 'A', 'a-high', 'bg-ok-600'],
+    [89.9, 'A', 'a-high', 'bg-ok-600'],
+    [90, 'S', 's', 'bg-ok-700'],
   ];
   for (const [score, band, tone, barClass] of expected) {
     const presentation = screenerStrengthPresentation(score);

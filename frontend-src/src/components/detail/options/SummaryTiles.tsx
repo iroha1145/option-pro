@@ -17,12 +17,12 @@ export default function SummaryTiles({ chain }: { chain: OptionChain }) {
   return <dl className="mt-4 grid grid-cols-2 overflow-hidden rounded-lg border border-line md:grid-cols-3">
     {sides.map(({ side, total, known, count, partial }) => <div key={side} className="px-4 py-4 first:border-r first:border-line">
       <dt className="text-caption text-ink-500">{side === 'call' ? t('看涨期权成交') : t('看跌期权成交')}</dt>
-      <dd className="mt-1.5 font-mono text-data-l font-medium text-ink-900 tnum">{total === null ? '—' : fmtCompact(total)}<span className="ml-1.5 font-sans text-caption font-normal text-ink-500">{t('张')}</span></dd>
+      <dd className="metric-value mt-1.5 text-data-l text-ink-900">{total === null ? '—' : fmtCompact(total)}<span className="ml-1.5 text-caption font-normal tracking-normal text-ink-500">{t('张')}</span></dd>
       <p className="mt-1 text-micro text-ink-500">{partial ? t('已取得 {known}/{total} 份合约的成交量', { known, total: count }) : t('合计 {n} 份合约', { n: count })}</p>
     </div>)}
     <div className="col-span-2 border-t border-line bg-paper-2/50 px-4 py-4 md:col-span-1 md:border-l md:border-t-0">
       <dt className="text-caption text-ink-500">{t('需关注合约')}</dt>
-      <dd className="mt-1.5 font-mono text-data-l font-medium text-ink-900 tnum">{alerts}<span className="ml-1.5 font-sans text-caption font-normal text-ink-500">{t('份')}</span></dd>
+      <dd className="metric-value mt-1.5 text-data-l text-ink-900">{alerts}<span className="ml-1.5 text-caption font-normal tracking-normal text-ink-500">{t('份')}</span></dd>
       <p className="mt-1 text-micro text-ink-500">{t('当前到期日')}</p>
     </div>
   </dl>;

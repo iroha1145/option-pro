@@ -20,6 +20,8 @@ import time
 from datetime import date, datetime, tzinfo
 from typing import Any, Callable, Iterable, Mapping
 
+from app.failure_diagnostics import record_fallback_failure
+
 TREND_RANGE = "6mo"
 TREND_INTERVAL = "1wk"
 TREND_ADJUSTMENT = "split"
@@ -175,7 +177,8 @@ def cached_weekly_history(
         return history
     try:
         fetched = fetch(to_fetch)
-    except Exception:
+    except Exception as exc:
+        record_fallback_failure("watchlist_trend_fetch", exc)
         fetched = {}
     with _lock:
         for ticker in to_fetch:
@@ -202,7 +205,8 @@ def reset_cache() -> None:
         _cache.clear()
 
 
-def _close_series(frame: Any, ticker: str, *, single: bool) -> Any:
+def close_series(frame: Any, ticker: str, *, single: bool) -> Any:
+    """One symbol's Close (else Adj Close) column from a provider frame, or None."""
     if frame is None or getattr(frame, "empty", True):
         return None
     columns = frame.columns
@@ -221,12 +225,14 @@ def _close_series(frame: Any, ticker: str, *, single: bool) -> Any:
     return None
 
 
-def _session_closes(series: Any, market_timezone: tzinfo) -> list[tuple[date, float]]:
-    """(session date, close) pairs; aware stamps are read in the symbol's market.
+def market_closes(series: Any, market_timezone: tzinfo) -> list[tuple[date, float]]:
+    """Positive finite closes with each stamp read in the symbol's market.
 
     Batched Yahoo frames are normalised to UTC before they are merged, which
-    moves an Asian session's midnight into the previous UTC day. Naive daily
-    stamps already name the local session.
+    moves an Asian session's midnight into the previous UTC day, so aware
+    stamps are converted. Naive stamps already name the market's local time
+    and only get its timezone attached. Plain dates are kept as they are; any
+    other index value is skipped.
     """
     if series is None:
         return []
@@ -240,12 +246,20 @@ def _session_closes(series: Any, market_timezone: tzinfo) -> list[tuple[date, fl
             continue
         when = index.to_pydatetime() if hasattr(index, "to_pydatetime") else index
         if isinstance(when, datetime):
-            if when.tzinfo is not None:
-                when = when.astimezone(market_timezone)
-            points.append((when.date(), close))
+            if when.tzinfo is None:
+                points.append((when.replace(tzinfo=market_timezone), close))
+            else:
+                points.append((when.astimezone(market_timezone), close))
         elif isinstance(when, date):
             points.append((when, close))
     return points
+
+
+def _session_closes(series: Any, market_timezone: tzinfo) -> list[tuple[date, float]]:
+    return [
+        (when.date() if isinstance(when, datetime) else when, close)
+        for when, close in market_closes(series, market_timezone)
+    ]
 
 
 def fetch_six_month_daily(
@@ -260,17 +274,18 @@ def fetch_six_month_daily(
     Only these two providers are used: the trend is decoration for a card, not
     a reason to spend the MarketData/Stooq/Finnhub budgets the screener relies on.
     """
-    from app.services.strength.scanner import _download_massive_history
+    from app.services.strength.scanner import download_massive_history
     from app.services.yfinance_batch import download_in_bounded_batches
 
     closes: dict[str, list[tuple[date, float]]] = {}
     try:
-        massive_frame, _missing = _download_massive_history(tickers, TREND_RANGE)
-    except Exception:
+        massive_frame, _missing = download_massive_history(tickers, TREND_RANGE)
+    except Exception as exc:
+        record_fallback_failure("watchlist_trend_massive", exc)
         massive_frame = None
     for ticker in tickers:
         points = _session_closes(
-            _close_series(massive_frame, ticker, single=False),
+            close_series(massive_frame, ticker, single=False),
             market_timezone(ticker),
         )
         if points:
@@ -289,11 +304,12 @@ def fetch_six_month_daily(
             kwargs["session"] = session
         try:
             yahoo_frame = download_in_bounded_batches(download, **kwargs)
-        except Exception:
+        except Exception as exc:
+            record_fallback_failure("watchlist_trend_yahoo", exc)
             yahoo_frame = None
         for ticker in remaining:
             points = _session_closes(
-                _close_series(yahoo_frame, ticker, single=len(remaining) == 1),
+                close_series(yahoo_frame, ticker, single=len(remaining) == 1),
                 market_timezone(ticker),
             )
             if points:

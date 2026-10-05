@@ -3,14 +3,14 @@
  * 头部：‹ › 上月/本月/下月连续切换（方向感知 slide 260ms ease-paper）· Serif 月标题 ·「今天」快捷钮
  * 网格：周一→周日 7 列 × 5–6 行；上/下月溢出日期 ink-300 淡显、本月 ink-800；
  *      今天 brand 圆底+圆点、选中 brand-50 底、周末淡底；无财报日期留白
- * 格内财报 chips ≤3（ticker + sun-bmo/moon-amc，盘前 warn-600 / 盘后 ai-600），超出「+N」；
- * <sm 收缩为色点 + 计数徽章（明细在下方列表查看）
+ * 格内财报 chips ≤3（ticker + sun-bmo/moon-amc 图标；盘前盘后是类别，用图标与墨色深浅区分，
+ * 不借警示琥珀或 AI 青瓷色），超出「+N」；<sm 收缩为圆点 + 计数徽章（明细在下方列表查看）
  * 点击日期 → 选中并联动 B2 日过滤（再点取消）；格 stagger 25ms rise-in（仅首次进场）
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
+import { DUR_SECTION, DUR_UI, EASE_PAPER } from '@/lib/motion';
 import Icon from '@/components/icons';
 import type { EarningsRow } from './types';
 import { addDays, etToday, fmtMDCN, weekStartMonday } from './types';
@@ -148,10 +148,10 @@ export default function MonthCalendar({
 
       {/* 星期头（周一→周日，周末淡显） */}
       <div className="grid grid-cols-7 border-b border-line bg-card-warm/60">
-        {WEEKDAYS.map((w, i) => (
+        {WEEKDAYS.map((w) => (
           <span
             key={w}
-            className={cn('py-1.5 text-center font-mono text-micro', i >= 5 ? 'text-ink-300' : 'text-ink-400')}
+            className="py-1.5 text-center text-micro text-ink-500"
           >
             {t(w)}
           </span>
@@ -165,7 +165,7 @@ export default function MonthCalendar({
           initial={{ x: dir * 36, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: dir * -36, opacity: 0 }}
-          transition={{ duration: 0.26, ease: EASE_PAPER }}
+          transition={{ duration: DUR_UI, ease: EASE_PAPER }}
           className="grid grid-cols-7"
         >
           {cells.map((date, ci) => {
@@ -214,7 +214,7 @@ export default function MonthCalendar({
                         ? 'flex h-6 min-w-6 items-center justify-center rounded-full bg-brand-600 px-1 font-semibold text-on-accent'
                         : inMonth
                           ? 'text-ink-800'
-                          : 'text-ink-300',
+                          : 'text-ink-400',
                     )}
                   >
                     {label}
@@ -243,15 +243,15 @@ export default function MonthCalendar({
                         <Icon
                           name={it.timing === 'bmo' ? 'sun-bmo' : it.timing === 'amc' ? 'moon-amc' : 'clock-ny'}
                           size={11}
-                          className={it.timing === 'bmo' ? 'text-warn-600' : it.timing === 'amc' ? 'text-ai-600' : 'text-ink-400'}
+                          className={active ? 'text-brand-700' : 'text-ink-500'}
                         />
-                        <span className="truncate font-mono text-[10px] font-medium leading-4 text-ink-800">
+                        <span className="truncate font-mono text-micro font-medium leading-4 text-ink-800">
                           {it.ticker}
                         </span>
                       </motion.button>
                     );
                   })}
-                  {extra > 0 && <span className="px-1 font-mono text-[10px] leading-4 text-ink-400 tnum">+{extra}</span>}
+                  {extra > 0 && <span className="px-1 text-micro leading-4 text-ink-500 tnum">+{extra}</span>}
                 </div>
 
                 {/* 移动端：色点 + 计数徽章（类手机日历） */}
@@ -264,12 +264,12 @@ export default function MonthCalendar({
                             key={`${it.ticker}-${i}`}
                             className={cn(
                               'size-1.5 rounded-full',
-                              it.timing === 'bmo' ? 'bg-warn-600' : it.timing === 'amc' ? 'bg-ai-600' : 'bg-ink-300',
+                              it.timing === 'bmo' ? 'bg-ink-400' : it.timing === 'amc' ? 'bg-ink-700' : 'bg-ink-300',
                             )}
                           />
                         ))}
                       </span>
-                      <span className="rounded-pill bg-line/70 px-1 font-mono text-[10px] leading-4 text-ink-600 tnum">
+                      <span className="rounded-pill bg-line/70 px-1 text-micro leading-4 text-ink-600 tnum">
                         {dayItems.length}
                       </span>
                     </span>

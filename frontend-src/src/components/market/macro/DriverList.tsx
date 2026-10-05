@@ -10,19 +10,16 @@ import { t } from '../../../i18n/core.ts';
 
 export default function DriverList({
   title,
-  eyebrow,
   drivers,
   emptyText,
 }: {
   title: string;
-  eyebrow: string;
   drivers: MacroDriver[];
   emptyText: string;
 }) {
   return (
     <section className="card-surface flex h-full flex-col p-5" aria-label={title}>
-      <p className="eyebrow">{eyebrow}</p>
-      <h3 className="mt-1.5 text-h3 text-ink-800">{title}</h3>
+      <h3 className="text-h3 text-ink-900">{title}</h3>
       {drivers.length === 0 ? (
         <p className="mt-4 text-body-s leading-relaxed text-ink-400">{emptyText}</p>
       ) : (
@@ -36,7 +33,7 @@ export default function DriverList({
                   {hint && <InfoHint hint={hint} side="bottom" align="start" size={11} />}
                 </span>
                 <span className="flex shrink-0 items-center gap-2">
-                  <span className="font-mono text-data-m text-ink-800 tnum">
+                  <span className="text-data-m text-ink-800 tnum">
                     {typeof driver.score === 'number' ? driver.score.toFixed(1) : '—'}
                   </span>
                   <ChangeBadge value={driver.scoreChange7d} size="sm" format="points" />
