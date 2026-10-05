@@ -1080,8 +1080,8 @@ def test_catalyst_sync_publishes_when_ai_jobs_initialization_fails(
         def initialize(self) -> None:
             local_calls.append("initialize")
 
-        def consume_refresh_requested(self) -> bool:
-            return False
+        def consume_refresh_requested(self) -> dict | None:
+            return None
 
         def reconcile(self, *, allow_scheduled_jobs: bool = False) -> dict:
             local_calls.append("reconcile")

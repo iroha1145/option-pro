@@ -823,7 +823,6 @@ class CatalystSyncTask:
         errors: dict[str, str] = {}
         metrics: dict[str, dict[str, int | bool]] = {}
         manual_request: dict[str, Any] | None = None
-        legacy_refresh_requested = False
         try:
             effective = get_effective_runtime_settings()
         except RuntimeSettingsStorageError:
@@ -860,16 +859,12 @@ class CatalystSyncTask:
                 )
                 if isinstance(raw_request, dict):
                     manual_request = raw_request
-                else:
-                    legacy_refresh_requested = bool(raw_request)
             except Exception as exc:
                 errors["refresh_request"] = self._error_code(exc)
 
         requested_type = (
             str(manual_request.get("operation_type"))
             if manual_request is not None
-            else "source_health"
-            if legacy_refresh_requested
             else None
         )
         if not scheduled_due and requested_type is None and not errors:
@@ -999,9 +994,7 @@ class CatalystSyncTask:
         details: dict[str, Any] = {
             "processed": processed,
             "streams": metrics,
-            "refresh_requested": bool(
-                manual_request is not None or legacy_refresh_requested
-            ),
+            "refresh_requested": manual_request is not None,
             "refresh_operation_type": requested_type,
             "refresh_request_id": (
                 manual_request.get("request_id")
