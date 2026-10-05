@@ -14,7 +14,7 @@
 
 `scripts/deploy.sh` 负责校验配置、构建镜像、停止旧写入者、启动两个服务并完成就绪核对。私有网络模式不会启动或等待公共行情快照；密码模式会启动`public_home`首次生成匿名首页所需数据，并等待七项公共资源均可读取。它不会请求新闻刷新，也不创建模型任务。发布脚本会拒绝未提交的工作树，避免服务运行内容与记录的提交不一致。
 
-## 环境文件迁移
+## 环境文件
 
 现行配置分为三层：
 
@@ -22,35 +22,7 @@
 - `machine.env`：七项机器配置，包括统一数据目录；
 - `secrets.env`：七项服务端密钥。
 
-`.env` 只保留一个迁移版本的兼容用途。旧环境文件可先转换为人工核对草稿：
-
-```bash
-PYTHONPATH=backend python -m app.tools.migrate_personal_config \
-  .env --output-directory config/migrated
-```
-
-该命令写入四个文件：
-
-- `personal.toml`：访问模式、模型限制、调度与保留期等行为配置；
-- `machine.env`：`HOST_BIND`、`PORT`、`MACROLENS_URL`、`ALLOWED_HOSTS`、`TRUST_PROXY_HEADERS`、`TRUSTED_PROXY_CIDRS` 和 `DATA_DIR`；
-- `secrets.env`：`OPENAI_API_KEY`、`FINNHUB_API_KEY`、`MARKETDATA_TOKEN`、`MASSIVE_API_KEY`、`FRED_API_KEY`、`INTERNAL_API_TOKEN` 和 `APP_PASSWORD_HASH`；
-- `migration-report.json`：只记录字段名称与迁移状态。
-
-后三个文件权限均为 `0600`。迁移报告只含 `mapped_keys`、`deprecated_keys`、`removed_keys`、`conflicting_keys`、`unmapped_keys`、`requires_owner_password` 和 `warnings`，不得出现值、值长度、摘要、网址或任何密钥片段。
-
-旧名称按以下规则迁移：
-
-- `MARKETDATA_API_TOKEN` 转为 `MARKETDATA_TOKEN`；
-- `MACROLENS_BASE_URL` 转为 `MACROLENS_URL`；
-- `MACROLENS_INTERNAL_TOKEN` 转为 `INTERNAL_API_TOKEN`。
-
-旧名与新名同时存在且非空值不同，转换会停止，并且只把冲突字段名写入报告。旧浏览器令牌、签名密钥、请求随机数和密钥编号不会复制；它们只会以 `removed_by_personal_edition` 状态列入 `removed_keys`。
-
-若存在 `APP_AUTH_TOKEN` 而没有 `APP_PASSWORD_HASH`，报告会把 `requires_owner_password` 设为 `true`。旧浏览器令牌不会迁移为所有者密码，应在服务器终端另行设置：
-
-```bash
-./personal.sh secrets set APP_PASSWORD_HASH
-```
+`.env` 是部署级覆盖文件，模板为空。它只放上面三层都没有归属的运维覆盖，例如突破雷达读取的 `RANGE_PERSISTENCE_VERSION` 与 `RANGE_PERSISTENCE_VALIDATION_VERSION`。机器字段和密钥以 `machine.env`、`secrets.env` 为准，同名值会覆盖 `.env`。
 
 建立正式文件：
 
@@ -61,7 +33,13 @@ cp secrets.env.example secrets.env
 chmod 600 .env machine.env secrets.env
 ```
 
-只把已经核对的字段写入对应文件。MacroLens 连接统一为 `machine.env` 中的 `MACROLENS_URL` 与 `secrets.env` 中的 `INTERNAL_API_TOKEN`，两者必须同时配置或同时留空；正式部署只接受超文本传输安全协议（HTTPS）地址。运行时不再读取旧访问开关、旧 MacroLens 名称或独立数据路径。
+已有部署上重跑 `setup.sh` 只补齐缺失的文件，已有文件保持不变。MacroLens 连接统一为 `machine.env` 中的 `MACROLENS_URL` 与 `secrets.env` 中的 `INTERNAL_API_TOKEN`，两者必须同时配置或同时留空；正式部署只接受超文本传输安全协议（HTTPS）地址。运行时不再读取旧访问开关、旧 MacroLens 名称或独立数据路径。
+
+密码模式需要的所有者密码在服务器终端设置：
+
+```bash
+./personal.sh secrets set APP_PASSWORD_HASH
+```
 
 ## 访问边界
 

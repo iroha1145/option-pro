@@ -1,9 +1,10 @@
 """Load repository runtime files before modules inspect ``os.environ``.
 
-The Personal Edition keeps three distinct files: legacy-compatible ``.env``,
-host-specific ``machine.env`` and server-only ``secrets.env``. Values exported
-by the process always win. The canonical files override legacy ``.env`` values
-only for the seven machine fields or the secrets that belong to them.
+The Personal Edition keeps three distinct files: deployment-level ``.env``
+overrides, host-specific ``machine.env`` and server-only ``secrets.env``.
+Values exported by the process always win. The canonical files override
+``.env`` values only for the seven machine fields or the secrets that belong
+to them.
 """
 
 from __future__ import annotations
