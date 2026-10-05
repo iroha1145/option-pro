@@ -183,6 +183,37 @@ def _completed_earnings_result() -> dict:
     }
 
 
+_ACTION_HEADERS = {"Origin": "http://localhost", "X-Optix-Action": "1"}
+
+
+def _released_aapl_snapshot(monkeypatch) -> None:
+    from app.api import earnings
+
+    async def snapshot():
+        return {
+            "data_limited": False,
+            "source_status": "active",
+            "earnings": [
+                {
+                    "ticker": "AAPL",
+                    "name": "Apple",
+                    "sector": "Technology",
+                    "earnings_date": "2026-07-23",
+                    "year": 2026,
+                    "quarter": 2,
+                    "eps_estimate": 1.4,
+                    "eps_actual": 1.6,
+                    "revenue_estimate": 90_000_000_000,
+                    "revenue_actual": 92_000_000_000,
+                    "market_cap": 3_000_000_000_000,
+                    "release_status": "released",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(earnings, "_read_current_upcoming_earnings_snapshot", snapshot)
+
+
 def test_manual_routes_fail_closed_when_only_scheduled_analysis_is_enabled(
     tmp_path,
     monkeypatch,
@@ -206,8 +237,9 @@ def test_manual_routes_fail_closed_when_only_scheduled_analysis_is_enabled(
     client = TestClient(app, base_url="http://localhost")
 
     earnings = client.post(
-        "/api/ai/jobs/earnings-impact",
-        json={"ticker": "AAPL", "name": "Apple"},
+        "/api/ai/earnings-impact/AAPL/reports/2026-07-23",
+        json={"confirm": True},
+        headers=_ACTION_HEADERS,
     )
     options = client.post(
         "/api/ai/jobs/option-alerts",
@@ -247,13 +279,15 @@ def test_earnings_manual_route_is_independent_from_catalyst_read_only_mode(
         capability_checked = True
 
     monkeypatch.setattr(ai, "_require_runtime_capability", capability)
+    _released_aapl_snapshot(monkeypatch)
     app = FastAPI()
     app.include_router(ai.router)
     client = TestClient(app, base_url="http://localhost")
 
     earnings = client.post(
-        "/api/ai/jobs/earnings-impact",
-        json={"ticker": "AAPL", "name": "Apple"},
+        "/api/ai/earnings-impact/AAPL/reports/2026-07-23",
+        json={"confirm": True},
+        headers=_ACTION_HEADERS,
     )
     options = client.post(
         "/api/ai/jobs/option-alerts",

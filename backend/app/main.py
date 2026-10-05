@@ -330,7 +330,6 @@ _PUBLIC_READ_API_PATTERNS = tuple(
         r"^/api/sectors/[^/]+/iv-ranking$",
         r"^/api/signals/stock/[^/]+$",
         r"^/api/macro/conditions/modules/[a-z_]{1,32}$",
-        r"^/api/macro/conditions/factors/[a-z0-9_]{1,64}/history$",
         r"^/api/catalysts/news/[1-9][0-9]*$",
         r"^/api/catalysts/tickers/(?!batch$)[A-Z0-9][A-Z0-9.-]{0,19}$",
         r"^/api/strength/stocks/[^/]+$",

@@ -840,47 +840,6 @@ class MacroConditionsService:
             sources.append("Option Pro 股票日线数据源")
         return sorted(set(sources))
 
-    def factor_history(
-        self,
-        factor_id: str,
-        *,
-        days: int = DEFAULT_HISTORY_DAYS,
-    ) -> dict[str, Any]:
-        if factor_id not in FACTORS_BY_ID:
-            raise MacroError("macro_snapshot_unavailable", "unknown factor")
-        bounded = max(MIN_HISTORY_DAYS, min(int(days), MAX_HISTORY_DAYS))
-        today = self._clock().date()
-        try:
-            rows = self.repository.factor_history(
-                factor_id,
-                start=today - timedelta(days=bounded),
-                end=today,
-            )
-        except MacroError:
-            rows = []
-        spec = FACTORS_BY_ID[factor_id]
-        return {
-            "status": "active" if rows else "unavailable",
-            "factor_id": factor_id,
-            "module_id": spec.module_id,
-            "display_name_zh": spec.display_name_zh,
-            "unit": unit_descriptor(spec.display_unit),
-            "days": bounded,
-            "scoring_version": SCORING_VERSION,
-            "points": [
-                {
-                    "date": row["snapshot_date"],
-                    "raw_value": row["raw_value"],
-                    "signed_value": row["signed_value"],
-                    "score": row["score"],
-                    "status": row["status"],
-                    "data_through": row["data_through"],
-                    "history_basis": row["history_basis"],
-                }
-                for row in rows
-            ],
-        }
-
     # ------------------------------------------------------------------
     # AI context
     # ------------------------------------------------------------------

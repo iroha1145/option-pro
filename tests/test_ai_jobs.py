@@ -2334,35 +2334,6 @@ def test_cached_get_hides_a_forged_zh_cn_legacy_result(monkeypatch, tmp_path):
     assert repository.get_job(row["job_id"])["result_json"] is not None
 
 
-def test_job_post_is_fast_local_and_idempotent(monkeypatch, tmp_path):
-    repository = AIJobRepository(tmp_path / "ai-jobs.db")
-    settings = _settings(tmp_path / "ai-jobs.db")
-    monkeypatch.setattr(ai, "_job_repository", lambda: repository)
-    monkeypatch.setattr(ai, "get_settings", lambda: settings)
-    monkeypatch.setattr(ai, "_require_runtime_capability", lambda: None)
-
-    app = FastAPI()
-    app.include_router(ai.router)
-    client = TestClient(app, base_url="http://localhost")
-    body = {
-        "ticker": "AAPL",
-        "name": "Apple",
-        "sector": "Technology",
-        "earnings_date": "2026-07-30",
-    }
-
-    first = client.post("/api/ai/jobs/earnings-impact", json=body)
-    second = client.post("/api/ai/jobs/earnings-impact", json=body)
-
-    assert first.status_code == 202
-    assert second.status_code == 202
-    assert first.json()["job_id"] == second.json()["job_id"]
-    assert first.json()["status"] == "pending"
-    assert second.json()["cached"] is False
-    stored = repository.get_job(first.json()["job_id"])
-    assert stored["prompt_version"] == "earnings-impact-zh-cn-v6"
-
-
 def test_option_alert_failed_job_requires_explicit_force_to_requeue(
     monkeypatch,
     tmp_path,
@@ -2435,23 +2406,6 @@ def test_large_valid_signal_result_is_persisted_separately_from_request_limit(
     completed = repository.public(repository.get_job(row["job_id"]))
     assert completed["status"] == "completed"
     assert completed["result"]["asset"] == "AAPL"
-
-
-def test_paid_job_route_has_no_extra_action_capability(monkeypatch, tmp_path):
-    repository = AIJobRepository(tmp_path / "ai-jobs.db")
-    monkeypatch.setattr(ai, "_job_repository", lambda: repository)
-    monkeypatch.setattr(ai, "_require_runtime_capability", lambda: None)
-    app = FastAPI()
-    app.include_router(ai.router)
-    client = TestClient(app, base_url="http://localhost")
-
-    response = client.post(
-        "/api/ai/jobs/earnings-impact",
-        json={"ticker": "AAPL"},
-    )
-
-    assert response.status_code == 202
-    assert repository.health()["pending"] == 1
 
 
 def test_pending_cancel_is_idempotent(tmp_path):

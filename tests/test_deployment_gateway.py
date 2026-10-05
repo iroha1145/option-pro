@@ -1069,7 +1069,7 @@ def test_production_validation_errors_never_echo_submitted_password() -> None:
         ("GET", "/api/ai/status", False),
         ("GET", "/api/ai/earnings-impact/AAPL", False),
         ("GET", "/api/ai/jobs/aij_" + "a" * 32, False),
-        ("POST", "/api/ai/jobs/earnings-impact", False),
+        ("POST", "/api/ai/jobs/option-alerts", False),
         ("POST", "/api/ai/earnings-impact/AAPL/reports/2026-07-23/", False),
         ("GET", "/api/runtime-settings", False),
         ("POST", "/api/stocks", False),
@@ -1114,7 +1114,7 @@ def test_visitor_action_flags_open_exactly_the_declared_posts() -> None:
     # 开关不放大其他 POST 面
     for blocked in (
         "/api/stocks/AAOI/pull/",
-        "/api/ai/jobs/earnings-impact",
+        "/api/ai/jobs/option-alerts",
         "/api/worker/actions/focus_refresh",
     ):
         assert not main._is_public_read_request(
@@ -1279,9 +1279,9 @@ def test_anonymous_requests_cannot_reach_any_owner_state_changing_route() -> Non
         for method, template, _route in _real_body_operations()
         if (method, template) not in _NON_OWNER_OPERATIONS
     ]
-    assert len(operations) >= 15
+    assert len(operations) >= 12
     assert ("PUT", "/api/runtime-settings") in operations
-    assert ("POST", "/api/ai/jobs/earnings-impact") in operations
+    assert ("POST", "/api/ai/jobs/option-alerts") in operations
     assert ("POST", "/api/catalysts/refresh") in operations
 
     for mode, address, expected_status, expected_error in (
