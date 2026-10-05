@@ -104,7 +104,6 @@ function MetricRows({ data }: { data: MarketSignalsSnapshot }) {
           </span>
         </div>
       ))}
-      <p className="pt-1 text-micro text-ink-400">{t('右列：指标值 · 顶部风险分 / 底部修复分')}</p>
     </div>
   );
 }

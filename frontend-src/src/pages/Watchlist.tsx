@@ -717,7 +717,6 @@ export default function Watchlist() {
         section="01"
         eyebrow="WATCHLIST"
         title={t("自选观察")}
-        description={t("跟踪自选股的价格、走势与市场信号。")}
         meta={
           <>
             {username && (

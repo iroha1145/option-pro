@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import {
   sectorsApi,
   type SectorPeriod,
@@ -8,7 +8,6 @@ import {
 import { usePolling } from '@/hooks/usePolling';
 import { useShell } from '@/hooks/useShell';
 import { fmtRelative, fmtTimeHHMMSS } from '@/lib/format';
-import { DUR_UI } from '@/lib/motion';
 import PageHeader from '@/components/shared/PageHeader';
 import Segmented from '@/components/shared/Segmented';
 import EmptyState from '@/components/shared/EmptyState';
@@ -18,7 +17,6 @@ import { BusyIcon } from '@/components/shared/IconSwap';
 import HeatMatrix, {
   HeatMatrixSkeleton,
 } from '@/components/sectors/HeatMatrix';
-import SectorList from '@/components/sectors/SectorList';
 import DetailBand from '@/components/sectors/DetailBand';
 import IvPanel from '@/components/sectors/IvPanel';
 import SideRail from '@/components/sectors/SideRail';
@@ -48,7 +46,6 @@ function emptyStrength(period: SectorPeriod): SectorStrengthEnvelope {
 
 export default function Sectors() {
   const { openTicker, openPalette } = useShell();
-  const [view, setView] = useState<'heat' | 'list'>('heat');
   const [period, setPeriod] = useState<SectorPeriod>('3mo');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [ivSectorId, setIvSectorId] = useState<string | null>(null);
@@ -115,7 +112,6 @@ export default function Sectors() {
         section="04"
         eyebrow="SECTORS · LIVE AGGREGATES"
         title={t("板块透视")}
-        description={t("比较各板块的平均涨跌幅、个股强度与数据覆盖情况。")}
         meta={
           <>
             <span className="hidden font-mono text-micro text-ink-400 tnum sm:inline">
@@ -123,25 +119,12 @@ export default function Sectors() {
                 ? t('统计截至 {time}', { time: fmtRelative(strengthEnvelope.asOf) })
                 : t('统计时间 —')}
             </span>
-            <Segmented
-              options={[
-                { value: 'heat', label: t('热力') },
-                { value: 'list', label: t('列表') },
-              ]}
-              value={view}
-              onChange={setView}
-            />
           </>
         }
       />
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-y border-line py-3">
-        <div>
-          <p className="text-caption font-medium text-ink-700">{t('收益统计周期')}</p>
-          <p className="text-micro text-ink-400">
-            {t('数值由板块成分股汇总得出')}
-          </p>
-        </div>
+        <p className="text-caption font-medium text-ink-700">{t('收益统计周期')}</p>
         <Segmented
           options={[
             { value: '1mo', label: t('1 个月') },
@@ -245,31 +228,13 @@ export default function Sectors() {
             />
           </div>
         ) : (
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={view}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: DUR_UI }}
-            >
-              {view === 'heat' ? (
-                <div className="card-surface p-4 md:p-6">
-                  <HeatMatrix
-                    sectors={sectors}
-                    selectedId={selectedId}
-                    onSelect={onToggleSelect}
-                  />
-                </div>
-              ) : (
-                <SectorList
-                  sectors={sectors}
-                  selectedId={selectedId}
-                  onSelect={onToggleSelect}
-                />
-              )}
-            </motion.div>
-          </AnimatePresence>
+          <div className="card-surface p-4 md:p-6">
+            <HeatMatrix
+              sectors={sectors}
+              selectedId={selectedId}
+              onSelect={onToggleSelect}
+            />
+          </div>
         )}
       </section>
 

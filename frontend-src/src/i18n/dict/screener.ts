@@ -6,7 +6,6 @@ export const SCREENER: Dict = {
   "估": ["est.", "推計"],
   "20 日均成交额代理": ["20-day average dollar-volume proxy", "20日平均売買代金の推計"],
   "按原始收盘价乘日成交量估算；成交额与成交时段资格仍需核实。": ["Estimated from raw close times daily volume; dollar-volume and session eligibility remain unverified.", "未調整終値と日次出来高から推計。売買代金と取引時間帯の適格性は未確認です。"],
-  "观察分取各家族与主题路径中的最高分，不代表多家族共识。": ["The observation score is the highest family/theme path score, not a multi-family consensus.", "観察スコアは各手法・テーマ経路の最高値であり、複数手法の合意ではありません。"],
   "观察分取各家族与主题路径中的最高分，不代表多家族共识。评分使用收盘日线的趋势、动量、结构、突破、回踩、量能与稳定性；行业因子当前停用。风险偏好调整权重和门槛，合格综合另需资格核实与家族共识。": ["Observation uses the highest family/theme path score. It combines daily-close trend, momentum, structure, breakout, pullback, volume, and stability; the industry factor is disabled. Profiles adjust weights and gates. Qualified consensus also requires verified eligibility and agreement between families.", "観察スコアは各手法・テーマ経路の最高値です。日足のトレンド、モメンタム、構造、ブレイク、押し目、出来高、安定性を用い、業種因子は無効です。リスク設定で重みと条件が変わり、適格な総合候補には資格確認と手法間の合意も必要です。"],
   "稳定性 R": ["Stability R", "安定性 R"],
   "稳定性因子：低波动占45%、低跳空占35%、低回撤占20%；分数高表示走势较平稳，不表示跑赢市场。": ["Stability: 45% low volatility, 35% small gaps, and 20% low drawdown. A high score means smoother prices, not market outperformance.", "安定性：低変動45%、小さな窓35%、低ドローダウン20%。高得点は値動きが安定していることを示し、市場超過収益を意味しません。"],
@@ -47,10 +46,6 @@ export const SCREENER: Dict = {
   '最低价格': ['Minimum price', '最低価格'],
   '最高价格': ['Maximum price', '最高価格'],
   '成交额下限': ['Min dollar volume', '売買代金下限'],
-  '按技术评分、板块与可用资格条件筛选股票。': [
-    'Screen stocks by technical score, sector, and available eligibility checks.',
-    'テクニカルスコア、セクター、利用可能な適格条件で銘柄を絞り込みます。',
-  ],
   '选股数据正在后台生成，请稍候。': [
     'Screener data is being prepared in the background. Please wait.',
     'スクリーナーデータをバックグラウンドで生成しています。しばらくお待ちください。',
@@ -163,7 +158,6 @@ export const SCREENER: Dict = {
   '近 5 日 · 点阵面积': ['Last 5 days · dot-matrix area', '直近5日 · ドットマトリクス面'],
   '日线 · 点阵面积': ['Daily · dot-matrix area', '日足 · ドットマトリクス面'],
   '日线数据暂不可用': ['Daily data unavailable', '日足データが利用できません'],
-  '权重来自当前评分方法（右侧栏）': ['Weights come from the current scoring method (sidebar, right).', 'ウェイトは現在の評価方法（右側のサイドバー）に基づきます。'],
   '操作与信号': ['Actions & signals', '操作とシグナル'],
   '打开详情': ['Open details', '詳細を開く'],
   '相关突破事件': ['Related breakout events', '関連ブレイクアウトイベント'],
@@ -182,11 +176,6 @@ export const SCREENER: Dict = {
   '全市场参照': ['Market reference', '全市場参照'],
   '评分方法 ·': ['Scoring method ·', '評価方法 ·'],
   '默认权重': ['Default weights', 'デフォルトウェイト'],
-  '最终强度分为四因子加权合成（0–100），≥85 为高强度区。': [
-    'The final strength score is a weighted blend of four factors (0–100), and 85 or above is the high-strength zone.',
-    '最終的な強度スコアは4つの要因を加重合成したもので（0〜100）、85以上が高強度ゾーンです。',
-  ],
-  '权重取自当前选用的评分档位': ['Weights are taken from the currently selected scoring profile.', 'ウェイトは現在選択中の評価プロファイルに基づきます。'],
 
   /* ---------------- cells.tsx ---------------- */
   '催化剂数据暂不可用': ['Catalyst data temporarily unavailable', 'カタリストデータは一時的に利用できません'],

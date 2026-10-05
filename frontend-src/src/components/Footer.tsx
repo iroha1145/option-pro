@@ -1,19 +1,11 @@
-/** Footer：发丝线 + 来源注（design.md §0 原则 1 / §7 Layout） */
-import SourceNote from '@/components/shared/SourceNote';
-import { t } from '../i18n/core.ts';
+/** Footer：页尾品牌行 */
 
 export default function Footer() {
   return (
     <footer className="mx-auto mt-16 w-full max-w-shell px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-8 xl:pb-10">
-      <div className="flex flex-col items-start gap-3 min-[360px]:flex-row min-[360px]:flex-wrap min-[360px]:items-center min-[360px]:justify-between">
-        <SourceNote
-          className="w-full min-[360px]:w-auto min-[360px]:min-w-0 min-[360px]:flex-1"
-          text={t('内容仅供研究参考')}
-        />
-        <p className="max-w-full break-words font-mono text-micro text-ink-400">
-          OPTIX PRO · PAPER TERMINAL v2
-        </p>
-      </div>
+      <p className="border-t border-line pt-4 font-mono text-micro text-ink-400">
+        OPTIX PRO · PAPER TERMINAL v2
+      </p>
     </footer>
   );
 }

@@ -119,9 +119,6 @@ export default function IvPanel({
           </button>
         </div>
       </div>
-      <p className="mt-1 text-caption text-ink-400">
-        {desc ? t('按平值期权的隐含波动率从高到低排列') : t('按平值期权的隐含波动率从低到高排列')}
-      </p>
 
       {/* 板块 pills（随 B1 联动，可手动改） */}
       <SectorChips sectors={sectors} value={sectorId} onChange={onSectorChange} className="mt-3" />

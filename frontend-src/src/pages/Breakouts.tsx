@@ -502,7 +502,6 @@ export default function Breakouts() {
             <span className="eyebrow">BREAKOUT RADAR · INTRADAY</span>
           </p>
           <h1 className="mt-2 font-display text-display-l text-ink-900">{__t('突破雷达')}</h1>
-          <p className="mt-1.5 text-body-s text-ink-500">{__t('发现突破机会，跟踪确认与回踩过程。')}</p>
         </div>
         {/* 紧凑状态条：启用 LED · 快照与活跃条数（副标合并至此去重）· 最近扫描 · 时段 chip · 扫描服务 · 下次扫描倒计时 · 查看范围 */}
         <div className="radar-status flex flex-wrap items-center justify-end gap-x-4 gap-y-2 pb-1 text-caption text-ink-500">
@@ -760,7 +759,6 @@ export default function Breakouts() {
                   <p className="text-body-s font-semibold text-ink-800">
                     {__t('其余当日信号 ·')} <span className="font-mono tnum">{current.length - 1}</span>
                   </p>
-                  <p className="text-micro text-ink-400">{__t('点击小卡查看事件详情 · 点击代码打开个股抽屉')}</p>
                 </div>
                 <SignalCards
                   events={current.slice(1)}

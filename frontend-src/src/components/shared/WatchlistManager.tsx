@@ -76,13 +76,10 @@ export default function WatchlistManager({ tickers, maxTickers, busy, onSave, on
     <>
       <div className="fixed inset-0 z-[85] bg-[var(--scrim)] backdrop-blur-[2px]" data-focus-backdrop={id} aria-hidden="true" onClick={() => !busy && onClose()} />
       <div className="pointer-events-none fixed inset-0 z-[86] flex items-center justify-center p-3 sm:p-6">
-        <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={`${id}-title`} aria-describedby={`${id}-description`} data-focus-overlay={id}
+        <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={`${id}-title`} data-focus-overlay={id}
           className="pointer-events-auto flex max-h-[90dvh] w-full max-w-[640px] flex-col overflow-hidden rounded-xl border border-line bg-card shadow-sh-3">
           <header className="flex shrink-0 items-start justify-between gap-3 border-b border-line p-4 sm:px-6">
-            <div className="min-w-0">
-              <h2 id={`${id}-title`} className="text-h3 text-ink-900">{t('管理自选')}</h2>
-              <p id={`${id}-description`} className="mt-1 text-caption leading-relaxed text-ink-500">{t('批量添加或移除股票，保存后生效。')}</p>
-            </div>
+            <h2 id={`${id}-title`} className="min-w-0 text-h3 text-ink-900">{t('管理自选')}</h2>
             <button className="inline-flex size-11 shrink-0 items-center justify-center rounded-md text-ink-400 hover:bg-paper-2 disabled:opacity-50" aria-label={t('关闭')} onClick={onClose} disabled={busy}><Icon name="x" size={18} /></button>
           </header>
           <div className="min-h-0 overflow-y-auto overscroll-contain p-4 sm:px-6">

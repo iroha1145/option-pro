@@ -255,7 +255,6 @@ export default function CtaDeepDive({
                 <InfoHint hint={CTA_HINTS.position} size={10} />
               </p>
               <PositionHistoryChart history={row.history} />
-              <p className="mt-1 text-micro text-ink-400">{t('按相同方法计算的每日收盘估算值')}</p>
             </div>
           </div>
 

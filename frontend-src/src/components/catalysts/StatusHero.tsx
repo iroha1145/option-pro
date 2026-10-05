@@ -6,14 +6,12 @@ import { usePolling } from '@/hooks/usePolling';
 import { remoteState } from '@/hooks/remoteState';
 import { catalystsContract } from './api';
 import { Led } from './bits';
-import SourceNote from '@/components/shared/SourceNote';
 import SoftBadge from '@/components/shared/SoftBadge';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import { fmtRelative } from '@/lib/format';
 import { afterLoadIdle } from '@/lib/afterLoadIdle';
 import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { cn } from '@/lib/utils';
-import Icon from '@/components/icons';
 import { t } from '../../i18n/core.ts';
 
 function HeroCell({ label, index, children }: { label: string; index: number; children: React.ReactNode }) {
@@ -199,13 +197,6 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
           )}
         </HeroCell>
       </div>
-      <details className="group border-t border-line px-4 py-1 sm:px-5">
-        <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-3 text-caption text-ink-500 marker:content-none [&::-webkit-details-marker]:hidden">
-          {t('数据与分析说明')}
-          <Icon name="chevron-down" size={14} className="shrink-0 transition-transform duration-ui group-open:rotate-180 motion-reduce:transition-none" />
-        </summary>
-        <SourceNote className="border-0 pb-3 pt-1" text={t("新闻保留原始来源；影响分与置信度由模型估算。数据滞后时间反映来源的更新进度。")} />
-      </details>
     </motion.section>
   );
 }

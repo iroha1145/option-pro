@@ -867,7 +867,6 @@ export default function Screener() {
         section="02"
         eyebrow="SCREENER · STRENGTH SCAN"
         title={__t("选股扫描")}
-        description={__t("按技术评分、板块与可用资格条件筛选股票。")}
         meta={
           <>
             <span className="text-right">

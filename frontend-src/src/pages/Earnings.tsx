@@ -455,7 +455,6 @@ export default function Earnings() {
         section="05"
         eyebrow="EARNINGS · AI IMPACT"
         title={t("财报日历")}
-        description={t("查看财报日程、业绩预期及对相关公司的影响。")}
         meta={headerMeta}
       />
 

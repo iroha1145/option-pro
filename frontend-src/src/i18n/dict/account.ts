@@ -21,17 +21,12 @@ export const ACCOUNT: Dict = {
   /* ---------------- L1 特性三行（FEATURES：突破雷达 / 板块透视 / 财报 AI）---------------- */
   /* 突破雷达、板块透视两个 title 已由 market.ts 统一定义（Breakout radar / Sector X-ray），
      此处只覆盖本页新增的「财报 AI」标题与三条 desc。 */
-  "追踪价格突破、回踩与成交量变化。": ["Track breakouts, pullbacks and volume changes.", "価格のブレイク、リテスト、出来高の変化を確認。"],
-  "比较板块涨跌、股票强弱与期权波动率。": ["Compare sector returns, stock strength and implied option volatility.", "セクターの騰落率、銘柄の強弱、オプションの予想変動率を比較。"],
   '财报 AI': ['Earnings AI', '決算 AI'],
-  "查看财报日程、市场预期与相关公司的影响分析。": ["Explore earnings dates, expectations and effects on related companies.", "決算日程、市場予想、関連企業への影響を確認。"],
 
   /* ---------------- L1 副文 / 脚注免责声明 ---------------- */
-  "汇集行情、选股、财报与新闻，帮助你跟踪美股市场。": ["Follow the US market with quotes, screening, earnings and news in one place.", "株価、銘柄スクリーニング、決算、ニュースで米国市場の動きを確認。"],
 
   /* ---------------- L2 登录卡：标题 / 切换 / 表单 ---------------- */
   "登录研究工作台": ["Sign in to your research desk", "リサーチ画面にログイン"],
-  "登录以保存自选股，也可作为访客浏览": ["Sign in to save your watchlist, or browse as a guest", "ログインしてウォッチリストを保存、またはゲストとして閲覧"],
   '注册': ['Sign up', '新規登録'],
   '无法连接服务，登录暂不可用': [
     "Can't reach the service. Sign-in is temporarily unavailable.",
@@ -57,8 +52,6 @@ export const ACCOUNT: Dict = {
   '注册并登录': ['Sign up & sign in', '登録してサインイン'],
   '或': ['or', 'または'],
   '以访客身份浏览（只读）': ['Browse as a guest (read-only)', 'ゲストとして利用（閲覧のみ）'],
-  "注册后可保存自选股，在不同设备上查看": ["Save your watchlist and access it across devices", "ウォッチリストを保存し、別の端末でも確認できます"],
-  "登录状态保留 30 天": ["Stay signed in for 30 days", "ログイン状態を30日間保持します"],
   '返回公开研究页面': ['Back to the public research page', '公開リサーチページに戻る'],
 
   /* ---------------- 校验 / 错误映射（mapError） ---------------- */

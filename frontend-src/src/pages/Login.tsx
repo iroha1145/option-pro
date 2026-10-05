@@ -124,10 +124,10 @@ function CharStagger({ text, className, delayBase = 0 }: { text: string; classNa
   );
 }
 
-const FEATURES: { icon: IconName; title: string; desc: string }[] = [
-  { icon: 'radar', title: t('突破雷达'), desc: t('追踪价格突破、回踩与成交量变化。') },
-  { icon: 'layers', title: t('板块透视'), desc: t('比较板块涨跌、股票强弱与期权波动率。') },
-  { icon: 'spark-ai', title: t('财报 AI'), desc: t('查看财报日程、市场预期与相关公司的影响分析。') },
+const FEATURES: { icon: IconName; title: string }[] = [
+  { icon: 'radar', title: t('突破雷达') },
+  { icon: 'layers', title: t('板块透视') },
+  { icon: 'spark-ai', title: t('财报 AI') },
 ];
 
 /* ---------------- 眼睛切换（手绘细线，与图标库同工艺） ---------------- */
@@ -353,15 +353,6 @@ export default function Login() {
             <CharStagger text={t('从这里开始。')} className="text-brand-600" delayBase={0.22} />
           </h1>
 
-          <motion.p
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: 0.3 }}
-            className="mt-5 max-w-[460px] text-[15px] leading-[26px] text-ink-600 max-lg:line-clamp-2"
-          >
-            {t('汇集行情、选股、财报与新闻，帮助你跟踪美股市场。')}
-          </motion.p>
-
           {/* 特性三行只在桌面展示：手机上登录才是这一页的事，表单要进第一屏。 */}
           <div className="mt-8 hidden flex-col gap-5 lg:flex">
             {FEATURES.map((f, i) => (
@@ -370,27 +361,15 @@ export default function Login() {
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: 0.42 + i * 0.12 }}
-                className="flex items-start gap-3"
+                className="flex items-center gap-3"
               >
-                <span className="mt-0.5 text-brand-600">
+                <span className="text-brand-600">
                   <Icon name={f.icon} size={20} />
                 </span>
-                <div>
-                  <p className="font-display text-[15px] font-semibold text-ink-900">{f.title}</p>
-                  <p className="mt-0.5 text-caption text-ink-500">{f.desc}</p>
-                </div>
+                <p className="font-display text-[15px] font-semibold text-ink-900">{f.title}</p>
               </motion.div>
             ))}
           </div>
-
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: DUR_SECTION, delay: 0.9 }}
-            className="mt-10 hidden border-t border-line pt-4 text-caption text-ink-400 lg:block"
-          >
-            {t('内容仅供研究参考')}
-          </motion.p>
         </div>
 
         {/* L2 右侧登录卡 */}
@@ -401,14 +380,11 @@ export default function Login() {
             transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: reduced ? 0 : 0.2 }}
             className="glass w-full max-w-[400px] rounded-xl border border-line p-9 shadow-sh-3 max-lg:p-6"
           >
-            <div className="flex items-start gap-3">
-              <span className="mt-0.5 text-brand-600">
+            <div className="flex items-center gap-3">
+              <span className="text-brand-600">
                 <Icon name="command" size={20} />
               </span>
-              <div>
-                <h2 className="font-display text-h2 text-ink-900">{t('登录研究工作台')}</h2>
-                <p className="mt-0.5 text-caption text-ink-400">{t('登录以保存自选股，也可作为访客浏览')}</p>
-              </div>
+              <h2 className="font-display text-h2 text-ink-900">{t('登录研究工作台')}</h2>
             </div>
 
             {/* 登录 / 注册切换：滑动指示条，沿用页面既有动效曲线 */}
@@ -598,12 +574,6 @@ export default function Login() {
             >
               {t('以访客身份浏览（只读）')}
             </button>
-
-            <p className="mt-5 text-center text-micro leading-[18px] text-ink-400">
-              {mode === 'register'
-                ? t('注册后可保存自选股，在不同设备上查看')
-                : t('登录状态保留 30 天')}
-            </p>
 
             <div className="mt-4 border-t border-line pt-3 text-center">
               <Link

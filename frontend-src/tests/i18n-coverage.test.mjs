@@ -186,7 +186,7 @@ const KNOWN_TYPE_DISCRIMINANTS = new Set([
  * that file's own comment: a broken import there is "a useful reminder, not an
  * obstacle to work around"). Its Chinese literals therefore stay unwrapped in the
  * source; translation happens at each render site instead (MacroFitBadge.tsx,
- * MacroFitPanel.tsx, MacroTechnicalMatrix.tsx, SectorList.tsx, Screener.tsx,
+ * MacroFitPanel.tsx, MacroTechnicalMatrix.tsx, DetailBand.tsx, Screener.tsx,
  * LeadBigCard.tsx all wrap the values macroFit.ts exports before displaying them).
  */
 const IMPORT_FREE_FILES = new Set(['lib/macroFit.ts']);

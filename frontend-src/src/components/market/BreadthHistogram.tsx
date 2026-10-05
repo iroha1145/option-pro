@@ -108,12 +108,6 @@ export default function BreadthHistogram({
           <span>100</span>
         </div>
       </div>
-
-      <p className="mt-auto pt-4 text-micro leading-relaxed text-ink-400">
-        {t('每组 10 分 · 颜色由弱到强')}
-        {/* 「全市场」指扫描股票池整体，与上方选中的指数无关——不标出来读者会以为它跟着指数变。 */}
-        <span className="mt-1 block">{t('统计全部扫描股票，不按指数划分。')}</span>
-      </p>
     </section>
   );
 }

@@ -16,7 +16,6 @@ export const EARNINGS: Dict = {
   '今天': ["Today", "今日"],
   '+15 天': ["+15 days", "+15日"],
   '+30 天': ["+30 days", "+30日"],
-  '财报日程 · 以公司公告为准': ["Earnings schedule · Per company announcements", "決算スケジュール · 日程は各社の発表に基づきます"],
 
   // ---------------- EarningsAnalysisControls.tsx ----------------
   '保存失败': ["Save failed", "保存に失敗しました"],
@@ -120,7 +119,6 @@ export const EARNINGS: Dict = {
     'リストと分析は引き続き表示できます。チャートだけ再試行できます。',
   ],
   '重试图表': ['Retry chart', 'チャートを再試行'],
-  "斜纹柱表示市场预期，实心柱表示已公布业绩。": ["Hatched bars show market estimates; solid bars show reported results.", "斜線の棒は市場予想、塗りつぶしの棒は発表済みの実績です。"],
   "这些公司尚未公布业绩。": ["These companies have not reported results yet.", "これらの企業はまだ決算を発表していません。"],
 
   // ---------------- ImpactCard.tsx ----------------
@@ -234,7 +232,6 @@ export const EARNINGS: Dict = {
   '手动刷新财报日历': ["Manually refresh the earnings calendar", "決算カレンダーを手動更新"],
   '刷新中': ["Refreshing", "更新中"],
   '刷新日历': ["Refresh calendar", "カレンダーを更新"],
-  "查看财报日程、业绩预期及对相关公司的影响。": ["Follow earnings dates, market expectations and effects on related companies.", "決算日程、市場予想、関連企業への影響を確認できます。"],
   "自动更新失败，显示上次数据。": ["Automatic update failed. Showing the previous data.", "自動更新に失敗したため、前回のデータを表示しています。"],
   "更新失败，显示上次数据。": ["Update failed. Showing the previous data.", "更新に失敗したため、前回のデータを表示しています。"],
   '财报数据暂时不完整': ["Earnings data temporarily incomplete", "決算データが一時的に不完全です"],

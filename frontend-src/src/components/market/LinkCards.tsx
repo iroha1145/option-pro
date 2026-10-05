@@ -5,19 +5,16 @@ import { Link } from 'react-router';
 import Icon, { type IconName } from '@/components/icons';
 import { t } from '../../i18n/core.ts';
 
-const CARDS: { to: string; icon: IconName; title: string; desc: string }[] = [
+const CARDS: { to: string; icon: IconName; title: string }[] = [
   {
     to: '/sectors',
     icon: 'layers',
     title: t('板块透视'),
-    /* 后端目录是 24 个可重叠的主题板块，不是 GICS 十一行业（审计 2.1.16） */
-    desc: t('比较板块涨跌、个股强度与期权隐含波动率。'),
   },
   {
     to: '/breakouts',
     icon: 'radar',
     title: t('突破雷达'),
-    desc: t('查看今日突破信号，追踪触发、确认与回踩过程。'),
   },
 ];
 
@@ -31,10 +28,7 @@ export default function LinkCards() {
             <span className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-line bg-brand-50 text-brand-600">
               <Icon name={c.icon} size={20} />
             </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-h3 text-ink-900">{c.title}</span>
-              <span className="mt-1 block truncate text-caption text-ink-500">{c.desc}</span>
-            </span>
+            <span className="min-w-0 flex-1 text-h3 text-ink-900">{c.title}</span>
             <Icon
               name="arrow-up-right"
               size={16}

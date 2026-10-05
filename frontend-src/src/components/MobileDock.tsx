@@ -32,13 +32,13 @@ const DOCK_ITEMS: { label: string; path: string; icon: IconName }[] = [
   { label: t('雷达'), path: '/breakouts', icon: 'radar' },
 ];
 
-const MORE_ITEMS: { label: string; path: string; icon: IconName; desc: string }[] = [
+const MORE_ITEMS: { label: string; path: string; icon: IconName }[] = [
   /* 板块从 Dock 移入「更多」（首页/自选/选股/雷达占满四个一级入口） */
-  { label: t('板块透视'), path: '/sectors', icon: 'layers', desc: t('主题板块热力与 IV 排名') },
-  { label: t('财报日历'), path: '/earnings', icon: 'calendar-spark', desc: t('即将公布 × AI 影响') },
-  { label: t('大盘强弱'), path: '/market', icon: 'radar', desc: t('指数 · 宽度 · 宏观环境') },
-  { label: t('CTA 趋势资金'), path: '/cta', icon: 'candle', desc: t('趋势资金 · 触发位') },
-  { label: t('新闻催化'), path: '/catalysts', icon: 'bolt', desc: t('热点 · 情绪新闻流') },
+  { label: t('板块透视'), path: '/sectors', icon: 'layers' },
+  { label: t('财报日历'), path: '/earnings', icon: 'calendar-spark' },
+  { label: t('大盘强弱'), path: '/market', icon: 'radar' },
+  { label: t('CTA 趋势资金'), path: '/cta', icon: 'candle' },
+  { label: t('新闻催化'), path: '/catalysts', icon: 'bolt' },
 ];
 
 export default function MobileDock() {
@@ -239,10 +239,7 @@ function MobileDockContent() {
                     <span className="flex size-9 items-center justify-center rounded-md border border-line bg-card-warm text-brand-600">
                       <Icon name={m.icon} size={17} />
                     </span>
-                    <span className="flex-1">
-                      <span className="block text-body-s font-medium text-ink-800">{m.label}</span>
-                      <span className="block text-micro text-ink-400">{m.desc}</span>
-                    </span>
+                    <span className="flex-1 text-body-s font-medium text-ink-800">{m.label}</span>
                     {isNavPathActive(location.pathname, m.path) ? (
                       <span className="size-1.5 shrink-0 rounded-full bg-brand-600" aria-hidden="true" />
                     ) : (

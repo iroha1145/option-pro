@@ -54,7 +54,6 @@ function ContractDetail({ contract: c, onClose }: { contract: ChainContract; onC
     </dl>
     <p className="mt-3 text-caption text-ink-600">{reason(c)}</p>
     <p className="mt-2 text-micro leading-relaxed text-ink-500">{t('参考价取买卖报价中值；成交金额按参考价 × 成交张数 × 100 估算。隐含波动率可能包含模型估算。')}</p>
-    <p className="mt-1 text-micro leading-relaxed text-ink-500">{t('模型估算采用 5% 利率，未计入股息。')}</p>
   </section>;
 }
 
