@@ -741,7 +741,8 @@ test('narrow screener keeps scoring details and real factor weights after card r
   const keys = ['T', 'M', 'S', 'B', 'P', 'V', 'R', 'G'];
   const state = await fixture(page, { rows: [{ ticker: 'AAA', name: '甲公司', price: 100,
     final_score: 95, change_pct: 1, avg_dollar_volume_20d: 25_000_000,
-    factor_dims: keys.map((key, index) => ({ key: `factor_${key}`, label: key, value: index === 7 ? null : 80 })),
+    factor_dims: keys.map((key, index) => ({ key: `factor_${key}`, label: key,
+      value: index === 7 ? null : index === 0 ? 89.65985623894318 : index === 1 ? 0 : 80 })),
     effective_weights: { T: 0.2, M: 0.3, S: 0.1, B: 0.1, P: 0.1, V: 0.1, R: 0.1 },
   }] });
   await page.locator('button.scan-trigger').click();
@@ -749,6 +750,9 @@ test('narrow screener keeps scoring details and real factor weights after card r
   await expect(row).toBeVisible();
   await expect(page.getByText('强度分布 · 候选比较', { exact: true })).toHaveCount(0);
   await row.click();
+  await expect(page.getByText(/^89\.7\s*×20\.0%$/).filter({ visible: true })).toBeVisible();
+  await expect(page.getByText(/^0\.0\s*×30\.0%$/).filter({ visible: true })).toBeVisible();
+  await expect(page.getByText('89.65985623894318', { exact: true })).toHaveCount(0);
   await expect(page.getByText('×20.0%', { exact: true }).filter({ visible: true })).toBeVisible();
   await expect(page.getByText('×30.0%', { exact: true }).filter({ visible: true })).toBeVisible();
   const method = page.getByRole('button', { name: /评分方法/ });

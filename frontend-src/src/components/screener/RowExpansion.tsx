@@ -1,6 +1,6 @@
 /**
  * 行展开分项明细（screener.md B2 行展开 · accordion 260ms）
- * ① 分项强度 breakdown（与行内微条同源 subscoreDimsOf；4 条比例条 + 分值 + 权重）
+ * ① 分项强度（与行内微条同源 subscoreDimsOf；实际因子、分值和有效权重）
  * ② 迷你点阵面积图（§6-2 stipple）：mock 用行内 sparkline；live 契约无 sparkline →
  *    按需拉真实日 K（stocksApi.chart range=1d）取近 6 根收盘；拿不到如实空态，杜绝 Infinity
  * ③ 操作（打开详情 / 相关突破事件）+ 信号 + 成交额
@@ -230,7 +230,7 @@ export default function RowExpansion({ row, dollarVolume, signals, onOpenDetail 
                   )}
                 </span>
                 <span className="text-right font-mono text-caption text-ink-800 tnum">
-                  {value !== null ? value : '—'}
+                  {value !== null ? value.toFixed(1) : '—'}
                   {w !== null && <span className="ml-1 text-micro text-ink-400">×{w.toFixed(1)}%</span>}
                 </span>
               </div>

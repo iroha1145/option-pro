@@ -38,14 +38,35 @@ function harness(initial = points(120)) {
     getHeight() { return 200; },
     dispatchAction(action) { actions.push(action); },
   });
+  read().prepareOption({});
   return { read, actions,
-    replace(next) { data = next; react.rerender(); },
+    replace(next, commit = true) {
+      data = next;
+      react.rerender();
+      if (commit) {
+        read().prepareOption({});
+        read().onOptionApplied();
+      }
+    },
     point(index) { events.updateAxisPointer({ axesInfo: [{ value: index }] }); },
     leave() { events.globalout(); },
     key(key) { read().sliderProps.onKeyDown({ key, preventDefault() {} }); },
     dispose() { disposed = true; },
   };
 }
+
+test('events from the old chart cannot select a date before the new option is committed', () => {
+  const h = harness(points(5));
+  h.point(2);
+  h.replace(points(5, 10), false);
+  h.point(2);
+  assert.equal(h.read().index, null);
+  assert.equal(h.read().point.date, '2026-01-15');
+  h.read().prepareOption({});
+  h.point(2);
+  assert.equal(h.read().index, 2);
+  assert.equal(h.read().point.date, '2026-01-13');
+});
 
 test('a 120-point cursor at 100 is safe during the render that receives 30 points', () => {
   const h = harness();

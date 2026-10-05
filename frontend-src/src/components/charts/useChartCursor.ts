@@ -10,12 +10,13 @@
  * 只用于类目横轴的折线图；K 线图有自己的十字线与提示，不走这里。
  */
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import type { EChartsInstance } from '@/lib/chart';
+import type { ChartOption, EChartsInstance } from '@/lib/chart';
 
 export function useChartCursor(dates: readonly string[], valueText: (index: number) => string) {
   const count = dates.length;
   const sequenceKey = JSON.stringify(dates);
   const chartRef = useRef<EChartsInstance | null>(null);
+  const chartSequenceRef = useRef<string | null>(null);
   const [cursor, setCursor] = useState<{ sequenceKey: string; count: number; index: number | null }>({
     sequenceKey, count, index: null,
   });
@@ -36,12 +37,22 @@ export function useChartCursor(dates: readonly string[], valueText: (index: numb
     clearPointer();
   }, [sequenceKey, clearPointer]);
 
+  const prepareOption = useCallback((option: ChartOption) => {
+    // notMerge 会销毁旧提示框，但 ECharts 仍可能执行它排队的刷新。
+    // 每次替换前都清掉旧坐标；只在日期变化时清理会漏掉连续的数值刷新。
+    clearPointer();
+    chartSequenceRef.current = sequenceKey;
+    return option;
+  }, [sequenceKey, clearPointer]);
+
   const onInit = useCallback((chart: EChartsInstance) => {
     chartRef.current = chart;
+    chartSequenceRef.current = null;
     chart.on('updateAxisPointer', (event: unknown) => {
       const value = (event as { axesInfo?: { value?: unknown }[] }).axesInfo?.[0]?.value;
+      const chartSequence = chartSequenceRef.current;
       if (typeof value === 'number' && Number.isInteger(value)) {
-        setCursor((previous) => value >= 0 && value < previous.count && previous.index !== value
+        setCursor((previous) => previous.sequenceKey === chartSequence && value >= 0 && value < previous.count && previous.index !== value
           ? { ...previous, index: value }
           : previous);
       }
@@ -60,6 +71,10 @@ export function useChartCursor(dates: readonly string[], valueText: (index: numb
     const x = chart.convertToPixel({ xAxisIndex: 0 }, next);
     if (typeof x === 'number' && Number.isFinite(x)) chart.dispatchAction({ type: 'showTip', x, y: chart.getHeight() / 2 });
   }, [clearPointer]);
+
+  const onOptionApplied = useCallback(() => {
+    if (index !== null) moveTo(index);
+  }, [index, moveTo]);
 
   const last = count - 1;
   const current = index ?? last;
@@ -88,5 +103,5 @@ export function useChartCursor(dates: readonly string[], valueText: (index: numb
     onBlur: () => moveTo(null),
   };
 
-  return { index, onInit, sliderProps };
+  return { index, onInit, prepareOption, onOptionApplied, sliderProps };
 }

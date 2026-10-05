@@ -79,7 +79,7 @@ export default function MacroHistoryChart({
   const colorMode = useColorMode();
   const appearance = useAppearance();
   const scoreText = (score: number | null) => (score === null ? '—' : score.toFixed(1));
-  const { index, onInit, sliderProps } = useChartCursor(points.map((point) => point.date), (i) =>
+  const { index, onInit, prepareOption, onOptionApplied, sliderProps } = useChartCursor(points.map((point) => point.date), (i) =>
     t('{date}：综合分 {v}', { date: points[i].date, v: scoreText(points[i].score) }),
   );
   /* 图上方的读数跟着游标走：默认最新一天，指针或方向键指到哪天就读哪天 */
@@ -272,7 +272,7 @@ export default function MacroHistoryChart({
             {t('历史数据积累中，记录足够后将显示综合分曲线。')}
           </div>
         ) : (
-          <ReactECharts option={option} onInit={onInit} ariaLabel={t("宏观环境综合分历史曲线")} />
+          <ReactECharts option={option} prepareOption={prepareOption} onOptionApplied={onOptionApplied} onInit={onInit} ariaLabel={t("宏观环境综合分历史曲线")} />
         )}
         </div>
       </div>

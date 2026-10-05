@@ -117,7 +117,7 @@ export default function PositionHistoryChart({ history }: { history: { date: str
     void appearance;
     return historyOption(history);
   }, [history, colorMode, appearance]);
-  const { index, onInit, sliderProps } = useChartCursor(history.map((point) => point.date), (i) =>
+  const { index, onInit, prepareOption, onOptionApplied, sliderProps } = useChartCursor(history.map((point) => point.date), (i) =>
     t('{date}：估算目标仓位 {v}', { date: history[i].date, v: signed(history[i].position) }),
   );
   if (!option) return <p className="mt-2 text-caption text-ink-400">{t('暂无数据')}</p>;
@@ -139,7 +139,7 @@ export default function PositionHistoryChart({ history }: { history: { date: str
         aria-label={t('估算仓位历史，左右键逐日查看')}
         className="h-56 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
       >
-        <ReactECharts option={option} onInit={onInit} ariaLabel={t('估算仓位历史曲线')} />
+        <ReactECharts option={option} prepareOption={prepareOption} onOptionApplied={onOptionApplied} onInit={onInit} ariaLabel={t('估算仓位历史曲线')} />
       </div>
     </InsightFrame>
   );
