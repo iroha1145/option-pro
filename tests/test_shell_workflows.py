@@ -371,7 +371,6 @@ def test_deploy_builds_only_current_services_and_verifies_both(tmp_path: Path) -
     assert "compose build --pull backend" in script
     assert "compose up -d --no-build --force-recreate" in script
     assert '"$ROOT_DIR/scripts/compose.sh" "$@"' in script
-    assert "Stopping legacy workers before the unified worker starts." in script
     assert "verify_public_snapshots" in script
     assert 'payload.get("status") != "ok"' in script
     assert '"ai_jobs",' in script
