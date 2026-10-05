@@ -8,10 +8,11 @@
 | --- | --- |
 | `DATA_SPEC.md` | 数据与算法规格。第 1 到 9 节是设计，第 10 到 19 节是核实过的生产事实、预算方案与取数规则，第 20 节是生产数据延迟的测量与烟雾测试结果 |
 | `PREREGISTRATION.md` | 预登记：数据、回放口径、事件定义、指标、候选、取舍规则、烟雾门槛；修订 1 与修订 2 记录看过什么之后改了什么 |
-| `RUN_SPEC.md` | 在 Colab 上怎么跑：建库、烟雾周、点时股数、五年全量、输出 |
+| `RUN_SPEC.md` | 在 Colab 上怎么跑：建库、烟雾周、点时股数、五年全量、输出、评估，以及修订 7 的重算命令（第 7 节） |
 | `harness/` | 回放骨架：`settings.py`（生产字段集与配置哈希、候选变体）、`stores.py`（分钟库、日线库、FRED、股数、目录元数据、生产候选元数据）、`discovery.py`（发现代理）、`adapters.py`（时钟、价格、强度、市场形态适配器）、`memo.py`（记忆化）、`runner.py`（逐次扫描驱动生产 worker）、`evaluation.py`（预登记的评估：触发、入场、退出、删失、视图、取舍） |
 | `scripts/` | `build_minute_store.py`、`replay.py`、`smoke_compare.py`（与生产逐层比对）、`discovery_misses.py`（发现层缺失归因）、`pit_shares_requests.py`（点时股数请求清单）、`evaluate.py`（第三阶段评估，RUN_SPEC 第 5 节） |
-| `results/` | 烟雾比对输出（在 Colab 上跑后落这里；本机的结果在会话临时目录） |
+| `results/` | 烟雾比对输出、第一轮部分结果（`full_partial_2026-09-29/`）、第二轮结果（`full_2026-10-05/`，已被取代）；修订 7 的重算结果放 `full_2026-10-05b/` |
+| `ADOPTION_MEMO.md` | 采纳备忘录：「采纳 = 是」在第 9 节里的含义、为何再跑一遍不检验任何东西、对生产设置的建议；数字待修订 7 重算后重写 |
 
 对应的测试在仓库 `tests/test_radar_replay_harness.py`（合成冻结数据上的骨架、哈希、逐字节一致性、延迟视图）、`tests/test_radar_pit_shares_requests.py` 与 `tests/test_radar_evaluate.py`（合成账本上的触发提取、拆股与删失、日内聚合、视图、漏斗与取舍规则）；生产改动的测试在 `tests/test_breakout_otc_exclusion.py`、`tests/test_breakout_research_overrides.py`、`tests/test_breakout_provider_contract.py`。
 
@@ -71,6 +72,8 @@ rvol 的数值比对只能在 K 线即时可见的运行上做，用 Yahoo 来�
 - 回放构造 worker 时关闭租约停滞保护（第一轮 7 段因此提前退出），任何一次扫描的异常记入账本、当天剔除、段继续跑。续跑切成 115 个子段（2025-08 之前 10 天、之后 6 天），两台 G4 各 40 进程约 12.5 小时、共约 250 CU（RUN_SPEC 第 7 节）。「实时数据」运行仍不在本轮。
 
 ## 第二轮结果（2026-10-05）：五年 1,250 个交易日全部评估
+
+> **已被取代，待重算（预登记修订 7）。** 外部审查找出评估脚本的四个计算问题（确认视图复用了首次触发的结果缓存；可追子集用了下一次扫描的信息；日频序列的 Newey-West 滞后用错；股票延迟入场时 SPY 没有对齐）。本节的基线水平与方向性结论大体不受影响，但 `confirm3` 的 +0.058、「追高事件反而不更差」、所有 t 值都要按修订 7 重算；`confirm3` 的采纳判定改为**待重算**，生产的确认根数维持 2。重算结果写到 `results/full_2026-10-05b/`。
 
 事实在预登记修订 6 的附录；表在 `results/full_2026-10-05/README_tables.md`，判定在 `decision.json`，完整结果包与逐触发明细在 Drive `radar_replay_2026-10-04/eval/`。8 个配置各 1,250 个评估日，0 个降级，0 个读不出的文件。
 
