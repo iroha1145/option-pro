@@ -203,6 +203,8 @@ $PY $P/scripts/evaluate.py --db /content/data/replay.sqlite --replay '/content/r
 
 必须带 `--minute-store`：账本里 SPY 记在扫描的槽位，股票延迟入场的事件（第一轮与续跑都有）要从分钟库重取入场那一刻的 SPY，现查次数记在 `coverage.<配置>.backfills` 的 `benchmark_realigned_triggers` 与 `benchmark_realigned_confirmed`；有分钟库时 `benchmark_misaligned_*` 应为 0，不为 0 说明分钟库缺 SPY 的那一天。核对三样：`coverage.baseline.triggers_extended_at_trigger` 与 `triggers_extended_by_next_scan` 是两个不同的数；`metrics.csv` 有 `nw_lag`（20 日为 19）与 `boot_t`；`decision.json` 每个候选有 `paired_t_h20`、`paired_boot_t_h20`、`paired_boot_ci95_pp`。把 `README_tables.md`、`decision.json`、`result_pack.json` 的 `coverage` 放进仓库 `results/full_2026-10-05b/`；`results/full_2026-10-05/` 原样保留，标为已被取代。若重算后通过第一阶段的候选不止一个，再按第 5 节加 `--stage2` 跑组合。
 
+2026-10-06 实际运行（代码 322e188c，8 vCPU、50 GB 内存的 CPU 机器）：`--workers 6` 被内核按 cgroup 杀掉，单个工作进程常驻内存约 9 GB（每个进程把一个配置 1,250 天的账本与逐触发结果全放在内存里）；`--workers 2` 用时 1 小时 43 分，之前从 Drive 还原数据 1 小时 27 分。在 50 GB 的机器上 `--workers` 不要超过 4。结果：没有候选被采纳，详见 README 与 `ADOPTION_MEMO.md`。
+
 ### 验证运行（新机器上先跑这个，约 20 分钟）
 
 ```
