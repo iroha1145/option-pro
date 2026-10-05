@@ -453,6 +453,37 @@ def test_confirmed_view_uses_its_own_entry_whatever_the_view_order(world: dict) 
     assert runs[("all", "confirmed")] == runs[("confirmed",)] == runs[("confirmed", "all")]
 
 
+def test_confirm3_decision_measures_the_later_confirmed_entry(world: dict, tmp_path: Path) -> None:
+    """F1 at the decision layer: a candidate that confirms one scan later, at a higher price, loses exactly that much."""
+
+    import shutil
+
+    d0 = world["d0"]
+    root = tmp_path / "decision"
+    shutil.copytree(world["root"] / "seg1" / "baseline", root / "seg1" / "baseline")
+    shutil.copytree(world["root"] / "seg1" / "baseline", root / "seg1" / "confirm3")
+    # confirm3's day 0: e2 is still TRIGGERED at 10:07 and confirms at 10:12 with an entry 4% above its trigger-day level
+    # (the baseline confirmed it at 10:07, 2% above); SPY at both confirmation moments is the same value.
+    good0, splt0, spy0 = 10 * 1.01 ** 2, 20 * 1.005 ** 2, 400 * 1.001 ** 2
+    with gzip.open(root / "seg1" / "baseline" / "ledger" / f"{d0.isoformat()}.jsonl.gz", "rt") as handle:
+        records = [json.loads(line) for line in handle]
+    at_1007 = records[2]
+    at_1007["events"] = [e if e["event_id"] != "e2" else {**e, "lifecycle_state": "TRIGGERED"} for e in at_1007["events"]]
+    at_1007["transitions"] = [t for t in at_1007["transitions"] if t["event_id"] != "e2"]
+    at_1012 = _scan_record(
+        d0, 10, 12, [{**_event("e2", "SPLT", d0, splt0 * 1.03, next_open=splt0 * 1.04, alert=40), "lifecycle_state": "CONFIRMED"}],
+        [{"event_id": "e2", "from_state": "TRIGGERED", "to_state": "CONFIRMED", "reason": "x", "evidence_at": "x"}], benchmark_open=spy0 * 1.0005,
+    )
+    _write_ledger(root / "seg1" / "confirm3" / "ledger", d0, [*records[:3], at_1012, records[3]])
+    pack = ev.run([root / "seg1"], ["baseline", "confirm3"], world["db"], tmp_path / "eval", write_events=False)
+    verdict = pack["decisions"]["variants"]["confirm3"]
+    # Day 0's confirmed view holds e1 and e2 on both sides; only e2's entry differs, so the daily difference is half of it.
+    expected_pp = 100 * ((1.005 ** 20 / 1.04 - 1) - (1.005 ** 20 / 1.02 - 1)) / 2
+    assert verdict["metric_view"] == "confirmed" and verdict["paired_days"] == 1
+    assert verdict["h20_diff_pp"]["ALL"] == pytest.approx(expected_pp, abs=1e-3) and expected_pp < -0.9
+    assert verdict["adopt"] is False
+
+
 def test_next_day_confirmation_is_grouped_on_the_confirmation_day(world: dict, tmp_path: Path) -> None:
     """F1: an event confirmed the next morning enters, and is counted, on that morning, whatever the view order."""
 

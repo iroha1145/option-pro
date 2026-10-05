@@ -848,24 +848,21 @@ def block_bootstrap(values: list[float], block: int, samples: int = BOOTSTRAP_SA
     starts = n - block + 1
     if n < 3 or starts < 2:  # nothing to resample: too few days for one block to move
         return {"se": None, "t": None, "ci_low": None, "ci_high": None}
-    import random
+    import numpy as np  # vectorised: thousands of summaries, each 2,000 resamples of ~1,250 days
 
-    rng = random.Random(seed)
-    mean = statistics.fmean(values)
-    means = []
-    for _ in range(samples):
-        picked: list[float] = []
-        while len(picked) < n:
-            start = rng.randrange(starts)
-            picked.extend(values[start:start + block])
-        means.append(statistics.fmean(picked[:n]))
-    means.sort()
-    se = statistics.pstdev(means)
+    series = np.asarray(values, dtype=float)
+    rng = np.random.default_rng(seed)  # the draw is fixed by the seed within one numpy version
+    blocks_per_sample = -(-n // block)
+    block_starts = rng.integers(0, starts, size=(samples, blocks_per_sample))
+    index = (block_starts[:, :, None] + np.arange(block)[None, None, :]).reshape(samples, blocks_per_sample * block)[:, :n]
+    means = np.sort(series[index].mean(axis=1))
+    mean = float(series.mean())
+    se = float(means.std())
     return {
         "se": se,
         "t": mean / se if se > 0 else None,
-        "ci_low": means[int(0.025 * (samples - 1))],
-        "ci_high": means[int(0.975 * (samples - 1))],
+        "ci_low": float(means[int(0.025 * (samples - 1))]),
+        "ci_high": float(means[int(0.975 * (samples - 1))]),
     }
 
 
