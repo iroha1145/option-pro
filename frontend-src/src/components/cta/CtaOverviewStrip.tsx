@@ -60,11 +60,11 @@ function OverviewCard({
       {active ? (
         <>
           <span className="mt-2 flex items-baseline gap-2">
-            <span className="font-mono text-data-l text-ink-900 tnum">{signed(row.position_score)}</span>
+            <span className="metric-value text-data-l text-ink-900">{signed(row.position_score)}</span>
             {delta !== null && (
               <span
                 className={cn(
-                  'inline-flex items-center gap-0.5 font-mono text-micro tnum',
+                  'inline-flex items-center gap-0.5 text-micro tnum',
                   delta > 0 ? 'text-up-700' : delta < 0 ? 'text-down-700' : 'text-ink-400',
                 )}
               >
@@ -75,10 +75,10 @@ function OverviewCard({
           </span>
           <span className="mt-1 block">
             <span className="text-micro text-ink-400">{t('今日仓位变化')} </span>
-            <span className={cn('font-mono text-caption tnum', (row.flow_score ?? 0) >= 0 ? 'text-up-700' : 'text-down-700')}>
+            <span className={cn('text-caption tnum', (row.flow_score ?? 0) >= 0 ? 'text-up-700' : 'text-down-700')}>
               {signed(row.flow_score)}
             </span>
-            <span className="block font-mono text-micro text-ink-400 tnum">
+            <span className="block text-micro text-ink-400 tnum">
               {t('趋势 {a} · 波动率 {b}', { a: signed(row.trend_flow), b: signed(row.volatility_flow) })}
             </span>
           </span>
@@ -97,7 +97,7 @@ function OverviewCard({
               <span className={zone.est_position_change >= 0 ? 'text-up-700' : 'text-down-700'}>
                 {ZONE_LABELS[zone.label_key] ?? zone.label_key}
               </span>{' '}
-              <span className="font-mono tnum">
+              <span className="tnum">
                 {zone.distance_pct > 0 ? '+' : ''}{zone.distance_pct.toFixed(1)}%
               </span>
             </span>
