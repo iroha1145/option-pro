@@ -1327,22 +1327,14 @@ def test_jobs_can_be_cancelled_after_switching_to_read_mode(tmp_path):
         [_news_change(1, 12, available_at=now - timedelta(minutes=10))],
         as_of=now - timedelta(minutes=9),
     )
-    prepared_revision = intelligence.reconcile()["prepared_revision"]
+    intelligence.reconcile()
     news_job = intelligence.request_analysis(12, force=False)
-    focus_cycle = intelligence.request_market_focus_cycle(
-        expected_prepared_revision=prepared_revision
-    )
 
     intelligence.mode = "read"
     cancelled_news = intelligence.cancel_analysis_job(news_job["job_id"])
-    cancelled_focus = intelligence.cancel_market_focus_cycle(
-        focus_cycle["cycle_id"]
-    )
 
     assert cancelled_news is not None
     assert cancelled_news["status"] == "cancelled"
-    assert cancelled_focus is not None
-    assert cancelled_focus["status"] == "cancelled"
     with sqlite3.connect(ai.path) as connection:
         statuses = dict(
             connection.execute("SELECT job_type,status FROM ai_jobs").fetchall()
@@ -1353,52 +1345,8 @@ def test_jobs_can_be_cancelled_after_switching_to_read_mode(tmp_path):
                 "SELECT submission_source FROM ai_job_sources"
             ).fetchall()
         }
-    assert statuses == {"market_focus": "cancelled", "news_impact": "cancelled"}
+    assert statuses == {"news_impact": "cancelled"}
     assert sources == {"manual"}
-
-
-def test_focus_cancel_follows_a_concurrent_retry_to_its_new_job(
-    tmp_path,
-    monkeypatch,
-):
-    etl, ai, intelligence = _stack(tmp_path, mode="manual")
-    now = datetime.now(timezone.utc).replace(microsecond=0)
-    _apply_news(
-        etl,
-        [_news_change(1, 13, available_at=now - timedelta(minutes=10))],
-        as_of=now - timedelta(minutes=9),
-    )
-    prepared_revision = intelligence.reconcile()["prepared_revision"]
-    cycle = intelligence.request_market_focus_cycle(
-        expected_prepared_revision=prepared_revision,
-    )
-    first_job_id = cycle["job_id"]
-    _fail_job(ai, first_job_id, "provider_failed")
-    intelligence.reconcile()
-
-    original_request_cancel = ai.request_cancel
-    calls: list[str] = []
-    retry_job_id: str | None = None
-
-    def retry_before_first_cancel(job_id):
-        nonlocal retry_job_id
-        calls.append(job_id)
-        if len(calls) == 1:
-            retried = intelligence._retry_focus(cycle["cycle_id"])
-            retry_job_id = str(retried["job_id"])
-        return original_request_cancel(job_id)
-
-    monkeypatch.setattr(ai, "request_cancel", retry_before_first_cancel)
-
-    cancelled = intelligence.cancel_market_focus_cycle(cycle["cycle_id"])
-
-    assert retry_job_id is not None
-    assert calls == [first_job_id, retry_job_id]
-    assert cancelled is not None
-    assert cancelled["job_id"] == retry_job_id
-    assert cancelled["status"] == "cancelled"
-    assert ai.get_job(first_job_id)["status"] == "failed"
-    assert ai.get_job(retry_job_id)["status"] == "cancelled"
 
 
 def test_manual_job_payload_contains_only_locally_validated_allowed_tickers(tmp_path):

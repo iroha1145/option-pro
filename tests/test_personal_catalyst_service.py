@@ -210,10 +210,6 @@ class FakeIntelligence:
     def market_focus_cycle(self, cycle_id):
         return None
 
-    def cancel_market_focus_cycle(self, cycle_id):
-        self.actions.append(("cancel_focus", cycle_id))
-        return {"cycle_id": cycle_id, "status": "cancelled", "result": None}
-
     def request_refresh(self):
         self.actions.append(("refresh",))
         return {"request_id": "refresh-1", "status": "queued"}
@@ -873,7 +869,6 @@ def test_read_mode_keeps_refresh_and_cancel_available_but_blocks_new_analysis() 
     assert engine.actions == []
 
     service.request_refresh()
-    service.cancel_market_focus_cycle("mfc_" + "a" * 32)
     assert service.cancel_analysis_job("aij_" + "b" * 32) is None
 
     create_actions = (
@@ -883,10 +878,7 @@ def test_read_mode_keeps_refresh_and_cancel_available_but_blocks_new_analysis() 
     for action in create_actions:
         with pytest.raises(CatalystError, match="read_only_mode"):
             action()
-    assert engine.actions == [
-        ("refresh",),
-        ("cancel_focus", "mfc_" + "a" * 32),
-    ]
+    assert engine.actions == [("refresh",)]
 
 
 def test_refresh_uses_personal_cooldown_when_runtime_settings_are_unavailable() -> None:

@@ -7618,60 +7618,6 @@ class LocalCatalystIntelligence:
             "warnings": [],
         }
 
-    def cancel_market_focus_cycle(self, cycle_id: str) -> dict[str, Any] | None:
-        for _attempt in range(5):
-            with self._connect() as connection:
-                target = connection.execute(
-                    """SELECT job_id,status FROM catalyst_local_focus_cycles
-                       WHERE cycle_id=?""",
-                    (cycle_id,),
-                ).fetchone()
-            if target is None:
-                return None
-            target_job_id = str(target["job_id"])
-            updated = self.ai_repository.request_cancel(target_job_id)
-            with self._connect() as connection:
-                connection.execute("BEGIN IMMEDIATE")
-                try:
-                    current = connection.execute(
-                        """SELECT job_id,status
-                           FROM catalyst_local_focus_cycles
-                           WHERE cycle_id=?""",
-                        (cycle_id,),
-                    ).fetchone()
-                    if current is None:
-                        connection.commit()
-                        return None
-                    if str(current["job_id"]) != target_job_id:
-                        connection.commit()
-                        continue
-                    if (
-                        updated is not None
-                        and str(current["status"])
-                        in {"pending", "queued", "in_progress"}
-                    ):
-                        changed = connection.execute(
-                            """UPDATE catalyst_local_focus_cycles SET
-                                   status=?,updated_at=?
-                               WHERE cycle_id=? AND job_id=?""",
-                            (
-                                str(updated["status"]),
-                                str(updated["updated_at"]),
-                                cycle_id,
-                                target_job_id,
-                            ),
-                        ).rowcount
-                        if changed != 1:
-                            raise RuntimeError(
-                                "market_focus_cancel_contention"
-                            )
-                    connection.commit()
-                except Exception:
-                    connection.rollback()
-                    raise
-            return self.market_focus_cycle(cycle_id)
-        raise RuntimeError("market_focus_cancel_contention")
-
     @staticmethod
     def _manual_operation_public(
         row: sqlite3.Row | dict[str, Any],
