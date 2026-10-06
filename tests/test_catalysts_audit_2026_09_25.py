@@ -942,11 +942,13 @@ class _UnavailableAIStore:
 def test_unavailable_ai_store_pauses_analysis_but_not_ingestion(
     tmp_path,
     ai_audit_diagnostics,
+    monkeypatch,
 ):
     store_path = tmp_path / "ai-jobs.db"
     store_path.write_bytes(b"not a sqlite database " * 64)
     store = _UnavailableAIStore(store_path)
     now = datetime.now(timezone.utc).replace(microsecond=0)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: now)
     with request_owner_access_context(True):
         etl, _store, engine = _ai_stack(tmp_path, ai_repository=store)
         _ai_apply_news(
