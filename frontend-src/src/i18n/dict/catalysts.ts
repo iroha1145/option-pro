@@ -354,6 +354,8 @@ export const CATALYSTS: Dict = {
   '指引': ['Guidance', 'ガイダンス'],
   '法务': ['Legal', '法務'],
   '日历': ['Calendar', 'カレンダー'],
+  '大宗商品': ['Commodities', 'コモディティ'],
+  '公司': ['Company', '企業'],
   '新闻热点': ['News hotspot', 'ニュース注目テーマ'],
   '后台采集流最近一次执行成功': [
     'Background collection stream last ran successfully',

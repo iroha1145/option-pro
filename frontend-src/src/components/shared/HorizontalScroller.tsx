@@ -30,6 +30,8 @@ interface Props {
   scrollerClassName?: string;
   /** 无障碍名称，例如「热点主题带」。 */
   label?: string;
+  /** 渐隐遮罩的底色：放在白色卡片里用 card，直接放在页面上用 paper（默认）。 */
+  surface?: 'paper' | 'card';
 }
 
 export default function HorizontalScroller({
@@ -37,6 +39,7 @@ export default function HorizontalScroller({
   className,
   scrollerClassName,
   label,
+  surface = 'paper',
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState({ left: false, right: false });
@@ -120,13 +123,19 @@ export default function HorizontalScroller({
       {edges.left && (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-paper to-transparent"
+          className={cn(
+            'pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r to-transparent',
+            surface === 'card' ? 'from-card' : 'from-paper',
+          )}
         />
       )}
       {edges.right && (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-paper to-transparent"
+          className={cn(
+            'pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l to-transparent',
+            surface === 'card' ? 'from-card' : 'from-paper',
+          )}
         />
       )}
       {arrow('left')}

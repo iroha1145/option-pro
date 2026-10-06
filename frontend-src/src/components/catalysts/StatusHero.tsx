@@ -14,10 +14,14 @@ import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { t } from '../../i18n/core.ts';
 
+/* 分隔线跟着列数换：单列（<400）只画上边线；两列（400 起）画左线和第二行的上边线；四列（xl）只画左线。
+   两列时每格内容宽 = (视口 − 98) / 2，状态灯 +「已就绪 · 931 组热点」药丸要 149px，视口不到约 396 就放不下：
+   灯被挤到药丸上方独占一行，更窄时药丸里的字也折行，所以 400 以下改单列。 */
 function HeroCell({ label, index, children }: { label: string; index: number; children: React.ReactNode }) {
   return (
     <div className={cn('min-w-0 border-line px-4 py-4 sm:px-5',
-      index >= 2 && 'border-t xl:border-t-0', index % 2 === 1 && 'border-l', index === 2 && 'xl:border-l')}>
+      index >= 1 && 'border-t', index === 1 && 'min-[400px]:border-t-0', index >= 2 && 'xl:border-t-0',
+      index % 2 === 1 && 'min-[400px]:border-l', index === 2 && 'xl:border-l')}>
       <p className="eyebrow">{label}</p>
       <div className="mt-2">{children}</div>
     </div>
@@ -88,7 +92,7 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
       aria-label={t("数据源状态")}
       className="card-surface mt-6"
     >
-      <div className="grid grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 min-[400px]:grid-cols-2 xl:grid-cols-4">
         <HeroCell index={0} label={t("数据源状态")}>
           {loading ? (
             <SkeletonBlock className="h-5 w-32 max-w-full" />

@@ -14,6 +14,7 @@ import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import Segmented from '@/components/shared/Segmented';
+import HorizontalScroller from '@/components/shared/HorizontalScroller';
 import InfoHint from '@/components/shared/InfoHint';
 import { CTA_HINTS } from '@/lib/ctaHints';
 import { cn } from '@/lib/utils';
@@ -125,17 +126,25 @@ export default function CtaDeepDive({
             <InfoHint hint={CTA_HINTS.overview} />
           </h2>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        {/* min-w-0：否则这一组按指数切换条的整条宽度撑开，里面的横向滚动不起作用 */}
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           <span className="rounded-pill border border-line bg-paper-2 px-2 py-0.5 text-micro text-ink-500">
             {t('基于 ETF 趋势的代理估算')}
           </span>
           {rows.length > 1 && (
-            <Segmented
-              options={rows.map((item) => ({ value: item.instrument, label: instrumentName(item.instrument, item.label) }))}
-              value={row.instrument}
-              onChange={onInstrumentChange}
-              className="[&_button]:text-micro"
-            />
+            /* 四个指数在 320 宽手机放不下：交给 HorizontalScroller 横向滚动并显示右侧渐隐，
+               不再被卡片裁成半个「道琼斯」。 */
+            <HorizontalScroller className="min-w-0 max-w-full" scrollerClassName="py-0.5" surface="card">
+              <div className="w-max">
+                <Segmented
+                  options={rows.map((item) => ({ value: item.instrument, label: instrumentName(item.instrument, item.label) }))}
+                  value={row.instrument}
+                  onChange={onInstrumentChange}
+                  className="[&_button]:text-micro"
+                  scrollable
+                />
+              </div>
+            </HorizontalScroller>
           )}
         </div>
       </div>
@@ -194,7 +203,7 @@ export default function CtaDeepDive({
                     {t('今日仓位变化')}
                     <InfoHint hint={CTA_HINTS.flow} size={10} />
                   </p>
-                  <p className={cn('mt-0.5 text-body font-semibold tnum', (row.flow_score ?? 0) >= 0 ? 'text-up-700' : 'text-down-700')}>
+                  <p className={cn('mt-0.5 text-body font-medium tnum', (row.flow_score ?? 0) >= 0 ? 'text-up-700' : 'text-down-700')}>
                     {signed(row.flow_score)}
                   </p>
                   <p className="text-micro text-ink-400 tnum">
@@ -208,7 +217,7 @@ export default function CtaDeepDive({
                   </p>
                   {/* 审计口径：大号 100% 视觉像「高置信度」，实际只表方向同向。
                       主读数改趋势强度（波动率缩放前，±100），方向/覆盖/缩放小字并列。 */}
-                  <p className="mt-0.5 text-body font-semibold text-ink-900 tnum">
+                  <p className="mt-0.5 text-body font-medium text-ink-900 tnum">
                     {t('强度 {v}', { v: signed(row.trend_strength) })}
                   </p>
                   <p className="text-micro text-ink-400 tnum">

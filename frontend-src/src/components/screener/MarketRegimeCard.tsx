@@ -67,7 +67,7 @@ function RegimeBar({ dim }: { dim: RegimeDim }) {
       {/* 毛玻璃 tooltip（绝对定位，不占网格槽位） */}
       <div className="cloud-popover pointer-events-none absolute -top-2 left-16 z-20 hidden w-56 -translate-y-full p-3 group-hover:block">
         <p className="flex items-baseline justify-between">
-          <span className="text-caption font-semibold text-ink-800">{dim.label}</span>
+          <span className="text-caption font-medium text-ink-800">{dim.label}</span>
           {getLocale() === 'zh' && <span className="font-mono text-micro text-ink-400">{dim.en}</span>}
         </p>
         <p className="mt-1.5 text-micro leading-[16px] text-ink-500">{dim.hint}</p>

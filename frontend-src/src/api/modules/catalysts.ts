@@ -39,7 +39,8 @@ function mapSentiment(r: Record<string, unknown>): NewsSentiment {
 function mapNewsItem(r: Record<string, unknown>): NewsItem {
   const tickers = Array.isArray(r.source_tickers) ? (r.source_tickers as string[]) : Array.isArray(r.tickers) ? (r.tickers as string[]) : [];
   return {
-    id: pickS(r, 'id', 'news_id') ?? '',
+    // 个人版 news_id 是整数：只按字符串取会全变成空串，个股新闻列表的 key 全部重复。
+    id: pickS(r, 'id', 'news_id') ?? (pickN(r, 'id', 'news_id') ?? '').toString(),
     // 公开投影会移除原文 title/summary，只保留已生成或安全回退的简体中文字段。
     title: pickS(r, 'title_zh', 'titleZh', 'title') ?? '',
     summary: pickS(r, 'summary_zh', 'summaryZh', 'summary') ?? '',

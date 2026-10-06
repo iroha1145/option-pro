@@ -851,7 +851,8 @@ export default function Screener() {
         title={__t("选股扫描")}
         meta={
           <>
-            <span className="text-right">
+            {/* 手机上元信息折到标题下方、靠左排，这里跟着左对齐；桌面在页头右侧时才右对齐 */}
+            <span className="text-left md:text-right">
               <span className="block text-micro text-ink-400">{__t('上次扫描')}</span>
               <span className="font-mono text-caption text-ink-600 tnum" suppressHydrationWarning>
                 {lastScanAt ? fmtTimeHHMMSS(lastScanAt) : '—'}
@@ -1371,11 +1372,13 @@ function buildChips(
     }),
   );
   if (f.priceMin != null || f.priceMax != null) {
-    const lo = f.priceMin != null ? `$${f.priceMin}` : '—';
-    const hi = f.priceMax != null ? `$${f.priceMax}` : '—';
+    const lo = f.priceMin != null ? `$${f.priceMin}` : null;
+    const hi = f.priceMax != null ? `$${f.priceMax}` : null;
     // priceMin 进 apiParams（min_price）、priceMax 是客户端过滤：并存时按更严的服务端语义走
     const remove = f.priceMin != null ? patchServer : patch;
-    chips.push({ key: 'price', label: __t('价格 {lo}–{hi}', { lo, hi }), onRemove: () => remove({ priceMin: null, priceMax: null }) });
+    // 只有一端时写 ≥ / ≤，不再拼出「价格 $5——」
+    const label = lo && hi ? __t('价格 {lo}–{hi}', { lo, hi }) : lo ? __t('价格 ≥{v}', { v: lo }) : __t('价格 ≤{v}', { v: hi ?? '' });
+    chips.push({ key: 'price', label, onRemove: () => remove({ priceMin: null, priceMax: null }) });
   }
   if (dollarVolumeFilterSupported && f.minDollarVol > 0) {
     const opt = DOLLAR_VOL_OPTIONS.find((o) => o.value === f.minDollarVol);

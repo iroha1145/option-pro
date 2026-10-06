@@ -36,8 +36,9 @@ const MORE_ITEMS: { label: string; path: string; icon: IconName }[] = [
   /* 板块从 Dock 移入「更多」（首页/自选/选股/雷达占满四个一级入口） */
   { label: t('板块透视'), path: '/sectors', icon: 'layers' },
   { label: t('财报日历'), path: '/earnings', icon: 'calendar-spark' },
-  { label: t('大盘强弱'), path: '/market', icon: 'radar' },
-  { label: t('CTA 趋势资金'), path: '/cta', icon: 'candle' },
+  /* 不与 Dock 的雷达、首页共用图标：大盘用页头同款仪表，CTA 用趋势线 */
+  { label: t('大盘强弱'), path: '/market', icon: 'wallet-gauge' },
+  { label: t('CTA 趋势资金'), path: '/cta', icon: 'trend-line' },
   { label: t('新闻催化'), path: '/catalysts', icon: 'bolt' },
 ];
 

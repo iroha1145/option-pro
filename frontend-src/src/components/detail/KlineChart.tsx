@@ -18,6 +18,7 @@ import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 import { DUR_UI, EASE_PAPER } from '@/lib/motion';
 import ReactECharts from '@/components/charts/ReactECharts';
 import Segmented from '@/components/shared/Segmented';
+import HorizontalScroller from '@/components/shared/HorizontalScroller';
 import MenuSelect from '@/components/shared/MenuSelect';
 import EmptyState from '@/components/shared/EmptyState';
 import InfoHint from '@/components/shared/InfoHint';
@@ -895,11 +896,17 @@ export default function KlineChart({
       aria-label={t('{ticker} K 线图', { ticker })}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Segmented
-          options={CHART_RANGES}
-          value={range}
-          onChange={setRange}
-        />
+        {/* 五个周期在 320 宽手机比卡片宽几像素：横向滚动加右侧渐隐，不把「周线」裁成半个字。 */}
+        <HorizontalScroller className="min-w-0 max-w-full" scrollerClassName="py-0.5" surface="card">
+          <div className="w-max">
+            <Segmented
+              options={CHART_RANGES}
+              value={range}
+              onChange={setRange}
+              scrollable
+            />
+          </div>
+        </HorizontalScroller>
         <div className="flex flex-wrap items-center gap-2">
           <Segmented
             options={[

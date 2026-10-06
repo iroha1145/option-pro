@@ -218,8 +218,9 @@ function CardTrend({ item }: { item: WatchlistItem }) {
       <>
         <Sparkline data={view.closes} width={230} height={56} change={view.change} variant="area" className="w-full" />
         <span className="mt-1 flex items-center justify-between gap-2 text-micro text-ink-400">
-          <span className="truncate">
-            {t('近半年')} <span className="font-mono tnum">{view.start.slice(5)} — {view.end.slice(5)}</span>
+          {/* 三列卡片（1280 宽）放不下一行时，日期整段换到「近半年」下面，不再截成「04-10 — 1…」 */}
+          <span className="flex min-w-0 flex-wrap gap-x-1">
+            {t('近半年')} <span className="whitespace-nowrap font-mono tnum">{view.start.slice(5)} — {view.end.slice(5)}</span>
           </span>
           <span className="flex shrink-0 items-center gap-1.5">{t('区间')}<ChangeBadge value={view.change} size="sm" /></span>
         </span>
@@ -302,12 +303,12 @@ function WatchCard({
         /* hover 上浮 -3px + sh-2 走 card-lift（hover/pointer 门控 CSS，触屏不粘滞；
            原 framer whileHover 已收敛）。不能挂在外层 motion.div：framer 入场后
            内联 transform:none 会压掉同元素上的 CSS hover 位移。 */
-        className="card-surface card-lift flex w-full flex-col p-4 text-left"
+        className="card-surface card-lift flex h-full w-full flex-col p-4 text-left"
       >
       <div className={cn("flex items-center gap-2.5", onRemove && "pr-9")}>
         <TickerLogo ticker={item.ticker} />
         <div className="min-w-0 flex-1">
-          <p className="font-mono text-body-s font-semibold text-ink-800">{item.ticker}</p>
+          <p className="font-mono text-body-s font-medium text-ink-800">{item.ticker}</p>
           <p className="truncate text-micro text-ink-400">{item.name}</p>
         </div>
         <LiveChange symbol={item.ticker} fallback={item.changePct} fallbackAt={item.updatedAt} size="sm" />
@@ -317,20 +318,27 @@ function WatchCard({
         {item.sector && <SoftBadge className="max-w-[60%]" title={t(item.sector)}><span className="truncate">{t(item.sector)}</span></SoftBadge>}
       </div>
       {!Number.isFinite(item.price) && <p className="mt-2 text-caption text-ink-400">{t('暂无行情')}</p>}
-      <span className="mt-2 block">
+      {/* 同排卡片等高（板块标签有时折行）：走势与底栏一起推到卡片底边，同排的走势图、强度条和信号横向对齐 */}
+      <span className="mt-auto block pt-2">
         <CardTrend item={item} />
       </span>
       {(showStrength || showSignals) && (
-        <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3">
-          {showStrength && <StrengthBar score={item.strengthScore} width={64} />}
-          {showSignals && (
-            <span className="flex gap-1">
-              {item.signals.slice(0, 2).map((s, i) => (
-                <SignalChip key={i} type={s.type} label={s.label} />
-              ))}
-              {item.signals.length > 2 && <span className="font-mono text-micro text-ink-400">+{item.signals.length - 2}</span>}
-            </span>
-          )}
+        <div className="w-full pt-3">
+          <div className="flex items-center justify-between gap-2 border-t border-line pt-3">
+            {showStrength && <StrengthBar score={item.strengthScore} width={64} />}
+            {showSignals && (
+              <span className="flex items-center gap-1">
+                {item.signals.slice(0, 2).map((s, i) => (
+                  <SignalChip key={i} type={s.type} label={s.label} />
+                ))}
+                {item.signals.length > 2 && (
+                  <span className="font-mono text-micro text-ink-400" title={item.signals.slice(2).map((s) => s.label).join('、')}>
+                    +{item.signals.length - 2}
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
         </div>
       )}
       </button>
@@ -491,7 +499,7 @@ export default function Watchlist() {
                 <Link
                   to={`/stock/${encodeURIComponent(r.ticker)}`}
                   aria-label={t('打开 {ticker} 详情', { ticker: r.ticker })}
-                  className="block w-fit rounded-sm font-mono text-body-s font-semibold text-ink-800 hover:text-brand-700 hover:underline"
+                  className="block w-fit rounded-sm font-mono text-body-s font-medium text-ink-800 hover:text-brand-700 hover:underline"
                 >{r.ticker}</Link>
                 {r.sector && <SoftBadge className="max-w-[7.5rem]" title={t(r.sector)}><span className="truncate">{t(r.sector)}</span></SoftBadge>}
               </span>

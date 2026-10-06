@@ -3,7 +3,7 @@
  * 列最近 5 次：时间（Mono）/ 参数摘要 / 结果数
  */
 import SoftBadge from '@/components/shared/SoftBadge';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { DUR_FAST, SPRING_POP } from '@/lib/motion';
@@ -19,6 +19,45 @@ export default function ScanHistoryPopover({ history }: { history: ScanHistoryEn
   const ref = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   useFocusTrap(popoverRef, open);
+
+  /* 右对齐按钮，并在打开、窗口和按钮尺寸变化时保留两侧 16px 边距。
+     量 offsetWidth（不受入场 scale 影响），直接写样式，不触发重渲染。 */
+  useLayoutEffect(() => {
+    const wrap = ref.current;
+    const pop = popoverRef.current;
+    if (!open || !wrap || !pop) return;
+    const gutter = 16;
+    let frame: number | null = null;
+    const place = () => {
+      const viewport = document.documentElement.clientWidth;
+      pop.style.maxWidth = `${Math.max(0, viewport - gutter * 2)}px`;
+      const width = pop.offsetWidth;
+      const naturalLeft = wrap.getBoundingClientRect().right - width;
+      const left = Math.min(Math.max(naturalLeft, gutter), Math.max(gutter, viewport - width - gutter));
+      pop.style.right = `${naturalLeft - left}px`;
+    };
+    // resize 事件中断点布局可能尚未落定；下一帧再读尺寸，避免沿用过渡时的边距。
+    const schedulePlace = () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        place();
+      });
+    };
+    place();
+    window.addEventListener('resize', schedulePlace);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedulePlace);
+    observer?.observe(wrap);
+    observer?.observe(pop);
+    // 页头内容宽度随断点内边距变化；按钮本身宽度不变，仍需跟随它最终的位置。
+    const layout = wrap.closest('header') ?? wrap.parentElement;
+    if (layout) observer?.observe(layout);
+    return () => {
+      window.removeEventListener('resize', schedulePlace);
+      observer?.disconnect();
+      if (frame !== null) window.cancelAnimationFrame(frame);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;

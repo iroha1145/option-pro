@@ -149,7 +149,7 @@ function HeatRow({
 
         <span
           className={cn(
-            'text-right text-body-s font-semibold tnum',
+            'text-right text-body-s font-medium tnum',
             !hasReturn || value === 0 ? 'text-ink-500' : value > 0 ? 'text-up-700' : 'text-down-700',
           )}
         >
@@ -172,7 +172,7 @@ function HeatRow({
             </span>
             <span className="flex items-center justify-between gap-2">
               <span className="text-ink-500">{t('强度领先')}</span>
-              <span className="font-semibold text-ink-800">
+              <span className="font-medium text-ink-800">
                 {leader
                   ? <><span className="font-mono">{leader.ticker}</span> <span className="tnum">{leader.score?.toFixed(1) ?? '—'}</span></>
                   : '—'}

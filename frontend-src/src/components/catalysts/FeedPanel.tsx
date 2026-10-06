@@ -104,7 +104,7 @@ export function NewsRow({
           {item.isStale && <StaleChip />}
         </p>
         {/* 标题 */}
-        <h3 className="mt-1.5 text-[15px] leading-[22px] font-semibold text-ink-900">
+        <h3 className="mt-1.5 text-[15px] leading-[22px] font-medium text-ink-900">
           <span className="bg-[linear-gradient(currentColor,currentColor)] bg-[length:0%_1px] bg-left-bottom bg-no-repeat transition-[background-size] duration-fast group-hover:bg-[length:100%_1px] group-hover:text-brand-600">
             {item.titleZh}
           </span>
