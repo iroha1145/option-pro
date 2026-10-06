@@ -1,6 +1,6 @@
 import { LivePrice, LiveChange } from '@/components/shared/LiveQuote';
 /**
- * B4 移动端结果卡片流（<768px 表格转卡片）
+ * B4 手机与平板结果卡片流（<1280px 表格转卡片）
  * 卡内：代码 + 强度大分 + 分项微条 + 涨跌 + 催化剂徽标；点按展开 accordion 明细。
  */
 import SoftBadge from '@/components/shared/SoftBadge';
@@ -159,6 +159,7 @@ export default function ResultCards({
                 >
                   <RowExpansion
                     row={r}
+                    layout="card"
                     dollarVolume={details[r.ticker]?.dollarVolume ?? null}
                     signals={signals[r.ticker] ?? null}
                     onOpenDetail={onOpenDetail}

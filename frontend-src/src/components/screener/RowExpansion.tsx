@@ -204,12 +204,13 @@ function TrendBlock({ row }: { row: ScreenerRow }) {
 
 export interface RowExpansionProps {
   row: ScreenerRow;
+  layout?: 'card' | 'table';
   dollarVolume: number | null;
   signals: RowSignalsState | null;
   onOpenDetail: (ticker: string) => void;
 }
 
-export default function RowExpansion({ row, dollarVolume, signals, onOpenDetail }: RowExpansionProps) {
+export default function RowExpansion({ row, layout = 'table', dollarVolume, signals, onOpenDetail }: RowExpansionProps) {
   const dims = subscoreDimsOf(row);
   const weightOf = (key: string): number | null => {
     const effective = row.effectiveWeights?.[key.replace(/^factor_/, '')];
@@ -217,7 +218,7 @@ export default function RowExpansion({ row, dollarVolume, signals, onOpenDetail 
     return null;
   };
   return (
-    <div className="grid grid-cols-1 gap-x-8 gap-y-5 border-t border-line bg-card-warm/60 px-4 py-4 md:grid-cols-3">
+    <div className={cn('grid grid-cols-1 gap-x-8 gap-y-5 border-t border-line bg-card-warm/60 px-4 py-4', layout === 'table' && 'md:grid-cols-3')}>
       {/* ① 分项强度 breakdown（与行内微条同源） */}
       <div>
         <p className="eyebrow">{t('分项强度')}</p>
