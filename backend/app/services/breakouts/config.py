@@ -26,6 +26,11 @@ _PERSONAL_RANGE_PERSISTENCE_MODE = {
 
 class BreakoutSettings(BaseSettings):
     _db_path_override: Path | None = PrivateAttr(default=None)
+    # Research-only switches. They live in a private attribute so that
+    # ``model_dump`` and the published scan ``config_hash`` are identical to a
+    # plain settings object; production never sets one, a replay records them
+    # separately next to the hash.
+    _research_overrides: dict[str, Any] = PrivateAttr(default_factory=dict)
 
     enabled: bool = Field(
         default=_PERSONAL_CONFIG.features.breakout_enabled,
@@ -82,7 +87,15 @@ class BreakoutSettings(BaseSettings):
         ge=0,
         alias="BREAKOUT_PROVIDER_MIN_MARKET_CAP",
     )
-    allow_etf: bool = Field(default=True, alias="BREAKOUT_ALLOW_ETF")
+    # Ordinary ETFs are out of the radar by default (the user's scope decision of
+    # 2026-09-28): in September 2026 they took about 9 rows per scan and 15% of
+    # the triggered events. Leveraged funds are excluded whatever this says.
+    allow_etf: bool = Field(default=False, alias="BREAKOUT_ALLOW_ETF")
+    # TradingView's "america" market includes OTC tickers. They took most of the
+    # 150 discovery rows (62% in the September 2026 candidate rows) and almost
+    # none survive the daily stage, so they are excluded in the query and again
+    # in normalization unless a deployment opts back in.
+    allow_otc: bool = Field(default=False, alias="BREAKOUT_ALLOW_OTC")
 
     daily_enrich_limit: int = Field(
         default=60, ge=1, le=60, alias="BREAKOUT_DAILY_ENRICH_LIMIT"
@@ -292,6 +305,22 @@ class BreakoutSettings(BaseSettings):
     @property
     def db_path(self) -> Path:
         return self._db_path_override or get_data_paths().optix_db
+
+    def research_override(self, name: str, default: Any) -> Any:
+        """Return a research switch, or ``default`` when none is set (production)."""
+
+        return self._research_overrides.get(name, default)
+
+    @property
+    def research_overrides(self) -> dict[str, Any]:
+        return dict(self._research_overrides)
+
+    def with_research_overrides(self, **overrides: Any) -> "BreakoutSettings":
+        """Copy these settings with research switches; the copy hashes the same."""
+
+        copy = self.model_copy()
+        copy._research_overrides = {**self._research_overrides, **overrides}
+        return copy
 
     @model_validator(mode="after")
     def validate_limits(self) -> "BreakoutSettings":

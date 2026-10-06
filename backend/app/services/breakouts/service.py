@@ -432,6 +432,18 @@ class BreakoutRadarService:
             include_current_bar=False,
         )
 
+    def _feature_snapshot_kwargs(self) -> dict[str, Any]:
+        """Feature-engine knobs: production values unless a research replay overrides."""
+
+        override = getattr(self.settings, "research_override", None)
+        lookback = (
+            int(override("rvol_lookback_sessions", 20)) if callable(override) else 20
+        )
+        return {
+            "opening_range_minutes": self.settings.opening_range_minutes,
+            "rvol_lookback_sessions": lookback,
+        }
+
     @staticmethod
     def _base_features(structure: Any) -> dict[str, Any]:
         if structure is None:
@@ -907,7 +919,7 @@ class BreakoutRadarService:
                     daily=daily_frame,
                     intraday=intraday_frame,
                     cutoff=cutoff,
-                    opening_range_minutes=self.settings.opening_range_minutes,
+                    **self._feature_snapshot_kwargs(),
                 )
                 if features.get("status") != "active":
                     feature_warnings = list(features.get("warnings") or [])
@@ -2370,7 +2382,7 @@ class BreakoutRadarService:
                     daily=daily_snapshot.frame,
                     intraday=intraday_snapshot.frame,
                     cutoff=cutoff,
-                    opening_range_minutes=self.settings.opening_range_minutes,
+                    **self._feature_snapshot_kwargs(),
                 )
                 features.update(
                     self._structure_intraday_features(

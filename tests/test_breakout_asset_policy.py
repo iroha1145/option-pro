@@ -88,9 +88,11 @@ def candidate(ticker, name):
 def test_discovery_filters_before_result_limit(session, profile):
     leveraged = candidate("SBIT", "ProShares UltraShort Bitcoin ETF")
     ordinary = candidate("SPY", "SPDR S&P 500 ETF Trust")
+    # Ordinary ETFs are excluded by default now; opt in so this still checks that
+    # the leveraged filter runs before the result limit.
     kept, warnings = filter_and_deduplicate(
         [leveraged, ordinary], session=session, profile=profile,
-        settings=BreakoutSettings(_env_file=None, BREAKOUT_PROVIDER_RESULT_LIMIT=1),
+        settings=BreakoutSettings(_env_file=None, BREAKOUT_PROVIDER_RESULT_LIMIT=1, BREAKOUT_ALLOW_ETF=True),
     )
     assert [item.ticker for item in kept] == ["SPY"]
     assert "SBIT:leveraged_etf_excluded" in warnings

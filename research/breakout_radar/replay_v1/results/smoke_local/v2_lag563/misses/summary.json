@@ -1,0 +1,309 @@
+{
+ "variant": "hybrid_otc",
+ "exclude_current_leveraged": false,
+ "replay_days": [
+  "2026-09-08",
+  "2026-09-09",
+  "2026-09-10",
+  "2026-09-11",
+  "2026-09-14",
+  "2026-09-15",
+  "2026-09-17",
+  "2026-09-18",
+  "2026-09-21",
+  "2026-09-22",
+  "2026-09-23",
+  "2026-09-24",
+  "2026-09-25"
+ ],
+ "matched_scans": 1140,
+ "production_listed_missing_in_replay": 11509,
+ "by_reason": {
+  "removed_by_normalizer": 9464,
+  "relvol_filter": 1308,
+  "change_filter": 454,
+  "no_bars_today": 209,
+  "cut_by_150_window": 50,
+  "no_bar_yet": 17,
+  "price_filter": 5,
+  "no_previous_close": 2
+ },
+ "distinct_tickers_by_reason": {
+  "removed_by_normalizer": 355,
+  "change_filter": 315,
+  "no_bar_yet": 17,
+  "cut_by_150_window": 49,
+  "no_bars_today": 5,
+  "relvol_filter": 360,
+  "price_filter": 4,
+  "no_previous_close": 2
+ },
+ "by_session": {
+  "premarket": {
+   "removed_by_normalizer": 3291,
+   "change_filter": 362,
+   "no_bar_yet": 17,
+   "cut_by_150_window": 3,
+   "price_filter": 2
+  },
+  "regular": {
+   "removed_by_normalizer": 6173,
+   "relvol_filter": 1308,
+   "no_bars_today": 209,
+   "change_filter": 92,
+   "cut_by_150_window": 47,
+   "price_filter": 3,
+   "no_previous_close": 2
+  }
+ },
+ "value_gaps": {
+  "change_filter": {
+   "prod_change": {
+    "n": 454,
+    "p10": 3.902439024390239,
+    "p50": 5.397103992979379,
+    "p90": 9.523949939129956
+   },
+   "replay_change": {
+    "n": 454,
+    "p10": -2.0352781546811416,
+    "p50": 2.988171819879648,
+    "p90": 4.924242424242431
+   },
+   "replay_minus_prod": {
+    "n": 454,
+    "p10": -12.340218855489885,
+    "p50": -1.8054985638079577,
+    "p90": -0.24275310581178644
+   }
+  },
+  "cut_by_150_window": {
+   "change_below_cut": {
+    "n": 50,
+    "p10": 0.2533643229183733,
+    "p50": 1.349879198327681,
+    "p90": 2.557529335071724
+   }
+  },
+  "relvol_filter": {
+   "prod_relvol": {
+    "n": 1308,
+    "p10": 1.5064745116047604,
+    "p50": 1.5560829703915477,
+    "p90": 2.026122969098439
+   },
+   "replay_relvol": {
+    "n": 1308,
+    "p10": 1.0424954940217261,
+    "p50": 1.4387878989547132,
+    "p90": 1.4931229938042105
+   },
+   "replay_over_prod": {
+    "n": 1308,
+    "p10": 0.5553312329721906,
+    "p50": 0.9011161999084789,
+    "p90": 0.9814663656476773
+   }
+  }
+ },
+ "top_missing_tickers": [
+  {
+   "ticker": "MXLL",
+   "count": 160,
+   "reasons": {
+    "removed_by_normalizer": 144,
+    "relvol_filter": 15,
+    "change_filter": 1
+   }
+  },
+  {
+   "ticker": "RGTC",
+   "count": 117,
+   "reasons": {
+    "relvol_filter": 1,
+    "removed_by_normalizer": 116
+   }
+  },
+  {
+   "ticker": "SKHN",
+   "count": 113,
+   "reasons": {
+    "change_filter": 2,
+    "removed_by_normalizer": 111
+   }
+  },
+  {
+   "ticker": "NVTC",
+   "count": 110,
+   "reasons": {
+    "relvol_filter": 1,
+    "removed_by_normalizer": 109
+   }
+  },
+  {
+   "ticker": "AXTQ",
+   "count": 110,
+   "reasons": {
+    "removed_by_normalizer": 95,
+    "change_filter": 2,
+    "relvol_filter": 13
+   }
+  },
+  {
+   "ticker": "SKDD",
+   "count": 110,
+   "reasons": {
+    "removed_by_normalizer": 108,
+    "relvol_filter": 1,
+    "change_filter": 1
+   }
+  },
+  {
+   "ticker": "COHQ",
+   "count": 106,
+   "reasons": {
+    "removed_by_normalizer": 98,
+    "relvol_filter": 8
+   }
+  },
+  {
+   "ticker": "RDDC",
+   "count": 104,
+   "reasons": {
+    "removed_by_normalizer": 104
+   }
+  },
+  {
+   "ticker": "BEG",
+   "count": 100,
+   "reasons": {
+    "removed_by_normalizer": 98,
+    "change_filter": 2
+   }
+  },
+  {
+   "ticker": "LNOK",
+   "count": 99,
+   "reasons": {
+    "removed_by_normalizer": 98,
+    "relvol_filter": 1
+   }
+  },
+  {
+   "ticker": "IONC",
+   "count": 95,
+   "reasons": {
+    "change_filter": 1,
+    "relvol_filter": 19,
+    "removed_by_normalizer": 75
+   }
+  },
+  {
+   "ticker": "TPLX",
+   "count": 94,
+   "reasons": {
+    "change_filter": 2,
+    "removed_by_normalizer": 92
+   }
+  },
+  {
+   "ticker": "FPSX",
+   "count": 94,
+   "reasons": {
+    "removed_by_normalizer": 92,
+    "change_filter": 1,
+    "relvol_filter": 1
+   }
+  },
+  {
+   "ticker": "AVXX",
+   "count": 91,
+   "reasons": {
+    "removed_by_normalizer": 90,
+    "relvol_filter": 1
+   }
+  },
+  {
+   "ticker": "BEC",
+   "count": 87,
+   "reasons": {
+    "removed_by_normalizer": 86,
+    "relvol_filter": 1
+   }
+  },
+  {
+   "ticker": "CRWL",
+   "count": 83,
+   "reasons": {
+    "change_filter": 1,
+    "removed_by_normalizer": 81,
+    "relvol_filter": 1
+   }
+  },
+  {
+   "ticker": "BEZ",
+   "count": 77,
+   "reasons": {
+    "change_filter": 3,
+    "removed_by_normalizer": 74
+   }
+  },
+  {
+   "ticker": "SOFC",
+   "count": 77,
+   "reasons": {
+    "relvol_filter": 18,
+    "cut_by_150_window": 1,
+    "removed_by_normalizer": 58
+   }
+  },
+  {
+   "ticker": "FLEL",
+   "count": 75,
+   "reasons": {
+    "cut_by_150_window": 1,
+    "removed_by_normalizer": 74
+   }
+  },
+  {
+   "ticker": "MPWC",
+   "count": 74,
+   "reasons": {
+    "removed_by_normalizer": 74
+   }
+  }
+ ],
+ "replay_listed_not_in_production": {
+  "rows": 8943,
+  "distinct_tickers": 759,
+  "change": {
+   "n": 8943,
+   "p10": 3.378378378378377,
+   "p50": 5.751295336787554,
+   "p90": 10.650069156293206
+  },
+  "relvol": {
+   "n": 8942,
+   "p10": 0.6675542618903908,
+   "p50": 1.864153522106815,
+   "p90": 4.676018150289068
+  },
+  "top_tickers": [
+   "GLND",
+   "DFDV",
+   "LTCC",
+   "BWET",
+   "BNC",
+   "ADAG",
+   "CRPT",
+   "SRZN",
+   "AEHL",
+   "TCAN",
+   "ARMP",
+   "AT",
+   "BAVA",
+   "OAIW",
+   "MNRS"
+  ]
+ }
+}

@@ -1,0 +1,270 @@
+{
+ "variant": "hybrid_otc",
+ "exclude_current_leveraged": false,
+ "replay_days": [
+  "2026-09-22"
+ ],
+ "matched_scans": 78,
+ "production_listed_missing_in_replay": 781,
+ "by_reason": {
+  "no_bar_yet": 437,
+  "no_bars_today": 190,
+  "change_filter": 145,
+  "relvol_filter": 7,
+  "price_filter": 1,
+  "no_previous_close": 1
+ },
+ "distinct_tickers_by_reason": {
+  "no_bar_yet": 60,
+  "change_filter": 97,
+  "price_filter": 1,
+  "no_bars_today": 5,
+  "no_previous_close": 1,
+  "relvol_filter": 3
+ },
+ "by_session": {
+  "premarket": {
+   "no_bar_yet": 53,
+   "change_filter": 43,
+   "price_filter": 1
+  },
+  "regular": {
+   "no_bar_yet": 384,
+   "no_bars_today": 190,
+   "change_filter": 102,
+   "relvol_filter": 7,
+   "no_previous_close": 1
+  }
+ },
+ "value_gaps": {
+  "change_filter": {
+   "prod_change": {
+    "n": 145,
+    "p10": 3.54142160981348,
+    "p50": 7.154150197628462,
+    "p90": 18.23365122615803
+   },
+   "replay_change": {
+    "n": 145,
+    "p10": -2.5249169435216046,
+    "p50": 0.3243299512366349,
+    "p90": 3.18518518518518
+   },
+   "replay_minus_prod": {
+    "n": 145,
+    "p10": -23.27887503243231,
+    "p50": -6.064236386902019,
+    "p90": -1.9282473533859945
+   }
+  },
+  "relvol_filter": {
+   "prod_relvol": {
+    "n": 7,
+    "p10": 1.503289572505783,
+    "p50": 1.6213748528316392,
+    "p90": 1.6231441496344543
+   },
+   "replay_relvol": {
+    "n": 7,
+    "p10": 1.454563973850313,
+    "p50": 1.499398818017232,
+    "p90": 1.499398818017232
+   },
+   "replay_over_prod": {
+    "n": 7,
+    "p10": 0.9236003787272289,
+    "p50": 0.9247699971407704,
+    "p90": 0.9656131863509093
+   }
+  }
+ },
+ "top_missing_tickers": [
+  {
+   "ticker": "AAPG",
+   "count": 49,
+   "reasons": {
+    "no_bar_yet": 48,
+    "change_filter": 1
+   }
+  },
+  {
+   "ticker": "BCOR",
+   "count": 47,
+   "reasons": {
+    "no_bars_today": 47
+   }
+  },
+  {
+   "ticker": "ORO",
+   "count": 46,
+   "reasons": {
+    "no_bar_yet": 44,
+    "change_filter": 2
+   }
+  },
+  {
+   "ticker": "WUGI",
+   "count": 45,
+   "reasons": {
+    "no_bars_today": 45
+   }
+  },
+  {
+   "ticker": "AIX",
+   "count": 41,
+   "reasons": {
+    "no_bar_yet": 39,
+    "change_filter": 2
+   }
+  },
+  {
+   "ticker": "XDAT",
+   "count": 39,
+   "reasons": {
+    "no_bars_today": 39
+   }
+  },
+  {
+   "ticker": "USMD",
+   "count": 35,
+   "reasons": {
+    "no_bars_today": 35
+   }
+  },
+  {
+   "ticker": "DAT",
+   "count": 33,
+   "reasons": {
+    "no_bar_yet": 32,
+    "change_filter": 1
+   }
+  },
+  {
+   "ticker": "TEMX",
+   "count": 33,
+   "reasons": {
+    "no_bar_yet": 33
+   }
+  },
+  {
+   "ticker": "CGPT",
+   "count": 25,
+   "reasons": {
+    "no_bar_yet": 23,
+    "change_filter": 2
+   }
+  },
+  {
+   "ticker": "CBXJ",
+   "count": 24,
+   "reasons": {
+    "no_bars_today": 24
+   }
+  },
+  {
+   "ticker": "XITK",
+   "count": 23,
+   "reasons": {
+    "no_bar_yet": 22,
+    "change_filter": 1
+   }
+  },
+  {
+   "ticker": "DVSP",
+   "count": 21,
+   "reasons": {
+    "no_bar_yet": 20,
+    "change_filter": 1
+   }
+  },
+  {
+   "ticker": "PTNT",
+   "count": 21,
+   "reasons": {
+    "no_bar_yet": 20,
+    "change_filter": 1
+   }
+  },
+  {
+   "ticker": "VERS",
+   "count": 21,
+   "reasons": {
+    "no_bar_yet": 20,
+    "change_filter": 1
+   }
+  },
+  {
+   "ticker": "NVPS",
+   "count": 19,
+   "reasons": {
+    "no_bar_yet": 17,
+    "change_filter": 2
+   }
+  },
+  {
+   "ticker": "MEIB",
+   "count": 12,
+   "reasons": {
+    "no_bar_yet": 10,
+    "change_filter": 2
+   }
+  },
+  {
+   "ticker": "FDCF",
+   "count": 11,
+   "reasons": {
+    "no_bar_yet": 9,
+    "change_filter": 2
+   }
+  },
+  {
+   "ticker": "BITS",
+   "count": 10,
+   "reasons": {
+    "no_bar_yet": 8,
+    "change_filter": 2
+   }
+  },
+  {
+   "ticker": "GAVA",
+   "count": 9,
+   "reasons": {
+    "no_bar_yet": 7,
+    "change_filter": 2
+   }
+  }
+ ],
+ "replay_listed_not_in_production": {
+  "rows": 280,
+  "distinct_tickers": 84,
+  "change": {
+   "n": 280,
+   "p10": 3.2846715328467058,
+   "p50": 5.154639175257736,
+   "p90": 9.936908517350162
+  },
+  "relvol": {
+   "n": 280,
+   "p10": 0.556828776704877,
+   "p50": 1.639661677040402,
+   "p90": 2.539319807250847
+  },
+  "top_tickers": [
+   "AEHL",
+   "STHH",
+   "AZO",
+   "VGZ",
+   "VFF",
+   "ARMH",
+   "NGNE",
+   "MANE",
+   "TARA",
+   "RXRX",
+   "CERS",
+   "USDE",
+   "SHOP",
+   "GLND",
+   "FIVN"
+  ]
+ }
+}

@@ -1,0 +1,566 @@
+"""The radar evaluation on synthetic ledgers and a synthetic daily database.
+
+Checks the trigger extraction, the intraday entry and split-adjusted exits, the SPY
+excess, the censoring statuses, the daily aggregation with its bounds, the views,
+the funnel counts and the pre-registered adoption rules.
+"""
+
+from __future__ import annotations
+
+import gzip
+import json
+import random
+import sqlite3
+import statistics
+import sys
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+import pytest
+
+REPO = Path(__file__).resolve().parents[1]
+PACK = REPO / "research" / "breakout_radar" / "replay_v1"
+if str(PACK) not in sys.path:
+    sys.path.insert(0, str(PACK))
+
+from harness import evaluation as ev  # noqa: E402
+
+NY = ZoneInfo("America/New_York")
+SESSIONS = [date(2024, 1, 2) + timedelta(days=n) for n in range(0, 120)]
+SESSIONS = [d for d in SESSIONS if d.weekday() < 5][:80]
+
+
+def _daily_db(path: Path) -> None:
+    connection = sqlite3.connect(path)
+    connection.executescript(
+        "CREATE TABLE market_sessions (session_date TEXT PRIMARY KEY, fetched_at TEXT, rows INTEGER, x TEXT, status TEXT);"
+        "CREATE TABLE raw_daily_bars (ticker TEXT, session_date TEXT, timestamp_ms INTEGER, open REAL, high REAL, low REAL, close REAL, volume REAL, vwap REAL, transactions INTEGER, PRIMARY KEY (ticker, session_date));"
+        "CREATE TABLE splits (ticker TEXT, execution_date TEXT, split_from REAL, split_to REAL, id TEXT);"
+        "CREATE TABLE split_captures (id TEXT);"
+    )
+    for day in SESSIONS:
+        connection.execute("INSERT INTO market_sessions VALUES (?, ?, ?, ?, ?)", (day.isoformat(), "x", 3, "x", "OK"))
+    for index, day in enumerate(SESSIONS):
+        # SPY drifts up 0.1% a session; GOOD rises 1% a session; SPLT doubles its price at a 2:1 split
+        # on session 30 (raw price halves); GONE stops trading after session 12.
+        spy = 400 * (1.001 ** index)
+        good = 10 * (1.01 ** index)
+        splt_raw = 20 * (1.005 ** index) / (2 if index >= 30 else 1)
+        rows = [("SPY", spy), ("GOOD", good), ("SPLT", splt_raw)]
+        if index <= 12:
+            rows.append(("GONE", 5.0))
+        for ticker, close in rows:
+            connection.execute(
+                "INSERT INTO raw_daily_bars VALUES (?, ?, 0, ?, ?, ?, ?, 1000000, ?, 10)",
+                (ticker, day.isoformat(), close * 0.99, close * 1.01, close * 0.98, close, close),
+            )
+    connection.execute("INSERT INTO splits VALUES ('SPLT', ?, 1.0, 2.0, 'E1')", (SESSIONS[30].isoformat(),))
+    connection.commit()
+    connection.close()
+
+
+def _scan_record(day: date, hour: int, minute: int, events: list[dict], transitions: list[dict], *, prefilter=120, listed=50, structures=35, benchmark_open=None) -> dict:
+    stamp = datetime(day.year, day.month, day.day, hour, minute, tzinfo=NY)
+    return {
+        "variant": "baseline", "as_of": stamp.isoformat(), "session": "regular", "kind": "regular", "warmup": False,
+        "status": "completed", "scan_run_id": f"scan_{day}_{hour}{minute}", "prefilter_count": prefilter,
+        "candidate_count": listed, "event_count": len(events), "structures": [{"ticker": f"T{i}"} for i in range(structures)],
+        "events": events, "transitions": transitions, "benchmark_next_bar_open": benchmark_open,
+    }
+
+
+def _event(event_id: str, ticker: str, day: date, price: float, origin: str = "DAILY_BASE_BREAKOUT", *, alert=70.0, strength=50.0, next_open=None, eligibility="allowed") -> dict:
+    return {
+        "event_id": event_id, "ticker": ticker, "trading_date": day.isoformat(), "origin_setup_type": origin, "setup_type": origin,
+        "lifecycle_state": "TRIGGERED", "event_price": price, "next_bar_open": next_open, "pivot_id": f"p-{ticker}",
+        "asset_type": "common_stock", "carryover": False,
+        "scores": {"alert_priority_score": alert, "intrinsic_strength_score": strength},
+        "features": {"market_shape_state": "BULL_TREND", "market_eligibility": eligibility},
+    }
+
+
+def _write_ledger(folder: Path, day: date, records: list[dict]) -> None:
+    folder.mkdir(parents=True, exist_ok=True)
+    with gzip.open(folder / f"{day.isoformat()}.jsonl.gz", "wt") as handle:
+        for record in records:
+            handle.write(json.dumps(record) + "\n")
+
+
+@pytest.fixture(scope="module")
+def world(tmp_path_factory) -> dict:
+    root = tmp_path_factory.mktemp("radar_eval")
+    _daily_db(root / "daily.sqlite")
+    d0, d1 = SESSIONS[2], SESSIONS[3]
+    good0 = 10 * (1.01 ** 2)
+    # Baseline: day 0 has GOOD (next bar open = its close that day, entered at 10:05), SPLT and GONE; day 1 has GOOD again (ORB).
+    base = root / "seg1" / "baseline"
+    _write_ledger(base / "ledger", d0, [
+        _scan_record(d0, 9, 35, [], [], benchmark_open=None),
+        _scan_record(
+            d0, 10, 2,
+            [_event("e1", "GOOD", d0, good0 * 0.99, next_open=good0), _event("e2", "SPLT", d0, 20 * 1.005 ** 2, next_open=20 * 1.005 ** 2, alert=40),
+             _event("e3", "GONE", d0, 5.0, next_open=5.0, alert=65, strength=70)],
+            [{"event_id": "e1", "from_state": "WATCHING", "to_state": "TRIGGERED", "reason": "x", "evidence_at": "x"},
+             {"event_id": "e1", "from_state": "TRIGGERED", "to_state": "CONFIRMED", "reason": "x", "evidence_at": "x"},  # confirmed in the trigger scan
+             {"event_id": "e2", "from_state": "WATCHING", "to_state": "TRIGGERED", "reason": "x", "evidence_at": "x"},
+             {"event_id": "e3", "from_state": "WATCHING", "to_state": "TRIGGERED", "reason": "x", "evidence_at": "x"}],
+            benchmark_open=400 * 1.001 ** 2, prefilter=170, listed=70, structures=40,
+        ),
+        # 10:07: e2 confirms (its entry bar open is recorded on the event), e3 goes EXTENDED one scan after its trigger.
+        _scan_record(
+            d0, 10, 7,
+            [_event("e1", "GOOD", d0, good0), {**_event("e2", "SPLT", d0, 20 * 1.005 ** 2 * 1.01, next_open=20 * 1.005 ** 2 * 1.02, alert=40), "lifecycle_state": "CONFIRMED"},
+             {**_event("e3", "GONE", d0, 5.1, alert=65, strength=70), "lifecycle_state": "EXTENDED"}],
+            [{"event_id": "e2", "from_state": "TRIGGERED", "to_state": "CONFIRMED", "reason": "confirmation_evidence_satisfied", "evidence_at": "x"},
+             {"event_id": "e3", "from_state": "TRIGGERED", "to_state": "EXTENDED", "reason": "distance_threshold_exceeded", "evidence_at": "x"}],
+            benchmark_open=400 * 1.001 ** 2 * 1.0005,
+        ),
+        _scan_record(d0, 15, 55, [_event("e3", "GONE", d0, 4.9)], [{"event_id": "e3", "from_state": "TRIGGERED", "to_state": "FAILED", "reason": "x", "evidence_at": datetime(d0.year, d0.month, d0.day, 15, 55, tzinfo=NY).isoformat()}]),
+    ])
+    good1 = 10 * (1.01 ** 3)
+    _write_ledger(base / "ledger", d1, [
+        _scan_record(d1, 9, 40, [{**_event("e4", "GOOD", d1, good1, origin="OPENING_RANGE_BREAKOUT", next_open=good1, alert=80), "warnings": ["extended_from_pivot"]}],
+                     [{"event_id": "e4", "from_state": "WATCHING", "to_state": "TRIGGERED", "reason": "x", "evidence_at": "x"}], benchmark_open=400 * 1.001 ** 3),
+        _scan_record(d1, 12, 0, [], [], prefilter=90, listed=40, structures=20),
+        {"variant": "baseline", "as_of": datetime(d1.year, d1.month, d1.day, 16, 30, tzinfo=NY).isoformat(), "kind": "t1", "warmup": False, "status": "completed"},
+    ])
+    with gzip.open(base / "research_bundle.json.gz", "wt") as handle:
+        json.dump({"events": [], "shadows": [], "transitions": [], "heads": [], "t1_current": [{"event_id": "e1", "status": "met"}, {"event_id": "e2", "status": "not_met"}]}, handle)
+    # A candidate that dropped SPLT and GONE (a narrower funnel) but kept GOOD both days.
+    cand = root / "seg1" / "disc5"
+    _write_ledger(cand / "ledger", d0, [
+        _scan_record(d0, 10, 2, [_event("c1", "GOOD", d0, good0 * 0.99, next_open=good0)],
+                     [{"event_id": "c1", "from_state": "WATCHING", "to_state": "TRIGGERED", "reason": "x", "evidence_at": "x"}], benchmark_open=400 * 1.001 ** 2),
+    ])
+    _write_ledger(cand / "ledger", d1, [
+        _scan_record(d1, 9, 40, [_event("c2", "GOOD", d1, good1, origin="OPENING_RANGE_BREAKOUT", next_open=good1)],
+                     [{"event_id": "c2", "from_state": "WATCHING", "to_state": "TRIGGERED", "reason": "x", "evidence_at": "x"}], benchmark_open=400 * 1.001 ** 3),
+    ])
+    # A warm-up day in a second segment directory must be ignored, and a duplicated day taken once.
+    seg2 = root / "seg2" / "baseline"
+    _write_ledger(seg2 / "ledger", d1, [
+        {**_scan_record(d1, 9, 40, [_event("dup", "GOOD", d1, good1, next_open=good1)], [{"event_id": "dup", "from_state": "WATCHING", "to_state": "TRIGGERED", "reason": "x", "evidence_at": "x"}]), "warmup": True},
+    ])
+    return {"root": root, "db": root / "daily.sqlite", "dirs": [root / "seg1", root / "seg2"], "d0": d0, "d1": d1}
+
+
+def test_triggers_and_funnel_are_read_once_per_day_and_carry_the_fields(world: dict) -> None:
+    triggers, funnel, info = ev.read_variant(world["dirs"], "baseline")
+    assert [t.event_id for t in triggers] == ["e1", "e2", "e3", "e4"]
+    assert info["skipped_duplicate_days"] == 0 and info["scans"] == 6  # the t1 record and the warm-up scan are skipped
+    e1, e3, e4 = triggers[0], triggers[2], triggers[3]
+    assert e1.day == world["d0"].isoformat() and e1.minute == 10 * 60 + 2 and e1.bucket == "morning"
+    assert e1.next_bar_open == pytest.approx(10 * 1.01 ** 2) and e1.benchmark_open == pytest.approx(400 * 1.001 ** 2)
+    assert e1.t1_status == "met" and e3.t1_status is None
+    assert e3.failed_at is not None and e1.failed_at is None
+    assert e4.origin == "OPENING_RANGE_BREAKOUT" and e4.bucket == "open30"
+    day0 = funnel[world["d0"].isoformat()]
+    # Structures per scan were 35, 40, 35, 35: cuts at 30 of 5, 10, 5 and 5.
+    assert (day0.scans, day0.triggers, day0.cut_150, day0.cut_60, day0.cut_30) == (4, 3, 20, 10, 25)
+
+
+def test_intraday_outcomes_split_adjust_censor_and_measure_excess(world: dict) -> None:
+    connection = sqlite3.connect(f"file:{world['db']}?mode=ro", uri=True)
+    prices = ev.RadarPrices(connection, SESSIONS[0].isoformat())
+    triggers, _f, _i = ev.read_variant(world["dirs"], "baseline")
+    by_id = {t.event_id: t for t in triggers}
+    # GOOD: entered at the day-0 close level, exits 20 sessions later; excess = 1.01^20 - 1.001^20.
+    good = ev.evaluate_trigger(by_id["e1"], prices, 20, "next_bar")
+    assert good.status == "ok" and good.benchmark_basis == "bar"
+    assert good.ret == pytest.approx(1.01 ** 20 - 1) and good.excess == pytest.approx((1.01 ** 20 - 1) - (1.001 ** 20 - 1))
+    # SPLT: the 2:1 split inside the window halves raw prices; the adjusted return is the 0.5%-a-session drift.
+    splt = ev.evaluate_trigger(by_id["e2"], prices, 63, "next_bar")
+    assert splt.status == "ok" and splt.ret == pytest.approx(1.005 ** 63 - 1, rel=1e-6)
+    # GONE: no bars after session 12 -> censored (no directory to verify), a loss bound exists, no excess.
+    gone = ev.evaluate_trigger(by_id["e3"], prices, 20, "next_bar")
+    assert gone.status == "censored_unverified" and gone.excess is None and gone.loss_excess is not None and gone.loss_excess < -0.9
+    assert gone.legacy_excess is not None and gone.failed_by_next_close is True
+    # Control entry at the trigger mark (1% lower) gives a higher return than the next bar open.
+    control = ev.evaluate_trigger(by_id["e1"], prices, 20, "trigger_mark")
+    assert control.excess > good.excess and control.benchmark_basis == "bar_control"  # SPY at the next bar, stock at the mark (修订 7 label)
+    # Without a SPY bar the benchmark enters at its close on the trigger day and says so.
+    by_id["e1"].benchmark_open = None
+    prices._intraday_outcomes.clear()
+    assert ev.evaluate_trigger(by_id["e1"], prices, 20, "next_bar").benchmark_basis == "close"
+    by_id["e1"].benchmark_open = 400 * 1.001 ** 2
+    # T1 entry at the next session's open (session 3, open = 0.99 x close), exit at the close of session 2 + 5.
+    t1 = ev.evaluate_trigger(by_id["e1"], prices, 5, "t1_next_open")
+    assert t1.status == "ok" and t1.ret == pytest.approx(1.01 ** 7 / (1.01 ** 3 * 0.99) - 1, rel=1e-6)
+    # Horizons past the data are unlabelled.
+    assert ev.evaluate_trigger(by_id["e4"], prices, 63 + 60, "next_bar").status == "no_label"
+
+
+def test_daily_points_bounds_views_and_summary(world: dict) -> None:
+    connection = sqlite3.connect(f"file:{world['db']}?mode=ro", uri=True)
+    prices = ev.RadarPrices(connection, SESSIONS[0].isoformat())
+    triggers, funnel, info = ev.read_variant(world["dirs"], "baseline")
+    evaluation = ev.evaluate_variant("baseline", triggers, funnel, info, prices)
+    points = evaluation.points[("all", 20, "next_bar")]
+    assert [p["day"] for p in points] == [world["d0"].isoformat(), world["d1"].isoformat()]
+    day0 = points[0]
+    assert day0["n"] == 3 and day0["observable"] == 2 and day0["statuses"]["censored_unverified"] == 1
+    assert day0["zero"] == pytest.approx(day0["mean"] * 2 / 3) and day0["loss"] < day0["zero"]
+    assert day0["failed_next_close"] == 1 and day0["failed_known"] == 3
+    summary = ev.summarize(points, 20)
+    assert summary["days"] == 2 and summary["triggers"] == 4 and summary["n_censored_unverified"] == 1
+    assert summary["hit_rate"] == pytest.approx(3 / 3) and summary["failed_by_next_close_share"] == pytest.approx(1 / 4)
+    assert summary["t"] is None  # two days are too few for a t statistic
+    assert ev.newey_west_t([0.01, 0.02, 0.015, 0.012, 0.03], 3) > 0
+    # Views: noorb drops the ORB trigger, tod drops the 09:40 one, alert60 keeps 70/65/80, dedup keeps one GOOD per day.
+    assert {t.event_id for t in ev.select_view(triggers, "noorb")} == {"e1", "e2", "e3"}
+    assert {t.event_id for t in ev.select_view(triggers, "tod")} == {"e1", "e2", "e3"}
+    assert {t.event_id for t in ev.select_view(triggers, "alert60")} == {"e1", "e3", "e4"}
+    assert {t.event_id for t in ev.select_view(triggers, "strength60")} == {"e3"}
+    assert {t.event_id for t in ev.select_view(triggers, "t1")} == {"e1"}
+    assert len(ev.select_view(triggers, "dedup")) == 4 and len(ev.select_view(triggers, "top10")) == 4
+    assert "origin:OPENING_RANGE_BREAKOUT" in ev.group_views(triggers) and "bucket:open30" in ev.group_views(triggers)
+    assert ("t1", 20, "t1_next_open") in evaluation.points and ("all", 20, "trigger_mark") in evaluation.points
+    funnel_summary = ev.funnel_summary(funnel)
+    assert funnel_summary["days"] == 2 and funnel_summary["days_with_cut_150"] == 1 and funnel_summary["triggers_per_day"] == 2.0
+
+
+def test_adoption_rules_pair_on_common_days_and_check_the_funnel_candidate(world: dict) -> None:
+    connection = sqlite3.connect(f"file:{world['db']}?mode=ro", uri=True)
+    prices = ev.RadarPrices(connection, SESSIONS[0].isoformat())
+    evaluations = {}
+    for name in ("baseline", "disc5"):
+        triggers, funnel, info = ev.read_variant(world["dirs"], name)
+        evaluations[name] = ev.evaluate_variant(name, triggers, funnel, info, prices, views=["all", *ev.FILTER_VIEWS])
+    verdicts = ev.decisions(evaluations, "baseline")
+    disc5 = verdicts["variants"]["disc5"]
+    assert disc5["paired_days"] == 2 and disc5["rule6_ok"] is True  # SPLT (removed) earned less than GOOD (kept)
+    assert disc5["rule4_ok"] is True and disc5["triggers_per_day"] == {"candidate": 1.0, "baseline": 2.0}
+    # 2024 has only two paired days: reported, not counted (修订 5); both days fall in P1, so rule 1 cannot pass.
+    assert disc5["rule2_years_compared"] == 0 and disc5["years_reported"]["2024"]["paired_days"] == 2
+    assert disc5["rule1_both_periods_up"] is False and disc5["adopt"] is False
+    assert set(verdicts["filters"]) == set(ev.FILTER_VIEWS)
+    # Synthetic paired series exercise the period rules directly.
+    days = [d.isoformat() for d in SESSIONS[:8]]
+    base = {h: [{"day": d, "n": 4, "observable": 4, "mean": 0.01, "hits": 3, "legacy": 0.009, "zero": 0.008, "loss": 0.005, "failed_next_close": 0, "failed_known": 4, "statuses": {}, "benchmark_close_fallback": 0} for d in days] for h in ev.HOLDINGS}
+    cand = {h: [{**p, "mean": 0.02, "legacy": 0.019, "zero": 0.018, "loss": 0.015} for p in base[h]] for h in ev.HOLDINGS}
+    ev.P1_END = days[3]
+    try:
+        verdict = ev.decide(cand, base)
+    finally:
+        ev.P1_END = "2024-12-31"
+    assert verdict["rule1_both_periods_up"] and verdict["rule3_ok"] and verdict["rule4_ok"] and verdict["rule5_ok"]
+    assert verdict["h20_diff_pp"]["ALL"] == pytest.approx(1.0)
+    # A constant paired difference has zero variance: the Newey-West t is undefined, the series is kept.
+    assert verdict["paired_t_h20"] is None and len(verdict["_paired_h20"]) == 8 and verdict["_paired_h20"][0]["diff_pct"] == pytest.approx(1.0)
+    noisy = {h: [{**p, "mean": 0.02 + (0.003 if i % 2 else -0.003)} for i, p in enumerate(base[h])] for h in ev.HOLDINGS}
+    ev.P1_END = days[3]
+    try:
+        assert ev.decide(noisy, base)["paired_t_h20"] > 5
+    finally:
+        ev.P1_END = "2024-12-31"
+    combo = ev.stage2_verdict({**verdict, "h20_diff_pp": {"ALL": 1.0, "P1": 0.9, "P2": 0.95}}, {"single": {**verdict, "adopt": True}})
+    assert combo["best_single"] == "single" and combo["within_0_2pp"] is True
+
+
+def test_confirmed_and_chaseable_views_follow_amendment_6(world: dict, tmp_path: Path) -> None:
+    import shutil
+
+    triggers, _f, _i = ev.read_variant(world["dirs"], "baseline")
+    by_id = {t.event_id: t for t in triggers}
+    # e1 confirmed in its trigger scan, e2 one scan later with its own entry bar, e3 and e4 never.
+    assert by_id["e1"].confirmed_at == by_id["e1"].as_of and by_id["e1"].confirmed_next_bar_open == pytest.approx(10 * 1.01 ** 2)
+    assert by_id["e2"].confirmed_day == world["d0"].isoformat() and by_id["e2"].confirmed_next_bar_open == pytest.approx(20 * 1.005 ** 2 * 1.02)
+    assert by_id["e2"].confirmed_benchmark_open == pytest.approx(400 * 1.001 ** 2 * 1.0005)
+    assert by_id["e3"].confirmed_at is None and by_id["e4"].confirmed_at is None
+    # e3 went EXTENDED only at the scan after its trigger: later information, descriptive only (修订 7);
+    # e4 carried the warning at its trigger, which is causal.
+    assert not by_id["e3"].extended_at_trigger and by_id["e3"].extended_by_next_scan
+    assert by_id["e4"].extended_at_trigger and not by_id["e4"].extended_by_next_scan
+    assert not by_id["e1"].extended_at_trigger and not by_id["e2"].extended_at_trigger
+    confirmed = ev.select_view(triggers, "confirmed")
+    assert [t.event_id for t in confirmed] == ["e1", "e2"] and confirmed[1].next_bar_open == pytest.approx(20 * 1.005 ** 2 * 1.02)
+    assert confirmed[1].minute == 10 * 60 + 7 and confirmed[1].day == world["d0"].isoformat()
+    assert {t.event_id for t in ev.select_view(triggers, "chaseable")} == {"e1", "e2", "e3"}
+    assert {t.event_id for t in ev.select_view(triggers, "extended")} == {"e4"}
+    assert {t.event_id for t in ev.select_view(triggers, "extended_by_next_scan")} == {"e3"}
+    assert ev.metric_view("confirm3") == "confirmed" and ev.metric_view("chase15") == "chaseable"
+    assert ev.metric_view("basemin15") == "all" and ev.metric_view("confirm3+orb15") == "confirmed"
+    # A confirm3 and a chase15 variant (copies of the baseline here) are judged on their own views.
+    root = tmp_path / "switches"
+    shutil.copytree(world["root"] / "seg1" / "baseline", root / "seg1" / "baseline")
+    for name in ("confirm3", "chase15"):
+        shutil.copytree(world["root"] / "seg1" / "baseline", root / "seg1" / name)
+    pack = ev.run([root / "seg1"], ["baseline", "confirm3", "chase15"], world["db"], tmp_path / "eval", write_events=False)
+    confirm = pack["decisions"]["variants"]["confirm3"]
+    assert confirm["metric_view"] == "confirmed" and confirm["confirmed_share"] == {"candidate": 0.5, "baseline": 0.5}
+    assert confirm["h20_diff_pp"]["ALL"] == pytest.approx(0.0) and confirm["paired_days"] == 1
+    chase = pack["decisions"]["variants"]["chase15"]
+    assert chase["metric_view"] == "chaseable" and chase["extended_share"] == {"candidate": 0.25, "baseline": 0.25}
+    assert "rule6_ok" in chase and chase["rule6_removed_mean_pp"] is None  # nothing removed relative to the baseline
+    assert pack["coverage"]["baseline"]["triggers_confirmed"] == 2 and pack["coverage"]["baseline"]["triggers_extended_at_trigger"] == 1
+    assert pack["coverage"]["baseline"]["triggers_extended_by_next_scan"] == 1 and pack["coverage"]["baseline"]["triggers_benchmark_misaligned"] == 0
+    assert ("confirmed", 20, "next_bar") in pack["metrics"] and ("chaseable", 20, "next_bar") in pack["metrics"] if isinstance(pack["metrics"], dict) else True
+    views = {(r["view"], r["holding"], r["entry"]) for r in pack["metrics"]}
+    assert ("confirmed", 20, "next_bar") in views and ("chaseable", 20, "next_bar") in views and ("extended", 20, "next_bar") in views
+
+
+def test_minute_store_backfills_missing_entry_and_benchmark_prices_under_the_amendment_6_rule(world: dict, tmp_path: Path) -> None:
+    """Round-1 ledgers: no SPY bar recorded (store gap, or a CONFIRMED-only scan), stock bar missing at the exact slot."""
+
+    import pandas as pd
+
+    from harness.stores import MinuteStore
+
+    d0 = world["d0"]
+    day = datetime(d0.year, d0.month, d0.day, tzinfo=NY)
+
+    def bars(ticker: str, times: list[tuple[int, int]], opens: list[float]) -> None:
+        stamps = [int(day.replace(hour=h, minute=m).timestamp() * 1000) for h, m in times]
+        pd.DataFrame({"t": stamps, "open": opens, "high": opens, "low": opens, "close": opens, "volume": [100.0] * len(opens)}).to_parquet(tmp_path / f"{ticker}.parquet", index=False)
+
+    bars("SPY", [(10, 10), (10, 15)], [401.0, 402.0])  # nothing at 10:05: SPY's first later bar is 10:10
+    bars("GOOD", [(10, 15)], [10.5])  # the 10:05 and 10:10 slots are empty: entry after two empty slots
+    pd.DataFrame({"ticker": ["SPY", "GOOD"], "day": [d0.isoformat()] * 2}).to_parquet(tmp_path / "coverage.parquet", index=False)
+    store = MinuteStore(tmp_path)
+    ledger = tmp_path / "seg" / "baseline" / "ledger"
+    event = _event("x1", "GOOD", d0, 10.0)  # next_bar_open absent, as the first runner wrote for non-triggered scans
+    _write_ledger(ledger, d0, [
+        _scan_record(d0, 10, 2, [event], [{"event_id": "x1", "from_state": "WATCHING", "to_state": "TRIGGERED", "reason": "x", "evidence_at": "x"}], benchmark_open=None),
+        _scan_record(d0, 10, 7, [{**event, "lifecycle_state": "CONFIRMED"}], [{"event_id": "x1", "from_state": "TRIGGERED", "to_state": "CONFIRMED", "reason": "x", "evidence_at": "x"}], benchmark_open=None),
+    ])
+    without = ev.read_variant([tmp_path / "seg"], "baseline")[0][0]
+    assert without.next_bar_open is None and without.benchmark_open is None and without.confirmed_benchmark_open is None
+    entry_lookup, benchmark_lookup = ev.store_lookups(store)
+    triggers, _f, info = ev.read_variant([tmp_path / "seg"], "baseline", entry_lookup=entry_lookup, benchmark_lookup=benchmark_lookup)
+    trigger = triggers[0]
+    assert (trigger.next_bar_open, trigger.next_bar_delay) == (10.5, 2)  # 10:05 and 10:10 empty, 10:15 within the 6-slot bound
+    # 修订 7: SPY is taken at the stock's entry moment (10:15), not at the scan's own slot (10:05 -> 10:10 = 401.0).
+    assert (trigger.benchmark_open, trigger.benchmark_delay, trigger.benchmark_aligned) == (402.0, 0, True)
+    assert trigger.entry_at == datetime(d0.year, d0.month, d0.day, 10, 15, tzinfo=NY).astimezone(timezone.utc).isoformat()
+    # 10:07 -> slot 10:10: GOOD at 10:15 (one empty slot), SPY at that same 10:15 bar.
+    assert (trigger.confirmed_next_bar_open, trigger.confirmed_next_bar_delay, trigger.confirmed_benchmark_open) == (10.5, 1, 402.0)
+    assert trigger.confirmed_entry_at == trigger.entry_at and trigger.confirmed_benchmark_aligned is True
+    assert info["backfills"] == {"entry_triggers": 1, "benchmark_triggers": 1, "entry_confirmed": 1, "benchmark_confirmed": 1,
+                                 "benchmark_realigned_triggers": 0, "benchmark_realigned_confirmed": 0,
+                                 "benchmark_misaligned_triggers": 0, "benchmark_misaligned_confirmed": 0}
+    # Recorded values win over the lookup, so old exact-slot values stay as written.
+    recorded = {**event, "next_bar_open": 9.99, "next_bar_delay_slots": 0}
+    _write_ledger(tmp_path / "seg2" / "baseline" / "ledger", d0, [
+        _scan_record(d0, 10, 2, [recorded], [{"event_id": "x1", "from_state": "WATCHING", "to_state": "TRIGGERED", "reason": "x", "evidence_at": "x"}], benchmark_open=400.5),
+    ])
+    kept, _f2, info2 = ev.read_variant([tmp_path / "seg2"], "baseline", entry_lookup=entry_lookup, benchmark_lookup=benchmark_lookup)
+    assert (kept[0].next_bar_open, kept[0].benchmark_open, kept[0].benchmark_aligned) == (9.99, 400.5, True) and sum(info2["backfills"].values()) == 0
+    # A stock that rolled forward two slots while SPY was recorded at the scan's slot (round-1 ledgers):
+    # flagged as misaligned without a store, realigned to the 10:15 bar with one.
+    rolled = {**event, "next_bar_open": 10.5, "next_bar_delay_slots": 2}
+    trigger_only = [{"event_id": "x1", "from_state": "WATCHING", "to_state": "TRIGGERED", "reason": "x", "evidence_at": "x"}]
+    _write_ledger(tmp_path / "seg3" / "baseline" / "ledger", d0, [_scan_record(d0, 10, 2, [rolled], trigger_only, benchmark_open=400.5)])
+    flagged, _f3, info3 = ev.read_variant([tmp_path / "seg3"], "baseline")
+    assert (flagged[0].benchmark_open, flagged[0].benchmark_aligned) == (400.5, False) and info3["backfills"]["benchmark_misaligned_triggers"] == 1
+    connection = sqlite3.connect(f"file:{world['db']}?mode=ro", uri=True)
+    prices = ev.RadarPrices(connection, SESSIONS[0].isoformat())
+    assert ev.evaluate_trigger(flagged[0], prices, 20, "next_bar").benchmark_basis == "bar_misaligned"
+    realigned, _f4, info4 = ev.read_variant([tmp_path / "seg3"], "baseline", entry_lookup=entry_lookup, benchmark_lookup=benchmark_lookup)
+    assert (realigned[0].benchmark_open, realigned[0].benchmark_aligned) == (402.0, True) and info4["backfills"]["benchmark_realigned_triggers"] == 1
+    assert ev.evaluate_trigger(realigned[0], prices, 20, "next_bar").benchmark_basis == "bar"
+    # A value the runner itself recorded at the entry moment wins over any lookup.
+    own_value = {**rolled, "benchmark_open_at_entry": 402.5, "benchmark_delay_at_entry": 0}
+    _write_ledger(tmp_path / "seg4" / "baseline" / "ledger", d0, [_scan_record(d0, 10, 2, [own_value], trigger_only, benchmark_open=400.5)])
+    own, _f5, info5 = ev.read_variant([tmp_path / "seg4"], "baseline", entry_lookup=entry_lookup, benchmark_lookup=benchmark_lookup)
+    assert (own[0].benchmark_open, own[0].benchmark_aligned) == (402.5, True) and sum(info5["backfills"].values()) == 0
+    # The stock rule stops after six empty slots; the benchmark rule does not.
+    assert entry_lookup("GOOD", datetime(d0.year, d0.month, d0.day, 9, 31, tzinfo=NY).isoformat()) is None
+    assert benchmark_lookup(datetime(d0.year, d0.month, d0.day, 9, 31, tzinfo=NY).isoformat()) == (401.0, 7)
+
+
+def test_partial_segments_keep_only_days_every_variant_completed(world: dict, tmp_path: Path) -> None:
+    """A killed segment: a truncated day file, a day only one variant finished, no bundle, T1 from SQLite."""
+
+    import shutil
+
+    root = tmp_path / "partial"
+    shutil.copytree(world["root"] / "seg1", root / "seg1")
+    d0, d1 = world["d0"], world["d1"]
+    # The baseline's second day file is truncated mid-write; disc5 finished it.
+    truncated = root / "seg1" / "baseline" / "ledger" / f"{d1.isoformat()}.jsonl.gz"
+    truncated.write_bytes(truncated.read_bytes()[:40])
+    # No research bundle (the segment never reached its end); T1 comes from the SQLite database instead.
+    (root / "seg1" / "baseline" / "research_bundle.json.gz").unlink()
+    db_dir = tmp_path / "db" / "seg1"
+    db_dir.mkdir(parents=True)
+    connection = sqlite3.connect(db_dir / "baseline.sqlite")
+    connection.execute("CREATE TABLE breakout_t1_current (event_id TEXT PRIMARY KEY, status TEXT)")
+    connection.execute("INSERT INTO breakout_t1_current VALUES ('e2', 'met')")
+    connection.commit()
+    connection.close()
+    triggers, funnel, info = ev.read_variant([root / "seg1"], "baseline", db_dir=tmp_path / "db")
+    assert info["corrupt_files"] == [str(truncated)] and info["segments_without_bundle"] == 1
+    assert sorted(funnel) == [d0.isoformat()] and {t.event_id for t in triggers} == {"e1", "e2", "e3"}
+    assert next(t for t in triggers if t.event_id == "e2").t1_status == "met"
+    loaded = {"baseline": (triggers, funnel, info), "disc5": ev.read_variant([root / "seg1"], "disc5")}
+    completion = ev.completed_days(loaded)
+    assert completion["days"] == [d0.isoformat()] and completion["dropped_not_in_every_variant"] == [d1.isoformat()]
+    assert completion["per_year"] == {"2024": 1} and completion["p1_days"] == 1 and completion["p2_days"] == 0
+    # A degraded scan drops its day for everyone.
+    degraded_dir = tmp_path / "degraded" / "seg1" / "baseline" / "ledger"
+    _write_ledger(degraded_dir, d0, [{**_scan_record(d0, 10, 2, [], []), "status": "degraded", "error_code": "x"}])
+    _t, _f, degraded_info = ev.read_variant([tmp_path / "degraded" / "seg1"], "baseline")
+    assert degraded_info["degraded_scans"] == 1 and degraded_info["degraded_days"] == [d0.isoformat()]
+    pack = ev.run([root / "seg1"], ["baseline", "disc5"], world["db"], tmp_path / "eval", db_dir=tmp_path / "db", workers=2, write_events=False)
+    assert pack["completed_days"]["days"] == [d0.isoformat()] and pack["coverage"]["baseline"]["days_evaluated"] == 1
+    assert "评估覆盖的交易日" in (tmp_path / "eval" / "README_tables.md").read_text()
+
+
+def test_run_writes_the_result_pack_and_tables(world: dict) -> None:
+    out = world["root"] / "eval"
+    pack = ev.run(world["dirs"], ["baseline", "disc5"], world["db"], out, baseline="baseline", stage2={"disc5": "disc5"})
+    assert (out / "metrics.csv").exists() and (out / "events_h20.csv").exists() and (out / "README_tables.md").exists()
+    assert pack["coverage"]["baseline"]["triggers"] == 4 and pack["coverage"]["baseline"]["triggers_without_next_bar_open"] == 0
+    assert pack["funnel"]["baseline"]["per_scan"]["cut_150"] == pytest.approx(20 / 6, abs=1e-3)
+    text = (out / "README_tables.md").read_text()
+    assert "| baseline |" in text and "| disc5 |" in text and "取舍" in text and "配对 t" in text
+    assert "disc5" in pack["decisions"]["stage2"]
+    # The paired daily series behind each verdict is a CSV, not part of the JSON pack.
+    assert (out / "paired_h20_disc5.csv").exists() and "_paired_h20" not in pack["decisions"]["variants"]["disc5"]
+    assert "paired_t_h20" in pack["decisions"]["variants"]["disc5"] and "paired_boot_t_h20" in pack["decisions"]["variants"]["disc5"]
+
+
+# ---- PREREGISTRATION 修订 7: the four evaluator corrections from the PR #209 review ----
+
+
+def _trigger_only(event_id: str) -> list[dict]:
+    return [{"event_id": event_id, "from_state": "WATCHING", "to_state": "TRIGGERED", "reason": "x", "evidence_at": "x"}]
+
+
+def test_confirmed_view_uses_its_own_entry_whatever_the_view_order(world: dict) -> None:
+    """F1: the result cache is keyed by the entry itself, so the confirmed view never inherits a first-trigger result."""
+
+    connection = sqlite3.connect(f"file:{world['db']}?mode=ro", uri=True)
+    prices = ev.RadarPrices(connection, SESSIONS[0].isoformat())
+    triggers, funnel, info = ev.read_variant(world["dirs"], "baseline")
+    e2 = next(t for t in triggers if t.event_id == "e2")
+    confirmed_e2 = next(t for t in ev.select_view(triggers, "confirmed") if t.event_id == "e2")
+    expected = ev.evaluate_trigger(confirmed_e2, prices, 20, "next_bar")
+    first = ev.evaluate_trigger(e2, prices, 20, "next_bar")
+    assert expected.ret < first.ret and expected.excess < first.excess  # the confirmed entry is 2% higher, same exit
+    runs = {}
+    for order in (["all", "confirmed"], ["confirmed"], ["confirmed", "all"]):
+        evaluation = ev.evaluate_variant("baseline", triggers, funnel, info, prices, views=order)
+        by_event = {r.trigger.event_id: r for r in evaluation.results[("confirmed", 20, "next_bar")]}
+        assert by_event["e2"].ret == pytest.approx(expected.ret) and by_event["e2"].excess == pytest.approx(expected.excess)
+        assert by_event["e2"].trigger.next_bar_open == pytest.approx(confirmed_e2.next_bar_open)
+        assert by_event["e2"].trigger.benchmark_open == pytest.approx(confirmed_e2.benchmark_open)
+        if "all" in order:
+            all_e2 = {r.trigger.event_id: r for r in evaluation.results[("all", 20, "next_bar")]}["e2"]
+            assert all_e2.ret == pytest.approx(first.ret)  # and the first-trigger view keeps its own entry
+        runs[tuple(order)] = [(p["day"], p["mean"], p["n"]) for p in evaluation.points[("confirmed", 20, "next_bar")]]
+    assert runs[("all", "confirmed")] == runs[("confirmed",)] == runs[("confirmed", "all")]
+
+
+def test_confirm3_decision_measures_the_later_confirmed_entry(world: dict, tmp_path: Path) -> None:
+    """F1 at the decision layer: a candidate that confirms one scan later, at a higher price, loses exactly that much."""
+
+    import shutil
+
+    d0 = world["d0"]
+    root = tmp_path / "decision"
+    shutil.copytree(world["root"] / "seg1" / "baseline", root / "seg1" / "baseline")
+    shutil.copytree(world["root"] / "seg1" / "baseline", root / "seg1" / "confirm3")
+    # confirm3's day 0: e2 is still TRIGGERED at 10:07 and confirms at 10:12 with an entry 4% above its trigger-day level
+    # (the baseline confirmed it at 10:07, 2% above); SPY at both confirmation moments is the same value.
+    good0, splt0, spy0 = 10 * 1.01 ** 2, 20 * 1.005 ** 2, 400 * 1.001 ** 2
+    with gzip.open(root / "seg1" / "baseline" / "ledger" / f"{d0.isoformat()}.jsonl.gz", "rt") as handle:
+        records = [json.loads(line) for line in handle]
+    at_1007 = records[2]
+    at_1007["events"] = [e if e["event_id"] != "e2" else {**e, "lifecycle_state": "TRIGGERED"} for e in at_1007["events"]]
+    at_1007["transitions"] = [t for t in at_1007["transitions"] if t["event_id"] != "e2"]
+    at_1012 = _scan_record(
+        d0, 10, 12, [{**_event("e2", "SPLT", d0, splt0 * 1.03, next_open=splt0 * 1.04, alert=40), "lifecycle_state": "CONFIRMED"}],
+        [{"event_id": "e2", "from_state": "TRIGGERED", "to_state": "CONFIRMED", "reason": "x", "evidence_at": "x"}], benchmark_open=spy0 * 1.0005,
+    )
+    _write_ledger(root / "seg1" / "confirm3" / "ledger", d0, [*records[:3], at_1012, records[3]])
+    pack = ev.run([root / "seg1"], ["baseline", "confirm3"], world["db"], tmp_path / "eval", write_events=False)
+    verdict = pack["decisions"]["variants"]["confirm3"]
+    # Day 0's confirmed view holds e1 and e2 on both sides; only e2's entry differs, so the daily difference is half of it.
+    expected_pp = 100 * ((1.005 ** 20 / 1.04 - 1) - (1.005 ** 20 / 1.02 - 1)) / 2
+    assert verdict["metric_view"] == "confirmed" and verdict["paired_days"] == 1
+    assert verdict["h20_diff_pp"]["ALL"] == pytest.approx(expected_pp, abs=1e-3) and expected_pp < -0.9
+    assert verdict["adopt"] is False
+
+
+def test_next_day_confirmation_is_grouped_on_the_confirmation_day(world: dict, tmp_path: Path) -> None:
+    """F1: an event confirmed the next morning enters, and is counted, on that morning, whatever the view order."""
+
+    d0, d1 = world["d0"], world["d1"]
+    good0, good1 = 10 * 1.01 ** 2, 10 * 1.01 ** 3
+    ledger = tmp_path / "seg" / "baseline" / "ledger"
+    _write_ledger(ledger, d0, [_scan_record(d0, 15, 55, [_event("n1", "GOOD", d0, good0, next_open=good0)], _trigger_only("n1"), benchmark_open=400 * 1.001 ** 2)])
+    _write_ledger(ledger, d1, [_scan_record(
+        d1, 9, 40, [{**_event("n1", "GOOD", d0, good1, next_open=good1), "lifecycle_state": "CONFIRMED"}],
+        [{"event_id": "n1", "from_state": "TRIGGERED", "to_state": "CONFIRMED", "reason": "x", "evidence_at": "x"}], benchmark_open=400 * 1.001 ** 3,
+    )])
+    triggers, funnel, info = ev.read_variant([tmp_path / "seg"], "baseline")
+    assert triggers[0].day == d0.isoformat() and triggers[0].confirmed_day == d1.isoformat()
+    connection = sqlite3.connect(f"file:{world['db']}?mode=ro", uri=True)
+    prices = ev.RadarPrices(connection, SESSIONS[0].isoformat())
+    for order in (["all", "confirmed"], ["confirmed", "all"]):
+        evaluation = ev.evaluate_variant("baseline", triggers, funnel, info, prices, views=order)
+        confirmed = evaluation.results[("confirmed", 20, "next_bar")]
+        assert [r.trigger.day for r in confirmed] == [d1.isoformat()] and confirmed[0].trigger.next_bar_open == pytest.approx(good1)
+        assert confirmed[0].ret == pytest.approx(1.01 ** 20 - 1)  # entered on d1 at that session's level, 20 sessions later
+        assert [p["day"] for p in evaluation.points[("confirmed", 20, "next_bar")]] == [d1.isoformat()]
+        assert [p["day"] for p in evaluation.points[("all", 20, "next_bar")]] == [d0.isoformat()]
+
+
+def test_extended_membership_is_frozen_at_the_trigger_scan(world: dict, tmp_path: Path) -> None:
+    """F2: appending the next scan never changes the chaseable/extended sets; a same-scan EXTENDED still counts."""
+
+    d0 = world["d0"]
+    trigger_scan = _scan_record(d0, 10, 2, [_event("f1", "GONE", d0, 5.0, next_open=5.0)], _trigger_only("f1"), benchmark_open=400.0)
+    later_scan = _scan_record(
+        d0, 10, 7, [{**_event("f1", "GONE", d0, 5.3), "lifecycle_state": "EXTENDED"}],
+        [{"event_id": "f1", "from_state": "TRIGGERED", "to_state": "EXTENDED", "reason": "distance_threshold_exceeded", "evidence_at": "x"}], benchmark_open=400.2,
+    )
+    _write_ledger(tmp_path / "prefix" / "baseline" / "ledger", d0, [trigger_scan])
+    _write_ledger(tmp_path / "full" / "baseline" / "ledger", d0, [trigger_scan, later_scan])
+    prefix = ev.read_variant([tmp_path / "prefix"], "baseline")[0][0]
+    full = ev.read_variant([tmp_path / "full"], "baseline")[0][0]
+    assert prefix.extended_at_trigger is False and full.extended_at_trigger is False
+    assert prefix.extended_by_next_scan is False and full.extended_by_next_scan is True
+    assert [t.event_id for t in ev.select_view([full], "chaseable")] == ["f1"] and ev.select_view([full], "extended") == []
+    assert [t.event_id for t in ev.select_view([full], "extended_by_next_scan")] == ["f1"]
+    same_scan = _scan_record(
+        d0, 10, 2, [{**_event("f2", "GONE", d0, 5.0, next_open=5.0), "lifecycle_state": "EXTENDED"}],
+        [*_trigger_only("f2"), {"event_id": "f2", "from_state": "TRIGGERED", "to_state": "EXTENDED", "reason": "x", "evidence_at": "x"}], benchmark_open=400.0,
+    )
+    _write_ledger(tmp_path / "same" / "baseline" / "ledger", d0, [same_scan])
+    same = ev.read_variant([tmp_path / "same"], "baseline")[0][0]
+    assert same.extended_at_trigger is True and ev.select_view([same], "chaseable") == []
+
+
+def test_newey_west_lags_match_the_daily_index_and_the_block_bootstrap_is_deterministic() -> None:
+    """F3: lag h - 1 on the daily series; a moving-block bootstrap with block h as the overlap-robust check."""
+
+    assert ev.NW_LAGS == {1: 0, 5: 4, 20: 19, 63: 62}
+    rng = random.Random(1)
+    series = [rng.gauss(0.001, 0.01) for _ in range(200)]
+    first, second = ev.block_bootstrap(series, 20), ev.block_bootstrap(series, 20)
+    assert first == second and first["se"] > 0 and first["ci_low"] < statistics.fmean(series) < first["ci_high"]
+    assert ev.block_bootstrap([0.01] * 8, 20) == {"se": None, "t": None, "ci_low": None, "ci_high": None}  # one block cannot move
+    base_point = {"n": 2, "observable": 2, "hits": 1, "legacy": 0.0, "zero": 0.0, "loss": 0.0, "failed_next_close": 0, "failed_known": 2, "statuses": {}, "benchmark_close_fallback": 0}
+    # (A strictly alternating series has a zero Bartlett long-run variance at lag 19, so the noise is random here.)
+    noise = [rng.gauss(0.0, 0.002) for _ in range(60)]
+    points = [{**base_point, "day": d.isoformat(), "mean": 0.01 + noise[i]} for i, d in enumerate(SESSIONS[:60])]
+    summary = ev.summarize(points, 20)
+    assert summary["nw_lag"] == 19 and summary["t"] > 0 and summary["boot_t"] > 0 and summary["boot_ci95_pct"][0] < summary["boot_ci95_pct"][1]
+    assert ev.summarize(points, 5)["nw_lag"] == 4 and ev.summarize(points, 1)["nw_lag"] == 0
+    base = {h: [{**p, "mean": 0.01} for p in points] for h in ev.HOLDINGS}
+    cand = {h: [{**p, "mean": 0.02 + noise[i]} for i, p in enumerate(points)] for h in ev.HOLDINGS}
+    verdict = ev.decide(cand, base)
+    assert verdict["paired_nw_lag"] == 19 and verdict["paired_t_h20"] > 2 and verdict["paired_boot_t_h20"] > 2
+    assert verdict["paired_boot_ci95_pp"][0] > 0 and verdict["paired_boot_ci95_pp"][0] < 1.0 < verdict["paired_boot_ci95_pp"][1]
+
+
+def test_entry_moment_follows_the_store_rounding() -> None:
+    """F4: the entry moment is the slot after the scan plus the stock's delay, with the store's rounding rule."""
+
+    assert ev.entry_moment("2024-01-04T10:02:37-05:00", 0) == "2024-01-04T15:05:00+00:00"
+    assert ev.entry_moment("2024-01-04T10:02:37-05:00", 2) == "2024-01-04T15:15:00+00:00"
+    assert ev.entry_moment("2024-01-04T15:05:00+00:00", 0) == "2024-01-04T15:05:00+00:00"  # on a boundary: that slot itself
+    assert ev.entry_moment("2024-01-04T15:05:00+00:00", None) == "2024-01-04T15:05:00+00:00"

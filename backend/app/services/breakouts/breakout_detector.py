@@ -35,6 +35,12 @@ def detect_breakout(
     settings: BreakoutSettings | None = None,
 ) -> dict[str, Any]:
     config = settings or get_breakout_settings()
+    # Strong single-bar confirmation needs this much same-time relative volume.
+    # 1.5 is production; only a research replay overrides it.
+    override = getattr(config, "research_override", None)
+    strong_rvol_min = (
+        float(override("strong_single_rvol_min", 1.5)) if callable(override) else 1.5
+    )
     # Discovery prices are coarse screening inputs only. A completed local bar
     # is required before any regular-session trigger or confirmation.
     price = _number(features, "event_price")
@@ -71,7 +77,7 @@ def detect_breakout(
                 clv is not None
                 and clv >= 0.70
                 and rvol is not None
-                and rvol >= 1.5
+                and rvol >= strong_rvol_min
                 and upper_wick is not None
                 and upper_wick <= 0.15
                 and opening_distance is not None
@@ -151,7 +157,7 @@ def detect_breakout(
         clv is not None
         and clv >= 0.70
         and rvol is not None
-        and rvol >= 1.5
+        and rvol >= strong_rvol_min
         and upper_wick is not None
         and upper_wick <= 0.15
         and distance is not None

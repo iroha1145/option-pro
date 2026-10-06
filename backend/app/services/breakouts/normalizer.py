@@ -176,8 +176,14 @@ def filter_and_deduplicate(
         return candidate.provider_change_pct or 0.0
 
     for candidate in candidates:
+        if not settings.allow_otc and (candidate.exchange or "").upper() == "OTC":
+            warnings.append(f"{candidate.ticker}:otc_exchange_excluded")
+            continue
         if is_leveraged_etf(candidate.asset_type, candidate.name, candidate.raw_provider_fields):
             warnings.append(f"{candidate.ticker}:leveraged_etf_excluded")
+            continue
+        if candidate.asset_type is AssetType.ETF and not settings.allow_etf:
+            warnings.append(f"{candidate.ticker}:etf_excluded")
             continue
         if candidate.asset_type not in allowed_assets:
             warnings.append(f"{candidate.ticker}:asset_type_excluded")

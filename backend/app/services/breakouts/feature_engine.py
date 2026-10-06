@@ -455,9 +455,12 @@ def compute_feature_snapshot(
     intraday: pd.DataFrame,
     cutoff: TemporalCutoff,
     opening_range_minutes: int = 30,
+    rvol_lookback_sessions: int = 20,
 ) -> dict[str, Any]:
     if opening_range_minutes < 5 or opening_range_minutes % 5 != 0:
         raise ValueError("opening_range_minutes must be a positive multiple of 5")
+    if rvol_lookback_sessions < 1:
+        raise ValueError("rvol_lookback_sessions must be positive")
     event_local = cutoff.event_at.astimezone(NEW_YORK)
     daily_visible = trim_daily_bars(daily, cutoff)
     intraday_visible = trim_intraday_bars(intraday, cutoff)
@@ -510,7 +513,9 @@ def compute_feature_snapshot(
     vwap = compute_vwap(current_session)
     close = _finite(bar["Close"])
     previous_close = _finite(daily_visible["Close"].iloc[-1]) if not daily_visible.empty else None
-    rvol = compute_time_of_day_rvol(intraday, cutoff)
+    rvol = compute_time_of_day_rvol(
+        intraday, cutoff, lookback_sessions=rvol_lookback_sessions
+    )
     high, low, open_ = (_finite(bar[name]) for name in ("High", "Low", "Open"))
     candle_range = high - low if high is not None and low is not None else None
     body_ratio = (

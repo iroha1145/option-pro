@@ -5,3 +5,5 @@
 pip==26.2.1
 pip-audit==2.10.1
 pytest==9.1.1
+# The breakout radar replay tests read and write parquet minute stores.
+pyarrow==25.0.1

@@ -1,0 +1,487 @@
+"""The radar replay harness on synthetic frozen data.
+
+Covers the settings-hash proof, the proxy labelling, memo byte-identity, the one-day
+warm-up identity (k = 1) and lockstep variants. Real smoke-window checks against the
+production export are run by the pack's scripts, not here.
+"""
+
+from __future__ import annotations
+
+import gzip
+import json
+import sqlite3
+import sys
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+import numpy as np
+import pytest
+
+REPO = Path(__file__).resolve().parents[1]
+PACK = REPO / "research" / "breakout_radar" / "replay_v1"
+if str(PACK) not in sys.path:
+    sys.path.insert(0, str(PACK))
+
+from app.services.eod_limited import market_data as md  # noqa: E402
+from app.services.market_calendar import is_trading_day  # noqa: E402
+
+from harness.runner import RunConfig, run_segment, settings_grid  # noqa: E402
+from harness.settings import PRODUCTION_CONFIG_HASH, build_settings, production_field_hash  # noqa: E402
+from harness.stores import build_minute_store  # noqa: E402
+
+NY = ZoneInfo("America/New_York")
+DAY1, DAY2, DAY3 = date(2026, 7, 8), date(2026, 7, 9), date(2026, 7, 10)
+BENCHMARKS = ("SPY", "QQQ", "IWM", "RSP")
+STOCKS = ("TA", "TB", "TC", "TD", "TE", "TF")
+# Which stock jumps on which day, at which regular-session bar (0 = 09:30 bar).
+BREAKOUTS = {"TA": (DAY1, 6), "TB": (DAY2, 6), "TC": (DAY3, 6)}
+PREMARKET_GAPPER = ("TD", DAY2)
+
+
+def _sessions_ending(end: date, count: int) -> list[date]:
+    days: list[date] = []
+    day = end
+    while len(days) < count:
+        if is_trading_day(day):
+            days.append(day)
+        day -= timedelta(days=1)
+    return sorted(days)
+
+
+def _daily_path(ticker: str, sessions: list[date], rng: np.random.Generator) -> np.ndarray:
+    n = len(sessions)
+    if ticker in BENCHMARKS:
+        return 400 + np.cumsum(rng.normal(0.4, 2.0, n))
+    # A base: oscillation under a resistance near 102 with several touches.
+    base = 100 + 1.5 * np.sin(np.arange(n) / 3.0) + rng.normal(0, 0.15, n)
+    return base
+
+
+def _write_daily_db(path: Path, sessions: list[date], rng: np.random.Generator, closes: dict[str, np.ndarray]) -> None:
+    connection = md._connect(path)
+    with connection:
+        for day in sessions:
+            connection.execute(
+                "INSERT INTO market_sessions VALUES (?, ?, ?, ?, ?)",
+                (day.isoformat(), "2026-09-28T00:00:00+00:00", len(closes), "x", "OK"),
+            )
+        for ticker, series in closes.items():
+            for index, day in enumerate(sessions):
+                close = float(series[index])
+                # A breakout day's daily bar shows the jump; earlier bars stay in the base.
+                event = BREAKOUTS.get(ticker)
+                if event is not None and day == event[0]:
+                    close = 106.0
+                if ticker == PREMARKET_GAPPER[0] and day == PREMARKET_GAPPER[1]:
+                    close = 108.0
+                high = close + 0.6
+                low = close - 0.6
+                volume = 3_000_000.0 if ticker in BENCHMARKS else 1_000_000.0
+                if event is not None and day == event[0]:
+                    volume = 2_500_000.0  # a breakout day trades 2.5x its average: yesterday's relative volume passes 1.5
+                connection.execute(
+                    "INSERT INTO raw_daily_bars VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (ticker, day.isoformat(), 0, close - 0.1, high, low, close, volume, close, 100),
+                )
+    connection.close()
+
+
+def _minute_page(ticker: str, sessions: list[date], rng: np.random.Generator, level: float) -> dict:
+    results = []
+    for day in sessions:
+        base = datetime(day.year, day.month, day.day, 4, 0, tzinfo=NY)
+        jump_day, jump_bar = BREAKOUTS.get(ticker, (None, None))
+        gap_day = PREMARKET_GAPPER[1] if ticker == PREMARKET_GAPPER[0] else None
+        for slot in range(192):
+            start = base + timedelta(minutes=5 * slot)
+            minute = 4 * 60 + 5 * slot
+            regular = 9 * 60 + 30 <= minute < 16 * 60
+            price = level
+            volume = 2_000.0
+            if regular:
+                volume = 120_000.0
+                bar = (minute - 9 * 60 - 30) // 5
+                if jump_day == day and bar >= jump_bar:
+                    price = level * 1.06 + 0.02 * (bar - jump_bar)
+                    volume = 260_000.0
+            if gap_day == day and minute >= 7 * 60:
+                price = level * 1.08 if not regular else level * 1.085
+                volume = 25_000.0 if not regular else 200_000.0
+            if minute >= 16 * 60:
+                volume = 500.0
+            noise = rng.normal(0, 0.02)
+            results.append(
+                {
+                    "v": volume,
+                    "vw": price,
+                    "o": price + noise,
+                    "c": price + noise,
+                    "h": price + abs(noise) + 0.05,
+                    "l": price - abs(noise) - 0.05,
+                    "t": int(start.timestamp() * 1000),
+                    "n": 10,
+                }
+            )
+    return {"ticker": ticker, "queryCount": len(results), "resultsCount": len(results), "adjusted": False, "results": results, "status": "OK"}
+
+
+def _write_directory(folder: Path, label: date) -> None:
+    folder.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {"ticker": t, "name": f"{t} Corp", "type": "CS", "primary_exchange": "XNAS", "cik": str(i), "active": True}
+        for i, t in enumerate(STOCKS, 1)
+    ] + [
+        {"ticker": t, "name": f"{t} Trust", "type": "ETF", "primary_exchange": "ARCX", "active": True}
+        for t in BENCHMARKS
+    ]
+    with gzip.open(folder / f"{label.isoformat()}.json.gz", "wt") as handle:
+        json.dump({"results": rows}, handle)
+
+
+def _write_fred(folder: Path, sessions: list[date]) -> None:
+    folder.mkdir(parents=True, exist_ok=True)
+    with open(folder / "VIXCLS.csv", "w") as handle:
+        handle.write("observation_date,VIXCLS\n")
+        for day in sessions:
+            handle.write(f"{day.isoformat()},18.5\n")
+    with open(folder / "DGS10.csv", "w") as handle:
+        handle.write("observation_date,DGS10\n")
+        for day in sessions:
+            handle.write(f"{day.isoformat()},4.3\n")
+
+
+@pytest.fixture(scope="module")
+def frozen(tmp_path_factory) -> dict:
+    root = tmp_path_factory.mktemp("radar_frozen")
+    rng = np.random.default_rng(11)
+    sessions = _sessions_ending(DAY3, 300)
+    closes = {ticker: _daily_path(ticker, sessions, rng) for ticker in (*BENCHMARKS, *STOCKS)}
+    _write_daily_db(root / "daily.sqlite", sessions, rng, closes)
+    raw = root / "raw" / "2026-07"
+    raw.mkdir(parents=True)
+    minute_sessions = sessions[-26:]
+    with open(root / "manifest.jsonl", "w") as manifest:
+        for ticker in STOCKS:
+            level = float(closes[ticker][-27])
+            page = _minute_page(ticker, minute_sessions, rng, level)
+            name = f"2026-07/{ticker}_{minute_sessions[0]}_{minute_sessions[-1]}_p0.json.gz"
+            with gzip.open(raw.parent / name, "wt") as handle:
+                json.dump(page, handle)
+            manifest.write(json.dumps({"ticker": ticker, "from": minute_sessions[0].isoformat(), "to": minute_sessions[-1].isoformat(),
+                                       "part": 0, "http": 200, "status": "OK", "count": len(page["results"]), "file": name, "complete": True}) + "\n")
+    build_minute_store(root / "manifest.jsonl", root / "raw", root / "minute_store")
+    _write_directory(root / "directory", DAY1 - timedelta(days=9))
+    _write_fred(root / "fred", sessions)
+    return {"root": root, "daily": root / "daily.sqlite", "minute": root / "minute_store", "fred": root / "fred", "directory": root / "directory"}
+
+
+def _config(frozen: dict, name: str, *, start: date, end: date, warmup: int, variants: list[str], memo: bool = True) -> RunConfig:
+    return RunConfig(
+        daily_db=frozen["daily"], minute_store=frozen["minute"], fred=frozen["fred"],
+        out=frozen["root"] / "runs" / name, db_dir=frozen["root"] / "db" / name, start=start, end=end,
+        variants=variants, warmup_days=warmup, grid="settings", directory=frozen["directory"],
+        metadata_mode="directory", market_cap_source="none", memo=memo, full_snapshots=True,
+        regular_step_minutes=30, premarket_step_minutes=60, label=name,
+    )
+
+
+def _read_jsonl(path: Path) -> list[dict]:
+    with gzip.open(path, "rt") as handle:
+        return [json.loads(line) for line in handle if line.strip()]
+
+
+def _snapshots(out: Path, variant: str, day: date) -> list[dict]:
+    return _read_jsonl(out / variant / "snapshots" / f"{day.isoformat()}.jsonl.gz")
+
+
+def test_settings_grid_matches_the_documented_cadence() -> None:
+    grid = settings_grid(DAY1)
+    kinds = [kind for _stamp, kind in grid]
+    assert kinds.count("premarket") == 32 and kinds.count("regular") == 77 and kinds.count("t1") == 1
+    assert grid[0][0].astimezone(NY).strftime("%H:%M") == "04:10"
+    assert [stamp.astimezone(NY).strftime("%H:%M") for stamp, kind in grid if kind == "regular"][:2] == ["09:35", "09:40"]
+    assert grid[-1][0].astimezone(NY).strftime("%H:%M") == "16:30"
+    early = settings_grid(date(2026, 11, 27))  # day after Thanksgiving closes at 13:00
+    assert [kind for _s, kind in early].count("regular") == 41
+
+
+@pytest.mark.parametrize("failure_index", [0, 1])
+def test_initialization_failure_restores_replay_patches_and_releases_ready_variants(tmp_path, monkeypatch, failure_index) -> None:
+    from types import SimpleNamespace
+
+    from app.services.breakouts import feature_engine, service, worker
+    from app.services.strength import scanner
+    from harness import runner
+
+    targets = [
+        (scanner, "market_strength"),
+        (worker, "record_fallback_failure"),
+        (service, "detect_base"),
+        (service, "_scan_range_feature"),
+        (service, "compute_feature_snapshot"),
+        (service, "relative_strength_features"),
+        (feature_engine, "compute_time_of_day_rvol"),
+    ]
+    originals = [(module, name, getattr(module, name)) for module, name in targets]
+    monkeypatch.setattr(runner, "build_shared", lambda config: {"daily_store": object(), "fred_store": object()})
+    initialized, released = [], []
+
+    def variant(name, *_args):
+        initialized.append(name)
+        if len(initialized) - 1 == failure_index:
+            raise RuntimeError("variant initialization failed")
+        return SimpleNamespace(release=lambda: released.append(name))
+
+    monkeypatch.setattr(runner, "_VariantRun", variant)
+    config = RunConfig(
+        daily_db=tmp_path / "daily.sqlite", minute_store=tmp_path / "minute",
+        fred=tmp_path / "fred", out=tmp_path / "out", db_dir=tmp_path / "db",
+        start=DAY1, end=DAY1, variants=["baseline", "confirm3"], warmup_days=0,
+    )
+    try:
+        with pytest.raises(RuntimeError, match="variant initialization failed"):
+            run_segment(config)
+        assert released == ["baseline"][:failure_index]
+        for module, name, original in originals:
+            assert getattr(module, name) is original, name
+    finally:
+        # Keep a failing regression run from contaminating unrelated test modules.
+        for module, name, original in originals:
+            setattr(module, name, original)
+
+
+def test_baseline_hashes_like_production_and_variants_do_not(tmp_path) -> None:
+    from app.services.breakouts.worker import _stable_hash
+
+    from harness.settings import full_hash
+
+    baseline = build_settings("baseline", tmp_path / "b.sqlite")
+    assert production_field_hash(baseline) == PRODUCTION_CONFIG_HASH
+    # The baseline is production after the two fixes: no OTC rows, no ordinary ETFs.
+    assert baseline.range_persistence_mode == "enabled" and baseline.allow_otc is False and baseline.allow_etf is False
+    # What production publishes after deploy is the hash of every field's actual value.
+    assert full_hash(baseline) == _stable_hash(baseline.model_dump(mode="json")) != PRODUCTION_CONFIG_HASH
+    # breakout_scan_runs.config_hash must equal this after the OTC/ETF fixes are deployed.
+    assert full_hash(baseline) == "76cf81ce3da0f09b30cd8aa81decbb31ef8eb88007ece722b69fdbbabf2ecb12"
+    assert production_field_hash(build_settings("confirm3", tmp_path / "c.sqlite")) != PRODUCTION_CONFIG_HASH
+    tuned = build_settings("rvol2", tmp_path / "r.sqlite")
+    assert production_field_hash(tuned) == PRODUCTION_CONFIG_HASH
+    assert tuned.research_overrides == {"strong_single_rvol_min": 2.0}
+    assert build_settings("hybrid_otc", tmp_path / "h.sqlite").allow_otc is True
+    september = build_settings("hybrid_otc+hybrid_etf", tmp_path / "s.sqlite")
+    assert september.allow_etf is True and production_field_hash(september) == PRODUCTION_CONFIG_HASH
+
+
+def test_contiguous_run_is_labelled_and_finds_the_designed_breakouts(frozen: dict) -> None:
+    summary = run_segment(_config(frozen, "contiguous", start=DAY1, end=DAY3, warmup=0, variants=["baseline", "confirm3"]))
+    assert summary["degraded"] == []
+    assert summary["variants"]["baseline"]["production_field_hash"] == PRODUCTION_CONFIG_HASH
+    assert summary["truncated_days"] == {"baseline": [], "confirm3": []}
+    out = frozen["root"] / "runs" / "contiguous"
+    records = [r for day in (DAY1, DAY2, DAY3) for r in _read_jsonl(out / "baseline" / "ledger" / f"{day.isoformat()}.jsonl.gz")]
+    scans = [r for r in records if r["kind"] != "t1"]
+    # Test cadence: pre-market every 60 minutes (05:00..09:00), regular every 30 (10:00..15:30).
+    assert len(scans) == 3 * (5 + 12) and all(r["status"] == "completed" for r in scans)
+    assert all(c["source"] == "replay_proxy" for r in scans for c in r["candidates"])
+    triggered = {(e["ticker"], e["trading_date"]) for r in scans for e in r["events"] if e["triggered_at"]}
+    assert {("TA", DAY1.isoformat()), ("TB", DAY2.isoformat()), ("TC", DAY3.isoformat())} <= triggered
+    gap = [e for r in scans for e in r["events"] if e["ticker"] == "TD" and e["origin_setup_type"] == "PREMARKET_GAP"]
+    assert gap, "the pre-market gapper must enter through the pre-market scans"
+    with sqlite3.connect(summary["variants"]["baseline"]["db"]) as connection:
+        providers = {row[0] for row in connection.execute("SELECT provider FROM breakout_scan_runs")}
+        snapshot_providers = {row[0] for row in connection.execute("SELECT provider FROM breakout_provider_snapshots")}
+    assert providers == {"replay_proxy"} and snapshot_providers == {"replay_proxy"}
+    # Lockstep variant: same identities, hash differs, confirmation bars differ where it bites.
+    confirm = [r for day in (DAY1, DAY2, DAY3) for r in _read_jsonl(out / "confirm3" / "ledger" / f"{day.isoformat()}.jsonl.gz") if r["kind"] != "t1"]
+    assert {e["event_id"] for r in confirm for e in r["events"]} == {e["event_id"] for r in scans for e in r["events"]}
+    assert summary["variants"]["confirm3"]["production_field_hash"] != PRODUCTION_CONFIG_HASH
+
+
+def test_one_warmup_day_reproduces_the_contiguous_run_byte_for_byte(frozen: dict) -> None:
+    run_segment(_config(frozen, "contiguous_ref", start=DAY1, end=DAY3, warmup=0, variants=["baseline"]))
+    run_segment(_config(frozen, "warm1", start=DAY3, end=DAY3, warmup=1, variants=["baseline"]))
+    reference = _snapshots(frozen["root"] / "runs" / "contiguous_ref", "baseline", DAY3)
+    warmed = _snapshots(frozen["root"] / "runs" / "warm1", "baseline", DAY3)
+    assert reference and json.dumps(reference, sort_keys=True) == json.dumps(warmed, sort_keys=True)
+
+
+def test_discovery_proxy_reads_a_delayed_view_with_yesterdays_values_before_the_roll(frozen: dict) -> None:
+    from datetime import datetime
+
+    from app.services.breakouts.models import MarketSession
+
+    from harness.discovery import ReplayDiscoveryProvider
+    from harness.stores import DailyStore, DirectoryMetadata, MinuteStore
+
+    settings = build_settings("baseline", frozen["root"] / "stale.sqlite")
+    stores = dict(minute_store=MinuteStore(frozen["minute"]), daily_store=DailyStore(frozen["daily"]),
+                  metadata=DirectoryMetadata(frozen["directory"]), market_cap_source="none")
+    delayed = ReplayDiscoveryProvider(settings, **stores)  # production's 15-minute view
+    live = ReplayDiscoveryProvider(settings, tv_delay_minutes=0, **stores)  # real-time sensitivity run
+    context = delayed.day_context(DAY1)
+    index = context.tickers.index("TA")
+    assert np.isfinite(context.previous_relvol[index]) and abs(context.previous_relvol[index] - 1.0) < 0.05
+
+    def rows(provider, session, stamp):
+        return {row[0]: row for row in provider._tradingview_rows(session, stamp)}
+
+    # TA jumps 6% at the seventh regular bar (10:00-10:05) on 2.2x volume. Real time lists it
+    # at 10:20 (cumulative relative volume 1.9); the delayed view (bars complete by 10:05) has
+    # only one heavy bar and does not; by 10:35 it does, well above yesterday's 1.0.
+    assert "TA" in rows(live, MarketSession.REGULAR, datetime(2026, 7, 8, 10, 20, tzinfo=NY))
+    assert "TA" not in rows(delayed, MarketSession.REGULAR, datetime(2026, 7, 8, 10, 20, tzinfo=NY))
+    late = rows(delayed, MarketSession.REGULAR, datetime(2026, 7, 8, 10, 35, tzinfo=NY))
+    assert "TA" in late and late["TA"][8] > 1.5
+    # TB jumped on DAY2. On DAY3 at 09:40 the view (09:25) has no regular bar yet, so TB is
+    # still listed with yesterday's close and change; by 10:35 today's flat prices took over.
+    stale = rows(delayed, MarketSession.REGULAR, datetime(2026, 7, 10, 9, 40, tzinfo=NY))
+    assert "TB" in stale and abs(stale["TB"][5] - 106.0) < 1e-6 and stale["TB"][6] > 3.0
+    assert "TB" not in rows(delayed, MarketSession.REGULAR, datetime(2026, 7, 10, 10, 35, tzinfo=NY))
+    assert "TB" not in rows(live, MarketSession.REGULAR, datetime(2026, 7, 10, 9, 40, tzinfo=NY))
+    # TD gapped 8% in DAY2's pre-market. On DAY3 at 04:10 the view (03:55) has no pre-market bar
+    # yet, so TD carries yesterday's pre-market close and change; by 07:30 it is a non-mover.
+    gap = rows(delayed, MarketSession.PREMARKET, datetime(2026, 7, 10, 4, 10, tzinfo=NY))
+    assert "TD" in gap and gap["TD"][7] > 5.0 and gap["TD"][8] > 0
+    assert "TD" not in rows(delayed, MarketSession.PREMARKET, datetime(2026, 7, 10, 7, 30, tzinfo=NY))
+
+
+def test_day_files_reproduce_the_ticker_file_slots_and_the_window_keeps_bars(frozen: dict) -> None:
+    from harness.stores import MinuteStore
+
+    store = MinuteStore(frozen["minute"])
+    assert store.has_day_files and (frozen["minute"] / "days").is_dir()
+    checked = 0
+    for ticker in store.tickers:
+        for day in (DAY1, DAY2, DAY3):
+            fast = store.day_slots(ticker, day)
+            slow = store.day_slots_from_ticker_file(ticker, day)
+            assert (fast is None) == (slow is None)
+            if fast is not None:
+                np.testing.assert_array_equal(fast[0], slow[0])
+                np.testing.assert_array_equal(fast[1], slow[1])
+                checked += 1
+    assert checked >= 3 * len(STOCKS)
+    # A windowed store keeps only the segment's bars (padded by a day for the UTC boundary)
+    # in memory, and the same bars inside the window.
+    windowed = MinuteStore(frozen["minute"], cache_tickers=4, window=(DAY3, DAY3))
+    full = store.bars("TA", DAY1, DAY3)
+    part = windowed.bars("TA", DAY1, DAY3)
+    assert len(part) < len(full) and part.equals(full.loc[part.index])
+    assert windowed.bars("TA", DAY3, DAY3).equals(store.bars("TA", DAY3, DAY3))
+
+
+def test_replay_worker_disables_the_stall_guard_and_a_failing_scan_does_not_kill_the_segment(frozen: dict, monkeypatch) -> None:
+    import asyncio
+    import time as _time
+
+    from app.services.breakouts.config import BreakoutSettings
+    from app.services.breakouts.worker import BreakoutWorker, LeaseLostError
+
+    from harness.runner import REPLAY_STALL_SECONDS
+
+    class _Repository:
+        def heartbeat_lock(self, *_args, **_kwargs):
+            return True
+
+        def __getattr__(self, name):
+            return lambda *args, **kwargs: None
+
+    async def blocking_scan():
+        _time.sleep(0.7)  # a CPU-bound stretch: the event loop cannot pulse
+        await asyncio.sleep(0)  # the production operation awaits again after its CPU work; a cancel lands here
+        return "done"
+
+    settings = BreakoutSettings(_env_file=None, BREAKOUT_RADAR_ENABLED=True)
+    guarded = BreakoutWorker(settings, _Repository(), lease_ttl_seconds=0.2, maximum_loop_stall_seconds=0.2)
+    with pytest.raises(LeaseLostError):
+        asyncio.run(guarded._run_with_lease_heartbeat(blocking_scan(), 1, "scan"))
+    relaxed = BreakoutWorker(settings, _Repository(), lease_ttl_seconds=0.2, maximum_loop_stall_seconds=REPLAY_STALL_SECONDS)
+    assert asyncio.run(relaxed._run_with_lease_heartbeat(blocking_scan(), 1, "scan")) == "done"
+
+    # One scan raising: with --on-degraded continue the scan is recorded as an exception and the
+    # segment finishes; with raise the segment stops.
+    original = BreakoutWorker._run_cycle
+    calls = {"n": 0}
+
+    async def flaky(self, lease, snapshot):
+        calls["n"] += 1
+        if calls["n"] == 3:
+            raise RuntimeError("synthetic scan failure")
+        return await original(self, lease, snapshot)
+
+    monkeypatch.setattr(BreakoutWorker, "_run_cycle", flaky)
+    config = _config(frozen, "flaky_continue", start=DAY3, end=DAY3, warmup=0, variants=["baseline"])
+    config.on_degraded = "continue"
+    summary = run_segment(config)
+    assert len(summary["degraded"]) == 1 and summary["degraded"][0]["status"] == "exception"
+    records = _read_jsonl(frozen["root"] / "runs" / "flaky_continue" / "baseline" / "ledger" / f"{DAY3.isoformat()}.jsonl.gz")
+    failed = [r for r in records if r["status"] == "exception"]
+    assert len(failed) == 1 and failed[0]["error_code"] == "RuntimeError" and "synthetic" in failed[0]["error"]
+    assert (frozen["root"] / "runs" / "flaky_continue" / "run.json").exists()
+    calls["n"] = 0
+    strict = _config(frozen, "flaky_raise", start=DAY3, end=DAY3, warmup=0, variants=["baseline"])
+    with pytest.raises(RuntimeError):
+        run_segment(strict)
+    assert summary["variants"]["baseline"]["production_field_hash"] == PRODUCTION_CONFIG_HASH
+
+
+def test_next_bar_falls_forward_over_empty_slots_within_the_bound(tmp_path) -> None:
+    import pandas as pd
+
+    from harness.stores import MinuteStore
+
+    day = datetime(2026, 7, 8, tzinfo=NY)
+    starts = [day.replace(hour=9, minute=30), day.replace(hour=9, minute=40), day.replace(hour=10, minute=25)]  # 09:35 and 09:45..10:20 missing
+    frame = pd.DataFrame({
+        "t": [int(s.timestamp() * 1000) for s in starts], "open": [10.0, 10.2, 10.9], "high": [10.1, 10.3, 11.0],
+        "low": [9.9, 10.1, 10.8], "close": [10.05, 10.25, 10.95], "volume": [100.0, 100.0, 100.0],
+    })
+    frame.to_parquet(tmp_path / "GAPPY.parquet", index=False)
+    pd.DataFrame({"ticker": ["GAPPY"], "day": ["2026-07-08"]}).to_parquet(tmp_path / "coverage.parquet", index=False)
+    store = MinuteStore(tmp_path)
+    assert store.next_bar("GAPPY", day.replace(hour=9, minute=30)) == (10.0, 0)  # on the boundary: that bar
+    assert store.next_bar("GAPPY", day.replace(hour=9, minute=31)) is None  # 09:35 missing, no skipping allowed
+    assert store.next_bar("GAPPY", day.replace(hour=9, minute=31), max_slots=6) == (10.2, 1)  # 09:40 after one empty slot
+    assert store.next_bar("GAPPY", day.replace(hour=9, minute=41), max_slots=6) is None  # 09:45..10:15 are seven empty slots
+    assert store.next_bar("GAPPY", day.replace(hour=9, minute=41), max_slots=None) == (10.9, 8)
+    assert store.next_bar("GAPPY", day.replace(hour=19, minute=58), max_slots=None) is None  # nothing before 20:00
+    assert store.next_bar_open("GAPPY", day.replace(hour=9, minute=31), max_slots=6) == 10.2
+
+
+def test_memo_off_is_byte_identical_to_memo_on(frozen: dict) -> None:
+    on = run_segment(_config(frozen, "memo_on", start=DAY2, end=DAY3, warmup=1, variants=["baseline"], memo=True))
+    off = run_segment(_config(frozen, "memo_off", start=DAY2, end=DAY3, warmup=1, variants=["baseline"], memo=False))
+    assert sum(v["hits"] for v in on["memo_stats"].values()) > 0 and off["memo_stats"] == {}
+    for day in (DAY2, DAY3):
+        left = _snapshots(frozen["root"] / "runs" / "memo_on", "baseline", day)
+        right = _snapshots(frozen["root"] / "runs" / "memo_off", "baseline", day)
+        assert json.dumps(left, sort_keys=True) == json.dumps(right, sort_keys=True)
+
+
+def test_runner_records_spy_at_the_stock_entry_moment_when_the_stock_rolls_forward(tmp_path) -> None:
+    """修订 7: a delayed stock entry carries SPY at that same bar; an on-time entry carries nothing extra."""
+
+    import pandas as pd
+
+    from harness.runner import record_entry_prices
+    from harness.stores import MinuteStore
+
+    day = datetime(2026, 7, 8, tzinfo=NY)
+
+    def bars(ticker: str, times: list[tuple[int, int]], opens: list[float]) -> None:
+        stamps = [int(day.replace(hour=h, minute=m).timestamp() * 1000) for h, m in times]
+        pd.DataFrame({"t": stamps, "open": opens, "high": opens, "low": opens, "close": opens, "volume": [100.0] * len(opens)}).to_parquet(tmp_path / f"{ticker}.parquet", index=False)
+
+    bars("SPY", [(10, 5), (10, 10), (10, 15)], [400.0, 401.0, 402.0])
+    bars("LATE", [(10, 15)], [10.5])  # 10:05 and 10:10 empty
+    bars("ONTIME", [(10, 5)], [20.0])
+    pd.DataFrame({"ticker": ["SPY", "LATE", "ONTIME"], "day": ["2026-07-08"] * 3}).to_parquet(tmp_path / "coverage.parquet", index=False)
+    store = MinuteStore(tmp_path)
+    events = [{"event_id": "a", "ticker": "LATE"}, {"event_id": "b", "ticker": "ONTIME"}, {"event_id": "c", "ticker": "LATE"}]
+    benchmark = record_entry_prices(store, events, {"a", "b"}, day.replace(hour=10, minute=2, second=37))
+    assert benchmark == (400.0, 0)  # the record keeps SPY at the scan's own slot
+    assert (events[0]["next_bar_open"], events[0]["next_bar_delay_slots"]) == (10.5, 2)
+    assert (events[0]["benchmark_open_at_entry"], events[0]["benchmark_delay_at_entry"]) == (402.0, 0)  # SPY at 10:15, the stock's bar
+    assert (events[1]["next_bar_open"], events[1]["next_bar_delay_slots"]) == (20.0, 0) and "benchmark_open_at_entry" not in events[1]
+    assert "next_bar_open" not in events[2]  # no entry transition for this event at this scan

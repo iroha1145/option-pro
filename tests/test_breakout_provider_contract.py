@@ -159,10 +159,14 @@ def test_regular_dollar_volume_payload_keeps_movers_payload_unchanged() -> None:
             "close",
             "change",
             "relative_volume_10d_calc",
+            "exchange",
+            "type",
         }
         assert {item["left"] for item in leaders["filter"]} == {
             "close",
             "Value.Traded",
+            "exchange",
+            "type",
         }
         assert next(
             item for item in leaders["filter"] if item["left"] == "Value.Traded"
