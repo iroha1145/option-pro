@@ -1,5 +1,6 @@
 import { useQuoteSymbols } from '@/hooks/useLiveQuote';
 import { LivePrice } from '@/components/shared/LiveQuote';
+import HorizontalScroller from '@/components/shared/HorizontalScroller';
 /** 当前 ATM IV 在所选板块成分中的真实横截面排名。 */
 import { useMemo, useState } from 'react';
 import { fmtRelative } from '@/lib/format';
@@ -35,7 +36,7 @@ function SourceStatusBadge({ status }: { status: keyof typeof SOURCE_STATUS_CN }
 function IvRankBar({ rank, replayKey }: { rank: number; replayKey: string }) {
   return (
     <span className="inline-flex items-center gap-2">
-      <span className="w-8 text-right text-body-s font-semibold text-ink-800 tnum">{rank}</span>
+      <span className="w-8 text-right text-body-s font-medium text-ink-800 tnum">{rank}</span>
       <span className="h-1 w-[100px] strength-track overflow-hidden rounded-pill bg-line" role="presentation">
         <span
           key={replayKey}
@@ -163,8 +164,8 @@ export default function IvPanel({
         </StatusNotice>
       )}
 
-      {/* 表 / 骨架 / 空态 */}
-      <div className="mt-3 overflow-x-auto overscroll-x-contain">
+      {/* 表 / 骨架 / 空态。表最窄 420px：手机上横向滚动，HorizontalScroller 给出右侧渐隐，看得出还有列。 */}
+      <HorizontalScroller className="mt-3" scrollerClassName="overscroll-x-contain" surface="card">
         {loading && rows.length === 0 ? (
           <SkeletonRows rows={6} />
         ) : error && rows.length === 0 ? (
@@ -234,7 +235,7 @@ export default function IvPanel({
                     <span className="flex items-center gap-2.5">
                       <TickerLogo ticker={r.ticker} size={28} />
                       <span>
-                        <span className="block font-mono text-body-s font-semibold text-ink-800">{r.ticker}</span>
+                        <span className="block font-mono text-body-s font-medium text-ink-800">{r.ticker}</span>
                         <span className="hidden max-w-[120px] truncate text-micro text-ink-400 sm:block">{r.name}</span>
                       </span>
                     </span>
@@ -242,7 +243,8 @@ export default function IvPanel({
                   <td
                     className="px-2 py-2 text-right text-data-m text-ink-800 tnum"
                   >
-                    <LivePrice symbol={r.ticker} fallback={r.price} />
+                    {/* 报价说明折到第二行时也靠右，与右对齐的「价」表头对齐 */}
+                    <LivePrice symbol={r.ticker} fallback={r.price} className="justify-end" />
                   </td>
                   <td className="px-2 py-2">
                     {r.rank !== null ? (
@@ -264,7 +266,7 @@ export default function IvPanel({
             </tbody>
           </table>
         )}
-      </div>
+      </HorizontalScroller>
     </div>
   );
 }

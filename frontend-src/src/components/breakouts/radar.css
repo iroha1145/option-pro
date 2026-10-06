@@ -50,7 +50,7 @@
   line-height: 18px;
   white-space: nowrap;
 }
-.radar-current-readout strong { color: var(--ink-800); font-size: 12px; font-weight: 600; }
+.radar-current-readout strong { color: var(--ink-800); font-size: 12px; font-weight: 500; }
 .radar-reference-invalid { color: var(--down-600); }
 .radar-reference-trigger { color: var(--brand-600); }
 .radar-reference-target { color: var(--up-600); }

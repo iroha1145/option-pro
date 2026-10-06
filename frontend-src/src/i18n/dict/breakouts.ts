@@ -2,6 +2,20 @@
 import type { Dict } from './types';
 
 export const BREAKOUTS: Dict = {
+  /* ---- LeadBigCard.tsx 风险提醒原因码 ---- */
+  '盘前跳空，待盘中确认': ['Pre-market gap, awaiting regular-session confirmation', 'プレマーケットのギャップ、通常取引での確認待ち'],
+  '无有效整理平台': ['No valid base', '有効なベースなし'],
+  '距突破位过远': ['Extended from pivot', 'ピボットから離れすぎ'],
+  '延续上一轮信号，已复核': ['Carried over from the previous scan, rechecked', '前回スキャンからの継続、再確認済み'],
+  '延续信号，暂未复核': ['Carried-over signal, recheck pending', '継続シグナル、再確認待ち'],
+  '延续信号已过期': ['Carried-over signal expired', '継続シグナルの期限切れ'],
+  '盘中快照不可用': ['Intraday snapshot unavailable', '日中スナップショット利用不可'],
+  '大盘偏弱，确认要求提高': ['Weak market: confirmation requirement raised', '地合い軟調のため確認条件を引き上げ'],
+  '暂无完整盘中 K 线': ['No complete intraday bars', '確定した日中足なし'],
+  '本时段暂无完整 K 线': ['No complete bars this session', '当セッションの確定足なし'],
+  '数据源缺相对量能': ['Provider relative volume missing', '相対出来高データなし'],
+  '高位附近动能减弱': ['Momentum fading near the high', '高値付近で勢いが鈍化'],
+  '区间持续性计算失败': ['Range persistence calculation failed', 'レンジ持続性の計算に失敗'],
   /* ---- EventDetail.tsx ---- */
   '暂无区带数据': ['No zone data yet', '帯データなし'],
   '支撑区': ['Support zone', 'サポート帯'],

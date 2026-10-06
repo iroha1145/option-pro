@@ -125,7 +125,7 @@ export default function HistoryRail({
       {/* 标题行 + 副标 */}
       <div className="shrink-0 border-b border-line px-4 pb-2.5 pt-3.5">
         <p className="flex items-baseline justify-between gap-2">
-          <span className="text-body-s font-semibold text-ink-900">
+          <span className="text-body-s font-medium text-ink-900">
             {t('历史事件回溯 ·')}{' '}
             <span className="font-mono tnum">
               {total !== null ? t('共 {n} 条', { n: total }) : t('已加载 {n} 条{suffix}', { n: loadedCount, suffix: serverHasMore ? '+' : '' })}
@@ -221,7 +221,7 @@ export default function HistoryRail({
                           {/* ticker/名称 + 形态·状态 */}
                           <span className="min-w-0 flex-1">
                             <span className="flex items-baseline gap-1.5">
-                              <span className="shrink-0 font-mono text-body-s font-semibold text-ink-800">{e.ticker}</span>
+                              <span className="shrink-0 font-mono text-body-s font-medium text-ink-800">{e.ticker}</span>
                               <span className="truncate text-micro text-ink-400">{e.name}</span>
                             </span>
                             <span className="mt-0.5 flex items-center gap-1.5 text-micro leading-[14px]">

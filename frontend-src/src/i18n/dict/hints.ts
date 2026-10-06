@@ -197,10 +197,6 @@ export const HINTS: Dict = {
   ],
 
   '平均强度（0–100）': ['Average strength (0–100)', '平均強度（0–100）'],
-  '组内成分股综合强度分的简单平均（没有分数的标的不计入）。用于横向比较组与组，个股仍以各自分数为准。': [
-    "A simple average of the composite strength scores of the group's constituents (names without a score are excluded). Use it to compare one group against another; for an individual stock, go by its own score.",
-    'グループ構成銘柄の総合強度スコアの単純平均です（スコアのない銘柄は含めません）。グループ同士の比較に使い、個別銘柄はそれぞれのスコアで判断してください。',
-  ],
 
   '板块内 IV 分位（0–100）': ['IV percentile within the sector (0–100)', 'セクター内 IV パーセンタイル（0–100）'],
   '该股平值期权隐含波动率（ATM IV）在本板块成分股中的百分位：100 = 板块内 IV 最高。它比较的是同板块内的相对贵贱，不是该股自己的历史高低位。': [

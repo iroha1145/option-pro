@@ -170,7 +170,8 @@ export default function SignalsReading({
       <div className="mt-5 grid flex-1 grid-cols-1 gap-6 lg:grid-cols-2">
         {/* 左：真实评分 + 指标对象 */}
         <div>
-          <div className="grid grid-cols-3 gap-3">
+          {/* 标签 +「ⓘ」要 59px；320 宽每格内容只有 45px，ⓘ 掉到下一行。标签不折行，<360 把格内左右边距收到 6px。 */}
+          <div className="grid grid-cols-3 gap-3 max-[359px]:[&>p]:px-1.5 [&>p>span:first-child]:whitespace-nowrap">
             <p className="rounded-md border border-line bg-card-warm p-3">
               <span className="block text-micro text-ink-400">
                 {t('顶部风险')}
@@ -203,7 +204,7 @@ export default function SignalsReading({
           <div className="flex items-baseline justify-between gap-3">
             <p>
               <span className="text-caption text-ink-500">{t('趋势偏向')}</span>
-              <span className={cn('ml-3 font-display text-display-m font-semibold', bias ? biasColor(bias.label) : 'text-ink-400')}>
+              <span className={cn('ml-3 font-display text-display-m font-medium', bias ? biasColor(bias.label) : 'text-ink-400')}>
                 {bias?.label ? t(bias.label) : '—'}
               </span>
             </p>

@@ -36,7 +36,6 @@ export interface ResultTableProps {
   catalysts: Record<string, CatalystSummary | undefined>;
   details: DetailCache;
   flashes: Record<string, 'up' | 'down'>;
-  weights: { trend: number; momentum: number; volume: number; volatility: number } | null;
   signals: Record<string, RowSignalsState | undefined>;
   onOpenDetail: (ticker: string) => void;
   /** 变化时重跑 stagger（扫描完成 / 翻页） */
@@ -110,7 +109,6 @@ export default function ResultTable({
   catalysts,
   details,
   flashes,
-  weights,
   signals,
   onOpenDetail,
   animKey,
@@ -174,7 +172,7 @@ export default function ResultTable({
                       <TickerLogo ticker={r.ticker} size={28} />
                       <span className="min-w-0">
                         <span className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-mono text-body-s font-semibold text-ink-800">{r.ticker}</span>
+                          <span className="font-mono text-body-s font-medium text-ink-800">{r.ticker}</span>
                           {r.sector && <SoftBadge className="max-w-[7.5rem]" title={t(r.sector)}><span className="truncate">{t(r.sector)}</span></SoftBadge>}
                           {r.observationOnly && <SoftBadge data-testid={`screener-eod-watch-${r.ticker}`}>{t('观察')}</SoftBadge>}
                           {r.listKind === 'composite' && r.status === 'eligible' && <SoftBadge tone="ok">{t('合格')}</SoftBadge>}
@@ -246,7 +244,6 @@ export default function ResultTable({
                 <ExpansionRow open={isOpen} colSpan={heads.length} panelId={panelId}>
                   <RowExpansion
                     row={r}
-                    weights={weights}
                     dollarVolume={dv ?? null}
                     signals={signals[r.ticker] ?? null}
                     onOpenDetail={onOpenDetail}

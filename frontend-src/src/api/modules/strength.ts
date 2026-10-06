@@ -108,18 +108,13 @@ export interface ScanParams {
 function applyParams(rows: ScreenerRow[], p: ScanParams): ScreenerRow[] {
   let out = [...rows];
   if (p.band && p.band !== 'all') out = out.filter((r) => r.band === p.band);
-  // sector 入参可能是契约 sector_id（live）或板块名（mock）：双向匹配
   if (p.sector && p.sector !== 'all') out = out.filter((r) => r.sector === p.sector || r.sectorId === p.sector);
   if (p.minScore !== undefined) out = out.filter((r) => r.strengthScore >= p.minScore!);
   const sort = p.sort ?? 'score';
-  if ((p.ranking_algorithm === 'a0_mid_long' || p.ranking_algorithm === 'eod_limited_v1') && sort === 'score') {
-    return out;
-  }
   const dir = p.order === 'asc' ? 1 : -1;
   out.sort((a, b) => {
     if (sort === 'ticker') return a.ticker.localeCompare(b.ticker) * dir;
     if (sort === 'changePct') {
-      // 涨跌幅缺失稳定排在末尾，而不是当成 0% 混进真实平盘股票中间（审计 P2-14）。
       const left = a.changePct;
       const right = b.changePct;
       if (left === null && right === null) return a.ticker.localeCompare(b.ticker);
@@ -127,11 +122,7 @@ function applyParams(rows: ScreenerRow[], p: ScanParams): ScreenerRow[] {
       if (right === null) return -1;
       return (left - right) * dir || a.ticker.localeCompare(b.ticker);
     }
-    const left = a.sortScore ?? a.strengthScore;
-    const right = b.sortScore ?? b.strengthScore;
-    if (a.sortScore == null && b.sortScore != null) return 1;
-    if (a.sortScore != null && b.sortScore == null) return -1;
-    return (left - right) * dir || a.ticker.localeCompare(b.ticker);
+    return (a.strengthScore - b.strengthScore) * dir || a.ticker.localeCompare(b.ticker);
   });
   return out;
 }
@@ -185,14 +176,6 @@ function mapScanRow(r: Record<string, unknown>): ScreenerRow | null {
     strengthScore: score,
     avgDollarVolume20d: pickN(r, 'avg_dollar_volume_20d'),
     band,
-    // 兼容槽位（消费层优先 subscoreDims；此处仅按周期分近似填充，注释如实标注）
-    // 缺失保持 null：补 0 会让回退路径把「没有数据」画成「该项 0 分」。
-    subscores: {
-      trend: dims[2].value,
-      momentum: dims[0].value,
-      volume: dims[1].value,
-      volatility: dims[3].value,
-    },
     subscoreDims: dims,
     sparkline: [], // 契约 StrengthRow 无 sparkline（行展开按需拉日 K，见 RowExpansion）
     // 影子字段：缺失一律保持 null / 空数组，绝不兜成 50 或「中性」。后端在覆盖度
@@ -203,11 +186,6 @@ function mapScanRow(r: Record<string, unknown>): ScreenerRow | null {
     macroSupporting: mapMacroFitDrivers(r.macro_supporting_factors),
     macroOpposing: mapMacroFitDrivers(r.macro_opposing_factors),
     macroTechnicalGap: pickN(r, 'macro_technical_gap'),
-    rankingScore: pickN(r, 'ranking_score', 'rankingScore') ?? score,
-    sortScore: pickN(r, 'sort_score', 'sortScore', 'a0_score'),
-    sortBasis: pickS(r, 'sort_basis', 'sortBasis'),
-    sortAlgorithm: pickS(r, 'sort_algorithm', 'sortAlgorithm'),
-    a0Available: pickB(r, 'a0_available', 'a0Available'),
     dollarVolumeUnknown: pickB(r, 'dollar_volume_unknown', 'dollarVolumeUnknown') ?? false,
     dollarVolumeProxyAvailable: pickB(r, 'dollar_volume_proxy_available') ?? false,
     dollarLiquidityVerified: pickB(r, 'dollar_liquidity_verified') ?? false,
@@ -370,21 +348,7 @@ function mapRegime(env: Rec): MarketRegimeInfo | null {
 function mapMarket(d: unknown): MarketStrength {
   const r = asRec(d);
   const regime = mapRegime(r);
-  const avgScore = pickN(r, 'avgScore', 'avg_score');
-  const ge85Count = pickN(r, 'ge85Count', 'ge85_count');
-  const histogram = Array.isArray(r.histogram)
-    ? (r.histogram as unknown[]).filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
-    : [];
-  const aggregateAvailable = avgScore !== null && ge85Count !== null && histogram.length > 0;
-  return {
-    // 兼容旧消费层的数值槽位；aggregateAvailable=false 时界面不得读取或展示。
-    // null 通过边界类型转换保留，避免把 market_regime.score 冒充全市场均分。
-    avgScore: avgScore as number,
-    ge85Count: ge85Count as number,
-    histogram,
-    aggregateAvailable,
-    ...(regime ? { regime } : {}),
-  };
+  return { ...(regime ? { regime } : {}) };
 }
 
 /** 契约 profile 枚举 → 中文名（与 screener PROFILE_CN 同口径） */
@@ -397,32 +361,13 @@ const PROFILE_NAME_CN: Record<string, string> = {
 /**
  * 契约 /strength/profiles → UI StrengthProfile[]。
  * 真实契约 profiles 为枚举字符串数组（无 name/description/weights）——不编造：
- * name 用枚举中文名，description 留空，weights 缺失（UI 隐藏权重条）。
- * 对象数组形状（mock 契约扩展）保留原映射。
+ * name 用枚举中文名；模拟数据使用相同的档位。
  */
 function mapProfiles(d: unknown): StrengthProfile[] {
-  return unwrap(d, 'profiles').map((p) => {
-    if (typeof (p as unknown) === 'string') {
-      const id = p as unknown as string;
-      return { id, name: PROFILE_NAME_CN[id] ?? id, description: '' };
-    }
-    const w = asRec(p.weights);
-    const hasW = ['trend', 'momentum', 'volume', 'volatility'].some((k) => pickN(w, k) !== null);
-    return {
-      id: pickS(p, 'id') ?? '',
-      name: pickLabel(p, 'name') ?? '',
-      description: pickLabel(p, 'description') ?? '',
-      ...(hasW
-        ? {
-            weights: {
-              trend: pickN(w, 'trend') ?? 0,
-              momentum: pickN(w, 'momentum') ?? 0,
-              volume: pickN(w, 'volume') ?? 0,
-              volatility: pickN(w, 'volatility') ?? 0,
-            },
-          }
-        : {}),
-    };
+  return unwrap(d, 'profiles').flatMap((profile) => {
+    if (typeof (profile as unknown) !== 'string') return [];
+    const id = profile as unknown as string;
+    return [{ id, name: PROFILE_NAME_CN[id] ?? id }];
   });
 }
 
@@ -435,8 +380,6 @@ function mapSectors(d: unknown): SectorOption[] {
 
 export const strengthApi = {
   market: (): Promise<MarketStrength> => mockOr(() => fx.getMarketStrength(), () => sharedGlobalGet<unknown>('/strength/market').then(mapMarket)),
-  profiles: (): Promise<StrengthProfile[]> =>
-    mockOr(() => fx.getStrengthProfiles(), () => get('/strength/profiles').then(mapProfiles)),
   /** profiles + 板块字典一次取齐（mock 无板块字典 → sectors:[]，消费层回退扫描行 sector 名） */
   profilesMeta: (): Promise<StrengthProfilesMeta> =>
     mockOr(
@@ -470,28 +413,11 @@ export const strengthApi = {
           snapshotSavedAt: null,
           cacheExpiresAt: null,
           priceProvider: 'mock fixtures',
-          effectiveAlgorithm:
-            params.ranking_algorithm === 'production' || params.ranking_algorithm === 'a0_mid_long'
-              ? params.ranking_algorithm
-              : params.ranking_algorithm === 'eod_limited_v1'
-                ? 'eod_limited_v1'
-                : 'eod_limited_v1',
-          algorithmVersion:
-            params.ranking_algorithm === 'a0_mid_long'
-              ? 'a0-mid-long-v1'
-              : params.ranking_algorithm === 'production'
-                ? 'strength-v3'
-                : 'eod-limited-v1.1',
-          scoreBasis:
-            params.ranking_algorithm === 'a0_mid_long'
-              ? '0.5 * score_mid + 0.5 * score_long'
-              : params.ranking_algorithm === 'production'
-                ? 'ranking_score'
-                : 'price_only_diagnostic + m1_consensus',
+          effectiveAlgorithm: 'eod_limited_v1',
+          algorithmVersion: 'eod-limited-v1.7',
+          scoreBasis: 'synthetic factor display',
           fallbackReason: null,
-          resolvedTimeframe: params.timeframe === 'all' && params.ranking_algorithm !== 'production' && params.ranking_algorithm !== 'a0_mid_long'
-            ? 'mid'
-            : params.timeframe ?? 'mid',
+          resolvedTimeframe: params.timeframe === 'all' ? 'mid' : params.timeframe ?? 'mid',
           purpose: null,
           historicalExample: false,
           synthetic: false,
@@ -504,12 +430,10 @@ export const strengthApi = {
           observationN: null,
           filterSupport: {
             minPrice: true,
-            minAvgDollarVolume: params.ranking_algorithm === 'eod_limited_v1' ? false : true,
+            minAvgDollarVolume: false,
           },
         };
       },
       () => liveScan(params, force),
     ),
-  scan: (params: ScanParams = {}): Promise<ScreenerRow[]> =>
-    mockOr(() => applyParams(fx.runStrengthScan(), params), () => liveScan(params).then((result) => result.rows)),
 };

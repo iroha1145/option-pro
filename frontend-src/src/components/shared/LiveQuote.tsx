@@ -25,7 +25,8 @@ export function QuoteIndicator({ symbol, className, usingFallback = false, fallb
       title={[stamp && t('报价时间 {time}（纽约）', { time: stamp }), day && t('报价日期 {date}', { date: day }), !usingFallback && quote?.source, !usingFallback && quote?.previous_close != null && quote.previous_close > 0 && t('昨收 ${price}', { price: fmtPrice(quote.previous_close) })].filter(Boolean).join(' · ')}
     >
       {label}
-      {day ? <span className="ml-1 font-mono tnum">{day}</span> : null}
+      {/* 日期整体换行，不在「2026-」「10-05」的连字符处断开 */}
+      {day ? <span className="ml-1 whitespace-nowrap font-mono tnum">{day}</span> : null}
     </span>
   );
 }

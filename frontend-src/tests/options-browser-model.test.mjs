@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { contractsForChain, selectContracts, isAlerting } from '../src/components/detail/options/chainMetrics.ts';
+import { contractsForChain, selectContracts } from '../src/components/detail/options/chainMetrics.ts';
 
 const row = (strike, changes = {}) => ({ strike, callVol: 300, callOi: 100, callBid: 1, callAsk: 1.2, callIv: 0.32, putVol: 10, putOi: 100, putBid: 0.8, putAsk: 1, putIv: 0.34, ...changes });
 const chain = (rows, spot = 102.5) => ({ ticker: 'TEST', expiration: '2030-01-18', spot, rows });
@@ -16,7 +16,7 @@ test('exact fractional strikes and one-sided contracts retain their identity', (
 test('three times open interest is flagged at the boundary, without direction inference', () => {
   const [c] = contractsForChain(chain([row(100)]));
   assert.deepEqual(c.activity, ['ratio']);
-  assert.equal(isAlerting(c.volOi), true);
+  assert.deepEqual(selectContracts([c], 'alerts', 'all', 100), [c]);
   assert.equal(c.direction, undefined);
 });
 

@@ -185,32 +185,6 @@ export function resolveRetryAction(
   return outboxEmpty ? 'idle' : 'replay';
 }
 
-export type RegeneratedOp =
-  | { type: 'create'; drawingId: string; drawing: ChartDrawing }
-  | { type: 'update'; drawingId: string; drawing: ChartDrawing }
-  | { type: 'delete'; drawingId: string; drawing: ChartDrawing };
-
-export function regeneratePersistOps(
-  local: ChartDrawing[],
-  server: ChartDrawing[],
-): RegeneratedOp[] {
-  const localMap = new Map(local.map((item) => [item.id, item]));
-  const serverMap = new Map(server.map((item) => [item.id, item]));
-  const ops: RegeneratedOp[] = [];
-  for (const [id, drawing] of localMap) {
-    const remote = serverMap.get(id);
-    if (!remote) {
-      ops.push({ type: 'create', drawingId: id, drawing: { ...drawing, revision: 1 } });
-    } else {
-      ops.push({ type: 'update', drawingId: id, drawing: { ...drawing, revision: remote.revision } });
-    }
-  }
-  for (const [id, drawing] of serverMap) {
-    if (!localMap.has(id)) ops.push({ type: 'delete', drawingId: id, drawing });
-  }
-  return ops;
-}
-
 export type ApplyAction =
   | { action: 'replace'; drawing: ChartDrawing }
   | { action: 'revision'; id: string; revision: number }
@@ -377,18 +351,6 @@ export function freezeDrawingRevision(job: PersistJob): PersistJob {
     return { ...job, expectedDrawingRevision: rev };
   }
   return job;
-}
-
-/** Keep local mutable fields and adopt the server revision so a retry can PUT. */
-export function keepLocalWithServerRevisions(
-  local: ChartDrawing[],
-  server: ChartDrawing[],
-): ChartDrawing[] {
-  const remote = new Map(server.map((item) => [item.id, item]));
-  return local.map((item) => {
-    const other = remote.get(item.id);
-    return other ? { ...item, revision: other.revision } : item;
-  });
 }
 
 export class DrawingOutbox {
@@ -676,21 +638,6 @@ export class DrawingOutbox {
     for (const chain of this.chains.values()) {
       chain.pending.sort((a, b) => a.generation - b.generation);
     }
-  }
-
-  stampRevisions(server: ChartDrawing[]): void {
-    const remote = new Map(server.map((item) => [item.id, item.revision]));
-    const patch = (job: PersistJob): PersistJob => {
-      if (!job.drawing) return job;
-      const revision = remote.get(job.drawing.id);
-      if (revision == null) return job;
-      return { ...job, drawing: { ...job.drawing, revision } };
-    };
-    for (const chain of this.chains.values()) {
-      if (chain.inflight) chain.inflight = patch(chain.inflight);
-      chain.pending = chain.pending.map(patch);
-    }
-    this.persistCurrent();
   }
 
   /**

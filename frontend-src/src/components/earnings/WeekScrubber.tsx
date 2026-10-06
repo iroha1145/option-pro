@@ -70,22 +70,23 @@ export default function WeekScrubber({
 
   return (
     <section className="card-surface overflow-hidden" aria-label={__t("周历")}>
-      {/* 周切换条 */}
-      <div className="flex h-11 items-center justify-between border-b border-line px-4 [@media(pointer:coarse)]:h-14">
+      {/* 周切换条：触屏按钮 44px 不收缩，与日期至少留 8px；日期与「美东 ET」居中成组，放不下就各占一行。
+          320 宽两侧内边距收到 8px，否则按钮之间只剩 166px，日期区间（162px）放不下。 */}
+      <div className="flex h-11 items-center justify-between gap-2 border-b border-line px-4 max-[359px]:px-2 [@media(pointer:coarse)]:h-14">
         <button
           onClick={() => onWeekChange(-1)}
-          className="flex size-7 items-center justify-center rounded-sm border border-line bg-card text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 [@media(pointer:coarse)]:size-11"
+          className="flex size-7 shrink-0 items-center justify-center rounded-sm border border-line bg-card text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 [@media(pointer:coarse)]:size-11"
           aria-label={__t("上一周")}
         >
           <Icon name="chevron-right" size={14} className="rotate-180" />
         </button>
-        <p className="font-mono text-caption text-ink-600 tnum" aria-live="polite">
-          {fmtMDCN(days[0])} – {fmtMDCN(days[6])}
-          <span className="ml-2 font-sans text-micro text-ink-400">{__t('美东 ET')}</span>
+        <p className="flex flex-wrap items-baseline justify-center gap-x-2 text-center font-mono text-caption text-ink-600 tnum" aria-live="polite">
+          <span>{fmtMDCN(days[0])} – {fmtMDCN(days[6])}</span>
+          <span className="font-sans text-micro text-ink-400">{__t('美东 ET')}</span>
         </p>
         <button
           onClick={() => onWeekChange(1)}
-          className="flex size-7 items-center justify-center rounded-sm border border-line bg-card text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 [@media(pointer:coarse)]:size-11"
+          className="flex size-7 shrink-0 items-center justify-center rounded-sm border border-line bg-card text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 [@media(pointer:coarse)]:size-11"
           aria-label={__t("下一周")}
         >
           <Icon name="chevron-right" size={14} />
@@ -149,7 +150,7 @@ export default function WeekScrubber({
                     <span
                       className={cn(
                         'flex items-center gap-1 text-caption',
-                        isToday ? 'font-semibold text-brand-600' : hasReports ? 'font-medium text-ink-800' : 'text-ink-400',
+                        isToday ? 'font-medium text-brand-600' : hasReports ? 'font-medium text-ink-800' : 'text-ink-400',
                       )}
                     >
                       {weekdayCN(date)}

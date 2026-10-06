@@ -2,7 +2,7 @@ import { useQuoteSymbols } from '@/hooks/useLiveQuote';
 import { LivePrice, LiveChange, PeriodicPriceFlash } from '@/components/shared/LiveQuote';
 /**
  * §01 自选观察（watchlist.md 完整实现）
- * B0 页头带 · B1 概览统计（count-up）· B2 可排序表格/卡片（tick-flash）· B3 侧栏（信号/强度分布/市场时钟）
+ * B0 页头带 · B1 概览统计（count-up）· B2 可排序表格/卡片（tick-flash）· B3 侧栏（信号/市场时钟）
  * 轮询 60s · 空态 / 骨架 / 503 · 响应式
  */
 import SoftBadge from '@/components/shared/SoftBadge';
@@ -16,7 +16,6 @@ import { watchlistErrorMessage } from '@/api/modules/account';
 import { DEFAULT_WATCHLIST_TICKERS, personalWatchlistRows } from '@/lib/personalWatchlist';
 import WatchlistManager from '@/components/shared/WatchlistManager';
 import { signalsApi } from '@/api/modules/signals';
-import { strengthApi } from '@/api/modules/strength';
 import { marketApi } from '@/api/modules/market';
 import { runtimeApi } from '@/api/modules/runtime';
 import { ApiError } from '@/api/client';
@@ -30,7 +29,6 @@ import { useToast } from '@/hooks/useToast';
 import { useShell } from '@/hooks/useShell';
 import { cn } from '@/lib/utils';
 import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
-import { strengthBarClass } from '@/lib/strengthColor';
 import { fmtCountdown, fmtNyTime, fmtTimeHHMMSS } from '@/lib/format';
 import type { MarketSignalsSnapshot, WatchlistItem } from '@/api/types';
 import PageHeader from '@/components/shared/PageHeader';
@@ -92,39 +90,6 @@ const STAT_GRID = 'grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4 max-sm:[&>*:la
 const watchKey = (item: WatchlistItem) => item.ticker;
 const watchPrice = (item: WatchlistItem) => item.price;
 
-/* ---------------- B1 小件：平均强度 donut（72px，draw-line） ---------------- */
-function ScoreDonut({ score }: { score: number }) {
-  const R = 28;
-  const C = 2 * Math.PI * R;
-  const target = C * (1 - score / 100);
-  return (
-    <div className="mt-2 flex items-center gap-4 sm:mt-0">
-      <p className="metric-value text-data-l text-ink-900 tnum sm:text-data-xl">{score.toFixed(1)}</p>
-      {/* 手机两列时卡宽约 165px，放不下 72px 的环；环只是读数的图形化，手机上让位 */}
-      <svg width="72" height="72" viewBox="0 0 72 72" className="hidden sm:block" aria-label={t('平均强度分 {score}', { score: score.toFixed(1) })}>
-        <circle cx="36" cy="36" r={R} fill="none" stroke="var(--line)" strokeWidth="6" />
-        <motion.circle
-          cx="36"
-          cy="36"
-          r={R}
-          fill="none"
-          stroke="var(--brand-600)"
-          strokeWidth="6"
-          strokeLinecap="round"
-          strokeDasharray={C}
-          initial={{ strokeDashoffset: C }}
-          animate={{ strokeDashoffset: target }}
-          transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
-          transform="rotate(-90 36 36)"
-        />
-        <text x="36" y="40" textAnchor="middle" className="fill-ink-500 font-mono" fontSize="12">
-          {t('均值')}
-        </text>
-      </svg>
-    </div>
-  );
-}
-
 /* ---------------- 页头带右侧：强制刷新 ---------------- */
 function ForceRefreshButton({ onRefresh, spinning }: { onRefresh: () => void; spinning: boolean }) {
   const { isOwner, identityUnavailable } = useAccess();
@@ -174,36 +139,6 @@ function SignalDistribution({ data }: { data: MarketSignalsSnapshot }) {
   );
 }
 
-/* ---------------- B3 小件：强度分布直方图 ---------------- */
-function StrengthHistogram({ histogram }: { histogram: number[] }) {
-  const max = Math.max(...histogram, 1);
-  return (
-    <div className="card-surface p-5">
-      <p className="eyebrow">{t('强度分布 · 全市场')}</p>
-      <div className="mt-4 flex h-24 items-end gap-1.5">
-        {histogram.map((n, i) => {
-          const score = i * 10 + 5;
-          return (
-            <div key={i} className="group relative flex-1">
-              <div className="cloud-popover pointer-events-none absolute -top-7 left-1/2 z-10 hidden -translate-x-1/2 px-1.5 py-0.5 font-mono text-micro text-ink-600 group-hover:block">
-                {n}
-              </div>
-              <div
-                className={cn('w-full origin-bottom rounded-t-[3px]', strengthBarClass(score))}
-                style={{ height: `${Math.max(4, (n / max) * 88)}px` }}
-              />
-            </div>
-          );
-        })}
-      </div>
-      <div className="mt-1.5 flex justify-between font-mono text-micro text-ink-400">
-        <span>0</span><span>50</span><span>100</span>
-      </div>
-    </div>
-  );
-}
-
-/* ---------------- B3 小件：市场时钟 ---------------- */
 function MarketClockCard() {
   const { data: status, loading } = usePolling(() => marketApi.status(), 60_000);
   const now = useNow(1000);
@@ -283,8 +218,9 @@ function CardTrend({ item }: { item: WatchlistItem }) {
       <>
         <Sparkline data={view.closes} width={230} height={56} change={view.change} variant="area" className="w-full" />
         <span className="mt-1 flex items-center justify-between gap-2 text-micro text-ink-400">
-          <span className="truncate">
-            {t('近半年')} <span className="font-mono tnum">{view.start.slice(5)} — {view.end.slice(5)}</span>
+          {/* 三列卡片（1280 宽）放不下一行时，日期整段换到「近半年」下面，不再截成「04-10 — 1…」 */}
+          <span className="flex min-w-0 flex-wrap gap-x-1">
+            {t('近半年')} <span className="whitespace-nowrap font-mono tnum">{view.start.slice(5)} — {view.end.slice(5)}</span>
           </span>
           <span className="flex shrink-0 items-center gap-1.5">{t('区间')}<ChangeBadge value={view.change} size="sm" /></span>
         </span>
@@ -367,12 +303,12 @@ function WatchCard({
         /* hover 上浮 -3px + sh-2 走 card-lift（hover/pointer 门控 CSS，触屏不粘滞；
            原 framer whileHover 已收敛）。不能挂在外层 motion.div：framer 入场后
            内联 transform:none 会压掉同元素上的 CSS hover 位移。 */
-        className="card-surface card-lift flex w-full flex-col p-4 text-left"
+        className="card-surface card-lift flex h-full w-full flex-col p-4 text-left"
       >
       <div className={cn("flex items-center gap-2.5", onRemove && "pr-9")}>
         <TickerLogo ticker={item.ticker} />
         <div className="min-w-0 flex-1">
-          <p className="font-mono text-body-s font-semibold text-ink-800">{item.ticker}</p>
+          <p className="font-mono text-body-s font-medium text-ink-800">{item.ticker}</p>
           <p className="truncate text-micro text-ink-400">{item.name}</p>
         </div>
         <LiveChange symbol={item.ticker} fallback={item.changePct} fallbackAt={item.updatedAt} size="sm" />
@@ -382,20 +318,27 @@ function WatchCard({
         {item.sector && <SoftBadge className="max-w-[60%]" title={t(item.sector)}><span className="truncate">{t(item.sector)}</span></SoftBadge>}
       </div>
       {!Number.isFinite(item.price) && <p className="mt-2 text-caption text-ink-400">{t('暂无行情')}</p>}
-      <span className="mt-2 block">
+      {/* 同排卡片等高（板块标签有时折行）：走势与底栏一起推到卡片底边，同排的走势图、强度条和信号横向对齐 */}
+      <span className="mt-auto block pt-2">
         <CardTrend item={item} />
       </span>
       {(showStrength || showSignals) && (
-        <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3">
-          {showStrength && <StrengthBar score={item.strengthScore} width={64} />}
-          {showSignals && (
-            <span className="flex gap-1">
-              {item.signals.slice(0, 2).map((s, i) => (
-                <SignalChip key={i} type={s.type} label={s.label} />
-              ))}
-              {item.signals.length > 2 && <span className="font-mono text-micro text-ink-400">+{item.signals.length - 2}</span>}
-            </span>
-          )}
+        <div className="w-full pt-3">
+          <div className="flex items-center justify-between gap-2 border-t border-line pt-3">
+            {showStrength && <StrengthBar score={item.strengthScore} width={64} />}
+            {showSignals && (
+              <span className="flex items-center gap-1">
+                {item.signals.slice(0, 2).map((s, i) => (
+                  <SignalChip key={i} type={s.type} label={s.label} />
+                ))}
+                {item.signals.length > 2 && (
+                  <span className="font-mono text-micro text-ink-400" title={item.signals.slice(2).map((s) => s.label).join('、')}>
+                    +{item.signals.length - 2}
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
         </div>
       )}
       </button>
@@ -470,7 +413,6 @@ export default function Watchlist() {
     toast.success(t('自选已保存'));
   }, [editPersonal, refreshWatchlist, toast]);
   const signalsQ = usePolling(() => signalsApi.market(), 60_000, [], { enabled: !identityLoading && !identityUnavailable });
-  const strengthQ = usePolling(() => strengthApi.market(), 60_000, [], { enabled: !identityLoading && !identityUnavailable });
   const statusQ = usePolling(() => marketApi.status(), 60_000);
   const now = useNow(1000);
 
@@ -557,7 +499,7 @@ export default function Watchlist() {
                 <Link
                   to={`/stock/${encodeURIComponent(r.ticker)}`}
                   aria-label={t('打开 {ticker} 详情', { ticker: r.ticker })}
-                  className="block w-fit rounded-sm font-mono text-body-s font-semibold text-ink-800 hover:text-brand-700 hover:underline"
+                  className="block w-fit rounded-sm font-mono text-body-s font-medium text-ink-800 hover:text-brand-700 hover:underline"
                 >{r.ticker}</Link>
                 {r.sector && <SoftBadge className="max-w-[7.5rem]" title={t(r.sector)}><span className="truncate">{t(r.sector)}</span></SoftBadge>}
               </span>
@@ -675,8 +617,8 @@ export default function Watchlist() {
   const cardItems = useMemo(() => sortWatchlistItems(items, sort), [items, sort]);
   useQuoteSymbols(identityUnavailable ? [] : cardItems.map(item => item.ticker));
   /* 「上涨/下跌」卡读的是 wl（自选行情），骨架条件必须包含它——否则
-     signals/strength 先返回时会把还没读到的自选渲染成「0 / 0」（审计 2.2.11）。 */
-  const statsLoading = signalsQ.loading || strengthQ.loading || loading;
+     市场信号先返回时会把还没读到的自选渲染成「0 / 0」（审计 2.2.11）。 */
+  const statsLoading = signalsQ.loading || loading;
 
   /**
    * 渲染分批，数据不分批。
@@ -787,20 +729,6 @@ export default function Watchlist() {
                   />
                 )}
               </div>,
-              ...(strengthQ.data?.aggregateAvailable
-                ? [
-                    <div key="avg" className="card-surface h-full p-4 sm:p-5">
-                      <div className="flex items-start justify-between">
-                        <p className="eyebrow">
-                          {t('全市场平均强度')}
-                          <InfoHint hint={SCORE_HINTS.avgStrength} side="bottom" size={12} className="ml-1" />
-                        </p>
-                        <Icon name="wallet-gauge" size={18} className="text-ink-400" />
-                      </div>
-                      <ScoreDonut score={strengthQ.data.avgScore} />
-                    </div>,
-                  ]
-                : []),
             ].map((node, i) => (
               <motion.div
                 key={i}
@@ -1055,11 +983,6 @@ export default function Watchlist() {
             </div>
           )}
           </SkeletonReveal>
-          {strengthQ.data?.aggregateAvailable && strengthQ.data.histogram.length > 0 ? (
-            <StrengthHistogram histogram={strengthQ.data.histogram} />
-          ) : strengthQ.loading ? (
-            <SkeletonCard />
-          ) : null}
           <MarketClockCard />
         </aside>
       </div>

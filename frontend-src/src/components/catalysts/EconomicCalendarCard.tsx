@@ -20,7 +20,7 @@ export default function EconomicCalendarCard() {
   return <section className="card-surface mt-8 overflow-hidden" aria-label={copy.title} data-testid="home-economic-calendar">
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-4 sm:px-5">
       <div className="min-w-0">
-        <h2 className="text-body-s font-semibold text-ink-800">{copy.title}</h2>
+        <h2 className="text-body-s font-medium text-ink-800">{copy.title}</h2>
         <p className="mt-0.5 text-micro text-ink-400">{copy.local} · {zone}</p>
       </div>
       <div className="flex flex-wrap items-center gap-3">

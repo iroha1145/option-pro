@@ -45,7 +45,7 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
         <TickerLogo ticker={symbol} size={40} />
         <div className="min-w-0">
           <h1 className="flex flex-wrap items-baseline gap-x-2.5">
-            <span className="font-display text-[22px] leading-[28px] font-bold text-ink-900">{symbol}</span>
+            <span className="font-display text-[22px] leading-[28px] font-semibold text-ink-900">{symbol}</span>
             <span className="text-body-s text-ink-500">{detail?.name ?? symbol}</span>
           </h1>
           <div className="mt-1 flex flex-wrap items-center gap-2">

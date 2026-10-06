@@ -2,6 +2,8 @@
 import type { Dict } from './types';
 
 export const SCREENER: Dict = {
+  '行业': ['Industry', '業種'],
+  '评分档位读取失败，请重试。': ['Failed to load scoring profiles. Please retry.', 'スコアリングプロファイルの読み込みに失敗しました。再試行してください。'],
   "稳定性": ["Stability", "安定性"],
   "估": ["est.", "推計"],
   "20 日均成交额代理": ["20-day average dollar-volume proxy", "20日平均売買代金の推計"],
@@ -19,9 +21,6 @@ export const SCREENER: Dict = {
   '技术详情': ['Technical details', 'テクニカル詳細'],
   '催化摘要读取失败，暂按强度排序': ['Catalyst summaries failed to load; results remain sorted by strength.', '材料の概要を取得できないため、強度順で表示しています。'],
   '展开或收起 {ticker} 详情': ['Expand or collapse {ticker} details', '{ticker} の詳細を開く・閉じる'],
-  '强度分布 · 候选比较': ['Strength distribution · candidate comparison', '強度分布 · 候補比較'],
-  '筛选后候选': ['Filtered candidates', '絞り込み後の候補'],
-  '已应用其他筛选，分档和数量上限不影响此图': ['Other filters apply; tier selection and the result limit do not affect this chart.', '他の絞り込み条件を反映しています。階層の選択と表示件数の上限はこの図に影響しません。'],
   '更多筛选': ['More filters', '詳細フィルター'],
   '辅助指标': ['Additional indicators', '補助指標'],
   /* ---------------- FilterWorkbench.tsx ---------------- */
@@ -108,30 +107,6 @@ export const SCREENER: Dict = {
   '成交量对当前趋势的确认程度。': ['How much volume confirms the current trend.', '出来高が現在のトレンドをどれだけ裏付けているかを示します。'],
   '资金愿意承担风险的程度。': ['How much risk investors are willing to take.', '投資家がどれだけリスクを取る意欲があるかを示します。'],
   '强弱价差': ['Strong/weak spread', 'リスクオン・スプレッド'],
-  '全市场强度分均值，衡量指数层面趋势健康度。': [
-    'The market-wide average strength score, gauging trend health at the index level.',
-    '全市場の強度スコア平均値。指数レベルのトレンドの健全性を測ります。',
-  ],
-  '强度 ≥70 的标的占比，反映资金推动的力度。': [
-    'The share of names scoring 70 or above, reflecting how forcefully money is pushing the market.',
-    '強度70以上の銘柄が占める比率。資金が相場を押し上げる勢いを反映します。',
-  ],
-  '强度 ≥50 标的占全市场比例，越高说明上涨扩散越广。': [
-    'The share of names scoring 50 or above across the whole market — the higher it is, the more broadly the advance is spreading.',
-    '強度50以上の銘柄が全市場に占める比率。高いほど上昇がより広く波及していることを示します。',
-  ],
-  '强度 ≥60 的标的占比，反映资金参与是否跟上趋势。': [
-    'The share of names scoring 60 or above, reflecting whether participation is keeping pace with the trend.',
-    '強度60以上の銘柄が占める比率。資金の参加がトレンドに追いついているかを反映します。',
-  ],
-  '强度均值与高强度标的占比加权，反映资金愿意承担多少风险。': [
-    'A weighted blend of the average strength score and the share of high-strength names, reflecting how much risk money is willing to take.',
-    '強度スコアの平均値と高強度銘柄の比率を加重したもの。資金がどれだけリスクを取る意欲があるかを反映します。',
-  ],
-  '高分组（≥70）与低分组（<40）均分之差，价差越大风格越极化。': [
-    'The gap between the average score of the high group (70+) and the low group (below 40) — the wider the gap, the more polarized market leadership is.',
-    '高スコア群（70以上）と低スコア群（40未満）の平均点の差。差が大きいほど相場のスタイルが二極化していることを示します。',
-  ],
   '市场形态': ['Market regime', '市場形態'],
   '6 维': ['6 factors', '6軸'],
 
@@ -170,12 +145,7 @@ export const SCREENER: Dict = {
   '最近扫描记录': ['Recent scan history', '最近のスキャン履歴'],
   '最近 5 次扫描': ['Last 5 scans', '直近5回のスキャン'],
   '尚无扫描记录': ['No scans yet', 'まだスキャン履歴がありません'],
-
-  /* ---------------- SideCards.tsx ---------------- */
-  'D 档（<60）计入「全部」': ['Tier D (below 60) counts toward "All"', 'D階層（60未満）は「全部」に含まれます'],
-  '全市场参照': ['Market reference', '全市場参照'],
   '评分方法 ·': ['Scoring method ·', '評価方法 ·'],
-  '默认权重': ['Default weights', 'デフォルトウェイト'],
 
   /* ---------------- cells.tsx ---------------- */
   '催化剂数据暂不可用': ['Catalyst data temporarily unavailable', 'カタリストデータは一時的に利用できません'],
@@ -266,7 +236,6 @@ export const SCREENER: Dict = {
   '默认条件': ['Default filters', 'デフォルト条件'],
   '读取中': ['Loading', '読み込み中'],
   '档位未知': ['Profile unknown', 'プロファイル不明'],
-  '评分档位读取失败，无法显示当前权重。': ['Failed to load scoring profiles; current weights cannot be shown.', 'スコアリングプロファイルの読み込みに失敗したため、現在のウェイトを表示できません。'],
   '20日均额': ['20D avg $ vol', '20日平均代金'],
   '20 日均美元成交额': ['20-day average dollar volume', '20日平均売買代金（ドル）'],
 };

@@ -5,7 +5,7 @@
  * 真实持仓曲线；0 轴上下代表模型群整体多/空，±60 浅带为「强净多/强净空」
  * 阈值（与 position_label 的 strong_long/strong_short 判定一致）。
  */
-import { useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import ReactECharts from '@/components/charts/ReactECharts';
 import { useChartCursor } from '@/components/charts/useChartCursor';
 import {
@@ -28,6 +28,16 @@ import { useColorMode } from '@/hooks/useColorMode.ts';
 import { useAppearance } from '@/hooks/useAppearance.ts';
 import { t } from '../../i18n/core.ts';
 import { signed } from './ctaMeta';
+
+/* 横轴「MM-DD」标签约 30px 宽，120 日里隔 24 天标一次共 5 个，要图宽 ≥ 约 265px 才留得出空隙；
+   320 宽手机图宽 228px，标签首尾相接成「06-0707-01…」。图宽 < 280px 时改隔 48 天标 3 个。 */
+const NARROW_CHART_PX = 280;
+
+/* 窄图的横轴：只把标签间隔从 24 天放到 48 天，其余沿用 historyOption 的结果。 */
+function withSparseTicks(option: ChartOption): ChartOption {
+  const xAxis = option.xAxis as { axisLabel?: object };
+  return { ...option, xAxis: { ...xAxis, axisLabel: { ...xAxis.axisLabel, interval: 47 } } } as ChartOption;
+}
 
 function historyOption(history: { date: string; position: number }[]): ChartOption | null {
   if (!history.length) return null;
@@ -111,13 +121,24 @@ function historyOption(history: { date: string; position: number }[]): ChartOpti
 export default function PositionHistoryChart({ history }: { history: { date: string; position: number }[] }) {
   const colorMode = useColorMode();
   const appearance = useAppearance();
-  const option = useMemo(() => {
+  /* 图宽取自它自己的容器：这张图在页面里的宽度随布局变，不能按视口断点猜。 */
+  const [narrow, setNarrow] = useState(false);
+  const watchWidth = useCallback((el: HTMLDivElement | null) => {
+    if (!el) return;
+    const update = (width: number) => setNarrow(width < NARROW_CHART_PX);
+    update(el.clientWidth);
+    const observer = new ResizeObserver(([entry]) => update(entry.contentRect.width));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  const baseOption = useMemo(() => {
     // 图表构造器读取涨跌色与浅/深外观，变化时需重新取值。
     void colorMode;
     void appearance;
     return historyOption(history);
   }, [history, colorMode, appearance]);
-  const { index, onInit, sliderProps } = useChartCursor(history.map((point) => point.date), (i) =>
+  const option = useMemo(() => (baseOption && narrow ? withSparseTicks(baseOption) : baseOption), [baseOption, narrow]);
+  const { index, onInit, prepareOption, onOptionApplied, sliderProps } = useChartCursor(history.map((point) => point.date), (i) =>
     t('{date}：估算目标仓位 {v}', { date: history[i].date, v: signed(history[i].position) }),
   );
   if (!option) return <p className="mt-2 text-caption text-ink-400">{t('暂无数据')}</p>;
@@ -136,10 +157,11 @@ export default function PositionHistoryChart({ history }: { history: { date: str
     >
       <div
         {...sliderProps}
+        ref={watchWidth}
         aria-label={t('估算仓位历史，左右键逐日查看')}
         className="h-56 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
       >
-        <ReactECharts option={option} onInit={onInit} ariaLabel={t('估算仓位历史曲线')} />
+        <ReactECharts option={option} prepareOption={prepareOption} onOptionApplied={onOptionApplied} onInit={onInit} ariaLabel={t('估算仓位历史曲线')} />
       </div>
     </InsightFrame>
   );

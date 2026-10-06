@@ -111,12 +111,6 @@ export interface MarketRegimeInfo {
 }
 
 export interface MarketStrength {
-  /** 仅当接口明确返回全市场聚合时为 true；market_regime 综合分不等于全市场均分。 */
-  aggregateAvailable?: boolean;
-  avgScore: number;
-  ge85Count: number;
-  histogram: number[];    // 10 桶（0-9 … 90-100）；live 契约无直方图 → []（UI 隐藏参照）
-  /** live 契约 market_regime 快照；mock 不填（UI 回退直方图推导） */
   regime?: MarketRegimeInfo;
 }
 
@@ -143,11 +137,6 @@ export interface ScreenerRow {
   /** 契约 change_pct；缺失如实为 null（ChangeBadge 显「—」，不显 +0.00%） */
   changePct: number | null;
   strengthScore: number;
-  rankingScore?: number | null;
-  sortScore?: number | null;
-  sortBasis?: string | null;
-  sortAlgorithm?: string | null;
-  a0Available?: boolean | null;
   priceUnknown?: boolean;
   dollarVolumeUnknown?: boolean;
   dollarVolumeProxyAvailable?: boolean;
@@ -171,17 +160,7 @@ export interface ScreenerRow {
   /** 日成交额代理的20日均值；可用性与资格认证分开。 */
   avgDollarVolume20d?: number | null;
   band: StrengthBand;
-  /**
-   * 兼容槽位；分项缺失时为 null。补 0 会把「没有这一项数据」画成「该项 0 分」
-   * ——在评分界面里这两件事读起来完全相反（审计 P2-15）。
-   */
-  subscores: {
-    trend: number | null;
-    momentum: number | null;
-    volume: number | null;
-    volatility: number | null;
-  };
-  /** live 契约分项（周期/质量分）：存在时 UI 优先消费；mock 不填，回退 subscores 四维 */
+  /** 真实评分因子分项；缺失时不以旧四因子数据替代。 */
   subscoreDims?: ScreenerSubscoreDim[];
   sparkline: number[];
   /**
@@ -209,9 +188,6 @@ export interface SectorOption {
 export interface StrengthProfile {
   id: string;
   name: string;
-  description: string;
-  /** mock 四因子权重；live 契约仅返回枚举字符串（无权重）→ 缺失时 UI 隐藏权重条 */
-  weights?: { trend: number; momentum: number; volume: number; volatility: number };
 }
 
 /** /strength/profiles 全量元数据（profiles + 板块字典；mock 无板块字典 → []） */
@@ -738,18 +714,6 @@ export interface NewsItem {
  * 看起来像真实数据，并继续流进异动判定与权利金估算。
  * 标识字段（ticker / strike / expiration）缺失的记录直接丢弃，不构造替身。
  */
-export interface UnusualOption {
-  id: string;
-  ticker: string;
-  side: 'call' | 'put';
-  strike: number;
-  expiration: string;
-  volume: number | null;
-  openInterest: number | null;
-  premium: number | null;      // 估算名义权利金（美元），不是资金流
-  sentiment: NewsSentiment;
-  at: string;
-}
 export interface OptionChainRow {
   strike: number;
   callOi: number | null; callVol: number | null; callIv: number | null;

@@ -9,7 +9,6 @@ import { LivePrice, LiveChange } from '@/components/shared/LiveQuote';
  *
  * 数据纪律（与 components/market/IndexCards.tsx 同款）：
  * - 无有效价显「—」，不显 0.00；sparkline 仅 mock 有数据，live 无指数 K 线端点如实留空
- * - 强度聚合 aggregateAvailable !== true 时隐藏对应行，不显 0
  */
 import { useEffect, useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router';
@@ -18,7 +17,6 @@ import { isMock, type ApiError } from '@/api/client';
 import type { BreakoutSignal, EarningsItem, IndexQuote, MarketSession, WatchlistItem } from '@/api/types';
 import { marketApi } from '@/api/modules/market';
 import { signalsApi } from '@/api/modules/signals';
-import { strengthApi } from '@/api/modules/strength';
 import { breakoutsApi } from '@/api/modules/breakouts';
 import { earningsApi } from '@/api/modules/earnings';
 import { stocksApi } from '@/api/modules/stocks';
@@ -219,7 +217,6 @@ export default function Home() {
   /* 300s：形态六维 / 信号 / 强度 / 雷达 / 财报 / 自选 / CTA */
   const regimeQ = usePolling(() => marketPulseApi.regime(), 300_000);
   const signalsQ = usePolling(() => signalsApi.market(), 300_000);
-  const strengthQ = usePolling(() => strengthApi.market(), 300_000);
   const breakoutsQ = usePolling(() => breakoutsApi.current(), 300_000);
   const earningsQ = usePolling(() => earningsApi.upcoming(), 300_000);
   const watchlistQ = usePolling(() => stocksApi.watchlist(true), 300_000);
@@ -413,14 +410,13 @@ export default function Home() {
           mean={mean}
           bias={bias}
           breadth={breadth}
-          strength={strengthQ.data}
           signalMetrics={signalsQ.data?.metrics ?? null}
           /* 该卡实际拼了四个辅助接口（六维/信号/强度/关注池宽度）：任一失败
              此前只会悄悄显示「—」或保留旧值——补统一陈旧提示（审计问题 5） */
-          auxError={Boolean(regimeQ.error || signalsQ.error || strengthQ.error || watchlistQ.error)}
-          auxRefreshing={regimeQ.refreshing || signalsQ.refreshing || strengthQ.refreshing || watchlistQ.refreshing}
+          auxError={Boolean(regimeQ.error || signalsQ.error || watchlistQ.error)}
+          auxRefreshing={regimeQ.refreshing || signalsQ.refreshing || watchlistQ.refreshing}
           onRetryAux={() => {
-            for (const q of [regimeQ, signalsQ, strengthQ, watchlistQ]) {
+            for (const q of [regimeQ, signalsQ, watchlistQ]) {
               if (q.error) q.refresh();
             }
           }}
@@ -584,7 +580,7 @@ export default function Home() {
   );
 }
 
-/** 「市场状态」卡：时段/纽约时间/倒计时/六维均值/涨跌平小砖/强度与信号 micro 行 */
+/** 「市场状态」卡：时段/纽约时间/倒计时/六维均值/涨跌平小砖/信号指标 */
 function MarketStatusPanel({
   status,
   session,
@@ -595,7 +591,6 @@ function MarketStatusPanel({
   mean,
   bias,
   breadth,
-  strength,
   signalMetrics,
   auxError,
   auxRefreshing,
@@ -610,7 +605,6 @@ function MarketStatusPanel({
   mean: number | null;
   bias: string | null;
   breadth: { adv: number | null; dec: number | null; flat: number | null; total: number | null };
-  strength: { aggregateAvailable?: boolean; avgScore: number; ge85Count: number } | null;
   signalMetrics: { label: string; value: number }[] | null;
   auxError: boolean;
   auxRefreshing: boolean;
@@ -686,17 +680,12 @@ function MarketStatusPanel({
       </div>
 
       {/* 辅助指标直接展示；缺失读数仍遵守原有数据纪律，不补零。 */}
-      {(strength?.aggregateAvailable === true || (signalMetrics && signalMetrics.length > 0)) && (
+      {(signalMetrics && signalMetrics.length > 0) && (
         <div className="mt-auto border-t border-line/70 pt-3" data-testid="home-supporting-metrics">
           <p className="text-caption font-medium text-ink-600">{t('辅助指标')}</p>
           <div className="mt-2 rounded-lg bg-paper-2/60 p-3">
-            {strength?.aggregateAvailable === true && (
-              <p className="text-caption text-ink-600">
-                {t('平均强度 {avg} · ≥85 {n} 只', { avg: strength.avgScore.toFixed(1), n: strength.ge85Count })}
-              </p>
-            )}
             {signalMetrics && signalMetrics.length > 0 && (
-              <div className={cn('grid grid-cols-2 gap-x-4 gap-y-2', strength?.aggregateAvailable === true && 'mt-3')}>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                 {signalMetrics.slice(0, 4).map((metric) => (
                   <p key={metric.label} className="flex items-baseline justify-between gap-2 text-micro text-ink-500">
                     <span className="min-w-0 truncate">{metric.label}</span>
@@ -722,10 +711,11 @@ function MarketStatusPanel({
   );
 }
 
-/* 雷达信号行的栅格：lg 及以下两行（代码与公司、价格与涨跌 / 形态与时间、强度），
-   xl 起一行七列定宽，上下行的形态、时间、价格、涨跌、强度各自对齐。 */
+/* 雷达信号行的栅格：lg 及以下两行（代码与公司、价格与涨跌 / 形态、时间与强度），
+   第二行跨满两列，价格列再宽也不会把形态标签挤空；xl 起一行七列定宽，上下行的
+   形态、时间、价格、涨跌、强度各自对齐。 */
 const RADAR_ROW_GRID =
-  "grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-2.5 [grid-template-areas:'logo_id_quote'_'logo_meta_bar'] md:px-5 xl:grid-cols-[28px_minmax(0,1fr)_5rem_5rem_8rem_5.25rem_6.5rem] xl:gap-y-0 xl:[grid-template-areas:'logo_id_chip_time_price_change_bar']";
+  "grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-2.5 [grid-template-areas:'logo_id_quote'_'logo_meta_meta'] md:px-5 xl:grid-cols-[28px_minmax(0,1fr)_5rem_5rem_8rem_5.25rem_6.5rem] xl:gap-y-0 xl:[grid-template-areas:'logo_id_chip_time_price_change_bar']";
 
 /** 强度读数：轨道作视口观察者，条用 GROW_X 从左长出（零面积的条自己观察会一直判不进视口）。
  *  读屏沿用 StrengthBar 的「强度分 {score}」/「强度分缺失」。 */
@@ -768,7 +758,7 @@ function RadarSignalRow({ signal: s, index: i }: { signal: BreakoutSignal; index
     >
       <TickerLogo ticker={s.ticker} size={28} className="[grid-area:logo]" />
       <span className="flex min-w-0 items-baseline gap-2 [grid-area:id]">
-        <span className="shrink-0 font-mono text-caption font-semibold text-ink-800">{s.ticker}</span>
+        <span className="shrink-0 font-mono text-caption font-medium text-ink-800">{s.ticker}</span>
         <span className="min-w-0 truncate text-caption text-ink-500">{s.name}</span>
       </span>
       <span className="flex min-w-0 items-center gap-2 [grid-area:meta] xl:contents">
@@ -776,14 +766,16 @@ function RadarSignalRow({ signal: s, index: i }: { signal: BreakoutSignal; index
           <span className="truncate">{s.label}</span>
         </SoftBadge>
         <span className="shrink-0 text-micro text-ink-400 xl:justify-self-end xl:[grid-area:time]">{fmtRelative(s.at)}</span>
+        <GrowStrength score={s.strengthScore} delay={staggerDelay(i)} className="ml-auto shrink-0 xl:ml-0 xl:justify-self-end xl:[grid-area:bar]" />
       </span>
-      <span className="flex items-center justify-end gap-2 [grid-area:quote] xl:contents">
-        <span className="text-caption text-ink-800 tnum xl:justify-self-end xl:[grid-area:price]">
+      <span className="flex items-center justify-end gap-2 [grid-area:quote] max-[374px]:flex-col max-[374px]:items-end max-[374px]:gap-1 xl:contents">
+        {/* 窄屏限宽：「暂无新成交 · 最后报价 日期」折到价格下方两行，不把代码挤出格。
+            375 以下价格列并排涨跌徽章要 217px，代码格被压没、标签画到代码上：徽章改叠在价格下方。 */}
+        <span className="min-w-0 max-w-[8.5rem] text-right text-caption text-ink-800 tnum xl:max-w-none xl:justify-self-end xl:[grid-area:price]">
           <LivePrice symbol={s.ticker} fallback={s.price} className="justify-end" />
         </span>
         <LiveChange symbol={s.ticker} fallback={s.changePct} size="sm" className="shrink-0 xl:justify-self-end xl:[grid-area:change]" />
       </span>
-      <GrowStrength score={s.strengthScore} delay={staggerDelay(i)} className="justify-self-end [grid-area:bar]" />
     </Link>
   );
 }
@@ -806,7 +798,7 @@ function EarningsAnchorRow({ item: it, todayKey }: { item: EarningsItem; todayKe
       >
         <span
           className={cn(
-            'block font-mono text-body-s font-semibold tnum',
+            'block font-mono text-body-s font-medium tnum',
             isToday ? 'text-brand-700' : 'text-ink-900',
           )}
         >
@@ -816,7 +808,7 @@ function EarningsAnchorRow({ item: it, todayKey }: { item: EarningsItem; todayKe
       </span>
       <TickerLogo ticker={it.ticker} size={28} />
       <p className="min-w-0 flex-1 truncate">
-        <span className="font-mono text-caption font-semibold text-ink-800">{it.ticker}</span>
+        <span className="font-mono text-caption font-medium text-ink-800">{it.ticker}</span>
         <span className="ml-2 text-caption text-ink-500">{it.name}</span>
       </p>
       <span className="flex shrink-0 items-center gap-1.5">
@@ -863,6 +855,11 @@ function moverPendingText(preparation: StockDataStatus | undefined, statusReadFa
 const MOVER_LINK =
   'transition-colors duration-fast hover:bg-paper-2/70 focus-visible:bg-paper-2/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600';
 
+/* 关注池紧凑行（含骨架）的栅格：左文字栏 + 右日线图，图宽至少 150px。360 以下改占 46%、
+   不设下限：150px 的下限在 320 宽只给文字栏留约 94px，「当日 / 区间」逐字折行、日期在连字符处断开。 */
+const MOVER_ROW_GRID =
+  'grid grid-cols-[minmax(0,1fr)_minmax(150px,46%)] items-center gap-3 px-4 py-2.5 max-[359px]:grid-cols-[minmax(0,1fr)_46%] md:px-5';
+
 /* LivePrice 的价格与「参考价/日期」标签同在一个外层：外层定小字，价格单独放大，
    标签不会跟着价格变成大字。 */
 const LEAD_PRICE = 'text-micro [&>.tick-flash]:text-[24px] [&>.tick-flash]:leading-8';
@@ -880,7 +877,7 @@ function WatchlistMoverLead({ item, index: i, preparation, statusReadFailed }: M
     >
       <div className="flex items-center gap-2.5">
         <TickerLogo ticker={item.ticker} size={28} />
-        <span className="shrink-0 font-mono text-caption font-semibold text-ink-800">{item.ticker}</span>
+        <span className="shrink-0 font-mono text-caption font-medium text-ink-800">{item.ticker}</span>
         <span className="min-w-0 flex-1 truncate text-caption text-ink-500">{item.name}</span>
         <span className="flex shrink-0 items-center gap-1.5">
           <span className="text-micro text-ink-400">{t('当日')}</span>
@@ -923,13 +920,13 @@ function WatchlistMoverRow({ item, preparation, statusReadFailed }: MoverProps) 
   return (
     <Link
       to={`/stock/${encodeURIComponent(item.ticker)}`}
-      className={`grid grid-cols-[minmax(0,1fr)_minmax(150px,46%)] items-center gap-3 px-4 py-2.5 md:px-5 ${MOVER_LINK}`}
+      className={`${MOVER_ROW_GRID} ${MOVER_LINK}`}
       data-testid="watchlist-mover-card"
     >
       <div className="min-w-0">
         <p className="flex min-w-0 items-center gap-2">
           <TickerLogo ticker={item.ticker} size={20} />
-          <span className="shrink-0 font-mono text-caption font-semibold text-ink-800">{item.ticker}</span>
+          <span className="shrink-0 font-mono text-caption font-medium text-ink-800">{item.ticker}</span>
           <span className="min-w-0 truncate text-caption text-ink-500">{item.name}</span>
         </p>
         <p className="mt-1.5 text-caption text-ink-800 tnum">
@@ -968,10 +965,10 @@ function RadarListSkeleton({ rows }: { rows: number }) {
       {Array.from({ length: rows }, (_, i) => (
         <div key={i} className={RADAR_ROW_GRID}>
           <SkeletonBlock className="size-7 rounded-md [grid-area:logo]" />
-          <SkeletonBlock className="h-3 w-28 [grid-area:id]" />
+          <SkeletonBlock className="h-3 w-28 max-w-full [grid-area:id]" />
           <SkeletonBlock className="h-4 w-24 rounded-xs [grid-area:meta] xl:[grid-area:chip]" />
           <SkeletonBlock className="h-4 w-28 justify-self-end rounded-xs [grid-area:quote] xl:[grid-area:price]" />
-          <SkeletonBlock className="h-1 w-24 justify-self-end rounded-pill [grid-area:bar]" />
+          <SkeletonBlock className="h-1 w-24 justify-self-end rounded-pill [grid-area:meta] xl:[grid-area:bar]" />
         </div>
       ))}
     </div>
@@ -994,7 +991,7 @@ function MoverListSkeleton({ rows }: { rows: number }) {
         <SkeletonBlock className="mt-3 h-1 w-24 rounded-pill" />
       </div>
       {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(150px,46%)] items-center gap-3 px-4 py-2.5 md:px-5">
+        <div key={i} className={MOVER_ROW_GRID}>
           <div className="space-y-2">
             <SkeletonBlock className="h-3 w-24" />
             <SkeletonBlock className="h-3 w-16" />

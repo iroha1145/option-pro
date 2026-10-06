@@ -366,7 +366,7 @@ export default function Login() {
                 <span className="text-brand-600">
                   <Icon name={f.icon} size={20} />
                 </span>
-                <p className="font-display text-[15px] font-semibold text-ink-900">{f.title}</p>
+                <p className="font-display text-[15px] font-medium text-ink-900">{f.title}</p>
               </motion.div>
             ))}
           </div>

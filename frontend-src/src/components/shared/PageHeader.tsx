@@ -21,7 +21,7 @@ export default function PageHeader({ section, eyebrow, title, meta, className }:
     >
       <div className="min-w-0 flex-1 basis-72">
         <p className="flex items-baseline gap-2.5">
-          <span className="font-mono text-caption font-semibold text-brand-600">§{section}</span>
+          <span className="font-mono text-caption font-medium text-brand-600">§{section}</span>
           <span className="eyebrow">{eyebrow}</span>
         </p>
         <h1 className="mt-1.5 font-display text-display-m text-ink-900 md:mt-2 md:text-display-l">{title}</h1>

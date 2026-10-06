@@ -170,7 +170,3 @@ export const MACRO_SHADOW_HINT = {
   note:
     '此分数单独展示，不影响选股和突破信号排名。数据不足时留空；分数反映当前环境，不预测股价。',
 };
-
-/** 同一句话的纯文本版，用于原生 title 属性（那里只能放字符串）。 */
-export const MACRO_SHADOW_TITLE_ATTR =
-  `${MACRO_SHADOW_HINT.title}：${MACRO_SHADOW_HINT.body}${MACRO_SHADOW_HINT.note}`;

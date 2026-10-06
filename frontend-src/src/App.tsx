@@ -8,6 +8,7 @@ import { WatchlistUndoProvider } from '@/hooks/useWatchlistUndo';
 import { ToastProvider } from '@/components/Toast';
 import AppErrorBoundary from '@/components/shared/AppErrorBoundary';
 import PageFallback from '@/components/shared/PageFallback';
+import TitleTooltipLayer from '@/components/shared/TitleTooltipLayer';
 import NotFound from '@/pages/NotFound';
 
 /* 路由级代码分割：页面按需加载，echarts 等重依赖不进首屏包 */
@@ -58,6 +59,8 @@ export default function App() {
             </Suspense>
           </WatchlistUndoProvider>
         </ToastProvider>
+        {/* 全站 title 提示改由网页绘制，不弹操作系统的提示框。 */}
+        <TitleTooltipLayer />
       </AccessProvider>
       </MotionConfig>
     </AppErrorBoundary>

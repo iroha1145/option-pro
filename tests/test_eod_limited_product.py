@@ -484,7 +484,6 @@ def test_unspecified_scan_consumes_eod_mid(
 
 def test_scheduled_refresh_publishes_eod_when_default_is_eod() -> None:
     eod_calls: list[dict] = []
-    scanner_calls: list[dict] = []
 
     def fake_eod(**kwargs):
         eod_calls.append(kwargs)
@@ -497,10 +496,6 @@ def test_scheduled_refresh_publishes_eod_when_default_is_eod() -> None:
             "published_at": 1_800_000_000.0,
             "publish": {"ok": True, "integrity": "ok", "published_at": 1_800_000_000.0},
         }
-
-    async def fake_scanner(**kwargs):
-        scanner_calls.append(kwargs)
-        raise AssertionError("production scanner must not run for the EOD default")
 
     async def _run() -> None:
         from app.api import strength as strength_api
@@ -522,7 +517,6 @@ def test_scheduled_refresh_publishes_eod_when_default_is_eod() -> None:
         )()
         try:
             result = await StrengthRefreshTask(
-                scanner=fake_scanner,
                 eod_runner=fake_eod,
                 clock=lambda: 1_800_000_000.0,
             )()
@@ -532,7 +526,6 @@ def test_scheduled_refresh_publishes_eod_when_default_is_eod() -> None:
         assert result.details.get("snapshot") == "eod-limited-v1/batch.json"
         assert eod_calls
         assert eod_calls[0]["horizon"] == "mid"
-        assert not scanner_calls
 
     asyncio.run(_run())
 

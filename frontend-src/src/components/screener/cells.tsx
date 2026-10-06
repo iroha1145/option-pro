@@ -40,7 +40,7 @@ export function ScoreCell({
         {/* 固定宽度 + 右对齐 + 统一一位小数：分数字符数不一（84 是两位、84.4 是四位）
             会把后面的横条推到各行不同的 x 上，整列看起来歪歪扭扭。tnum 只保证数字等宽，
             管不了字符个数，所以既要定宽也要定小数位（JS 数字 84.0 会打印成 84）。 */}
-        <SoftBadge tone={strength.badgeTone} className="metric-value w-[3.25rem] shrink-0 justify-end text-[15px] leading-[20px] font-semibold tnum">
+        <SoftBadge tone={strength.badgeTone} className="metric-value w-[3.25rem] shrink-0 justify-end text-[15px] leading-[20px] font-medium tnum">
           {score.toFixed(1)}
         </SoftBadge>
         <span
@@ -65,8 +65,8 @@ export function ScoreCell({
 }
 
 /* ----------------------------------------------------------------------------
- * 分项微条：4 段（14×3px 轨道 + 比例填充，§6-5 色阶，hover 毛玻璃 tooltip）
- * 数据源与展开区 BREAKDOWN 同源（subscoreDimsOf：live 契约周期分 / mock 四维），
+ * 分项微条：按实际因子数量展示，缺失读数保留空轨道
+ * 数据源与展开区同源（subscoreDimsOf），
  * 单项缺失（null）如实空轨道，tooltip 该项显「—」——不再出现整排占位。
  * -------------------------------------------------------------------------- */
 export function SubscoreTicks({ row, tipSide = 'top' }: { row: ScreenerRow; tipSide?: 'top' | 'bottom' }) {

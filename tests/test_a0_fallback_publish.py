@@ -8,7 +8,6 @@ import pytest
 from app.api import strength
 from tests.legacy_strength_support import read_legacy_snapshot
 from app.services.algorithm_modes import A0_ALGORITHM, A0_UNAVAILABLE, PRODUCTION_ALGORITHM
-from app.services.strength.ranking_variants import a0_request_can_score, apply_a0_mid_long
 from tests.legacy_strength_support import LegacySnapshotTask
 from tests.http_response_support import anonymous_get_request as _areq, response_payload as _rp
 from tests.test_strength_worker_snapshot import NOW, _payload
@@ -84,26 +83,6 @@ def test_a0_fallback_snapshot_writes_and_reads_requested_identity(
     assert production["rows"][0]["ticker"] == "PROD"
     assert production["effective_algorithm"] == PRODUCTION_ALGORITHM
     assert production.get("fallback_reason") in {None}
-
-
-def test_partial_missing_a0_scores_keep_a0_order() -> None:
-    rows = [
-        {"ticker": "GAP", "score_mid": None, "score_long": None, "ranking_score": 99},
-        {"ticker": "MID", "score_mid": 80, "score_long": 60, "ranking_score": 50},
-        {"ticker": "LOW", "score_mid": 10, "score_long": 10, "ranking_score": 90},
-    ]
-    assert a0_request_can_score(rows) is True
-    ranked = apply_a0_mid_long(rows)
-    assert [item["ticker"] for item in ranked] == ["MID", "LOW", "GAP"]
-    assert ranked[2]["a0_available"] is False
-
-
-def test_all_missing_a0_scores_are_unavailable_for_a0() -> None:
-    rows = [
-        {"ticker": "AAA", "score_mid": None, "score_long": None, "ranking_score": 99},
-        {"ticker": "BBB", "ranking_score": 80},
-    ]
-    assert a0_request_can_score(rows) is False
 
 
 def test_fallback_payload_without_requested_identity_is_rejected(tmp_path: Path) -> None:

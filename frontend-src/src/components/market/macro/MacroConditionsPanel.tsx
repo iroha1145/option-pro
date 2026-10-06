@@ -13,6 +13,7 @@ import { macroApi, type MacroConditionsResponse } from '@/api/modules/macro';
 import { usePolling } from '@/hooks/usePolling';
 import { useAccess } from '@/hooks/useAccess';
 import { cn } from '@/lib/utils';
+import Icon from '@/components/icons';
 import { BusyIcon } from '@/components/shared/IconSwap';
 import EmptyState from '@/components/shared/EmptyState';
 import SourceNote from '@/components/shared/SourceNote';
@@ -334,7 +335,10 @@ export default function MacroConditionsPanel({
 
       {/* F. 来源说明 */}
       <details className="group border-t border-line pt-3">
-        <summary className="cursor-pointer text-caption text-ink-500">{t('数据源')}</summary>
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-caption text-ink-500 [&::-webkit-details-marker]:hidden">
+          <span>{t('数据源')}</span>
+          <Icon name="chevron-down" size={14} className="shrink-0 transition-transform duration-fast group-open:rotate-180 motion-reduce:transition-none" />
+        </summary>
         <SourceNote className="border-0 pt-3" text={MACRO_SOURCE_NOTE + (data.scoringVersion ? t(' 评分版本 {version}。', { version: data.scoringVersion }) : '')} />
       </details>
     </div>

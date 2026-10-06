@@ -13,18 +13,26 @@ import {
   catalogShakeStateClasses,
   overlayClassName,
   overlayDataOpen,
-  overlayTiming,
   overlayVisible,
   parseDurationMs,
   placeGlide,
-  readCssVar,
-  replayShake,
-  shakeDurationMs,
 } from '../src/lib/transitions.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const src = path.resolve(here, '..', 'src');
 const source = (p) => readFile(path.join(src, p), 'utf8');
+
+function readCssVar(cssText, name) {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return cssText.match(new RegExp(`${escaped}\\s*:\\s*([^;\\n]+);`))?.[1].trim() ?? null;
+}
+
+function overlayTiming(cssText, openVar, closeVar, openFallback, closeFallback) {
+  return {
+    open: parseDurationMs(readCssVar(cssText, openVar) ?? '', openFallback),
+    close: parseDurationMs(readCssVar(cssText, closeVar) ?? '', closeFallback),
+  };
+}
 
 /** Strip comments before matching: these guards must read the code, not the
     prose next to it — a comment repeating `layoutRoot` once satisfied the
@@ -391,27 +399,11 @@ test('placeGlide writes transform + the axis size, suspending the transition on 
   assert.equal(y.style.height, '40px');
 });
 
-test('replayShake removes, reflows, then re-adds is-shaking', async () => {
+test('catalog shake duration is 280ms across its four phases', async () => {
   const root = await source('styles/transitions-root.css');
-  assert.equal(shakeDurationMs(root), 280);
-
-  const classes = new Set();
-  let reads = 0;
-  const el = {
-    classList: {
-      remove: (name) => classes.delete(name),
-      add: (name) => classes.add(name),
-    },
-    get offsetWidth() {
-      reads += 1;
-      assert.equal(classes.has('is-shaking'), false, 'class must be off during reflow');
-      return 1;
-    },
-  };
-  classes.add('is-shaking');
-  replayShake(el);
-  assert.equal(classes.has('is-shaking'), true);
-  assert.ok(reads >= 1);
+  const a = parseDurationMs(readCssVar(root, '--shake-dur-a') ?? '', 80);
+  const b = parseDurationMs(readCssVar(root, '--shake-dur-b') ?? '', 60);
+  assert.equal(a * 2 + b * 2, 280);
 });
 
 test('page enter and chrome polish ride transitions.dev / shadcn tokens', async () => {

@@ -71,7 +71,7 @@ export default function MenuSelect<T extends string | number>({
                 <Select.Item
                   key={`${typeof option.value}-${String(option.value)}`}
                   value={`option-${index}`}
-                  className="relative flex min-h-9 cursor-default select-none items-center gap-3 rounded-md py-2 pl-2.5 pr-8 text-caption text-ink-600 outline-none data-[highlighted]:bg-brand-50 data-[highlighted]:text-brand-700 data-[state=checked]:font-semibold"
+                  className="relative flex min-h-9 cursor-default select-none items-center gap-3 rounded-md py-2 pl-2.5 pr-8 text-caption text-ink-600 outline-none data-[highlighted]:bg-brand-50 data-[highlighted]:text-brand-700 data-[state=checked]:font-medium"
                 >
                   <Select.ItemText>{option.label}</Select.ItemText>
                   <Select.ItemIndicator className="absolute right-2 text-brand-600"><Icon name="check" size={13} /></Select.ItemIndicator>

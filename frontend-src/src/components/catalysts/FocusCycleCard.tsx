@@ -68,7 +68,7 @@ function StageStepper({ stage }: { stage: number }) {
                   )}
                 />
               )}
-              <span className={cn('text-micro leading-[14px]', current ? 'font-semibold text-brand-600' : past ? 'text-ink-500' : 'text-ink-400')}>
+              <span className={cn('text-micro leading-[14px]', current ? 'font-medium text-brand-600' : past ? 'text-ink-500' : 'text-ink-400')}>
                 {label}
               </span>
             </motion.span>
@@ -134,7 +134,7 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
         </StatusNotice>
       )}
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h3 className={cn('font-display font-semibold text-ink-900', compact ? 'text-[16px]' : 'text-[20px] leading-[28px]')}>
+        <h3 className={cn('font-display font-medium text-ink-900', compact ? 'text-[16px]' : 'text-[20px] leading-[28px]')}>
           {cycle.dominantEvent}
         </h3>
         {statusCn && (
@@ -156,7 +156,7 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
               <StageStepper stage={cycle.stage} />
             </div>
           )}
-          {cycle.headline && <p className="mb-3 text-body-s font-semibold leading-6 text-ink-800">{cycle.headline}</p>}
+          {cycle.headline && <p className="mb-3 text-body-s font-medium leading-6 text-ink-800">{cycle.headline}</p>}
           <p className={cn('text-ink-600', compact ? 'text-caption leading-6' : 'text-body-s leading-7')}>
             {cycle.summary}
           </p>
@@ -178,7 +178,7 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
           aria-label={t('逐股评估')}
           className={cn('min-w-0 border-t border-line pt-4', !compact && 'lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0')}
         >
-          <h4 className="mb-3 text-caption font-semibold text-ink-700">{t('逐股评估')}</h4>
+          <h4 className="mb-3 text-caption font-medium text-ink-700">{t('逐股评估')}</h4>
           <div className="divide-y divide-line">
             {cycle.assessments.map((a, i) => {
               const d = DIR_ARROW[a.direction];
@@ -194,7 +194,7 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
                     <span className={cn('flex size-6 shrink-0 items-center justify-center rounded-md', d.cls)}>
                       <Icon name={d.icon} size={12} />
                     </span>
-                    <span className="shrink-0 font-mono text-caption font-semibold text-ink-800">{a.ticker}</span>
+                    <span className="shrink-0 font-mono text-caption font-medium text-ink-800">{a.ticker}</span>
                     {a.insufficientEvidence ? (
                       /* 后端在证据不足时强制 catalyst_bias 为 null。说「证据不足」，而不是画一个 0。 */
                       <SoftBadge tone="warn" className="shrink-0">

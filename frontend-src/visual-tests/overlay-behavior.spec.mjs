@@ -177,6 +177,37 @@ test('nonmodal scan history still closes by clicking outside', async ({ page }) 
   await expect(page.getByRole('dialog',{name:'最近扫描记录'})).toBeHidden();
 });
 
+for (const [start, resized] of [[390, 1440], [1440, 320]]) {
+  test(`scan history stays inside the live screener viewport across ${start} → ${resized} → ${start}px`, async ({ page }) => {
+    await page.route('**/*', (route) => {
+      const url = new URL(route.request().url());
+      return ['127.0.0.1', 'localhost'].includes(url.hostname) ? route.continue() : route.abort();
+    });
+    await page.setViewportSize({ width: start, height: 900 });
+    await page.goto('/screener');
+    const trigger = page.getByRole('button', { name: '扫描历史', exact: true });
+    await trigger.click();
+    const history = page.getByRole('dialog', { name: '最近扫描记录', exact: true });
+    for (const width of [start, resized, start]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(history).toBeVisible();
+      await expect.poll(() => history.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        const viewport = document.documentElement.clientWidth;
+        return rect.left >= 15.5 && rect.right <= viewport - 15.5;
+      })).toBe(true);
+    }
+    await page.keyboard.press('Escape');
+    await expect(history).toBeHidden();
+    await trigger.click();
+    await expect(history).toBeVisible();
+    await expect.poll(() => history.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.left >= 15.5 && rect.right <= document.documentElement.clientWidth - 15.5;
+    })).toBe(true);
+  });
+}
+
 for (const width of [390,1440]) {
   test(`Drawer naming, close target and long palette text fit ${width}px`, async ({ page }) => {
     await page.setViewportSize({width,height:900}); await harness(page); await openDrawer(page);

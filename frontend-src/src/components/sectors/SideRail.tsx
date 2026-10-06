@@ -56,14 +56,15 @@ function IvHeatCard({
         >
           {top.map((row, index) => (
             <li key={row.ticker}>
+              {/* 320 宽时强度条按上限 4.5rem 占满，名称只剩一个字：360 以下条宽收到下限 2.5rem，名称多出约 32px。 */}
               <button
                 type="button"
                 onClick={() => onOpenTicker(row.ticker)}
                 aria-label={t('{ticker} 板块 IV 排位 {rank}，打开详情', { ticker: row.ticker, rank: row.rank })}
-                className="grid min-h-9 w-full grid-cols-[1.25rem_3.5rem_minmax(0,1fr)_minmax(2.5rem,4.5rem)_2rem] items-center sm:grid-cols-[1.25rem_3.75rem_minmax(0,1fr)_minmax(3rem,7rem)_2rem] gap-x-2.5 rounded-md px-1.5 text-left transition-colors duration-fast hover:bg-paper-2 [@media(pointer:coarse)]:min-h-11"
+                className="grid min-h-9 w-full grid-cols-[1.25rem_3.5rem_minmax(0,1fr)_minmax(2.5rem,4.5rem)_2rem] items-center max-[359px]:grid-cols-[1.25rem_3.5rem_minmax(0,1fr)_2.5rem_2rem] sm:grid-cols-[1.25rem_3.75rem_minmax(0,1fr)_minmax(3rem,7rem)_2rem] gap-x-2.5 rounded-md px-1.5 text-left transition-colors duration-fast hover:bg-paper-2 [@media(pointer:coarse)]:min-h-11"
               >
                 <span className="text-right text-caption text-ink-400 tnum">{index + 1}</span>
-                <span className="font-mono text-caption font-semibold text-ink-800">{row.ticker}</span>
+                <span className="font-mono text-caption font-medium text-ink-800">{row.ticker}</span>
                 <span className="truncate text-micro text-ink-500" title={row.name}>
                   {row.name !== row.ticker ? row.name : ''}
                 </span>

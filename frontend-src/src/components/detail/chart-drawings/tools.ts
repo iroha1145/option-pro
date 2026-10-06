@@ -1,6 +1,5 @@
 /** Pure click-machine for in-progress drawings. One active tool at a time. */
 import { ANCHOR_COUNTS, type DrawingKind } from './types.ts';
-import { constrainByShift } from './geometry.ts';
 import type { PointerKind } from './hitTest.ts';
 
 export type DrawingTool = 'select' | DrawingKind;
@@ -31,22 +30,6 @@ export function addDraftPoint(
     return { status: 'complete', points };
   }
   return { status: 'pending', draft: { kind, points } };
-}
-
-export function applyShiftToDraft(kind: DrawingKind, points: DraftPoint[], next: DraftPoint, shift: boolean): DraftPoint {
-  if (!shift || points.length === 0) return next;
-  if (kind === 'horizontal') return next;
-  const last = points[points.length - 1];
-  const snapped = constrainByShift(
-    { x: last.barIndex, y: last.price },
-    { x: next.barIndex, y: next.price },
-  );
-  return { ...next, barIndex: snapped.x, price: snapped.y };
-}
-
-export function exclusiveTool(next: DrawingTool | 'measure'): { tool: DrawingTool; measure: boolean } {
-  if (next === 'measure') return { tool: 'select', measure: true };
-  return { tool: next, measure: false };
 }
 
 export function isTextInputTarget(target: EventTarget | null): boolean {

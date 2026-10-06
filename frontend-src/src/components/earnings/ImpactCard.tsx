@@ -164,7 +164,7 @@ function QuotedSummary({ text, onOpenTicker }: { text: string; onOpenTicker: (t:
             <button
               key={i}
               onClick={() => onOpenTicker(p.slice(1))}
-              className="font-semibold text-brand-600 underline decoration-brand-400/50 decoration-dotted underline-offset-4 transition-colors duration-fast hover:text-brand-700"
+              className="font-medium text-brand-600 underline decoration-brand-400/50 decoration-dotted underline-offset-4 transition-colors duration-fast hover:text-brand-700"
               aria-label={__t('查看 {name} 详情', { name: p.slice(1) })}
             >
               {p}
@@ -826,7 +826,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                         className="w-full rounded-md border border-line bg-card-warm p-3 text-left transition-colors duration-fast hover:border-brand-400/50 hover:bg-card"
                       >
                         <span className="flex min-w-0 items-center gap-2">
-                          <span className="font-mono text-caption font-semibold text-ink-900">${item.ticker}</span>
+                          <span className="font-mono text-caption font-medium text-ink-900">${item.ticker}</span>
                           <span className="min-w-0 truncate text-caption text-ink-500">{item.name}</span>
                           <SoftBadge tone={meta.tone} className="ml-auto shrink-0">
                             {meta.label}

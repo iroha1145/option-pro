@@ -250,7 +250,7 @@ def test_e05_visitor_get_storm_does_not_call_scanner_or_touch_mtime(tmp_path, mo
     def forbidden(*args, **kwargs):
         raise AssertionError("visitor GET must not start a live computation")
 
-    monkeypatch.setattr("app.services.strength.scanner.scan_strength", forbidden)
+    monkeypatch.setattr("app.services.strength.scanner._download_history", forbidden)
     monkeypatch.setattr("app.services.eod_limited.worker.run_eod_limited_job", forbidden)
     for _ in range(20):
         payload = _rp(asyncio.run(strength.scan(

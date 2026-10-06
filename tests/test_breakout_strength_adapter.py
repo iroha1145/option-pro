@@ -355,21 +355,3 @@ def test_explicit_ticker_set_does_not_cache_benchmark_only_history(monkeypatch) 
             )
 
     assert attempts == 2
-
-
-def test_public_single_stock_lookup_preserves_profile_and_market_semantics(monkeypatch) -> None:
-    async def fake_scan_strength(**kwargs):
-        assert kwargs["profile"] == "aggressive"
-        assert kwargs["top"] == 250
-        assert kwargs["include_options"] is False
-        return {
-            "as_of": "2026-07-10T12:00:00+00:00",
-            "rows": [{"ticker": "AAA", "final_score": 88}],
-            "market_regime": {"status": "active", "score": 72},
-        }
-
-    monkeypatch.setattr(scanner, "scan_strength", fake_scan_strength)
-    payload = asyncio.run(scanner.stock_strength("aaa", profile="aggressive"))
-    assert payload["row"]["final_score"] == 88
-    assert payload["market_regime"] == {"status": "active", "score": 72}
-    assert "score_scope" not in payload

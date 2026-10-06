@@ -211,7 +211,7 @@ export default function MonthCalendar({
                     className={cn(
                       'font-mono text-micro tnum',
                       isToday
-                        ? 'flex h-6 min-w-6 items-center justify-center rounded-full bg-brand-600 px-1 font-semibold text-on-accent'
+                        ? 'flex h-6 min-w-6 items-center justify-center rounded-full bg-brand-600 px-1 font-medium text-on-accent'
                         : inMonth
                           ? 'text-ink-800'
                           : 'text-ink-400',

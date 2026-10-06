@@ -36,7 +36,7 @@ function TapeItem({ q, flash, onOpen }: { q: IndexQuote; flash: 'up' | 'down' | 
         flash === 'down' && 'tick-flash-down',
       )}
     >
-      <span className="font-mono text-caption font-semibold text-ink-800">{q.code}</span>
+      <span className="font-mono text-caption font-medium text-ink-800">{q.code}</span>
       <span className="font-mono text-caption text-ink-600 tnum">{fmtPrice(q.price)}</span>
       <span
         className={cn(
@@ -68,7 +68,7 @@ const FUND_LABELS: Record<string, string> = { SPY: t('标普500基金'), QQQ: t(
 function FundTapeItem({ symbol, onOpen }: { symbol: string; onOpen: () => void }) {
   const quote = useLiveQuote(symbol);
   return <button type="button" onClick={onOpen} title={t('{fund} · 美元价格', { fund: FUND_LABELS[symbol] })} className="inline-flex items-baseline gap-2 rounded-xs px-1 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">
-    <span className="text-caption font-semibold text-ink-800">{FUND_LABELS[symbol]}</span>
+    <span className="text-caption font-medium text-ink-800">{FUND_LABELS[symbol]}</span>
     <span className="font-mono text-micro text-ink-400">{symbol}</span>
     <LivePrice symbol={symbol} prefix="$" indicator={false} className="font-mono text-caption text-ink-600" />
     <LiveChange symbol={symbol} fallback={quote?.change_pct} size="sm" />

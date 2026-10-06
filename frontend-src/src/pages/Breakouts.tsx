@@ -498,7 +498,7 @@ export default function Breakouts() {
       >
         <div>
           <p className="flex items-baseline gap-2.5">
-            <span className="font-mono text-caption font-semibold text-brand-600">§03</span>
+            <span className="font-mono text-caption font-medium text-brand-600">§03</span>
             <span className="eyebrow">BREAKOUT RADAR · INTRADAY</span>
           </p>
           <h1 className="mt-2 font-display text-display-l text-ink-900">{__t('突破雷达')}</h1>
@@ -756,7 +756,7 @@ export default function Breakouts() {
             {current.length > 1 && (
               <div className="mt-6">
                 <div className="radar-section-heading mb-3 flex flex-wrap items-baseline justify-between gap-2 pb-2">
-                  <p className="text-body-s font-semibold text-ink-800">
+                  <p className="text-body-s font-medium text-ink-800">
                     {__t('其余当日信号 ·')} <span className="font-mono tnum">{current.length - 1}</span>
                   </p>
                 </div>

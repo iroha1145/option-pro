@@ -49,27 +49,3 @@ def clamp_number(
     if not math.isfinite(number):
         return default
     return max(lo, min(hi, number))
-
-
-def positive_sum(values: list[Any]) -> float:
-    total = 0.0
-    for value in values:
-        number = rounded_number(value, 4)
-        if number is not None and number > 0:
-            total += number
-    return total
-
-
-def positive_weighted_average(values: list[Any], weights: list[Any]) -> float | None:
-    numerator = 0.0
-    denominator = 0.0
-    for value, weight in zip(values, weights):
-        number = rounded_number(value, 6)
-        w = rounded_number(weight, 4) or 0.0
-        if number is None or number <= 0 or w <= 0:
-            continue
-        numerator += number * w
-        denominator += w
-    if denominator <= 0:
-        return None
-    return round(numerator / denominator, 4)
