@@ -833,12 +833,10 @@
   padding: 8px 0;
   line-height: 20px;
 }
-/* 行情带按钮只有 24px 高：粗指针下行情带加高到 44px，每个指数整格可点。
-   按钮内各段按基线对齐（items-baseline），单行 flex 会把这一行贴在按钮顶部；
-   允许换行后 align-content 才能把这一行放到 44px 的正中（按钮宽度不受限，不会真的换行）。 */
+/* 触屏行情带整格可点；各段直接居中，不受字体与装饰点的基线差异影响。 */
 @media (pointer: coarse) {
   .marquee-track { height: 2.75rem; }
-  .marquee-track button { min-height: 2.75rem; flex-wrap: wrap; align-content: center; }
+  .marquee-track button { min-height: 2.75rem; align-items: center; }
 }
 /* 说明图标视觉只有 11-13px：粗指针下用透明伪元素把点按区域扩到约 44px，外观不变。 */
 @media (pointer: coarse) {
