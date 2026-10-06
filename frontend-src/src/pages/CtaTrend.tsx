@@ -46,13 +46,11 @@ export default function CtaTrend() {
   return (
     <div>
       <PageHeader
-        section="CTA"
-        eyebrow="CTA TREND FLOW · PROXY"
         title={t('CTA 趋势资金')}
         meta={
           <>
             {ctaQ.data?.method_version && (
-              <span className="rounded-pill border border-line bg-paper-2 px-2 py-0.5 font-mono text-micro text-ink-500 tnum">
+              <span className="rounded-pill border border-line bg-paper-2 px-2 py-0.5 text-micro text-ink-500 tnum">
                 {ctaQ.data.method_version}
               </span>
             )}
@@ -60,7 +58,7 @@ export default function CtaTrend() {
                 此前显示的是浏览器请求完成时刻，会把旧快照误标成「刚更新」
                 （GPT-5.6-Pro 审计问题 3）。 */}
             {(ctaQ.data?.snapshot_saved_at ?? ctaQ.data?.generated_at) && (
-              <span className="font-mono text-caption text-ink-400 tnum">
+              <span className="text-caption text-ink-400 tnum">
                 {t('快照 {time}', {
                   time: fmtTimeHHMMSS(
                     new Date((ctaQ.data.snapshot_saved_at ?? ctaQ.data.generated_at)!).getTime(),

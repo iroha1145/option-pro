@@ -111,7 +111,7 @@ export default function ScanHistoryPopover({ history }: { history: ScanHistoryEn
               <ul className="divide-y divide-line">
                 {history.slice(0, 5).map((h, i) => (
                   <li key={i} className="flex items-center gap-3 px-2 py-2.5">
-                    <span className="font-mono text-caption text-ink-800 tnum">{fmtTimeHHMMSS(h.at)}</span>
+                    <span className="text-caption text-ink-800 tnum">{fmtTimeHHMMSS(h.at)}</span>
                     <span className="min-w-0 flex-1 truncate text-micro text-ink-500" title={h.summary}>
                       {h.summary}
                     </span>

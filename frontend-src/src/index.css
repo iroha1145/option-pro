@@ -65,11 +65,11 @@
     --ai-50: #E7F3F6;
     /* §4.1 缓动 */
     --ease-paper: cubic-bezier(.16, 1, .3, 1);
-    /* 圆角三档（docs/UI_DESIGN_SYSTEM.md §3）：组内小件 4、普通控件 6、控件组与浮层 8；
-       卡片 12、抽屉 16 走 Tailwind 的 rounded-lg / rounded-xl。 */
-    --r-chip: 4px;
-    --r-control: 6px;
-    --r-group: 8px;
+    /* 圆角（docs/UI_DESIGN_SYSTEM.md §3，2026-10-06 第二轮整体上调一档，参照 uiarc.dev）：
+       组内小件 6、普通控件 8、控件组与浮层 10；卡片 16、抽屉 20 走 Tailwind 的 rounded-lg / rounded-xl。 */
+    --r-chip: 6px;
+    --r-control: 8px;
+    --r-group: 10px;
     --ease-snap: cubic-bezier(.22, 1, .36, 1);
     /* v8 阴影三层制：更柔更大（rgba(16,24,40,*)），内高光 .7 保持 */
     --shadow-sh-1: 0 1px 2px rgba(16, 24, 40, .03);
@@ -88,7 +88,14 @@
     --insight-frame-shadow: none;
     /* Cloud Monitor 的细节层次，保留 Optix 的纸面与群青。 */
     --control-track: #F2F4F7;
+    /* 财报时段图标（2026-10-06 用户要求按类别着色）：盘前太阳黄、盘后月亮蓝、时间待定闹钟橙。
+       浅底上取够深的色，图形对比度约 3:1。 */
+    --timing-bmo: #C98A00;
+    --timing-amc: #2F7AE5;
+    --timing-tbd: #E0670B;
     --control-selected-shadow: 0 0 0 1px rgba(16, 24, 40, .07), 0 1px 2px rgba(16, 24, 40, .05);
+    /* 手机分段与筛选的选中块：2026-10-06 用户要求改回原版——只有柔和投影、不加描边。 */
+    --control-selected-shadow-raised: 0 2px 4px rgba(24, 43, 68, .045), 0 5px 12px -4px rgba(24, 43, 68, .09);
     --card-shadow: none;
     --popover-shadow: 0 2px 5px rgba(24, 43, 68, .045), 0 10px 28px -10px rgba(24, 43, 68, .15);
     --knob-shadow: 0 1px 3px rgba(16, 24, 40, .18), 0 1px 1px rgba(16, 24, 40, .10);
@@ -174,7 +181,11 @@
     --ai-600: #4EC4D4;
     --ai-50: #12353A;
     --control-track: #21242B;
+    --timing-bmo: #FACC15;
+    --timing-amc: #6FA8FF;
+    --timing-tbd: #FB923C;
     --control-selected-shadow: 0 0 0 1px var(--line-strong);
+    --control-selected-shadow-raised: 0 2px 4px rgba(0, 0, 0, .28), 0 5px 12px -4px rgba(0, 0, 0, .36);
     --card-shadow: none;
     --popover-shadow: 0 2px 5px rgba(0, 0, 0, .32), 0 10px 28px -10px rgba(0, 0, 0, .5);
     --knob-shadow: 0 1px 3px rgba(0, 0, 0, .45), 0 1px 1px rgba(0, 0, 0, .28);
@@ -236,16 +247,7 @@
     font-feature-settings: "tnum" 1, "cv05" 1;
   }
 
-  /* §3.5 纸面点阵纹理（22px，opacity ≤0.04，几乎不可见、近看有纸纹） */
-  body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    pointer-events: none;
-    background-image: radial-gradient(circle, rgba(13, 22, 38, .02) 1px, transparent 1px);
-    background-size: 22px 22px;
-  }
+  /* 2026-10-06 第二轮：去掉 §3.5 纸面点阵纹理，页面底色保持纯色（参照 uiarc.dev）。 */
 
   /* 2026-10-06 正文段落避免末行孤字（手机上「…显著放/大」）：pretty 只调整段落最后几行的断点，
      单行文字不受影响；不支持的浏览器照常折行。 */
@@ -266,9 +268,6 @@
     color: var(--brand-700);
   }
 
-  html.dark body::before {
-    background-image: radial-gradient(circle, rgba(241, 243, 245, .045) 1px, transparent 1px);
-  }
   html.dark .skeleton-shimmer::after {
     background: linear-gradient(90deg, transparent, rgba(241, 243, 245, .08), transparent);
   }
@@ -342,7 +341,7 @@
   .card-surface {
     background: var(--card);
     border: 1px solid var(--line);
-    border-radius: 12px;
+    border-radius: 16px;
     box-shadow: var(--card-shadow);
   }
 
@@ -357,7 +356,7 @@
     border-radius: var(--r-group);
     background: var(--brand-600);
     padding: 0.5rem 1rem;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     line-height: 1.25;
     color: var(--on-accent);
@@ -388,7 +387,7 @@
     gap: 0.375rem;
     border-radius: 6px;
     padding: 0.375rem 0.75rem;
-    font-size: 12px;
+    font-size: 13px;
   }
   @media (pointer: coarse) {
     .btn-primary.btn-sm { min-height: 2.75rem; }
@@ -504,9 +503,9 @@
   }
 
   /* 眉题 Eyebrow（仅拉丁文） */
+  /* 2026-10-06 第二轮：小标签不再全大写、不加字距（uiarc 的区块标签就是普通的灰色小字）。 */
   .eyebrow {
-    @apply font-sans text-eyebrow uppercase text-ink-400;
-    letter-spacing: .035em;
+    @apply font-sans text-eyebrow text-ink-400;
     font-weight: 500;
   }
 
@@ -569,7 +568,7 @@
   border-radius: var(--r-control);
   background: var(--card);
   color: var(--ink-600);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 18px;
   white-space: nowrap;
@@ -601,7 +600,8 @@
   align-items: center;
   gap: 2px;
   padding: 3px;
-  border: 1px solid var(--line);
+  /* 2026-10-06 第二轮（参照 uiarc.dev）：底槽只靠浅灰底色，不再描边；边框留透明占位，尺寸不变。 */
+  border: 1px solid transparent;
   border-radius: var(--r-group);
   background: var(--control-track);
 }
@@ -621,7 +621,7 @@
 .t-tabs.selection-group {
   padding: 3px;
   border-radius: var(--r-group);
-  border-color: var(--line);
+  border-color: transparent;
   background: var(--control-track);
 }
 @layer components {
@@ -681,7 +681,7 @@
   border-radius: var(--r-control);
   background: var(--ai-50);
   color: var(--ai-600);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 18px;
   white-space: nowrap;
@@ -739,7 +739,7 @@
     gap: 2px;
     padding: 2px;
     overflow: visible;
-    border: 1px solid var(--line);
+    border: 1px solid transparent;
     border-radius: var(--r-group);
     background: var(--control-track);
   }
@@ -757,25 +757,26 @@
     min-width: 44px;
     padding: 8px 12px;
     border: 0;
-    border-radius: var(--r-group);
+    /* 与外框同心：外框 --r-group、内衬 2px；组内按钮仍守 §3 的克制圆角（≤ 9px）。 */
+    border-radius: calc(var(--r-group) - 2px);
     background: transparent;
     color: var(--ink-600);
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
     line-height: 20px;
     white-space: nowrap;
   }
   .t-tabs.selection-group .selection-indicator {
-    border-radius: var(--r-group);
+    border-radius: calc(var(--r-group) - 2px);
     background: var(--card);
-    box-shadow: var(--control-selected-shadow);
+    box-shadow: var(--control-selected-shadow-raised);
   }
   .filter-group > .control-button[aria-pressed="true"],
   .mobile-selection-rail > button:is([aria-selected="true"], [aria-pressed="true"]),
   .mobile-selection-rail .mobile-selection-option[aria-pressed="true"] {
     background: var(--card);
     color: var(--brand-700);
-    box-shadow: var(--control-selected-shadow);
+    box-shadow: var(--control-selected-shadow-raised);
   }
   .mobile-selection-rail [data-selection-decoration] { display: none; }
   .mobile-selection-rail > button:focus-visible,
@@ -793,6 +794,11 @@
   letter-spacing: -.035em;
 }
 .soft-badge { border-radius: var(--r-chip); }
+
+/* 财报时段图标：颜色只跟时段类别走，选中的小块里也保持。 */
+.timing-icon-bmo { color: var(--timing-bmo); }
+.timing-icon-amc { color: var(--timing-amc); }
+.timing-icon-tbd { color: var(--timing-tbd); }
 
 /* Read-only floating details share one surface; coordinates never animate. */
 .cloud-popover {
@@ -827,12 +833,10 @@
   padding: 8px 0;
   line-height: 20px;
 }
-/* 行情带按钮只有 24px 高：粗指针下行情带加高到 44px，每个指数整格可点。
-   按钮内各段按基线对齐（items-baseline），单行 flex 会把这一行贴在按钮顶部；
-   允许换行后 align-content 才能把这一行放到 44px 的正中（按钮宽度不受限，不会真的换行）。 */
+/* 触屏行情带整格可点；各段直接居中，不受字体与装饰点的基线差异影响。 */
 @media (pointer: coarse) {
   .marquee-track { height: 2.75rem; }
-  .marquee-track button { min-height: 2.75rem; flex-wrap: wrap; align-content: center; }
+  .marquee-track button { min-height: 2.75rem; align-items: center; }
 }
 /* 说明图标视觉只有 11-13px：粗指针下用透明伪元素把点按区域扩到约 44px，外观不变。 */
 @media (pointer: coarse) {

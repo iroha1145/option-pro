@@ -121,7 +121,7 @@ function NextScanCountdown({ nextSessionAt }: { nextSessionAt: string }) {
   const s = Math.floor((ms % 60_000) / 1000);
   const countdown = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   return (
-    <span className="font-mono tnum">
+    <span className="tnum">
       {__t('下次扫描')} <span className="text-brand-600">{countdown}</span>
     </span>
   );
@@ -494,25 +494,20 @@ export default function Breakouts() {
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
-        className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-b border-line pb-5"
+        className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 pb-1"
       >
-        <div>
-          <p className="flex items-baseline gap-2.5">
-            <span className="font-mono text-caption font-medium text-brand-600">§03</span>
-            <span className="eyebrow">BREAKOUT RADAR · INTRADAY</span>
-          </p>
-          <h1 className="mt-2 font-display text-display-l text-ink-900">{__t('突破雷达')}</h1>
-        </div>
+        {/* 与 PageHeader 一致：只留标题，不再有「§03 + 英文」装饰行 */}
+        <h1 className="font-display text-display-m text-ink-900 md:text-display-l">{__t('突破雷达')}</h1>
         {/* 紧凑状态条：启用 LED · 快照与活跃条数（副标合并至此去重）· 最近扫描 · 时段 chip · 扫描服务 · 下次扫描倒计时 · 查看范围 */}
         <div className="radar-status flex flex-wrap items-center justify-end gap-x-4 gap-y-2 pb-1 text-caption text-ink-500">
           <span className="inline-flex items-center gap-1.5">
             <span className={cn('size-2 rounded-full', status?.enabled ? 'bg-ok-600 animate-led-pulse' : 'bg-ink-300')} aria-hidden="true" />
             {status ? (status.enabled ? __t('扫描已启用') : __t('扫描已暂停')) : __t('状态读取中…')}
           </span>
-          <span className="font-mono tnum">
+          <span className="tnum">
             {__t('数据截至')} {snapshotAt} {__t('· 读取')} {readAt} · <span className="text-ink-700">{currentAll.length}</span> {__t('条活跃')}
           </span>
-          <span className="font-mono tnum">
+          <span className="tnum">
             {__t('最近扫描')} {status?.lastScanAt ? fmtTimeHHMMSS(new Date(status.lastScanAt)) : '—'}
           </span>
           {status?.market_session && <SessionChip session={status.market_session} />}
@@ -607,7 +602,7 @@ export default function Breakouts() {
             onClick={() => setTickerFilter('')}
             aria-label={__t('清除代码聚焦 {ticker}', { ticker: tickerFilter })}
             type="button"
-            className="control-button font-mono tnum"
+            className="control-button tnum"
           >
             {tickerFilter}
             <Icon name="x" size={12} />
@@ -615,7 +610,7 @@ export default function Breakouts() {
         )}
         <span className="flex flex-wrap items-center gap-3 sm:ml-auto">
           {statusQ.lastUpdatedAt && (
-            <span className="font-mono text-micro text-ink-400 tnum">{__t('更新')} {fmtTimeHHMMSS(statusQ.lastUpdatedAt)}</span>
+            <span className="text-micro text-ink-400 tnum">{__t('更新')} {fmtTimeHHMMSS(statusQ.lastUpdatedAt)}</span>
           )}
           {isOwner && (
             <button
@@ -665,7 +660,7 @@ export default function Breakouts() {
       >
         <div className="radar-section-heading mb-4 flex items-end justify-between pb-1">
           <h2 className="text-h2 text-ink-900">{__t('当日信号')}</h2>
-          <p className="font-mono text-caption text-ink-400 tnum">
+          <p className="text-caption text-ink-400 tnum">
             {current.length} {__t('个活跃')}{onlyWatch ? __t(' · 只看自选') : ''}
           </p>
         </div>
@@ -757,7 +752,7 @@ export default function Breakouts() {
               <div className="mt-6">
                 <div className="radar-section-heading mb-3 flex flex-wrap items-baseline justify-between gap-2 pb-2">
                   <p className="text-body-s font-medium text-ink-800">
-                    {__t('其余当日信号 ·')} <span className="font-mono tnum">{current.length - 1}</span>
+                    {__t('其余当日信号 ·')} <span className="tnum">{current.length - 1}</span>
                   </p>
                 </div>
                 <SignalCards

@@ -48,7 +48,7 @@ function OverviewCard({
       <span className="flex items-start justify-between gap-2">
         <span className="min-w-0">
           <span className="block truncate text-body-s font-medium text-ink-900">{instrumentName(row.instrument, row.label)}</span>
-          <span className="font-mono text-micro text-ink-400 tnum">{row.proxy_symbol} · ETF</span>
+          <span className="text-micro text-ink-400 tnum">{row.proxy_symbol} · ETF</span>
         </span>
         {active && meta ? (
           <span className={cn('shrink-0 rounded-pill px-2 py-0.5 text-micro font-medium', meta.cls)}>{meta.label}</span>

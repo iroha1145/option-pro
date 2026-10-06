@@ -494,7 +494,7 @@ test('行展开：换行后，旧行手动拉取的晚到结果不能写进新�
     '@/components/detail/ManualStockPull': { default: 'ManualStockPull' },
   });
   let row = { ticker: 'AAA', sparkline: [] };
-  const view = stub.mount(() => sandbox.DotMatrixBlock({ row }));
+  const view = stub.mount(() => sandbox.TrendBlock({ row }));
   const candles = (...closes) => ({ candles: closes.map((c) => ({ c })) });
   const sparkData = () => findAll(view(), (node) => node.type === 'Sparkline').map((node) => node.props.data.join(','));
 

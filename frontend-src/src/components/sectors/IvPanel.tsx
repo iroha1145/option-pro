@@ -202,7 +202,7 @@ export default function IvPanel({
         ) : (
           <table className="min-w-[420px] w-full border-collapse" aria-label={t("板块隐含波动率排名表")}>
             <thead>
-              <tr className="border-b border-line text-left text-eyebrow font-sans uppercase tracking-[0.14em] text-ink-400">
+              <tr className="border-b border-line text-left text-eyebrow font-sans text-ink-400">
                 <th className="py-2.5 pr-2 font-sans">{t('代码')}</th>
                 <th className="px-2 py-2.5 text-right font-sans">{t('价')}</th>
                 <th className="px-2 py-2.5 font-sans">
@@ -235,7 +235,7 @@ export default function IvPanel({
                     <span className="flex items-center gap-2.5">
                       <TickerLogo ticker={r.ticker} size={28} />
                       <span>
-                        <span className="block font-mono text-body-s font-medium text-ink-800">{r.ticker}</span>
+                        <span className="block tnum text-body-s font-medium text-ink-800">{r.ticker}</span>
                         <span className="hidden max-w-[120px] truncate text-micro text-ink-400 sm:block">{r.name}</span>
                       </span>
                     </span>
@@ -250,7 +250,7 @@ export default function IvPanel({
                     {r.rank !== null ? (
                       <IvRankBar rank={r.rank} replayKey={`${sectorId}:${r.ticker}`} />
                     ) : (
-                      <span className="font-mono text-ink-400">—</span>
+                      <span className="tnum text-ink-400">—</span>
                     )}
                   </td>
                   <td className="px-2 py-2 text-right text-data-m text-ink-600 tnum">

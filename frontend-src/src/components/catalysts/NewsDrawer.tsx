@@ -55,7 +55,7 @@ function StockImpactCard({ imp, index }: { imp: TrustedStockImpact; index: numbe
         <TickerChip ticker={imp.ticker} onClick={() => openTicker(imp.ticker)} />
         <ClassificationChip classification={imp.direction} />
         <ImpactValue value={imp.impactScore} />
-        <span className="ml-auto font-mono text-micro text-ink-400">{imp.horizon}</span>
+        <span className="ml-auto tnum text-micro text-ink-400">{imp.horizon}</span>
       </div>
       <p className="mt-2 text-micro text-ink-500">
         <span className="font-medium text-ink-600">{__t('机制 ·')} {imp.mechanism}</span>
@@ -79,7 +79,7 @@ function JobStepper({ job }: { job: NewsAnalysisJob }) {
         </p>
         {/* 任务查询接口不提供进度，只有明确给出百分比时才显示，没有就不占位。 */}
         {job.progress !== null && (
-          <span className="ml-auto shrink-0 font-mono text-micro text-ink-400 tnum">
+          <span className="ml-auto shrink-0 text-micro text-ink-400 tnum">
             {`${Math.round(job.progress)}%`}
           </span>
         )}
@@ -660,10 +660,10 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-micro text-ink-400">
             <span className="font-medium text-ink-500">{item.source}</span>
             <span aria-hidden="true">·</span>
-            <span className="font-mono tnum">
+            <span className="tnum">
               {fmtLocaleDateTime(item.publishedAt)}
             </span>
-            {item.sourceCount > 1 && <SoftBadge className="font-mono">{item.sourceCount} {__t('源确认')}</SoftBadge>}
+            {item.sourceCount > 1 && <SoftBadge className="tnum">{item.sourceCount} {__t('源确认')}</SoftBadge>}
             {item.isStale && <StaleChip />}
             <a
               href={item.url}
@@ -784,7 +784,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
                     <StockImpactCard key={imp.ticker} imp={imp} index={i} />
                   ))}
                 </div>
-                <p className="mt-3 border-t border-line pt-2.5 font-mono text-micro text-ink-400 tnum">
+                <p className="mt-3 border-t border-line pt-2.5 text-micro text-ink-400 tnum">
                   {__t('AI 生成于')}{' '}
                   {fmtLocaleTime(analysis.generatedAt)}
                 </p>

@@ -28,7 +28,7 @@ export function ScoreCell({
   if (score == null || !Number.isFinite(score)) {
     return (
       <span className="inline-flex flex-col gap-0.5">
-        <span className="font-mono text-body-s text-ink-400 tnum">—</span>
+        <span className="text-body-s text-ink-400 tnum">—</span>
         {caption ? <span className="text-micro text-ink-400">{caption}</span> : null}
       </span>
     );
@@ -44,7 +44,7 @@ export function ScoreCell({
           {score.toFixed(1)}
         </SoftBadge>
         <span
-          className="strength-track h-1 w-16 overflow-hidden rounded-pill bg-paper"
+          className="strength-track h-1 w-12 overflow-hidden rounded-pill bg-paper"
           role="progressbar"
           aria-label={t('强度分 {score}，{band} {label}', { score, band: strength.band, label: strength.label })}
           aria-valuemin={0}
@@ -81,7 +81,7 @@ export function SubscoreTicks({ row, tipSide = 'top' }: { row: ScreenerRow; tipS
       content={dims.map(({ key, label, value }) => (
         <span key={key} className="flex items-center justify-between gap-3 py-0.5 text-micro">
           <span className="text-ink-500">{label}</span>
-          <span className="font-mono text-ink-800 tnum">{value !== null ? value : '—'}</span>
+          <span className="text-ink-800 tnum">{value !== null ? value : '—'}</span>
         </span>
       ))}
     >
@@ -135,11 +135,11 @@ export function CatalystBadge({ summary, tipSide = 'top' }: { summary: CatalystS
           {' · '}{t('利空')} <SoftBadge tone="down">{summary.neg}</SoftBadge>
           {summary.pending != null ? (
             <>
-              {' · '}{t('待分析')} <span className="font-mono tnum">{summary.pending}</span>
+              {' · '}{t('待分析')} <span className="tnum">{summary.pending}</span>
             </>
           ) : (
             <>
-              {' · '}{t('中性')} <span className="font-mono tnum">{summary.neu}</span>
+              {' · '}{t('中性')} <span className="tnum">{summary.neu}</span>
             </>
           )}
         </span>
@@ -149,14 +149,14 @@ export function CatalystBadge({ summary, tipSide = 'top' }: { summary: CatalystS
           </span>
         )}
         {summary.latestAt && (
-          <span className="mt-0.5 block font-mono text-micro text-ink-400 tnum">{fmtRelative(summary.latestAt)}</span>
+          <span className="mt-0.5 block text-micro text-ink-400 tnum">{fmtRelative(summary.latestAt)}</span>
         )}
       </>}
     >
       <SoftBadge tone={tone}>
         <Icon name="bolt" size={11} />
         {label}
-        <span className="font-mono tnum">{countText}</span>
+        <span className="tnum">{countText}</span>
       </SoftBadge>
     </PointerTooltip>
   );

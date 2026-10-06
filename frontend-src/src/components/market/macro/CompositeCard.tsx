@@ -35,7 +35,7 @@ function StatLine({
         {label}
         {hintKey && <InfoHint hint={SCORE_HINTS_MACRO[hintKey]} side="bottom" align="start" size={11} />}
       </p>
-      <p className="mt-0.5 truncate font-mono text-data-m text-ink-800 tnum">{value}</p>
+      <p className="mt-0.5 truncate text-data-m text-ink-800 tnum">{value}</p>
     </div>
   );
 }

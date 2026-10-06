@@ -30,7 +30,7 @@ function CountdownRow({ label, at, now }: { label: string; at: string | null; no
   return (
     <div className="flex items-center justify-between border-t border-line py-2.5">
       <span className="text-caption text-ink-500">{label}</span>
-      <span className="font-mono text-data-m text-brand-600 tnum" suppressHydrationWarning>
+      <span className="text-data-m text-brand-600 tnum" suppressHydrationWarning>
         {at ? fmtCountdown(at, now) : '—'}
       </span>
     </div>
@@ -94,7 +94,7 @@ export default function StatusCard({
         <span className="font-display text-[20px] leading-[26px] text-ink-900">{data.market ? MARKET_LABEL[data.market] : t('时段未知')}</span>
       </div>
       <div className="mt-3">
-        <p className="font-mono text-data-xl text-ink-900 tnum" suppressHydrationWarning>
+        <p className="text-data-xl text-ink-900 tnum" suppressHydrationWarning>
           {fmtNyTime(new Date(now))}
         </p>
         <p className="mt-1 text-micro text-ink-400">{t('纽约时间（ET）· 每秒更新')}</p>

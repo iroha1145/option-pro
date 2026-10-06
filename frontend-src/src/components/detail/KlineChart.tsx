@@ -28,7 +28,7 @@ import Icon from '@/components/icons';
 import { STRUCTURE_HINTS } from '@/lib/structureHints';
 import { usePolling } from '@/hooks/usePolling';
 import { useAccess } from '@/hooks/useAccess';
-import { baseAnimation, CH, CHART_MONO_FONT, escapeTooltipText, glassTooltip, stippleAreaStyle, withAlpha, type ChartOption, type EChartsInstance } from '@/lib/chart';
+import { baseAnimation, CH, CHART_TEXT_FONT, escapeTooltipText, glassTooltip, stippleAreaStyle, withAlpha, type ChartOption, type EChartsInstance } from '@/lib/chart';
 import { directionColors, getColorMode, type ColorMode } from '@/lib/colorPreference.ts';
 import { useColorMode } from '@/hooks/useColorMode.ts';
 import { useAppearance } from '@/hooks/useAppearance.ts';
@@ -94,7 +94,7 @@ type MeasureOverlay =
   | { kind: 'pending'; aIdx: number }
   | { kind: 'done'; m: RangeMeasure };
 
-const MEASURE_LABEL_FONT = { fontSize: 10, fontFamily: CHART_MONO_FONT };
+const MEASURE_LABEL_FONT = { fontSize: 10, fontFamily: CHART_TEXT_FONT };
 
 /** 覆盖层 → markLine / markPoint / markArea 数据（K线与面积模式共用） */
 function measureMarks(overlay: MeasureOverlay | null | undefined) {
@@ -218,7 +218,7 @@ function buildOption(
           formatter: t('昨收 {p}', { p: fmtPrice(prevClose) }),
           color: CH.ink400,
           fontSize: 10,
-          fontFamily: CHART_MONO_FONT,
+          fontFamily: CHART_TEXT_FONT,
           position: 'insideStartTop' as const,
         },
       });
@@ -233,7 +233,7 @@ function buildOption(
         data: labels,
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: CHART_MONO_FONT },
+        axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: CHART_TEXT_FONT },
       },
       yAxis: {
         type: 'value' as const,
@@ -241,7 +241,7 @@ function buildOption(
         position: 'right' as const,
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: CHART_MONO_FONT },
+        axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: CHART_TEXT_FONT },
         splitLine: { lineStyle: { color: CH.lineChart, width: 1 } },
       },
       tooltip: glassTooltip({
@@ -253,7 +253,7 @@ function buildOption(
           const chg = b.c - b.o;
           const color = chg >= 0 ? upFill : downFill;
           return (
-            `<div style="font-family:${CHART_MONO_FONT};font-size:12px;line-height:19px">` +
+            `<div style="font-family:${CHART_TEXT_FONT};font-variant-numeric:tabular-nums;font-size:12px;line-height:19px">` +
             `<div style="color:${CH.ink400}">${barTooltipTitle(b.t, range)}${b.quote_only ? t(' · 仅报价') : ''}</div>` +
             `<div>${t('收 {c}', { c: `<b style="color:${color}">${fmtPrice(b.c)}</b>` })}</div>` +
             `<div>${t('量 {v}', { v: fmtCompact(b.v) })}</div></div>`
@@ -272,7 +272,7 @@ function buildOption(
             formatter: () => fmtPrice(last),
             color: CH.brand600,
             fontSize: 11,
-            fontFamily: CHART_MONO_FONT,
+            fontFamily: CHART_TEXT_FONT,
             distance: 6,
           },
           markLine: areaMarkLines.length
@@ -340,7 +340,7 @@ function buildOption(
       axisLine: { show: false },
       axisTick: { show: false },
       axisLabel: index === grids.length - 1
-        ? { color: CH.ink400, fontSize: 11, fontFamily: CHART_MONO_FONT, hideOverlap: true }
+        ? { color: CH.ink400, fontSize: 11, fontFamily: CHART_TEXT_FONT, hideOverlap: true }
         : { show: false },
     })),
     yAxis: grids.map((_, index) => {
@@ -356,8 +356,8 @@ function buildOption(
         axisTick: { show: false },
         splitNumber: index === 0 ? 5 : 3,
         axisLabel: index === 0
-          ? { color: CH.ink400, fontSize: 11, fontFamily: CHART_MONO_FONT }
-          : { color: CH.ink400, fontSize: 10, fontFamily: CHART_MONO_FONT, hideOverlap: true,
+          ? { color: CH.ink400, fontSize: 11, fontFamily: CHART_TEXT_FONT }
+          : { color: CH.ink400, fontSize: 10, fontFamily: CHART_TEXT_FONT, hideOverlap: true,
               formatter: formatIndicatorValue, margin: 8 },
         splitLine: index === 0
           ? { lineStyle: { color: CH.lineChart, width: 1 } }
@@ -375,7 +375,7 @@ function buildOption(
           borderColor: CH.lineChart,
           borderWidth: 1,
           color: CH.tooltipFg,
-          fontFamily: CHART_MONO_FONT,
+          fontFamily: CHART_TEXT_FONT,
           fontSize: 10,
         },
       },
@@ -401,7 +401,7 @@ function buildOption(
         const row = (k: string, v: string) =>
           `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:${CH.ink400}">${escapeTooltipText(k)}</span><span>${v}</span></div>`;
         return (
-          `<div style="font-family:${CHART_MONO_FONT};font-size:12px;line-height:19px;min-width:150px">` +
+          `<div style="font-family:${CHART_TEXT_FONT};font-variant-numeric:tabular-nums;font-size:12px;line-height:19px;min-width:150px">` +
           `<div style="color:${CH.ink400};margin-bottom:2px">${barTooltipTitle(b.t, range)}${b.quote_only ? t(' · <span style="color:var(--warn-600)">仅报价</span>') : ''}</div>` +
           row(t('开'), fmtPrice(b.o)) +
           row(t('高'), fmtPrice(b.h)) +
@@ -1230,7 +1230,7 @@ export default function KlineChart({
       />
 
       <p className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-micro text-ink-400">
-        <span className="font-mono tnum">
+        <span className="tnum">
           {data
             ? t('共 {n} 根 · 末根 {at}{status}', {
                 n: data.bars.length,
@@ -1240,7 +1240,7 @@ export default function KlineChart({
             : ' '}
           {data && <> · {t('美东')}</>}
         </span>
-        <span className="font-mono tnum">
+        <span className="tnum">
           {data ? t('读取于 {at}', { at: formatChartTime(data.as_of, '5m') }) : ''}
         </span>
       </p>

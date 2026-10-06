@@ -44,7 +44,7 @@ function NetImpactBar({ value, analyzed }: { value: number; analyzed: number }) 
       <div className="flex items-center gap-2">
         <NetImpactLabel />
         <div className="h-1.5 w-28 rounded-pill bg-line" aria-hidden="true" />
-        <span className="font-mono text-micro text-ink-400">—</span>
+        <span className="tnum text-micro text-ink-400">—</span>
       </div>
     );
   }
@@ -78,7 +78,7 @@ function NetImpactBar({ value, analyzed }: { value: number; analyzed: number }) 
           />
         </span>
       </div>
-      <SoftBadge tone={tone} size="md" className="font-mono" title={t("净影响分")}>
+      <SoftBadge tone={tone} size="md" className="tnum" title={t("净影响分")}>
         {sign}
         {Math.abs(value).toFixed(2)}
       </SoftBadge>
@@ -142,7 +142,7 @@ export default function StocksPanel({ filters }: { filters: CatalystFilters; ref
             <span className="flex min-w-0 flex-1 items-center gap-2.5 sm:w-40 sm:flex-none">
               <TickerLogo ticker={r.ticker} size={28} />
               <span className="min-w-0 flex-1">
-                <span className="block font-mono text-body-s font-medium text-ink-800">{r.ticker}</span>
+                <span className="block tnum text-body-s font-medium text-ink-800">{r.ticker}</span>
                 {(r.name !== r.ticker || r.sector) && (
                   <span className="flex min-w-0 items-center gap-1.5">
                     {r.name !== r.ticker && (
@@ -160,20 +160,20 @@ export default function StocksPanel({ filters }: { filters: CatalystFilters; ref
             <span className="order-last w-full min-w-0 sm:order-none sm:min-w-[180px] sm:flex-1">
               <NetImpactBar value={r.netImpact} analyzed={r.analyzed} />
             </span>
-            <span className="hidden items-center gap-1 font-mono text-micro tnum md:flex" title={t("利多 / 利空 / 中性")}>
+            <span className="hidden items-center gap-1 text-micro tnum md:flex" title={t("利多 / 利空 / 中性")}>
               <SoftBadge tone="up">{r.bullish}</SoftBadge>
               <span className="text-ink-400">/</span>
               <SoftBadge tone="down">{r.bearish}</SoftBadge>
               <span className="text-ink-400">/</span>
               <SoftBadge>{r.neutral}</SoftBadge>
             </span>
-            <span className="hidden w-14 text-right font-mono text-micro text-ink-500 tnum sm:block" title={t("来源数")}>
+            <span className="hidden w-14 text-right text-micro text-ink-500 tnum sm:block" title={t("来源数")}>
               {r.sourceDiversity} {t('源')}
             </span>
-            <span className="hidden w-16 text-right font-mono text-micro text-ink-400 tnum lg:block" title={t("最新新闻")}>
+            <span className="hidden w-16 text-right text-micro text-ink-400 tnum lg:block" title={t("最新新闻")}>
               {fmtRelative(r.latestAt)}
             </span>
-            <span className="w-12 shrink-0 text-right font-mono text-data-m text-ink-800 tnum" title={t("相关新闻数")}>
+            <span className="w-12 shrink-0 text-right text-data-m text-ink-800 tnum" title={t("相关新闻数")}>
               {r.count}
               <span className="ml-0.5 text-micro font-normal text-ink-400">{t('条')}</span>
             </span>

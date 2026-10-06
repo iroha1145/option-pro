@@ -12,6 +12,7 @@ export const QUOTES: Dict = {
   "行情重连中": ["Reconnecting to quote feed", "株価配信に再接続中"],
   '定时更新': ['Periodic updates', '定期更新'],
   '暂无新成交 · 最后报价': ['No recent trades · last quote', '新たな約定なし · 最後の株価'],
+  '最后报价': ['Last quote', '最後の株価'],
   '等待报价': ['Awaiting quote', '株価を待機中'],
   '盘前实时': ['Live pre-market', '市場開始前 · リアルタイム'],
   '盘后实时': ['Live after-hours', '時間外 · リアルタイム'],

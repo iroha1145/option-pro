@@ -161,13 +161,11 @@ export default function Catalysts() {
     <div>
       {/* B0 页头带 */}
       <PageHeader
-        section="06"
-        eyebrow="CATALYSTS · NEWS FLOW"
         title={__t("新闻催化剂")}
         meta={
           <>
             {lastLoadedAt && (
-              <span className="hidden font-mono text-micro text-ink-400 tnum sm:inline" suppressHydrationWarning>
+              <span className="hidden text-micro text-ink-400 tnum sm:inline" suppressHydrationWarning>
                 {__t('更新')} {fmtTimeHHMMSS(lastLoadedAt)}
               </span>
             )}

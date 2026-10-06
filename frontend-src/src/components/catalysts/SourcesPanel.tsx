@@ -78,15 +78,15 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
             </div>
             <div className="mt-4 grid grid-cols-3 gap-2 text-center">
               <div>
-                <p className="font-mono text-data-l text-ink-900 tnum">{formatDataLag(s.latencyMs)}</p>
+                <p className="text-data-l text-ink-900 tnum">{formatDataLag(s.latencyMs)}</p>
                 <p className="mt-0.5 text-micro text-ink-400">{t('数据滞后')}</p>
               </div>
               <div>
-                <p className="font-mono text-data-l text-ink-900 tnum">{s.itemsToday ?? '—'}</p>
+                <p className="text-data-l text-ink-900 tnum">{s.itemsToday ?? '—'}</p>
                 <p className="mt-0.5 text-micro text-ink-400">{t('近 24h 条数')}</p>
               </div>
               <div>
-                <p className="font-mono text-data-l text-ink-900 tnum" suppressHydrationWarning>
+                <p className="text-data-l text-ink-900 tnum" suppressHydrationWarning>
                   {fmtRelativeShort(s.lastFetchedAt)}
                 </p>
                 <p className="mt-0.5 text-micro text-ink-400">{t('最近抓取')}</p>

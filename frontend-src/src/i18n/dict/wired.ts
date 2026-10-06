@@ -142,7 +142,7 @@ export const WIRED: Dict = {
   '进攻型与防守型资产之间的强弱差（{label}）。': ['The strength gap between offensive and defensive assets ({label}).', '攻めと守りの資産間の強弱差（{label}）。'],
   '进攻型与防守型资产之间的强弱差。': ['The strength gap between offensive and defensive assets.', '攻めと守りの資産間の強弱差。'],
   '{tierA}–{tierB}（{range}）': ['{tierA}–{tierB} ({range})', '{tierA}–{tierB}（{range}）'],
-  '近 {count} 日 · 点阵面积': ['Last {count} days · dot-matrix area', '直近 {count} 日 · ドットマトリクス面積'],
+  '近 {count} 日走势': ['Last {count} days', '直近 {count} 日の推移'],
 
   // ── 抽屉 / 雷达 / 选股（范围外收尾）────────────────────────────────
   '{label} · 延迟 15 分钟': ['{label} · delayed 15 min', '{label} · 15分遅延'],

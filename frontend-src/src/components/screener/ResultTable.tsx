@@ -1,6 +1,6 @@
-import { LivePrice, LiveChange, PeriodicPriceFlash } from '@/components/shared/LiveQuote';
+import { LivePrice, LiveChange, LiveQuoteLabel, PeriodicPriceFlash } from '@/components/shared/LiveQuote';
 /**
- * B2 结果表（桌面 ≥768px）：紧凑 44px 行 · 发丝线 · 行展开 accordion（260ms）· 分页
+ * B2 结果表（桌面 ≥1280px；更窄时用 ResultCards）：紧凑 44px 行 · 发丝线 · 行展开 accordion（260ms）· 分页
  * 列：# / 代码 / 强度分 / 分项 / 价·涨跌 / 催化剂 72h / 成交额 / ▸
  * 行 stagger 30ms 仅第一页入场（翻页直接呈现）；排序切换 layout 重排 320ms；价格 tick-flash。
  */
@@ -131,7 +131,7 @@ export default function ResultTable({
                 style={h.width ? { width: h.width } : undefined}
                 className={cn(
                   // 列头多为中文：大写和 0.14em 字距只会把「催化剂 · 72H」撑成两行。
-                  'whitespace-nowrap border-b border-line px-3 py-2.5 text-caption font-medium text-ink-400',
+                  'whitespace-nowrap border-b border-line px-2.5 py-2.5 text-caption font-medium text-ink-400',
                   h.align === 'right' ? 'text-right' : h.align === 'center' ? 'text-center' : 'text-left',
                 )}
               >
@@ -165,24 +165,24 @@ export default function ResultTable({
                   )}
                 >
                   {/* # */}
-                  <td className="px-3 py-2 font-mono text-caption text-ink-400 tnum">{startIndex + i + 1}</td>
+                  <td className="px-2.5 py-2 text-caption text-ink-400 tnum">{startIndex + i + 1}</td>
                   {/* 代码 */}
-                  <td className="px-3 py-2">
+                  <td className="px-2.5 py-2">
                     <span className="flex items-center gap-2.5">
                       <TickerLogo ticker={r.ticker} size={28} />
                       <span className="min-w-0">
                         <span className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-mono text-body-s font-medium text-ink-800">{r.ticker}</span>
-                          {r.sector && <SoftBadge className="max-w-[7.5rem]" title={t(r.sector)}><span className="truncate">{t(r.sector)}</span></SoftBadge>}
+                          <span className="tnum text-body-s font-medium text-ink-800">{r.ticker}</span>
+                          {r.sector && <SoftBadge className="max-w-[6rem]" title={t(r.sector)}><span className="truncate">{t(r.sector)}</span></SoftBadge>}
                           {r.observationOnly && <SoftBadge data-testid={`screener-eod-watch-${r.ticker}`}>{t('观察')}</SoftBadge>}
                           {r.listKind === 'composite' && r.status === 'eligible' && <SoftBadge tone="ok">{t('合格')}</SoftBadge>}
                         </span>
-                        <span className="block max-w-[150px] truncate text-micro text-ink-400" title={r.name}>{r.name}</span>
+                        <span className="block max-w-[120px] truncate text-micro text-ink-400" title={r.name}>{r.name}</span>
                       </span>
                     </span>
                   </td>
                   {/* 当前唯一选股引擎的主评分。 */}
-                  <td className="px-3 py-2">
+                  <td className="px-2.5 py-2">
                     <ScoreCell
                       score={rowPrimarySortScore(r)}
                       index={i}
@@ -191,40 +191,44 @@ export default function ResultTable({
                   </td>
                   {/* 宏观适配（可选列） */}
                   {showMacro && (
-                    <td className="px-3 py-2">
+                    <td className="px-2.5 py-2">
                       <MacroFitBadge score={r.macroFit} tailwind={r.macroTailwind} compact />
                     </td>
                   )}
                   {/* 分项微条 */}
-                  <td className="px-3 py-2">
+                  <td className="px-2.5 py-2">
                     <SubscoreTicks row={r} tipSide={i < 3 ? 'bottom' : 'top'} />
                   </td>
-                  {/* 价 / 涨跌 */}
-                  <td className="px-3 py-2 text-right">
-                    <PeriodicPriceFlash
-                      key={r.ticker}
-                      symbol={r.ticker}
-                      fallbackAt={r.priceAsOf ?? r.dailyDataThrough}
-                      flash={flashes[r.ticker] ?? null}
-                      className="tick-flash inline-block rounded-xs px-1 font-mono text-body-s text-ink-900 tnum"
-                    >
-                      <LivePrice symbol={r.ticker} fallback={r.price} fallbackAt={r.priceAsOf ?? r.dailyDataThrough} fallbackKind="scan" className="flex-nowrap whitespace-nowrap" />
-                    </PeriodicPriceFlash>
-                    <span className="ml-1.5 align-middle">
-                      <LiveChange symbol={r.ticker} fallback={r.changePct} fallbackPrice={r.price} fallbackAt={r.priceAsOf ?? r.dailyDataThrough} size="sm" />
+                  {/* 价 / 涨跌：价格与涨跌一行，「扫描价 · 日线 10-05」说明放到下一行——原来三者挤一行，
+                      这一列占近 200px，1280 宽时右边几列被挤出卡片（2026-10-06 用户反馈「显示不全」）。 */}
+                  <td className="px-2.5 py-2 text-right">
+                    <span className="inline-flex flex-col items-end">
+                      <span className="inline-flex items-baseline gap-1.5 whitespace-nowrap">
+                        <PeriodicPriceFlash
+                          key={r.ticker}
+                          symbol={r.ticker}
+                          fallbackAt={r.priceAsOf ?? r.dailyDataThrough}
+                          flash={flashes[r.ticker] ?? null}
+                          className="tick-flash inline-block rounded-xs px-1 text-body-s text-ink-900 tnum"
+                        >
+                          <LivePrice symbol={r.ticker} fallback={r.price} fallbackAt={r.priceAsOf ?? r.dailyDataThrough} fallbackKind="scan" indicator={false} />
+                        </PeriodicPriceFlash>
+                        <LiveChange symbol={r.ticker} fallback={r.changePct} fallbackPrice={r.price} fallbackAt={r.priceAsOf ?? r.dailyDataThrough} size="sm" />
+                      </span>
+                      <LiveQuoteLabel symbol={r.ticker} fallback={r.price} fallbackAt={r.priceAsOf ?? r.dailyDataThrough} fallbackKind="scan" className="whitespace-nowrap" />
                     </span>
                   </td>
                   {/* 催化剂 72h */}
-                  <td className="px-3 py-2">
+                  <td className="px-2.5 py-2">
                     <CatalystBadge summary={catalysts[r.ticker]} tipSide={i < 3 ? 'bottom' : 'top'} />
                   </td>
                   {/* 20 日平均美元成交额 */}
-                  <td className="px-3 py-2 text-right font-mono text-body-s text-ink-600 tnum" title={r.dollarVolumeProxyAvailable ? t('20 日均成交额代理') : undefined}>
+                  <td className="px-2.5 py-2 text-right text-body-s text-ink-600 tnum" title={r.dollarVolumeProxyAvailable ? t('20 日均成交额代理') : undefined}>
                     {dvPending ? <span className="text-ink-400">…</span> : dv === null || dv === undefined ? '—' : `$${fmtCompact(dv)}`}
                     {r.dollarVolumeProxyAvailable && <span className="ml-1 text-micro text-ink-400">{t('估')}</span>}
                   </td>
                   {/* 展开 */}
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-2.5 py-2 text-right">
                     <button
                       type="button"
                       onClick={() => onToggle(r.ticker)}
@@ -256,7 +260,7 @@ export default function ResultTable({
       </table>
       {/* 分档角标说明 + 分页 */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-card-warm px-4 py-2.5">
-        <p className="font-mono text-micro text-ink-400 tnum">
+        <p className="text-micro text-ink-400 tnum">
           {t('每页 20 · 分档')} {rows.length > 0 ? t('{tierA}–{tierB}（{range}）', { tierA: tierOf(rows[0].strengthScore), tierB: tierOf(rows[rows.length - 1].strengthScore), range: TIER_RANGE[tierOf(rows[0].strengthScore)] }) : '—'}
         </p>
         <nav className="flex items-center gap-1" aria-label={t("分页")}>
@@ -274,7 +278,7 @@ export default function ResultTable({
               onClick={() => onPageChange(p)}
               aria-current={p === page ? 'page' : undefined}
               className={cn(
-                'flex size-7 items-center justify-center rounded-sm border font-mono text-caption tnum transition-colors duration-fast',
+                'flex size-7 items-center justify-center rounded-sm border text-caption tnum transition-colors duration-fast',
                 p === page ? 'border-brand-600 bg-brand-600 text-on-accent shadow-chip' : 'border-line text-ink-500 hover:border-brand-400 hover:text-brand-600',
               )}
             >

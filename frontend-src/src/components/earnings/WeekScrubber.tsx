@@ -80,7 +80,7 @@ export default function WeekScrubber({
         >
           <Icon name="chevron-right" size={14} className="rotate-180" />
         </button>
-        <p className="flex flex-wrap items-baseline justify-center gap-x-2 text-center font-mono text-caption text-ink-600 tnum" aria-live="polite">
+        <p className="flex flex-wrap items-baseline justify-center gap-x-2 text-center text-caption text-ink-600 tnum" aria-live="polite">
           <span>{fmtMDCN(days[0])} – {fmtMDCN(days[6])}</span>
           <span className="font-sans text-micro text-ink-400">{__t('美东 ET')}</span>
         </p>
@@ -138,18 +138,18 @@ export default function WeekScrubber({
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: di * 0.035 }}
                   className={cn(
-                    'flex min-h-[96px] w-[86px] shrink-0 cursor-pointer snap-start flex-col border-r border-line px-2 py-2.5 text-left transition-colors duration-fast last:border-r-0 sm:w-auto sm:min-w-0',
+                    'flex min-h-[96px] w-[92px] shrink-0 cursor-pointer snap-start flex-col border-r border-line px-2 py-2.5 text-left transition-colors duration-fast last:border-r-0 sm:w-auto sm:min-w-0',
                     isSelected ? 'bg-brand-50' : 'hover:bg-paper-2',
                     'tick-flash',
                     flashing && hasReports && 'tick-flash-up',
                   )}
                 >
                   {/* 日期头：有财报的日子用正文墨色并在右上角写数量；空白日只留浅色日期，
-                      不再每格画一个「—」，一眼看出这周哪几天有事。 */}
+                      不再每格画一个「—」，一眼看出这周哪几天有事。手机列宽 92px：「周二 ● 14 条」一行排下，两侧都不折行。 */}
                   <div className="flex items-center justify-between gap-1">
                     <span
                       className={cn(
-                        'flex items-center gap-1 text-caption',
+                        'flex items-center gap-1 whitespace-nowrap text-caption',
                         isToday ? 'font-medium text-brand-600' : hasReports ? 'font-medium text-ink-800' : 'text-ink-400',
                       )}
                     >
@@ -157,12 +157,12 @@ export default function WeekScrubber({
                       {isToday && <span className="size-1.5 rounded-full bg-brand-600" aria-label={__t("今天")} />}
                     </span>
                     {hasReports && (
-                      <span className="text-micro font-medium text-ink-600 tnum">
+                      <span className="shrink-0 whitespace-nowrap text-micro font-medium text-ink-600 tnum">
                         {__t('{n} 条', { n: dayItems.length })}
                       </span>
                     )}
                   </div>
-                  <span className={cn('font-mono text-micro tnum', isToday ? 'text-brand-600' : hasReports ? 'text-ink-500' : 'text-ink-400')}>
+                  <span className={cn('text-micro tnum', isToday ? 'text-brand-600' : hasReports ? 'text-ink-500' : 'text-ink-400')}>
                     {fmtMMDD(date)}
                   </span>
 
@@ -187,13 +187,13 @@ export default function WeekScrubber({
                               active ? 'bg-brand-100 text-brand-700' : 'bg-paper-2 text-ink-800 hover:bg-brand-50',
                             )}
                           >
-                            {/* 盘前盘后是类别：图标形状区分，不借警示琥珀或 AI 青瓷色 */}
+                            {/* 盘前盘后是类别：图标形状加类别色（太阳黄、月亮蓝、待定闹钟橙；2026-10-06 用户要求） */}
                             <Icon
                               name={it.timing === 'bmo' ? 'sun-bmo' : it.timing === 'amc' ? 'moon-amc' : 'clock-ny'}
                               size={12}
-                              className={active ? 'text-brand-700' : 'text-ink-500'}
+                              className={it.timing === 'bmo' ? 'timing-icon-bmo' : it.timing === 'amc' ? 'timing-icon-amc' : 'timing-icon-tbd'}
                             />
-                            <span className="font-mono text-micro font-medium">{it.ticker}</span>
+                            <span className="tnum text-micro font-medium">{it.ticker}</span>
                           </motion.button>
                         );
                       })}

@@ -60,8 +60,6 @@ export default function Market() {
     <div>
       {/* B0 页头带 */}
       <PageHeader
-        section="MKT"
-        eyebrow="MARKET PULSE · INDEX & BREADTH"
         title={t("大盘强弱")}
         meta={
           <>
@@ -76,7 +74,7 @@ export default function Market() {
               </span>
             )}
             {indicesQ.lastUpdatedAt && (
-              <span className="font-mono text-caption text-ink-400 tnum">
+              <span className="text-caption text-ink-400 tnum">
                 {t('更新')} {fmtTimeHHMMSS(indicesQ.lastUpdatedAt)}
               </span>
             )}

@@ -82,7 +82,7 @@ export function ConfidenceLabel({
   bare?: boolean;
 }) {
   return (
-    <SoftBadge className={cn('font-mono', className)}>
+    <SoftBadge className={cn('tnum', className)}>
       {(value * 100).toFixed(0)}%
       {!bare && <InfoHint hint={SCORE_HINTS.newsConfidence} size={11} className="ml-1" />}
     </SoftBadge>
@@ -109,13 +109,13 @@ export function ImpactValue({
   bare?: boolean;
 }) {
   if (value === null || Number.isNaN(value)) {
-    return <SoftBadge className={cn('shrink-0 font-mono', className)}>{dash}</SoftBadge>;
+    return <SoftBadge className={cn('shrink-0 tnum', className)}>{dash}</SoftBadge>;
   }
   const sign = value > 0 ? '+' : value < 0 ? '−' : '';
   const tone = value > 0.05 ? 'up' : value < -0.05 ? 'down' : 'neutral';
   return (
     /* shrink-0 + nowrap：这是一个紧凑读数，「−4.00 ⓘ」不该被折行拆开。 */
-    <SoftBadge tone={tone} className={cn('shrink-0 font-mono', className)}>
+    <SoftBadge tone={tone} className={cn('shrink-0 tnum', className)}>
       {sign}
       {Math.abs(value).toFixed(2)}
       {!bare && <InfoHint hint={SCORE_HINTS.newsImpact} size={11} className="ml-1" />}
@@ -126,7 +126,7 @@ export function ImpactValue({
 /* ---------------- 代码 chip(无 onClick 渲染为 span,可安全嵌入按钮内) ---------------- */
 export function TickerChip({ ticker, onClick, className }: { ticker: string; onClick?: () => void; className?: string }) {
   const cls = cn(
-    'soft-badge inline-flex items-center bg-brand-50 px-1.5 py-0.5 font-mono text-[11px] leading-[16px] font-medium text-brand-700 transition-colors duration-fast',
+    'soft-badge inline-flex items-center bg-brand-50 px-1.5 py-0.5 tnum text-[12px] leading-[16px] font-medium text-brand-700 transition-colors duration-fast',
     onClick ? 'hover:bg-brand-100 cursor-pointer' : 'cursor-default',
     className,
   );

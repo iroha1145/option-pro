@@ -128,7 +128,7 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
         <StatusNotice className="mb-4">
           <p>{attemptNotice(cycle.latestAttempt.status)}</p>
           <p className="mt-1 text-micro text-ink-500">{attempt.reason}</p>
-          <p className="mt-1 break-all font-mono text-micro text-ink-400 tnum">
+          <p className="mt-1 break-all text-micro text-ink-400 tnum">
             {cycle.latestAttempt.cycleId} · {fmtCycleDate(cycle.latestAttempt.startedAt, true)}
           </p>
         </StatusNotice>
@@ -145,7 +145,7 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
         )}
       </div>
       {failure && <p className="mt-2 text-caption leading-5 text-ink-500">{failure.reason}</p>}
-      <p className="mt-2 font-mono text-micro leading-5 text-ink-400 tnum">
+      <p className="mt-2 text-micro leading-5 text-ink-400 tnum">
         {t('启动')} {fmtCycleDate(cycle.startedAt, false)} {t('· 生成')} {fmtCycleDate(cycle.generatedAt, true)} {t('· 样本')} {cycle.newsCount}{' '}
         {cycle.sampleLabel ?? t('条')}
       </p>
@@ -170,7 +170,7 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
               ))}
             </ul>
           )}
-          <p className="mt-4 break-all font-mono text-micro leading-5 text-ink-400 tnum">
+          <p className="mt-4 break-all text-micro leading-5 text-ink-400 tnum">
             {cycle.cycleId} · {cycle.trigger === 'manual' ? t('手动触发') : t('定时生成')} · {cycle.model}
           </p>
         </div>
@@ -194,7 +194,7 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
                     <span className={cn('flex size-6 shrink-0 items-center justify-center rounded-md', d.cls)}>
                       <Icon name={d.icon} size={12} />
                     </span>
-                    <span className="shrink-0 font-mono text-caption font-medium text-ink-800">{a.ticker}</span>
+                    <span className="shrink-0 tnum text-caption font-medium text-ink-800">{a.ticker}</span>
                     {a.insufficientEvidence ? (
                       /* 后端在证据不足时强制 catalyst_bias 为 null。说「证据不足」，而不是画一个 0。 */
                       <SoftBadge tone="warn" className="shrink-0">
@@ -207,7 +207,7 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
                       /* 偏向与置信共用一条说明（见 SCORE_HINTS.focusCycleAssessment）。
                          原先两个读数后面各挂一句常驻免责声明（「· 非收益」「· 非胜率」），
                          每行重复、又解释不了自己。声明留着，但收进这一个 ⓘ。 */
-                      <SoftBadge className="shrink-0 font-mono">
+                      <SoftBadge className="shrink-0 tnum">
                         {t('置信')} {Math.round(a.confidence * 100)}
                         <InfoHint hint={SCORE_HINTS.focusCycleAssessment} size={11} className="ml-1" />
                       </SoftBadge>

@@ -30,7 +30,7 @@ export default function StrengthBar({
           />
         )}
       </span>
-      {showScore && <span className="text-[12px] font-medium leading-[18px] text-ink-600 tnum">{displayScore}</span>}
+      {showScore && <span className="text-[13px] font-medium leading-[18px] text-ink-600 tnum">{displayScore}</span>}
     </span>
   );
 }

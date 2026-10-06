@@ -132,7 +132,7 @@ export function baseGrid(overrides: Partial<GridComponentOption> = {}): GridComp
   return { left: 8, right: 8, top: 12, bottom: 8, containLabel: true, ...overrides };
 }
 
-export { CHART_MONO_FONT };
+export { CHART_MONO_FONT, CHART_TEXT_FONT };
 
 export function categoryAxis(labels: string[]) {
   return {

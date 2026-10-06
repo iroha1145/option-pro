@@ -13,7 +13,6 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { fmtPrice } from '@/lib/format';
 import ChangeBadge from '@/components/shared/ChangeBadge';
-import SoftBadge from '@/components/shared/SoftBadge';
 
 import { toneOf } from '@/lib/insightTone';
 
@@ -81,11 +80,18 @@ export function InsightValue({
       </span>
       {suffix && <span className="text-body-s text-ink-500">{suffix}</span>}
       {changePct !== undefined && <ChangeBadge value={changePct} size={size === 'xl' ? 'md' : 'sm'} />}
+      {/* 涨跌额与 ChangeBadge 同样只用着色文字，不加浅色底块（2026-10-06 第二轮） */}
       {hasChange && (
-        <SoftBadge tone={tone === 'flat' ? 'neutral' : tone} size={size === 'xl' ? 'md' : 'sm'}>
+        <span
+          className={cn(
+            'change-badge tnum',
+            size === 'xl' ? 'text-[14px] leading-[18px]' : 'text-[12px] leading-[16px]',
+            tone === 'up' ? 'text-up-700' : tone === 'down' ? 'text-down-700' : 'text-ink-500',
+          )}
+        >
           {change > 0 ? '+' : change < 0 ? '−' : ''}
           {fmtPrice(Math.abs(change))}
-        </SoftBadge>
+        </span>
       )}
       {basis && <span className="text-micro text-ink-400">{basis}</span>}
     </div>

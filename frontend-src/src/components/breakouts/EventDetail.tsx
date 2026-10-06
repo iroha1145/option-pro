@@ -91,7 +91,7 @@ function ZoneBand({ ev }: { ev: BreakoutEventFull }) {
           <span className="radar-price-cursor absolute -top-1 left-1/2 -translate-x-1/2" />
         </div>
       </div>
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-0.5 font-mono text-micro text-ink-500 tnum">
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-0.5 text-micro text-ink-500 tnum">
         <span className="inline-flex items-center gap-1">
           <span className="inline-block size-2 rounded-[2px] bg-up-600/25 ring-1 ring-up-600/40" />
           {__t('支撑区')} {fmtPrice(sz.low)}–{fmtPrice(sz.high)}
@@ -132,10 +132,10 @@ function LifecycleTrack({ ev }: { ev: BreakoutEventFull }) {
                 )}
                 aria-hidden="true"
               />
-              <span className={cn('mt-1.5 whitespace-nowrap text-[11px] leading-[15px]', last ? 'font-medium text-ink-800' : 'text-ink-400')}>
+              <span className={cn('mt-1.5 whitespace-nowrap text-[12px] leading-[15px]', last ? 'font-medium text-ink-800' : 'text-ink-400')}>
                 {LIFECYCLE_CN[t.state] ?? t.state}
               </span>
-              <span className="whitespace-nowrap font-mono text-[11px] leading-[15px] text-ink-400 tnum">{hhmm(t.at)}</span>
+              <span className="whitespace-nowrap text-[12px] leading-[15px] text-ink-400 tnum">{hhmm(t.at)}</span>
             </div>
             {!last && <span className="mx-1 mt-[9px] h-px min-w-4 flex-1 bg-line-strong" aria-hidden="true" />}
           </li>
@@ -169,7 +169,7 @@ function CatalystDigest({ ticker }: { ticker: string }) {
             <span className={cn('mt-1.5 size-1.5 shrink-0 rounded-full', DOT[n.sentiment])} aria-hidden="true" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-caption text-ink-800">{n.title}</p>
-              <p className="mt-0.5 font-mono text-micro text-ink-400 tnum">
+              <p className="mt-0.5 text-micro text-ink-400 tnum">
                 {n.source} · {fmtRelative(n.publishedAt)}
               </p>
             </div>
@@ -270,10 +270,10 @@ export default function EventDetail({
               <TickerLogo ticker={event.ticker} size={36} />
               <div className="min-w-0 flex-1">
                 <p className="flex items-baseline gap-2">
-                  <span className="font-mono text-[17px] font-medium leading-[24px] text-ink-900">{event.ticker}</span>
+                  <span className="tnum text-[17px] font-medium leading-[24px] text-ink-900">{event.ticker}</span>
                   <span className="truncate text-body-s text-ink-500">{event.name}</span>
                 </p>
-                <p className="mt-0.5 font-mono text-micro text-ink-400 tnum">
+                <p className="mt-0.5 text-micro text-ink-400 tnum">
                   {__t('触发')} {hhmm(event.triggered_at)} · {SESSION_CN[event.session] ?? '—'} · {SETUP_CN[event.setup_type] ?? event.setup_type ?? '—'}
                 </p>
               </div>
@@ -303,7 +303,7 @@ export default function EventDetail({
                 {event.trigger_source === 'finnhub' && <p className="mb-2 text-micro text-ink-500">{__t('实时成交触发')} · {event.evidence_at ? `${hhmm(event.evidence_at)} ${__t('纽约')}` : __t('时间待更新')} · {__t('状态版本')} {event.state_version}</p>}
                 <PriceScale large invalidation={event.invalidation_price} trigger={event.event_price} target={event.target_price} current={event.current_price} />
                 {event.event_anchor?.kind === 'opening_range' && event.event_anchor.status === 'partial' && <p className="mt-2 text-caption text-ink-400">{__t('开盘区间低点缺失，暂无失效位')}</p>}
-                <div className="mt-1 flex flex-wrap gap-x-4 font-mono text-micro text-ink-400 tnum">
+                <div className="mt-1 flex flex-wrap gap-x-4 text-micro text-ink-400 tnum">
                   <span>{__t('跳空')} {fin(event.gap_pct) ? `${event.gap_pct >= 0 ? '+' : ''}${event.gap_pct.toFixed(2)}%` : '—'}</span>
                   <span>{__t('量能')} {fin(event.rvol_time_of_day) ? `${event.rvol_time_of_day.toFixed(1)}×` : '—'}</span>
                   <span>{__t('时段涨跌')} <LiveChange symbol={event.ticker} fallback={event.session_change_pct} size="sm" /></span>
@@ -351,7 +351,7 @@ export default function EventDetail({
                       className="relative py-1.5"
                     >
                       <span className="absolute -left-[21px] top-[11px] size-2 rounded-full bg-brand-500 ring-2 ring-brand-100" aria-hidden="true" />
-                      <span className="mr-2 font-mono text-micro text-ink-400 tnum">{line.slice(0, 5)}</span>
+                      <span className="mr-2 text-micro text-ink-400 tnum">{line.slice(0, 5)}</span>
                       <span className="text-body-s text-ink-600">{line.slice(6)}</span>
                     </motion.li>
                     ))}

@@ -122,7 +122,7 @@ export default function CtaDeepDive({
         <div>
           <h2 className="flex items-center gap-1.5 text-h3 text-ink-900">
             {instrumentName(row.instrument, row.label)}
-            <span className="font-mono text-caption font-normal text-ink-400 tnum">{row.proxy_symbol}</span>
+            <span className="text-caption font-normal text-ink-400 tnum">{row.proxy_symbol}</span>
             <InfoHint hint={CTA_HINTS.overview} />
           </h2>
         </div>
@@ -179,7 +179,7 @@ export default function CtaDeepDive({
                   </span>
                 </p>
                 <div className="mt-2"><PositionBar value={row.position_score} /></div>
-                <p className="mt-1 flex justify-between font-mono text-micro text-ink-400 tnum" aria-hidden="true">
+                <p className="mt-1 flex justify-between text-micro text-ink-400 tnum" aria-hidden="true">
                   <span>-100</span><span>0</span><span>+100</span>
                 </p>
               </div>

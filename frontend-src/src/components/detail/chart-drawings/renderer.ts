@@ -9,7 +9,7 @@ import { resolveAnchor } from './projection.ts';
 import { drawingPaint, drawingSurface } from './drawingAppearance.ts';
 import { resolvePaintColor } from './schema.ts';
 import { manualLineInk, renderPatternInk } from './linePresentation.ts';
-import { CHART_MONO_FONT } from '@/lib/chartFonts.ts';
+import { CHART_TEXT_FONT } from '@/lib/chartFonts.ts';
 import type { ProjectedDrawing } from './hitTest.ts';
 import type { ChartDrawing, ChartRange, DrawingKind, Point, Segment } from './types.ts';
 
@@ -337,7 +337,7 @@ export function drawingsToMarks(
             position: 'insideEndTop',
             fontSize: 11,
             lineHeight: 12,
-            fontFamily: CHART_MONO_FONT,
+            fontFamily: CHART_TEXT_FONT,
             color: lineStyle.color,
             backgroundColor: drawingSurface(0.96),
             padding: [1, 4],

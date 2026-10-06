@@ -76,7 +76,7 @@ export function FactorTableRow({ factor }: { factor: MacroFactor }) {
       <td className="py-2.5 pr-3 text-right">
         <ChangeBadge value={factor.scoreChange7d} size="sm" format="points" />
       </td>
-      <td className="py-2.5 text-right font-mono text-micro text-ink-400 tnum">
+      <td className="py-2.5 text-right text-micro text-ink-400 tnum">
         {factor.dataThrough ?? '—'}
       </td>
     </tr>
@@ -114,7 +114,7 @@ export function FactorCard({ factor }: { factor: MacroFactor }) {
         </div>
         <div className="min-w-0">
           <dt className="text-micro text-ink-400">{t('数据截止')}</dt>
-          <dd className="truncate font-mono text-micro text-ink-400 tnum">
+          <dd className="truncate text-micro text-ink-400 tnum">
             {factor.dataThrough ?? '—'}
           </dd>
         </div>

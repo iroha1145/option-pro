@@ -14,7 +14,9 @@ import { BusyIcon } from '@/components/shared/IconSwap';
 import { t } from '../../i18n/core.ts';
 
 /* 与首页指数带同一栅格：窄于 360px 时两列，其余手机三列，xl 起按最小 170px 自动排 */
-const INDEX_GRID = 'grid grid-cols-2 gap-2 min-[360px]:grid-cols-3 sm:gap-3 xl:[grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]';
+/* 手机两三列、平板多列时是独立小卡；xl 起排成一行，合成一条指标带（参照 uiarc.dev 的 KPI 条）：
+   外框一圈发丝线，格子之间用 1px 间隙露出线色分隔，格子本身去掉边框和圆角。auto-fit 收起空轨道，不会出现空格。 */
+const INDEX_GRID = 'grid grid-cols-2 gap-2 min-[360px]:grid-cols-3 sm:gap-3 xl:[grid-template-columns:repeat(auto-fit,minmax(170px,1fr))] xl:gap-px xl:overflow-hidden xl:rounded-[16px] xl:border xl:border-line xl:bg-line';
 
 const indexKey = (quote: IndexQuote) => quote.code;
 const indexPrice = (quote: IndexQuote) => quote.price;

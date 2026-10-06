@@ -68,7 +68,7 @@ function RegimeBar({ dim }: { dim: RegimeDim }) {
       <div className="cloud-popover pointer-events-none absolute -top-2 left-16 z-20 hidden w-56 -translate-y-full p-3 group-hover:block">
         <p className="flex items-baseline justify-between">
           <span className="text-caption font-medium text-ink-800">{dim.label}</span>
-          {getLocale() === 'zh' && <span className="font-mono text-micro text-ink-400">{dim.en}</span>}
+          {getLocale() === 'zh' && <span className="tnum text-micro text-ink-400">{dim.en}</span>}
         </p>
         <p className="mt-1.5 text-micro leading-[16px] text-ink-500">{dim.hint}</p>
         <SoftBadge tone={dim.value === null ? 'neutral' : 'brand'} className="mt-1.5">
@@ -95,7 +95,7 @@ export default function MarketRegimeCard({ market }: { market: MarketStrength })
         {regime && regime.score !== null ? (
           <span className="metric-value text-data-m text-ink-900 tnum">{regime.score}</span>
         ) : (
-          <span className="font-mono text-micro text-ink-400 tnum">{t('6 维')}</span>
+          <span className="text-micro text-ink-400 tnum">{t('6 维')}</span>
         )}
       </div>
       {regime && (regime.label || regime.spreadLabel) && (

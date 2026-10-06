@@ -38,17 +38,17 @@ export default function EconomicCalendarCard() {
         {events.slice(0, 4).map((event) => <article key={event.eventId} className="flex min-w-0 gap-3 border-b border-line px-4 py-4 sm:px-5">
           <span aria-hidden="true" className={cn('w-[3px] shrink-0 rounded-full', BARS[event.impact])} />
           <div className="w-20 shrink-0">
-            <time dateTime={event.scheduledAt} className="block font-mono text-caption font-medium text-ink-700 tnum">{fmtLocaleTime(event.scheduledAt)}</time>
-            {view === 'next' && <span className="block font-mono text-micro text-ink-400">{fmtLocaleDate(event.scheduledAt, { month: '2-digit', day: '2-digit' })}</span>}
+            <time dateTime={event.scheduledAt} className="block text-caption font-medium text-ink-700 tnum">{fmtLocaleTime(event.scheduledAt)}</time>
+            {view === 'next' && <span className="block tnum text-micro text-ink-400">{fmtLocaleDate(event.scheduledAt, { month: '2-digit', day: '2-digit' })}</span>}
             <span className="mt-1 inline-block max-w-full break-words rounded border border-line bg-paper-2 px-1.5 py-0.5 text-micro leading-4 text-ink-500">{flatCountry(event.country)}</span>
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-body-s font-medium leading-relaxed text-ink-800">{event.title}</p>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-ink-400">
               <span>{copy[event.impact]}</span>
-              <span>{copy.forecast} <span className="font-mono text-ink-600 tnum">{event.forecast}</span></span>
-              <span>{copy.previous} <span className="font-mono text-ink-600 tnum">{event.previous}</span></span>
-              <span>{copy.actual} <span className={cn('font-mono tnum', event.actual !== null ? 'font-medium text-brand-700' : 'text-ink-400')}>
+              <span>{copy.forecast} <span className="text-ink-600 tnum">{event.forecast}</span></span>
+              <span>{copy.previous} <span className="text-ink-600 tnum">{event.previous}</span></span>
+              <span>{copy.actual} <span className={cn('tnum', event.actual !== null ? 'font-medium text-brand-700' : 'text-ink-400')}>
                 {event.actual !== null ? event.actual : Date.parse(event.scheduledAt) <= q.now.getTime() ? copy.delayed : copy.pending}
               </span></span>
             </div>

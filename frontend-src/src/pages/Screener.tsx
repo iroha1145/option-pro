@@ -846,15 +846,13 @@ export default function Screener() {
     <div>
       {/* B0 页头带 */}
       <PageHeader
-        section="02"
-        eyebrow="SCREENER · STRENGTH SCAN"
         title={__t("选股扫描")}
         meta={
           <>
             {/* 手机上元信息折到标题下方、靠左排，这里跟着左对齐；桌面在页头右侧时才右对齐 */}
             <span className="text-left md:text-right">
               <span className="block text-micro text-ink-400">{__t('上次扫描')}</span>
-              <span className="font-mono text-caption text-ink-600 tnum" suppressHydrationWarning>
+              <span className="text-caption text-ink-600 tnum" suppressHydrationWarning>
                 {lastScanAt ? fmtTimeHHMMSS(lastScanAt) : '—'}
               </span>
               {queryCheckedAt ? (
@@ -901,9 +899,10 @@ export default function Screener() {
       </div>
 
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* B2 结果区（8 列） */}
+        {/* B2 结果区（8 列，xl 起 9 列）：xl 起结果表约 890px 宽，侧栏收到 3 列也放得下；
+            xl 以下表格区不足 900px，改用两列结果卡（2026-10-06 用户反馈表格右侧显示不全）。 */}
         <section
-          className="lg:col-span-8"
+          className="lg:col-span-8 xl:col-span-9"
           aria-label={__t("扫描结果")}
           {...pageRegionProps(
             'screener',
@@ -931,9 +930,9 @@ export default function Screener() {
             ) : scanState === 'done' || (scanState === 'error' && rows) ? (
               <>
                 <h2 className="font-display text-[18px] leading-[24px] text-ink-900">
-                  {__t('命中')} <span className="font-mono tnum">{hitCount}</span> {__t('只')}
+                  {__t('命中')} <span className="tnum">{hitCount}</span> {__t('只')}
                 </h2>
-                <span className="font-mono text-caption text-ink-400 tnum">{__t('耗时')} {(scanDurationMs / 1000).toFixed(1)}s</span>
+                <span className="text-caption text-ink-400 tnum">{__t('耗时')} {(scanDurationMs / 1000).toFixed(1)}s</span>
                 {scanPhase === 'queued' && <SoftBadge>{__t('排队中')}</SoftBadge>}
                 {scanPhase === 'running' && <SoftBadge>{__t('后台计算中')}</SoftBadge>}
                 {scanPhase === 'verifying' && <SoftBadge>{__t('正在确认最新结果')}</SoftBadge>}
@@ -952,12 +951,12 @@ export default function Screener() {
                   <SoftBadge tone="warn" data-testid="screener-eod-historical">{__t('历史示例')}</SoftBadge>
                 )}
                 {scanMeta && (scanMeta.observationN != null || scanMeta.compositeN != null) && (
-                  <span className="font-mono text-micro text-ink-400 tnum" data-testid="screener-eod-counts">
+                  <span className="text-micro text-ink-400 tnum" data-testid="screener-eod-counts">
                     {__t('观察')} {scanMeta.observationN ?? 0} · {__t('合格')} {scanMeta.compositeN ?? 0}
                   </span>
                 )}
                 {scanMeta && (
-                  <span className="font-mono text-micro text-ink-400 tnum" data-testid="screener-market-coverage">
+                  <span className="text-micro text-ink-400 tnum" data-testid="screener-market-coverage">
                     {scanMeta.universe === 'all_market' ? __t('全市场股票与基金') : __t('股票池')} {scanMeta.universeCount}
                     {' · '}{__t('当日日线完整')} {scanMeta.screenedCount}
                     {scanMeta.coverage?.missingSessionCount != null && scanMeta.coverage.missingSessionCount > 0 && (
@@ -1160,9 +1159,9 @@ export default function Screener() {
                   <div className="mt-4">
                     <p className="mb-2 flex items-center gap-2 text-caption text-ink-400">
                       <SoftBadge tone="warn">{__t('已过期')}</SoftBadge>
-                      {__t('上次成功扫描于')} <span className="font-mono tnum">{lastScanAt ? fmtTimeHHMMSS(lastScanAt) : '—'}</span>
+                      {__t('上次成功扫描于')} <span className="tnum">{lastScanAt ? fmtTimeHHMMSS(lastScanAt) : '—'}</span>
                     </p>
-                    <div className="hidden md:block">
+                    <div className="hidden xl:block">
                       <ResultTable
                         rows={pageRows}
                         startIndex={(safePage - 1) * PAGE_SIZE}
@@ -1181,9 +1180,9 @@ export default function Screener() {
                         stale
                       />
                     </div>
-                    {/* 移动端同样保留旧结果（审计 2.4.3）：只给桌面表格时，
-                        <768px 的失败态会剩一行「已过期」标签指着一片空白。 */}
-                    <div className="opacity-60 md:hidden">
+                    {/* 卡片同样保留旧结果（审计 2.4.3）：只给桌面表格时，
+                        <1280px 的失败态会剩一行「已过期」标签指着一片空白。 */}
+                    <div className="opacity-60 xl:hidden">
                       <ResultCards
                         rows={pageRows}
                         expanded={expanded}
@@ -1229,7 +1228,7 @@ export default function Screener() {
             ) : (
               /* 正常结果 */
               <>
-                <div className={cn('hidden md:block', scanState === 'scanning' && 'opacity-60')}>
+                <div className={cn('hidden xl:block', scanState === 'scanning' && 'opacity-60')}>
                   <ResultTable
                     rows={pageRows}
                     startIndex={(safePage - 1) * PAGE_SIZE}
@@ -1247,7 +1246,7 @@ export default function Screener() {
                     showMacro={showMacro}
                   />
                 </div>
-                <div className={cn('md:hidden', scanState === 'scanning' && 'opacity-60')}>
+                <div className={cn('xl:hidden', scanState === 'scanning' && 'opacity-60')}>
                   <ResultCards
                     rows={pageRows}
                     expanded={expanded}
@@ -1267,7 +1266,7 @@ export default function Screener() {
                   {totalPages > 1 && (
                     <div className="mt-4 flex items-center justify-center gap-2">
                       <PagerButton disabled={safePage <= 1} onClick={() => setPage(safePage - 1)} label={__t("上一页")} />
-                      <span className="font-mono text-caption text-ink-500 tnum">
+                      <span className="text-caption text-ink-500 tnum">
                         {safePage} / {totalPages}
                       </span>
                       <PagerButton disabled={safePage >= totalPages} onClick={() => setPage(safePage + 1)} label={__t("下一页")} />
@@ -1283,7 +1282,7 @@ export default function Screener() {
             吸顶偏移 = Navbar 64px + 16px：IndexTape 不吸顶，按它计会恒留
             52px 空隙；与 Breakouts 侧栏的 top-20 同口径（审计 2.4.10）。 */}
         <aside
-          className="grid grid-cols-1 gap-4 self-start md:grid-cols-2 lg:sticky lg:top-20 lg:col-span-4 lg:grid-cols-1"
+          className="grid grid-cols-1 gap-4 self-start md:grid-cols-2 lg:sticky lg:top-20 lg:col-span-4 lg:grid-cols-1 xl:col-span-3"
           aria-label={__t("侧栏")}
         >
           {marketQ.data ? (

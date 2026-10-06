@@ -3,8 +3,8 @@
  * 头部：‹ › 上月/本月/下月连续切换（方向感知 slide 260ms ease-paper）· Serif 月标题 ·「今天」快捷钮
  * 网格：周一→周日 7 列 × 5–6 行；上/下月溢出日期 ink-300 淡显、本月 ink-800；
  *      今天 brand 圆底+圆点、选中 brand-50 底、周末淡底；无财报日期留白
- * 格内财报 chips ≤3（ticker + sun-bmo/moon-amc 图标；盘前盘后是类别，用图标与墨色深浅区分，
- * 不借警示琥珀或 AI 青瓷色），超出「+N」；<sm 收缩为圆点 + 计数徽章（明细在下方列表查看）
+ * 格内财报 chips ≤3（ticker + sun-bmo/moon-amc/clock-ny 图标；盘前盘后是类别，图标按类别着色：
+ * 太阳黄、月亮蓝、待定闹钟橙，见 index.css 的 --timing-*），超出「+N」；<sm 收缩为圆点 + 计数徽章（明细在下方列表查看）
  * 点击日期 → 选中并联动 B2 日过滤（再点取消）；格 stagger 25ms rise-in（仅首次进场）
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -209,7 +209,7 @@ export default function MonthCalendar({
                 <div className="flex items-center justify-between">
                   <span
                     className={cn(
-                      'font-mono text-micro tnum',
+                      ' text-micro tnum',
                       isToday
                         ? 'flex h-6 min-w-6 items-center justify-center rounded-full bg-brand-600 px-1 font-medium text-on-accent'
                         : inMonth
@@ -243,9 +243,9 @@ export default function MonthCalendar({
                         <Icon
                           name={it.timing === 'bmo' ? 'sun-bmo' : it.timing === 'amc' ? 'moon-amc' : 'clock-ny'}
                           size={11}
-                          className={active ? 'text-brand-700' : 'text-ink-500'}
+                          className={it.timing === 'bmo' ? 'timing-icon-bmo' : it.timing === 'amc' ? 'timing-icon-amc' : 'timing-icon-tbd'}
                         />
-                        <span className="truncate font-mono text-micro font-medium leading-4 text-ink-800">
+                        <span className="truncate tnum text-micro font-medium leading-4 text-ink-800">
                           {it.ticker}
                         </span>
                       </motion.button>

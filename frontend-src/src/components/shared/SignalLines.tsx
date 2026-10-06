@@ -30,7 +30,7 @@ export default function SignalLines({ signals }: { signals: Signal[] }) {
         ) : (
           <Fragment key={`${s.label}-${i}`}>
             <span className="truncate text-ink-400">{s.name ?? s.label}</span>
-            <span className="col-span-2 text-right font-mono text-micro text-ink-400 tnum">{fmtRelative(s.at)}</span>
+            <span className="col-span-2 text-right text-micro text-ink-400 tnum">{fmtRelative(s.at)}</span>
           </Fragment>
         ),
       )}

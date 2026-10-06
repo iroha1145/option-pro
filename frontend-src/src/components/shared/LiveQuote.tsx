@@ -16,19 +16,33 @@ export function QuoteIndicator({ symbol, className, usingFallback = false, fallb
   const stamp = day && at && !/^\d{4}-\d{2}-\d{2}$/.test(at.trim())
     ? fmtTimeHHMMSS(new Date(at))
     : null;
-  const label = quote
+  const fullLabel = quote
     ? displayedQuoteLabel(quote, status, !usingFallback, fallbackAt, fallbackKind)
     : fallbackQuoteLabel(fallbackAt, fallbackKind);
+  /* 2026-10-06 第二轮：列表里这行常折成三行（「暂无新成交 · 最后报价 2026-10-05」）。
+     可见文字只留短标签和月-日（今年的日期省年份）；完整说明与带年份的日期在悬停提示里。 */
+  const label = fullLabel === t('暂无新成交 · 最后报价') ? t('最后报价') : fullLabel;
+  const shortDay = day && day.slice(0, 4) === String(new Date().getFullYear()) ? day.slice(5) : day;
+  /* 年份已在「报价日期」里；只有说明文字被缩短时，才把原文放到提示开头。 */
+  const detail = label !== fullLabel ? fullLabel : null;
   return (
     <span
       className={cn('text-micro font-normal text-ink-400', className)}
-      title={[stamp && t('报价时间 {time}（纽约）', { time: stamp }), day && t('报价日期 {date}', { date: day }), !usingFallback && quote?.source, !usingFallback && quote?.previous_close != null && quote.previous_close > 0 && t('昨收 ${price}', { price: fmtPrice(quote.previous_close) })].filter(Boolean).join(' · ')}
+      title={[detail, stamp && t('报价时间 {time}（纽约）', { time: stamp }), day && t('报价日期 {date}', { date: day }), !usingFallback && quote?.source, !usingFallback && quote?.previous_close != null && quote.previous_close > 0 && t('昨收 ${price}', { price: fmtPrice(quote.previous_close) })].filter(Boolean).join(' · ')}
     >
       {label}
-      {/* 日期整体换行，不在「2026-」「10-05」的连字符处断开 */}
-      {day ? <span className="ml-1 whitespace-nowrap font-mono tnum">{day}</span> : null}
+      {/* 日期整体换行，不在连字符处断开 */}
+      {shortDay ? <span className="ml-1 whitespace-nowrap tnum">{shortDay}</span> : null}
     </span>
   );
+}
+/** 只渲染报价说明（价格另行排版时用，如选股表把说明放到价格下一行）。判断口径与 LivePrice 相同。 */
+export function LiveQuoteLabel({ symbol, fallback, fallbackAt, fallbackKind = 'reference', className }: { symbol: string; fallback?: number | null; fallbackAt?: string | null; fallbackKind?: FallbackQuoteKind; className?: string }) {
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  const quote = useLiveQuote(normalizedSymbol);
+  const hasFallback = typeof fallback === 'number' && Number.isFinite(fallback) && fallback > 0;
+  const useLive = preferLiveQuote(quote, hasFallback, fallbackAt);
+  return <QuoteIndicator symbol={normalizedSymbol} usingFallback={!useLive && hasFallback} fallbackAt={fallbackAt} fallbackKind={fallbackKind} className={className} />;
 }
 const flashKey = () => 'price';
 const flashValue = (value: number | null) => value;
