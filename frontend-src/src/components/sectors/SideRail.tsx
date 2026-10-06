@@ -64,7 +64,7 @@ function IvHeatCard({
                 className="grid min-h-9 w-full grid-cols-[1.25rem_3.5rem_minmax(0,1fr)_minmax(2.5rem,4.5rem)_2rem] items-center max-[359px]:grid-cols-[1.25rem_3.5rem_minmax(0,1fr)_2.5rem_2rem] sm:grid-cols-[1.25rem_3.75rem_minmax(0,1fr)_minmax(3rem,7rem)_2rem] gap-x-2.5 rounded-md px-1.5 text-left transition-colors duration-fast hover:bg-paper-2 [@media(pointer:coarse)]:min-h-11"
               >
                 <span className="text-right text-caption text-ink-400 tnum">{index + 1}</span>
-                <span className="font-mono text-caption font-medium text-ink-800">{row.ticker}</span>
+                <span className="tnum text-caption font-medium text-ink-800">{row.ticker}</span>
                 <span className="truncate text-micro text-ink-500" title={row.name}>
                   {row.name !== row.ticker ? row.name : ''}
                 </span>
@@ -182,13 +182,13 @@ function CoverageCard({
         <div className="flex items-center justify-between py-2.5">
           <dt className="text-caption text-ink-500">{t('板块内最高')}</dt>
           <dd className="text-data-m text-ink-800 tnum">
-            {highest ? <><span className="font-mono">{highest.ticker}</span> · {highest.rank.toFixed(1)}</> : '—'}
+            {highest ? <><span className="tnum">{highest.ticker}</span> · {highest.rank.toFixed(1)}</> : '—'}
           </dd>
         </div>
         <div className="flex items-center justify-between py-2.5">
           <dt className="text-caption text-ink-500">{t('板块内最低')}</dt>
           <dd className="text-data-m text-ink-800 tnum">
-            {lowest ? <><span className="font-mono">{lowest.ticker}</span> · {lowest.rank.toFixed(1)}</> : '—'}
+            {lowest ? <><span className="tnum">{lowest.ticker}</span> · {lowest.rank.toFixed(1)}</> : '—'}
           </dd>
         </div>
       </dl>

@@ -147,11 +147,11 @@ export default function DetailBand({
                       onClick={() => onOpenTicker(leader.ticker)}
                       className="group flex min-h-11 w-full items-center gap-3 py-2 text-left transition-colors duration-fast hover:bg-paper-2"
                     >
-                      <span className="w-5 shrink-0 font-mono text-micro text-ink-400 tnum">
+                      <span className="w-5 shrink-0 text-micro text-ink-400 tnum">
                         {String(index + 1).padStart(2, '0')}
                       </span>
                       <TickerLogo ticker={leader.ticker} size={26} />
-                      <span className="font-mono text-body-s font-medium text-ink-800">
+                      <span className="tnum text-body-s font-medium text-ink-800">
                         {leader.ticker}
                       </span>
                       <span className="ml-auto text-micro text-ink-400">
@@ -192,7 +192,7 @@ export default function DetailBand({
                     key={ticker}
                     type="button"
                     onClick={() => onOpenTicker(ticker)}
-                    className="min-w-0 rounded-md border border-line bg-card-warm px-2 py-2 text-center font-mono text-caption font-medium text-ink-700 transition-colors duration-fast hover:border-brand-400 hover:text-brand-700"
+                    className="min-w-0 rounded-md border border-line bg-card-warm px-2 py-2 text-center tnum text-caption font-medium text-ink-700 transition-colors duration-fast hover:border-brand-400 hover:text-brand-700"
                   >
                     <span className="block truncate">{ticker}</span>
                   </button>

@@ -70,7 +70,7 @@ function LabeledSlider({
         style={{ '--fill': `${fill}%` } as CSSProperties}
         aria-label={label}
       />
-      <span className={cn('w-14 whitespace-nowrap font-mono text-micro tnum', value > 0 ? 'text-brand-600' : 'text-ink-400')}>
+      <span className={cn('w-14 whitespace-nowrap text-micro tnum', value > 0 ? 'text-brand-600' : 'text-ink-400')}>
         {format(value)}
       </span>
     </div>
@@ -108,7 +108,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
             value={filters.ticker}
             onChange={(e) => set({ ticker: e.target.value.toUpperCase().replace(/[^A-Z0-9.^-]/g, '').slice(0, 12) })}
             placeholder={t("代码过滤")}
-            className="h-8 w-28 rounded-md border border-line bg-card pl-7 pr-2 font-mono text-caption text-ink-800 placeholder:text-ink-400 focus:border-brand-400 focus:outline-none"
+            className="h-8 w-28 rounded-md border border-line bg-card pl-7 pr-2 tnum text-caption text-ink-800 placeholder:text-ink-400 focus:border-brand-400 focus:outline-none"
             aria-label={t("按代码过滤")}
           />
         </div>
@@ -247,7 +247,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
 
 function CountNote({ total, filtered }: { total: number | null; filtered: boolean }) {
   return (
-    <p className="font-mono text-micro text-ink-400 tnum">
+    <p className="text-micro text-ink-400 tnum">
       {total === null ? '—' : t('{n} 条', { n: total })}
       {filtered && total !== null && <span className="text-ink-400"> {t('· 已过滤')}</span>}
     </p>

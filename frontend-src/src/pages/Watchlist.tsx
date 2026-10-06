@@ -122,7 +122,7 @@ function SignalDistribution({ data }: { data: MarketSignalsSnapshot }) {
         {data.metrics.slice(0, 8).map((metric) => (
           <div key={metric.key} className="grid grid-cols-[minmax(0,1fr)_56px] items-center gap-2">
             <span className="truncate text-caption text-ink-500" title={metric.label}>{metric.label}</span>
-            <span className="text-right font-mono text-caption text-ink-800 tnum">{metric.value}</span>
+            <span className="text-right text-caption text-ink-800 tnum">{metric.value}</span>
           </div>
         ))}
       </div>
@@ -161,7 +161,7 @@ function MarketClockCard() {
       {status?.nextEvent && (
         <div className="mt-3 flex items-center justify-between border-t border-line pt-3">
           <span className="text-caption text-ink-500">{t('距')}{status.nextEvent.kind === 'open' ? t('开盘') : t('收盘')}</span>
-          <SoftBadge tone="brand" className="font-mono tnum">{fmtCountdown(status.nextEvent.at, now)}</SoftBadge>
+          <SoftBadge tone="brand" className="tnum">{fmtCountdown(status.nextEvent.at, now)}</SoftBadge>
         </div>
       )}
     </div>
@@ -220,7 +220,7 @@ function CardTrend({ item }: { item: WatchlistItem }) {
         <span className="mt-1 flex items-center justify-between gap-2 text-micro text-ink-400">
           {/* 三列卡片（1280 宽）放不下一行时，日期整段换到「近半年」下面，不再截成「04-10 — 1…」 */}
           <span className="flex min-w-0 flex-wrap gap-x-1">
-            {t('近半年')} <span className="whitespace-nowrap font-mono tnum">{view.start.slice(5)} — {view.end.slice(5)}</span>
+            {t('近半年')} <span className="whitespace-nowrap tnum">{view.start.slice(5)} — {view.end.slice(5)}</span>
           </span>
           <span className="flex shrink-0 items-center gap-1.5">{t('区间')}<ChangeBadge value={view.change} size="sm" /></span>
         </span>
@@ -308,7 +308,7 @@ function WatchCard({
       <div className={cn("flex items-center gap-2.5", onRemove && "pr-9")}>
         <TickerLogo ticker={item.ticker} />
         <div className="min-w-0 flex-1">
-          <p className="font-mono text-body-s font-medium text-ink-800">{item.ticker}</p>
+          <p className="tnum text-body-s font-medium text-ink-800">{item.ticker}</p>
           <p className="truncate text-micro text-ink-400">{item.name}</p>
         </div>
         <LiveChange symbol={item.ticker} fallback={item.changePct} fallbackAt={item.updatedAt} size="sm" />
@@ -332,7 +332,7 @@ function WatchCard({
                   <SignalChip key={i} type={s.type} label={s.label} />
                 ))}
                 {item.signals.length > 2 && (
-                  <span className="font-mono text-micro text-ink-400" title={item.signals.slice(2).map((s) => s.label).join('、')}>
+                  <span className="tnum text-micro text-ink-400" title={item.signals.slice(2).map((s) => s.label).join('、')}>
                     +{item.signals.length - 2}
                   </span>
                 )}
@@ -499,7 +499,7 @@ export default function Watchlist() {
                 <Link
                   to={`/stock/${encodeURIComponent(r.ticker)}`}
                   aria-label={t('打开 {ticker} 详情', { ticker: r.ticker })}
-                  className="block w-fit rounded-sm font-mono text-body-s font-medium text-ink-800 hover:text-brand-700 hover:underline"
+                  className="block w-fit rounded-sm tnum text-body-s font-medium text-ink-800 hover:text-brand-700 hover:underline"
                 >{r.ticker}</Link>
                 {r.sector && <SoftBadge className="max-w-[7.5rem]" title={t(r.sector)}><span className="truncate">{t(r.sector)}</span></SoftBadge>}
               </span>
@@ -520,7 +520,7 @@ export default function Watchlist() {
             symbol={r.ticker}
             fallbackAt={r.updatedAt}
             flash={flashes[r.ticker] ?? null}
-            className="tick-flash inline-block rounded-xs px-1 font-mono text-[15px] leading-6 text-ink-900 tnum"
+            className="tick-flash inline-block rounded-xs px-1 text-[15px] leading-6 text-ink-900 tnum"
           >
             <LivePrice symbol={r.ticker} fallback={r.price} fallbackAt={r.updatedAt} />
           </PeriodicPriceFlash>
@@ -560,7 +560,7 @@ export default function Watchlist() {
                   <SignalChip key={i} type={s.type} label={s.label} />
                 ))}
                 {r.signals.length > 2 && (
-                  <span className="font-mono text-micro text-ink-400" title={r.signals.slice(2).map((s) => s.label).join('、')}>
+                  <span className="tnum text-micro text-ink-400" title={r.signals.slice(2).map((s) => s.label).join('、')}>
                     +{r.signals.length - 2}
                   </span>
                 )}
@@ -662,8 +662,6 @@ export default function Watchlist() {
       )}
       {/* B0 页头带 */}
       <PageHeader
-        section="01"
-        eyebrow="WATCHLIST"
         title={t("自选观察")}
         meta={
           <>
@@ -678,7 +676,7 @@ export default function Watchlist() {
               label={statusQ.data?.label}
               loading={statusQ.loading}
             />
-            <span className="hidden font-mono text-data-m text-ink-600 tnum sm:inline" suppressHydrationWarning>
+            <span className="hidden text-data-m text-ink-600 tnum sm:inline" suppressHydrationWarning>
               {fmtNyTime(new Date(now))}
             </span>
             <ForceRefreshButton
@@ -784,7 +782,7 @@ export default function Watchlist() {
             <p className="w-full text-right text-caption text-ink-400 sm:w-auto">
               {displayedCount !== null && (
                 <>
-                  <span className="font-mono tnum">{displayedCount}</span>{' '}
+                  <span className="tnum">{displayedCount}</span>{' '}
                   {showingDefaultPool ? t('只（默认关注）', { n: displayedCount }) : t('只标的', { n: displayedCount })}
                 </>
               )}
@@ -793,7 +791,7 @@ export default function Watchlist() {
                 <span className="ml-1 text-ink-400">{t('/ 上限')} {maxTickers}</span>
               )}
               {wl.lastUpdatedAt && (
-                <span className="ml-2 hidden font-mono text-micro tnum sm:inline">{t('更新')} {fmtTimeHHMMSS(wl.lastUpdatedAt)}</span>
+                <span className="ml-2 hidden text-micro tnum sm:inline">{t('更新')} {fmtTimeHHMMSS(wl.lastUpdatedAt)}</span>
               )}
             </p>
           </div>
@@ -952,7 +950,7 @@ export default function Watchlist() {
                   className="inline-flex min-h-11 items-center gap-2 rounded-md border border-line-strong bg-card px-4 py-2 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:bg-paper-2"
                 >
                   {t('加载更多')}
-                  <span className="font-mono text-micro text-ink-400 tnum">
+                  <span className="text-micro text-ink-400 tnum">
                     {t('还有 {n} 只', { n: progressive.remaining })}
                   </span>
                 </button>

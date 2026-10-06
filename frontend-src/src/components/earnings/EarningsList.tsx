@@ -1,7 +1,7 @@
 import AnalysisIcon from '@/components/shared/AnalysisIcon';
 /**
  * B2 即将公布表（earnings.md）· 按日期分组
- * 行：TickerLogo+代码/名称 · 时间（sun-bmo 盘前 warn-600 / moon-amc 盘后 ai-600）
+ * 行：TickerLogo+代码/名称 · 时间（盘前太阳黄 / 盘后月亮蓝 / 待定闹钟橙，见 index.css 的 --timing-*）
  *     EPS 迷你斜纹柱对（预估斜纹 ink-400 / 实际实心 brand-600）· 营收预期 · 市值
  *     预期波动始终保留，缺失时说明原因 · AI 影响钮
  * days_until=0「今天」高亮 · 行 stagger 40ms · 斜纹柱对 grow 错峰 700ms · <md 转卡片流
@@ -58,7 +58,7 @@ export function TimingBadge({ timing, className }: { timing: EarningsRow['timing
   if (timing == null) {
     return (
       <SoftBadge className={className} aria-label={t("公布时间待定")}>
-        <Icon name="clock-ny" size={14} />
+        <Icon name="clock-ny" size={14} className="timing-icon-tbd" />
         {t('时间待定')}
       </SoftBadge>
     );
@@ -69,7 +69,7 @@ export function TimingBadge({ timing, className }: { timing: EarningsRow['timing
       className={className}
       aria-label={bmo ? t('盘前公布') : t('盘后公布')}
     >
-      <Icon name={bmo ? 'sun-bmo' : 'moon-amc'} size={14} />
+      <Icon name={bmo ? 'sun-bmo' : 'moon-amc'} size={14} className={bmo ? 'timing-icon-bmo' : 'timing-icon-amc'} />
       {bmo ? t('盘前') : t('盘后')}
     </SoftBadge>
   );
@@ -138,7 +138,7 @@ function ExpectedMoveCell({
     const missing = expectedMoveMissingCopy(status);
     return (
       <span
-        className={cn('block min-w-0 text-[12px] font-medium leading-4 text-ink-400', align === 'end' && 'text-right')}
+        className={cn('block min-w-0 text-[13px] font-medium leading-4 text-ink-400', align === 'end' && 'text-right')}
         title={missing.title}
         data-expected-move-state={status || 'unknown'}
       >
@@ -373,7 +373,7 @@ export default function EarningsList({
                   <span className="rounded-xs bg-brand-600 px-1.5 py-px text-micro font-medium leading-4 text-on-accent">{t('今天')}</span>
                 )}
               </p>
-              <p className="font-mono text-micro text-ink-400 tnum">
+              <p className="text-micro text-ink-400 tnum">
                 {relativeDayCN(g.date)} · {g.rows.length} {t('条')}
               </p>
             </div>
@@ -418,7 +418,7 @@ export default function EarningsList({
                     <span className="flex min-w-0 items-center gap-2.5">
                       <TickerLogo ticker={row.ticker} />
                       <span className="min-w-0 flex-1">
-                        <span className="block font-mono text-body-s font-medium text-ink-800">{row.ticker}</span>
+                        <span className="block tnum text-body-s font-medium text-ink-800">{row.ticker}</span>
                         <span className="flex min-w-0 items-center gap-1.5">
                           <span className="min-w-0 truncate text-micro text-ink-400" title={row.name}>{row.name}</span>
                           {sector && (
@@ -472,7 +472,7 @@ export default function EarningsList({
                     <span className="flex items-center gap-2.5">
                       <TickerLogo ticker={row.ticker} size={28} />
                       <span className="min-w-0 flex-1">
-                        <span className="block font-mono text-body-s font-medium text-ink-800">{row.ticker}</span>
+                        <span className="block tnum text-body-s font-medium text-ink-800">{row.ticker}</span>
                         <span className="flex min-w-0 items-center gap-1.5">
                           <span className="min-w-0 truncate text-micro text-ink-400" title={row.name}>{row.name}</span>
                           {sector && (

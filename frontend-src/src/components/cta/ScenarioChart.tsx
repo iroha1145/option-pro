@@ -8,7 +8,7 @@ import ReactECharts from '@/components/charts/ReactECharts';
 import {
   baseAnimation,
   CH,
-  CHART_MONO_FONT,
+  CHART_TEXT_FONT,
   INSIGHT_FRAME,
   insightDotRow,
   insightLine,
@@ -51,7 +51,7 @@ function scenarioOption(row: CtaInstrumentEstimate): ChartOption | null {
       axisLabel: {
         color: CH.ink400,
         fontSize: 10,
-        fontFamily: CHART_MONO_FONT,
+        fontFamily: CHART_TEXT_FONT,
         /* interval 传数值时 ECharts 按「每 N+1 个取一」采样，中心标签会偏离
            0 基准（实测落在 +1%）。改函数式：固定取 0/24/48/72/96 五点，
            refIndex=48 正好落在 0 标签上。 */
@@ -66,7 +66,7 @@ function scenarioOption(row: CtaInstrumentEstimate): ChartOption | null {
       position: 'right' as const,
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: CH.ink400, fontSize: 10, fontFamily: CHART_MONO_FONT },
+      axisLabel: { color: CH.ink400, fontSize: 10, fontFamily: CHART_TEXT_FONT },
       splitLine: { lineStyle: { color: CH.lineChart, width: 1 } },
     },
     tooltip: insightTooltip({
@@ -106,7 +106,7 @@ function scenarioOption(row: CtaInstrumentEstimate): ChartOption | null {
                 formatter: t('现价 {p}', { p: fmtPrice(row.reference_price) }),
                 color: CH.ink400,
                 fontSize: 10,
-                fontFamily: CHART_MONO_FONT,
+                fontFamily: CHART_TEXT_FONT,
                 position: 'insideEndTop' as const,
               },
             },
@@ -124,7 +124,7 @@ function scenarioOption(row: CtaInstrumentEstimate): ChartOption | null {
             position: 'right' as const,
             distance: 6,
             fontSize: 10,
-            fontFamily: CHART_MONO_FONT,
+            fontFamily: CHART_TEXT_FONT,
             color: CH.brand600,
             formatter: t('现值 {v}', {
               v: row.position_score === null

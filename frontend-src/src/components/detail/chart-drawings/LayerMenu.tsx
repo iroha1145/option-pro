@@ -93,7 +93,7 @@ function ValueBadge({ text, className }: { text: string; className?: string }) {
   return (
     <span
       className={cn(
-        'inline-flex h-6 items-center justify-center rounded-sm bg-paper-2 font-mono leading-none text-ink-700 tnum',
+        'inline-flex h-6 items-center justify-center rounded-sm bg-paper-2 leading-none text-ink-700 tnum',
         className,
       )}
     >
@@ -224,7 +224,7 @@ function Card({ title, meta, children, className }: { title: string; meta?: stri
     <section className={cn('rounded-lg border border-line bg-card p-2 shadow-card', className)}>
       <div className="mb-1 flex h-6 items-center justify-between px-1.5 pt-0.5">
         <h3 className="font-medium leading-none text-ink-600">{title}</h3>
-        {meta && <span className="font-mono text-micro leading-none text-ink-400 tnum">{meta}</span>}
+        {meta && <span className="text-micro leading-none text-ink-400 tnum">{meta}</span>}
       </div>
       {children}
     </section>
@@ -417,7 +417,7 @@ export default function LayerMenu({
                   {(['short', 'mid', 'long', 'trend', 'breakout', 'price_action'] as const).map((name) => (
                     <div key={name} className="flex items-center justify-between gap-2">
                       <dt className="truncate text-ink-500">{FAMILY_LABELS[name]}</dt>
-                      <dd className="font-mono text-ink-700 tnum">
+                      <dd className="text-ink-700 tnum">
                         {families[name]?.score == null ? '—' : families[name]?.score}
                       </dd>
                     </div>

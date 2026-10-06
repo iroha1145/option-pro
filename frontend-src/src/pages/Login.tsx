@@ -341,10 +341,8 @@ export default function Login() {
             className="flex items-center gap-3"
           >
             <img src="/logo.svg" alt="" className="size-10 dark:brightness-0 dark:invert" />
-            <div>
-              <p className="font-display text-h2 font-bold text-ink-900">Optix Pro</p>
-              <p className="eyebrow mt-0.5">US EQUITY RESEARCH DESK</p>
-            </div>
+            {/* 与顶栏一致只留品牌名（2026-10-06 第二轮） */}
+            <p className="font-display text-h2 font-bold text-ink-900">Optix Pro</p>
           </motion.div>
 
           <h1 className="mt-10 font-display text-display-l text-ink-900 lg:text-display-xl">
@@ -491,7 +489,7 @@ export default function Login() {
                     onKeyDown={(e) => setCapsLock(e.getModifierState?.('CapsLock') ?? false)}
                     onKeyUp={(e) => setCapsLock(e.getModifierState?.('CapsLock') ?? false)}
                     placeholder={mode === 'register' ? t('设置密码') : t('输入密码')}
-                    className="h-full min-w-0 flex-1 bg-transparent font-mono text-[16px] text-ink-800 outline-none placeholder:text-ink-400 disabled:opacity-60"
+                    className="h-full min-w-0 flex-1 bg-transparent tnum text-[16px] text-ink-800 outline-none placeholder:text-ink-400 disabled:opacity-60"
                     autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
                     aria-label={t("密码")}
                     aria-describedby={mode === 'register' ? 'registration-password-hint' : undefined}

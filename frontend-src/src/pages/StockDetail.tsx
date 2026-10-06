@@ -115,7 +115,6 @@ export default function StockDetail() {
       <div className="space-y-5" aria-busy="true" {...pageRegionProps('stock', 'loading')}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           {toolbar}
-          <span className="eyebrow">STOCK · ${symbol}</span>
         </div>
         <PriceHeader symbol={symbol} />
         <SkeletonBlock className="h-[380px] w-full rounded-md" />
@@ -135,7 +134,6 @@ export default function StockDetail() {
       <div {...pageRegionProps('stock', is404 || manualRecovery ? 'empty' : 'error')}>
         <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
           {toolbar}
-          <span className="eyebrow">STOCK · ${symbol}</span>
         </div>
         <PriceHeader symbol={symbol} />
         <EmptyState
@@ -240,7 +238,6 @@ export default function StockDetail() {
       {/* 行0 */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
         {toolbar}
-        <span className="eyebrow">STOCK · ${symbol}</span>
       </div>
       <PriceHeader detail={detail} />
       {scopeBanner}

@@ -185,7 +185,7 @@ export default function EarningsAnalysisControls() {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <h2 className="text-body-s font-medium text-ink-800">{t('财报分析管理')}</h2>
-              <SoftBadge className="font-mono">
+              <SoftBadge className="tnum">
                 {t('未来 5 天')}
               </SoftBadge>
             </div>
@@ -227,7 +227,7 @@ export default function EarningsAnalysisControls() {
           </button>
         </div>
 
-        <p className="mt-2 font-mono text-micro text-ink-400">
+        <p className="mt-2 tnum text-micro text-ink-400">
           {running
             ? t('正在为新增财报安排分析…')
             : loading

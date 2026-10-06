@@ -109,12 +109,10 @@ export default function Sectors() {
   return (
     <div>
       <PageHeader
-        section="04"
-        eyebrow="SECTORS · LIVE AGGREGATES"
         title={t("板块透视")}
         meta={
           <>
-            <span className="hidden font-mono text-micro text-ink-400 tnum sm:inline">
+            <span className="hidden text-micro text-ink-400 tnum sm:inline">
               {strengthEnvelope.asOf
                 ? t('统计截至 {time}', { time: fmtRelative(strengthEnvelope.asOf) })
                 : t('统计时间 —')}

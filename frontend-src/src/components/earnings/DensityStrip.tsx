@@ -74,7 +74,7 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
                           : 'left-1/2 -translate-x-1/2',
                     )}
                   >
-                    <span className="block font-mono text-micro text-ink-500">
+                    <span className="block tnum text-micro text-ink-500">
                       {fmtMMDD(d.date)} {weekdayCN(d.date)}
                     </span>
                     {n === 0 ? (
@@ -82,12 +82,12 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
                     ) : (
                       <span className="mt-0.5 flex flex-wrap gap-1">
                         {d.rows.slice(0, MAX_TOOLTIP_TICKERS).map((r) => (
-                          <span key={r.ticker} className="font-mono text-micro font-medium text-ink-800">
+                          <span key={r.ticker} className="tnum text-micro font-medium text-ink-800">
                             {r.ticker}
                           </span>
                         ))}
                         {n > MAX_TOOLTIP_TICKERS && (
-                          <span className="font-mono text-micro text-ink-400">
+                          <span className="tnum text-micro text-ink-400">
                             +{n - MAX_TOOLTIP_TICKERS}
                           </span>
                         )}
@@ -109,7 +109,7 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
               );
             })}
           </motion.div>
-          <div className="mt-1.5 flex justify-between font-mono text-micro text-ink-400">
+          <div className="mt-1.5 flex justify-between tnum text-micro text-ink-400">
             <span>{t('今天')}</span>
             <span>{t('+15 天')}</span>
             <span>{t('+30 天')}</span>

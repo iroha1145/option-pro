@@ -36,7 +36,7 @@ function TimeCol({ iso }: { iso: string }) {
   const sameDay = d.toDateString() === now.toDateString();
   return (
     <div className="flex w-11 shrink-0 flex-col items-center pt-0.5">
-      <span className="font-mono text-[11px] leading-[14px] text-ink-400 tnum">
+      <span className="text-[12px] leading-[14px] text-ink-400 tnum">
         {sameDay
           ? fmtLocaleTime(iso)
           : fmtLocaleDate(iso, { month: '2-digit', day: '2-digit' })}
@@ -95,9 +95,9 @@ export function NewsRow({
         <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-micro text-ink-400">
           <span className="font-medium text-ink-500">{item.source}</span>
           <span aria-hidden="true">·</span>
-          <span className="font-mono tnum">{fmtRelative(item.publishedAt)}</span>
+          <span className="tnum">{fmtRelative(item.publishedAt)}</span>
           {item.sourceCount > 1 && (
-            <SoftBadge className="font-mono" title={__t("多源确认条数")}>
+            <SoftBadge className="tnum" title={__t("多源确认条数")}>
               {item.sourceCount} {__t('源')}
             </SoftBadge>
           )}

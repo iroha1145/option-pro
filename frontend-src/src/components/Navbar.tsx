@@ -39,7 +39,7 @@ export const NAV_ITEMS = [
 function NyClock({ className }: { className?: string }) {
   const now = useNow(1000);
   return (
-    <span className={cn('font-mono text-micro text-ink-500 tnum', className)} suppressHydrationWarning>
+    <span className={cn('text-micro text-ink-500 tnum', className)} suppressHydrationWarning>
       {fmtNyTime(new Date(now))} ET
     </span>
   );
@@ -140,10 +140,8 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
         {/* Logo */}
         <Link to="/" className="flex shrink-0 items-center gap-2.5" aria-label={t("Optix Pro 首页")}>
           <img src="/logo.svg" alt="" className="size-7 md:size-8 dark:brightness-0 dark:invert" />
-          <span className="hidden flex-col leading-none sm:flex">
-            <span className="font-display text-[17px] font-bold text-ink-900">Optix Pro</span>
-            <span className="eyebrow mt-0.5 text-micro">US EQUITY DESK</span>
-          </span>
+          {/* 2026-10-06 第二轮：只留品牌名，去掉下方「US EQUITY DESK」小字 */}
+          <span className="hidden font-display text-[17px] font-bold leading-none text-ink-900 sm:inline">Optix Pro</span>
         </Link>
 
         {/* 编号导航（桌面） */}
@@ -177,9 +175,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
                 active ? 'font-medium text-brand-600' : 'text-ink-500 hover:text-ink-800',
               )}
             >
-              {/* 9 项编号在 xl–2xl 之间是压垮布局的最后一根稻草（1440 登录态
-                  「退出」被挤出视口）：sub-2xl 只留文字标签，≥2xl 恢复编号。 */}
-              <span className="hidden font-mono text-[11px] text-ink-400 2xl:inline">{item.no}</span>
+              {/* 2026-10-06 第二轮：导航只留文字标签，不再显示「01」「02」编号（命令面板同步去掉）。 */}
               {/* 标签盒是滑行下划线的测量锚：placeGlide 按它的 left/width 补间，
                   跨项滑动（beUI tabs / transitions.dev tabs-sliding）。 */}
               <span data-nav-label className="relative flex h-full items-center">

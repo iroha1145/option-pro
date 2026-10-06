@@ -39,13 +39,14 @@ export type IndexCardProps = Target & {
   focused?: boolean;
 };
 
+/* xl 起与相邻格子合成一条指标带：去掉自身边框圆角，悬停换浅底而不是加深描边。 */
 const SURFACE =
-  'card-surface card-hover card-glare flex h-full w-full flex-col gap-1 p-2.5 text-left sm:p-3';
+  'card-surface card-hover card-glare flex h-full w-full flex-col gap-1 p-2.5 text-left sm:p-3 xl:rounded-none xl:border-0 xl:px-5 xl:py-4 xl:transition-colors xl:hover:bg-paper-2';
 
 /** 同尺寸骨架：三行与真实卡对齐，手机三列时也不溢出卡宽 */
 export function IndexCardSkeleton() {
   return (
-    <div className="card-surface flex flex-col gap-1.5 p-2.5 sm:p-3" data-state="loading" aria-hidden="true">
+    <div className="card-surface flex flex-col gap-1.5 p-2.5 sm:p-3 xl:rounded-none xl:border-0 xl:px-5 xl:py-4" data-state="loading" aria-hidden="true">
       <SkeletonBlock className="h-3 w-3/5" />
       <SkeletonBlock className="h-5 w-4/5 sm:h-6" />
       <SkeletonBlock className="mt-1 h-4 w-14 rounded-xs" />
@@ -63,7 +64,7 @@ export default function IndexCard(props: IndexCardProps) {
     <>
       <span className="flex min-w-0 items-baseline justify-between gap-1.5">
         <span className="min-w-0 truncate text-caption text-ink-500">{quote.name}</span>
-        <span className="shrink-0 font-mono text-micro text-ink-400">{quote.code}</span>
+        <span className="shrink-0 tnum text-micro text-ink-400">{quote.code}</span>
       </span>
       <span
         className={cn(

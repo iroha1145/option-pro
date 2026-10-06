@@ -826,7 +826,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                         className="w-full rounded-md border border-line bg-card-warm p-3 text-left transition-colors duration-fast hover:border-brand-400/50 hover:bg-card"
                       >
                         <span className="flex min-w-0 items-center gap-2">
-                          <span className="font-mono text-caption font-medium text-ink-900">${item.ticker}</span>
+                          <span className="tnum text-caption font-medium text-ink-900">${item.ticker}</span>
                           <span className="min-w-0 truncate text-caption text-ink-500">{item.name}</span>
                           <SoftBadge tone={meta.tone} className="ml-auto shrink-0">
                             {meta.label}

@@ -113,7 +113,7 @@ export default function DrawingInspector({
                   {item.hidden ? <span className="ml-1 text-ink-400">{t('已隐藏')}</span> : null}
                   {item.locked ? <span className="ml-1 text-ink-400">{t('已锁定')}</span> : null}
                   {unresolvedItem ? <span className="ml-1 text-warn-700">{t('未解析')}</span> : null}
-                  <span className="ml-1 font-mono text-ink-400">{t('层级 {n}', { n: item.zOrder })}</span>
+                  <span className="ml-1 tnum text-ink-400">{t('层级 {n}', { n: item.zOrder })}</span>
                 </button>
                 <button
                   type="button"
@@ -175,7 +175,7 @@ export default function DrawingInspector({
                 aria-pressed={drawing.style.width === width}
                 onClick={() => onStyle({ ...drawing.style, width })}
                 className={cn(
-                  'rounded-xs border px-2 py-0.5 font-mono text-micro outline-none focus-visible:ring-2 focus-visible:ring-brand-600',
+                  'rounded-xs border px-2 py-0.5 tnum text-micro outline-none focus-visible:ring-2 focus-visible:ring-brand-600',
                   drawing.style.width === width ? 'border-brand-400 bg-brand-50' : 'border-line',
                 )}
               >

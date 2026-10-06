@@ -27,8 +27,8 @@ export function ScoreBarsMini({ event, className }: { event: BreakoutEventFull; 
         return (
           <div key={d.key} title={`${d.label} ${disp(v)}`}>
             <p className="flex items-baseline justify-between">
-              <span className="text-[11px] leading-[16px] text-ink-500">{d.label}</span>
-              <span className="font-mono text-[11px] leading-[16px] text-ink-700 tnum">{disp(v)}</span>
+              <span className="text-[12px] leading-[16px] text-ink-500">{d.label}</span>
+              <span className="text-[12px] leading-[16px] text-ink-700 tnum">{disp(v)}</span>
             </p>
             <motion.div
               className="mt-0.5 radar-bar-track h-[5px] overflow-hidden rounded-pill bg-line"
@@ -71,7 +71,7 @@ export function ScoreBarsFull({ event, className }: { event: BreakoutEventFull; 
                 />
               )}
             </div>
-            <span className="text-right font-mono text-caption text-ink-600 tnum">{disp(v)}</span>
+            <span className="text-right text-caption text-ink-600 tnum">{disp(v)}</span>
           </div>
         );
       })}
@@ -102,7 +102,7 @@ export function RangePersistenceBars({ event, className }: { event: BreakoutEven
       <div className={cn('grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-2', className)} aria-label={t("区间持续指标")}>
         <div className="col-span-3 flex items-center justify-between rounded-sm bg-card-warm px-2.5 py-1.5">
           <span className="text-caption text-ink-500">{t('状态')}</span>
-          <span className="font-mono text-caption text-ink-700">{statusCn[rp.status] ?? rp.status}</span>
+          <span className="tnum text-caption text-ink-700">{statusCn[rp.status] ?? rp.status}</span>
         </div>
         {metrics.map((metric, i) => (
           <div key={metric.key} className="col-span-3 grid grid-cols-subgrid items-center gap-x-2.5">
@@ -118,10 +118,10 @@ export function RangePersistenceBars({ event, className }: { event: BreakoutEven
                 />
               )}
             </div>
-            <span className="text-right font-mono text-caption text-ink-600 tnum">{disp(metric.value)}</span>
+            <span className="text-right text-caption text-ink-600 tnum">{disp(metric.value)}</span>
           </div>
         ))}
-        <p className="pt-1 text-right font-mono text-micro text-ink-400 tnum">
+        <p className="pt-1 text-right text-micro text-ink-400 tnum">
           {t('5 日斜率')} {fin(rp.slope5d) ? `${rp.slope5d >= 0 ? '+' : ''}${rp.slope5d.toFixed(2)}` : '—'}
         </p>
       </div>
@@ -154,7 +154,7 @@ export function RangePersistenceBars({ event, className }: { event: BreakoutEven
                 style={{ width: `${Math.max(3, Math.min(100, v))}%` }}
               />
             </div>
-            <span className="text-right font-mono text-caption text-ink-600 tnum">{disp(v)}</span>
+            <span className="text-right text-caption text-ink-600 tnum">{disp(v)}</span>
           </div>
         );
       })}

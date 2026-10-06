@@ -53,7 +53,7 @@ export default function ResultCards({
   showMacro = false,
 }: ResultCardsProps) {
   return (
-    <div className="grid grid-cols-1 gap-3" key={animKey}>
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:items-start" key={animKey}>
       {rows.map((r, i) => {
         const isOpen = expanded === r.ticker;
         const primary = rowPrimarySortScore(r);
@@ -66,9 +66,8 @@ export default function ResultCards({
             initial={page === 1 ? { opacity: 0, y: 14 } : false}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: page === 1 ? Math.min(i * 0.03, 0.3) : 0, layout: { duration: DUR_UI, ease: EASE_PAPER } }}
-            /* 可展开结果卡：hover 上浮 -3px/240ms（whileHover 避免入场后内联 transform 压掉 CSS 位移），阴影用 CSS */
-            whileHover={{ y: -3, transition: { duration: DUR_UI, ease: 'easeOut' } }}
-            className="card-surface overflow-hidden transition-shadow duration-240 ease-out hover:shadow-sh-2"
+            /* 可展开结果卡：2026-10-06 起卡片在 768–1279px 也用（两列），悬停按全站规则只加深描边（card-lift，精确指针门控），不再上浮投影 */
+            className="card-surface card-lift overflow-hidden"
           >
             <button
               onClick={() => onToggle(r.ticker)}
@@ -79,7 +78,7 @@ export default function ResultCards({
                 <TickerLogo ticker={r.ticker} size={32} />
                 <span className="min-w-0 flex-1">
                   <span className="flex flex-wrap items-center gap-1.5">
-                    <span className="font-mono text-body-s font-medium text-ink-800">{r.ticker}</span>
+                    <span className="tnum text-body-s font-medium text-ink-800">{r.ticker}</span>
                     {r.sector && <SoftBadge className="max-w-[7.5rem]" title={t(r.sector)}><span className="truncate">{t(r.sector)}</span></SoftBadge>}
                     {r.observationOnly && <SoftBadge>{t('观察')}</SoftBadge>}
                     {r.listKind === 'composite' && r.status === 'eligible' && <SoftBadge tone="ok">{t('合格')}</SoftBadge>}

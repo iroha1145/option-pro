@@ -27,7 +27,7 @@ export default function PageFallback() {
       <span className="flex items-center">
         <MatrixLoader />
       </span>
-      <span className="ml-2.5 font-mono text-caption text-ink-400">{t('加载中…')}</span>
+      <span className="ml-2.5 tnum text-caption text-ink-400">{t('加载中…')}</span>
     </div>
   );
 }

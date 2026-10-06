@@ -118,13 +118,13 @@ module.exports = {
         },
       },
       borderRadius: {
-        /* v8 清新回暖：chip/badge 4 · 按钮/输入 6 · 卡片/容器 12 · 抽屉/模态 16 */
+        /* 2026-10-06 第二轮（参照 uiarc.dev 的 8/16 两档）：chip/badge 6 · 按钮/输入 8 · 卡片/容器 16 · 抽屉/模态 20 */
         xs: '4px',
-        sm: '4px',
-        md: '6px',
-        lg: '12px',
-        xl: '16px',
-        '2xl': '20px',
+        sm: '6px',
+        md: '8px',
+        lg: '16px',
+        xl: '20px',
+        '2xl': '24px',
         pill: '999px',
       },
       boxShadow: {
@@ -163,21 +163,24 @@ module.exports = {
       fontSize: {
         /* design.md §2.2 字阶（size/lineHeight，weight 由工具类控制） */
         /* 2026-10-06 字重只用 400/500：标题与数字中等，其余常规（中文 550 以上会落到
-           苹方「中粗」，整页发重）。display 字阶 tracking -0.02em · lineHeight 1.15。 */
+           苹方「中粗」，整页发重）。display 字阶 tracking -0.02em · lineHeight 1.15。
+           2026-10-06 第二轮（参照 uiarc.dev）：小字整体上调一档——micro 12、caption 13、
+           body-s 14、body 15，行高放到 1.4–1.6；原 11–12px、行高 1.1 的密排读起来挤。
+           eyebrow 不再全大写加字距，只是一行中等字重的灰色小标签。 */
         'display-xl': ['56px', { lineHeight: '64px', fontWeight: '500', letterSpacing: '-0.02em' }],
         'display-l': ['40px', { lineHeight: '46px', fontWeight: '500', letterSpacing: '-0.02em' }],
         'display-m': ['28px', { lineHeight: '32px', fontWeight: '500', letterSpacing: '-0.02em' }],
         h2: ['20px', { lineHeight: '26px', fontWeight: '500' }],
-        h3: ['15px', { lineHeight: '22px', fontWeight: '500' }],
-        body: ['14px', { lineHeight: '22px', fontWeight: '400' }],
-        'body-s': ['13px', { lineHeight: '20px', fontWeight: '400' }],
-        caption: ['12px', { lineHeight: '16px', fontWeight: '400' }],
-        eyebrow: ['11px', { lineHeight: '14px', fontWeight: '500', letterSpacing: '0.08em' }], // v8 字距收紧 0.14→0.08em
+        h3: ['16px', { lineHeight: '24px', fontWeight: '500' }],
+        body: ['15px', { lineHeight: '24px', fontWeight: '400' }],
+        'body-s': ['14px', { lineHeight: '21px', fontWeight: '400' }],
+        caption: ['13px', { lineHeight: '19px', fontWeight: '400' }],
+        eyebrow: ['12px', { lineHeight: '17px', fontWeight: '500' }],
         'data-xxl': ['44px', { lineHeight: '48px', fontWeight: '500', letterSpacing: '-0.02em' }],
         'data-xl': ['30px', { lineHeight: '36px', fontWeight: '500' }],
         'data-l': ['20px', { lineHeight: '26px', fontWeight: '500' }],
-        'data-m': ['14px', { lineHeight: '20px', fontWeight: '400' }],
-        micro: ['11px', { lineHeight: '14px', fontWeight: '400' }],
+        'data-m': ['15px', { lineHeight: '22px', fontWeight: '400' }],
+        micro: ['12px', { lineHeight: '17px', fontWeight: '400' }],
       },
       maxWidth: {
         shell: '1440px',

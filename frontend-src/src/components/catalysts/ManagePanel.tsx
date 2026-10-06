@@ -308,7 +308,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
         </span>
         <span className="flex items-center gap-2.5">
           {worker && (
-            <span className="hidden items-center gap-1.5 font-mono text-micro text-ink-400 sm:flex">
+            <span className="hidden items-center gap-1.5 tnum text-micro text-ink-400 sm:flex">
               {/* worker 健康是静态状态，不脉冲 */}
               <Led tone={worker.healthy ? 'ok' : 'danger'} className="size-1.5" />
               worker {worker.healthy ? __t('正常') : worker.status}
@@ -347,7 +347,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
                 ) : worker && worker.tasks.length > 0 ? (
                   <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1">
                     {worker.tasks.map((t) => (
-                      <li key={t.name} className="flex items-center gap-1.5 font-mono text-micro text-ink-500 tnum">
+                      <li key={t.name} className="flex items-center gap-1.5 text-micro text-ink-500 tnum">
                         <Led tone={!t.enabled ? 'muted' : t.healthy ? 'ok' : 'danger'} className="size-1.5" />
                         <span className="truncate">{TASK_CN[t.name] ?? t.name}</span>
                         {t.lastSuccessAt && <span className="ml-auto shrink-0 text-ink-400">{fmtRelative(t.lastSuccessAt)}</span>}

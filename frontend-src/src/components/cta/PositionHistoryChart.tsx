@@ -11,7 +11,7 @@ import { useChartCursor } from '@/components/charts/useChartCursor';
 import {
   baseAnimation,
   CH,
-  CHART_MONO_FONT,
+  CHART_TEXT_FONT,
   INSIGHT_SMOOTH,
   insightAreaStyle,
   insightDotRow,
@@ -50,7 +50,7 @@ function historyOption(history: { date: string; position: number }[]): ChartOpti
       data: history.map((h) => h.date.slice(5)),
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: CH.ink400, fontSize: 10, fontFamily: CHART_MONO_FONT, interval: 23 },
+      axisLabel: { color: CH.ink400, fontSize: 10, fontFamily: CHART_TEXT_FONT, interval: 23 },
     },
     yAxis: {
       type: 'value' as const,
@@ -59,7 +59,7 @@ function historyOption(history: { date: string; position: number }[]): ChartOpti
       position: 'right' as const,
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: CH.ink400, fontSize: 10, fontFamily: CHART_MONO_FONT },
+      axisLabel: { color: CH.ink400, fontSize: 10, fontFamily: CHART_TEXT_FONT },
       splitLine: { lineStyle: { color: CH.lineChart, width: 1 } },
     },
     tooltip: insightTooltip({
@@ -152,7 +152,7 @@ export default function PositionHistoryChart({ history }: { history: { date: str
           ? t('0 为多空分界 · 最新 {v}', { v: signed(point.position) })
           : t('0 为多空分界 · 当日 {v}', { v: signed(point.position) })
       }
-      action={<span className="font-mono text-micro text-ink-400 tnum">{point.date}</span>}
+      action={<span className="text-micro text-ink-400 tnum">{point.date}</span>}
       className="mt-1.5"
     >
       <div

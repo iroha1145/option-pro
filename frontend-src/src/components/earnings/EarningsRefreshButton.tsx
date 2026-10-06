@@ -28,10 +28,10 @@ export default function EarningsRefreshButton({
   return (
     <span className="flex items-center gap-2.5">
       {refreshStatus === 'failed_stale' && (
-        <span className="font-mono text-micro text-warn-700">{t('刷新失败 · 显示已有数据')}</span>
+        <span className="tnum text-micro text-warn-700">{t('刷新失败 · 显示已有数据')}</span>
       )}
       {refreshStatus === 'refreshed' && cooldownRemain <= 0 && lastUpdatedAt && (
-        <span className="font-mono text-micro text-ink-400 tnum">{t('已更新')} {fmtTimeHHMMSS(lastUpdatedAt)}</span>
+        <span className="text-micro text-ink-400 tnum">{t('已更新')} {fmtTimeHHMMSS(lastUpdatedAt)}</span>
       )}
       <button
         onClick={() => onRefresh()}

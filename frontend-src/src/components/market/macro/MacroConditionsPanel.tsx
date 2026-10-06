@@ -227,7 +227,7 @@ export default function MacroConditionsPanel({
           <p className="eyebrow">{t('宏观环境')}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-caption text-ink-400 tnum">
+          <span className="text-caption text-ink-400 tnum">
             {t('数据截止')} {data.dataThrough ?? '—'}
           </span>
           {chip && (

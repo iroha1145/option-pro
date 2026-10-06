@@ -23,4 +23,6 @@ export const SHARED_UI_STUBS = {
   '@/components/shared/ThinkingLabel': { default: 'ThinkingLabel' },
   '@/components/shared/CollapsePresence': { default: 'CollapsePresence' },
   '@/components/shared/AutoHeight': { default: 'AutoHeight' },
+  // 2026-10-06：选股行展开的近半年走势块用涨跌徽标显示区间涨跌。
+  '@/components/shared/ChangeBadge': { default: 'ChangeBadge' },
 };

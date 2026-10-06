@@ -114,7 +114,7 @@ function SignalCard({ ev: initialEvent, index, flash, locate, onOpen, showT1 = f
               openTicker(ev.ticker);
             }}
             aria-label={t('打开 {ticker} 个股详情抽屉', { ticker: ev.ticker })}
-            className="font-mono text-body-s font-medium text-ink-800 underline-offset-2 transition-colors duration-fast hover:text-brand-600 hover:underline"
+            className="tnum text-body-s font-medium text-ink-800 underline-offset-2 transition-colors duration-fast hover:text-brand-600 hover:underline"
           >
             {ev.ticker}
           </button>
@@ -123,7 +123,7 @@ function SignalCard({ ev: initialEvent, index, flash, locate, onOpen, showT1 = f
             {ev.sector && <SoftBadge size="sm" tone="neutral">{t(ev.sector)}</SoftBadge>}
           </div>
         </div>
-        <span className="shrink-0 font-mono text-micro text-ink-400 tnum">{fmtRelative(ev.triggered_at)}</span>
+        <span className="shrink-0 text-micro text-ink-400 tnum">{fmtRelative(ev.triggered_at)}</span>
       </div>
 
       {/* chip 行 */}
@@ -136,7 +136,7 @@ function SignalCard({ ev: initialEvent, index, flash, locate, onOpen, showT1 = f
       <div className="radar-quote-row mt-3 flex items-end justify-between gap-2">
         <span
           className={cn(
-            'tick-flash rounded-xs px-1 font-mono text-data-l text-ink-900 tnum',
+            'tick-flash rounded-xs px-1 text-data-l text-ink-900 tnum',
             !preferLiveQuote(quote, Number.isFinite(ev.current_price)) && flash === 'up' && 'tick-flash-up',
             !preferLiveQuote(quote, Number.isFinite(ev.current_price)) && flash === 'down' && 'tick-flash-down',
           )}

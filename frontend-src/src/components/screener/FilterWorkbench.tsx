@@ -66,7 +66,7 @@ function TierSegmented({
       renderLabel={(o, active) => (
         <span className="flex items-center gap-1.5">
           {o.label}
-          <span className={cn('min-w-4 rounded-sm px-1 py-px font-mono text-[11px] leading-[14px] tnum', active ? 'bg-paper-2 text-ink-600' : 'text-ink-400')}>
+          <span className={cn('min-w-4 rounded-sm px-1 py-px text-[12px] leading-[14px] tnum', active ? 'bg-paper-2 text-ink-600' : 'text-ink-400')}>
             {counts[o.value]}
           </span>
         </span>
@@ -103,7 +103,7 @@ function PriceInput({
   }
   return (
     <div className="relative">
-      <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 font-mono text-caption text-ink-400">$</span>
+      <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 tnum text-caption text-ink-400">$</span>
       <input
         value={text}
         inputMode="decimal"
@@ -118,7 +118,7 @@ function PriceInput({
           const n = Number(t);
           onCommit(t === '' || !Number.isFinite(n) ? null : n);
         }}
-        className="screener-price-input h-8 w-[88px] rounded-md border border-line/70 bg-paper-2/50 pl-6 pr-2 font-mono text-caption text-ink-800 tnum placeholder:text-ink-400 hover:border-line-strong focus-visible:border-brand-400"
+        className="screener-price-input h-8 w-[88px] rounded-md border border-line/70 bg-paper-2/50 pl-6 pr-2 text-caption text-ink-800 tnum placeholder:text-ink-400 hover:border-line-strong focus-visible:border-brand-400"
       />
     </div>
   );
@@ -178,7 +178,7 @@ export function ScanButton({
           <>
             <Icon name="crosshair" size={16} />
             <span className="text-body-s font-medium">{__t('开始扫描')}</span>
-            <span className="font-mono text-micro text-on-accent tnum">≈{universeCount} {__t('只')}</span>
+            <span className="text-micro text-on-accent tnum">≈{universeCount} {__t('只')}</span>
           </>
         )}
       </span>
@@ -380,7 +380,7 @@ export default function FilterWorkbench({
                   <button
                     type="button"
                     onClick={() => setShowAllSectors(true)}
-                    className="flex h-8 shrink-0 items-center whitespace-nowrap rounded-lg bg-paper-2 px-2.5 font-mono text-caption text-ink-500 tnum transition-colors duration-fast hover:bg-paper hover:text-ink-800"
+                    className="flex h-8 shrink-0 items-center whitespace-nowrap rounded-lg bg-paper-2 px-2.5 text-caption text-ink-500 tnum transition-colors duration-fast hover:bg-paper hover:text-ink-800"
                   >
                     +{hiddenCount}
                   </button>

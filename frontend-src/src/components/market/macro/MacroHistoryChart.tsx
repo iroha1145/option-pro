@@ -211,7 +211,7 @@ export default function MacroHistoryChart({
                 aria-pressed={range === item.key}
                 onClick={() => onRangeChange(item.key)}
                 className={cn(
-                  'rounded-xs px-2 py-1 font-mono text-micro tnum outline-none transition-colors duration-fast',
+                  'rounded-xs px-2 py-1 text-micro tnum outline-none transition-colors duration-fast',
                   range === item.key
                     ? 'bg-brand-50 text-brand-700 shadow-chip'
                     : 'text-ink-400 hover:text-ink-600 focus-visible:text-ink-600',
@@ -240,7 +240,7 @@ export default function MacroHistoryChart({
       <div className={cn(INSIGHT_FRAME, 'mt-4 flex flex-col lg:flex-1')}>
         {readout && (
           <p className="flex items-baseline justify-between gap-3 px-1.5 pb-1 pt-0.5 text-caption text-ink-500">
-            <span className="font-mono tnum">{readout.date}</span>
+            <span className="tnum">{readout.date}</span>
             <span className="tnum">
               {t('综合分')} <span className="font-medium text-ink-900">{scoreText(readout.score)}</span>
               {readout.regime ? ` · ${t(readout.regime)}` : ''}

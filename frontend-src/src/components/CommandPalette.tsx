@@ -39,7 +39,6 @@ interface PaletteProps {
 interface Entry {
   id: string;
   group: string;
-  no?: string;
   title: string;
   mono?: boolean;
   hint?: string;
@@ -189,7 +188,6 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
         list.push({
           id: `f-${n.path}`,
           group: __t('功能'),
-          no: n.no,
           title: n.label,
           hint: __t('前往{label}', { label: n.label }),
           icon: 'chevron-right',
@@ -466,7 +464,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                   </span>
                   <p className="mt-3 text-body-s font-medium text-ink-700">{__t('没有匹配的结果')}</p>
                   <p className="mt-1 text-micro text-ink-400">
-                    {__t('试试代码')} <span className="font-mono">NVDA</span> {__t('或中文名（英伟达）')}
+                    {__t('试试代码')} <span className="tnum">NVDA</span> {__t('或中文名（英伟达）')}
                   </p>
                 </div>
               )}
@@ -499,10 +497,9 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                       )}
                     >
                       {e.ticker ? <TickerLogo ticker={e.ticker} size={24} /> : <Icon name={e.icon} size={15} className={cn('shrink-0', e.idx === clampedActive ? 'text-brand-600' : 'text-ink-400')} />}
-                      {e.no && <span className="font-mono text-micro text-ink-400 tnum">{e.no}</span>}
                       <span
                         className={cn(
-                          e.mono ? 'font-mono text-body-s font-medium' : 'text-body-s',
+                          e.mono ? 'tnum text-body-s font-medium' : 'text-body-s',
                           e.idx === clampedActive ? 'text-ink-900' : 'text-ink-700',
                         )}
                       >

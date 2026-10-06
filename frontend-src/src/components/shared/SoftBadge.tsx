@@ -27,7 +27,7 @@ export default function SoftBadge({
       data-soft-badge={tone}
       className={cn(
         'soft-badge inline-flex max-w-full items-center gap-1 whitespace-nowrap align-middle font-medium tnum',
-        size === 'md' ? 'px-2 py-1 text-[13px] leading-[18px]' : 'px-1.5 py-0.5 text-[11px] leading-[16px]',
+        size === 'md' ? 'px-2 py-1 text-[14px] leading-[18px]' : 'px-1.5 py-0.5 text-[12px] leading-[16px]',
         TONES[tone],
         className,
       )}

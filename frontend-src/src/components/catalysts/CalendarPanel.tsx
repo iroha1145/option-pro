@@ -113,11 +113,11 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
           <div key={date} className={cn(gi > 0 && 'border-t border-line')}>
             {/* 日期分组头 */}
             <div className={cn('flex items-center justify-between px-5 py-2.5', isToday ? 'bg-brand-50' : 'bg-card-warm')}>
-              <p className={cn('font-mono text-caption font-medium tnum', isToday ? 'text-brand-700' : 'text-ink-600')}>
+              <p className={cn('text-caption font-medium tnum', isToday ? 'text-brand-700' : 'text-ink-600')}>
                 {fmtLocaleDate(`${date}T00:00:00`, { month: '2-digit', day: '2-digit', weekday: 'short' })}
                 {isToday && <span className="ml-2 rounded-xs bg-brand-600 px-1.5 py-0.5 text-micro font-medium text-on-accent">{__t('今日')}</span>}
               </p>
-              <span className="font-mono text-micro text-ink-400 tnum">{events.length} {__t('项')}</span>
+              <span className="text-micro text-ink-400 tnum">{events.length} {__t('项')}</span>
             </div>
             <div className="divide-y divide-line">
               {/* 后续区块 rise-in 减量：直接呈现 */}
@@ -133,7 +133,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
                     {/* 重要度分级色条 */}
                     <span className={cn('w-[3px] shrink-0 rounded-full', s.bar)} aria-hidden="true" />
                     <div className="flex w-16 shrink-0 flex-col justify-center">
-                      <span className="font-mono text-[11px] leading-[14px] text-ink-500 tnum">
+                      <span className="text-[12px] leading-[14px] text-ink-500 tnum">
                         {allDay ? __t('全天') : fmtLocaleTime(ev.scheduledAt)}
                       </span>
                       <span className="mt-1 self-start break-words rounded border border-line bg-paper-2 px-1.5 py-0.5 text-micro leading-[14px] text-ink-500">{flatCountry(ev.country)}</span>
@@ -143,7 +143,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
                         <p className="text-body-s font-medium text-ink-800">{ev.title}</p>
                         <ImpactChip ev={ev} />
                       </div>
-                      <p className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 font-mono text-micro text-ink-400 tnum">
+                      <p className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-micro text-ink-400 tnum">
                         <span>{__t('预期')} <span className="text-ink-600">{ev.forecast}</span></span>
                         <span>{__t('前值')} <span className="text-ink-600">{ev.previous}</span></span>
                         <span>

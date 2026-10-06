@@ -87,7 +87,7 @@ export default function WatchlistManager({ tickers, maxTickers, busy, onSave, on
             <label className="text-caption font-medium text-ink-700" htmlFor={`${id}-input`}>{t('添加股票代码')}</label>
             <textarea ref={inputRef} id={`${id}-input`} value={input} onChange={(event) => { setInput(event.target.value); setError(''); }} disabled={busy}
               rows={2} maxLength={2000} placeholder="AAPL, MSFT, NVDA, SPY" aria-describedby={`${id}-hint`}
-              className="mt-2 w-full resize-y rounded-md border border-line-strong bg-paper px-3 py-2 font-mono text-body-s uppercase text-ink-800 outline-none focus:border-brand-600 focus:shadow-focus-ring disabled:opacity-50" />
+              className="mt-2 w-full resize-y rounded-md border border-line-strong bg-paper px-3 py-2 tnum text-body-s uppercase text-ink-800 outline-none focus:border-brand-600 focus:shadow-focus-ring disabled:opacity-50" />
             <p id={`${id}-hint`} className="mt-1 text-caption text-ink-400">{t('用逗号、空格或换行分隔，重复代码会自动合并。')}</p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button className={secondary} onClick={() => append(input)} disabled={busy || !input.trim()}><Icon name="plus" size={15} />{t('加入列表')}</button>
@@ -96,14 +96,14 @@ export default function WatchlistManager({ tickers, maxTickers, busy, onSave, on
             <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-y border-line py-2">
               <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-caption text-ink-700">
                 <input type="checkbox" checked={allSelected} disabled={busy || !draft.length} onChange={() => setSelected(allSelected ? new Set() : new Set(draft))} className="size-4 accent-brand-600" />{t('全选')}
-                <span className="font-mono text-ink-400">{draft.length} / {maxTickers}</span>
+                <span className="tnum text-ink-400">{draft.length} / {maxTickers}</span>
               </label>
               <button className={secondary} disabled={busy || !selected.size} onClick={() => { setDraft(draft.filter((symbol) => !selected.has(symbol))); setSelected(new Set()); setError(''); }}>{t('移除所选（{count}）', { count: selected.size })}</button>
             </div>
             {draft.length ? <div className="mt-2 grid grid-cols-2 gap-x-3 sm:grid-cols-3">
               {draft.map((symbol) => <label key={symbol} className="flex min-h-11 min-w-0 cursor-pointer items-center gap-2 border-b border-line/70 px-1 text-caption text-ink-700">
                 <input type="checkbox" checked={selected.has(symbol)} aria-label={t('选择 {ticker}', { ticker: symbol })} disabled={busy} onChange={() => setSelected((current) => { const next = new Set(current); if (next.has(symbol)) next.delete(symbol); else next.add(symbol); return next; })} className="size-4 shrink-0 accent-brand-600" />
-                <span className="truncate font-mono font-medium">{symbol}</span>
+                <span className="truncate tnum font-medium">{symbol}</span>
               </label>)}
             </div> : <p className="py-6 text-center text-caption text-ink-400">{t('保存后自选列表将为空。')}</p>}
             {error && <p role="alert" className="mt-3 break-words rounded-md bg-danger-50 px-3 py-2 text-caption text-danger-700">{error}</p>}

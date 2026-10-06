@@ -174,7 +174,7 @@ function HeatRow({
               <span className="text-ink-500">{t('强度领先')}</span>
               <span className="font-medium text-ink-800">
                 {leader
-                  ? <><span className="font-mono">{leader.ticker}</span> <span className="tnum">{leader.score?.toFixed(1) ?? '—'}</span></>
+                  ? <><span className="">{leader.ticker}</span> <span className="tnum">{leader.score?.toFixed(1) ?? '—'}</span></>
                   : '—'}
               </span>
             </span>
@@ -193,7 +193,7 @@ function HeatRow({
             {sector.scoreDataThrough && (
               <span className="flex items-center justify-between gap-2">
                 <span className="text-ink-500">{t('评分截至')}</span>
-                <span className="font-mono text-ink-800 tnum">{sector.scoreDataThrough}</span>
+                <span className="text-ink-800 tnum">{sector.scoreDataThrough}</span>
               </span>
             )}
           </span>

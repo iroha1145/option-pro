@@ -87,7 +87,7 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
       </div>
 
       <p className="mt-2 text-micro text-ink-400">
-        {__t('报价更新于')} <span className="font-mono tnum">{updatedAt ? fmtTimeHHMMSS(new Date(updatedAt)) : '—'}</span>
+        {__t('报价更新于')} <span className="tnum">{updatedAt ? fmtTimeHHMMSS(new Date(updatedAt)) : '—'}</span>
         {priceLabel ? ` · ${priceLabel}` : __t(' · 延迟行情')}
       </p>
     </motion.header>

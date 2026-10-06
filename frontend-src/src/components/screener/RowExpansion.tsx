@@ -1,8 +1,8 @@
 /**
  * 行展开分项明细（screener.md B2 行展开 · accordion 260ms）
  * ① 分项强度（与行内微条同源 subscoreDimsOf；实际因子、分值和有效权重）
- * ② 迷你点阵面积图（§6-2 stipple）：mock 用行内 sparkline；live 契约无 sparkline →
- *    按需拉真实日 K（stocksApi.chart range=1d）取近 6 根收盘；拿不到如实空态，杜绝 Infinity
+ * ② 近半年走势：mock 用行内 sparkline；live 契约无 sparkline →
+ *    按需拉真实日 K（stocksApi.chart range=1d）取最近 6 个月的收盘；拿不到如实空态，杜绝 Infinity
  * ③ 操作（打开详情 / 相关突破事件）+ 信号 + 成交额
  */
 import SoftBadge from '@/components/shared/SoftBadge';
@@ -16,6 +16,7 @@ import { fmtCompact } from '@/lib/format';
 import Icon from '@/components/icons';
 import SignalLines from '@/components/shared/SignalLines';
 import Sparkline from '@/components/charts/Sparkline';
+import ChangeBadge from '@/components/shared/ChangeBadge';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import { strengthBarClass } from '@/lib/strengthColor';
 import InfoHint from '@/components/shared/InfoHint';
@@ -55,8 +56,11 @@ function eodDetailLabel(value: string): string {
   return value;
 }
 
-/* ---------------- 近 6 日收盘（live 懒加载；表格/卡片双实例只共享进行中的请求） ---------------- */
-const DOT_DAYS = 6;
+/* ---------------- 近半年日线收盘（live 懒加载；表格/卡片双实例只共享进行中的请求） ---------------- */
+/* 2026-10-06 用户要求：原来只取最后 6 根收盘画「点阵面积」，改成近半年走势（按最后一根的日期往前推 6 个月）。 */
+const TREND_MONTHS = 6;
+/** K 线缺可解析日期时的兜底：约半年的交易日数。 */
+const TREND_TRADING_DAYS = 126;
 const closesCache = new Map<string, Promise<number[] | null>>();
 
 /**
@@ -81,10 +85,15 @@ function fetchDailyCloses(ticker: string, force = false): Promise<number[] | nul
     p = stocksApi
       .chart(ticker, '1d', 'raw', force) // 后端真实日 K 周期
       .then((c) => {
-        const closes = c.candles
-          .map((b) => b.c)
-          .filter((v) => Number.isFinite(v) && v > 0)
-          .slice(-DOT_DAYS);
+        const bars = c.candles.filter((b) => Number.isFinite(b.c) && b.c > 0);
+        const lastAt = Date.parse(bars[bars.length - 1]?.t ?? '');
+        let recent = bars.slice(-TREND_TRADING_DAYS);
+        if (Number.isFinite(lastAt)) {
+          const cutoff = new Date(lastAt);
+          cutoff.setMonth(cutoff.getMonth() - TREND_MONTHS);
+          recent = bars.filter((b) => Date.parse(b.t) >= cutoff.getTime());
+        }
+        const closes = recent.map((b) => b.c);
         return closes.length >= 2 ? closes : null;
       })
       .catch((error) => {
@@ -92,7 +101,7 @@ function fetchDailyCloses(ticker: string, force = false): Promise<number[] | nul
       })
       .finally(() => {
         // 成功数据的新鲜度由 marketGet 统一管理。这里只合并并发请求，
-        // 不能在单页会话中永久冻结第一次展开时的六日收盘。
+        // 不能在单页会话中永久冻结第一次展开时的收盘序列。
         if (closesCache.get(ticker) === p) closesCache.delete(ticker);
       });
     closesCache.set(ticker, p);
@@ -101,10 +110,10 @@ function fetchDailyCloses(ticker: string, force = false): Promise<number[] | nul
 }
 
 /**
- * 点阵面积块三态：undefined 加载中 · null 数据不可用（诚实空态） · number[] 真实收盘
- * mock 行自带 sparkline 直接使用；live 行 sparkline 恒空 → 拉真实日 K。
+ * 走势块三态：undefined 加载中 · null 数据不可用（诚实空态） · number[] 真实收盘
+ * mock 行自带 sparkline（5 日）直接使用；live 行 sparkline 恒空 → 拉真实日 K 取近半年。
  */
-function DotMatrixBlock({ row }: { row: ScreenerRow }) {
+function TrendBlock({ row }: { row: ScreenerRow }) {
   const hasSpark = row.sparkline.length >= 2;
   const [closes, setCloses] = useState<number[] | null | undefined>(hasSpark ? row.sparkline : undefined);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -138,11 +147,7 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [row.ticker, hasSpark]);
 
-  const title = hasSpark
-    ? t('近 5 日 · 点阵面积')
-    : Array.isArray(closes)
-      ? t('近 {count} 日 · 点阵面积', { count: closes.length })
-      : t('日线 · 点阵面积');
+  const title = hasSpark ? t('近 {count} 日走势', { count: row.sparkline.length }) : t('近半年走势');
 
   const refreshAfterPull = () => {
     const read = ++manualReadRef.current;
@@ -182,8 +187,12 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
               variant="area"
               className="w-full"
             />
-            <div className="mt-2 flex items-center justify-between font-mono text-micro text-ink-400 tnum">
+            <div className="mt-2 flex items-center justify-between gap-2 text-micro text-ink-400 tnum">
               <span>{t('低')} {Math.min(...closes).toFixed(1)}</span>
+              <span className="flex items-center gap-1.5">
+                {t('区间')}
+                <ChangeBadge value={(closes[closes.length - 1] / closes[0] - 1) * 100} size="sm" />
+              </span>
               <span>{t('高')} {Math.max(...closes).toFixed(1)}</span>
             </div>
           </>
@@ -229,7 +238,7 @@ export default function RowExpansion({ row, dollarVolume, signals, onOpenDetail 
                     />
                   )}
                 </span>
-                <span className="text-right font-mono text-caption text-ink-800 tnum">
+                <span className="text-right text-caption text-ink-800 tnum">
                   {value !== null ? value.toFixed(1) : '—'}
                   {w !== null && <span className="ml-1 text-micro text-ink-400">×{w.toFixed(1)}%</span>}
                 </span>
@@ -253,7 +262,7 @@ export default function RowExpansion({ row, dollarVolume, signals, onOpenDetail 
               <p className="text-micro text-ink-500">{row.rejectionReasons.map(eodDetailLabel).join(' · ')}</p>
             )}
             {(row.knownSupport != null || row.plannedInvalidation != null) && (
-              <p className="font-mono text-micro text-ink-500 tnum">
+              <p className="text-micro text-ink-500 tnum">
                 {t('支撑')} {row.knownSupport ?? '—'} · {t('失效')} {row.plannedInvalidation ?? '—'}
               </p>
             )}
@@ -275,8 +284,8 @@ export default function RowExpansion({ row, dollarVolume, signals, onOpenDetail 
         </div>
       </div>
 
-      {/* ② 迷你点阵面积图（真实日 K / mock sparkline；空态诚实） */}
-      <DotMatrixBlock row={row} />
+      {/* ② 近半年走势（真实日 K / mock sparkline；空态诚实） */}
+      <TrendBlock row={row} />
 
       {/* ③ 操作 + 信号 + 成交额 */}
       <div>
@@ -315,7 +324,7 @@ export default function RowExpansion({ row, dollarVolume, signals, onOpenDetail 
         </div>
         <div className="mt-3 flex items-center justify-between border-t border-line pt-3">
           <span className="text-micro text-ink-400">{row.dollarVolumeProxyAvailable ? t('20 日均成交额代理') : t('20 日均美元成交额')}</span>
-          <span className="font-mono text-data-m text-ink-800 tnum">
+          <span className="text-data-m text-ink-800 tnum">
             {dollarVolume === null ? '—' : `$${fmtCompact(dollarVolume)}`}
           </span>
         </div>

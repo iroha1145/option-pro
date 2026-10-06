@@ -68,7 +68,9 @@ function dateAnchorParts(iso: string): { day: number; monthShort: string } | nul
 }
 
 /* 指数带：窄于 360px 时两列，其余手机与 sm–lg 三列，xl 起一行排满 */
-const INDEX_GRID = 'grid grid-cols-2 gap-2 min-[360px]:grid-cols-3 sm:gap-3 xl:[grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]';
+/* 手机两三列、平板多列时是独立小卡；xl 起排成一行，合成一条指标带（参照 uiarc.dev 的 KPI 条）：
+   外框一圈发丝线，格子之间用 1px 间隙露出线色分隔，格子本身去掉边框和圆角。auto-fit 收起空轨道，不会出现空格。 */
+const INDEX_GRID = 'grid grid-cols-2 gap-2 min-[360px]:grid-cols-3 sm:gap-3 xl:[grid-template-columns:repeat(auto-fit,minmax(170px,1fr))] xl:gap-px xl:overflow-hidden xl:rounded-[16px] xl:border xl:border-line xl:bg-line';
 const indexKey = (quote: IndexQuote) => quote.code;
 const indexPrice = (quote: IndexQuote) => quote.price;
 
@@ -126,7 +128,7 @@ function SectionCard({
       {updatedAt ? (
         <p className="mt-auto flex items-center gap-1.5 border-t border-line px-4 py-2.5 text-micro text-ink-400 md:px-5">
           {t('更新')}
-          <span className="font-mono tnum">{fmtTimeHHMMSS(updatedAt)}</span>
+          <span className="tnum">{fmtTimeHHMMSS(updatedAt)}</span>
         </p>
       ) : null}
     </section>
@@ -322,8 +324,6 @@ export default function Home() {
     <div>
       {/* 页头带 */}
       <PageHeader
-        section="01"
-        eyebrow="OPTIX PRO · DELAYED 15MIN"
         title={t('首页')}
         meta={
           <>
@@ -333,7 +333,7 @@ export default function Home() {
               loading={statusQ.loading}
             />
             {indicesQ.lastUpdatedAt && (
-              <span className="font-mono text-caption text-ink-400 tnum">
+              <span className="text-caption text-ink-400 tnum">
                 {t('更新')} {fmtTimeHHMMSS(indicesQ.lastUpdatedAt)}
               </span>
             )}
@@ -639,7 +639,7 @@ function MarketStatusPanel({
       </div>
 
       <div className="mt-3">
-        <p className="font-mono text-data-l text-ink-900 tnum" suppressHydrationWarning>
+        <p className="text-data-l text-ink-900 tnum" suppressHydrationWarning>
           {fmtNyTime(new Date(now))}
         </p>
         <p className="mt-0.5 text-micro text-ink-400">{t('纽约时间')}</p>
@@ -648,13 +648,13 @@ function MarketStatusPanel({
       <div className="mt-3">
         <div className="flex items-center justify-between border-t border-line py-2">
           <span className="text-caption text-ink-500">{t('距下一开盘')}</span>
-          <span className="font-mono text-data-m text-brand-600 tnum" suppressHydrationWarning>
+          <span className="text-data-m text-brand-600 tnum" suppressHydrationWarning>
             {status?.next_open ? fmtCountdown(status.next_open, now) : '—'}
           </span>
         </div>
         <div className="flex items-center justify-between border-t border-line py-2">
           <span className="text-caption text-ink-500">{t('距下一收盘')}</span>
-          <span className="font-mono text-data-m text-brand-600 tnum" suppressHydrationWarning>
+          <span className="text-data-m text-brand-600 tnum" suppressHydrationWarning>
             {status?.next_close ? fmtCountdown(status.next_close, now) : '—'}
           </span>
         </div>
@@ -713,9 +713,9 @@ function MarketStatusPanel({
 
 /* 雷达信号行的栅格：lg 及以下两行（代码与公司、价格与涨跌 / 形态、时间与强度），
    第二行跨满两列，价格列再宽也不会把形态标签挤空；xl 起一行七列定宽，上下行的
-   形态、时间、价格、涨跌、强度各自对齐。 */
+   形态、时间、价格、涨跌、强度各自对齐。价格列 10rem：「38.50 最后报价 10-05」排得下一行，行高一致。 */
 const RADAR_ROW_GRID =
-  "grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-2.5 [grid-template-areas:'logo_id_quote'_'logo_meta_meta'] md:px-5 xl:grid-cols-[28px_minmax(0,1fr)_5rem_5rem_8rem_5.25rem_6.5rem] xl:gap-y-0 xl:[grid-template-areas:'logo_id_chip_time_price_change_bar']";
+  "grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-2.5 [grid-template-areas:'logo_id_quote'_'logo_meta_meta'] md:px-5 xl:grid-cols-[28px_minmax(0,1fr)_5rem_5rem_10rem_5.25rem_6.5rem] xl:gap-y-0 xl:[grid-template-areas:'logo_id_chip_time_price_change_bar']";
 
 /** 强度读数：轨道作视口观察者，条用 GROW_X 从左长出（零面积的条自己观察会一直判不进视口）。
  *  读屏沿用 StrengthBar 的「强度分 {score}」/「强度分缺失」。 */
@@ -758,7 +758,7 @@ function RadarSignalRow({ signal: s, index: i }: { signal: BreakoutSignal; index
     >
       <TickerLogo ticker={s.ticker} size={28} className="[grid-area:logo]" />
       <span className="flex min-w-0 items-baseline gap-2 [grid-area:id]">
-        <span className="shrink-0 font-mono text-caption font-medium text-ink-800">{s.ticker}</span>
+        <span className="shrink-0 tnum text-caption font-medium text-ink-800">{s.ticker}</span>
         <span className="min-w-0 truncate text-caption text-ink-500">{s.name}</span>
       </span>
       <span className="flex min-w-0 items-center gap-2 [grid-area:meta] xl:contents">
@@ -798,7 +798,7 @@ function EarningsAnchorRow({ item: it, todayKey }: { item: EarningsItem; todayKe
       >
         <span
           className={cn(
-            'block font-mono text-body-s font-medium tnum',
+            'block text-body-s font-medium tnum',
             isToday ? 'text-brand-700' : 'text-ink-900',
           )}
         >
@@ -808,7 +808,7 @@ function EarningsAnchorRow({ item: it, todayKey }: { item: EarningsItem; todayKe
       </span>
       <TickerLogo ticker={it.ticker} size={28} />
       <p className="min-w-0 flex-1 truncate">
-        <span className="font-mono text-caption font-medium text-ink-800">{it.ticker}</span>
+        <span className="tnum text-caption font-medium text-ink-800">{it.ticker}</span>
         <span className="ml-2 text-caption text-ink-500">{it.name}</span>
       </p>
       <span className="flex shrink-0 items-center gap-1.5">
@@ -877,7 +877,7 @@ function WatchlistMoverLead({ item, index: i, preparation, statusReadFailed }: M
     >
       <div className="flex items-center gap-2.5">
         <TickerLogo ticker={item.ticker} size={28} />
-        <span className="shrink-0 font-mono text-caption font-medium text-ink-800">{item.ticker}</span>
+        <span className="shrink-0 tnum text-caption font-medium text-ink-800">{item.ticker}</span>
         <span className="min-w-0 flex-1 truncate text-caption text-ink-500">{item.name}</span>
         <span className="flex shrink-0 items-center gap-1.5">
           <span className="text-micro text-ink-400">{t('当日')}</span>
@@ -895,7 +895,7 @@ function WatchlistMoverLead({ item, index: i, preparation, statusReadFailed }: M
            起伏放大成陡峰，多出的空间留在说明行与强度行之间。上下堆叠时固定 104px。 */
         <figure className="mt-3 flex flex-col md:flex-1" data-testid="watchlist-daily-trend" aria-label={moverTrendLabel(item.ticker, trend, periodChange)}>
           <Sparkline data={spark} width={480} height={104} change={periodChange} variant="area" stretch className="h-[104px] w-full md:h-auto md:max-h-[220px] md:min-h-[104px] md:flex-1" />
-          <figcaption className="mt-1 flex items-center justify-between gap-2 font-mono text-micro text-ink-400 tnum">
+          <figcaption className="mt-1 flex items-center justify-between gap-2 text-micro text-ink-400 tnum">
             <span>{trend[0].date.slice(5)} — {trend[trend.length - 1].date.slice(5)}</span>
             <span className="flex items-center gap-1.5"><span className="font-sans">{t('区间')}</span><ChangeBadge value={periodChange} size="sm" /></span>
           </figcaption>
@@ -926,7 +926,7 @@ function WatchlistMoverRow({ item, preparation, statusReadFailed }: MoverProps) 
       <div className="min-w-0">
         <p className="flex min-w-0 items-center gap-2">
           <TickerLogo ticker={item.ticker} size={20} />
-          <span className="shrink-0 font-mono text-caption font-medium text-ink-800">{item.ticker}</span>
+          <span className="shrink-0 tnum text-caption font-medium text-ink-800">{item.ticker}</span>
           <span className="min-w-0 truncate text-caption text-ink-500">{item.name}</span>
         </p>
         <p className="mt-1.5 text-caption text-ink-800 tnum">

@@ -452,8 +452,6 @@ export default function Earnings() {
     <div>
       {/* B0 页头带 */}
       <PageHeader
-        section="05"
-        eyebrow="EARNINGS · AI IMPACT"
         title={t("财报日历")}
         meta={headerMeta}
       />
@@ -650,7 +648,7 @@ export default function Earnings() {
                 {selectedDay && (
                   <div className="flex items-center gap-2">
                     <p className="text-caption text-ink-500">
-                      {t('已筛选')} <span className="font-mono text-brand-600">{fmtMDCN(selectedDay)}</span> {t('当日财报')}
+                      {t('已筛选')} <span className="tnum text-brand-600">{fmtMDCN(selectedDay)}</span> {t('当日财报')}
                     </p>
                     <button
                       onClick={() => setSelectedDay(null)}

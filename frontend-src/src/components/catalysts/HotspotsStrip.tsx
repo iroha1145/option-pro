@@ -46,7 +46,7 @@ function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: number; onO
         {h.tickers.slice(0, 3).map((t) => (
           <TickerChip key={t} ticker={t} />
         ))}
-        <span className="ml-auto font-mono text-micro text-ink-400 tnum">
+        <span className="ml-auto text-micro text-ink-400 tnum">
           {h.newsCount} {h.countKind === 'sources' ? __t('源') : __t('条')}
         </span>
       </div>
@@ -137,7 +137,7 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
             <div className="card-surface flex min-h-44 w-[260px] shrink-0 snap-start flex-col items-center justify-center p-5 text-center sm:w-[300px]">
               <Spinner size={20} tone="brand" />
               <p className="mt-2.5 text-body-s font-medium text-ink-800">{__t('热点计算中…')}</p>
-              <p className="mt-1 font-mono text-micro text-ink-400 tnum">
+              <p className="mt-1 text-micro text-ink-400 tnum">
                 {statusQ.data?.etaSeconds != null ? __t('预计 {n}s', { n: statusQ.data.etaSeconds }) : __t('请稍候')}
               </p>
             </div>

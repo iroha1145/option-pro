@@ -213,7 +213,7 @@ export default function TrendBiasPanel({
         {t('分项根据该股信号计算')}
         <InfoHint hint={SCORE_HINTS.trendBiasFactors} size={11} className="mx-0.5" />
         {t(' · 缺失项显示 — · 更新于 ')}
-        <span className="font-mono tnum">{fmtTimeHHMMSS(new Date(data.as_of))}</span>
+        <span className="tnum">{fmtTimeHHMMSS(new Date(data.as_of))}</span>
       </p>
     </div>
   );

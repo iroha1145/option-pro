@@ -128,7 +128,7 @@ function ModuleSummary({
               : t('有效因子 {valid}/{total}', { valid: module.validFactorCount, total: module.totalFactorCount ?? '—' })}
           </span>
           {ownDate !== null && (
-            <span className="font-mono text-ink-500 tnum">
+            <span className="text-ink-500 tnum">
               {t('截止')} {ownDate}
             </span>
           )}

@@ -29,7 +29,7 @@ function Metric({
   return (
     <div className="min-w-0 rounded-sm border border-line bg-card px-3 py-2.5">
       <p className="text-micro text-ink-400">{label}</p>
-      <SoftBadge tone={tone} size="md" className="mt-1 font-mono">{value}</SoftBadge>
+      <SoftBadge tone={tone} size="md" className="mt-1 tnum">{value}</SoftBadge>
     </div>
   );
 }
@@ -123,7 +123,7 @@ function OwnerAnalysisProgressCard() {
             <p className="text-body-s font-medium text-ink-800">{progressHeadline(progress)}</p>
           </div>
         </div>
-        <p className="font-mono text-micro text-ink-400 tnum">
+        <p className="text-micro text-ink-400 tnum">
           {sourceLabel}
           {progress.lastUpdatedAt ? t(' · 更新 {time}', { time: fmtRelative(progress.lastUpdatedAt) }) : ''}
         </p>
@@ -131,7 +131,7 @@ function OwnerAnalysisProgressCard() {
 
       {progress.total > 0 && (
         <div className="mt-3">
-          <div className="flex items-center justify-between font-mono text-micro text-ink-400 tnum">
+          <div className="flex items-center justify-between text-micro text-ink-400 tnum">
             <span>
               {t('已结束')} {progress.finished} / {progress.total}
             </span>
@@ -173,11 +173,11 @@ function OwnerAnalysisProgressCard() {
       </div>
 
       <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-micro text-ink-400">
-        <span className="font-mono tnum">
+        <span className="tnum">
           {t('当前队列')} {progress.queueTotal} {t('条 · 等待')} {progress.queueWaiting} {t('· 进行中')} {progress.queueInProgress}
         </span>
         {progress.currentNewsId !== null && (
-          <span className="font-mono tnum">{t('新闻编号')} {progress.currentNewsId}</span>
+          <span className="tnum">{t('新闻编号')} {progress.currentNewsId}</span>
         )}
         {otherTerminal > 0 && (
           <span>

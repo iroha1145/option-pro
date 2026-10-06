@@ -105,13 +105,13 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
                 {s?.collecting ? t('采集中') : t('已暂停')}
                 {s?.collecting && s.intervalMinutes != null && <span className="text-ink-500"> {t('· 每')} {s.intervalMinutes} {t('分钟')}</span>}
               </SoftBadge>
-              <span className="font-mono text-micro text-ink-400 tnum">
+              <span className="text-micro text-ink-400 tnum">
                 {s && s.sourcesTotal > 0 ? `${s.sourcesActive}/${s.sourcesTotal} ${s.streams?.length ? t('流') : t('源')}` : ''}
               </span>
             </div>
           )}
           {s && (
-            <p className="mt-1 flex flex-wrap items-center gap-x-2.5 font-mono text-micro text-ink-400 tnum">
+            <p className="mt-1 flex flex-wrap items-center gap-x-2.5 text-micro text-ink-400 tnum">
               <span>{t('上次采集')} {fmtRelative(s.lastCrawlAt)}</span>
               {s.streams?.map((st) => (
                 <SoftBadge key={st.name} tone={st.ok ? 'ok' : 'danger'} className="whitespace-normal [overflow-wrap:anywhere]">
@@ -133,18 +133,18 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
               <Led tone="warn" pulse />
               <SoftBadge tone="warn" size="md">{t('热点计算中…')}</SoftBadge>
               {hs.etaSeconds != null && (
-                <span className="font-mono text-micro text-ink-400 tnum">{t('预计')} {hs.etaSeconds}s</span>
+                <span className="text-micro text-ink-400 tnum">{t('预计')} {hs.etaSeconds}s</span>
               )}
             </div>
           ) : (
             <div className="flex flex-wrap items-center gap-2">
               <Led tone={hs?.scanning ? 'brand' : 'muted'} pulse={!!hs?.scanning} />
               <SoftBadge tone={hs?.scanning ? 'brand' : 'neutral'} size="md" className="whitespace-normal">
-                {hs?.scanning ? t('已就绪') : t('已暂停')} · <span className="font-mono tnum">{hs?.groupCount ?? 0}</span> {t('组热点')}
+                {hs?.scanning ? t('已就绪') : t('已暂停')} · <span className="tnum">{hs?.groupCount ?? 0}</span> {t('组热点')}
               </SoftBadge>
             </div>
           )}
-          {hs && <p className="mt-1 font-mono text-micro text-ink-400 tnum">{t('更新')} {fmtRelative(hs.updatedAt)}</p>}
+          {hs && <p className="mt-1 text-micro text-ink-400 tnum">{t('更新')} {fmtRelative(hs.updatedAt)}</p>}
         </HeroCell>
 
         <HeroCell index={2} label={t("分析可用性")}>
@@ -165,7 +165,7 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
             </SoftBadge>
           )}
           {s && (
-            <p className="mt-1 break-words font-mono text-micro text-ink-400 tnum">
+            <p className="mt-1 break-words text-micro text-ink-400 tnum">
               {s.analysisModel ? (
                 <>
                   {t('模型')} {s.analysisModel}
@@ -184,13 +184,13 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
           {newsQ.loading && !newsQ.data ? (
             <SkeletonBlock className="h-7 w-16" />
           ) : (
-            <p className="font-mono text-data-l text-ink-900 tnum">
+            <p className="text-data-l text-ink-900 tnum">
               {newsQ.data ? `${newsQ.data.count}${newsQ.data.saturated ? '+' : ''}` : '—'}
               <span className="ml-1.5 text-micro font-normal text-ink-400">{t('条 / 24h')}</span>
             </p>
           )}
           {newsQ.data && (
-            <p className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 font-mono text-micro text-ink-400 tnum">
+            <p className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-micro text-ink-400 tnum">
               <span className="whitespace-nowrap">{t('已分析')} <span className="text-ink-600">{newsQ.data.analyzed}</span> {t('条')}</span>
               {newsQ.data.pending > 0 && (
                 <span className="whitespace-nowrap">

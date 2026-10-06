@@ -33,7 +33,7 @@ import { cn } from '@/lib/utils';
 import { DUR_SECTION, DUR_UI, EASE_PAPER, GROW_X } from '@/lib/motion';
 import { fmtNyEventTime, fmtPrice, fmtRelative } from '@/lib/format';
 import { MACRO_TONE_LABEL, macroToneOf } from '@/lib/macroFit';
-import { baseAnimation, CH, CHART_MONO_FONT, glassTooltip, type ChartOption } from '@/lib/chart';
+import { baseAnimation, CH, CHART_TEXT_FONT, glassTooltip, type ChartOption } from '@/lib/chart';
 import { useColorMode } from '@/hooks/useColorMode.ts';
 import { useAppearance } from '@/hooks/useAppearance.ts';
 import {
@@ -49,7 +49,8 @@ import type { BreakoutCurrentEvent, BreakoutEventFull, BreakoutSession } from '.
 import T1StatusChip from './T1StatusChip';
 import { t } from '../../i18n/core.ts';
 
-const MONO = CHART_MONO_FONT;
+/* 2026-10-06 第二轮：图表数字改用页面字体（不再用等宽），提示框里用 tabular-nums 对齐数字。 */
+const CHART_FONT = CHART_TEXT_FONT;
 
 /* ---------------- 工具 ---------------- */
 
@@ -88,10 +89,10 @@ function MacroPriorityShadow({ ev }: { ev: BreakoutEventFull }) {
       title={t('宏观适配 {fit}（{tone}）。加入宏观因素后的参考优先级：原优先级 {sign} {delta}，最多调整 4 分；当前排序保持不变。', { fit: fit.toFixed(1), tone: tone ? t(MACRO_TONE_LABEL[tone]) : '—', sign: delta >= 0 ? '+' : '−', delta: Math.abs(delta).toFixed(1) })}
     >
       <span>{t('宏观参考')}</span>
-      <span className="font-mono tnum text-ink-600">{shadow.toFixed(1)}</span>
+      <span className="tnum text-ink-600">{shadow.toFixed(1)}</span>
       <span
         className={cn(
-          'font-mono tnum',
+          ' tnum',
           delta > 0 ? 'text-up-700' : delta < 0 ? 'text-down-700' : 'text-ink-400',
         )}
       >
@@ -135,13 +136,13 @@ function PriorityRing({ score }: { score: number | null }) {
           )}
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="font-mono text-[15px] font-medium leading-[20px] text-ink-900 tnum">
+          <span className="text-[15px] font-medium leading-[20px] text-ink-900 tnum">
             <span className="sr-only">{score === null ? '—' : Math.round(score)}</span>
             <span aria-hidden="true">{score === null ? '—' : Math.round(v)}</span>
           </span>
         </div>
       </div>
-      <span className="mt-0.5 whitespace-nowrap text-[11px] leading-[15px] text-ink-400">
+      <span className="mt-0.5 whitespace-nowrap text-[12px] leading-[15px] text-ink-400">
         {t('告警优先级')}
         <InfoHint hint={SCORE_HINTS.breakoutPriority} side="top" align="end" size={11} className="ml-0.5" />
       </span>
@@ -220,7 +221,7 @@ function LifecycleStepper({ state }: { state: string }) {
       />
       <span
         className={cn(
-          'mt-1.5 whitespace-nowrap text-[11px] leading-[16px]',
+          'mt-1.5 whitespace-nowrap text-[12px] leading-[16px]',
           tone === 'current' && 'font-medium text-brand-700',
           (tone === 'past' || tone === 'future') && 'text-ink-400',
           tone === 'down' && 'font-medium text-danger-700',
@@ -293,7 +294,7 @@ function buildMiniOption(bars: MiniBar[], levels: MiniLevels): ChartOption {
     label: {
       formatter: `${name} ${fmtPrice(price)}`,
       color,
-      fontFamily: MONO,
+      fontFamily: CHART_FONT,
       fontSize: 11,
       position: 'insideStartTop' as const,
       backgroundColor: CH.tooltipBg,
@@ -309,7 +310,7 @@ function buildMiniOption(bars: MiniBar[], levels: MiniLevels): ChartOption {
       data: labels,
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: MONO, hideOverlap: true },
+      axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: CHART_FONT, hideOverlap: true },
     },
     yAxis: {
       type: 'value' as const,
@@ -317,14 +318,14 @@ function buildMiniOption(bars: MiniBar[], levels: MiniLevels): ChartOption {
       position: 'right' as const,
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: MONO },
+      axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: CHART_FONT },
       splitLine: { lineStyle: { color: CH.lineChart, width: 1, type: [2, 4], opacity: 0.7 } },
       // 参考线不计入自动刻度范围，价位落在 30 根 K 线之外时要把轴撑开，否则线被裁掉。
       ...(levelPrices.length > 0 && {
         min: (extent: { min: number }) => Math.min(extent.min, ...levelPrices),
         max: (extent: { max: number }) => Math.max(extent.max, ...levelPrices),
         // 撑开后两端是原始价位（如 258.88），和中间的整刻度（240、250）位数不齐：两端不标数。
-        axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: MONO, showMinLabel: false, showMaxLabel: false },
+        axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: CHART_FONT, showMinLabel: false, showMaxLabel: false },
       }),
     },
     tooltip: glassTooltip({
@@ -339,7 +340,7 @@ function buildMiniOption(bars: MiniBar[], levels: MiniLevels): ChartOption {
           borderColor: 'var(--line)',
           borderWidth: 1,
           color: CH.tooltipFg,
-          fontFamily: MONO,
+          fontFamily: CHART_FONT,
           fontSize: 10,
         },
       },
@@ -350,7 +351,7 @@ function buildMiniOption(bars: MiniBar[], levels: MiniLevels): ChartOption {
         const chg = b.c - b.o;
         const color = chg >= 0 ? CH.up600 : CH.down600;
         return (
-          `<div style="font-family:${MONO};font-size:12px;line-height:19px">` +
+          `<div style="font-family:${CHART_FONT};font-variant-numeric:tabular-nums;font-size:12px;line-height:19px">` +
           `<div style="color:${CH.ink400}">${fmtBarTime(b.t)}${b.quote_only ? t(' · 仅报价') : ''}</div>` +
           `${t('开 {o}', { o: b.o.toFixed(2) })} · ${t('高 {h}', { h: b.h.toFixed(2) })}<br/>${t('低 {l}', { l: b.l.toFixed(2) })} · ` +
           `${t('收 {c}', { c: `<b style="color:${color}">${b.c.toFixed(2)}</b>` })}</div>`
@@ -523,7 +524,7 @@ function BigScoreBars({ ev }: { ev: BreakoutEventFull }) {
                 />
               )}
             </motion.div>
-            <span className="text-right font-mono text-caption text-ink-600 tnum">{raw !== null ? raw.toFixed(1) : '—'}</span>
+            <span className="text-right text-caption text-ink-600 tnum">{raw !== null ? raw.toFixed(1) : '—'}</span>
           </div>
         );
       })}
@@ -560,7 +561,7 @@ function ContributionBar({ ev }: { ev: BreakoutEventFull }) {
 
   if (parts === null) {
     return (
-      <p className="text-[11px] leading-[14px] text-ink-400">
+      <p className="text-[12px] leading-[14px] text-ink-400">
         {t('评分构成不可用（数据不足）')}
       </p>
     );
@@ -588,8 +589,8 @@ function ContributionBar({ ev }: { ev: BreakoutEventFull }) {
         {parts.map((p) => (
           <li key={p.d.key} className="inline-flex items-center gap-1.5">
             <span className={cn('inline-block size-2 rounded-[2px]', p.d.cls)} aria-hidden="true" />
-            <span className="text-[11px] leading-[14px] text-ink-500">{p.d.label}</span>
-            <span className="font-mono text-[11px] leading-[14px] text-ink-600 tnum">{p.v.toFixed(1)}</span>
+            <span className="text-[12px] leading-[14px] text-ink-500">{p.d.label}</span>
+            <span className="text-[12px] leading-[14px] text-ink-600 tnum">{p.v.toFixed(1)}</span>
           </li>
         ))}
       </ul>
@@ -711,14 +712,14 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
           <span className={cn('size-1.5 rounded-full', SESSION_DOT[e.session], e.session !== 'closed' && 'animate-led-pulse')} aria-hidden="true" />
           {SESSION_CN[e.session]}
         </span>
-        <span className="font-mono text-micro text-ink-400 tnum">{fmtRelative(e.triggered_at)}</span>
+        <span className="text-micro text-ink-400 tnum">{fmtRelative(e.triggered_at)}</span>
         {/* lg 以上：meta 并入 chips 行（空格分隔 inline 项，不再用 · 串） */}
         <span className="hidden items-center gap-3 text-micro text-ink-500 lg:inline-flex">
           {exchange && <span>{exchange}</span>}
           <SoftBadge size="sm" tone="neutral">{t(e.sector)}</SoftBadge>
-          <span className="font-mono tnum">{t('跳空')} {gap !== null ? `${gap >= 0 ? '+' : ''}${gap.toFixed(2)}%` : '—'}</span>
-          <span className="font-mono tnum">{t('量能')} {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}</span>
-          <span className="font-mono tnum">{fmtEventTime(e.event_at)} {t('美东')}</span>
+          <span className="tnum">{t('跳空')} {gap !== null ? `${gap >= 0 ? '+' : ''}${gap.toFixed(2)}%` : '—'}</span>
+          <span className="tnum">{t('量能')} {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}</span>
+          <span className="tnum">{fmtEventTime(e.event_at)} {t('美东')}</span>
         </span>
         <span className="radar-chip radar-chip-brand ml-auto">
           <Icon name="radar" size={12} />
@@ -741,9 +742,9 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
         <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-ink-500 lg:hidden">
           {exchange && <span>{exchange}</span>}
           <SoftBadge size="sm" tone="neutral">{t(e.sector)}</SoftBadge>
-          <span className="font-mono tnum">{t('跳空')} {gap !== null ? `${gap >= 0 ? '+' : ''}${gap.toFixed(2)}%` : '—'}</span>
-          <span className="font-mono tnum">{t('同时段量能')} {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}</span>
-          <span className="font-mono tnum">{t('事件时间')} {fmtEventTime(e.event_at)} {t('美东')}</span>
+          <span className="tnum">{t('跳空')} {gap !== null ? `${gap >= 0 ? '+' : ''}${gap.toFixed(2)}%` : '—'}</span>
+          <span className="tnum">{t('同时段量能')} {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}</span>
+          <span className="tnum">{t('事件时间')} {fmtEventTime(e.event_at)} {t('美东')}</span>
         </p>
       </div>
 
@@ -762,7 +763,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
             <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
               <span
                 className={cn(
-                  'tick-flash min-w-0 rounded-xs px-1 font-mono text-data-l text-ink-900 tnum',
+                  'tick-flash min-w-0 rounded-xs px-1 text-data-l text-ink-900 tnum',
                   !preferLiveQuote(quote, Number.isFinite(e.current_price)) && flash === 'up' && 'tick-flash-up',
                   !preferLiveQuote(quote, Number.isFinite(e.current_price)) && flash === 'down' && 'tick-flash-down',
                 )}
@@ -777,14 +778,14 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
               <span className="radar-reference-glyph radar-reference-trigger" aria-hidden="true" />
               {t('突破枢轴')}
             </p>
-            <p className="mt-0.5 font-mono text-data-l text-ink-900 tnum">{num(e.pivot_price) !== null ? fmtPrice(e.pivot_price) : '—'}</p>
+            <p className="mt-0.5 text-data-l text-ink-900 tnum">{num(e.pivot_price) !== null ? fmtPrice(e.pivot_price) : '—'}</p>
           </div>
           <div className="radar-value-cell px-3 py-2.5">
             <p className="flex items-center gap-1 text-micro text-ink-400">
               <span className="radar-reference-glyph radar-reference-invalid" aria-hidden="true" />
               {t('失效位置')}
             </p>
-            <p className="mt-0.5 font-mono text-data-l text-ink-900 tnum">{invalid !== null ? fmtPrice(invalid) : '—'}</p>
+            <p className="mt-0.5 text-data-l text-ink-900 tnum">{invalid !== null ? fmtPrice(invalid) : '—'}</p>
             {e.event_anchor?.kind === 'opening_range' && e.event_anchor.status === 'partial' && <p className="mt-1 text-micro text-ink-400">{t('开盘区间低点缺失，暂无失效位')}</p>}
           </div>
         </div>
