@@ -584,82 +584,84 @@ def run_segment(config: RunConfig) -> dict[str, Any]:
         }
     clock = ReplayClock(market_datetime(days[0], 4 * 60))
     market_shape = MarketShapeReplay(shared["daily_store"], shared["fred_store"])
-    market_shape.install()
     memo = Memo()
-    if config.memo:
-        memo.install()
     failures = _FailureRecorder()
-    failures.install()
-    runs = [_VariantRun(name, config, clock, shared) for name in config.variants]
-    summary: dict[str, Any] = {
-        "label": config.label,
-        "config": {key: (str(value) if isinstance(value, Path) else value) for key, value in asdict(config).items()},
-        "days": [{"day": day.isoformat(), "warmup": day in warmup} for day in days],
-        "variants": {
-            run.name: {
-                "production_field_hash": run.production_hash,
-                "full_hash": run.full_hash,
-                "research_overrides": run.research_overrides,
-                "settings_diff": variant_spec(run.name),
-                "db": str(run.db_path),
-            }
-            for run in runs
-        },
-        "scans": 0,
-        "degraded": [],
-        "truncated_days": {},
-        "prune": {},
-    }
-
-    async def drive() -> None:
-        for day in days:
-            if (config.out / STOP_FILE).exists():
-                summary["stopped_before_day"] = day.isoformat()
-                break
-            is_warmup = day in warmup
-            for as_of, kind in grid_by_day.get(day, []):
-                clock.set(as_of)
-                for run in runs:
-                    run.heartbeat(clock.now)
-                    snapshot = run.worker.clock.snapshot()
-                    tick = time.perf_counter()
-                    try:
-                        result = dict(await run.worker._run_cycle(run.lease, snapshot))
-                    except Exception as exc:  # noqa: BLE001 - one scan must not take the segment down
-                        # PREREGISTRATION 修订 6: the scan is recorded as an exception, the day
-                        # is thereby degraded (the evaluation drops it), and the segment goes on
-                        # unless --on-degraded raise asks for a hard stop.
-                        run.captured = None
-                        result = {
-                            "status": "exception", "error_code": type(exc).__name__,
-                            "error": str(exc)[:300], "session": kind, "scan_run_id": None,
-                        }
-                        if config.on_degraded == "raise":
-                            raise RuntimeError(f"scan raised {result}") from exc
-                    elapsed = (time.perf_counter() - tick) * 1000.0
-                    if result.get("status") in ("degraded", "exception"):
-                        detail = {
-                            "variant": run.name, "as_of": as_of.isoformat(), "status": result.get("status"),
-                            "error_code": result.get("error_code"), "failure_domain": result.get("failure_domain"),
-                            "exception": result.get("error") or (repr(failures.last) if failures.last is not None else None),
-                        }
-                        run.degraded.append(detail)
-                        summary["degraded"].append(detail)
-                        if config.on_degraded == "raise":
-                            if failures.last is not None:
-                                raise RuntimeError(f"degraded scan {detail}") from failures.last
-                            raise RuntimeError(f"degraded scan {detail}")
-                    run.record(as_of, kind, result, elapsed, is_warmup)
-                memo.clear_scan_scope()
-            for run in runs:
-                run.flush_day(day)
-                summary["prune"].setdefault(run.name, {})[day.isoformat()] = run.prune(clock.now)
-            memo.clear_day_scope()
-            shared["daily_store"].clear_cache()
-            for stale in [key for key in shared["day_contexts"] if key < day - timedelta(days=1)]:
-                shared["day_contexts"].pop(stale, None)
-
+    runs: list[_VariantRun] = []
     try:
+        market_shape.install()
+        if config.memo:
+            memo.install()
+        failures.install()
+        for name in config.variants:
+            runs.append(_VariantRun(name, config, clock, shared))
+        summary: dict[str, Any] = {
+            "label": config.label,
+            "config": {key: (str(value) if isinstance(value, Path) else value) for key, value in asdict(config).items()},
+            "days": [{"day": day.isoformat(), "warmup": day in warmup} for day in days],
+            "variants": {
+                run.name: {
+                    "production_field_hash": run.production_hash,
+                    "full_hash": run.full_hash,
+                    "research_overrides": run.research_overrides,
+                    "settings_diff": variant_spec(run.name),
+                    "db": str(run.db_path),
+                }
+                for run in runs
+            },
+            "scans": 0,
+            "degraded": [],
+            "truncated_days": {},
+            "prune": {},
+        }
+
+        async def drive() -> None:
+            for day in days:
+                if (config.out / STOP_FILE).exists():
+                    summary["stopped_before_day"] = day.isoformat()
+                    break
+                is_warmup = day in warmup
+                for as_of, kind in grid_by_day.get(day, []):
+                    clock.set(as_of)
+                    for run in runs:
+                        run.heartbeat(clock.now)
+                        snapshot = run.worker.clock.snapshot()
+                        tick = time.perf_counter()
+                        try:
+                            result = dict(await run.worker._run_cycle(run.lease, snapshot))
+                        except Exception as exc:  # noqa: BLE001 - one scan must not take the segment down
+                            # PREREGISTRATION 修订 6: the scan is recorded as an exception, the day
+                            # is thereby degraded (the evaluation drops it), and the segment goes on
+                            # unless --on-degraded raise asks for a hard stop.
+                            run.captured = None
+                            result = {
+                                "status": "exception", "error_code": type(exc).__name__,
+                                "error": str(exc)[:300], "session": kind, "scan_run_id": None,
+                            }
+                            if config.on_degraded == "raise":
+                                raise RuntimeError(f"scan raised {result}") from exc
+                        elapsed = (time.perf_counter() - tick) * 1000.0
+                        if result.get("status") in ("degraded", "exception"):
+                            detail = {
+                                "variant": run.name, "as_of": as_of.isoformat(), "status": result.get("status"),
+                                "error_code": result.get("error_code"), "failure_domain": result.get("failure_domain"),
+                                "exception": result.get("error") or (repr(failures.last) if failures.last is not None else None),
+                            }
+                            run.degraded.append(detail)
+                            summary["degraded"].append(detail)
+                            if config.on_degraded == "raise":
+                                if failures.last is not None:
+                                    raise RuntimeError(f"degraded scan {detail}") from failures.last
+                                raise RuntimeError(f"degraded scan {detail}")
+                        run.record(as_of, kind, result, elapsed, is_warmup)
+                    memo.clear_scan_scope()
+                for run in runs:
+                    run.flush_day(day)
+                    summary["prune"].setdefault(run.name, {})[day.isoformat()] = run.prune(clock.now)
+                memo.clear_day_scope()
+                shared["daily_store"].clear_cache()
+                for stale in [key for key in shared["day_contexts"] if key < day - timedelta(days=1)]:
+                    shared["day_contexts"].pop(stale, None)
+
         asyncio.run(drive())
     finally:
         for run in runs:

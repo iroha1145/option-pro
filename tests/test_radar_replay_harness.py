@@ -206,6 +206,51 @@ def test_settings_grid_matches_the_documented_cadence() -> None:
     assert [kind for _s, kind in early].count("regular") == 41
 
 
+@pytest.mark.parametrize("failure_index", [0, 1])
+def test_initialization_failure_restores_replay_patches_and_releases_ready_variants(tmp_path, monkeypatch, failure_index) -> None:
+    from types import SimpleNamespace
+
+    from app.services.breakouts import feature_engine, service, worker
+    from app.services.strength import scanner
+    from harness import runner
+
+    targets = [
+        (scanner, "market_strength"),
+        (worker, "record_fallback_failure"),
+        (service, "detect_base"),
+        (service, "_scan_range_feature"),
+        (service, "compute_feature_snapshot"),
+        (service, "relative_strength_features"),
+        (feature_engine, "compute_time_of_day_rvol"),
+    ]
+    originals = [(module, name, getattr(module, name)) for module, name in targets]
+    monkeypatch.setattr(runner, "build_shared", lambda config: {"daily_store": object(), "fred_store": object()})
+    initialized, released = [], []
+
+    def variant(name, *_args):
+        initialized.append(name)
+        if len(initialized) - 1 == failure_index:
+            raise RuntimeError("variant initialization failed")
+        return SimpleNamespace(release=lambda: released.append(name))
+
+    monkeypatch.setattr(runner, "_VariantRun", variant)
+    config = RunConfig(
+        daily_db=tmp_path / "daily.sqlite", minute_store=tmp_path / "minute",
+        fred=tmp_path / "fred", out=tmp_path / "out", db_dir=tmp_path / "db",
+        start=DAY1, end=DAY1, variants=["baseline", "confirm3"], warmup_days=0,
+    )
+    try:
+        with pytest.raises(RuntimeError, match="variant initialization failed"):
+            run_segment(config)
+        assert released == ["baseline"][:failure_index]
+        for module, name, original in originals:
+            assert getattr(module, name) is original, name
+    finally:
+        # Keep a failing regression run from contaminating unrelated test modules.
+        for module, name, original in originals:
+            setattr(module, name, original)
+
+
 def test_baseline_hashes_like_production_and_variants_do_not(tmp_path) -> None:
     from app.services.breakouts.worker import _stable_hash
 
