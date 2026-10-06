@@ -8,13 +8,12 @@
  * - 鼠标进入（或在其上移动时遇到）带 title 的元素，立刻把 title 借走：原文存进
  *   data-title-borrowed，title 改成空串（原生提示就不会出现）；停留 SHOW_DELAY_MS
  *   后在 body 上画只读浮层；离开元素时把原文还回去。
- * - 借走写空串而不是删属性：悬停期间 React 删掉 title（如点了星标，「移出自选」
- *   不该再有）会留下变更记录，此时放弃借用、离开时不再把过时文字还回去；React
- *   改写 title（如报价时间每笔刷新）则重新借走，浮层跟着更新。
+ * - 借走写空串而不是删属性；自己的写入不参与监听。React 清空或删掉 title 时
+ *   收起旧提示，补齐 title 时安排显示，离开后恢复的总是组件最后一次提供的值。
  * - 按下、滚动、Esc、窗口失焦只收起浮层，title 仍借着，直到指针离开，免得
  *   点击后原生提示又冒出来。
- * - 只接管鼠标：触屏本来就没有 title 提示；未悬停时 DOM 不动，读屏的可访问
- *   名称和 getByTitle 测试都不受影响。
+ * - 只接管鼠标；借用期间通过 aria-description 保留标题说明，已有的作者说明
+ *   优先级不变。只能从 title 获得名称的元素保留原生属性。未悬停时 DOM 不动。
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -32,6 +31,19 @@ const GUTTER = 8;
 const MAX_WIDTH = 280;
 /** 与 InfoHint 同层：盖住抽屉 70、命令面板 80、确认框 85，低于 Toast 90。 */
 const Z_INDEX = 88;
+const WATCHED_ATTRIBUTES = ['title', 'aria-description', 'aria-label', 'aria-labelledby'];
+
+/** 不借走元素唯一的命名来源。不能确认有独立名称时，保留原生 title。 */
+function canBorrowTitle(element: HTMLElement): boolean {
+  if (element.getAttribute('aria-label')?.trim()) return true;
+  if (element.getAttribute('aria-labelledby')?.split(/\s+/).some((id) => document.getElementById(id)?.textContent?.trim())) return true;
+  if (element.innerText.trim()) return true;
+  if (element instanceof HTMLImageElement && element.alt.trim()) return true;
+  if (element instanceof HTMLInputElement || element instanceof HTMLSelectElement || element instanceof HTMLTextAreaElement) {
+    return Array.from(element.labels ?? []).some((label) => label.textContent?.trim());
+  }
+  return false;
+}
 
 function titledElement(node: EventTarget | null): HTMLElement | null {
   let element = node instanceof Element ? node : null;
@@ -54,22 +66,47 @@ export default function TitleTooltipLayer() {
     let alive: number | null = null;
     let watcher: MutationObserver | null = null;
     let visible = false;
+    let dismissed = false;
     let lastHiddenAt = -Infinity;
+    let description: { owner: HTMLElement; value: string; original: string | null } | null = null;
+    const observe = (element: HTMLElement) => watcher?.observe(element, {
+      attributes: true,
+      attributeFilter: WATCHED_ATTRIBUTES,
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+
+    const restoreDescription = () => {
+      const owned = description;
+      description = null;
+      if (!owned || owned.owner.getAttribute('aria-description') !== owned.value) return;
+      if (owned.original === null) owned.owner.removeAttribute('aria-description');
+      else owned.owner.setAttribute('aria-description', owned.original);
+    };
+    const preserveDescription = (element: HTMLElement, value: string) => {
+      restoreDescription();
+      const original = element.getAttribute('aria-description');
+      if (!value.trim() || original?.trim()) return;
+      // aria-describedby 本来就比 aria-description 优先；不追加或替换作者的关联说明。
+      element.setAttribute('aria-description', value);
+      description = { owner: element, value, original };
+    };
 
     const borrow = (element: HTMLElement) => {
       const value = element.getAttribute('title') ?? '';
+      // 自己写空串时暂停监听，才能把组件主动写入的空串当作真正的清空。
+      watcher?.disconnect();
+      preserveDescription(element, value);
       element.setAttribute(BORROWED, value);
       element.setAttribute('title', '');
+      observe(element);
       return value.trim();
     };
     const hide = () => {
       if (timer !== null) {
         window.clearTimeout(timer);
         timer = null;
-      }
-      if (alive !== null) {
-        window.clearInterval(alive);
-        alive = null;
       }
       if (visible) lastHiddenAt = performance.now();
       visible = false;
@@ -79,6 +116,11 @@ export default function TitleTooltipLayer() {
       hide();
       watcher?.disconnect();
       watcher = null;
+      restoreDescription();
+      if (alive !== null) {
+        window.clearInterval(alive);
+        alive = null;
+      }
       const owner = ownerRef.current;
       ownerRef.current = null;
       if (!owner) return;
@@ -88,28 +130,8 @@ export default function TitleTooltipLayer() {
       if (value !== null && owner.getAttribute('title') === '') owner.setAttribute('title', value);
     };
 
-    const onPointer = (event: PointerEvent) => {
-      if (event.pointerType !== 'mouse') return;
-      const target = titledElement(event.target);
-      if (target === ownerRef.current) return;
-      release();
-      if (!target) return;
-      ownerRef.current = target;
-      const value = borrow(target);
-      watcher = new MutationObserver(() => {
-        if (!target.hasAttribute('title')) {
-          // React 删掉了 title：放弃借用，正在显示的旧文字也收起。
-          target.removeAttribute(BORROWED);
-          hide();
-          return;
-        }
-        const next = target.getAttribute('title') ?? '';
-        if (next === '') return; // 自己写入的空串
-        borrow(target);
-        if (visible) setText(next.trim() || null);
-      });
-      watcher.observe(target, { attributes: true, attributeFilter: ['title'] });
-      if (!value) return;
+    const schedule = (target: HTMLElement) => {
+      if (dismissed || timer !== null || visible || !target.getAttribute(BORROWED)?.trim()) return;
       const warm = performance.now() - lastHiddenAt < WARM_WINDOW_MS;
       timer = window.setTimeout(() => {
         timer = null;
@@ -119,10 +141,53 @@ export default function TitleTooltipLayer() {
         }
         visible = true;
         setText(target.getAttribute(BORROWED)?.trim() || null);
-        alive = window.setInterval(() => {
-          if (!target.isConnected) release();
-        }, ALIVE_CHECK_MS);
       }, warm ? WARM_DELAY_MS : SHOW_DELAY_MS);
+    };
+    const dismiss = () => {
+      dismissed = true;
+      hide();
+    };
+
+    const onPointer = (event: PointerEvent) => {
+      if (event.pointerType !== 'mouse') return;
+      const target = titledElement(event.target);
+      if (target === ownerRef.current) return;
+      release();
+      if (!target || !canBorrowTitle(target)) return;
+      ownerRef.current = target;
+      dismissed = false;
+      borrow(target);
+      watcher = new MutationObserver((changes) => {
+        if (changes.some((change) => change.target === target && change.attributeName === 'aria-description')) {
+          // 组件接管了说明属性，哪怕写入相同文字，也不再由提示层负责撤销。
+          description = null;
+        }
+        if (!canBorrowTitle(target)) {
+          release();
+          return;
+        }
+        if (!changes.some((change) => change.target === target && change.attributeName === 'title')) {
+          watcher?.disconnect();
+          preserveDescription(target, target.getAttribute(BORROWED) ?? '');
+          observe(target);
+          return;
+        }
+        if (!target.hasAttribute('title')) {
+          // React 删掉了 title：放弃借用，正在显示的旧文字也收起。
+          target.removeAttribute(BORROWED);
+          release();
+          return;
+        }
+        const next = borrow(target);
+        if (!next) hide();
+        else if (visible) setText(next);
+        else schedule(target);
+      });
+      observe(target);
+      alive = window.setInterval(() => {
+        if (!target.isConnected) release();
+      }, ALIVE_CHECK_MS);
+      schedule(target);
     };
     const onOut = (event: PointerEvent) => {
       if (event.pointerType !== 'mouse') return;
@@ -133,7 +198,7 @@ export default function TitleTooltipLayer() {
       release();
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') hide();
+      if (event.key === 'Escape') dismiss();
     };
 
     /* pointermove 兜住悬停后才出现的 title（如点星标后才有「移出自选」）：同一元素上
@@ -141,17 +206,17 @@ export default function TitleTooltipLayer() {
     document.addEventListener('pointerover', onPointer);
     document.addEventListener('pointermove', onPointer);
     document.addEventListener('pointerout', onOut);
-    document.addEventListener('pointerdown', hide, true);
+    document.addEventListener('pointerdown', dismiss, true);
     document.addEventListener('keydown', onKey, true);
-    window.addEventListener('scroll', hide, true);
+    window.addEventListener('scroll', dismiss, true);
     window.addEventListener('blur', release);
     return () => {
       document.removeEventListener('pointerover', onPointer);
       document.removeEventListener('pointermove', onPointer);
       document.removeEventListener('pointerout', onOut);
-      document.removeEventListener('pointerdown', hide, true);
+      document.removeEventListener('pointerdown', dismiss, true);
       document.removeEventListener('keydown', onKey, true);
-      window.removeEventListener('scroll', hide, true);
+      window.removeEventListener('scroll', dismiss, true);
       window.removeEventListener('blur', release);
       release();
     };
@@ -182,7 +247,7 @@ export default function TitleTooltipLayer() {
     <span
       ref={tipRef}
       role="tooltip"
-      /* 内容就是元素自己的 title，读屏已从可访问名称/描述读到，不再重复朗读。 */
+      /* 标题说明在所属元素的 aria-description 中保留，浮层不重复朗读。 */
       aria-hidden="true"
       data-portal=""
       data-title-tooltip=""

@@ -34,7 +34,8 @@ test('only mouse pointers are taken over; touch and pen keep default behaviour',
 test('the borrowed title is restored on release and React rewrites are re-borrowed', async () => {
   const layer = await source('components/shared/TitleTooltipLayer.tsx');
   assert.match(layer, /owner\.setAttribute\('title', value\)/, '离开时把 title 原样还回');
-  assert.match(layer, /attributeFilter: \['title'\]/, '悬停期间 React 改写 title 要再借走，原生提示不能冒出来');
+  assert.match(layer, /const WATCHED_ATTRIBUTES = \['title', 'aria-description'/, '悬停期间监听标题和可访问说明的组件更新');
+  assert.match(layer, /attributeFilter: WATCHED_ATTRIBUTES/);
   assert.match(layer, /aria-hidden="true"/, '浮层内容与元素自己的 title 重复，读屏不再朗读');
   assert.match(layer, /window\.addEventListener\('blur', release\)/);
 });
