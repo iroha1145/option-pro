@@ -695,7 +695,10 @@ def _validate_market_signals(payload: Mapping[str, Any]) -> bool:
         or source.get("value") not in {"active", "degraded"}
         or not isinstance(source.get("label"), str)
         or not isinstance(breadth, dict)
-        or set(breadth) != {"available", "expected", "ratio"}
+        or set(breadth) not in (
+            {"available", "expected", "ratio"},
+            {"available", "expected", "ratio", "above_count"},
+        )
         or isinstance(breadth.get("available"), bool)
         or not isinstance(breadth.get("available"), int)
         or isinstance(breadth.get("expected"), bool)
@@ -703,6 +706,13 @@ def _validate_market_signals(payload: Mapping[str, Any]) -> bool:
         or not 0 <= breadth["available"] <= breadth["expected"] <= 100
         or not _finite_number(breadth.get("ratio"), minimum=0)
         or float(breadth["ratio"]) > 1
+    ):
+        return False
+    above_count = breadth.get("above_count")
+    if above_count is not None and (
+        isinstance(above_count, bool)
+        or not isinstance(above_count, int)
+        or not 0 <= above_count <= breadth["available"]
     ):
         return False
     metric_count = 0

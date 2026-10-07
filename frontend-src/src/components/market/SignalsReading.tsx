@@ -8,6 +8,7 @@ import type { MarketStatusDetail } from './api';
 import { cn } from '@/lib/utils';
 import { fmtPct, fmtPrice } from '@/lib/format';
 import { isUsIndexSymbol } from '@/lib/quoteSymbol';
+import { sectorBreadthReading } from '@/lib/sectorBreadth';
 import EmptyState from '@/components/shared/EmptyState';
 import InfoHint from '@/components/shared/InfoHint';
 import { MARKET_SIGNAL_HINTS, SCORE_HINTS } from '@/lib/scoreHints';
@@ -49,7 +50,9 @@ function buildReading(
     .slice(0, 2);
   if (leading.length) {
     const items = leading
-      .map((metric) => t('「{label}」{value}', { label: metric.label, value: metric.value }))
+      .map((metric) => metric.key === 'sectors_above_50dma'
+        ? sectorBreadthReading(metric.value, signals.breadthCoverage)
+        : t('「{label}」{value}', { label: metric.label, value: metric.value }))
       .join(t('、'));
     parts.push(t('主要指标：{items}。', { items }));
   }
@@ -97,7 +100,9 @@ function MetricRows({ data }: { data: MarketSignalsSnapshot }) {
               <InfoHint hint={MARKET_SIGNAL_HINTS[metric.key]} align="start" size={11} />
             )}
           </span>
-          <span className="text-right text-caption text-ink-800 tnum">{metric.value}</span>
+          <span className="text-right text-caption text-ink-800 tnum">
+            {metric.key === 'sectors_above_50dma' ? `${metric.value.toFixed(2)}%` : metric.value}
+          </span>
           <span className="text-right text-micro text-ink-400 tnum">
             {metric.topScore !== null || metric.bottomScore !== null
               ? `${metric.topScore ?? '—'} / ${metric.bottomScore ?? '—'}`

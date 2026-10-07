@@ -167,6 +167,7 @@ def test_market_signal_breadth_ignores_missing_sector_funds_and_marks_degraded(
         "available": 0,
         "expected": len(signals.SECTOR_ETFS),
         "ratio": 0.0,
+        "above_count": None,
     }
     assert result["_source_status"]["value"] == "degraded"
 
@@ -187,7 +188,34 @@ def test_market_signal_breadth_uses_only_available_funds_in_denominator(
 
     assert result["sectors_above_50dma"]["value"] == 100.0
     assert result["_breadth_coverage"]["available"] == 7
+    assert result["_breadth_coverage"]["above_count"] == 7
     assert result["_source_status"]["value"] == "degraded"
+
+
+@pytest.mark.parametrize("available_count,above_count", [(11, 2), (7, 2), (7, 0), (6, 2)])
+def test_market_signal_breadth_preserves_actual_count_and_coverage_threshold(
+    monkeypatch: pytest.MonkeyPatch, available_count: int, above_count: int,
+) -> None:
+    signals._cache.clear()
+    rising = _history()
+    falling = rising.iloc[::-1].reset_index(drop=True)
+    frames = {"SPY": rising}
+    frames.update({
+        symbol: rising if index < above_count else falling
+        for index, symbol in enumerate(signals.SECTOR_ETFS[:available_count])
+    })
+    monkeypatch.setattr(signals, "_bulk_history", lambda _symbols: frames)
+
+    result = signals.compute_market_signals()
+
+    assert result["_breadth_coverage"]["available"] == available_count
+    assert result["_breadth_coverage"]["expected"] == 11
+    if available_count < 7:
+        assert result["sectors_above_50dma"]["value"] is None
+        assert result["_breadth_coverage"]["above_count"] is None
+    else:
+        assert result["_breadth_coverage"]["above_count"] == above_count
+        assert result["sectors_above_50dma"]["value"] == round(above_count / available_count * 100, 4)
 
 
 def test_market_signal_bulk_fallback_does_not_retry_massive_per_symbol(
