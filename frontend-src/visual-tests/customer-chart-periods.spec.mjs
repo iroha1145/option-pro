@@ -54,3 +54,40 @@ test('an anonymous chart view never starts a provider pull', async ({ page }) =>
   await expect(page.getByText(/该股票暂无数据，可手动获取最新行情、日线/)).toHaveCount(0);
   expect((await (await page.request.get('/test/state')).json()).provider_calls).toEqual([]);
 });
+
+for (const width of [1440, 390]) {
+  test(`home movers follow real customer sessions and persisted membership at ${width}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.addInitScript(() => localStorage.setItem('optix:locale', 'zh'));
+    await page.request.post('/test/reset');
+    const errors = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    const movers = page.getByRole('region', { name: '关注池异动', exact: true });
+    const symbols = () => movers.getByTestId('watchlist-mover-card').evaluateAll((nodes) =>
+      nodes.map((node) => decodeURIComponent(node.getAttribute('href').split('/').at(-1))).sort());
+    for (const [account, members] of [['first', ['AMD', 'NVDA']], ['second', ['AAPL']]]) {
+      const registered = await page.request.post('/api/account/register', {
+        headers, data: { username: `home${account}${width}r${info.repeatEachIndex}`, password: 'fixture-customer-password' },
+      });
+      expect(registered.status()).toBe(201);
+      const identity = await (await page.request.get('/api/access/status')).json();
+      expect(identity.logged_in).toBe(false);
+      expect(identity.account.logged_in).toBe(true);
+      const saved = await page.request.put('/api/account/watchlist', { headers, data: { tickers: members } });
+      expect(saved.status()).toBe(200);
+      expect((await saved.json()).tickers.sort()).toEqual([...members].sort());
+      await page.goto('/');
+      await expect.poll(symbols).toEqual([...members].sort());
+      await page.reload();
+      await expect.poll(symbols).toEqual([...members].sort());
+    }
+    const emptied = await page.request.put('/api/account/watchlist', { headers, data: { tickers: [] } });
+    expect(emptied.status()).toBe(200);
+    await page.reload();
+    await expect(movers).toContainText('暂无关注标的');
+    await expect.poll(symbols).toEqual([]);
+    expect((await (await page.request.get('/test/state')).json()).provider_calls).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(errors).toEqual([]);
+  });
+}
