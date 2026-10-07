@@ -8,7 +8,6 @@ import { useStockDataStatus } from '../../src/hooks/useStockDataStatus';
 import StockDataCoverage from '../../src/components/shared/StockDataCoverage';
 import Home from '../../src/pages/Home';
 import Breakouts from '../../src/pages/Breakouts';
-import { accessApi } from '../../src/api/modules/access';
 import { marketApi } from '../../src/api/modules/market';
 import { marketPulseApi } from '../../src/components/market/api';
 import { signalsApi } from '../../src/api/modules/signals';
@@ -22,9 +21,8 @@ import '../../src/index.css';
 
 const noop = () => {};
 const mode = new URLSearchParams(location.search).get('mode') ?? 'status';
-// Only unrelated domains are stubbed. Status, watchlist and chart requests use
+// Only unrelated domains are stubbed. Identity, status, watchlist and chart requests use
 // the production API client and cache; Playwright supplies isolated HTTP responses.
-Object.assign(accessApi, { status: async () => ({ role: 'visitor', aiEnabled: false, aiAvailable: false }) });
 Object.assign(marketApi, { indices: async () => fx.getIndices(), ctaTrend: async () => fx2.getCtaTrend() });
 Object.assign(marketPulseApi, { statusDetail: async () => pulse.getMarketStatusDetail(), regime: async () => pulse.getMarketRegime() });
 Object.assign(signalsApi, { market: async () => null });
