@@ -26,7 +26,8 @@ import { getIndexIntraday } from '@/mocks/marketPulse';
 import { usePolling } from '@/hooks/usePolling';
 import { useTickFlash } from '@/hooks/useTickFlash';
 import { useStockDataStatus } from '@/hooks/useStockDataStatus';
-import type { StockDataStatus } from '@/lib/stockDataStatus';
+import { useHomeMovers } from '@/hooks/useHomeMovers';
+import { dailyDataVersion, type StockDataStatus } from '@/lib/stockDataStatus';
 import { quoteSymbol } from '@/lib/quoteSymbol';
 import { MARKET_LABEL, MARKET_TO_SESSION } from '@/lib/marketSession';
 import { useNow } from '@/hooks/useNow';
@@ -222,6 +223,7 @@ export default function Home() {
   const breakoutsQ = usePolling(() => breakoutsApi.current(), 300_000);
   const earningsQ = usePolling(() => earningsApi.upcoming(), 300_000);
   const watchlistQ = usePolling(() => stocksApi.watchlist(true), 300_000);
+  const moverQ = useHomeMovers(watchlistQ);
   const ctaQ = usePolling(() => marketApi.ctaTrend(), 300_000);
 
   const status = statusQ.data;
@@ -283,13 +285,12 @@ export default function Home() {
     [earningsQ.data, nyToday, poolTickers],
   );
 
-  /* 关注池异动：stocksApi.watchlist() 返回站点公共关注池（非登录账号的个
-     人自选——个人过滤在自选页做），按 |changePct| 降序前 6；缺失的行排最后 */
+  /* 关注池异动使用当前主体的成员；访客使用公共池。按 |changePct| 降序前 6，缺失排最后。 */
   const movers = useMemo(() => {
     const mag = (v: number | null | undefined) =>
       typeof v === 'number' && Number.isFinite(v) ? Math.abs(v) : -1;
-    return (watchlistQ.data ?? []).slice().sort((a, b) => mag(b.changePct) - mag(a.changePct)).slice(0, 6);
-  }, [watchlistQ.data]);
+    return (moverQ.data ?? []).slice().sort((a, b) => mag(b.changePct) - mag(a.changePct)).slice(0, 6);
+  }, [moverQ.data]);
 
   /* 涨跌平家数（自选股池统计；缺涨跌幅的行不进入任何一桶） */
   const breadth = useMemo(() => {
@@ -310,6 +311,7 @@ export default function Home() {
   const ctaInstruments = ctaQ.data?.instruments ?? [];
   const readiness = useStockDataStatus([
     ...(watchlistQ.data ?? []).map((item) => item.ticker),
+    ...moverQ.tickers,
     ...breakouts.map((item) => item.ticker), ...earnings.map((item) => item.ticker),
     ...movers.map((item) => item.ticker), 'NVDA',
   ]);
@@ -319,6 +321,15 @@ export default function Home() {
     stocksApi.invalidatePreparedDaily();
     refreshWatchlist({ force: true });
   }, [readiness.dailyVersion, refreshWatchlist]);
+  const moverDailyVersion = readiness.items
+    .filter((item) => moverQ.tickers.includes(item.ticker))
+    .map((item) => `${item.ticker}:${dailyDataVersion(item)}`).filter((item) => !item.endsWith(':')).sort().join('|');
+  const { refresh: refreshMovers, personal: personalMovers } = moverQ;
+  useEffect(() => {
+    if (!personalMovers || !moverDailyVersion) return;
+    stocksApi.invalidatePreparedDaily();
+    refreshMovers();
+  }, [moverDailyVersion, personalMovers, refreshMovers]);
 
   return (
     <div>
@@ -462,12 +473,12 @@ export default function Home() {
           </ListBody>
         </SectionCard>
 
-        <SectionCard title={t('关注池异动')} to="/watchlist" updatedAt={watchlistQ.lastUpdatedAt} className="lg:col-span-2">
+        <SectionCard title={t('关注池异动')} to="/watchlist" updatedAt={moverQ.lastUpdatedAt} className="lg:col-span-2">
           <ListBody
-            loading={watchlistQ.loading}
-            error={watchlistQ.error}
-            refreshing={watchlistQ.refreshing}
-            onRetry={() => watchlistQ.refresh()}
+            loading={moverQ.loading}
+            error={moverQ.error}
+            refreshing={moverQ.refreshing}
+            onRetry={() => moverQ.refresh()}
             isEmpty={movers.length === 0}
             emptyTitle={t('暂无关注标的')}
             skeleton={<MoverListSkeleton rows={5} />}

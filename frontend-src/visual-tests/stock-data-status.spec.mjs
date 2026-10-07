@@ -20,6 +20,9 @@ async function fixture(page, mode = 'status') {
     const request = route.request(), url = new URL(request.url());
     if (!url.pathname.startsWith('/api/')) return route.continue();
     state.requests.push({ method: request.method(), path: url.pathname, tickers: (url.searchParams.get('tickers') ?? '').split(',').filter(Boolean) });
+    if (url.pathname === '/api/access/status') {
+      return route.fulfill({ json: { access_mode: 'password', logged_in: false, account: null } });
+    }
     if (url.pathname === '/api/stocks/data/status') {
       const tickers = (url.searchParams.get('tickers') ?? '').split(',').filter(Boolean);
       if (state.hold) { const hold = state.hold; state.hold = null; return hold(route, tickers); }
