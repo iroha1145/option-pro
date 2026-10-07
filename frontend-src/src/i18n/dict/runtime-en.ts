@@ -2606,7 +2606,6 @@ export const EN: Record<string, string> = {
   "强度分 {score}，{band} {label}": "Strength score {score}, {band} {label}",
   "强度分档 · 计数基于{scope}": "Strength tier · count based on {scope}",
   "分档计数基于{scope}": "Tier counts based on {scope}",
-  "进攻型与防守型资产之间的强弱差（{label}）。": "The strength gap between offensive and defensive assets ({label}).",
   "进攻型与防守型资产之间的强弱差。": "The strength gap between offensive and defensive assets.",
   "{tierA}–{tierB}（{range}）": "{tierA}–{tierB} ({range})",
   "近 {count} 日走势": "Last {count} days",

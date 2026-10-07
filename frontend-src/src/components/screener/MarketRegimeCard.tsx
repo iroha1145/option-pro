@@ -9,16 +9,14 @@ import SoftBadge from '@/components/shared/SoftBadge';
 import type { MarketRegimeDims, MarketRegimeInfo, MarketStrength } from '@/api/types';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS, type ScoreHintKey } from '@/lib/scoreHints';
-import { t, getLocale } from '../../i18n/core.ts';
+import { t } from '../../i18n/core.ts';
 
 interface RegimeDim {
   key: string;
   label: string;
-  en: string;
   /** null = 契约缺失（空轨道 + 「—」，不编造） */
   value: number | null;
-  hint: string;
-  /** 评分算法解释（lib/scoreHints）——与既有 glass tooltip 并存 */
+  /** 评分算法解释（lib/scoreHints） */
   hintKey: ScoreHintKey;
 }
 
@@ -26,19 +24,15 @@ interface RegimeDim {
 function liveDims(r: MarketRegimeInfo): RegimeDim[] {
   const d: MarketRegimeDims = r.dims;
   return [
-    { key: 'index_trend', label: t('指数趋势'), en: 'INDEX TREND', value: d.indexTrend, hint: t('指数整体的趋势健康程度。'), hintKey: 'regimeTrend' },
-    { key: 'momentum', label: t('市场动量'), en: 'MOMENTUM', value: d.momentum, hint: t('资金推动价格的力度强弱。'), hintKey: 'regimeMomentum' },
-    { key: 'breadth', label: t('市场广度'), en: 'BREADTH', value: d.breadth, hint: t('上涨在多少标的中扩散开来。'), hintKey: 'regimeBreadth' },
-    { key: 'volume', label: t('量能配合'), en: 'VOLUME', value: d.volume, hint: t('成交量对当前趋势的确认程度。'), hintKey: 'regimeVolume' },
-    { key: 'risk_appetite', label: t('风险偏好'), en: 'RISK APPETITE', value: d.riskAppetite, hint: t('资金愿意承担风险的程度。'), hintKey: 'regimeRiskAppetite' },
+    { key: 'index_trend', label: t('指数趋势'), value: d.indexTrend, hintKey: 'regimeTrend' },
+    { key: 'momentum', label: t('市场动量'), value: d.momentum, hintKey: 'regimeMomentum' },
+    { key: 'breadth', label: t('市场广度'), value: d.breadth, hintKey: 'regimeBreadth' },
+    { key: 'volume', label: t('量能配合'), value: d.volume, hintKey: 'regimeVolume' },
+    { key: 'risk_appetite', label: t('风险偏好'), value: d.riskAppetite, hintKey: 'regimeRiskAppetite' },
     {
       key: 'risk_on_spread',
       label: t('强弱价差'),
-      en: 'RISK-ON SPREAD',
       value: d.riskOnSpread,
-      hint: r.spreadLabel
-        ? t('进攻型与防守型资产之间的强弱差（{label}）。', { label: r.spreadLabel })
-        : t('进攻型与防守型资产之间的强弱差。'),
       hintKey: 'regimeRiskOn',
     },
   ];
@@ -48,7 +42,7 @@ function RegimeBar({ dim }: { dim: RegimeDim }) {
   /* count-up 减量：六维条数值直接呈现终值 */
   const v = dim.value ?? 0;
   return (
-    <div className="group relative col-span-3 grid grid-cols-subgrid items-center gap-x-3">
+    <div className="col-span-3 grid grid-cols-subgrid items-center gap-x-3">
         <span className="whitespace-nowrap text-caption text-ink-500">
           {dim.label}
           <InfoHint hint={SCORE_HINTS[dim.hintKey]} side="bottom" size={11} className="ml-0.5" />
@@ -64,17 +58,6 @@ function RegimeBar({ dim }: { dim: RegimeDim }) {
         <span className="metric-value text-right text-caption text-ink-800 tnum">
           {dim.value !== null ? Math.round(v) : '—'}
         </span>
-      {/* 毛玻璃 tooltip（绝对定位，不占网格槽位） */}
-      <div className="cloud-popover pointer-events-none absolute -top-2 left-16 z-20 hidden w-56 -translate-y-full p-3 group-hover:block">
-        <p className="flex items-baseline justify-between">
-          <span className="text-caption font-medium text-ink-800">{dim.label}</span>
-          {getLocale() === 'zh' && <span className="tnum text-micro text-ink-400">{dim.en}</span>}
-        </p>
-        <p className="mt-1.5 text-micro leading-[16px] text-ink-500">{dim.hint}</p>
-        <SoftBadge tone={dim.value === null ? 'neutral' : 'brand'} className="mt-1.5">
-          {dim.value !== null ? `${Math.round(dim.value * 10) / 10} / 100` : t('暂无数据')}
-        </SoftBadge>
-      </div>
     </div>
   );
 }

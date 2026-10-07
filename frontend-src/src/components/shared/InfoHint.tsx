@@ -63,15 +63,18 @@ export default function InfoHint({
   align = 'center',
   size = 13,
   className,
+  triggerClassName,
   children,
 }: {
-  hint: ScoreHint;
+  hint: Omit<ScoreHint, 'body'> & { body: ReactNode };
   /** 浮层出现的方向；表格首行/页脚等边缘位置按需选 bottom */
   side?: 'top' | 'bottom';
   /** 水平对齐；靠近容器右缘时用 end，左缘时用 start */
   align?: 'start' | 'center' | 'end';
   size?: number;
   className?: string;
+  /** 自定义按钮可撑满触发区域；不影响默认信息图标。 */
+  triggerClassName?: string;
   /**
    * 自定义触发器。传了就用它当触发点（如绘图工具按钮本身），不再渲染那个「i」
    * 图标——工具条上再挂一排 i 是噪点，用户期待的是悬停按钮本体就出解释。
@@ -182,7 +185,7 @@ export default function InfoHint({
       {children ? (
         <span
           ref={triggerRef}
-          className="inline-flex"
+          className={cn('inline-flex', triggerClassName)}
           aria-describedby={exposed ? tooltipId : undefined}
           onFocus={() => { setDismissed(false); setFocused(true); }}
           onBlur={() => setFocused(false)}
