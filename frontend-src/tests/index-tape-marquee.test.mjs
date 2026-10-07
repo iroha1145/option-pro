@@ -53,7 +53,9 @@ test('动画元素只含第一套：每轮平移 -100%，左内边距不在周�
   const config = await read('tailwind.config.js');
   assert.match(config, /marquee: \{\s*from: \{ transform: 'translateX\(0\)' \},\s*to: \{ transform: 'translateX\(-100%\)' \},\s*\}/);
   const tape = await read('src/components/IndexTape.tsx');
-  assert.match(tape, /className="marquee-track [^"]*\bpl-4\b[^"]*"/);
+  assert.match(tape, /className="marquee-viewport [^"]*\bpl-4\b[^"]*"/);
+  assert.match(tape, /marquee-label pointer-events-none/);
+  assert.doesNotMatch(tape, /marquee-label absolute/);
   assert.match(tape, /className="marquee-inner relative flex w-max shrink-0 animate-marquee items-center"/);
   assert.match(tape, /className="marquee-echo absolute inset-y-0 [^"]*\bpr-8\b[^"]*" style=\{\{ left: `\$\{\(index \+ 1\) \* 100\}%` \}\}/);
 });
@@ -63,9 +65,9 @@ test('键盘焦点进入时暂停；减少动态时藏起副本、改为可横�
   assert.match(css, /\.marquee-track:hover \.marquee-inner,\s*\.marquee-track:has\(:focus-visible\) \.marquee-inner \{\s*animation-play-state: paused;/);
   assert.match(css, /\.marquee-track:has\(:focus-visible\) > \.marquee-label \{\s*opacity: 0;\s*pointer-events: none;/);
   const reduced = css.slice(css.indexOf('/* §4.2 降级：减少动态偏好 */'));
-  assert.match(reduced, /\.marquee-track \{ overflow-x: auto; \}/);
+  assert.match(reduced, /\.marquee-viewport \{ overflow-x: auto; \}/);
   assert.match(reduced, /\.marquee-echo \{ display: none; \}/);
-  assert.match(reduced, /\.marquee-track > \.marquee-label \{[^}]*position: sticky;/);
+  assert.match(reduced, /\.marquee-track > \.marquee-label \{[^}]*position: static;/);
   // 鼠标点击不挪位置，只处理键盘焦点
   const tape = await read('src/components/IndexTape.tsx');
   assert.match(tape, /target\.matches\(':focus-visible'\)/);

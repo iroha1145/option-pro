@@ -63,7 +63,7 @@ export default function IndexCard(props: IndexCardProps) {
   const body = (
     <>
       <span className="flex min-w-0 items-baseline justify-between gap-1.5">
-        <span className="min-w-0 truncate text-caption text-ink-500">{quote.name}</span>
+        <span className="min-w-0 truncate text-caption text-ink-500" title={quote.name}>{quote.name}</span>
         <span className="shrink-0 tnum text-micro text-ink-400">{quote.code}</span>
       </span>
       <span

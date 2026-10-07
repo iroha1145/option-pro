@@ -1005,15 +1005,20 @@
   *, *::before, *::after {
     transition-duration: 160ms !important;
   }
-  /* 不动的跑马灯改成可横向滑动的一条：副本藏起来，免得同一只指数出现两次；
-     右侧标签改为贴边占位，滑到头时不再盖住最后一项。 */
-  .marquee-track { overflow-x: auto; }
+  /* 不动的跑马灯改成可横向滑动的一条：副本藏起来，免得同一只指数出现两次。
+     滑动发生在视口里；右侧标签本来就占独立一列，滑到头也不会盖住最后一项。 */
+  .marquee-viewport { overflow-x: auto; }
   .marquee-echo { display: none; }
   .marquee-track > .marquee-label {
-    position: sticky;
-    align-self: stretch;
+    position: static;
     flex-shrink: 0;
-    margin-left: auto;
+  }
+}
+
+/* 手机底部 Dock 是 fixed。键盘把焦点滚进视口时留出 Dock 的高度，避免落在导航下面。 */
+@media (max-width: 1279px) {
+  html {
+    scroll-padding-bottom: calc(5.75rem + env(safe-area-inset-bottom));
   }
 }
 

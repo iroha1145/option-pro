@@ -201,7 +201,7 @@ export default function Screener() {
   const sectorOptions = useMemo<SectorOption[]>(() => {
     const fromMeta = profilesQ.data?.sectors ?? [];
     if (fromMeta.length > 0) return fromMeta;
-    return universe.sectors.map((s) => ({ id: s, name: s }));
+    return universe.sectors.map((s) => ({ id: s, name: __t(s) }));
   }, [profilesQ.data, universe.sectors]);
 
   useEffect(() => {

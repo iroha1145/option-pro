@@ -1,9 +1,9 @@
 /**
  * Toast 系统（design.md §7.5 + transitions.dev toast open/close）
  * 右上 catalog `.t-toast`：升起 fade+blur+scale；open 慢 / close 快。
- * 顶部偏移让开 sticky Navbar（h-12 / md:h-16）。
+ * 顶部偏移让开仍留在视口里的顶栏、指数条和演示条，避免压住行情。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
@@ -19,6 +19,26 @@ interface ToastItem {
   description?: string;
   action?: ToastAction;
   hiding?: boolean;
+}
+
+/** 仍压在视口顶部的壳层底边。滚走的指数条不再占位。 */
+function shellChromeBottom(): number | null {
+  if (typeof document === 'undefined') return null;
+  const nodes = [
+    document.querySelector('header'),
+    document.querySelector('.marquee-track'),
+    document.querySelector('[data-demo-banner]'),
+  ];
+  let bottom = 0;
+  let found = false;
+  for (const node of nodes) {
+    if (!(node instanceof HTMLElement)) continue;
+    const rect = node.getBoundingClientRect();
+    if (rect.bottom <= 0 || rect.height <= 0) continue;
+    found = true;
+    bottom = Math.max(bottom, rect.bottom);
+  }
+  return found ? bottom + 8 : null;
 }
 
 const BAR: Record<ToastKind, string> = {
@@ -115,6 +135,25 @@ function ToastCard({ t, onDismiss, onRemove }: { t: ToastItem; onDismiss: (id: n
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
+  const [chromeTop, setChromeTop] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const measure = () => setChromeTop(shellChromeBottom());
+    measure();
+    window.addEventListener('scroll', measure, { passive: true });
+    window.addEventListener('resize', measure);
+    const observed = [
+      document.querySelector('header'),
+      document.querySelector('.marquee-track'),
+      document.querySelector('[data-demo-banner]'),
+    ].filter((node): node is HTMLElement => node instanceof HTMLElement);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observed.forEach((node) => observer?.observe(node));
+    return () => {
+      window.removeEventListener('scroll', measure);
+      window.removeEventListener('resize', measure);
+      observer?.disconnect();
+    };
+  }, []);
   const nextId = useRef(0);
   const remove = useCallback((id: number) => {
     setItems((prev) => prev.filter((item) => item.id !== id));
@@ -145,7 +184,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       {/* 行间距放在 t-toast-row-inner 的 padding 里（不用 gap）：收起的行连
           同间距一起坍缩，剩余 toast 平滑上移而不是跳位。 */}
-      <div data-focus-allow aria-live="off" className="pointer-events-none fixed right-4 top-[calc(3rem+8px)] z-[90] flex w-[320px] max-w-[calc(100vw-32px)] flex-col md:top-[calc(4rem+8px)]">
+      <div
+        data-focus-allow
+        aria-live="off"
+        className={cn(
+          'pointer-events-none fixed right-4 z-[90] flex w-[320px] max-w-[calc(100vw-32px)] flex-col',
+          chromeTop == null && 'top-[calc(3rem+8px)] md:top-[calc(4rem+8px)]',
+        )}
+        style={chromeTop == null ? undefined : { top: chromeTop }}
+      >
         {items.map((t) => (
           <ToastCard key={t.id} t={t} onDismiss={dismiss} onRemove={remove} />
         ))}

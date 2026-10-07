@@ -2669,7 +2669,7 @@ export const EN: Record<string, string> = {
   "公开快照暂无该股票的日线图 · 可手动拉取": "The saved public snapshot doesn't include this stock's daily chart · pull live data manually",
   "衡量当前经济环境对该股票所属板块是否有利，结合各项经济指标的历史位置和板块敏感度评分。65 分及以上为顺风，35 分及以下为逆风。": "Rates how favorable the economy is for the stock’s sector, using each indicator’s historical range and the sector’s sensitivity. Scores of 65 or more indicate a tailwind; 35 or less, a headwind.",
   "此分数单独展示，不影响选股和突破信号排名。数据不足时留空；分数反映当前环境，不预测股价。": "Shown separately from stock and breakout rankings. Left blank when data is insufficient. It describes current conditions rather than forecasting prices.",
-  "超威半导体": "AMD",
+  "超威半导体": "Advanced Micro Devices",
   "Meta 平台": "Meta Platforms",
   "谷歌 A": "Alphabet (Google) Class A",
   "超微电脑": "Super Micro Computer (Supermicro)",

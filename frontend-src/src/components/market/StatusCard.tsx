@@ -108,7 +108,7 @@ export default function StatusCard({
         </div>
       </div>
       <p className="mt-3 text-caption text-ink-500">
-        {data.phase ? (PHASE_LABEL[data.phase] ?? data.phase) : '—'}
+        {data.phase ? (PHASE_LABEL[data.phase] ?? t(data.phase)) : '—'}
       </p>
     </section>
   );

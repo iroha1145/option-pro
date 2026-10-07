@@ -137,23 +137,27 @@ export default function IndexTape() {
     : <TapeRow items={items} flashes={flashes} onOpen={openMarket} />;
 
   return (
-    <div className="marquee-track no-scrollbar relative flex h-9 items-center overflow-hidden border-b border-line bg-paper-2/80 pl-4" onFocus={(event) => revealKeyboardFocus(event.target)}>
-      <div ref={innerRef} className="marquee-inner relative flex w-max shrink-0 animate-marquee items-center">
-        <div ref={copyRef} className="flex items-center gap-8 whitespace-nowrap pr-8" aria-hidden={!useFunds && items.length === 0}>
-          {row}
-        </div>
-        {/* 其余副本只为无缝滚动存在：不能让键盘与读屏软件把每个指数访问多遍
-            （审计 P3-4）。aria-hidden 挡读屏，inert 挡 Tab 与点击。副本依次绝对定位在
-            第一套之后，动画每轮正好平移一套的宽度（含尾部间距），接缝处不跳。 */}
-        {Array.from({ length: copies - 1 }, (_, index) => (
-          <div key={index} className="marquee-echo absolute inset-y-0 flex items-center gap-8 whitespace-nowrap pr-8" style={{ left: `${(index + 1) * 100}%` }} aria-hidden="true" inert>
+    <div className="marquee-track relative flex h-9 items-stretch overflow-hidden border-b border-line bg-paper-2/80" onFocus={(event) => revealKeyboardFocus(event.target)}>
+      {/* 标签占独立一列，滚动内容在剩余宽度里走，不再从「延迟行情」下面钻过去。
+          左内边距放在视口上、不放进平移的那一套，周期里才不会把 16px 算进去。 */}
+      <div className="marquee-viewport no-scrollbar relative flex h-full min-w-0 flex-1 items-center overflow-hidden pl-4">
+        <span className="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-gradient-to-r from-transparent to-paper-2" aria-hidden="true" />
+        <div ref={innerRef} className="marquee-inner relative flex w-max shrink-0 animate-marquee items-center">
+          <div ref={copyRef} className="flex items-center gap-8 whitespace-nowrap pr-8" aria-hidden={!useFunds && items.length === 0}>
             {row}
           </div>
-        ))}
+          {/* 其余副本只为无缝滚动存在：不能让键盘与读屏软件把每个指数访问多遍
+              （审计 P3-4）。aria-hidden 挡读屏，inert 挡 Tab 与点击。副本依次绝对定位在
+              第一套之后，动画每轮正好平移一套的宽度（含尾部间距），接缝处不跳。 */}
+          {Array.from({ length: copies - 1 }, (_, index) => (
+            <div key={index} className="marquee-echo absolute inset-y-0 flex items-center gap-8 whitespace-nowrap pr-8" style={{ left: `${(index + 1) * 100}%` }} aria-hidden="true" inert>
+              {row}
+            </div>
+          ))}
+        </div>
       </div>
-      <span className="marquee-label absolute inset-y-0 right-0 z-10 flex items-stretch">
-        <span className="pointer-events-none w-8 bg-gradient-to-r from-transparent to-paper-2" aria-hidden="true" />
-        {/* 不用 .glass：底色已是 95% 不透明，磨砂看不出来，却要随下面一直滚动的跑马灯逐帧重算模糊 */}
+      <span className="marquee-label pointer-events-none relative z-10 flex shrink-0 items-stretch">
+        {/* 不用 .glass：底色已是 95% 不透明，磨砂看不出来，却要随旁边一直滚动的跑马灯逐帧重算模糊 */}
         <span className="flex items-center border-l border-line bg-paper-2/95 px-3 text-micro font-medium text-ink-400">
           {useFunds ? (quoteStatus.connected ? t('基金行情 · 美元') : t('行情连接中')) : t('延迟行情')}
         </span>

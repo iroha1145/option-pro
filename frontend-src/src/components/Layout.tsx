@@ -90,7 +90,7 @@ export default function Layout() {
         <Navbar onOpenPalette={openPalette} />
         <IndexTape />
         {isMock && (
-          <aside className="border-b border-brand-100 bg-brand-50 px-4 py-2 text-center text-caption text-brand-700">
+          <aside data-demo-banner className="border-b border-brand-100 bg-brand-50 px-4 py-2 text-center text-caption text-brand-700">
             {__t('演示模式 · 当前行情与信号为示例数据')}
           </aside>
         )}

@@ -116,10 +116,13 @@ function SessionChip({ session }: { session: BreakoutSession }) {
 
 function NextScanCountdown({ nextSessionAt }: { nextSessionAt: string }) {
   const now = useNow(1000);
-  const ms = Math.max(0, new Date(nextSessionAt).getTime() - now);
+  const remaining = new Date(nextSessionAt).getTime() - now;
+  const ms = Number.isFinite(remaining) ? Math.max(0, remaining) : Number.NaN;
   const m = Math.floor(ms / 60_000);
   const s = Math.floor((ms % 60_000) / 1000);
-  const countdown = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  const countdown = Number.isFinite(ms)
+    ? `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : '—';
   return (
     <span className="tnum">
       {__t('下次扫描')} <span className="text-brand-600">{countdown}</span>

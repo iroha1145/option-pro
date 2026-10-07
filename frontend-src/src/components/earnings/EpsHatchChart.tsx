@@ -1,7 +1,7 @@
 /**
  * EPS 预期 vs 实际斜纹柱状图（design.md §6-3 / earnings.md）
  * 预估 = brand 同色系 45° 斜纹 decal（4px 间距 · 1.2px 线 · 透明度 .55）
- * 实际 = brand-600 实心（未公布留空）；图注 HatchLegend「▨ 预估 ▮ 实际」
+ * 实际 = brand-600 实心（未公布留空）；图注随图表打包（预估斜纹 / 实际实心）
  * 首绘 900–1200ms cubicOut + 逐柱错峰
  */
 import { useMemo } from 'react';
@@ -77,7 +77,7 @@ export default function EpsHatchChart({ items, title = t('EPS 预期 vs 实际')
     <section className="card-surface p-5" data-eps-chart="" aria-label={t("EPS 预期与实际对照图")}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="eyebrow">{title}</p>
-        {/* 图例随图表打包；不把选股页也使用的 HatchLegend 拉入图表大包。 */}
+        {/* 图例跟这张图走，避免再拆一个没有调用方的图例组件。 */}
         <span className="inline-flex items-center gap-3 text-micro text-ink-400">
           <span className="inline-flex items-center gap-1">
             <span className="inline-block size-2.5 rounded-[2px] bg-brand-600" aria-hidden="true" />

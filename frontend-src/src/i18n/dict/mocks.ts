@@ -16,7 +16,7 @@ export const MOCKS: Dict = {
   '英伟达': ['NVIDIA', 'エヌビディア'],
   '特斯拉': ['Tesla', 'テスラ'],
   '苹果': ['Apple', 'アップル'],
-  '超威半导体': ['AMD', 'AMD'],
+  '超威半导体': ['Advanced Micro Devices', 'アドバンスト・マイクロ・デバイセズ'],
   '微软': ['Microsoft', 'マイクロソフト'],
   'Meta 平台': ['Meta Platforms', 'メタ・プラットフォームズ'],
   '亚马逊': ['Amazon', 'アマゾン'],
