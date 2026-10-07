@@ -8,8 +8,7 @@
 //
 // UI 流程按新 SPA 重写，选择器全部用文案/角色定位（不改业务源码、不加 data-testid）：
 // - 访客标记：Navbar.tsx L145-150 的「登录」链接（to=/login）
-// - Owner 标记：Navbar 的「退出」按钮 + 读取真实后端可用性的 AI 徽标
-//   （fixture 可用时 title="分析服务可用"）
+// - Owner 标记：Navbar 的「退出」按钮；导航不再展示 AI 状态徽标。
 // - 登录页：账号功能上线后改为「用户名 + 密码」双字段（Login.tsx aria-label="用户名"
 //   与 aria-label="密码"，另有显示/隐藏密码切换按钮）。Owner 用保留用户名 admin
 //   登录（app/api/access.py::OWNER_USERNAME），其余用户名都是 Customer Account。
@@ -17,7 +16,7 @@
 //   mapError 未知业务码 →「用户名或密码不正确」（现在不再追加「，请重试」）。
 // - 旧 spec 的 #owner-ai-toggle（runtime-settings 乐观锁 PUT + version_conflict 重试）
 //   在新 UI 无对应控件：AUDIT-live.md「当前无页面消费 settings/updateSettings/history/
-//   rollback」，Navbar 仅有只读 AI 徽标。该交互不移植（不伪造 UI）；owner 专属交互改由
+//   rollback」。该交互不移植（不伪造 UI）；owner 专属交互改由
 //   Watchlist.tsx L88-107「强制刷新」按钮的 disabled/title 状态验证（乐观锁逻辑仍在
 //   src/api/modules/runtime.ts，等未来设置页接入后再补 E2E）。
 import { expect, test } from "@playwright/test";
@@ -233,10 +232,10 @@ async function expectVisitorShell(page) {
 }
 
 
-// Owner 壳断言：「退出」按钮 + AI 徽标出现，「登录」链接消失
+// Owner 壳断言：「退出」按钮出现，「登录」链接消失，导航不显示 AI 徽标
 async function expectOwnerShell(page) {
   await expect(page.getByRole("button", { name: "退出" })).toBeVisible();
-  await expect(page.getByTitle("分析服务可用")).toBeVisible();
+  await expect(page.locator('header').getByText('AI', { exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "登录", exact: true })).toHaveCount(0);
 }
 

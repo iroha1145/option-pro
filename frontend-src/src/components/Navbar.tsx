@@ -1,6 +1,6 @@
 /**
  * Header（design.md §7.1）· sticky top-0 z-50 · 毛玻璃
- * Logo | 01–06 编号导航（滑动下划线） | ⌘K 触发 | 时段LED+纽约时钟 | AI 点（owner）| 登录/退出
+ * Logo | 导航（滑动下划线） | ⌘K 触发 | 时段LED+纽约时钟 | 登录/退出
  * 移动端折叠为 48px：Logo + ⌘K + 时钟。
  */
 import { useLayoutEffect, useRef, useState } from 'react';
@@ -39,14 +39,14 @@ export const NAV_ITEMS = [
 function NyClock({ className }: { className?: string }) {
   const now = useNow(1000);
   return (
-    <span className={cn('text-micro text-ink-500 tnum', className)} suppressHydrationWarning>
+    <span className={cn('shrink-0 whitespace-nowrap text-micro text-ink-500 tnum', className)} suppressHydrationWarning>
       {fmtNyTime(new Date(now))} ET
     </span>
   );
 }
 
 export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void }) {
-  const { isOwner, isSignedIn, username, aiEnabled, aiAvailable, aiReason, aiPending, logout } = useAccess();
+  const { isOwner, isSignedIn, username, logout } = useAccess();
   const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -169,7 +169,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
               }}
               className={cn(
                 /* R4 加到 9 项后 1440(xl) 逼近满宽：sub-2xl 收 px-2，登录态
-                   右侧簇（AI 胶囊+退出）才不会被挤出视口；≥2xl 恢复 3.5。
+                   右侧操作区才不会被挤出视口；≥2xl 恢复 3.5。
                    relative：盖在悬停浅底之上。 */
                 'relative flex h-full items-center gap-1.5 whitespace-nowrap px-2 text-body-s transition-colors duration-fast 2xl:px-3.5',
                 active ? 'font-medium text-brand-600' : 'text-ink-500 hover:text-ink-800',
@@ -209,37 +209,10 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
             <Icon name="search" size={16} />
           </button>
 
-          <span className="hidden items-center gap-2 md:flex" aria-label={t('市场时段：{label}', { label: status?.label ?? t('未知') })}>
+          <span className="hidden shrink-0 items-center gap-2 md:flex" aria-label={t('市场时段：{label}', { label: status?.label ?? t('未知') })}>
             <SessionDot session={session} />
             <NyClock />
           </span>
-
-          {isOwner && (
-            <span
-              className={cn(
-                'hidden items-center gap-1.5 rounded-pill border px-2 py-0.5 text-micro md:flex',
-                aiAvailable
-                  ? 'border-ai-600/20 bg-ai-50 text-ai-600'
-                  : aiEnabled
-                    ? 'border-warn-600/25 bg-warn-50 text-warn-700'
-                    : 'border-line bg-card-warm text-ink-400',
-              )}
-              title={
-                aiPending
-                  ? t('分析服务确认中')
-                  : aiAvailable
-                  ? t('分析服务可用')
-                  : aiEnabled && ['analysis_in_progress', 'global_concurrency_limit', 'queue_busy'].includes(aiReason ?? '')
-                    ? t('分析任务处理中')
-                    : aiEnabled
-                      ? t('分析服务暂不可用')
-                      : t('分析服务未开启')
-              }
-            >
-              <Icon name="spark-ai" size={12} />
-              AI
-            </span>
-          )}
 
           <LanguageSwitcher className="hidden md:block" />
           <ColorModeSwitcher className="hidden xl:flex" />
