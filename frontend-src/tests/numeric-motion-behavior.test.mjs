@@ -471,15 +471,23 @@ test('skeleton loading reversals cancel the previous reveal clock', () => {
   assert.equal(allNodes(h.value()).find((node) => node.props?.className === 't-skel-content').props.children, children);
 });
 
-test('Escape dismisses a focused tooltip without closing its surrounding dialog', () => {
+test('growing tooltip content flips within the viewport, then Escape dismisses it without closing its dialog', () => {
   const h = harness();
+  let onResize;
+  let observed;
+  let disconnected = false;
+  class ResizeObserver {
+    constructor(callback) { onResize = callback; }
+    observe(node) { observed = node; }
+    disconnect() { disconnected = true; }
+  }
   const tip = { style: {}, offsetHeight: 80, classList: { add() {} } };
   const trigger = { getBoundingClientRect: () => ({ left: 100, right: 116, width: 16, height: 16, top: 100, bottom: 116 }) };
   const document = { body: {}, documentElement: { clientWidth: 390, clientHeight: 700 }, addEventListener() {}, removeEventListener() {} };
   Object.assign(h.runtime.window, { addEventListener() {}, removeEventListener() {} });
   const { default: InfoHint } = loadSource('components/shared/InfoHint.tsx', {
     react: h.React, 'react-dom': { createPortal: (child) => child },
-  }, { ...h.runtime, document });
+  }, { ...h.runtime, document, ResizeObserver });
   h.mount(() => InfoHint({ hint: { title: 'Score', body: 'Explanation' } }), (tree) => {
     allNodes(tree).forEach((node) => {
       if (!node.props?.ref) return;
@@ -489,10 +497,17 @@ test('Escape dismisses a focused tooltip without closing its surrounding dialog'
   allNodes(h.value()).find((node) => node.props?.role === 'button').props.onFocus();
   assert.ok(allNodes(h.value()).some((node) => node.props?.role === 'tooltip'));
   assert.ok(Number.parseFloat(tip.style.left) >= 8);
+  assert.equal(observed, tip);
+  assert.ok(Number.parseFloat(tip.style.top) + tip.offsetHeight < 100);
+  tip.offsetHeight = 240;
+  onResize();
+  assert.ok(Number.parseFloat(tip.style.top) > 116, 'larger content flips below the trigger');
+  assert.ok(Number.parseFloat(tip.style.top) + tip.offsetHeight <= 692);
   let stopped = false;
   h.value().props.onKeyDown({ key: 'Escape', stopPropagation() { stopped = true; } });
   assert.equal(stopped, true);
   assert.equal(allNodes(h.value()).some((node) => node.props?.role === 'tooltip'), false);
   assert.equal(allNodes(h.value()).find((node) => node.props?.role === 'button').props['aria-expanded'], false);
+  assert.equal(disconnected, true, 'dismissed tooltips stop observing size changes');
   h.unmount();
 });

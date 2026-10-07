@@ -7,6 +7,7 @@ import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { EASE_PAPER, GROW_Y } from '@/lib/motion';
+import InfoHint from '@/components/shared/InfoHint';
 import type { EarningsRow } from './types';
 import { addDays, etToday, fmtMDCN, fmtMMDD, weekdayCN } from './types';
 import { t } from '../../i18n/core.ts';
@@ -56,55 +57,51 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
                 /* listitem 放包装节点：role 打在 <button> 上会把按钮语义整个覆盖，
                    读屏只报「列表项」不报「按钮」（审计 #59）。 */
                 <span key={d.date} role="listitem" className="contents">
-                <button
-                  onClick={() => onJumpDay(d.date)}
-                  aria-label={t('{date} {weekday}，{n} 条财报，跳转', { date: fmtMDCN(d.date), weekday: weekdayCN(d.date), n })}
-                  className="group relative flex h-full min-w-0 flex-1 items-end focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600"
-                >
-                  {/* tooltip：当日代码列表。首/尾三分之一改为贴边对齐（审计 2.4.6）：
-                      纯居中在窄屏上会把浮层伸出视口，Layout 的 overflow-x-clip
-                      只裁不滚，看不全当天的代码。 */}
-                  <span
-                    className={cn(
-                      'cloud-popover pointer-events-none absolute -top-2 z-20 hidden w-max max-w-[180px] -translate-y-full px-2.5 py-1.5 text-left group-hover:block group-focus-visible:block',
-                      i < days.length / 3
-                        ? 'left-0'
-                        : i >= (days.length * 2) / 3
-                          ? 'right-0'
-                          : 'left-1/2 -translate-x-1/2',
-                    )}
+                  <InfoHint
+                    side="bottom"
+                    className="h-full min-w-0 flex-1"
+                    triggerClassName="h-full w-full"
+                    hint={{
+                      title: `${fmtMMDD(d.date)} ${weekdayCN(d.date)}`,
+                      body: n === 0 ? (
+                        <span className="block text-micro text-ink-400">{t('无财报')}</span>
+                      ) : (
+                        <span className="mt-0.5 flex flex-wrap gap-1">
+                          {d.rows.slice(0, MAX_TOOLTIP_TICKERS).map((r) => (
+                            <span key={r.ticker} className="tnum text-micro font-medium text-ink-800">
+                              {r.ticker}
+                            </span>
+                          ))}
+                          {n > MAX_TOOLTIP_TICKERS && (
+                            <span className="tnum text-micro text-ink-400">
+                              +{n - MAX_TOOLTIP_TICKERS}
+                            </span>
+                          )}
+                        </span>
+                      ),
+                    }}
                   >
-                    <span className="block tnum text-micro text-ink-500">
-                      {fmtMMDD(d.date)} {weekdayCN(d.date)}
-                    </span>
-                    {n === 0 ? (
-                      <span className="block text-micro text-ink-400">{t('无财报')}</span>
-                    ) : (
-                      <span className="mt-0.5 flex flex-wrap gap-1">
-                        {d.rows.slice(0, MAX_TOOLTIP_TICKERS).map((r) => (
-                          <span key={r.ticker} className="tnum text-micro font-medium text-ink-800">
-                            {r.ticker}
-                          </span>
-                        ))}
-                        {n > MAX_TOOLTIP_TICKERS && (
-                          <span className="tnum text-micro text-ink-400">
-                            +{n - MAX_TOOLTIP_TICKERS}
-                          </span>
+                    <button
+                      onClick={() => onJumpDay(d.date)}
+                      onFocus={(event) => {
+                        // 鼠标点选日期后只保留悬停提示，避免移到下一天时叠出两层。
+                        if (!event.currentTarget.matches(':focus-visible')) event.stopPropagation();
+                      }}
+                      aria-label={t('{date} {weekday}，{n} 条财报，跳转', { date: fmtMDCN(d.date), weekday: weekdayCN(d.date), n })}
+                      className="group relative flex h-full w-full min-w-0 items-end focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600"
+                    >
+                      <motion.span
+                        className={cn(
+                          'w-full rounded-t-[2px] transition-colors duration-fast',
+                          n > 0 ? 'bg-brand-400 group-hover:bg-brand-600' : 'bg-line',
+                          isToday && 'ring-1 ring-brand-600 ring-offset-1 ring-offset-card',
                         )}
-                      </span>
-                    )}
-                  </span>
-                  <motion.span
-                    className={cn(
-                      'w-full rounded-t-[2px] transition-colors duration-fast',
-                      n > 0 ? 'bg-brand-400 group-hover:bg-brand-600' : 'bg-line',
-                      isToday && 'ring-1 ring-brand-600 ring-offset-1 ring-offset-card',
-                    )}
-                    style={{ height: n > 0 ? `${Math.max(12, (n / max) * 100)}%` : '2px', transformOrigin: 'bottom' }}
-                    variants={GROW_Y}
-                    transition={{ duration: 0.7, ease: EASE_PAPER, delay: i * 0.02 }}
-                  />
-                </button>
+                        style={{ height: n > 0 ? `${Math.max(12, (n / max) * 100)}%` : '2px', transformOrigin: 'bottom' }}
+                        variants={GROW_Y}
+                        transition={{ duration: 0.7, ease: EASE_PAPER, delay: i * 0.02 }}
+                      />
+                    </button>
+                  </InfoHint>
                 </span>
               );
             })}

@@ -695,33 +695,35 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
         </div>
       )}
       {/* 顶行：状态 chips + 相对时间（lg 合并 meta 行）· 右侧首要信号徽章 */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span
-          className={cn(
-            'radar-chip',
-            LIFECYCLE_CHIP_CLASS[LIFECYCLE_TONE[e.lifecycle_state] ?? 'ink'],
-          )}
-        >
-          {LIFECYCLE_CN[e.lifecycle_state] ?? e.lifecycle_state ?? '—'}
-        </span>
-        {showT1 && <T1StatusChip status={e.t1_status} />}
-        <span className="radar-chip radar-chip-brand">
-          {SETUP_CN[e.setup_type] ?? e.setup_type ?? '—'}
-        </span>
-        <span className="radar-chip radar-chip-neutral">
-          <span className={cn('size-1.5 rounded-full', SESSION_DOT[e.session], e.session !== 'closed' && 'animate-led-pulse')} aria-hidden="true" />
-          {SESSION_CN[e.session]}
-        </span>
-        <span className="text-micro text-ink-400 tnum">{fmtRelative(e.triggered_at)}</span>
-        {/* lg 以上：meta 并入 chips 行（空格分隔 inline 项，不再用 · 串） */}
-        <span className="hidden items-center gap-3 text-micro text-ink-500 lg:inline-flex">
-          {exchange && <span>{exchange}</span>}
-          <SoftBadge size="sm" tone="neutral">{t(e.sector)}</SoftBadge>
-          <span className="tnum">{t('跳空')} {gap !== null ? `${gap >= 0 ? '+' : ''}${gap.toFixed(2)}%` : '—'}</span>
-          <span className="tnum">{t('量能')} {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}</span>
-          <span className="tnum">{fmtEventTime(e.event_at)} {t('美东')}</span>
-        </span>
-        <span className="radar-chip radar-chip-brand ml-auto">
+      <div className="flex items-start gap-3">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+          <span
+            className={cn(
+              'radar-chip',
+              LIFECYCLE_CHIP_CLASS[LIFECYCLE_TONE[e.lifecycle_state] ?? 'ink'],
+            )}
+          >
+            {LIFECYCLE_CN[e.lifecycle_state] ?? e.lifecycle_state ?? '—'}
+          </span>
+          {showT1 && <T1StatusChip status={e.t1_status} />}
+          <span className="radar-chip radar-chip-brand">
+            {SETUP_CN[e.setup_type] ?? e.setup_type ?? '—'}
+          </span>
+          <span className="radar-chip radar-chip-neutral">
+            <span className={cn('size-1.5 rounded-full', SESSION_DOT[e.session], e.session !== 'closed' && 'animate-led-pulse')} aria-hidden="true" />
+            {SESSION_CN[e.session]}
+          </span>
+          <span className="text-micro text-ink-400 tnum">{fmtRelative(e.triggered_at)}</span>
+          {/* lg 以上：meta 并入 chips 行（空格分隔 inline 项，不再用 · 串） */}
+          <span className="hidden min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-micro text-ink-500 lg:inline-flex">
+            {exchange && <span>{exchange}</span>}
+            <SoftBadge size="sm" tone="neutral">{t(e.sector)}</SoftBadge>
+            <span className="tnum">{t('跳空')} {gap !== null ? `${gap >= 0 ? '+' : ''}${gap.toFixed(2)}%` : '—'}</span>
+            <span className="tnum">{t('量能')} {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}</span>
+            <span className="tnum">{fmtEventTime(e.event_at)} {t('美东')}</span>
+          </span>
+        </div>
+        <span className="radar-chip radar-chip-brand shrink-0">
           <Icon name="radar" size={12} />
           {t('首要信号')}
         </span>
