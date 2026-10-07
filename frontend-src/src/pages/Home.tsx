@@ -726,7 +726,7 @@ function MarketStatusPanel({
    第二行跨满两列，价格列再宽也不会把形态标签挤空；xl 起一行七列定宽，上下行的
    形态、时间、价格、涨跌、强度各自对齐。价格列 10rem：「38.50 最后报价 10-05」排得下一行，行高一致。 */
 const RADAR_ROW_GRID =
-  "grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-2.5 [grid-template-areas:'logo_id_quote'_'logo_meta_meta'] md:px-5 xl:grid-cols-[28px_minmax(0,1fr)_5rem_5rem_10rem_5.25rem_6.5rem] xl:gap-y-0 xl:[grid-template-areas:'logo_id_chip_time_price_change_bar']";
+  "grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-2.5 [grid-template-areas:'logo_id_quote'_'logo_meta_meta'] md:px-5 xl:grid-cols-[28px_minmax(0,1fr)_7.5rem_5.5rem_10rem_5.25rem_6.5rem] xl:gap-y-0 xl:[grid-template-areas:'logo_id_chip_time_price_change_bar']";
 
 /** 强度读数：轨道作视口观察者，条用 GROW_X 从左长出（零面积的条自己观察会一直判不进视口）。
  *  读屏沿用 StrengthBar 的「强度分 {score}」/「强度分缺失」。 */
@@ -770,10 +770,10 @@ function RadarSignalRow({ signal: s, index: i }: { signal: BreakoutSignal; index
       <TickerLogo ticker={s.ticker} size={28} className="[grid-area:logo]" />
       <span className="flex min-w-0 items-baseline gap-2 [grid-area:id]">
         <span className="shrink-0 tnum text-caption font-medium text-ink-800">{s.ticker}</span>
-        <span className="min-w-0 truncate text-caption text-ink-500">{s.name}</span>
+        <span className="min-w-0 truncate text-caption text-ink-500" title={s.name}>{s.name}</span>
       </span>
       <span className="flex min-w-0 items-center gap-2 [grid-area:meta] xl:contents">
-        <SoftBadge className="min-w-0 xl:justify-self-start xl:[grid-area:chip]">
+        <SoftBadge className="min-w-0 xl:justify-self-start xl:[grid-area:chip]" title={s.label}>
           <span className="truncate">{s.label}</span>
         </SoftBadge>
         <span className="shrink-0 text-micro text-ink-400 xl:justify-self-end xl:[grid-area:time]">{fmtRelative(s.at)}</span>

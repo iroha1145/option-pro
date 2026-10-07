@@ -26,5 +26,6 @@ test('only the next-scan display owns the one-second clock', () => {
   now += 1000;
   assert.equal(read('2026-10-02T18:01:05Z'), '01:04');
   assert.equal(read('2026-10-02T17:59:00Z'), '00:00');
-  assert.deepEqual(intervals, [1000, 1000, 1000]);
+  assert.equal(read('not-a-date'), '—');
+  assert.deepEqual(intervals, [1000, 1000, 1000, 1000]);
 });

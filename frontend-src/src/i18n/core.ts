@@ -125,7 +125,7 @@ export function t(msgid: string, vars?: TVars): string {
   if (current !== 'zh') {
     const translated = lookup(msgid, current);
     if (translated) text = translated;
-    else if (import.meta.env?.DEV && !missing.has(msgid)) {
+    else if (import.meta.env?.DEV && tables[current] && !missing.has(msgid)) {
       missing.add(msgid);
       console.warn(`[i18n] 缺 ${current} 译文：${msgid}`);
     }

@@ -50,7 +50,7 @@ const INDEX_BASE: { code: string; symbol: string; name: string; base: number }[]
   { code: 'NDX', symbol: '^NDX', name: __t('纳指 100'), base: 21468.2 },
   { code: 'DJI', symbol: '^DJI', name: __t('道琼斯'), base: 43828.1 },
   { code: 'RUT', symbol: '^RUT', name: __t('罗素 2000'), base: 2382.6 },
-  { code: 'SOX', symbol: '^SOX', name: '费城半导体', base: 5124.7 },
+  { code: 'SOX', symbol: '^SOX', name: __t('费城半导体'), base: 5124.7 },
   { code: 'VIX', symbol: '^VIX', name: __t('波动率指数'), base: 14.86 },
 ];
 
