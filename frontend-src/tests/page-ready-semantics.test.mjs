@@ -288,7 +288,7 @@ test('真实 DOM：长说明/长错误/卡片/零命中/非默认语言', () => 
 test('业务区标记优先，长 main 文本不能冒充 content；idle 是终态', () => {
   assert.equal(classifyPageReady({
     path: '/market',
-    heading: '大盘强弱',
+    heading: '美股大盘强弱',
     bodyText: 'x'.repeat(200),
     mainText: 'x'.repeat(200),
     hasForm: true,
