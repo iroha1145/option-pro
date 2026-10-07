@@ -100,7 +100,7 @@ for (const remount of [false, true]) {
     // Market statically imports the canonical chart module. EPS failures must
     // not leave that URL rejected in the browser's module map.
     await page.locator('a[href="/market"]').first().click();
-    await expect(page.getByRole('heading', { name: '大盘强弱', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '美股大盘强弱', exact: true })).toBeVisible();
     expect(chartRequests).toHaveLength(4);
     expect(new URL(chartRequests[3].url).search).toBe('');
     expect(chartRequests[3].failed).toBe(false);

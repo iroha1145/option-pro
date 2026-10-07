@@ -1,6 +1,7 @@
 /**
- * §MKT 大盘强弱（/market，从指数 tape ?index= 进入）
- * B1 指数概览 6 卡 · B2 市场状态 · B3 形态六维 · B4 宏观环境 · B5 信号解读
+ * §MKT 美股大盘强弱（/market，从指数 tape ?index= 进入）
+ * B1 指数概览（美股指数与其他市场分组） · B2 市场状态 · B3 形态六维 · B4 宏观环境 · B5 信号解读
+ * 除 B1 的其他市场一组外，整页读数都只算美股：纽约时段、SPY 等美股 ETF、美国宏观数据。
  * B7 联动卡
  * 轮询：indices+status 60s / 形态+信号 300s / 宏观 15min（visibility 暂停，usePolling）
  */
@@ -60,7 +61,7 @@ export default function Market() {
     <div>
       {/* B0 页头带 */}
       <PageHeader
-        title={t("大盘强弱")}
+        title={t('美股大盘强弱')}
         meta={
           <>
             {session ? (
@@ -97,7 +98,6 @@ export default function Market() {
                 : 'content',
         )}
       >
-        <p className="eyebrow mb-3">{t('指数概览')} · {t('延迟行情')}</p>
         <IndexCards
           data={indicesQ.data}
           loading={indicesQ.loading}

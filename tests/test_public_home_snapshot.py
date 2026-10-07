@@ -433,6 +433,36 @@ def _task_config() -> SimpleNamespace:
     )
 
 
+@pytest.mark.parametrize("above_count", [None, 0, 2, 11])
+def test_market_breadth_count_round_trips_in_public_snapshot(
+    tmp_path: Path, above_count: int | None,
+) -> None:
+    now = time.time()
+    payload = _payload("market_signals", now)
+    payload["signals"]["_breadth_coverage"]["above_count"] = above_count
+    entry = create_public_home_entry(
+        "market_signals", payload, saved_at=now,
+        parameters=public_home_resource_parameters("market_signals", now=now),
+    )
+    path = tmp_path / "public-home-snapshot-v1.json"
+    write_public_home_snapshot(path, {"market_signals": entry}, now=now)
+    loaded = read_public_home_resource(
+        "market_signals",
+        parameters=public_home_resource_parameters("market_signals", now=now),
+        path=path, now=now + 1,
+    )
+    assert loaded is not None
+    assert loaded["signals"]["_breadth_coverage"]["above_count"] == above_count
+
+
+@pytest.mark.parametrize("above_count", [-1, 12, True, 2.5, "2"])
+def test_market_breadth_count_rejects_invalid_values(above_count: object) -> None:
+    payload = _payload("market_signals", time.time())
+    payload["signals"]["_breadth_coverage"]["above_count"] = above_count
+    with pytest.raises(ValueError):
+        validate_public_home_payload("market_signals", payload)
+
+
 def test_snapshot_round_trip_and_atomic_generation_reload(tmp_path: Path) -> None:
     now = time.time()
     path = tmp_path / "public-home-snapshot-v1.json"

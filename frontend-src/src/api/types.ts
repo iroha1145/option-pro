@@ -86,6 +86,12 @@ export interface MarketSignalsSnapshot {
   topLabel: string | null;
   bottomLabel: string | null;
   dataQuality: number | null;
+  breadthCoverage: {
+    available: number | null;
+    expected: number | null;
+    /** 后端实际计数；旧快照可能缺失，不从占比倒推。 */
+    aboveCount: number | null;
+  };
   sourceStatus: string | null;
   asOf: string | null;
   cached: boolean;

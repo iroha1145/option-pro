@@ -558,17 +558,16 @@ def compute_market_signals() -> dict:
                 valid_sector_frames.append(frame)
         sector_coverage = len(valid_sector_frames) / len(SECTOR_ETFS)
         breadth_value = None
+        above_count = None
         if valid_sector_frames and sector_coverage >= _MIN_SECTOR_BREADTH_COVERAGE:
-            breadth_value = (
-                sum(1 for frame in valid_sector_frames if _is_above_sma_frame(frame, 50))
-                / len(valid_sector_frames)
-                * 100
-            )
+            above_count = sum(1 for frame in valid_sector_frames if _is_above_sma_frame(frame, 50))
+            breadth_value = above_count / len(valid_sector_frames) * 100
         add("sectors_above_50dma", breadth_value, "板块ETF在50日线上方%")
         signals["_breadth_coverage"] = {
             "available": len(valid_sector_frames),
             "expected": len(SECTOR_ETFS),
             "ratio": round(sector_coverage, 3),
+            "above_count": above_count,
         }
         signals["_source_status"] = {
             "value": "active" if len(valid_sector_frames) == len(SECTOR_ETFS) else "degraded",

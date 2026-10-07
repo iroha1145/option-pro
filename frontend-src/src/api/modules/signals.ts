@@ -49,6 +49,7 @@ export function mapMarketSignals(d: unknown): MarketSignalsSnapshot {
   const rawSignals = asRec(env.signals);
   const scores = asRec(env.scores);
   const source = asRec(rawSignals._source_status);
+  const breadth = asRec(rawSignals._breadth_coverage);
   const metrics = Object.entries(rawSignals).flatMap(([key, raw]) => {
     if (key.startsWith('_')) return [];
     const metric = asRec(raw);
@@ -70,6 +71,11 @@ export function mapMarketSignals(d: unknown): MarketSignalsSnapshot {
     topLabel: pickLabel(scores, 'top_label', 'topLabel'),
     bottomLabel: pickLabel(scores, 'bottom_label', 'bottomLabel'),
     dataQuality: pickN(scores, 'data_quality', 'dataQuality'),
+    breadthCoverage: {
+      available: pickN(breadth, 'available'),
+      expected: pickN(breadth, 'expected'),
+      aboveCount: pickN(breadth, 'above_count'),
+    },
     sourceStatus: pickS(source, 'value'),
     asOf: pickS(env, 'as_of', 'asOf'),
     cached: env._cached === true,
@@ -91,6 +97,7 @@ function mapMockMarketSignals(): MarketSignalsSnapshot {
     topLabel: null,
     bottomLabel: null,
     dataQuality: null,
+    breadthCoverage: { available: null, expected: null, aboveCount: null },
     sourceStatus: 'mock',
     asOf: new Date().toISOString(),
     cached: false,

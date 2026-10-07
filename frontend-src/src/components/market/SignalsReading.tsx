@@ -7,6 +7,8 @@ import type { IndexQuote, MarketSignalsSnapshot } from '@/api/types';
 import type { MarketStatusDetail } from './api';
 import { cn } from '@/lib/utils';
 import { fmtPct, fmtPrice } from '@/lib/format';
+import { isUsIndexSymbol } from '@/lib/quoteSymbol';
+import { sectorBreadthReading } from '@/lib/sectorBreadth';
 import EmptyState from '@/components/shared/EmptyState';
 import InfoHint from '@/components/shared/InfoHint';
 import { MARKET_SIGNAL_HINTS, SCORE_HINTS } from '@/lib/scoreHints';
@@ -48,22 +50,24 @@ function buildReading(
     .slice(0, 2);
   if (leading.length) {
     const items = leading
-      .map((metric) => t('「{label}」{value}', { label: metric.label, value: metric.value }))
+      .map((metric) => metric.key === 'sectors_above_50dma'
+        ? sectorBreadthReading(metric.value, signals.breadthCoverage)
+        : t('「{label}」{value}', { label: metric.label, value: metric.value }))
       .join(t('、'));
     parts.push(t('主要指标：{items}。', { items }));
   }
-  if (indices?.length) {
+  /* 只数美股指数：本页其余读数都是美股的，日经、上证的涨跌混进来会让这句话和上下文对不上。 */
+  const usIndices = indices?.filter((q) => isUsIndexSymbol(q.symbol || q.code)) ?? [];
+  if (usIndices.length) {
     /* 平盘不算上涨（审计 P2-4 同一口径）；这段文字会进 AI 上下文，口径必须准。 */
-    const adv = indices.filter((q) => q.changePct !== null && q.changePct > 0).length;
-    const dec = indices.filter((q) => q.changePct !== null && q.changePct < 0).length;
-    const flat = indices.filter((q) => q.changePct === 0).length;
-    const unknown = indices.length - adv - dec - flat;
-    const spx = indices.find((q) => q.code === 'SPX');
-    /* 数量随真实指数列表走（审计 2.1.3）：后端目前只有 5 个指数（含日经与
-       上证），写死「六大」会得出「六大指数 3 涨 2 跌」这类自相矛盾的句子，
-       且这段文字还会进 AI 上下文。 */
+    const adv = usIndices.filter((q) => q.changePct !== null && q.changePct > 0).length;
+    const dec = usIndices.filter((q) => q.changePct !== null && q.changePct < 0).length;
+    const flat = usIndices.filter((q) => q.changePct === 0).length;
+    const unknown = usIndices.length - adv - dec - flat;
+    const spx = usIndices.find((q) => q.code === 'SPX');
+    /* 数量随真实指数列表走（审计 2.1.3）：写死「三大」「六大」会和实际取到的个数对不上。 */
     parts.push(
-      t('{n} 个主要指数 {adv} 涨 {dec} 跌', { n: indices.length, adv, dec }) +
+      t('美股 {n} 个主要指数 {adv} 涨 {dec} 跌', { n: usIndices.length, adv, dec }) +
         (flat > 0 ? t(' {flat} 平', { flat }) : '') +
         (unknown > 0 ? t('，{unknown} 个涨跌未知', { unknown }) : '') +
         (spx ? t('，标普 500 报 {price}（{pct}）', { price: fmtPrice(spx.price), pct: fmtPct(spx.changePct) }) : '') +
@@ -96,7 +100,9 @@ function MetricRows({ data }: { data: MarketSignalsSnapshot }) {
               <InfoHint hint={MARKET_SIGNAL_HINTS[metric.key]} align="start" size={11} />
             )}
           </span>
-          <span className="text-right text-caption text-ink-800 tnum">{metric.value}</span>
+          <span className="text-right text-caption text-ink-800 tnum">
+            {metric.key === 'sectors_above_50dma' ? `${metric.value.toFixed(2)}%` : metric.value}
+          </span>
           <span className="text-right text-micro text-ink-400 tnum">
             {metric.topScore !== null || metric.bottomScore !== null
               ? `${metric.topScore ?? '—'} / ${metric.bottomScore ?? '—'}`
