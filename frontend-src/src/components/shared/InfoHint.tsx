@@ -143,9 +143,13 @@ export default function InfoHint({
   useLayoutEffect(() => {
     if (!exposed) return;
     place();
+    // 财报等动态说明可能在显示期间变高，继续按新的尺寸避让视口。
+    const observer = new ResizeObserver(place);
+    if (tooltipRef.current) observer.observe(tooltipRef.current);
     window.addEventListener('resize', place);
     window.addEventListener('scroll', place, true);
     return () => {
+      observer.disconnect();
       window.removeEventListener('resize', place);
       window.removeEventListener('scroll', place, true);
     };
