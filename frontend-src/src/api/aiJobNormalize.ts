@@ -247,7 +247,7 @@ export function aiJobCreateErrorMessage(error: unknown): string {
       case 'read_only_mode':
         return t('当前为只读模式，不能发起分析');
       case 'stale_signal_evidence':
-        return t('技术信号已过期，请先手动拉取最新行情再分析');
+        return t('技术信号已过期，请先手动获取最新行情再分析');
       case 'runtime_settings_unavailable':
         return t('暂时读不到分析设置，请稍后再试');
       case 'not_configured':

@@ -422,7 +422,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
       const next = await loadImpact(ticker, { background: true });
       setPollAttempt((value) => value + 1);
       if (next?.result && !reportAnalysisNeedsPolling(next)) {
-        toast.success(__t('{ticker} AI 影响分析已生成', { ticker }));
+        toast.success(__t('{ticker} 财报影响分析已生成', { ticker }));
       }
     }, delay);
     return () => window.clearTimeout(timer);
@@ -444,7 +444,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
         className="mt-2 flex h-8 items-center gap-1.5 rounded-md border border-line bg-card px-3 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:text-ink-800"
       >
         <Icon name="refresh" size={13} />
-        {__t('重新查询')}
+        {__t('查询进度')}
       </button>
     </div>
   ) : pollNotice ? (
@@ -512,7 +512,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
   const jobCancelled = ['cancelled', 'canceled'].includes(normalizedStage(analysis?.status));
 
   return (
-    <aside className={cn('card-surface self-start overflow-hidden', className)} aria-label={__t("AI 影响分析")}>
+    <aside className={cn('card-surface self-start overflow-hidden', className)} aria-label={__t("财报影响分析")}>
       <AnimatePresence mode="wait">
         <motion.div
           key={`${ticker ?? 'none'}-${phase === 'ready' ? 'ready' : 'state'}`}
@@ -528,17 +528,17 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               <span className="flex size-12 items-center justify-center rounded-lg border border-line bg-card-warm text-ink-400">
                 <Icon name="calendar-spark" size={22} />
               </span>
-              <h3 className="mt-3 text-h3 text-ink-800">{__t('选择一只标的')}</h3>
+              <h3 className="mt-3 text-h3 text-ink-800">{__t('选择公司')}</h3>
               <p className="mt-1 max-w-[260px] text-caption text-ink-500">{__t('在日历或列表中选择公司，查看财报对相关公司的影响。')}</p>
             </div>
           )}
 
           {/* ---------- 加载骨架 ---------- */}
           {phase === 'loading' && (
-            <div aria-label={__t("AI 影响分析加载中")}>
+            <div aria-label={__t("财报影响分析加载中")}>
               <div className="flex items-center gap-2">
                 <AnalysisIcon size={16} className="text-ai-600" />
-                <span className="font-display text-[18px] leading-6 text-ink-900">{__t('AI 影响 ·')} {ticker}</span>
+                <span className="font-display text-[18px] leading-6 text-ink-900">{__t('财报影响 ·')} {ticker}</span>
               </div>
               <div className="mt-4 space-y-4">
                 <div className="skeleton-shimmer h-9 w-28 rounded-sm" />
@@ -557,7 +557,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               description={
                 aiEnabled
                   ? __t('暂时无法生成新分析，已有分析仍可查看。')
-                  : __t('分析生成已关闭，已有分析仍可查看。')
+                  : __t('新分析已关闭，已有结果仍可查看')
               }
             />
           )}
@@ -593,7 +593,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                 disabled
                 className="mt-4 h-8 cursor-not-allowed rounded-md bg-paper-2 px-3 text-caption font-medium text-ink-400"
               >
-                {__t('正在更新分析')}
+                {__t('分析更新中')}
               </button>
               {pollStatusNote}
             </div>
@@ -628,7 +628,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               <span className="flex size-12 items-center justify-center rounded-lg bg-ai-50 text-ai-600">
                 <AnalysisIcon size={22} />
               </span>
-              <h3 className="mt-3 text-h3 text-ink-800">{__t('尚未生成 AI 影响')}</h3>
+              <h3 className="mt-3 text-h3 text-ink-800">{__t('尚未生成财报影响分析')}</h3>
               <p className="mt-1 max-w-[280px] text-caption text-ink-500">
                 {__t('分析 {ticker} 的财报对相关公司的影响。', { ticker })}
               </p>
@@ -676,7 +676,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                   <ThinkingLabel live={!pollPaused}>
                     {['queued', 'pending', 'preparing'].includes(normalizedStage(analysis.status))
                       ? __t('排队中')
-                      : __t('正在生成分析')}
+                      : __t('正在分析')}
                   </ThinkingLabel>
                 </span>
               </div>
@@ -752,7 +752,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               <Section>
                 <div className="flex items-center gap-2">
                   <AnalysisIcon size={16} className="text-ai-600" />
-                  <h3 className="font-display text-[18px] leading-6 text-ink-900">{__t('AI 影响 ·')} {impact.ticker}</h3>
+                  <h3 className="font-display text-[18px] leading-6 text-ink-900">{__t('财报影响 ·')} {impact.ticker}</h3>
                   {isFinalImpact(impact) ? (
                     <SoftBadge tone="up" className="ml-auto">
                       {__t('最终分析')}
@@ -760,7 +760,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                   ) : isImpactFinalizing(impact) ? (
                     <SoftBadge tone="ai" className="ml-auto">
                       <PulseDot className="bg-ai-600" size={6} />
-                      {__t('正在更新分析')}
+                      {__t('分析更新中')}
                     </SoftBadge>
                   ) : (
                     <SoftBadge tone="ai" className="ml-auto">
@@ -782,7 +782,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                     </p>
                     {!pollPaused && (
                       <p className="mt-1 text-micro text-ink-500">
-                        {__t('暂时显示发布前的分析，更新完成后会自动替换。')}
+                        {__t('暂显发布前分析，更新后自动替换')}
                       </p>
                     )}
                     {pollStatusNote}
@@ -812,7 +812,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               {/* 4 关联标的 */}
               <Section>
                 <div className="flex items-baseline justify-between">
-                  <p className="eyebrow">{__t('关联标的')}</p>
+                  <p className="eyebrow">{__t('相关标的')}</p>
                   <span className="text-micro text-ink-400">{impact.impacted.length} {__t('项')}</span>
                 </div>
                 <div className="mt-2.5 space-y-2">

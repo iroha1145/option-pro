@@ -60,8 +60,8 @@ function searchErrorText(error: unknown): string {
         ? t('搜索请求较多，请 {n} 秒后重试', { n: Math.ceil(error.retryAfter) })
         : __t('搜索请求较多，请稍后重试');
     }
-    if (error.code === 401) return __t('登录状态已失效，请重新登录');
-    if (error.code === 503) return __t('股票目录暂不可用，请稍后重试');
+    if (error.code === 401) return __t('登录已过期，请重新登录');
+    if (error.code === 503) return __t('股票搜索暂不可用，请稍后重试');
     return error.message || __t('股票搜索失败，请稍后重试');
   }
   return error instanceof Error && error.message
@@ -187,7 +187,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
       NAV_ITEMS.forEach((n) =>
         list.push({
           id: `f-${n.path}`,
-          group: __t('功能'),
+          group: __t('功能入口'),
           title: n.label,
           hint: __t('前往{label}', { label: n.label }),
           icon: 'chevron-right',
@@ -201,9 +201,9 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
       if (isOwner) {
         list.push({
           id: 'f-refresh',
-          group: __t('功能'),
-          title: __t('强制刷新自选'),
-          hint: __t('重新获取自选行情'),
+          group: __t('功能入口'),
+          title: __t('更新关注数据'),
+          hint: __t('重新获取关注股票的行情'),
           icon: 'refresh',
           action: () => {
             onClose();
@@ -212,9 +212,9 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
         });
         list.push({
           id: 'f-logout',
-          group: __t('功能'),
+          group: __t('功能入口'),
           title: __t('退出管理员账号'),
-          hint: __t('退出此设备上的登录'),
+          hint: __t('退出本设备登录'),
           icon: 'shield',
           action: () => {
             onClose();
@@ -226,9 +226,9 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
         // 客户会话在整个 UI 里无处退出）
         list.push({
           id: 'f-logout',
-          group: __t('功能'),
+          group: __t('功能入口'),
           title: username ? __t('退出 {name}', { name: username }) : __t('退出登录'),
-          hint: __t('退出此设备上的登录'),
+          hint: __t('退出本设备登录'),
           icon: 'shield',
           action: () => {
             onClose();
@@ -238,7 +238,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
       } else {
         list.push({
           id: 'f-login',
-          group: __t('功能'),
+          group: __t('功能入口'),
           title: __t('登录'),
           hint: __t('管理员或个人账号'),
           icon: 'shield',
@@ -358,7 +358,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
             role="dialog"
             aria-modal="true"
             data-focus-overlay="command-palette"
-            aria-label={__t("命令面板")}
+            aria-label={__t("快捷查找")}
             /* 键盘逻辑挂在面板上（审计 2.2.13）：焦点 Tab 进结果按钮后，
                ↑↓/Enter/Esc 依然生效（事件冒泡到这里统一处理）。 */
             onKeyDown={onKeyDown}
@@ -393,7 +393,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                 /* beautifului Search 的清除钮：fade-in 150ms 进场，点后清空并回焦 */
                 <button
                   type="button"
-                  aria-label={__t('清除搜索')}
+                  aria-label={__t('清空搜索')}
                   onClick={() => {
                     setQuery('');
                     setSearchError(null);
@@ -452,7 +452,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                   <span className="flex size-9 items-center justify-center rounded-full bg-danger-50 text-danger-700">
                     <Icon name="x" size={15} />
                   </span>
-                  <p className="mt-3 text-body-s font-medium text-ink-700">{__t('搜索未完成')}</p>
+                  <p className="mt-3 text-body-s font-medium text-ink-700">{__t('搜索失败')}</p>
                   <p className="mt-1 max-w-sm text-micro leading-5 text-ink-400">{searchError}</p>
                 </div>
               )}
@@ -462,7 +462,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                   <span className="flex size-9 items-center justify-center rounded-lg border border-line bg-card-warm text-ink-400 shadow-[inset_0_1px_2px_rgba(16,24,40,.05)]">
                     <Icon name="search" size={16} />
                   </span>
-                  <p className="mt-3 text-body-s font-medium text-ink-700">{__t('没有匹配的结果')}</p>
+                  <p className="mt-3 text-body-s font-medium text-ink-700">{__t('没有找到')}</p>
                   <p className="mt-1 text-micro text-ink-400">
                     {__t('试试代码')} <span className="tnum">NVDA</span> {__t('或中文名（英伟达）')}
                   </p>

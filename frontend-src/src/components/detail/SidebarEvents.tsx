@@ -14,8 +14,8 @@ import { t as __t } from '../../i18n/core.ts';
 export default function SidebarEvents({ ticker }: { ticker: string }) {
   if (isIndexSymbol(ticker)) {
     return <div className="card-surface p-5">
-      <h3 className="text-h3 text-ink-900">{__t('相关突破事件')}</h3>
-      <p className="mt-3 text-body-s text-ink-400">{__t('股票雷达暂不覆盖指数，指数行情与技术研究仍可查看。')}</p>
+      <h3 className="text-h3 text-ink-900">{__t('突破记录')}</h3>
+      <p className="mt-3 text-body-s text-ink-400">{__t('突破雷达暂不覆盖指数，指数行情与技术研究仍可查看。')}</p>
     </div>;
   }
   return <StockSidebarEvents key={ticker} ticker={ticker} />;
@@ -26,7 +26,7 @@ function StockSidebarEvents({ ticker }: { ticker: string }) {
   const items = (data ?? []).slice(0, 3);
   return (
     <div className="card-surface p-5">
-      <h3 className="text-h3 text-ink-900">{__t('相关突破事件')}</h3>
+      <h3 className="text-h3 text-ink-900">{__t('突破记录')}</h3>
       {loading && !data ? (
         <div className="mt-3 space-y-2" aria-hidden="true">
           <span className="skeleton-shimmer block h-4 w-full rounded-xs" />

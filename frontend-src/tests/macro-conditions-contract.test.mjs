@@ -493,7 +493,7 @@ test('every module and factor referenced by the panel has hint copy', () => {
   assert.ok(SCORE_HINTS_MACRO.macroComposite.body.includes('至少 5 个模块'));
   assert.ok(SCORE_HINTS_MACRO.macroComposite.note.includes('当前读数在过去 5 年中的相对位置'));
   assert.ok(SCORE_HINTS_MACRO.macroHistoryBasis.body.includes('最新修订的数据重新计算历史分数'));
-  assert.ok(SCORE_HINTS_MACRO.macroHistoryBasis.body.includes('保留功能上线后各次采集的原始结果'));
+  assert.ok(SCORE_HINTS_MACRO.macroHistoryBasis.body.includes('保留功能上线后各次获取的原始结果'));
 });
 
 test('the panel polls macro data at fifteen minutes, not sixty seconds', async () => {
@@ -515,7 +515,7 @@ test('the panel polls macro data at fifteen minutes, not sixty seconds', async (
   assert.match(text, /const REFRESH_FOLLOW_TIMEOUT_MS = 3 \* 60_000;/);
   // 访客看不到 Owner 动作
   assert.match(text, /isOwner \?/);
-  assert.match(text, /登录后可手动刷新/);
+  assert.match(text, /登录后可手动更新/);
 });
 
 test('the source note states the real sources', async () => {
@@ -544,7 +544,8 @@ test('the market page places macro between the regime panel and the signal readi
   assert.ok(regime < macro && macro < signals, 'macro sits at B4');
   assert.match(text, /B4 宏观环境/);
   assert.match(text, /B5 信号解读/);
-  assert.match(text, /B7 联动卡/);
+  // 2026-10-08：页底联动卡删除，行业表现与 CTA 趋势走市场组二级标签。
+  assert.doesNotMatch(text, /LinkCards/);
 });
 
 // Reduced-motion, interruption and exact final values are exercised against the

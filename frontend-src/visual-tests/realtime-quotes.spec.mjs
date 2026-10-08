@@ -158,7 +158,7 @@ test('watchlist subscribes offscreen rows, pushes prices without reordering, and
   expect(after).toEqual(before);
   await emit(page, symbol, 1234.56, { subscription_status: 'limited', freshness: 'snapshot' });
   await expect(page.locator(`main [data-quote-symbol="${symbol}"]`).first()).toContainText('盘中 · 延迟 15 分钟');
-  await page.getByRole('link', { name: '大盘', exact: true }).first().click();
+  await page.getByRole('link', { name: '市场', exact: true }).first().click();
   await expect.poll(() => latestSymbols(page)).not.toContain('S031');
   expect(await page.evaluate(() => window.quoteStreams.filter(row => !row.closed).length)).toBe(1);
   expect(state.errors).toEqual([]);
@@ -193,7 +193,7 @@ test('visitors without quote access keep delayed indices and never open a stream
 
 test('an open radar detail follows new versions and reconciles missed states after reconnect', async ({ page }) => {
   const state = await fixture(page); state.quoteDelayMs = 750; await page.goto('/breakouts');
-  await page.getByRole('button', { name: '查看完整证据', exact: true }).click();
+  await page.getByRole('button', { name: '查看完整依据', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'AAPL 突破事件详情' });
   await expect(dialog).toBeVisible();
   state.radar = { ...state.radar, state_version: 1, lifecycle_state: 'TRIGGERED', trigger_source: 'finnhub', evidence_at: at, triggered_at: at };

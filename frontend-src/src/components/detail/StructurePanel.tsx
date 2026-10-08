@@ -97,7 +97,7 @@ export default function StructurePanel({ technical }: { technical: TechnicalStru
           </span>
           <span className="text-caption font-medium text-ink-800">{pa.structure_label ? t(pa.structure_label) : '—'}</span>
         </div>
-        <ScoreLine label={t('价格行为')} score={pa.score} hint={STRUCTURE_HINTS.price_action_score} />
+        <ScoreLine label={t('价格行为评分')} score={pa.score} hint={STRUCTURE_HINTS.price_action_score} />
         <div className="mt-1.5 flex flex-wrap gap-1.5">
           {(pa.pattern_events.length > 0 ? pa.pattern_events : pa.pattern_labels.map((label) => ({ label, bars_ago: null }))).map((event) => {
             const when = barsAgoText(event.bars_ago);
@@ -178,7 +178,7 @@ export default function StructurePanel({ technical }: { technical: TechnicalStru
             <StructFact label={t('失效位')} value={priceOr(base.invalidation_price)} />
             {/* 半宽格在手机上放不下整段区间：只在箭头处换行，不把日期拆成「2026-」「08-29」 */}
             <StructFact
-              label={t('形成区间')}
+              label={t('形成时段')}
               value={<><span className="whitespace-nowrap">{base.base_start ?? '—'}</span> → <span className="whitespace-nowrap">{base.base_end ?? '—'}</span></>}
             />
             <StructFact label={t('支撑下沿')} value={priceOr(base.support_low)} />
@@ -200,12 +200,12 @@ export default function StructurePanel({ technical }: { technical: TechnicalStru
         </div>
         <dl className="grid grid-cols-2 gap-1.5 text-caption">
           <StructFact
-            label={t('努力')}
+            label={t('相对量能')}
             value={vpm.effort !== null ? `${vpm.effort.toFixed(2)}x` : '—'}
             hint={STRUCTURE_HINTS.effort}
           />
           <StructFact
-            label={t('结果')}
+            label={t('价格位移')}
             value={vpm.result !== null ? `${vpm.result.toFixed(2)}x` : '—'}
             hint={STRUCTURE_HINTS.result}
           />

@@ -1,6 +1,7 @@
 /** Map and gate ChartAnalysisBundle. Algorithms never carry an ECharts option. */
 
 import { layerIdForOverlay, type LayerSettings } from './settings.ts';
+import { LAYERS } from './registry.ts';
 import { sha256Hex } from './sha256.ts';
 import type { TechnicalStructure } from '@/api/types';
 
@@ -215,10 +216,14 @@ function datesForSeries(raw: Record<string, unknown>, sharedDates: string[], len
   return sharedDates.slice(start, start + length);
 }
 
+/* 副图标题按图层编号取前端登记的显示名（与图表设置里的开关同名）；后端 label 只作兜底，
+   否则中文界面的副图头和「选择副图指标」下拉会冒出「SPY Relative Strength」这类英文。 */
+const PANE_LABELS = new Map(LAYERS.filter((layer) => layer.group === 'pane').map((layer) => [layer.id, layer.label]));
+
 function mapPane(raw: unknown, sharedDates: string[]): AnalysisPane | null {
   if (!isRecord(raw)) return null;
   const id = text(raw.id);
-  const label = text(raw.label) ?? id ?? '';
+  const label = (id ? PANE_LABELS.get(id) : undefined) ?? text(raw.label) ?? id ?? '';
   const kind = text(raw.kind);
   if (!id || !kind) return null;
   const valuesRaw = isRecord(raw.values) ? raw.values : {};

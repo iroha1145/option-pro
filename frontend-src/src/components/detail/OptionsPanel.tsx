@@ -133,12 +133,12 @@ function AiOptionInsight({
             disabled={!hasEvidence}
             title={
               hasEvidence
-                ? t('使用当前期权链的 {n} 条异动记录', { n: evidence.length })
-                : t('当前期权链暂无符合条件的异动')
+                ? t('使用当前期权报价的 {n} 条异动记录', { n: evidence.length })
+                : t('当前期权报价暂无符合条件的异动')
             }
             className="btn-ai"
           >
-            {hasEvidence ? t('生成解读') : t('暂无异动')}
+            {hasEvidence ? t('生成分析') : t('暂无异动')}
           </button>
         )}
       </div>
@@ -177,7 +177,7 @@ function AiOptionInsight({
               }}
               className="btn-ai"
             >
-              {t('生成解读')}
+              {t('生成分析')}
             </button>
             <button
               onClick={() => setConfirming(false)}
@@ -209,7 +209,7 @@ function AiOptionInsight({
               disabled={job.cancelRequested}
               className="text-ink-400 hover:text-ink-600 disabled:cursor-default disabled:text-ink-300"
             >
-              {t('取消任务')}
+              {t('取消分析')}
             </button>
           </div>
           {deferral && !job.cancelRequested && (
@@ -286,7 +286,7 @@ function AiOptionInsight({
             }}
             className="mt-2 text-caption font-medium text-ai-600 hover:text-ai-600/80"
           >
-            {t('重新生成')}
+            {t('重新分析')}
           </button>
         </div>
       )}
@@ -299,7 +299,7 @@ function AiOptionInsight({
               : t('分析已完成，但没有返回可展示的结果。')}
           </p>
           <button onClick={reset} className="mt-2 text-caption font-medium text-ai-600">
-            {t('重新生成')}
+            {t('重新分析')}
           </button>
         </div>
       )}
@@ -410,9 +410,9 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
         icon="doc-quote"
         title={
           loginExpired
-            ? t('登录状态已失效')
+            ? t('登录失效')
             : rateLimited
-              ? t('期权链请求较频繁')
+              ? t('期权报价请求过于频繁')
               : preparing ? t('期权数据准备中') : t('期权数据暂不可用')
         }
         description={
@@ -493,7 +493,7 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
         />
         {shownChain && (
           <p className="text-micro text-ink-400">
-            {t('标的价')}{' '}
+            {t('标的现价')}{' '}
             <span className="text-ink-600 tnum">
               {dash(shownChain.spot, (n) => fmtPrice(n))}
             </span>
@@ -508,7 +508,7 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
           className="mt-2"
           text={`${t('延迟行情')}${
             shownChain.asOf ? t(' · 数据获取于 {time}', { time: fmtRelative(shownChain.asOf) }) : ''
-          }${shownChain.stale ? t(' · 暂未刷新，显示最近一次结果') : ''}`}
+          }${shownChain.stale ? t(' · 暂未更新，显示最近一次结果') : ''}`}
         />
       )}
 

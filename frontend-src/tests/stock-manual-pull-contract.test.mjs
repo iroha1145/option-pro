@@ -28,7 +28,7 @@ test('stock pull refreshes detail, daily chart, and signals cache paths', async 
 
 test('snapshot-missing panels offer pull-and-analyze instead of a dead-end retry', async () => {
   // 快照缺失 ≠ 读取失败：三块分析卡都必须区分 public_snapshot_unavailable
-  // 并给出「拉取并分析」入口；真正的瞬时失败仍保留重试按钮。
+  // 并给出「获取并计算」入口；真正的瞬时失败仍保留重试按钮。
   const trend = await source('components/detail/TrendBiasPanel.tsx');
   const list = await source('components/detail/SignalList.tsx');
   const page = await source('pages/StockDetail.tsx');
@@ -41,7 +41,7 @@ test('snapshot-missing panels offer pull-and-analyze instead of a dead-end retry
     );
     assert.match(
       body,
-      /该股尚未拉取数据，拉取后自动分析/,
+      /该股尚未获取数据，获取后自动分析/,
       `${name} must explain the pull-then-analyze recovery`,
     );
     assert.match(body, /<ManualStockPull[^>]*minimal/, `${name} must embed the minimal pull CTA`);
@@ -50,7 +50,7 @@ test('snapshot-missing panels offer pull-and-analyze instead of a dead-end retry
   assert.match(list, /信号数据读取失败/);
   assert.match(page, /技术结构读取失败，请重试/);
   assert.match(control, /minimal/);
-  assert.match(control, /拉取并分析/);
+  assert.match(control, /获取并计算/);
 });
 
 test('stock pull UI reports truthful three-resource progress and persistence', async () => {
@@ -63,7 +63,7 @@ test('stock pull UI reports truthful three-resource progress and persistence', a
   assert.match(control, /正在更新基础行情、日线与技术信号 · 共 3 项/);
   assert.match(control, /state\.ticker === ticker/);
   assert.match(control, /latestTickerRef\.current !== requestedTicker/);
-  assert.match(control, /获取该股票的最新价格、日线与技术指标/);
+  assert.match(control, /更新该股票的最新价格、日线与技术指标/);
   assert.doesNotMatch(control, /Massive|yfinance|兜底/);
   assert.match(control, /cause\.retryAfter/);
   assert.equal(control.includes('if (!isOwner) return null'), false);

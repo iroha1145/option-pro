@@ -36,7 +36,7 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
         <EmptyState
           variant="error"
           icon="doc-quote"
-          title={t("数据源状态暂不可用")}
+          title={t("来源状态暂不可用")}
           description={t("稍后刷新再试")}
           action={
             <button
@@ -83,13 +83,13 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
               </div>
               <div>
                 <p className="text-data-l text-ink-900 tnum">{s.itemsToday ?? '—'}</p>
-                <p className="mt-0.5 text-micro text-ink-400">{t('近 24h 条数')}</p>
+                <p className="mt-0.5 text-micro text-ink-400">{t('近 24 小时条数')}</p>
               </div>
               <div>
                 <p className="text-data-l text-ink-900 tnum" suppressHydrationWarning>
                   {fmtRelativeShort(s.lastFetchedAt)}
                 </p>
-                <p className="mt-0.5 text-micro text-ink-400">{t('最近抓取')}</p>
+                <p className="mt-0.5 text-micro text-ink-400">{t('最近获取')}</p>
               </div>
             </div>
             <p className="mt-3 border-t border-line pt-2.5 text-micro text-ink-400">{s.note}</p>

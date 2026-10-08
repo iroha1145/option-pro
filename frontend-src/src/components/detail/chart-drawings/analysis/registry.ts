@@ -24,23 +24,23 @@ export const LAYERS: LayerDef[] = [
   { id: 'support_resistance', group: 'price', kind: 'level', label: t('支撑阻力') },
   { id: 'bases', group: 'price', kind: 'box', label: t('整理区') },
   { id: 'gaps', group: 'price', kind: 'gap', label: t('价格缺口（日线）') },
-  { id: 'pivots', group: 'price', kind: 'pivot', label: t('pivot/invalidation') },
-  { id: 'auto_patterns', group: 'price', kind: 'pattern', label: t('自动趋势线/通道/三角形/楔形') },
+  { id: 'pivots', group: 'price', kind: 'pivot', label: t('突破价与失效价') },
+  { id: 'auto_patterns', group: 'price', kind: 'pattern', label: t('趋势线与形态') },
   { id: 'candles', group: 'event', kind: 'candle', label: t('K线形态') },
-  { id: 'traps', group: 'event', kind: 'trap', label: t('Spring/Upthrust') },
-  { id: 'breakouts', group: 'event', kind: 'breakout', label: t('突破触发/测试/失败') },
+  { id: 'traps', group: 'event', kind: 'trap', label: t('假跌破与假突破') },
+  { id: 'breakouts', group: 'event', kind: 'breakout', label: t('突破进展') },
   { id: 'rsi', group: 'pane', kind: 'rsi', label: t('RSI') },
   { id: 'macd', group: 'pane', kind: 'macd', label: t('MACD') },
   { id: 'obv', group: 'pane', kind: 'obv', label: t('OBV') },
   { id: 'clv', group: 'pane', kind: 'clv', label: t('CLV') },
   { id: 'range_persistence', group: 'pane', kind: 'range', label: t('60日区间位置') },
-  { id: 'spy_rs', group: 'pane', kind: 'rs', label: t('SPY Relative Strength') },
+  { id: 'spy_rs', group: 'pane', kind: 'rs', label: t('相对 SPY 强度') },
 ];
 
 export const GROUPS: { id: LayerGroup; label: string }[] = [
   { id: 'price', label: t('价格图层') },
-  { id: 'event', label: t('事件') },
-  { id: 'pane', label: t('副图') },
+  { id: 'event', label: t('事件标记') },
+  { id: 'pane', label: t('指标副图') },
 ];
 
 export interface PresetDef {
@@ -78,7 +78,7 @@ export const PRESETS: Record<Exclude<PresetId, 'custom'>, PresetDef> = {
     labelDensity: 0.7,
   },
   breakout: {
-    label: t('突破交易'),
+    label: t('突破观察'),
     enabled: ['bases', 'gaps', 'pivots', 'breakouts', 'auto_patterns', 'obv', 'clv'],
     maxPatterns: 6,
     maxLabels: 8,

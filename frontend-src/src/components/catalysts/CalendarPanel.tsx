@@ -97,7 +97,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
         <CatalystCacheStatus {...cacheStatusProps(q)} />
         <EmptyState
           icon="doc-quote"
-          title={__t('本窗口暂无经济事件')}
+          title={__t('当前范围暂无经济事件')}
           description={__t('切换时间范围或稍后再看')}
         />
       </div>
@@ -151,9 +151,9 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
                           {ev.actual !== null ? (
                             <SoftBadge tone="brand">{ev.actual}</SoftBadge>
                           ) : (ev.releaseStatus === 'awaiting_source' || Date.parse(ev.scheduledAt) <= q.now.getTime()) ? (
-                            <SoftBadge tone="warn">{__t('数据源未回填')}</SoftBadge>
+                            <SoftBadge tone="warn">{__t('尚未取得公布值')}</SoftBadge>
                           ) : (
-                            <span className="text-ink-400">{__t('待公布')}</span>
+                            <span className="text-ink-400">{__t('等待公布')}</span>
                           )}
                         </span>
                       </p>

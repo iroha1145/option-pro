@@ -29,6 +29,9 @@ const panel = [
 ]
   .map((f) => readFileSync(join(src, f), 'utf8'))
   .join('\n');
+/* 去掉块注释与行注释：文件头里的说明文字不能让「界面文案」断言碰巧通过。 */
+const stripComments = (text) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+const scenarioChart = stripComments(readFileSync(join(src, 'components/cta/ScenarioChart.tsx'), 'utf8'));
 const ctaPage = readFileSync(join(src, 'pages/CtaTrend.tsx'), 'utf8');
 const marketPage = readFileSync(join(src, 'pages/Market.tsx'), 'utf8');
 const marketModule = readFileSync(join(src, 'api/modules/market.ts'), 'utf8');
@@ -96,7 +99,7 @@ test('v3 kind 细分：过零/饱和分开标注，饱和不冒充翻转', () =>
   assert.match(panel, /position_before/);
   /* 垫衬贴现价时区分缓冲边界与真实阈值 */
   assert.match(panel, /nearest_event_distance_pct/);
-  assert.match(panel, /最近断点 \{v\}%/);
+  assert.match(panel, /最近断点距离 \{v\}%/);
   /* 方向三角中性化：价格位置不用涨绿跌红（红绿只留净 Δ） */
   assert.match(panel, /border-b-ink-400/);
   assert.match(panel, /border-t-ink-400/);
@@ -124,16 +127,18 @@ test('v2 读数拆解与新鲜度：强度/覆盖/最新交易日/快照时刻/�
   assert.match(panel, /<TriggerLadder key=\{row\.instrument\}/);
   /* 页头时间 = 快照落盘时刻，不是浏览器请求时刻 */
   assert.match(ctaPage, /snapshot_saved_at/);
-  assert.match(ctaPage, /快照 \{time\}/);
+  assert.match(ctaPage, /记录时间 \{time\}/);
   assert.doesNotMatch(ctaPage, /\{t\('更新'\)\} \{fmtTimeHHMMSS\(ctaQ\.lastUpdatedAt\)\}/);
 });
 
 test('CTA 只做并排联动，不混入 regime 或 Strength', () => {
-  /* 旧面板已剥离：大盘页不再渲染 <CtaTrendPanel>、不再轮询 ctaTrend，
-     只留指向 /cta 的引导卡。 */
+  /* 旧面板已剥离：大盘页不再渲染 <CtaTrendPanel>、不再轮询 ctaTrend。
+     2026-10-08 第二版导航删掉了引导卡，/cta 由市场组的二级标签进入。 */
   assert.doesNotMatch(marketPage, /CtaTrendPanel/);
   assert.doesNotMatch(marketPage, /ctaQ/);
-  assert.match(marketPage, /to="\/cta"/);
+  assert.match(marketPage, /section="market"/);
+  assert.match(ctaPage, /section="market"/);
+  assert.match(readFileSync(join(src, 'lib/navigation.ts'), 'utf8'), /pages: \[MARKET, SECTORS, CTA\]/);
   /* regimeMean 只读传入深读面板；页面的 bias/mean 计算不引用 CTA 数据。 */
   assert.match(ctaPage, /regimeMean=\{mean\}/);
   assert.match(ctaPage, /marketApi\.ctaTrend\(\)/);
@@ -145,10 +150,13 @@ test('快照只读：marketGet /market/cta，无直连供应商路径', () => {
   assert.match(marketModule, /marketGet\('\/market\/cta'/);
 });
 
-test('情景双曲线（完整敞口 vs 波动率冻结）都在图上', () => {
-  assert.match(panel, /完整敞口（含波动率调整）/);
-  assert.match(panel, /仅趋势（波动率冻结）/);
-  assert.match(panel, /trend_only/);
+test('情景双曲线（完整仓位 vs 波动率固定）都在图上', () => {
+  /* 图例两行是界面真正显示的文案，走 t() 取词典；匹配对象是去掉注释后的代码 */
+  assert.match(scenarioChart, /t\('完整仓位（含波动率调整）'\)/);
+  assert.match(scenarioChart, /t\('仅趋势（波动率固定）'\)/);
+  assert.match(scenarioChart, /curve\.trend_only/);
+  /* 旧图例文案只剩文件头注释里，代码里不得再出现 */
+  assert.doesNotMatch(scenarioChart, /完整敞口（含波动率调整）|仅趋势（波动率冻结）/);
 });
 
 test('120 日仓位历史已接入独立页（原面板未使用的 history 字段）', () => {
@@ -167,7 +175,7 @@ test('hints 数字与后端 config 一致（镜子）', () => {
   assert.ok(hints.includes('现价上下 12%'));
   assert.ok(hints.includes('55%'));
   assert.ok(hints.includes('0.1'));
-  assert.ok(hints.includes('快 30% / 中 40% / 慢 30%'));
+  assert.ok(hints.includes('短期 30% / 中期 40% / 长期 30%'));
   assert.match(backendConfig, /SubmodelSpec\(\s*"fast", "快速（≈1 个月）", 0\.30/);
   assert.match(backendConfig, /SubmodelSpec\(\s*"medium", "中速（≈3 个月）", 0\.40/);
   assert.match(backendConfig, /"tsmom", 0\.40, horizon=21/);

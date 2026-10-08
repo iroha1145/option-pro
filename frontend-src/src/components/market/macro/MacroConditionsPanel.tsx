@@ -38,22 +38,22 @@ const STATUS_CHIP: Record<
   { label: string; tone: string } | null
 > = {
   active: null,
-  degraded: { label: t('部分数据缺失'), tone: 'border-warn-600 bg-warn-50 text-warn-700' },
+  degraded: { label: t('数据不全'), tone: 'border-warn-600 bg-warn-50 text-warn-700' },
   stale: { label: t('数据陈旧'), tone: 'border-warn-600 bg-warn-50 text-warn-700' },
-  unavailable: { label: t('暂无快照'), tone: 'border-line bg-paper-2 text-ink-500' },
-  disabled: { label: t('未启用'), tone: 'border-line bg-paper-2 text-ink-500' },
+  unavailable: { label: t('暂无数据'), tone: 'border-line bg-paper-2 text-ink-500' },
+  disabled: { label: t('尚未启用'), tone: 'border-line bg-paper-2 text-ink-500' },
   insufficient_history: { label: t('历史不足'), tone: 'border-line bg-paper-2 text-ink-500' },
 };
 
 type RefreshPhase = 'idle' | 'sending' | 'queued' | 'cooldown' | 'in_progress' | 'failed';
 
 const REFRESH_LABEL: Record<RefreshPhase, string> = {
-  idle: t('刷新宏观数据'),
-  sending: t('正在提交…'),
-  queued: t('已排入刷新队列'),
-  cooldown: t('冷却中'),
-  in_progress: t('正在刷新'),
-  failed: t('刷新未成功'),
+  idle: t('更新数据'),
+  sending: t('提交中'),
+  queued: t('等待更新'),
+  cooldown: t('稍后可更新'),
+  in_progress: t('正在更新'),
+  failed: t('更新失败'),
 };
 
 function DisabledNotice({ reason }: { reason: string | null }) {
@@ -112,7 +112,7 @@ export default function MacroConditionsPanel({
       if (Date.now() - started > REFRESH_FOLLOW_TIMEOUT_MS) {
         window.clearInterval(timer);
         setRefreshPhase('idle');
-        setRefreshNote(t('刷新仍在进行，完成后自动显示最新数据。'));
+        setRefreshNote(t('更新仍在进行，完成后自动显示最新数据。'));
         return;
       }
       /* 硬失效 + 强制世代：跟进轮询必须真的打到后端。普通失效下，
@@ -146,15 +146,15 @@ export default function MacroConditionsPanel({
         setRefreshPhase('cooldown');
         setRefreshNote(
           result.cooldownSeconds
-            ? t('刷新冷却中，{n} 秒内只允许一次。', { n: Math.round(result.cooldownSeconds) })
-            : t('刷新冷却中。'),
+            ? t('更新冷却中，{n} 秒内只允许一次。', { n: Math.round(result.cooldownSeconds) })
+            : t('更新冷却中。'),
         );
       } else if (result.reason === 'already_running') {
         setRefreshPhase('in_progress');
-        setRefreshNote(t('宏观数据正在刷新，请等待完成。'));
+        setRefreshNote(t('宏观数据正在更新，请等待完成。'));
       } else {
         setRefreshPhase('queued');
-        setRefreshNote(t('刷新请求已提交，完成后自动显示最新数据。'));
+        setRefreshNote(t('更新请求已提交，完成后自动显示最新数据。'));
       }
     } catch (error) {
       setRefreshPhase('failed');
@@ -166,7 +166,7 @@ export default function MacroConditionsPanel({
             ? t('后台服务暂不可用，请稍后重试。')
             : error instanceof ApiError
               ? error.message
-              : t('刷新请求未成功。'),
+              : t('更新请求未成功。'),
       );
     }
   }, [snapshotStamp]);
@@ -228,7 +228,7 @@ export default function MacroConditionsPanel({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-caption text-ink-400 tnum">
-            {t('数据截止')} {data.dataThrough ?? '—'}
+            {t('数据截至')} {data.dataThrough ?? '—'}
           </span>
           {chip && (
             <span
@@ -254,7 +254,7 @@ export default function MacroConditionsPanel({
               {REFRESH_LABEL[refreshPhase]}
             </button>
           ) : (
-            <span className="text-micro text-ink-400">{t('登录后可手动刷新')}</span>
+            <span className="text-micro text-ink-400">{t('登录后可手动更新')}</span>
           )}
         </div>
       </div>
@@ -291,7 +291,7 @@ export default function MacroConditionsPanel({
               <div className="card-surface h-full">
                 <EmptyState
                   icon="doc-quote"
-                  title={t("暂无正式综合分")}
+                  title={t("暂无综合分")}
                   description={t("至少需要 5 类有效指标才能计算综合分。")}
                 />
               </div>
@@ -322,12 +322,12 @@ export default function MacroConditionsPanel({
       {/* E. 驱动因素 */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <DriverList
-          title={t("7 日分数改善最多")}
+          title={t("7 日评分上升最多")}
           drivers={data.drivers.improving}
           emptyText={t("暂无 7 日前的数据可供比较，或本期没有评分上升的指标。")}
         />
         <DriverList
-          title={t("7 日分数恶化最多")}
+          title={t("7 日评分下降最多")}
           drivers={data.drivers.deteriorating}
           emptyText={t("暂无 7 日前的数据可供比较，或本期没有评分下降的指标。")}
         />
@@ -336,7 +336,7 @@ export default function MacroConditionsPanel({
       {/* F. 来源说明 */}
       <details className="group border-t border-line pt-3">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-caption text-ink-500 [&::-webkit-details-marker]:hidden">
-          <span>{t('数据源')}</span>
+          <span>{t('数据来源')}</span>
           <Icon name="chevron-down" size={14} className="shrink-0 transition-transform duration-fast group-open:rotate-180 motion-reduce:transition-none" />
         </summary>
         <SourceNote className="border-0 pt-3" text={MACRO_SOURCE_NOTE + (data.scoringVersion ? t(' 评分版本 {version}。', { version: data.scoringVersion }) : '')} />

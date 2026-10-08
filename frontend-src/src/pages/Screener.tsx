@@ -4,14 +4,13 @@ import { useQuoteSymbols } from '@/hooks/useLiveQuote';
  * B0 页头带（上次扫描 / 扫描历史 popover / owner strength_refresh）
  * B1 筛选条件（周期/偏好/分档/预设/板块/价格/成交额/TopN + 真实等待态扫描钮）
  * B2 结果区（统计行 + 参数回显 chips + 三态排序 Segmented + 结果表/卡片流 + 行展开）
- * B3 右侧栏（市场形态 6 维 / 强度剖面 / 评分方法 / 空结果引导）
+ * B3 右侧栏（走势评分六项 / 评分方法）；无命中时的恢复操作只在结果空态里给
  * 状态：未扫描 empty-scan.svg · 扫描中骨架 · 无命中 · 503 快照不可用（保留上次结果）
  * 数据：strengthApi.scanEnvelope / market / profilesMeta + catalystsApi.batchSummaries72h（单次批量）+ signalsApi.stock
  */
 import SoftBadge from '@/components/shared/SoftBadge';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTickFlash } from '@/hooks/useTickFlash';
-import { AnimatePresence, motion } from 'framer-motion';
 import { strengthApi, type StrengthScanEnvelope } from '@/api/modules/strength';
 import { catalystsApi } from '@/api/modules/catalysts';
 import { signalsApi } from '@/api/modules/signals';
@@ -25,7 +24,6 @@ import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/hooks/useToast';
 import { useShell } from '@/hooks/useShell';
 import { cn } from '@/lib/utils';
-import { DUR_FAST, DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { fmtCompact, fmtLocaleDateTime, fmtTimeHHMMSS } from '@/lib/format';
 import {
   MACRO_SHADOW_HINT,
@@ -278,7 +276,7 @@ export default function Screener() {
           requireCurrent();
         }
         if (!refreshActionMatchesRequest(action, requested)) {
-          throw new ApiError(409, __t('另一组筛选条件正在扫描或冷却，请稍后重试'), {
+          throw new ApiError(409, __t('另一组条件正在扫描或等待间隔结束，请稍后重试'), {
             bizCode: 'strength_parameters_busy',
             payload: action,
           });
@@ -301,7 +299,7 @@ export default function Screener() {
           requireCurrent();
           if (!refreshActionMatchesRequest(action, requested)) {
             clearPendingStrengthTask(requestId);
-            throw new ApiError(409, __t('另一组筛选条件正在扫描或冷却，请稍后重试'), {
+            throw new ApiError(409, __t('另一组条件正在扫描或等待间隔结束，请稍后重试'), {
               bizCode: 'strength_parameters_busy', payload: action,
             });
           }
@@ -334,7 +332,7 @@ export default function Screener() {
             const snapshot = expireStrengthSnapshot(await strengthApi.scanEnvelope(params, force));
             requireCurrent();
             if (!completedAction || strengthPublicationMatches(snapshot, completedAction)) return snapshot;
-            throw new ApiError(409, __t('数据未刷新'), { bizCode: 'strength_publication_unverified' });
+            throw new ApiError(409, __t('数据未更新'), { bizCode: 'strength_publication_unverified' });
           } catch (error) {
             requireCurrent();
             const notPublished = error instanceof ApiError && (
@@ -735,10 +733,10 @@ export default function Screener() {
       const ok = await runScan(applied, { forceRefresh: true });
       if (ok === undefined) return;
       if (!ok) {
-        toast.error(__t('刷新失败'), __t('扫描未完成，请查看结果区的错误提示'));
+        toast.error(__t('更新失败'), __t('扫描未完成，请查看结果区的错误提示'));
         return;
       }
-      toast.success(__t('强度扫描完成'), __t('已读取最新扫描结果'));
+      toast.success(__t('评分扫描完成'), __t('已读取最新扫描结果'));
       universeQ.refresh();
       marketQ.refresh();
     } catch (e) {
@@ -825,6 +823,10 @@ export default function Screener() {
   const patchDraftOnly = useCallback((p: Partial<ScanFilters>) => {
     setDraft((value) => applyEodLimitedView({ ...value, ...p }));
   }, []);
+  // 成交额下限只有服务端确认支持时才生效；没生效的限制既不回显 chip，也不给清除按钮。
+  const appliedDollarVolumeFilterSupported = supportsDollarVolumeFilter({
+    serverSupport: scanMeta?.filterSupport?.minAvgDollarVolume,
+  });
   const chips = useMemo(
     () => buildChips(
       applied,
@@ -832,11 +834,9 @@ export default function Screener() {
       sectorOptions,
       patchApplied,
       patchDraftOnly,
-      supportsDollarVolumeFilter({
-        serverSupport: scanMeta?.filterSupport?.minAvgDollarVolume,
-      }),
+      appliedDollarVolumeFilterSupported,
     ),
-    [applied, profiles, sectorOptions, patchApplied, patchDraftOnly, scanMeta],
+    [applied, profiles, sectorOptions, patchApplied, patchDraftOnly, appliedDollarVolumeFilterSupported],
   );
 
   const animKey = `${scanSeq.current}:${safePage}`;
@@ -846,7 +846,8 @@ export default function Screener() {
     <div>
       {/* B0 页头带 */}
       <PageHeader
-        title={__t("选股扫描")}
+        section="screen"
+        title={__t("条件选股")}
         meta={
           <>
             {/* 手机上元信息折到标题下方、靠左排，这里跟着左对齐；桌面在页头右侧时才右对齐 */}
@@ -866,11 +867,11 @@ export default function Screener() {
               <button
                 onClick={() => void onStrengthRefresh()}
                 disabled={refreshingStrength || scanState === 'scanning'}
-                title={__t("重新计算强度评分（需管理员登录）")}
+                title={__t("重新计算评分（需管理员登录）")}
                 className="control-button h-9"
               >
                 <BusyIcon busy={refreshingStrength} size={15} tone="brand" />
-                {__t('刷新强度分')}
+                {__t('重算评分')}
               </button>
             )}
           </>
@@ -903,7 +904,7 @@ export default function Screener() {
             xl 以下表格区不足 900px，改用两列结果卡（2026-10-06 用户反馈表格右侧显示不全）。 */}
         <section
           className="lg:col-span-8 xl:col-span-9"
-          aria-label={__t("扫描结果")}
+          aria-label={__t("筛选结果")}
           {...pageRegionProps(
             'screener',
             scanState === 'idle'
@@ -924,8 +925,8 @@ export default function Screener() {
                 <Spinner size={14} tone="brand" />
                 {__t('正在扫描…')}
                 {scanPhase === 'queued' ? ` · ${__t('排队中')}` : ''}
-                {scanPhase === 'running' ? ` · ${__t('后台计算中')}` : ''}
-                {scanPhase === 'verifying' ? ` · ${__t('正在确认最新结果')}` : ''}
+                {scanPhase === 'running' ? ` · ${__t('正在计算')}` : ''}
+                {scanPhase === 'verifying' ? ` · ${__t('正在核验结果')}` : ''}
               </span>
             ) : scanState === 'done' || (scanState === 'error' && rows) ? (
               <>
@@ -934,8 +935,8 @@ export default function Screener() {
                 </h2>
                 <span className="text-caption text-ink-400 tnum">{__t('耗时')} {(scanDurationMs / 1000).toFixed(1)}s</span>
                 {scanPhase === 'queued' && <SoftBadge>{__t('排队中')}</SoftBadge>}
-                {scanPhase === 'running' && <SoftBadge>{__t('后台计算中')}</SoftBadge>}
-                {scanPhase === 'verifying' && <SoftBadge>{__t('正在确认最新结果')}</SoftBadge>}
+                {scanPhase === 'running' && <SoftBadge>{__t('正在计算')}</SoftBadge>}
+                {scanPhase === 'verifying' && <SoftBadge>{__t('正在核验结果')}</SoftBadge>}
                 {reusedExisting && scanState === 'done' && (
                   <SoftBadge>{__t('使用已有评分')}</SoftBadge>
                 )}
@@ -945,19 +946,19 @@ export default function Screener() {
                   </SoftBadge>
                 )}
                 {scanMeta?.synthetic && (
-                  <SoftBadge tone="warn" data-testid="screener-eod-synthetic">{__t('SYNTHETIC')}</SoftBadge>
+                  <SoftBadge tone="warn" data-testid="screener-eod-synthetic">{__t('模拟数据')}</SoftBadge>
                 )}
                 {scanMeta?.historicalExample && !scanMeta.synthetic && (
                   <SoftBadge tone="warn" data-testid="screener-eod-historical">{__t('历史示例')}</SoftBadge>
                 )}
                 {scanMeta && (scanMeta.observationN != null || scanMeta.compositeN != null) && (
                   <span className="text-micro text-ink-400 tnum" data-testid="screener-eod-counts">
-                    {__t('观察')} {scanMeta.observationN ?? 0} · {__t('合格')} {scanMeta.compositeN ?? 0}
+                    {__t('观察候选')} {scanMeta.observationN ?? 0} · {__t('合格候选')} {scanMeta.compositeN ?? 0}
                   </span>
                 )}
                 {scanMeta && (
                   <span className="text-micro text-ink-400 tnum" data-testid="screener-market-coverage">
-                    {scanMeta.universe === 'all_market' ? __t('全市场股票与基金') : __t('股票池')} {scanMeta.universeCount}
+                    {scanMeta.universe === 'all_market' ? __t('全市场股票与基金') : __t('股票范围')} {scanMeta.universeCount}
                     {' · '}{__t('当日日线完整')} {scanMeta.screenedCount}
                     {scanMeta.coverage?.missingSessionCount != null && scanMeta.coverage.missingSessionCount > 0 && (
                       <>{' · '}{__t('缺少当日日线')} {scanMeta.coverage.missingSessionCount}</>
@@ -972,9 +973,9 @@ export default function Screener() {
                 {truncatedScope && (
                   <SoftBadge
                     tone="warn"
-                    title={__t('价格、板块、分档与最低分筛选仅适用于已载入的 {returned} 只股票；已评分股票共 {screened} 只。', { returned: truncatedScope.returned, screened: truncatedScope.screened })}
+                    title={__t('价格、行业、分档与最低分筛选仅适用于已载入的 {returned} 只股票；已评分股票共 {screened} 只。', { returned: truncatedScope.returned, screened: truncatedScope.screened })}
                   >
-                    {__t('仅在强度前')} {truncatedScope.returned} {__t('名内筛选')}
+                    {__t('仅在评分前')} {truncatedScope.returned} {__t('名内筛选')}
                   </SoftBadge>
                 )}
                 {preparingCatalystSort && (
@@ -985,7 +986,7 @@ export default function Screener() {
                 )}
                 {scanState === 'done' && catalystSortFailed && (
                   <div className="flex flex-wrap items-center gap-2" role="status">
-                    <SoftBadge tone="warn" className="whitespace-normal">{__t('催化摘要读取失败，暂按强度排序')}</SoftBadge>
+                    <SoftBadge tone="warn" className="whitespace-normal">{__t('消息摘要读取失败，暂按评分排序')}</SoftBadge>
                     <button type="button" onClick={retryCatalystSort} disabled={catalystLoading} className="control-button">
                       {__t('重试')}
                     </button>
@@ -999,7 +1000,7 @@ export default function Screener() {
                 )}
                 {scanMeta?.stale && (
                   <SoftBadge tone="warn" className="whitespace-normal">
-                    {__t('数据未刷新')}{scanMeta.snapshotSavedAt ? ` · ${fmtLocaleDateTime(scanMeta.snapshotSavedAt, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}
+                    {__t('数据未更新')}{scanMeta.snapshotSavedAt ? ` · ${fmtLocaleDateTime(scanMeta.snapshotSavedAt, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}
                   </SoftBadge>
                 )}
                 {chips.map((c) => (
@@ -1015,7 +1016,7 @@ export default function Screener() {
                 ))}
               </>
             ) : (
-              <h2 className="font-display text-[18px] leading-[24px] text-ink-900">{__t('扫描结果')}</h2>
+              <h2 className="font-display text-[18px] leading-[24px] text-ink-900">{__t('筛选结果')}</h2>
             )}
             <div className="ml-auto flex flex-wrap items-center gap-2">
               {/* 可选列开关。关掉时同时清掉宏观筛选：否则行会按一个看不见的条件被筛掉。 */}
@@ -1050,8 +1051,8 @@ export default function Screener() {
               )}
               <Segmented<'observation' | 'composite'>
                 options={[
-                  { value: 'observation', label: __t('技术观察') },
-                  { value: 'composite', label: __t('合格综合') },
+                  { value: 'observation', label: __t('观察候选') },
+                  { value: 'composite', label: __t('合格候选') },
                 ]}
                 value={draft.resultSet}
                 onChange={(resultSet) => {
@@ -1060,7 +1061,7 @@ export default function Screener() {
                   setPage(1);
                   if (scanState === 'done') void runScan(next);
                 }}
-                ariaLabel={__t('结果集')}
+                ariaLabel={__t('结果类别')}
               />
               <Segmented<SortMode>
                 options={(['deterministic', 'latest', 'impact'] as const).map((v) => ({ value: v, label: SORT_CN[v] }))}
@@ -1075,7 +1076,7 @@ export default function Screener() {
           {/* 宏观筛选会排除没有读数的行；数量说清楚，别让人以为那些股票不存在。 */}
           {showMacro && macroToneFilter !== 'all' && macroUnreadCount > 0 && (
             <p className="mt-2 text-micro text-ink-400">
-              {macroUnreadCount} {__t('只缺少宏观数据，已从当前筛选结果中排除')}
+              {__t('{n} 只股票仅因缺少宏观数据，已从当前筛选结果中排除', { n: macroUnreadCount })}
             </p>
           )}
 
@@ -1086,8 +1087,8 @@ export default function Screener() {
               <div className="card-surface">
                 <EmptyState
                   image="/empty-scan.svg"
-                  title={__t("设定条件，开始一次扫描")}
-                  description={__t("或从预设策略一键开始")}
+                  title={__t("设置条件，开始扫描")}
+                  description={__t("也可选择预设策略开始扫描")}
                   action={
                     <div className="flex flex-col items-center gap-3">
                       <button
@@ -1158,7 +1159,7 @@ export default function Screener() {
                 {rows && (
                   <div className="mt-4">
                     <p className="mb-2 flex items-center gap-2 text-caption text-ink-400">
-                      <SoftBadge tone="warn">{__t('已过期')}</SoftBadge>
+                      <SoftBadge tone="warn">{__t('结果已过期')}</SoftBadge>
                       {__t('上次成功扫描于')} <span className="tnum">{lastScanAt ? fmtTimeHHMMSS(lastScanAt) : '—'}</span>
                     </p>
                     <div className="hidden xl:block">
@@ -1204,23 +1205,23 @@ export default function Screener() {
               <div className="card-surface">
                 <EmptyState
                   icon="search"
-                  title={__t("当前条件无命中")}
+                  title={__t("没有符合条件的股票")}
                   description={
                     applied.resultSet === 'composite'
                       ? eodEmptyEligibleLabel(scanMeta?.emptyEligibleReason)
-                      : __t("尝试放宽条件，或移除部分过滤器")
+                      : __t("放宽筛选条件，或移除部分条件后重试")
                   }
                   action={
                     <div className="flex flex-wrap justify-center gap-2">
                       {(applied.tier !== 'all' || applied.minScore != null) && (
-                        <SuggestButton label={__t("放宽一档")} onClick={() => patchApplied({ tier: 'all', minScore: null, presetId: null })} />
+                        <SuggestButton label={__t("清除评分限制")} onClick={() => patchApplied({ tier: 'all', minScore: null, presetId: null })} />
                       )}
-                      {applied.sectors.length > 0 && <SuggestButton label={__t("清除板块")} onClick={() => patchApplied({ sectors: [] })} />}
+                      {applied.sectors.length > 0 && <SuggestButton label={__t("清除行业")} onClick={() => patchApplied({ sectors: [] })} />}
                       {(applied.priceMin != null || applied.priceMax != null) && (
-                        <SuggestButton label={__t("清除价格区间")} onClick={() => patchApplied({ priceMin: null, priceMax: null })} />
+                        <SuggestButton label={__t("清除价格范围")} onClick={() => patchApplied({ priceMin: null, priceMax: null })} />
                       )}
-                      {applied.minDollarVol > 0 && <SuggestButton label={__t("清除成交额下限")} onClick={() => patchApplied({ minDollarVol: 0 })} />}
-                      <SuggestButton label={__t("重置全部条件")} onClick={resetAllFilters} />
+                      {appliedDollarVolumeFilterSupported && applied.minDollarVol > 0 && <SuggestButton label={__t("清除成交额限制")} onClick={() => patchApplied({ minDollarVol: 0 })} />}
+                      <SuggestButton label={__t("重置条件")} onClick={resetAllFilters} />
                     </div>
                   }
                 />
@@ -1289,7 +1290,7 @@ export default function Screener() {
             <MarketRegimeCard market={marketQ.data} />
           ) : marketQ.error ? (
             <div className="card-surface p-5">
-              <p className="eyebrow">{__t('市场形态')}</p>
+              <p className="eyebrow">{__t('走势评分')}</p>
               <p className="mt-3 text-body-s text-ink-500">{marketQ.error.code === 503 ? __t('数据暂不可用 · 稍后刷新再试') : marketQ.error.message}</p>
               <button
                 onClick={() => marketQ.refresh()}
@@ -1308,28 +1309,6 @@ export default function Screener() {
             error={!!profilesQ.error}
             onRetry={() => profilesQ.refresh()}
           />
-          <AnimatePresence>
-            {scanState === 'done' && sorted.length === 0 && (
-              <motion.div
-                key="relax"
-                initial={{ opacity: 0, y: 14 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, transition: { duration: DUR_FAST } }}
-                transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
-                className="card-surface p-5"
-              >
-                <p className="eyebrow">{__t('调整筛选条件')}</p>
-                <p className="mt-2.5 text-body-s text-ink-500">{__t('暂无股票符合当前条件。')}</p>
-                <button
-                  onClick={() => patchApplied({ tier: 'all', minScore: null, presetId: null })}
-                  className="btn-primary btn-sm"
-                >
-                  <Icon name="filter-funnel" size={13} />
-                  {__t('放宽一档试试')}
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </aside>
       </div>
     </div>
@@ -1359,8 +1338,8 @@ function buildChips(
        表格里的分数却仍是进取档算出来的，且 dirty=false 没有任何重扫提示。 */
   const chips: EchoChip[] = [];
   if (f.tier !== 'all') chips.push({ key: 'tier', label: __t('{tier} 档', { tier: f.tier }), onRemove: () => patch({ tier: 'all' }) });
-  if (f.timeframe !== 'mid') chips.push({ key: 'tf', label: __t('周期 {tf}', { tf: TIMEFRAME_CN[f.timeframe] }), onRemove: () => patchServer({ timeframe: 'mid' }) });
-  if (f.profile !== 'balanced') chips.push({ key: 'pf', label: __t('偏好 {profile}', { profile: PROFILE_CN[f.profile] }), onRemove: () => patchServer({ profile: 'balanced' }) });
+  if (f.timeframe !== 'mid') chips.push({ key: 'tf', label: __t('评分周期 {tf}', { tf: TIMEFRAME_CN[f.timeframe] }), onRemove: () => patchServer({ timeframe: 'mid' }) });
+  if (f.profile !== 'balanced') chips.push({ key: 'pf', label: __t('风险偏好 {profile}', { profile: PROFILE_CN[f.profile] }), onRemove: () => patchServer({ profile: 'balanced' }) });
   if (f.topN > 0) chips.push({ key: 'top', label: `Top ${f.topN}`, onRemove: () => patchServer({ topN: 0 }) });
   f.sectors.forEach((s) =>
     chips.push({
@@ -1383,7 +1362,7 @@ function buildChips(
     const opt = DOLLAR_VOL_OPTIONS.find((o) => o.value === f.minDollarVol);
     chips.push({ key: 'dv', label: __t('成交额 {v}', { v: opt?.label ?? `≥${fmtCompact(f.minDollarVol)}` }), onRemove: () => patchServer({ minDollarVol: 0 }) });
   }
-  if (f.minScore != null) chips.push({ key: 'ms', label: __t('强度 ≥{n}', { n: f.minScore }), onRemove: () => patchServer({ minScore: null }) });
+  if (f.minScore != null) chips.push({ key: 'ms', label: __t('评分 ≥{n}', { n: f.minScore }), onRemove: () => patchServer({ minScore: null }) });
   if (f.presetId) {
     const name = profiles?.find((p) => p.id === f.presetId)?.name ?? f.presetId;
     chips.push({ key: 'preset', label: __t('预设 {name}', { name }), onRemove: () => patch({ presetId: null }) });
@@ -1397,10 +1376,10 @@ function summarizeFilters(f: ScanFilters, dollarVolumeFilterSupported = true): s
   if (f.timeframe !== 'all') parts.push(TIMEFRAME_CN[f.timeframe]);
   parts.push(PROFILE_CN[f.profile]);
   if (f.topN > 0) parts.push(`Top ${f.topN}`);
-  if (f.sectors.length > 0) parts.push(__t('板块 {n} 项', { n: f.sectors.length }));
-  if (f.priceMin != null || f.priceMax != null) parts.push(__t('价格区间'));
+  if (f.sectors.length > 0) parts.push(__t('行业 {n} 项', { n: f.sectors.length }));
+  if (f.priceMin != null || f.priceMax != null) parts.push(__t('价格范围'));
   if (dollarVolumeFilterSupported && f.minDollarVol > 0) parts.push(__t('成交额≥{v}', { v: fmtCompact(f.minDollarVol) }));
-  if (f.minScore != null) parts.push(__t('强度≥{n}', { n: f.minScore }));
+  if (f.minScore != null) parts.push(__t('评分≥{n}', { n: f.minScore }));
   return parts.join(' · ') || __t('默认条件');
 }
 

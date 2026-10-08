@@ -60,7 +60,7 @@ function IvHeatCard({
               <button
                 type="button"
                 onClick={() => onOpenTicker(row.ticker)}
-                aria-label={t('{ticker} 板块 IV 排位 {rank}，打开详情', { ticker: row.ticker, rank: row.rank })}
+                aria-label={t('{ticker} 行业 IV 排位 {rank}，打开详情', { ticker: row.ticker, rank: row.rank })}
                 className="grid min-h-9 w-full grid-cols-[1.25rem_3.5rem_minmax(0,1fr)_minmax(2.5rem,4.5rem)_2rem] items-center max-[359px]:grid-cols-[1.25rem_3.5rem_minmax(0,1fr)_2.5rem_2rem] sm:grid-cols-[1.25rem_3.75rem_minmax(0,1fr)_minmax(3rem,7rem)_2rem] gap-x-2.5 rounded-md px-1.5 text-left transition-colors duration-fast hover:bg-paper-2 [@media(pointer:coarse)]:min-h-11"
               >
                 <span className="text-right text-caption text-ink-400 tnum">{index + 1}</span>
@@ -104,7 +104,7 @@ function IvHeatCard({
         className="control-button mt-3"
       >
         <Icon name="plus" size={14} />
-        {t('搜索更多代码并加入自选')}
+        {t('搜索股票并加入关注')}
       </button>
     </div>
   );
@@ -141,7 +141,7 @@ function CoverageCard({
     return (
       <div className="card-surface p-5">
         <p className="eyebrow">{t('IV 数据覆盖')}</p>
-        <h3 className="mt-1 text-h3 text-ink-800">{sector?.name ?? t('所选板块')}</h3>
+        <h3 className="mt-1 text-h3 text-ink-800">{sector?.name ?? t('所选行业')}</h3>
         <div className="mt-4 space-y-2.5" aria-hidden="true">
           <SkeletonBlock className="h-4 w-full" />
           <SkeletonBlock className="h-4 w-3/4" />
@@ -156,7 +156,7 @@ function CoverageCard({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="eyebrow">{t('IV 数据覆盖')}</p>
-          <h3 className="mt-1 text-h3 text-ink-800">{sector?.name ?? t('所选板块')}</h3>
+          <h3 className="mt-1 text-h3 text-ink-800">{sector?.name ?? t('所选行业')}</h3>
         </div>
         <span
           className={cn(
@@ -172,7 +172,7 @@ function CoverageCard({
 
       <dl className="mt-4 divide-y divide-line">
         <div className="flex items-center justify-between py-2.5">
-          <dt className="text-caption text-ink-500">{t('成功样本')}</dt>
+          <dt className="text-caption text-ink-500">{t('可用样本')}</dt>
           <dd className="text-data-m text-ink-800 tnum">
             {error && meta.successCount === null
               ? '— / —'
@@ -180,13 +180,13 @@ function CoverageCard({
           </dd>
         </div>
         <div className="flex items-center justify-between py-2.5">
-          <dt className="text-caption text-ink-500">{t('板块内最高')}</dt>
+          <dt className="text-caption text-ink-500">{t('行业最高')}</dt>
           <dd className="text-data-m text-ink-800 tnum">
             {highest ? <><span className="tnum">{highest.ticker}</span> · {highest.rank.toFixed(1)}</> : '—'}
           </dd>
         </div>
         <div className="flex items-center justify-between py-2.5">
-          <dt className="text-caption text-ink-500">{t('板块内最低')}</dt>
+          <dt className="text-caption text-ink-500">{t('行业最低')}</dt>
           <dd className="text-data-m text-ink-800 tnum">
             {lowest ? <><span className="tnum">{lowest.ticker}</span> · {lowest.rank.toFixed(1)}</> : '—'}
           </dd>

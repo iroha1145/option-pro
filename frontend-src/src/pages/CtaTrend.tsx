@@ -46,6 +46,7 @@ export default function CtaTrend() {
   return (
     <div>
       <PageHeader
+        section="market"
         title={t('CTA 趋势资金')}
         meta={
           <>
@@ -59,7 +60,7 @@ export default function CtaTrend() {
                 （GPT-5.6-Pro 审计问题 3）。 */}
             {(ctaQ.data?.snapshot_saved_at ?? ctaQ.data?.generated_at) && (
               <span className="text-caption text-ink-400 tnum">
-                {t('快照 {time}', {
+                {t('记录时间 {time}', {
                   time: fmtTimeHHMMSS(
                     new Date((ctaQ.data.snapshot_saved_at ?? ctaQ.data.generated_at)!).getTime(),
                   ),
@@ -79,7 +80,7 @@ export default function CtaTrend() {
         </div>
       ) : snapshotMissing ? (
         <p className="mt-6 rounded-md border border-line bg-card-warm px-3 py-4 text-caption text-ink-500" {...pageRegionProps('cta', 'empty')}>
-          {t('CTA 估算尚未生成，首次计算完成后自动显示')}
+          {t('首次估算完成后自动显示')}
         </p>
       ) : ctaQ.error && !ctaQ.data ? (
         <div className="card-surface mt-6" {...pageRegionProps('cta', 'error')}>
@@ -101,7 +102,7 @@ export default function CtaTrend() {
         </div>
       ) : !row || !ctaQ.data ? (
         <div className="card-surface mt-6" {...pageRegionProps('cta', 'empty')}>
-          <EmptyState title={t('暂无数据')} />
+          <EmptyState title={t('暂无估算')} />
         </div>
       ) : (
         <div {...pageRegionProps('cta', 'content')}>
@@ -110,7 +111,7 @@ export default function CtaTrend() {
             <StaleStrip onRetry={() => ctaQ.refresh()} refreshing={ctaQ.refreshing} className="mt-6" />
           )}
           {/* B1 指数总览 */}
-          <section className="mt-6" aria-label={t('指数总览')}>
+          <section className="mt-6" aria-label={t('指数概况')}>
             <CtaOverviewStrip
               rows={rows}
               selected={row.instrument}

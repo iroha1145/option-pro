@@ -30,7 +30,7 @@ import { t } from '../../i18n/core.ts';
 const MATRIX_HINT = {
   title: t('技术 × 结构性宏观'),
   body:
-    t('技术侧为市场形态六维均值；宏观侧为结构性宏观（流动性、融资、国债、利率）的加权均值。'),
+    t('技术侧为走势评分的六项均分；宏观侧为结构性宏观（流动性、融资、国债、利率）的加权均值。'),
   // 整句作单一 msgid：英/日与中文语序不同，分段 t() 拼接必然错乱，只能整句翻译。
   note:
     t('信用与风险不计入结构性宏观：它们与技术形态读的是同一批工具（HYG/LQD/KRE/VIX/SPY-TLT/IWM-SPY），再算一次等于同一个信号计两次权。此卡仅展示，不改变任何评分，也不参与突破的六状态分类。')
@@ -93,7 +93,7 @@ export default function MacroTechnicalMatrix({
           </dl>
           {gap !== null && (
             <p className="mt-3 border-t border-line pt-3 text-caption text-ink-500">
-              {t('差值')}{' '}
+              {t('评分差值')}{' '}
               <span
                 className={cn(
                   'tnum',
@@ -114,10 +114,10 @@ export default function MacroTechnicalMatrix({
         /* 任一侧缺失就不给状态。凑一个出来会把「没数据」说成一个判断。 */
         <p className="mt-1 text-body-s text-ink-400">
           {technical === null && structural === null
-            ? t('市场形态与宏观快照都暂不可用')
+            ? t('走势评分与宏观数据都暂不可用')
             : technical === null
-              ? t('市场形态六维暂不可用')
-              : t('宏观快照暂不可用')}
+              ? t('走势评分暂不可用')
+              : t('宏观数据暂不可用')}
           {t(' · 不按中性计')}
         </p>
       )}

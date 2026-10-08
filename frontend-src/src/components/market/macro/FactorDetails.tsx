@@ -47,15 +47,15 @@ function FactorTable({ factors }: { factors: MacroFactor[] }) {
   return (
     <div className="hidden md:block">
       <table className="w-full table-fixed border-collapse text-body-s">
-        <caption className="sr-only">{t('因子当前值、历史分位与 7 日变化')}</caption>
+        <caption className="sr-only">{t('指标当前值、历史分位与 7 日变化')}</caption>
         <thead>
           <tr className="text-micro text-ink-400">
-            <th scope="col" className="w-[32%] pb-2 text-left font-medium">{t('因子')}</th>
+            <th scope="col" className="w-[32%] pb-2 text-left font-medium">{t('指标')}</th>
             <th scope="col" className="w-[18%] pb-2 text-right font-medium">{t('当前值')}</th>
             <th scope="col" className="w-[12%] pb-2 text-right font-medium">{t('历史分位')}</th>
             <th scope="col" className="w-[15%] pb-2 text-right font-medium">{t('7 日原值变化')}</th>
-            <th scope="col" className="w-[12%] pb-2 text-right font-medium">{t('7 日分数变化')}</th>
-            <th scope="col" className="w-[11%] pb-2 text-right font-medium">{t('数据截止')}</th>
+            <th scope="col" className="w-[12%] pb-2 text-right font-medium">{t('7 日评分变化')}</th>
+            <th scope="col" className="w-[11%] pb-2 text-right font-medium">{t('数据截至')}</th>
           </tr>
         </thead>
         <tbody>
@@ -80,7 +80,7 @@ function ModuleSummary({
   panelDataThrough: string | null;
 }) {
   const scored = hasScore(module);
-  /* 七个模块通常与面板同一天截止，标题行已经写着「数据截止」；只有落后或
+  /* 七个模块通常与面板同一天截止，标题行已经写着「数据截至」；只有落后或
      超前于面板的模块才单独写出自己的日期，免得七行重复同一个日期。 */
   const ownDate =
     module.dataThrough === null || module.dataThrough !== panelDataThrough
@@ -124,12 +124,12 @@ function ModuleSummary({
         <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-micro text-ink-500 md:col-start-6 md:row-start-1 md:justify-end md:text-right">
           <span className="tnum">
             {module.validFactorCount === null
-              ? t('有效因子 —')
-              : t('有效因子 {valid}/{total}', { valid: module.validFactorCount, total: module.totalFactorCount ?? '—' })}
+              ? t('有效指标 —')
+              : t('有效指标 {valid}/{total}', { valid: module.validFactorCount, total: module.totalFactorCount ?? '—' })}
           </span>
           {ownDate !== null && (
             <span className="text-ink-500 tnum">
-              {t('截止')} {ownDate}
+              {t('截至')} {ownDate}
             </span>
           )}
         </span>
@@ -181,7 +181,7 @@ export default function FactorDetails({
         ...previous,
         [moduleId]: {
           loading: false,
-          error: error instanceof ApiError ? error.message : t('因子详情暂不可用'),
+          error: error instanceof ApiError ? error.message : t('指标详情暂不可用'),
           factors: previous[moduleId]?.factors ?? [],
         },
       } : previous);
@@ -195,7 +195,7 @@ export default function FactorDetails({
   if (!modules.length) {
     return (
       <p className="card-surface p-5 text-body-s text-ink-500">
-        {t('暂无模块分数。数据接入后这里会显示七个模块。')}
+        {t('暂无类别分数。数据接入后这里会显示七个类别。')}
       </p>
     );
   }
@@ -203,7 +203,7 @@ export default function FactorDetails({
   return (
     <motion.div
       className="card-surface divide-y divide-line"
-      aria-label={t("因子详情")}
+      aria-label={t("指标详情")}
       initial="hidden"
       whileInView="shown"
       viewport={{ once: true, amount: 0.2 }}
@@ -215,7 +215,7 @@ export default function FactorDetails({
         return (
           <article
             key={module.moduleId}
-            aria-label={t('{name} 模块', { name: t(module.nameZh) })}
+            aria-label={t('{name} 类别', { name: t(module.nameZh) })}
           >
             <h3>
               <button
@@ -233,7 +233,7 @@ export default function FactorDetails({
             </h3>
             {!hasScore(module) && (
               <p className={cn('-mt-1 pb-3 pr-4 text-micro leading-relaxed text-ink-500', DETAIL_INSET)}>
-                {t('有效因子不足')} {module.minimumValidFactors ?? ''} {t('个门槛，本模块不出分（不按 50 补齐）。')}
+                {t('有效指标不足')} {module.minimumValidFactors ?? ''} {t('个门槛，本类别不出分（不按 50 补齐）。')}
               </p>
             )}
             <div

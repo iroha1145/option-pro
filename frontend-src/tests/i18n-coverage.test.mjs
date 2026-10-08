@@ -299,9 +299,11 @@ test('watchlist and smart-drawing copy stays natural in EN/JA', () => {
   assert.equal(merged.get('价格行为')?.en, 'Price action');
 });
 
-test('LanguageSwitcher is wired into the navbar', async () => {
+test('language choice is wired into the navbar settings menu', async () => {
   const navbar = await readFile(path.join(srcDir, 'components', 'Navbar.tsx'), 'utf8');
-  assert.match(navbar, /LanguageSwitcher/, 'Navbar.tsx must render <LanguageSwitcher />');
+  const settings = await readFile(path.join(srcDir, 'components', 'SettingsMenu.tsx'), 'utf8');
+  assert.match(navbar, /<SettingsMenu \/>/, 'Navbar.tsx must render <SettingsMenu />');
+  assert.match(settings, /setLocale\(l\.code\)/, 'SettingsMenu must switch locale');
 });
 
 test('i18n core exposes zh/en/ja and a browser-language auto-detect', async () => {

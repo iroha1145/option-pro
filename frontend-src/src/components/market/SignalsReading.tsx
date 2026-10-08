@@ -15,6 +15,8 @@ import { MARKET_SIGNAL_HINTS, SCORE_HINTS } from '@/lib/scoreHints';
 import { SkeletonCard } from '@/components/shared/Skeleton';
 import { BusyIcon } from '@/components/shared/IconSwap';
 import Icon from '@/components/icons';
+import { Link } from 'react-router';
+import { routeIntentHandlers } from '@/lib/prefetchRouteChunk';
 import { t } from '../../i18n/core.ts';
 
 export interface TrendBias {
@@ -76,7 +78,7 @@ function buildReading(
   }
   if (regimeMean !== null) {
     parts.push(
-      t('六维市场形态均值 {mean}', { mean: regimeMean.toFixed(1) }) +
+      t('走势评分六项均分 {mean}', { mean: regimeMean.toFixed(1) }) +
         (bias ? t('，整体「{label}」', { label: t(bias.label) }) : '') +
         t('。'),
     );
@@ -166,11 +168,23 @@ export default function SignalsReading({
     /* 后续区块 rise-in 减量：直接呈现 */
     <section
       className="card-surface flex h-full flex-col p-6"
-      aria-label={t("市场信号解读")}
+      aria-label={t("信号解读")}
     >
-      <div className="flex items-start justify-between">
-        <h3 className="text-h3 text-ink-900">{t('市场信号解读')}</h3>
-        <Icon name="flag" size={18} className="text-ink-400" />
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+        <h3 className="text-h3 text-ink-900">{t('信号解读')}</h3>
+        {/* 原页底联动卡里的突破雷达入口：属于选股组，跨组跳转留在读信号的地方 */}
+        <Link
+          to="/breakouts"
+          {...routeIntentHandlers('/breakouts')}
+          className="touch-target group inline-flex min-h-8 items-center gap-1 text-caption font-medium text-brand-600 hover:text-brand-700"
+        >
+          {t('查看突破雷达')}
+          <Icon
+            name="arrow-up-right"
+            size={14}
+            className="transition-transform duration-fast group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+          />
+        </Link>
       </div>
 
       <div className="mt-5 grid flex-1 grid-cols-1 gap-6 lg:grid-cols-2">

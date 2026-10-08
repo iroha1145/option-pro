@@ -52,8 +52,15 @@ async function open(page, width) {
     return route.fulfill({ json: {} });
   });
   await page.goto('/screener');
-  const panel = page.getByRole('region', { name: '按代码查询选股诊断' });
+  const panel = page.getByRole('region', { name: '单股诊断' });
   await expect(panel).toBeVisible();
+  // 查询表单默认收起，入口是「单股诊断」按钮；每个用例先展开再查询。
+  const toggle = panel.getByRole('button', { name: '单股诊断', exact: true });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(panel.getByLabel('证券代码')).toBeHidden();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(panel.getByLabel('证券代码')).toBeVisible();
   return panel;
 }
 
@@ -76,7 +83,7 @@ for (const width of [1440, 390, 320]) {
     await expect(panel.getByText('实际波动幅度：5.50%')).toBeVisible();
     await expect(panel.getByText('波动门槛：3.50%')).toBeVisible();
     await expect(panel.getByText('代理值达到数值门槛，资格未认证', { exact: false })).toBeVisible();
-    await expect(panel.getByText('最终评分门（当前轨道）', { exact: true })).toBeVisible();
+    await expect(panel.getByText('最终评分条件（当前轨道）', { exact: true })).toBeVisible();
     await expect(panel.getByText('分数贡献：60.00')).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
     expect(requests).toBe(1);
@@ -102,7 +109,7 @@ test('changing profile revokes an older lookup and errors remain distinct from e
   await panel.getByLabel('证券代码').fill('SLOW');
   await panel.getByRole('button', { name: '查询诊断', exact: true }).click();
   await expect.poll(() => typeof release).toBe('function');
-  await page.getByRole('tablist', { name: '偏好', exact: true }).getByRole('tab', { name: '进取', exact: true }).click();
+  await page.getByRole('tablist', { name: '风险偏好', exact: true }).getByRole('tab', { name: '进取', exact: true }).click();
   release();
   await expect(panel.getByText('完整评分路径', { exact: false })).toHaveCount(0);
   await expect(panel.getByRole('button', { name: '查询诊断', exact: true })).toBeEnabled();
@@ -111,7 +118,7 @@ test('changing profile revokes an older lookup and errors remain distinct from e
   await expect(panel.getByRole('alert')).toHaveText('该代码不在本批次证券目录中。');
   await panel.getByLabel('证券代码').fill('UNAVAILABLE');
   await panel.getByRole('button', { name: '查询诊断', exact: true }).click();
-  await expect(panel.getByRole('alert')).toHaveText('该批次尚无完整诊断，请等待扫描完成后重试。');
+  await expect(panel.getByRole('alert')).toHaveText('本批次诊断尚未完成，请等待扫描结束后重试。');
 });
 
 test('a diagnostic 429 names the wait from Retry-After without showing an empty result', async ({ page }) => {
@@ -125,7 +132,7 @@ test('a diagnostic 429 names the wait from Retry-After without showing an empty 
   await panel.getByLabel('证券代码').fill('CRWD');
   await panel.getByRole('button', { name: '查询诊断', exact: true }).click();
   await expect.poll(() => requests).toBe(1);
-  await expect(panel.getByRole('alert')).toHaveText('选股诊断查询过于频繁，请 3 秒后重试。');
+  await expect(panel.getByRole('alert')).toHaveText('查询过于频繁，请 3 秒后重试。');
   await expect(panel.getByText('完整评分路径', { exact: false })).toHaveCount(0);
 });
 

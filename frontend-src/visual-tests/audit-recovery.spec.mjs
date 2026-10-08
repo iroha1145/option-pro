@@ -110,7 +110,7 @@ test('radar watchlist scope uses the signed-in personal selection', async ({ pag
   await page.goto('/breakouts');
   const current = page.getByRole('region', { name: '当日信号', exact: true });
   await expect(current).toContainText('AAOI');
-  await page.getByRole('tab', { name: '查看自选', exact: true }).click();
+  await page.getByRole('tab', { name: '我的关注', exact: true }).click();
   await expect(current).toContainText('AAOI');
   await expect(current).not.toContainText('NVDA');
   expect(state.requests.some(row => row.path === '/api/account/watchlist')).toBe(true);
@@ -125,7 +125,7 @@ test('lead signal keeps its base card when detail fails and retry fills the deta
   await expect(lead).toContainText('AAOI');
   const notice = lead.getByRole('status');
   await expect(notice).toContainText('补充详情暂时读不到，当前显示基础信号。');
-  await expect(lead.getByRole('button', { name: '查看完整证据' })).toBeVisible();
+  await expect(lead.getByRole('button', { name: '查看完整依据' })).toBeVisible();
   state.failLeadDetail = false;
   await notice.getByRole('button', { name: '重试' }).click();
   await expect(notice).toHaveCount(0);
@@ -150,7 +150,7 @@ test('historical trigger prices stay distinct from the current quote in both sto
   await expect(page.getByText('触发 —', { exact: true })).toBeVisible();
   await expect(page.getByText('触发 90.00', { exact: true })).toHaveCount(0);
   const sidebar = page.locator('div').filter({
-    has: page.getByRole('heading', { name: '相关突破事件', exact: true }),
+    has: page.getByRole('heading', { name: '突破记录', exact: true }),
   }).last();
   await expect(sidebar.locator('li')).toHaveCount(2);
   await expect(sidebar.locator('li').nth(0)).toContainText('84.51');
@@ -179,7 +179,7 @@ test('canonical and aliased indices keep charts without company-only requests', 
     state.requests.length = 0;
     await page.goto(`/stock/${encodeURIComponent(symbol)}`);
     await expect(page.getByText('指数不适用公司新闻与财报摘要', { exact: true })).toBeVisible();
-    await expect(page.getByText('股票雷达暂不覆盖指数，指数行情与技术研究仍可查看。', { exact: true })).toBeVisible();
+    await expect(page.getByText('突破雷达暂不覆盖指数，指数行情与技术研究仍可查看。', { exact: true })).toBeVisible();
     expect(state.requests.filter(({ path }) => path.startsWith('/api/breakouts/tickers/') || path.startsWith('/api/catalysts/tickers/') || path.startsWith('/api/earnings/impact/') || path.startsWith('/api/options/'))).toEqual([]);
     expect(state.requests.some(({ path }) => path.endsWith('/chart'))).toBe(true);
   }
@@ -189,8 +189,12 @@ test('canonical and aliased indices keep charts without company-only requests', 
 test('repeated job lookup failures pause and resume the same job without a second create', async ({ page }) => {
   const state = await fixture(page, { owner: true });
   await page.goto('/stock/AAPL');
-  await page.getByRole('button', { name: '生成解读', exact: true }).click();
-  await page.getByRole('button', { name: '生成解读', exact: true }).click();
+  // 「AI 股票分析」卡也有同名的「生成分析」，限定在期权解读卡内：先开确认，再确认。
+  const insight = page.getByText('AI 期权解读', { exact: true }).locator('..').locator('..');
+  await insight.getByRole('button', { name: '生成分析', exact: true }).click();
+  await expect(insight.getByText(/^分析 AAPL 当前到期日的/)).toBeVisible();
+  await insight.getByRole('button', { name: '生成分析', exact: true }).click();
+  await expect.poll(() => state.jobPosts).toBe(1);
   const resume = page.getByRole('button', { name: '继续查询原任务', exact: true });
   await expect(resume).toBeVisible({ timeout: 18000 });
   expect(state.jobReads).toBe(5);

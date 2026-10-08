@@ -5,8 +5,9 @@
  *   离现价最近的紧贴现价行）；方向符 ▲/▼ 表示触发区在现价上方/下方。
  * - 数字用正文字体加等宽数字（tnum）右对齐成列：价格区间 / 距离 / 估算 Δ / 权重计量条
  *   （bg-line 轨道 + ink-500 填充，宽=weight_share/maxWeight）。
- * - 触发位全部「需收盘确认」：盘中穿越的区间在标签后挂脉动圆点，展开详情里
- *   再给「盘中已穿越 · 待收盘确认」暂定章，不构成正式触发。
+ * - 触发位全部「需收盘确认」：盘中穿越的区间在标签后挂脉动圆点和「盘中已穿越」字样
+ *   （2026-10-08：只靠圆点，折叠时读不出含义），展开详情里再给「盘中已穿越 · 待收盘确认」
+ *   暂定章，不构成正式触发。
  * - 点击行在手风琴内展开详情（类型/确认章/估算 Δ 与趋势/波动率拆分/模型权重），
  *   默认展开距现价最近的一行；选中行 = 左侧 2px brand 竖条 + bg-paper-2（不用 ring）。
  * - 语义纪律：这是多周期趋势模型群的**代理估算**，不是任何机构的真实仓位披露。
@@ -103,7 +104,7 @@ export default function TriggerLadder({ row }: { row: CtaInstrumentEstimate }) {
         <button
           type="button"
           aria-expanded={expanded}
-          aria-label={`${ZONE_LABELS[zone.label_key] ?? zone.label_key} ${fmtPrice(zone.price_low)} – ${fmtPrice(zone.price_high)}`}
+          aria-label={`${ZONE_LABELS[zone.label_key] ?? zone.label_key} ${fmtPrice(zone.price_low)} – ${fmtPrice(zone.price_high)}${crossed ? ` · ${t('盘中已穿越')}` : ''}`}
           onClick={() => setSelectedId(expanded ? (nearest.id === zone.id ? null : nearest.id) : zone.id)}
           className={cn(
             'relative flex w-full flex-wrap items-center gap-x-2 py-2 pl-3 pr-1 text-left transition-colors duration-fast',
@@ -118,7 +119,12 @@ export default function TriggerLadder({ row }: { row: CtaInstrumentEstimate }) {
             <span className="truncate text-caption font-medium text-ink-800">
               {ZONE_LABELS[zone.label_key] ?? zone.label_key}
             </span>
-            {crossed && <PulseDot className="shrink-0" />}
+            {crossed && (
+              <span className="inline-flex shrink-0 items-center gap-1 text-micro text-warn-700">
+                <PulseDot />
+                {t('盘中已穿越')}
+              </span>
+            )}
           </span>
           {/* 3 距离（右对齐定宽）——价格位置读数用中性色，红绿只留给净 Δ */}
           <span className="order-3 w-12 shrink-0 text-right text-caption text-ink-600 tnum sm:order-4">
@@ -172,7 +178,7 @@ export default function TriggerLadder({ row }: { row: CtaInstrumentEstimate }) {
                   </p>
                 )}
                 <p className="mt-0.5 text-micro text-ink-500 tnum">
-                  {t('估算 Δ{v}', { v: signed(zone.est_position_change) })}
+                  {t('估算仓位变化 Δ{v}', { v: signed(zone.est_position_change) })}
                   {' · '}
                   {t('趋势 {a} · 波动率 {b}', { a: signed(zone.trend_change), b: signed(zone.vol_change) })}
                 </p>
@@ -185,7 +191,7 @@ export default function TriggerLadder({ row }: { row: CtaInstrumentEstimate }) {
                   {zone.nearest_event_distance_pct !== null && (
                     <>
                       {' · '}
-                      {t('最近断点 {v}%', {
+                      {t('最近断点距离 {v}%', {
                         v: `${zone.nearest_event_distance_pct > 0 ? '+' : ''}${zone.nearest_event_distance_pct.toFixed(1)}`,
                       })}
                     </>

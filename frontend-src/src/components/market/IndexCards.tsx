@@ -62,7 +62,7 @@ export default function IndexCards({
   }, [focus, data]);
 
   /* 加载、出错、空态时还不知道有哪些市场，标题沿用「指数概览」 */
-  const overview = <Eyebrow>{t('指数概览')} · {t('延迟行情')}</Eyebrow>;
+  const overview = <Eyebrow>{t('市场指数')} · {t('延迟行情')}</Eyebrow>;
 
   if (loading) {
     return (
@@ -96,7 +96,7 @@ export default function IndexCards({
             variant="error"
             image="/empty-chart.svg"
             title={error.code === 503 ? t('数据暂不可用') : t('加载失败')}
-            description={error.code === 503 ? t('暂无指数数据') : error.message}
+            description={error.code === 503 ? t('暂无指数行情') : error.message}
             action={retry}
           />
         </div>
@@ -112,7 +112,7 @@ export default function IndexCards({
         <div className="card-surface">
           <EmptyState
             image="/empty-chart.svg"
-            title={t('暂无指数数据')}
+            title={t('暂无指数行情')}
             description={t('暂未取得指数行情，请稍后重试')}
             action={retry}
           />

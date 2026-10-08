@@ -47,14 +47,14 @@ export interface ResultTableProps {
 
 const HEADS: { label: string; align?: 'right' | 'center'; width?: string; hint?: ScoreHint }[] = [
   { label: '#', width: '36px' },
-  { label: t('代码') },
-  { label: t('强度分'), hint: SCORE_HINTS.strengthComposite },
+  { label: t('股票代码') },
+  { label: t('评分'), hint: SCORE_HINTS.strengthComposite },
   { label: t('分项') },
-  { label: t('价 / 涨跌'), align: 'right' },
-  { label: t('催化剂 · 72H') },
+  { label: t('价格／涨跌'), align: 'right' },
+  { label: t('消息 · 近 72 小时') },
   /* 数字是后端 avg_dollar_volume_20d（20 个交易日的平均美元成交额），不是
      当日成交额——列头如实限定口径（审计 2.3.2） */
-  { label: t('20日均额'), align: 'right' },
+  { label: t('20日均成交额'), align: 'right' },
   { label: '', width: '40px' },
 ];
 
@@ -174,8 +174,8 @@ export default function ResultTable({
                         <span className="flex flex-wrap items-center gap-1.5">
                           <span className="tnum text-body-s font-medium text-ink-800">{r.ticker}</span>
                           {r.sector && <SoftBadge className="max-w-[6rem]" title={t(r.sector)}><span className="truncate">{t(r.sector)}</span></SoftBadge>}
-                          {r.observationOnly && <SoftBadge data-testid={`screener-eod-watch-${r.ticker}`}>{t('观察')}</SoftBadge>}
-                          {r.listKind === 'composite' && r.status === 'eligible' && <SoftBadge tone="ok">{t('合格')}</SoftBadge>}
+                          {r.observationOnly && <SoftBadge data-testid={`screener-eod-watch-${r.ticker}`}>{t('观察候选')}</SoftBadge>}
+                          {r.listKind === 'composite' && r.status === 'eligible' && <SoftBadge tone="ok">{t('合格候选')}</SoftBadge>}
                         </span>
                         <span className="block max-w-[120px] truncate text-micro text-ink-400" title={r.name}>{r.name}</span>
                       </span>
@@ -223,7 +223,7 @@ export default function ResultTable({
                     <CatalystBadge summary={catalysts[r.ticker]} tipSide={i < 3 ? 'bottom' : 'top'} />
                   </td>
                   {/* 20 日平均美元成交额 */}
-                  <td className="px-2.5 py-2 text-right text-body-s text-ink-600 tnum" title={r.dollarVolumeProxyAvailable ? t('20 日均成交额代理') : undefined}>
+                  <td className="px-2.5 py-2 text-right text-body-s text-ink-600 tnum" title={r.dollarVolumeProxyAvailable ? t('20 日均成交额（估算）') : undefined}>
                     {dvPending ? <span className="text-ink-400">…</span> : dv === null || dv === undefined ? '—' : `$${fmtCompact(dv)}`}
                     {r.dollarVolumeProxyAvailable && <span className="ml-1 text-micro text-ink-400">{t('估')}</span>}
                   </td>

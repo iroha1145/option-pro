@@ -90,7 +90,7 @@ export default function ScanHistoryPopover({ history }: { history: ScanHistoryEn
         )}
       >
         <Icon name="clock-ny" size={14} />
-        {t('扫描历史')}
+        {t('扫描记录')}
       </button>
       <AnimatePresence>
         {open && (
@@ -106,7 +106,7 @@ export default function ScanHistoryPopover({ history }: { history: ScanHistoryEn
           >
             <p className="px-2 pb-1.5 pt-1 eyebrow">{t('最近 5 次扫描')}</p>
             {history.length === 0 ? (
-              <p className="px-2 py-4 text-center text-caption text-ink-400">{t('尚无扫描记录')}</p>
+              <p className="px-2 py-4 text-center text-caption text-ink-400">{t('暂无扫描记录')}</p>
             ) : (
               <ul className="divide-y divide-line">
                 {history.slice(0, 5).map((h, i) => (

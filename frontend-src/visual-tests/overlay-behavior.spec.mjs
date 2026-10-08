@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 const drawer = (page) => page.getByRole('dialog', { name: '测试详情' });
-const palette = (page) => page.getByRole('dialog', { name: '命令面板' });
+const palette = (page) => page.getByRole('dialog', { name: '快捷查找' });
 const overflow = (page) => page.evaluate(() => ({ value: document.body.style.getPropertyValue('overflow'), priority: document.body.style.getPropertyPriority('overflow') }));
 const activeId = (page) => page.evaluate(() => document.activeElement?.id);
 async function harness(page) { await page.goto('/visual-tests/support/overlay-harness.html'); await expect(page.locator('#drawer-trigger')).toBeVisible(); }
@@ -103,7 +103,7 @@ test('DrawingWorkspace, LayerMenu and nested confirmation keep one scroll and fo
   const workspace = page.getByRole('dialog', { name: '绘图工作区', exact: true });
   await expect(workspace).toBeVisible();
   await page.evaluate(() => window.overlayHarness.layers(true));
-  const layers = page.getByRole('dialog', { name: '算法与图层', exact: true });
+  const layers = page.getByRole('dialog', { name: '图表设置', exact: true });
   await expect(layers).toBeVisible();
   await page.keyboard.press('Tab');
   await expect.poll(() => layers.evaluate((el) => el.contains(document.activeElement))).toBe(true);
@@ -117,6 +117,42 @@ test('DrawingWorkspace, LayerMenu and nested confirmation keep one scroll and fo
   await expect(workspace).toBeVisible();
   await page.evaluate(() => window.overlayHarness.workspace(false));
   await expect.poll(() => overflow(page)).toEqual({ value: '', priority: '' });
+});
+
+test('drawing inspector shows styles only for a selected drawing and keeps file actions in one folded area', async ({ page }) => {
+  await harness(page);
+  await page.getByRole('button', { name: '打开绘图工作区', exact: true }).click();
+  const workspace = page.getByRole('dialog', { name: '绘图工作区', exact: true });
+  await expect(workspace).toBeVisible();
+  const colors = workspace.getByRole('group', { name: '颜色', exact: true });
+  const files = workspace.getByRole('button', { name: '绘图文件', exact: true });
+  const fileActions = ['导出绘图', '导入绘图文件', '导入本机绘图', '清空手绘'];
+
+  // 没有任何手绘图形：只有列表空态，没有样式区；文件操作收在「绘图文件」里。
+  await expect(workspace.getByText('当前没有手绘图形', { exact: true })).toBeVisible();
+  await expect(workspace.getByText('图形样式', { exact: true })).toHaveCount(0);
+  await expect(colors).toHaveCount(0);
+  await expect(files).toHaveAttribute('aria-expanded', 'false');
+  for (const name of fileActions) await expect(workspace.getByRole('button', { name, exact: true })).toHaveCount(0);
+
+  // 有图形但没选中：一句空态说明，仍没有一排禁用的样式控件。
+  await page.evaluate(() => window.overlayHarness.drawings('listed'));
+  await expect(workspace.getByText('选中图形后，可修改颜色、线宽和线型', { exact: true })).toBeVisible();
+  await expect(workspace.getByText('图形样式', { exact: true })).toHaveCount(0);
+  await expect(colors).toHaveCount(0);
+
+  // 选中后样式区出现，空态说明消失。
+  await page.evaluate(() => window.overlayHarness.drawings('selected'));
+  await expect(workspace.getByText('图形样式', { exact: true })).toBeVisible();
+  await expect(colors).toBeVisible();
+  await expect(workspace.getByText('选中图形后，可修改颜色、线宽和线型', { exact: true })).toHaveCount(0);
+
+  await files.click();
+  await expect(files).toHaveAttribute('aria-expanded', 'true');
+  for (const name of fileActions) await expect(workspace.getByRole('button', { name, exact: true })).toBeVisible();
+  // 清空仍先弹确认窗口，不直接清。
+  await workspace.getByRole('button', { name: '清空手绘', exact: true }).click();
+  await expect(page.getByRole('alertdialog', { name: '清空手绘' })).toBeVisible();
 });
 
 test('closed palette cancels pending debounce and ignores an already started reply', async ({ page }) => {
@@ -171,7 +207,7 @@ test('mobile sheet can sit beneath the palette and restores scrolling after both
 });
 
 test('nonmodal scan history still closes by clicking outside', async ({ page }) => {
-  await harness(page); await page.getByRole('button',{name:'扫描历史'}).click();
+  await harness(page); await page.getByRole('button',{name:'扫描记录'}).click();
   await expect(page.getByRole('dialog',{name:'最近扫描记录'})).toBeVisible();
   await page.locator('#background-button').click();
   await expect(page.getByRole('dialog',{name:'最近扫描记录'})).toBeHidden();
@@ -185,7 +221,7 @@ for (const [start, resized] of [[390, 1440], [1440, 320]]) {
     });
     await page.setViewportSize({ width: start, height: 900 });
     await page.goto('/screener');
-    const trigger = page.getByRole('button', { name: '扫描历史', exact: true });
+    const trigger = page.getByRole('button', { name: '扫描记录', exact: true });
     await trigger.click();
     const history = page.getByRole('dialog', { name: '最近扫描记录', exact: true });
     for (const width of [start, resized, start]) {

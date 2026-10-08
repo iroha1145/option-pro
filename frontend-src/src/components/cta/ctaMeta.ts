@@ -76,10 +76,18 @@ export const INSTRUMENT_NAMES: Record<string, string> = {
 export const instrumentName = (instrument: string, fallback: string): string =>
   INSTRUMENT_NAMES[instrument] ?? t(fallback);
 
+/* 三个周期模型的显示名按键映射（同 INSTRUMENT_NAMES 的理由：后端 label「快速（≈1 个月）」
+   直渲染会把措辞绑在后端常量上）；后端 label 只作兜底。「短期/中期/长期」与 MODEL_SHORT 同一套。 */
+export const SUBMODEL_LABELS: Record<string, string> = {
+  fast: t('短期（约 1 个月）'),
+  medium: t('中期（约 3 个月）'),
+  slow: t('长期（约 12 个月）'),
+};
+
 export const MODEL_SHORT: Record<string, string> = {
-  fast: t('快'),
-  medium: t('中'),
-  slow: t('慢'),
+  fast: t('短期'),
+  medium: t('中期'),
+  slow: t('长期'),
 };
 
 export const signed = (v: number | null, digits = 1): string =>

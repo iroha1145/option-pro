@@ -41,7 +41,7 @@ for (const width of [320, 390]) {
       const indicesReady = new Promise(resolve => { release = resolve; });
       const errors = await fixture(page, indicesReady);
       await page.goto(pathname);
-      const region = page.getByRole('region', { name: '指数概览', exact: true });
+      const region = page.getByRole('region', { name: '市场指数', exact: true });
       const skeleton = region.locator('[data-state="loading"]');
       await expect(skeleton.first()).toBeVisible();
       const expectedColumns = width < 360 ? 2 : 3;
@@ -81,8 +81,8 @@ for (const width of [320, 390]) {
 test('market page lists US indices apart from other markets and counts only US ones in the reading', async ({ page }) => {
   const errors = await fixture(page, Promise.resolve());
   await page.goto('/market');
-  await expect(page.getByRole('heading', { level: 1, name: '美股大盘强弱', exact: true })).toBeVisible();
-  const region = page.getByRole('region', { name: '指数概览', exact: true });
+  await expect(page.getByRole('heading', { level: 1, name: '美股概况', exact: true })).toBeVisible();
+  const region = page.getByRole('region', { name: '市场指数', exact: true });
   const labels = (scope) => scope.locator('button[aria-label$="详情"]').evaluateAll(els => els.map(el => el.getAttribute('aria-label')));
   await expect.poll(() => labels(region.getByRole('group', { name: '美股指数', exact: true })))
     .toEqual(['标普500 SPX 详情', '纳指综合 IXIC 详情', '道琼斯 DJI 详情']);
@@ -97,7 +97,7 @@ test('market page lists US indices apart from other markets and counts only US o
   const widths = (await boxes()).map(box => box.width);
   expect(Math.max(...widths) - Math.min(...widths)).toBeLessThanOrEqual(2);
   // 日经、上证不进美股的涨跌统计：5 个指数里只数 3 个美股指数。
-  const reading = page.getByRole('region', { name: '市场信号解读', exact: true });
+  const reading = page.getByRole('region', { name: '信号解读', exact: true });
   await expect(reading).toContainText('美股 3 个主要指数 1 涨 1 跌 1 平');
   await expect(reading).not.toContainText('5 个主要指数');
   expect(errors).toEqual([]);

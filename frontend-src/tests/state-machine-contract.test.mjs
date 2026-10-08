@@ -59,7 +59,7 @@ test('四处闪烁实现收敛到同一个 hook', async () => {
 
 test('桌面表格提供删除入口，且不会误触打开详情', async () => {
   const page = codeOf(await source('pages/Watchlist.tsx'));
-  assert.match(page, /从自选移除 \{ticker\}', \{ ticker: r\.ticker \}/);
+  assert.match(page, /移除关注 \{ticker\}', \{ ticker: r\.ticker \}/);
   assert.match(page, /event\.stopPropagation\(\);\s*\n\s*void onRemoveTicker\(r\.ticker\);/);
 });
 
@@ -124,7 +124,7 @@ test('详情与加载更多的失败都会显示出来', async () => {
   const detail = codeOf(await source('components/breakouts/EventDetail.tsx'));
   const feed = codeOf(await source('components/catalysts/FeedPanel.tsx'));
   assert.doesNotMatch(page, /\.catch\(\(\) => undefined\);/);
-  assert.match(detail, /详情加载失败，暂显示列表中的信息/);
+  assert.match(detail, /详情读取失败，暂显示列表中的信息/);
   assert.doesNotMatch(feed, /catch \{\s*\n\s*\} finally/);
   assert.match(feed, /\{__t\('加载更多失败：'\)\}\{moreError\.message\}/);
 });

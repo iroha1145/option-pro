@@ -1,11 +1,12 @@
 /**
  * Header（design.md §7.1）· sticky top-0 z-50 · 毛玻璃
- * Logo | 导航（滑动下划线） | ⌘K 触发 | 时段LED+纽约时钟 | 登录/退出
- * 移动端折叠为 48px：Logo + ⌘K + 时钟。
+ * Logo | 一级导航 6 项（滑动下划线） | ⌘K 触发 | 时段LED+纽约时钟 | 显示设置 | 登录/退出
+ * 移动端折叠为 48px：Logo + ⌘K + 显示设置 + 登录/退出。
  */
 import { useLayoutEffect, useRef, useState } from 'react';
-import { Link, NavLink, useLocation, useNavigate } from 'react-router';
-import { cn, isNavPathActive } from '@/lib/utils';
+import { Link, useLocation, useNavigate } from 'react-router';
+import { cn } from '@/lib/utils';
+import { NAV_GROUPS, NAV_PAGES, isNavGroupActive, navAriaCurrent } from '@/lib/navigation';
 import { useNow } from '@/hooks/useNow';
 import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/hooks/useToast';
@@ -15,26 +16,12 @@ import { fmtNyTime } from '@/lib/format';
 import { placeGlide } from '@/lib/transitions';
 import Icon from '@/components/icons';
 import { SessionDot } from '@/components/shared/SessionLED';
-import LanguageSwitcher from '@/components/LanguageSwitcher';
-import ColorModeSwitcher from '@/components/ColorModeSwitcher';
-import ThemeSwitcher from '@/components/ThemeSwitcher';
+import SettingsMenu from '@/components/SettingsMenu';
 import { t } from '../i18n/core.ts';
 import { routeIntentHandlers } from '../lib/prefetchRouteChunk.ts';
 
-export const NAV_ITEMS = [
-  { no: '01', label: t('首页'), path: '/' },
-  { no: '02', label: t('自选'), path: '/watchlist' },
-  { no: '03', label: t('选股'), path: '/screener' },
-  { no: '04', label: t('雷达'), path: '/breakouts' },
-  { no: '05', label: t('板块'), path: '/sectors' },
-  { no: '06', label: t('财报'), path: '/earnings' },
-  { no: '07', label: t('催化'), path: '/catalysts' },
-  /* 大盘强弱页此前没有任何常规入口（不在导航、不在 Dock、⌘K 也搜不到，
-     唯一通路是点指数跑马灯）——一个完整页面不该只有彩蛋入口。 */
-  { no: '08', label: t('大盘'), path: '/market' },
-  /* CTA 趋势资金：原大盘页 B4.5 卡剥离成的独立页面 */
-  { no: '09', label: t('CTA'), path: '/cta' },
-] as const;
+/* 命令面板逐页列出全部九个页面；顶栏只放 6 个一级入口（见 lib/navigation.ts）。 */
+export const NAV_ITEMS = NAV_PAGES;
 
 function NyClock({ className }: { className?: string }) {
   const now = useNow(1000);
@@ -61,7 +48,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
   const hoverShownRef = useRef(false);
   const glideReadyRef = useRef(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const activePath = NAV_ITEMS.find((item) => isNavPathActive(location.pathname, item.path))?.path ?? '';
+  const activePath = NAV_GROUPS.find((group) => isNavGroupActive(location.pathname, group))?.path ?? '';
 
   const alignRef = useRef<(animate: boolean) => void>(() => undefined);
   useLayoutEffect(() => {
@@ -153,14 +140,17 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
         >
           <span ref={hoverRef} aria-hidden="true" className="nav-hover" />
           <span ref={glideRef} data-nav-glide="" aria-hidden="true" className="nav-glide" />
-          {NAV_ITEMS.map((item) => {
-            const active = isNavPathActive(location.pathname, item.path);
+          {NAV_GROUPS.map((item) => {
+            /* 选股、市场两组：任一子页打开时一级入口亮起；单页入口按自身路径边界匹配。 */
+            const active = isNavGroupActive(location.pathname, item);
             const intent = routeIntentHandlers(item.path);
             return (
-            <NavLink
+            /* 不用 NavLink：它只在自己的 to 命中时写 aria-current，组内其他子页（/breakouts、/cta…）
+               看着选中、读屏却不报「当前」。改由 navAriaCurrent 统一给 page / true。 */
+            <Link
               key={item.path}
               to={item.path}
-              end={item.path === '/'}
+              aria-current={navAriaCurrent(location.pathname, item)}
               data-active={active}
               {...intent}
               onPointerEnter={(event) => {
@@ -168,10 +158,8 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
                 if (event.pointerType === 'mouse') showNavHover(event.currentTarget);
               }}
               className={cn(
-                /* R4 加到 9 项后 1440(xl) 逼近满宽：sub-2xl 收 px-2，登录态
-                   右侧操作区才不会被挤出视口；≥2xl 恢复 3.5。
-                   relative：盖在悬停浅底之上。 */
-                'relative flex h-full items-center gap-1.5 whitespace-nowrap px-2 text-body-s transition-colors duration-fast 2xl:px-3.5',
+                /* 一级入口收成 6 项后 1280 也放得下，统一 px-3。relative：盖在悬停浅底之上。 */
+                'relative flex h-full items-center gap-1.5 whitespace-nowrap px-3 text-body-s transition-colors duration-fast',
                 active ? 'font-medium text-brand-600' : 'text-ink-500 hover:text-ink-800',
               )}
             >
@@ -181,19 +169,19 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
               <span data-nav-label className="relative flex h-full items-center">
                 {item.label}
               </span>
-            </NavLink>
+            </Link>
             );
           })}
         </nav>
 
         {/* 右侧操作区 */}
-        <div className="ml-auto flex items-center gap-2.5 md:gap-3.5 xl:ml-0">
+        {/* 手机上每个操作外面都有 44px 的透明触控区，按钮之间已隔开 12px，间距收到 4px */}
+        <div className="ml-auto flex items-center gap-1 md:gap-3.5 xl:ml-0">
           <button
             onClick={onOpenPalette}
-            /* xl–2xl 是 9 项导航的拥挤带（审计：1280 + 长用户名/英日文风险）：
-               该档只留搜索图标（下方按钮），文字框在 md–xl 与 ≥2xl 显示。 */
-            className="touch-target hidden h-8 w-44 items-center gap-2 rounded-md border border-line bg-card-warm px-3 text-caption text-ink-400 transition-[border-color,box-shadow,color] duration-fast hover:border-line-strong hover:text-ink-500 focus-visible:border-brand-500 focus-visible:shadow-focus-ring md:flex xl:hidden 2xl:flex 2xl:w-[220px]"
-            aria-label={t("打开命令面板")}
+            /* 一级入口收成 6 项后 xl 不再拥挤，文字搜索框从 md 起常显（此前 xl–2xl 只留图标）。 */
+            className="touch-target hidden h-8 w-44 items-center gap-2 rounded-md border border-line bg-card-warm px-3 text-caption text-ink-400 transition-[border-color,box-shadow,color] duration-fast hover:border-line-strong hover:text-ink-500 focus-visible:border-brand-500 focus-visible:shadow-focus-ring md:flex 2xl:w-[220px]"
+            aria-label={t("搜索代码或功能")}
           >
             <Icon name="search" size={14} />
             <span className="flex-1 truncate text-left">{t('搜索代码或功能…')}</span>
@@ -203,10 +191,12 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
           </button>
           <button
             onClick={onOpenPalette}
-            className="touch-target flex size-9 items-center justify-center rounded-md border border-line bg-card-warm text-ink-500 shadow-btn md:hidden xl:flex xl:size-8 2xl:hidden"
+            className="touch-target header-action md:hidden"
             aria-label={t("搜索")}
           >
-            <Icon name="search" size={16} />
+            <span className="header-chip">
+              <Icon name="search" size={15} />
+            </span>
           </button>
 
           <span className="hidden shrink-0 items-center gap-2 md:flex" aria-label={t('市场时段：{label}', { label: status?.label ?? t('未知') })}>
@@ -214,26 +204,26 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
             <NyClock />
           </span>
 
-          <LanguageSwitcher className="hidden md:block" />
-          <ColorModeSwitcher className="hidden xl:flex" />
-          <ThemeSwitcher />
+          <SettingsMenu />
 
           {isSignedIn ? (
             <button
               onClick={handleLogout}
               disabled={loggingOut}
-              className="touch-target flex h-8 max-w-[140px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-card px-3 text-caption text-ink-500 shadow-btn transition-colors duration-fast hover:text-ink-800 disabled:cursor-wait disabled:opacity-60 md:max-w-none"
+              className="touch-target header-action max-w-[140px] md:max-w-none"
             >
-              <Icon name="logout" size={14} className="shrink-0" />
-              <span className="truncate">{username ? t('退出 {name}', { name: username }) : t('退出')}</span>
+              <span className="header-chip px-3">
+                <Icon name="logout" size={14} className="shrink-0" />
+                <span className="truncate">{username ? t('退出 {name}', { name: username }) : t('退出')}</span>
+              </span>
             </button>
           ) : (
             <Link
               to="/login"
               {...routeIntentHandlers('/login')}
-              className="btn-primary btn-sm touch-target shrink-0 whitespace-nowrap"
+              className="touch-target header-action"
             >
-              {t('登录')}
+              <span className="header-chip header-chip-primary">{t('登录')}</span>
             </Link>
           )}
         </div>

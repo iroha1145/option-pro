@@ -23,14 +23,14 @@ test('real mock calendar keeps one report per company while retaining expansion 
   await page.getByRole('button', { name: /显示更多/ }).click();
   await expect.poll(() => visibleRows.count()).toBeGreaterThan(24);
 
-  await page.getByRole('tab', { name: '月', exact: true }).click();
-  const calendar = page.getByRole('region', { name: '月历', exact: true });
+  await page.getByRole('tab', { name: '月历', exact: true }).click();
+  const calendar = page.getByRole('region', { name: '财报月历', exact: true });
   await expect(calendar.getByText('+1', { exact: true }).first()).toBeVisible();
   await calendar.getByRole('button', { name: '上个月', exact: true }).click();
   await expect(calendar.getByRole('button', { name: /^NVDA .*财报/ })).toHaveCount(0);
   await calendar.getByRole('button', { name: '下个月', exact: true }).click();
   await calendar.getByRole('button', { name: /^NVDA .*财报/ }).click();
-  await expect(page.getByRole('complementary', { name: 'AI 影响分析', exact: true })).toContainText('财报日 2026-09-14');
+  await expect(page.getByRole('complementary', { name: '财报影响分析', exact: true })).toContainText('财报日 2026-09-14');
   await expect(list.locator('[role="button"][aria-pressed="true"]').filter({ visible: true })).toHaveCount(1);
   await expect(list.locator('[role="button"][aria-pressed="true"]').filter({ visible: true })).toContainText('NVDA');
 

@@ -279,7 +279,7 @@ export default function MacroHistoryChart({
 
       {modules.length > 0 && (
         <SelectionViewport>
-          <div className="mobile-selection-rail mt-3 flex flex-wrap gap-1.5" role="group" aria-label={t("叠加模块线")}>
+          <div className="mobile-selection-rail mt-3 flex flex-wrap gap-1.5" role="group" aria-label={t("叠加类别线")}>
             {modules.map((module) => {
               const active = shownModules.includes(module.moduleId);
               return (

@@ -28,11 +28,11 @@ export default function IvRefreshControl({
   const disabled = busy || cooling;
 
   let label = t('更新 IV');
-  if (submitting) label = t('正在提交');
+  if (submitting) label = t('提交中');
   else if (queued) label = t('等待更新');
   else if (running) label = t('正在更新');
   else if (cooling) label = t('{n} 秒后可更新', { n: retrySeconds });
-  else if (refresh.status === 'failed' || refresh.status === 'cooldown') label = t('重新更新');
+  else if (refresh.status === 'failed' || refresh.status === 'cooldown') label = t('再次更新');
 
   let status: string | null = null;
   if (queued) status = t('更新已排队，完成后会自动显示');

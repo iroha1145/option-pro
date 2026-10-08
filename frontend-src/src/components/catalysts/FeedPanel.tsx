@@ -97,7 +97,7 @@ export function NewsRow({
           <span aria-hidden="true">·</span>
           <span className="tnum">{fmtRelative(item.publishedAt)}</span>
           {item.sourceCount > 1 && (
-            <SoftBadge className="tnum" title={__t("多源确认条数")}>
+            <SoftBadge className="tnum" title={__t("报道来源数量")}>
               {item.sourceCount} {__t('源')}
             </SoftBadge>
           )}
@@ -141,8 +141,8 @@ export function NewsRow({
           type="button"
           onClick={() => onOpen(item.newsId)}
           className={cn('control-button ai-action btn-icon', a && 'is-ready')}
-          title={__t("查看 / 生成 AI 分析")}
-          aria-label={__t("查看 / 生成 AI 分析")}
+          title={__t("查看 / 生成分析")}
+          aria-label={__t("查看 / 生成分析")}
         >
           <AnalysisIcon size={14} />
         </button>
@@ -290,21 +290,21 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
           image="/empty-news.svg"
           title={
             hasFilters
-              ? __t('这个角度暂时没有新闻')
+              ? __t('当前条件下暂无新闻')
               : hiddenUnanalyzed > 0
-                ? __t('已收录、等中文分析')
+                ? __t('已收录，等待中文内容')
                 : hiddenCountUnknown
-                  ? __t('新闻数量暂不可确认')
+                  ? __t('暂时无法确认新闻数量')
                   : __t('暂时没有新闻')
           }
           description={
             hasFilters
-              ? __t('可放宽筛选条件，或清除条件查看全部新闻')
+              ? __t('可放宽筛选条件，或清空条件查看全部新闻')
               : hiddenUnanalyzed > 0
                 ? __t('新闻已收录，中文标题与摘要生成后自动显示')
                 : hiddenCountUnknown
                   ? __t('暂时无法确认是否有待分析新闻，请稍后重试')
-                  : __t('新闻采集恢复后将自动出现在这里')
+                  : __t('新闻获取恢复后将自动出现在这里')
           }
           action={
             hasFilters ? (
@@ -313,7 +313,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
                 className="btn-primary"
               >
                 <Icon name="x" size={13} />
-                {__t('清除过滤')}
+                {__t('清空条件')}
               </button>
             ) : hiddenCountUnknown ? (
               <button type="button" className="control-button" onClick={() => void fetchFirst()}>{__t('重试')}</button>
@@ -343,7 +343,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
                 className="control-button"
               >
                 {loadingMore && <Spinner size={14} tone="muted" />}
-                {__t('加载更多')}
+                {__t('查看更多')}
               </button>
             ) : (
               <p className="text-micro text-ink-400">{__t('已加载全部')} {items.length} {__t('条')}</p>

@@ -5,8 +5,8 @@ import { useQuoteSymbols, useRadarVersion, useRadarUpdates } from '@/hooks/useLi
  * §03 突破雷达（原版布局 · Paper Terminal 皮肤）
  * 页头带：§03 眉题 + 衬线大标 + 副标（仅流程句）+ 右侧紧凑状态条
  *        （扫描启用 LED / 快照与活跃条数 / 最近扫描 / 市场时段 chip / Worker / 下次扫描倒计时 · 查看范围）
- * 筛选行：状态与评分分组 + ticker 聚焦清除 + owner「立即扫描」
- * 当日信号：左 7/12 lead 压缩大卡（不动）+ 右 5/12 吸顶 HistoryRail「历史事件回溯」压缩面板
+ * 筛选行：状态下拉 + 「更多筛选」（最低评分、排序；折叠时一行摘要）+ 代码筛选清除 + owner「立即扫描」
+ * 当日信号：左 7/12 lead 压缩大卡（不动）+ 右 5/12 吸顶 HistoryRail「历史事件」压缩面板
  * 其下：SignalCards 个股小卡网格（当日其余事件，3 列 / 移动单列，V3 小卡结构恢复）
  * 事件详情模态保留 · status/current 30s 轮询 · 空态/骨架/503/移动端单列
  */
@@ -31,7 +31,9 @@ import { cn } from '@/lib/utils';
 import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import Segmented from '@/components/shared/Segmented';
 import FilterButton from '@/components/shared/FilterButton';
+import MenuSelect from '@/components/shared/MenuSelect';
 import SelectionViewport from '@/components/shared/SelectionViewport';
+import SectionNav from '@/components/shared/SectionNav';
 import { fmtTimeHHMMSS } from '@/lib/format';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonCard } from '@/components/shared/Skeleton';
@@ -78,17 +80,24 @@ const STATUS_CAPS: { value: StatusFilter; label: string }[] = [
   { value: 'CONFIRMED', label: __t('已确认') },
   { value: 'HOLDING', label: __t('保持中') },
   { value: 'RETESTING', label: __t('回踩中') },
-  { value: 'FAILED', label: __t('突破失败') },
+  /* 与卡片上的生命周期标签同名（LIFECYCLE_CN.FAILED）：同一状态只用一套中文 */
+  { value: 'FAILED', label: __t('已失效') },
 ];
 const SCORE_CAPS = [
-  { value: 0, label: __t('不限') },
+  { value: 0, label: __t('不限评分') },
   { value: 65, label: __t('65 分以上') },
   { value: 80, label: __t('80 分以上') },
 ];
 
 const WATCH_SCOPE_OPTIONS = [
-  { value: 'all', label: __t('查看全部') },
-  { value: 'watchlist', label: __t('查看自选') },
+  { value: 'all', label: __t('全部信号') },
+  { value: 'watchlist', label: __t('我的关注') },
+];
+
+const SORT_OPTIONS: { value: RadarSortChoice; label: string }[] = [
+  { value: 'follow_default', label: __t('跟随默认') },
+  { value: 'production', label: __t('原雷达排序') },
+  { value: 't1_daily_priority', label: __t('日线量价优先（试用）') },
 ];
 
 /* ---------------- 市场时段 chip（§1.6 色） ---------------- */
@@ -268,7 +277,7 @@ export default function Breakouts() {
         startedSort,
         currentSort: requestedSortRef.current,
       })) return;
-      setHistoryMoreError(error instanceof ApiError ? error : new ApiError(500, __t('加载更多失败')));
+      setHistoryMoreError(error instanceof ApiError ? error : new ApiError(500, __t('更早事件读取失败')));
     } finally {
       if (startedRequestId === historyRequestId.current) {
         setHistoryLoadingMore(false);
@@ -398,7 +407,7 @@ export default function Breakouts() {
       setDetailError(null);
     }).catch((error: unknown) => {
       if (request !== selectedDetailRequest.current || detailForRef.current !== selectedId) return;
-      setDetailError(error instanceof ApiError ? error : new ApiError(500, __t('详情加载失败')));
+      setDetailError(error instanceof ApiError ? error : new ApiError(500, __t('详情读取失败')));
     });
   }, [selectedId]);
   useEffect(() => {
@@ -446,7 +455,7 @@ export default function Breakouts() {
     try {
       await runtimeApi.workerAction('breakout_refresh');
       if (!scanMounted.current) return;
-      toast.success(__t('已请求刷新'), __t('扫描任务已受理，完成后自动更新'));
+      toast.success(__t('扫描请求已受理'), __t('完成后自动更新'));
       statusQ.refresh();
       later(() => {
         statusQ.refresh();
@@ -454,7 +463,7 @@ export default function Breakouts() {
         eventsQ.refresh();
       }, 10_000);
     } catch {
-      if (scanMounted.current) toast.error(__t('触发失败'), __t('扫描任务未被受理，请稍后重试'));
+      if (scanMounted.current) toast.error(__t('触发失败'), __t('扫描请求未被受理，请稍后重试'));
     } finally {
       if (scanMounted.current) later(() => setScanning(false), 700);
     }
@@ -467,6 +476,14 @@ export default function Breakouts() {
     : '—';
   const readAt = currentQ.lastUpdatedAt ? fmtTimeHHMMSS(currentQ.lastUpdatedAt) : '—';
   const currentError = currentQ.error && !currentQ.data ? currentQ.error : null;
+
+  /* 「更多筛选」折叠时的一行摘要：范围、状态、最低评分、排序都是当前生效的条件。 */
+  const filterSummary: [string, string][] = [
+    [__t('范围'), WATCH_SCOPE_OPTIONS.find((option) => option.value === (onlyWatch ? 'watchlist' : 'all'))?.label ?? ''],
+    [__t('状态'), STATUS_CAPS.find((option) => option.value === statusFilter)?.label ?? ''],
+    [__t('最低评分'), SCORE_CAPS.find((option) => option.value === minScore)?.label ?? ''],
+    [__t('排序'), SORT_OPTIONS.find((option) => option.value === radarSort)?.label ?? ''],
+  ];
 
   /* 历史事件回溯压缩面板（右栏吸顶 / 空态·错误态下整宽兜底，保持历史可访问） */
   const historyRailEl = (
@@ -489,6 +506,7 @@ export default function Breakouts() {
 
   return (
     <div className="radar-page">
+      <SectionNav section="screen" />
       {/* 页头带：§03 眉题 + 衬线大标 + 副标 · 右侧紧凑状态条 */}
       <motion.header
         initial={{ opacity: 0, y: 14 }}
@@ -502,7 +520,7 @@ export default function Breakouts() {
         <div className="radar-status flex flex-wrap items-center justify-end gap-x-4 gap-y-2 pb-1 text-caption text-ink-500">
           <span className="inline-flex items-center gap-1.5">
             <span className={cn('size-2 rounded-full', status?.enabled ? 'bg-ok-600 animate-led-pulse' : 'bg-ink-300')} aria-hidden="true" />
-            {status ? (status.enabled ? __t('扫描已启用') : __t('扫描已暂停')) : __t('状态读取中…')}
+            {status ? (status.enabled ? __t('扫描已启用') : __t('扫描已暂停')) : __t('正在读取扫描状态…')}
           </span>
           <span className="tnum">
             {__t('数据截至')} {snapshotAt} {__t('· 读取')} {readAt} · <span className="text-ink-700">{currentAll.length}</span> {__t('条活跃')}
@@ -546,7 +564,7 @@ export default function Breakouts() {
             {/* 自选未就绪时说清楚过滤还没生效，而不是先给一个假空态（审计 P2-18） */}
             {watchFilterPending && (
               <span className="text-micro text-ink-400">
-                {watchFailed ? __t('自选读取失败 · 暂显示全部') : __t('自选加载中 · 暂显示全部')}
+                {watchFailed ? __t('关注读取失败，暂显示全部信号') : __t('正在读取关注，暂显示全部信号')}
               </span>
             )}
           </div>
@@ -554,53 +572,24 @@ export default function Breakouts() {
       </motion.header>
       <StockDataCoverage state={readiness} className="mt-4" />
 
-      {/* 同一工具栏内明确区分两个筛选维度；窄屏按组换行，触控目标不互相覆盖。 */}
+      {/* 状态收成一个下拉；最低评分与排序收进「更多筛选」，折叠时一行摘要仍写明范围、状态、评分与排序。 */}
       <div className="radar-filterbar mt-4 flex flex-wrap items-center gap-x-5 gap-y-3 pb-4" data-breakout-filters="">
         <div className="flex max-w-full flex-wrap items-center gap-2">
           <span className="flex items-center gap-1.5 text-caption text-ink-500">
             <Icon name="filter-funnel" size={13} />
             {__t('状态')}
           </span>
-          <SelectionViewport>
-          <div className="filter-group" role="group" aria-label={__t("状态筛选")}>
-            {STATUS_CAPS.map((c) => (
-              <FilterButton key={c.value} active={statusFilter === c.value} onClick={() => setStatusFilter(c.value)}>
-                {c.label}
-              </FilterButton>
-            ))}
-          </div>
-          </SelectionViewport>
-        </div>
-        <div className="flex max-w-full flex-wrap items-center gap-2">
-          <span className="text-caption text-ink-500">{__t('评分')}</span>
-          <SelectionViewport>
-          <div className="filter-group" role="group" aria-label={__t("评分筛选")}>
-            {SCORE_CAPS.map((c) => (
-              <FilterButton key={c.value} active={minScore === c.value} onClick={() => setMinScore(c.value)} aria-label={__t('评分{label}', { label: c.label })}>
-                {c.label}
-              </FilterButton>
-            ))}
-          </div>
-          </SelectionViewport>
-        </div>
-        <div className="flex max-w-full flex-wrap items-center gap-2">
-          <span className="text-caption text-ink-500">{__t('排序')}</span>
-          <Segmented<RadarSortChoice>
-            options={[
-              { value: 'follow_default', label: __t('跟随默认') },
-              { value: 'production', label: __t('原雷达排序') },
-              { value: 't1_daily_priority', label: __t('日线量价条件优先（试用）') },
-            ]}
-            value={radarSort}
-            onChange={updateRadarSort}
-            scrollable
-            ariaLabel={__t('雷达排序算法')}
+          <MenuSelect
+            ariaLabel={__t('状态筛选')}
+            value={statusFilter}
+            onChange={setStatusFilter}
+            options={STATUS_CAPS}
           />
         </div>
         {tickerFilter && (
           <button
             onClick={() => setTickerFilter('')}
-            aria-label={__t('清除代码聚焦 {ticker}', { ticker: tickerFilter })}
+            aria-label={__t('清除代码筛选 {ticker}', { ticker: tickerFilter })}
             type="button"
             className="control-button tnum"
           >
@@ -624,12 +613,56 @@ export default function Breakouts() {
             </button>
           )}
         </span>
+        <details className="group/more basis-full border-t border-line/70 pt-3" data-testid="breakout-more-filters">
+          <summary className="disclosure-trigger flex cursor-pointer list-none flex-wrap items-center gap-x-4 gap-y-2 rounded-lg py-1 text-caption text-ink-500 outline-none transition-colors duration-fast hover:text-ink-800 focus-visible:ring-2 focus-visible:ring-brand-400/40 [&::-webkit-details-marker]:hidden">
+            <span className="inline-flex shrink-0 items-center gap-2 font-medium text-ink-700">
+              {__t('更多筛选')}
+              <Icon name="chevron-down" size={13} className="text-ink-400 transition-transform group-open/more:rotate-180" />
+            </span>
+            <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-micro" data-testid="breakout-filter-summary">
+              {filterSummary.map(([name, value]) => (
+                <span key={name}>
+                  <span className="text-ink-400">{name}</span> <span className="text-ink-700">{value}</span>
+                </span>
+              ))}
+            </span>
+          </summary>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-3 pt-3">
+            <div className="flex max-w-full flex-wrap items-center gap-2">
+              <span className="text-caption text-ink-500">{__t('最低评分')}</span>
+              <SelectionViewport>
+              <div className="filter-group" role="group" aria-label={__t("评分筛选")}>
+                {SCORE_CAPS.map((c) => (
+                  <FilterButton
+                    key={c.value}
+                    active={minScore === c.value}
+                    onClick={() => setMinScore(c.value)}
+                    aria-label={c.value > 0 ? __t('评分{label}', { label: c.label }) : c.label}
+                  >
+                    {c.label}
+                  </FilterButton>
+                ))}
+              </div>
+              </SelectionViewport>
+            </div>
+            <div className="flex max-w-full flex-wrap items-center gap-2">
+              <span className="text-caption text-ink-500">{__t('排序')}</span>
+              <Segmented<RadarSortChoice>
+                options={SORT_OPTIONS}
+                value={radarSort}
+                onChange={updateRadarSort}
+                scrollable
+                ariaLabel={__t('雷达排序算法')}
+              />
+            </div>
+          </div>
+        </details>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-caption text-ink-500">
         {/* 只在「跟随默认」时说明实际生效的是哪种排序；手动选了的，分段控件上已经写着 */}
         {radarSort === 'follow_default' && (
           <span data-testid="radar-effective-algorithm">
-            {__t('默认排序：{name}', { name: showT1 ? __t('日线量价条件优先（试用）') : __t('原雷达排序') })}
+            {__t('默认排序：{name}', { name: showT1 ? __t('日线量价优先（试用）') : __t('原雷达排序') })}
           </span>
         )}
         {showT1 && (
@@ -661,7 +694,7 @@ export default function Breakouts() {
         <div className="radar-section-heading mb-4 flex items-end justify-between pb-1">
           <h2 className="text-h2 text-ink-900">{__t('当日信号')}</h2>
           <p className="text-caption text-ink-400 tnum">
-            {current.length} {__t('个活跃')}{onlyWatch ? __t(' · 只看自选') : ''}
+            {current.length} {__t('个活跃')}{onlyWatch ? __t(' · 只看关注') : ''}
           </p>
         </div>
         {currentQ.loading ? (
@@ -682,7 +715,7 @@ export default function Breakouts() {
               <EmptyState
                 variant="error"
                 image="/empty-radar.svg"
-                title={currentError.code === 503 ? __t('扫描数据暂不可用') : __t('信号加载失败')}
+                title={currentError.code === 503 ? __t('扫描数据暂不可用') : __t('信号读取失败')}
                 description={currentError.code === 503 ? __t('稍后刷新再试') : currentError.message}
                 action={
                   <button
@@ -703,12 +736,12 @@ export default function Breakouts() {
             <div className="card-surface">
               <EmptyState
                 image="/empty-radar.svg"
-                title={statusFilter !== 'ALL' || minScore > 0 || tickerFilter ? __t('没有符合筛选的信号') : __t('本轮暂无突破信号')}
+                title={statusFilter !== 'ALL' || minScore > 0 || tickerFilter ? __t('没有符合筛选条件的信号') : __t('本轮暂无突破信号')}
                 description={
                   statusFilter !== 'ALL' || minScore > 0 || tickerFilter
-                    ? __t('放宽筛选条件，或清除代码聚焦试试')
+                    ? __t('放宽筛选条件，或清除代码筛选后重试')
                     : onlyWatch
-                      ? __t('自选池本轮暂无触发，试试「查看全部」')
+                      ? __t('关注股票本轮暂无触发，可切换到全部信号')
                       : __t('下一轮扫描在冷却结束后自动开始')
                 }
                 action={
@@ -717,7 +750,7 @@ export default function Breakouts() {
                     className="btn-primary"
                   >
                     <Icon name="clock-ny" size={14} />
-                    {__t('看看历史事件')}
+                    {__t('查看历史')}
                   </button>
                 }
               />

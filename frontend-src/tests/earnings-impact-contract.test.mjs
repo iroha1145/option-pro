@@ -460,7 +460,7 @@ test('财报日历保留全市场覆盖状态和真实供应方', () => {
     assert.equal(source.includes(field), true, `财报元数据缺少 ${field}`);
   }
   assert.equal(source.includes('mapUpcomingPayload'), true);
-  assert.equal(page.includes('财报数据暂时不完整'), true);
+  assert.equal(page.includes('财报数据不全'), true);
   assert.equal(page.includes('部分公司数据缺失'), true);
   assert.equal(page.includes('const coverageLimited = q.data?.dataLimited === true;'), true);
   assert.equal(page.includes("q.data?.sourceStatus === 'degraded'"), false);
@@ -657,6 +657,13 @@ test('财报模型使用精确报告级接口、逐条进度和管理员批量�
   const api = fs.readFileSync(moduleSourcePath, 'utf8');
   const card = fs.readFileSync(cardSourcePath, 'utf8');
   const controls = fs.readFileSync(controlsSourcePath, 'utf8');
+  const page = fs.readFileSync(pageSourcePath, 'utf8');
+
+  // 管理员的批量设置收进具名展开区「财报设置」：仅管理员可见，更新日历按钮由页面传入。
+  assert.equal(controls.includes("aria-label={t('财报设置')}"), true);
+  assert.equal(controls.includes('aria-expanded={open}'), true);
+  assert.equal(controls.includes('if (!isOwner) return null;'), true);
+  assert.match(page, /<EarningsAnalysisControls[\s\S]*?calendarControls=\{\s*<EarningsRefreshButton/);
 
   assert.equal(card.includes('earningsApi.reportAnalysis'), true);
   assert.equal(card.includes('earningsApi.requestReportAnalysis'), true);
@@ -719,6 +726,6 @@ test('股票搜索失败显示明确错误态，不伪装成空结果', () => {
   assert.equal(source.includes('catch (cause)'), true);
   assert.equal(source.includes('setSearchError(searchErrorText(cause))'), true);
   assert.equal(source.includes('role="alert"'), true);
-  assert.equal(source.includes('搜索未完成'), true);
+  assert.equal(source.includes('搜索失败'), true);
   assert.equal(source.includes('!searching && !searchError && flat.length === 0'), true);
 });

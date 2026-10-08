@@ -220,19 +220,28 @@ test('系统外观监听兼容 addListener，清空本地存储会重置偏好',
   assert.match(sourceText, /event\.key !== THEME_KEY && event\.key !== null/);
 });
 
-test('顶栏、登录页与手机更多菜单都有外观开关', async () => {
+test('页头设置菜单（桌面与手机同一入口）与登录页都有外观开关', async () => {
   const navbar = codeOf(await source('components/Navbar.tsx'));
   const login = codeOf(await source('pages/Login.tsx'));
-  const dock = codeOf(await source('components/MobileDock.tsx'));
+  const settings = codeOf(await source('components/SettingsMenu.tsx'));
   const switcher = codeOf(await source('components/ThemeSwitcher.tsx'));
-  assert.match(navbar, /<ThemeSwitcher\s*\/>/);
-  assert.doesNotMatch(navbar, /<ThemeSwitcher[^>]*hidden/);
+  assert.match(navbar, /<SettingsMenu\s*\/>/);
+  assert.doesNotMatch(navbar, /<SettingsMenu[^>]*hidden/);
+  assert.match(settings, /setThemePreference\(option\.value\)/);
+  assert.match(settings, /跟随系统/);
+  assert.match(settings, /useThemePreference\(\)/);
   assert.match(login, /<ThemeSwitcher\s*\/>/);
-  assert.match(dock, /setThemePreference/);
-  assert.match(dock, /跟随系统/);
   assert.match(switcher, /useThemePreference\(\)/);
   assert.match(switcher, /setThemePreference/);
   assert.match(switcher, /role="menuitemradio"/);
+});
+
+test('手机底栏不再放外观开关：外观只在页头设置菜单里改', async () => {
+  /* 去掉注释再匹配：文件头的说明里会提到「外观」，注释不算数。 */
+  const dock = codeOf(await source('components/MobileDock.tsx'));
+  assert.doesNotMatch(dock, /setThemePreference/, '底栏不再直接改外观偏好');
+  assert.doesNotMatch(dock, /跟随系统/, '底栏不再出现「跟随系统」选项');
+  assert.doesNotMatch(dock, /ThemeSwitcher/, '底栏也不能换个组件把外观开关放回来');
 });
 
 test('图表与热力在外观变化时重建 option / 订阅 useAppearance', async () => {

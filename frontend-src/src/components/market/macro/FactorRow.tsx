@@ -107,13 +107,13 @@ export function FactorCard({ factor }: { factor: MacroFactor }) {
           </dd>
         </div>
         <div className="min-w-0">
-          <dt className="text-micro text-ink-400">{t('7 日分数变化')}</dt>
+          <dt className="text-micro text-ink-400">{t('7 日评分变化')}</dt>
           <dd>
             <ChangeBadge value={factor.scoreChange7d} size="sm" format="points" />
           </dd>
         </div>
         <div className="min-w-0">
-          <dt className="text-micro text-ink-400">{t('数据截止')}</dt>
+          <dt className="text-micro text-ink-400">{t('数据截至')}</dt>
           <dd className="truncate text-micro text-ink-400 tnum">
             {factor.dataThrough ?? '—'}
           </dd>

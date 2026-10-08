@@ -10,6 +10,7 @@ import ConfirmDialog from '../../src/components/catalysts/ConfirmDialog';
 import LayerMenu from '../../src/components/detail/chart-drawings/LayerMenu';
 import DrawingWorkspace from '../../src/components/detail/chart-drawings/DrawingWorkspace';
 import type { DrawingController } from '../../src/components/detail/chart-drawings/useDrawingController';
+import type { ChartDrawing } from '../../src/components/detail/chart-drawings/types';
 import { settingsFromPreset } from '../../src/components/detail/chart-drawings/analysis/settings';
 import MenuSelect from '../../src/components/shared/MenuSelect';
 import InfoHint from '../../src/components/shared/InfoHint';
@@ -27,6 +28,12 @@ const searchCalls: string[] = [];
 const searchReplies = new Map<string, (results: { ticker: string; name: string; sector: string }[]) => void>();
 stocksApi.search = (q) => { searchCalls.push(q); return new Promise((resolve) => searchReplies.set(q, resolve)); };
 const noop = () => {};
+const sampleDrawing: ChartDrawing = {
+  schemaVersion: 1, id: 'harness-line', ticker: 'AAPL', range: '1d', adjustment: 'raw', kind: 'horizontal',
+  anchors: [{ time: '2026-01-02T14:30:00Z', barKey: '2026-01-02', price: 100 }],
+  style: { color: '#2E46E0', width: 2, dash: 'solid' }, locked: false, hidden: false, zOrder: 1, revision: 1,
+  createdAt: '2026-01-02T14:30:00Z', updatedAt: '2026-01-02T14:30:00Z',
+};
 const eventFixture = normalizeBreakoutEvent(getBreakoutEventDetail(getBreakoutEvents().items[0].id));
 
 export function Harness() {
@@ -37,18 +44,20 @@ export function Harness() {
   const [confirm, setConfirm] = useState(false);
   const [layers, setLayers] = useState(false);
   const [workspace, setWorkspace] = useState(false);
+  const [drawingState, setDrawingState] = useState<'none' | 'listed' | 'selected'>('none');
   const [trigger, setTrigger] = useState(true);
   const [value, setValue] = useState(0);
   const [settings, setSettings] = useState(() => settingsFromPreset('structure'));
   const controller = new Proxy({
-    tool: 'select', drawings: [], unresolvedIds: [], selected: null, importError: null,
+    tool: 'select', drawings: drawingState === 'none' ? [] : [sampleDrawing], unresolvedIds: [],
+    selected: drawingState === 'selected' ? sampleDrawing : null, importError: null,
     canUndo: false, canRedo: false, autoPatternsEnabled: true, expanded: workspace,
     syncStatus: 'guest', syncHint: null, setExpanded: setWorkspace, hasRejectedImport: false,
   }, { get: (target, name) => name in target ? target[name as keyof typeof target] : noop }) as unknown as DrawingController;
   useEffect(() => {
     Object.assign(window, { overlayHarness: {
       drawer: setDrawer, palette: setPalette, confirm: setConfirm, layers: setLayers,
-      workspace: setWorkspace, event: setEventOpen, trigger: setTrigger, searchCalls,
+      workspace: setWorkspace, event: setEventOpen, trigger: setTrigger, searchCalls, drawings: setDrawingState,
       reply: (q: string, results: { ticker: string; name: string; sector: string }[]) => searchReplies.get(q)?.(results),
     } });
   }, []);

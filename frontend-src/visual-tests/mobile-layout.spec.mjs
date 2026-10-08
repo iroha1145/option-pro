@@ -90,9 +90,9 @@ for (const viewport of VIEWPORTS) {
       await page.getByRole("button", { name: "更多" }).click();
       const more = page.getByRole("dialog", { name: "更多功能" });
       await expect(more).toBeVisible();
-      await more.getByRole("button", { name: /新闻催化/ }).click();
+      await more.getByRole("button", { name: /新闻/ }).click();
       await expect(page).toHaveURL(/\/catalysts$/);
-      const tabs = page.getByRole("tablist", { name: "催化剂视图" });
+      const tabs = page.getByRole("tablist", { name: "新闻栏目" });
       await expect(tabs).toBeVisible();
       const tabViewport = page.locator(".selection-viewport").filter({ has: tabs });
       await expect
@@ -130,7 +130,7 @@ for (const viewport of VIEWPORTS) {
       await expect(firstTab).toBeFocused();
       await expect(firstTab).toHaveAttribute("aria-selected", "true");
       await expect(lastTab).toHaveAttribute("aria-selected", "false");
-      const filterRow = page.getByRole("button", { name: "筛选", exact: true }).locator("..");
+      const filterRow = page.getByTestId("catalyst-filter-row");
       const count = filterRow.getByText(/^\d+\s*条$/);
       let recoveredFeed = false;
       // Earlier real-backend tests share the request bucket. Honor an observed
@@ -244,7 +244,7 @@ for (const viewport of EARNINGS_DESKTOP_VIEWPORTS) {
 
       const subject = page.locator('[aria-label="财报主体"]');
       const list = page.locator('[aria-label="即将公布"]');
-      const analysis = page.locator('[aria-label="AI 影响分析"]');
+      const analysis = page.locator('[aria-label="财报影响分析"]');
       await expect(subject).toBeVisible();
       // The API probe and earlier browser cases share this backend's IP
       // bucket. Recover only an observed 429 through the actual page action;
@@ -271,11 +271,11 @@ for (const viewport of EARNINGS_DESKTOP_VIEWPORTS) {
         "营收预期",
         "市值",
         "预期波动",
-        "AI 影响",
+        "财报影响",
       ]) {
         await expect(header.getByText(column, { exact: true })).toBeVisible();
       }
-      const rowAction = list.getByRole("button", { name: / AI 影响分析$/ }).first();
+      const rowAction = list.getByRole("button", { name: /(?:^|\s)(?:生成财报分析|查看财报影响分析|财报影响分析|查看最终分析|最终分析生成中)$/ }).first();
       await expect(rowAction).toBeVisible();
       // 真实报价缺失时仍保留列，并明确说明原因，避免看起来像功能被删除。
       const moveHeader = header.getByText("预期波动", { exact: true });

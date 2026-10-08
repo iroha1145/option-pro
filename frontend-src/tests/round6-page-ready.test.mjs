@@ -6,7 +6,7 @@ test('laboratory ready classifier recognizes the catalysts page', () => {
   assert.equal(
     classifyPageReady({
       path: '/catalysts',
-      heading: '新闻催化剂',
+      heading: '新闻',
       bodyText: '',
       hasNewsArticle: true,
     }),

@@ -17,9 +17,9 @@ const RESOURCE_LABELS: Array<{
 ];
 
 function resourceSummary(resource: StockPullResource): string {
-  if (resource.status === 'failed') return t('拉取失败');
+  if (resource.status === 'failed') return t('获取失败');
   if (resource.status === 'unavailable') return t('暂无数据');
-  if (!resource.persisted) return t('已拉取，保存失败');
+  if (!resource.persisted) return t('已获取，但保存失败');
   if (resource.barCount !== undefined) return t('{n} 根', { n: resource.barCount });
   if (resource.metricCount !== undefined) return t('{n} 项', { n: resource.metricCount });
   return resource.provider || t('已更新');
@@ -103,7 +103,7 @@ export default function ManualStockPull({
               : cause.bizCode === 'stock_pull_cooldown'
                 ? `${t('{ticker} 刚刚更新过，请稍后再试', { ticker: requestedTicker })}${cause.retryAfter ? t(' · {n} 秒后可重试', { n: cause.retryAfter }) : ''}`
             : `${cause.message}${cause.retryAfter ? t(' · {n} 秒后可重试', { n: cause.retryAfter }) : ''}`
-          : t('拉取失败，请稍后重试'),
+          : t('获取失败，请稍后重试'),
       });
     } finally {
       if (
@@ -134,7 +134,7 @@ export default function ManualStockPull({
           className="btn-primary btn-sm"
         >
           <BusyIcon busy={running} size={12} tone="on-accent" />
-          {running ? t('正在获取行情数据') : t('拉取并分析')}
+          {running ? t('正在获取行情数据') : t('获取并计算')}
         </button>
         {error && (
           <p role="alert" className="text-caption text-danger-700">
@@ -162,12 +162,12 @@ export default function ManualStockPull({
         className={quiet ? 'control-button' : 'btn-primary min-h-11 w-full whitespace-normal sm:w-auto'}
       >
         <BusyIcon busy={running} size={13} tone={quiet ? 'brand' : 'on-accent'} />
-        {running ? t('正在获取行情数据') : result ? t('重新获取') : t('获取行情数据')}
+        {running ? t('正在更新行情') : result ? t('再次更新') : t('更新行情')}
       </button>
 
       {!running && !result && !error && (
         <p className="text-micro text-ink-500">
-          {isIndexSymbol(ticker) ? t('获取该指数的最新价格、日线与技术指标') : t('获取该股票的最新价格、日线与技术指标')}
+          {isIndexSymbol(ticker) ? t('更新该指数的最新价格、日线与技术指标') : t('更新该股票的最新价格、日线与技术指标')}
         </p>
       )}
 

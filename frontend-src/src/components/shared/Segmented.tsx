@@ -42,6 +42,9 @@ export default function Segmented<T extends string>({
   onOptionIntent,
 }: SegmentedProps<T>) {
   const layoutId = useId();
+  /* 当前值不在选项里时（如新闻页停在「更多」菜单里的消息来源），没有哪一项是选中的；
+     仍让第一项可以用 Tab 进入，否则键盘用户回不到这组切换。 */
+  const hasSelection = options.some((option) => option.value === value);
 
   return (
     /* 投影作用域二选一：layoutRoot 把 layoutId 的坐标收进条内（MobileDock 是
@@ -73,7 +76,7 @@ export default function Segmented<T extends string>({
               aria-selected={active}
               /* tablist 的标准键盘行为（审计 P3-5）：roving tabindex + 左右方向键 +
                  Home/End。旧实现只有 role，Tab 会逐个停在每一项，方向键完全无效。 */
-              tabIndex={active ? 0 : -1}
+              tabIndex={active || (!hasSelection && index === 0) ? 0 : -1}
               onClick={() => onChange(o.value)}
               onPointerEnter={() => onOptionIntent?.(o.value)}
               onFocus={() => onOptionIntent?.(o.value)}

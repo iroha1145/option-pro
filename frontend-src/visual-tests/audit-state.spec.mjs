@@ -62,12 +62,12 @@ test('slow identity followed by unavailable visitor quotes shows an error, never
   const state = await fixture(page, { holdIdentity: true, failQuotes: true });
   await page.goto('/watchlist');
   await expect.poll(() => state.identityRoutes.length).toBe(1);
-  await expect(page.getByText('清单还是空的', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('暂无关注', { exact: true })).toHaveCount(0);
   expect(state.quoteReads).toBe(0);
   state.holdIdentity = false;
   await state.identityRoutes.shift().fulfill({ json: { access_mode: 'password', logged_in: false, account: null } });
   await expect(page.getByText('数据暂不可用', { exact: true }).first()).toBeVisible();
-  await expect(page.getByText('清单还是空的', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('暂无关注', { exact: true })).toHaveCount(0);
   expect(state.quoteReads).toBeGreaterThan(0);
   expect(state.errors).toEqual([]);
 });
@@ -83,7 +83,7 @@ test('visitor quotes survive a failed poll and expose their own retry notice', a
   const failed = page.waitForResponse(response => new URL(response.url()).pathname === '/api/stocks/watchlist' && response.status() === 408);
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   await failed;
-  await expect(page.getByText('行情暂时读取失败，自选名单已保留。', { exact: true })).toBeVisible();
+  await expect(page.getByText('行情暂时读取失败，关注列表已保留。', { exact: true })).toBeVisible();
   await expect(page.locator('[data-quote-symbol="AAPL"]').first()).toContainText('100');
   expect(state.errors).toEqual([]);
 });
@@ -116,11 +116,11 @@ test('customer 401 clears the username and management controls even while identi
   const state = await fixture(page, { customer: 'alice' });
   await page.goto('/watchlist');
   await expect(page.getByRole('button', { name: '退出 alice', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: '管理自选', exact: true }).first()).toBeEnabled();
+  await expect(page.getByRole('button', { name: '管理关注', exact: true }).first()).toBeEnabled();
   state.expired = true; state.failIdentity = true;
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(page.getByRole('button', { name: '退出 alice', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: '管理自选', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '管理关注', exact: true })).toHaveCount(0);
   await expect(page.getByText('身份暂时无法确认，请稍后重试', { exact: true })).toBeVisible();
   expect(state.errors).toEqual([]);
 });
@@ -129,7 +129,7 @@ test('login cookie plus failed identity pauses personalized reads and restores o
   const state = await fixture(page);
   await page.goto('/watchlist');
   // The old principal must be confirmed before this test changes its cookie.
-  await expect(page.getByRole('heading', { name: '自选观察', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '我的关注', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: '登录', exact: true })).toBeVisible();
   await page.getByRole('link', { name: '登录', exact: true }).click();
   await page.getByLabel('用户名', { exact: true }).fill('admin');

@@ -83,10 +83,10 @@ export default function StatusCard({
     /* 后续区块 rise-in 减量：直接呈现 */
     <section
       className="card-surface flex h-full flex-col p-5"
-      aria-label={t("市场状态")}
+      aria-label={t("交易时段")}
     >
       <div className="flex items-start justify-between">
-        <h3 className="text-h3 text-ink-900">{t('市场状态')}</h3>
+        <h3 className="text-h3 text-ink-900">{t('交易时段')}</h3>
         <Icon name="clock-ny" size={18} className="text-ink-400" />
       </div>
       <div className="mt-4 flex items-center gap-2.5">
@@ -100,10 +100,10 @@ export default function StatusCard({
         <p className="mt-1 text-micro text-ink-400">{t('纽约时间（ET）· 每秒更新')}</p>
       </div>
       <div className="mt-4">
-        <CountdownRow label={t("距下一开盘")} at={data.next_open} now={now} />
-        <CountdownRow label={t("距下一收盘")} at={data.next_close} now={now} />
+        <CountdownRow label={t("距开盘")} at={data.next_open} now={now} />
+        <CountdownRow label={t("距收盘")} at={data.next_close} now={now} />
         <div className="flex items-center justify-between border-y border-line py-2.5">
-          <span className="text-caption text-ink-500">{t('节假日')}</span>
+          <span className="text-caption text-ink-500">{t('假日安排')}</span>
           <span className="text-data-m text-ink-600">{data.holiday ?? '—'}</span>
         </div>
       </div>

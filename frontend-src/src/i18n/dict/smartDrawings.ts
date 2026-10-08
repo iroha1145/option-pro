@@ -18,10 +18,7 @@ export const SMART_DRAWINGS: Dict = {
     "Solid: horizontal level; faint dotted: broken level",
     "実線：水平水準、薄い点線：無効化された水準"
   ],
-  "智能画线": [
-    "Smart lines",
-    "スマート描画"
-  ],
+  '自动画线': ['Auto lines', '自動描画'],
   "根据已收盘 K 线识别支撑、阻力和形态，并合并相近线条": ["Find support, resistance and patterns in closed bars, merging similar lines", "確定足からサポート・レジスタンス・パターンを検出し、近い線をまとめます"],
   "水平支撑": [
     "Horizontal support",

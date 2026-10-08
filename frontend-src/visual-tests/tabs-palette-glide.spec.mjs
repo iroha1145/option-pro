@@ -15,7 +15,7 @@
 import { expect, test } from "@playwright/test";
 import { captureEvidence } from "./support/evidence.mjs";
 
-const paletteDialog = (page) => page.getByRole("dialog", { name: "命令面板" });
+const paletteDialog = (page) => page.getByRole("dialog", { name: "快捷查找" });
 const paletteInput = (page) => page.getByRole("combobox", { name: "搜索股票或功能" });
 const GLIDE_SELECTOR = "#command-palette-listbox [data-glide-list]";
 const glide = (page) => page.locator(GLIDE_SELECTOR);
@@ -152,7 +152,7 @@ test.describe("command palette glide highlight (#113 blocker 1+2)", () => {
        复位「已落笔」标志，所以这条路径同样会从旧股票行滑过来。 */
     await openPalette(page);
     await paletteInput(page).pressSequentially("NVDA");
-    const clear = page.getByRole("button", { name: "清除搜索" });
+    const clear = page.getByRole("button", { name: "清空搜索" });
     await expect(clear).toBeVisible();
     await page.keyboard.press("ArrowDown");
 
@@ -167,7 +167,7 @@ test.describe("command palette glide highlight (#113 blocker 1+2)", () => {
   test("clear button Enter clears the query and refocuses the input", async ({ page }) => {
     await openPalette(page);
     await paletteInput(page).pressSequentially("NVDA");
-    const clear = page.getByRole("button", { name: "清除搜索" });
+    const clear = page.getByRole("button", { name: "清空搜索" });
     await expect(clear).toBeVisible();
     await clear.focus();
     await page.keyboard.press("Enter");
@@ -181,7 +181,7 @@ test.describe("command palette glide highlight (#113 blocker 1+2)", () => {
   test("clear button Space clears the query as well", async ({ page }) => {
     await openPalette(page);
     await paletteInput(page).pressSequentially("TSLA");
-    const clear = page.getByRole("button", { name: "清除搜索" });
+    const clear = page.getByRole("button", { name: "清空搜索" });
     await clear.focus();
     await page.keyboard.press(" ");
     await expect(paletteInput(page)).toHaveValue("");
@@ -195,7 +195,7 @@ test.describe("command palette glide highlight (#113 blocker 1+2)", () => {
       navigations += 1;
     });
     /* 避开「首页」项（从 / 到 / 的同路径导航不可靠）：选「自选」功能项 */
-    const option = page.locator('#command-palette-listbox [role="option"]', { hasText: "自选" }).first();
+    const option = page.locator('#command-palette-listbox [role="option"]', { hasText: "我的关注" }).first();
     await option.focus();
     await page.keyboard.press("Enter");
     await page.waitForURL(/\/watchlist$/, { timeout: 5000 });
@@ -253,7 +253,7 @@ test.describe("spring tabs glide (#113 blocker 3+4)", () => {
   test.describe.configure({ timeout: 90_000 });
   test.use({ contextOptions: { reducedMotion: "no-preference" } });
 
-  const TIER_LIST = '[role="tablist"][aria-label^="强度分档"]';
+  const TIER_LIST = '[role="tablist"][aria-label^="评分分档"]';
   const TIER_PILL = `${TIER_LIST} [data-glide-pill]`;
   const tierList = (page) => page.locator(TIER_LIST);
   const tierTab = (page, name) => tierList(page).getByRole("tab", { name, exact: false });
@@ -334,7 +334,7 @@ test.describe("spring tabs glide (#113 blocker 3+4)", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openScreener(page);
     /* 数据无关地强制溢出：把分档条夹窄，保证横向可滚动 */
-    await page.addStyleTag({ content: '[aria-label^="强度分档"] { max-width: 150px !important; }' });
+    await page.addStyleTag({ content: '[aria-label^="评分分档"] { max-width: 150px !important; }' });
     const list = tierList(page);
     await expect
       .poll(() => list.evaluate((node) => node.scrollWidth - node.clientWidth))
@@ -403,9 +403,9 @@ test.describe("spring tabs under reduced motion", () => {
   test("pill lands on the active tab without spring travel", async ({ page }) => {
     await openScreener(page);
     expect(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches)).toBe(true);
-    const list = page.locator('[role="tablist"][aria-label^="强度分档"]');
+    const list = page.locator('[role="tablist"][aria-label^="评分分档"]');
     const target = list.getByRole("tab", { name: /^B/ }).first();
-    const pill = page.locator('[role="tablist"][aria-label^="强度分档"] [data-glide-pill]');
+    const pill = page.locator('[role="tablist"][aria-label^="评分分档"] [data-glide-pill]');
     await target.click();
     await expect
       .poll(

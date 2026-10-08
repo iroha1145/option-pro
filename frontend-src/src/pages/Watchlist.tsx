@@ -90,23 +90,19 @@ const STAT_GRID = 'grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4 max-sm:[&>*:la
 const watchKey = (item: WatchlistItem) => item.ticker;
 const watchPrice = (item: WatchlistItem) => item.price;
 
-/* ---------------- 页头带右侧：强制刷新 ---------------- */
+/* ---------------- 页头带右侧：更新数据（仅管理员可见） ---------------- */
 function ForceRefreshButton({ onRefresh, spinning }: { onRefresh: () => void; spinning: boolean }) {
   const { isOwner, identityUnavailable } = useAccess();
+  if (!isOwner) return null;
   return (
     <button
-      onClick={isOwner ? onRefresh : undefined}
-      disabled={!isOwner || identityUnavailable || spinning}
-      title={isOwner ? t('更新自选行情与评分') : t('管理员登录后可更新数据')}
-      className={cn(
-        'flex h-9 items-center gap-2 rounded-md border px-3 text-caption shadow-btn transition-colors duration-fast',
-        isOwner
-          ? 'border-line bg-card text-ink-600 hover:border-brand-400 hover:text-brand-600'
-          : 'cursor-not-allowed border-line bg-card-warm text-ink-300',
-      )}
+      onClick={onRefresh}
+      disabled={identityUnavailable || spinning}
+      title={t('更新关注股票的行情与评分')}
+      className="flex h-9 items-center gap-2 rounded-md border border-line bg-card px-3 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
     >
       <BusyIcon busy={spinning} size={15} tone="brand" />
-      {t('强制刷新')}
+      {t('更新数据')}
     </button>
   );
 }
@@ -117,7 +113,7 @@ function SignalDistribution({ data }: { data: MarketSignalsSnapshot }) {
     <div className="card-surface p-5">
       {/* 「实时指标」与全站「延迟 15 分钟」口径冲突（审计 2.3.6）——这些是
         * 市场信号模型基于延迟行情算出的读数。 */}
-      <p className="eyebrow">{t('市场信号 · 模型指标')}</p>
+      <p className="eyebrow">{t('市场分析')}</p>
       <div className="mt-4 space-y-3">
         {data.metrics.slice(0, 8).map((metric) => (
           <div key={metric.key} className="grid grid-cols-[minmax(0,1fr)_56px] items-center gap-2">
@@ -151,13 +147,13 @@ function MarketClockCard() {
       <SoftBadge tone={session === 'regular' ? 'up' : 'neutral'} size="md" className="mt-3 gap-2.5">
         <SessionDot session={session} />
         <span>
-          {status?.label ?? (loading ? t('时段读取中…') : t('时段未知'))}
+          {status?.label ?? (loading ? t('正在读取交易时段…') : t('时段未知'))}
         </span>
       </SoftBadge>
       <p className="mt-2 metric-value text-data-l text-ink-800 tnum" suppressHydrationWarning>
         {fmtNyTime(new Date(now))}
       </p>
-      <p className="mt-1 text-micro text-ink-400">{t('美东时间 ET')}</p>
+      <p className="mt-1 text-micro text-ink-400">{t('纽约时间')}</p>
       {status?.nextEvent && (
         <div className="mt-3 flex items-center justify-between border-t border-line pt-3">
           <span className="text-caption text-ink-500">{t('距')}{status.nextEvent.kind === 'open' ? t('开盘') : t('收盘')}</span>
@@ -174,8 +170,8 @@ const SORT_OPTIONS: { id: string; label: string; sort: SortState | null }[] = [
   { id: 'default', label: t('默认排序'), sort: null },
   { id: 'gain', label: t('涨幅优先'), sort: { key: 'changePct', desc: true } },
   { id: 'loss', label: t('跌幅优先'), sort: { key: 'changePct', desc: false } },
-  { id: 'strength', label: t('强度优先'), sort: { key: 'strength', desc: true } },
-  { id: 'ticker', label: t('按代码 A–Z'), sort: { key: 'ticker', desc: false } },
+  { id: 'strength', label: t('评分优先'), sort: { key: 'strength', desc: true } },
+  { id: 'ticker', label: t('代码顺序'), sort: { key: 'ticker', desc: false } },
 ];
 
 function SortDropdown({ sort, onChange }: { sort: SortState | null; onChange: (s: SortState | null) => void }) {
@@ -222,7 +218,7 @@ function CardTrend({ item }: { item: WatchlistItem }) {
           <span className="flex min-w-0 flex-wrap gap-x-1">
             {t('近半年')} <span className="whitespace-nowrap tnum">{view.start.slice(5)} — {view.end.slice(5)}</span>
           </span>
-          <span className="flex shrink-0 items-center gap-1.5">{t('区间')}<ChangeBadge value={view.change} size="sm" /></span>
+          <span className="flex shrink-0 items-center gap-1.5">{t('区间涨跌')}<ChangeBadge value={view.change} size="sm" /></span>
         </span>
       </>
     );
@@ -345,8 +341,8 @@ function WatchCard({
       {onRemove && (
         <button
           type="button"
-          aria-label={t('将 {ticker} 移出自选', { ticker: item.ticker })}
-          title={t("移出自选")}
+          aria-label={t('移除关注 {ticker}', { ticker: item.ticker })}
+          title={t("移除关注")}
           disabled={removing}
           onClick={(event) => {
             event.stopPropagation();
@@ -410,7 +406,7 @@ export default function Watchlist() {
     const next = await editPersonal(add, remove);
     selectedTickersRef.current = next.tickers;
     refreshWatchlist({ force: true });
-    toast.success(t('自选已保存'));
+    toast.success(t('关注已保存'));
   }, [editPersonal, refreshWatchlist, toast]);
   const signalsQ = usePolling(() => signalsApi.market(), 60_000, [], { enabled: !identityLoading && !identityUnavailable });
   const statusQ = usePolling(() => marketApi.status(), 60_000);
@@ -422,22 +418,22 @@ export default function Watchlist() {
       return;
     }
     setForceRefreshing(true);
-    toast.info(t('正在刷新'), t('正在更新自选行情与评分'));
+    toast.info(t('正在更新'), t('正在更新关注股票的行情与评分'));
     try {
       const action = await runtimeApi.workerAction('focus_refresh');
       if (action.status !== 'completed') {
-        if (!action.requestId) throw new ApiError(502, t('刷新任务未能启动'));
+        if (!action.requestId) throw new ApiError(502, t('更新任务未能启动'));
         await runtimeApi.waitForWorkerAction(action.requestId);
       }
       // worker 原子写入后绕过浏览器短缓存读取一次同一路径；不再发送
       // 后端从未支持的 ?force=1 占位参数。
       await stocksApi.watchlistFor(selectedTickers, true);
       refreshWatchlist();
-      toast.success(t('自选已更新'), t('已读取最新行情数据'));
+      toast.success(t('关注数据已更新'), t('已读取最新行情数据'));
     } catch (error) {
       toast.error(
-        t('自选刷新失败'),
-        error instanceof ApiError ? error.message : t('刷新暂时不可用'),
+        t('关注数据更新失败'),
+        error instanceof ApiError ? error.message : t('数据更新暂不可用'),
       );
     } finally {
       setForceRefreshing(false);
@@ -488,7 +484,7 @@ export default function Watchlist() {
     () => [
       {
         key: 'ticker',
-        title: t('代码'),
+        title: t('股票代码'),
         sortable: true,
         sortValue: (r) => r.ticker,
         render: (r) => (
@@ -543,7 +539,7 @@ export default function Watchlist() {
       ...(rowStrengthAvailable
         ? [{
             key: 'strength',
-            title: t('强度'),
+            title: t('评分'),
             hint: <InfoHint hint={SCORE_HINTS.strengthComposite} side="bottom" size={11} />,
             sortable: true,
             sortValue: (r: WatchlistItem) => r.strengthScore,
@@ -580,8 +576,8 @@ export default function Watchlist() {
             {canManageWatchlist && (
               <button
                 type="button"
-                title={t('从自选移除 {ticker}', { ticker: r.ticker })}
-                aria-label={t('从自选移除 {ticker}', { ticker: r.ticker })}
+                title={t('移除关注 {ticker}', { ticker: r.ticker })}
+                aria-label={t('移除关注 {ticker}', { ticker: r.ticker })}
                 disabled={personal.busy || !personal.enabled}
                 onClick={(event) => {
                   // 行本身是「打开详情」的点击目标，删除必须先拦住冒泡。
@@ -662,7 +658,7 @@ export default function Watchlist() {
       )}
       {/* B0 页头带 */}
       <PageHeader
-        title={t("自选观察")}
+        title={t("我的关注")}
         meta={
           <>
             {username && (
@@ -718,7 +714,7 @@ export default function Watchlist() {
                 </div>
                 {personalFailed || (wl.error && !wl.data) ? (
                   /* 自选行情读取失败：0/0 看起来像全体持平（审计 2.2.11） */
-                  <p className="mt-4 text-caption text-ink-400">{t('自选行情读取失败，涨跌家数不可用')}</p>
+                  <p className="mt-4 text-caption text-ink-400">{t('关注行情读取失败，暂不显示涨跌家数')}</p>
                 ) : (
                   <AdvanceDeclineBar
                     advancers={aggregates.advancers}
@@ -744,7 +740,7 @@ export default function Watchlist() {
         {/* B2 自选主区（8 列） */}
         <section
           className="lg:col-span-8"
-          aria-label={t("自选列表")}
+          aria-label={t("关注列表")}
           {...pageRegionProps(
             'watchlist',
             loading
@@ -771,11 +767,11 @@ export default function Watchlist() {
               {canManageWatchlist ? (
                 <button type="button" onClick={() => setManagerKey(personal.key)} disabled={!personal.enabled || personal.loading || personal.busy || myTickers === null}
                   className="btn-primary">
-                  <Icon name="plus" size={15} />{t('管理自选')}
+                  <Icon name="plus" size={15} />{t('管理关注')}
                 </button>
               ) : (
                 <Link to="/login" state={{ from: '/watchlist' }} className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-line-strong bg-card px-3 text-caption text-ink-600 hover:border-brand-400 hover:text-brand-600">
-                  <Icon name="plus" size={15} />{t('登录后管理自选')}
+                  <Icon name="plus" size={15} />{t('登录后管理关注')}
                 </Link>
               )}
             </div>
@@ -798,14 +794,14 @@ export default function Watchlist() {
 
           {err && items.length > 0 && (
             <p className="mt-3 flex flex-wrap items-center gap-2 text-caption text-ink-500" role="status">
-              <SoftBadge tone="warn" className="whitespace-normal">{t('行情暂时读取失败，自选名单已保留。')}</SoftBadge>
+              <SoftBadge tone="warn" className="whitespace-normal">{t('行情暂时读取失败，关注列表已保留。')}</SoftBadge>
               <button className="control-button" disabled={wl.refreshing} onClick={() => wl.refresh({ force: true })}>{t('重试')}</button>
             </p>
           )}
           {!err && uncoveredTickers.length > 0 && (
             <p className="mt-3 flex flex-wrap items-center gap-1.5 text-caption text-ink-500" role="status">
               <SoftBadge tone="warn" className="whitespace-normal">{t('暂无行情：')}{uncoveredTickers.join(getLocale() === 'en' ? ', ' : '、')}</SoftBadge>
-              <span className="ml-1 text-ink-500">{t('（不在当前覆盖范围内，可在个股页手动获取）')}</span>
+              <span className="ml-1 text-ink-500">{t('（暂无覆盖数据，可在股票详情页手动获取）')}</span>
             </p>
           )}
 
@@ -814,7 +810,7 @@ export default function Watchlist() {
               className="mt-3 flex flex-wrap items-center gap-2 text-caption text-ink-500"
               role="status"
             >
-              <SoftBadge tone="warn" className="whitespace-normal">{personalFailed ? t('暂时读不到你的自选列表，请重试。') : personal.error}</SoftBadge>
+              <SoftBadge tone="warn" className="whitespace-normal">{personalFailed ? t('暂时读不到关注列表，请重试。') : personal.error}</SoftBadge>
               <button
                 type="button"
                 onClick={() => void personal.refresh()}
@@ -842,7 +838,7 @@ export default function Watchlist() {
               }
             >
             {personalFailed ? (
-              <div className="card-surface"><EmptyState variant="error" image="/empty-watchlist.svg" title={t('自选读取失败')} description={personal.error ?? ''} /></div>
+              <div className="card-surface"><EmptyState variant="error" image="/empty-watchlist.svg" title={t('关注读取失败')} description={personal.error ?? ''} /></div>
             ) : err && !wl.data && !canManageWatchlist ? (
               /* 失败但还有上一轮数据时不整块换错误页：一次 408/断网就把
                  「214 只标的」的统计和涨跌家数换成加载失败，同屏自相矛盾 */
@@ -869,15 +865,15 @@ export default function Watchlist() {
               <div className="card-surface">
                 <EmptyState
                   image="/empty-watchlist.svg"
-                  title={t("清单还是空的")}
+                  title={t("暂无关注")}
                   description={
                     canManageWatchlist
-                      ? t('点击管理自选，添加股票或一次导入多个代码。')
-                      : t('登录后可以把自选股保存在账号里，换设备也还在')
+                      ? t('点击管理关注，添加股票或一次输入多个代码。')
+                      : t('登录后可将关注股票保存在账号里，换设备也能查看。')
                   }
                   footnote={
                     canManageWatchlist
-                      ? t('自选保存在账号 {username} 下', { username: username ?? 'admin' })
+                      ? t('关注股票保存在账号 {username} 下', { username: username ?? 'admin' })
                       : isVisitor
                         ? t('当前为访客只读模式')
                         : undefined
@@ -889,9 +885,9 @@ export default function Watchlist() {
                       className="btn-primary"
                     >
                       <Icon name="plus" size={14} />
-                      {t('管理自选')}
+                      {t('管理关注')}
                     </button>
-                  ) : <Link to="/login" className="control-button">{t('登录后管理自选')}</Link>}
+                  ) : <Link to="/login" className="control-button">{t('登录后管理关注')}</Link>}
                 />
               </div>
             ) : view === 'table' ? (
@@ -969,8 +965,8 @@ export default function Watchlist() {
             /* 失败 ≠ 永远加载中（审计 2.2.12）：骨架屏无限闪动会被读成
                「正在加载」，这里如实报错并给重试。 */
             <div className="card-surface p-5">
-              <p className="eyebrow">{t('市场信号 · 模型指标')}</p>
-              <p className="mt-3 text-caption text-ink-400">{t('市场信号读取失败')}</p>
+              <p className="eyebrow">{t('市场分析')}</p>
+              <p className="mt-3 text-caption text-ink-400">{t('市场分析读取失败')}</p>
               <button
                 onClick={() => signalsQ.refresh()}
                 className="control-button mt-3"

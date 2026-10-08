@@ -1,7 +1,7 @@
 /**
  * B1 筛选条件（screener.md）
- * 常驻：分档 / 周期 / 偏好 / 返回数量 / 扫描
- * 更多筛选：预设、板块、价格与成交额；折叠时仍展示当前约束
+ * 常驻：分档 / 周期 / 偏好 / 扫描
+ * 更多筛选：预设、行业、价格、成交额与显示数量；折叠时仍展示当前约束（含显示数量上限）
  * 行 stagger 60ms；过滤器变更主按钮脉冲（box-shadow 呼吸 1.2s ×2）
  */
 import SoftBadge from '@/components/shared/SoftBadge';
@@ -51,7 +51,7 @@ function TierSegmented({
   coversPool: boolean;
   onChange: (v: TierFilter) => void;
 }) {
-  const scopeNote = coversPool ? __t('已评分候选池') : __t('当前结果中的股票');
+  const scopeNote = coversPool ? __t('已评分股票') : __t('当前结果中的股票');
   /* 只剩三处真实差异：徽标标签、aria/title 文案、可横向滚动（滚动条投影用
      layoutScroll）。键盘/结构/指示器全部复用共享件——两份抄写在本 PR 里已经
      各自跑偏过一次（审计 2.5.9）。 */
@@ -61,7 +61,7 @@ function TierSegmented({
       value={value}
       onChange={onChange}
       scrollable
-      ariaLabel={__t('强度分档 · 计数基于{scope}', { scope: scopeNote })}
+      ariaLabel={__t('评分分档 · 计数基于{scope}', { scope: scopeNote })}
       title={__t('分档计数基于{scope}', { scope: scopeNote })}
       renderLabel={(o, active) => (
         <span className="flex items-center gap-1.5">
@@ -256,18 +256,21 @@ export default function FilterWorkbench({
   const selectedPreset = presets?.find((preset) => preset.id === draft.presetId);
   const selectedSectors = draft.sectors.map((id) => sectorOptions.find((sector) => sector.id === id)?.name ?? id);
   const priceSummary = draft.priceMin !== null && draft.priceMax !== null
-    ? `${__t('价格区间')} $${draft.priceMin} – $${draft.priceMax}`
+    ? `${__t('价格范围')} $${draft.priceMin} – $${draft.priceMax}`
     : draft.priceMin !== null
-      ? `${__t('价格区间')} ≥ $${draft.priceMin}`
-      : draft.priceMax !== null ? `${__t('价格区间')} ≤ $${draft.priceMax}` : null;
+      ? `${__t('价格范围')} ≥ $${draft.priceMin}`
+      : draft.priceMax !== null ? `${__t('价格范围')} ≤ $${draft.priceMax}` : null;
   const volumeSummary = dollarVolumeFilterSupported && draft.minDollarVol > 0
     ? `${__t('成交额下限')} ${DOLLAR_VOL_OPTIONS.find((option) => option.value === draft.minDollarVol)?.label ?? draft.minDollarVol}`
     : null;
+  // 显示数量收进「更多筛选」后，折叠状态下仍要看得到返回上限。
+  const topNSummary = `${__t('显示数量')} ${TOPN_OPTIONS.find((option) => option.value === draft.topN)?.label ?? `Top ${draft.topN}`}`;
   const advancedSummary = [
     selectedPreset?.name,
     selectedSectors.length > 0 ? `${selectedSectors.slice(0, 2).join(' / ')}${selectedSectors.length > 2 ? ` +${selectedSectors.length - 2}` : ''}` : null,
     priceSummary,
     volumeSummary,
+    topNSummary,
   ].filter((value): value is string => Boolean(value));
 
   return (
@@ -281,7 +284,7 @@ export default function FilterWorkbench({
     >
       <motion.div variants={row} className="flex min-w-0 flex-wrap items-end gap-x-5 gap-y-4">
         <div className="w-full min-w-0 sm:w-auto">
-          <FieldLabel>{__t('强度分档')}</FieldLabel>
+          <FieldLabel>{__t('评分分档')}</FieldLabel>
           <TierSegmented
             value={draft.tier}
             counts={universe.tierCounts}
@@ -290,26 +293,22 @@ export default function FilterWorkbench({
           />
         </div>
         <div className="w-full min-w-0 sm:w-auto">
-          <FieldLabel>{__t('周期')}</FieldLabel>
+          <FieldLabel>{__t('评分周期')}</FieldLabel>
           <Segmented<Timeframe>
             options={(['short', 'mid', 'long'] as const).map((v) => ({ value: v, label: TIMEFRAME_CN[v] }))}
             value={draft.timeframe === 'all' ? 'mid' : draft.timeframe}
             onChange={(timeframe) => patch({ timeframe })}
-            ariaLabel={__t('周期')}
+            ariaLabel={__t('评分周期')}
           />
         </div>
         <div className="min-w-0">
-          <FieldLabel>{__t('偏好')}</FieldLabel>
+          <FieldLabel>{__t('风险偏好')}</FieldLabel>
           <Segmented<ProfilePref>
             options={(['conservative', 'balanced', 'aggressive'] as const).map((v) => ({ value: v, label: PROFILE_CN[v] }))}
             value={draft.profile}
             onChange={(profile) => patch({ profile, presetId: null })}
-            ariaLabel={__t('偏好')}
+            ariaLabel={__t('风险偏好')}
           />
-        </div>
-        <div>
-          <FieldLabel>{__t('返回数量')}</FieldLabel>
-          <MenuSelect ariaLabel={__t("最多显示数量")} value={draft.topN} onChange={(topN) => patch({ topN })} options={TOPN_OPTIONS} />
         </div>
         <ScanButton scanning={scanning} dirty={dirty} universeCount={universe.count} onScan={onScan} className="w-full sm:ml-auto sm:w-auto" />
       </motion.div>
@@ -323,9 +322,9 @@ export default function FilterWorkbench({
             <Icon name="chevron-down" size={13} className="text-ink-400 transition-transform group-open/filters:rotate-180" />
           </span>
           <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-micro text-ink-500" data-testid="screener-advanced-summary">
-            {advancedSummary.length > 0 ? advancedSummary.map((label, index) => (
+            {advancedSummary.map((label, index) => (
               <SoftBadge key={index}>{label}</SoftBadge>
-            )) : <span>{__t('预设策略')} · {__t('板块（多选）')} · {__t('价格区间')} · {__t('成交额下限')}</span>}
+            ))}
           </span>
         </summary>
 
@@ -361,7 +360,7 @@ export default function FilterWorkbench({
             )}
           </div>
           <div data-screener-field="sectors" className="min-w-0">
-            <FieldLabel>{__t('板块（多选）')}</FieldLabel>
+            <FieldLabel>{__t('行业（多选）')}</FieldLabel>
             {sectorOptions.length === 0 ? (
               <div className="flex flex-wrap gap-2" aria-hidden="true">
                 {Array.from({ length: 5 }, (_, i) => (
@@ -396,7 +395,7 @@ export default function FilterWorkbench({
           </div>
           <div className="flex flex-wrap items-end gap-x-6 gap-y-4 border-t border-line/60 pt-4">
             <div data-screener-field="price">
-              <FieldLabel>{__t('价格区间')}</FieldLabel>
+              <FieldLabel>{__t('价格范围')}</FieldLabel>
               <div className="flex items-center gap-1.5">
                 <PriceInput value={draft.priceMin} placeholder={__t("最低")} ariaLabel={__t("最低价格")} onCommit={(priceMin) => patch({ priceMin })} />
                 <span className="text-ink-300" aria-hidden="true">–</span>
@@ -417,6 +416,10 @@ export default function FilterWorkbench({
                   {__t('当前排序未核实成交额口径，此条件未应用')}
                 </p>
               )}
+            </div>
+            <div data-screener-field="top-n">
+              <FieldLabel>{__t('显示数量')}</FieldLabel>
+              <MenuSelect ariaLabel={__t("最多显示数量")} value={draft.topN} onChange={(topN) => patch({ topN })} options={TOPN_OPTIONS} />
             </div>
           </div>
         </div>

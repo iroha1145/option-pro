@@ -148,7 +148,7 @@ Score Method 含义见 [评分](scoring.md)：
 - **Formula Version**：`optix-macro-factor-v1`
 - **说明**：SOFR 减隔夜逆回购中标利率，单位百分点。评分用绝对值，衡量对走廊下沿的偏离。界面同时显示带符号原值。
 
-### 9. EFFR−IORB 价差 · `effr_iorb_spread`
+### 9. EFFR−IORB 利差 · `effr_iorb_spread`
 
 - **输入**：`EFFR`, `IORB`
 - **公式**：`signed = A − B`；评分用 `abs(signed)`
@@ -160,7 +160,7 @@ Score Method 含义见 [评分](scoring.md)：
 - **Formula Version**：`optix-macro-factor-v1`
 - **说明**：联邦基金有效利率减准备金余额利率，单位百分点。评分用绝对值，衡量政策利率传导是否顺畅。界面同时显示带符号原值。
 
-### 10. 商业票据−国库券价差 · `cp_tbill_spread`
+### 10. 商业票据−国库券利差 · `cp_tbill_spread`
 
 - **输入**：`DCPF3M`, `DTB3`
 - **公式**：`signed = DCPF3M − DTB3`；评分用 `max(signed, 0)`
@@ -170,7 +170,7 @@ Score Method 含义见 [评分](scoring.md)：
 - **最小历史**：252
 - **新鲜度**：日度 7 自然日
 - **Formula Version**：`optix-macro-factor-v1`
-- **说明**：3 个月金融商业票据利率减 3 个月国库券贴现率，单位百分点。评分只取正值部分：正价差扩大代表短期信用融资变贵。界面同时显示带符号原值。
+- **说明**：3 个月金融商业票据利率减 3 个月国库券贴现率，单位百分点。评分只取正值部分：正利差扩大代表短期信用融资变贵。界面同时显示带符号原值。
 
 ### 11. 融资分化度（21 日） · `funding_fragmentation_21d`
 

@@ -253,6 +253,9 @@ export default function LayerMenu({
   /* shadcn Dialog 语义：标题走 aria-labelledby、副标题走 aria-describedby，
      比光秃秃一个 aria-label 多给读屏一句「这窗是干什么的」。 */
   const titleId = useId();
+  /* 显示细节只收起控件，不动 settings：已生效的参数在收起时以一行摘要继续可见。 */
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const detailsId = useId();
   const closeMs = readRootDurationMs('--modal-close-dur', 150);
   const phase = useOverlayPhase(open, closeMs);
   const mounted = overlayVisible(open, phase);
@@ -278,6 +281,16 @@ export default function LayerMenu({
   /* 与 DrawingWorkspace 同规：portal 到 body。组件挂在 KlineChart 里，头顶是
      .page-enter 的路由进场 transform——transform ≠ none 的祖先会接管 fixed 的
      包含块，弹窗就相对整页而不是视口定位（移动端实测 shellTop 飘到 2300+）。 */
+
+  const detailsSummary = [
+    t('最低形态吻合度 {fit}% · 标签密度 {density}% · 形态数量上限 {max}', {
+      fit: Math.round(settings.minShapeQuality * 100),
+      density: Math.round(settings.labelDensity * 100),
+      max: settings.maxPatterns,
+    }),
+    settings.onlyActive ? t('只看有效形态') : null,
+    settings.showInvalidated ? t('显示失效形态') : null,
+  ].filter((part): part is string => Boolean(part)).join(' · ');
 
   const [primaryGroup, ...secondaryGroups] = GROUPS;
   const groupCard = (group: (typeof GROUPS)[number]) => {
@@ -329,7 +342,7 @@ export default function LayerMenu({
         >
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-card px-5 py-3">
             <div className="min-w-0">
-              <h2 id={titleId} className="truncate text-body font-medium leading-tight text-ink-900">{t('算法与图层')}</h2>
+              <h2 id={titleId} className="truncate text-body font-medium leading-tight text-ink-900">{t('图表设置')}</h2>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
               <button
@@ -379,40 +392,65 @@ export default function LayerMenu({
               <div className="flex min-w-0 flex-1 flex-col gap-3">{secondaryGroups.map(groupCard)}</div>
             </div>
 
-            <Card title={t('高级')} className="mt-3">
-              <SliderRow
-                label={t('最低几何质量')}
-                value={Math.round(settings.minShapeQuality * 100)}
-                step={5}
-                onApply={(next) => patch({ minShapeQuality: next / 100 })}
-              />
-              <SliderRow
-                label={t('标签密度')}
-                value={Math.round(settings.labelDensity * 100)}
-                step={10}
-                onApply={(next) => patch({ labelDensity: next / 100 })}
-              />
-              <StepperRow
-                label={t('最大形态数')}
-                value={settings.maxPatterns}
-                onChange={(next) => patch({ maxPatterns: next })}
-              />
+            <section className="mt-3 rounded-lg border border-line bg-card p-2 shadow-card">
+              <h3 className="font-medium leading-none text-ink-600">
+                <button
+                  type="button"
+                  aria-expanded={detailsOpen}
+                  aria-controls={detailsId}
+                  onClick={() => setDetailsOpen((open) => !open)}
+                  className={cn(
+                    'flex h-8 w-full items-center justify-between gap-2 rounded-md px-1.5 text-left font-medium leading-none text-ink-600 transition-colors duration-fast hover:bg-paper-2/70',
+                    FOCUS_RING,
+                  )}
+                >
+                  {t('显示细节')}
+                  <Icon
+                    name="chevron-down"
+                    size={14}
+                    className={cn('shrink-0 text-ink-400 transition-transform duration-fast motion-reduce:transition-none', detailsOpen && 'rotate-180')}
+                  />
+                </button>
+              </h3>
+              {!detailsOpen && <p className="px-1.5 pb-1.5 text-ink-400">{detailsSummary}</p>}
+              <div id={detailsId} hidden={!detailsOpen}>
+                {detailsOpen && (
+                  <>
+                    <SliderRow
+                      label={t('最低形态吻合度')}
+                      value={Math.round(settings.minShapeQuality * 100)}
+                      step={5}
+                      onApply={(next) => patch({ minShapeQuality: next / 100 })}
+                    />
+                    <SliderRow
+                      label={t('标签密度')}
+                      value={Math.round(settings.labelDensity * 100)}
+                      step={10}
+                      onApply={(next) => patch({ labelDensity: next / 100 })}
+                    />
+                    <StepperRow
+                      label={t('形态数量上限')}
+                      value={settings.maxPatterns}
+                      onChange={(next) => patch({ maxPatterns: next })}
+                    />
 
-              <LayerRow
-                label={t('仅当前有效')}
-                checked={settings.onlyActive}
-                onToggle={() => patch({ onlyActive: !settings.onlyActive })}
-              />
-              <LayerRow
-                label={t('显示已失效')}
-                checked={settings.showInvalidated}
-                onToggle={() => patch({ showInvalidated: !settings.showInvalidated })}
-              />
-            </Card>
+                    <LayerRow
+                      label={t('只看有效形态')}
+                      checked={settings.onlyActive}
+                      onToggle={() => patch({ onlyActive: !settings.onlyActive })}
+                    />
+                    <LayerRow
+                      label={t('显示失效形态')}
+                      checked={settings.showInvalidated}
+                      onToggle={() => patch({ showInvalidated: !settings.showInvalidated })}
+                    />
+                  </>
+                )}
+              </div>
+            </section>
 
             {families && (
-              <Card title={t('选股上下文')} className="mt-3">
-                <p className="mb-2 px-1.5 text-ink-400">{t('几何质量衡量形状的吻合程度')}</p>
+              <Card title={t('选股评分')} className="mt-3">
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-1 px-1.5">
                   {(['short', 'mid', 'long', 'trend', 'breakout', 'price_action'] as const).map((name) => (
                     <div key={name} className="flex items-center justify-between gap-2">

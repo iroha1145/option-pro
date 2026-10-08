@@ -23,30 +23,30 @@ export function WatchlistUndoProvider({ children }: { children: ReactNode }) {
   const removeWithUndo = useCallback(async (ticker: string, principalKey: string) => {
     const epoch = principal.current.epoch;
     if (!latest.current.isCurrentPrincipal(principalKey)) {
-      throw new ApiError(409, t('登录身份已变化，请重新操作'), { bizCode: 'watchlist_identity_changed' });
+      throw new ApiError(409, t('登录账号已变化，请重新操作'), { bizCode: 'watchlist_identity_changed' });
     }
     const removal = await latest.current.remove(ticker);
     if (principal.current.epoch !== epoch || !latest.current.isCurrentPrincipal(principalKey)) {
-      throw new ApiError(409, t('登录身份已变化，请重新操作'), { bizCode: 'watchlist_identity_changed' });
+      throw new ApiError(409, t('登录账号已变化，请重新操作'), { bizCode: 'watchlist_identity_changed' });
     }
     if (!removal.undo) return removal;
     const undo = removal.undo;
     let restoring = false;
     let restored = false;
-    toast.info(t('已移出自选'), undo.ticker, {
+    toast.info(t('已移除关注'), undo.ticker, {
       action: { label: t('撤销'), onClick: () => {
         if (restoring || restored) return;
         restoring = true;
         const restore = async () => {
           if (principal.current.epoch !== epoch) {
-            throw new Error(t('登录身份已变化，请重新操作'));
+            throw new Error(t('登录账号已变化，请重新操作'));
           }
           await latest.current.restore(undo, removal.principalKey);
           if (principal.current.epoch !== epoch || !latest.current.isCurrentPrincipal(removal.principalKey)) {
-            throw new Error(t('登录身份已变化，请重新操作'));
+            throw new Error(t('登录账号已变化，请重新操作'));
           }
           restored = true;
-          toast.success(t('已恢复到自选'), undo.ticker);
+          toast.success(t('已恢复关注'), undo.ticker);
         };
         void restore().catch((error) => {
           toast.error(t('恢复失败'), watchlistErrorMessage(error, removal.maxTickers));

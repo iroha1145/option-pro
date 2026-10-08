@@ -181,16 +181,16 @@ function ImpactAction({ row, onSelect }: { row: EarningsRow; onSelect: () => voi
   // 就写「重分析中」，一条失败或被预算挡下的最终任务会让这一行永远显示在跑。
   const finalizing = exBool(row, 'finalizationInProgress') === true;
   /* 这一列只有 96px：标签必须短且单行，四个汉字会折行把 h-7 撑破。
-     列头已经写着「AI 影响」，按钮不必再重复一遍，状态交给配色区分。 */
+     列头已经写着「财报影响」，按钮不必再重复一遍，状态交给配色区分。 */
   const [label, title] = locked
     ? [t('最终'), t('查看最终分析')]
     : finalizing
       ? [t('分析中'), t('最终分析生成中')]
       : ready === true
-        ? [t('查看'), t('查看 AI 影响分析')]
+        ? [t('查看'), t('查看财报影响分析')]
         : ready === false
-          ? [t('分析'), t('生成 AI 影响分析')]
-          : [t('AI 影响'), t('AI 影响分析')];
+          ? [t('分析'), t('生成财报分析')]
+          : [t('查看'), t('查看财报影响分析')];
   return (
     <button
       onClick={(e) => {
@@ -277,7 +277,7 @@ export default function EarningsList({
         <section className="card-surface" aria-label={t("即将公布")}>
           <EmptyState
             image="/empty-chart.svg"
-            title={filteredByDay ? t('当日没有重点公司财报') : t('当前范围内没有重点公司财报')}
+            title={filteredByDay ? t('当日暂无重点公司财报') : t('当前范围内没有重点公司财报')}
             description={t('切换到「全部公司」查看其他公司的财报。')}
             action={
               onShowAll ? (
@@ -300,7 +300,7 @@ export default function EarningsList({
           image="/empty-chart.svg"
           /* 默认列表覆盖的是「近 3 天到未来 30 天」滚动窗口（审计 2.3.4）：
              写「本周清淡 · 跳到下周看看」会让用户以为还有下周数据没查。 */
-          title={filteredByDay ? t('当日无财报') : t('近一个月暂无财报')}
+          title={filteredByDay ? t('当日无财报') : t('未来 30 天暂无财报')}
           description={filteredByDay ? t('当日没有财报安排，可查看其他日期。') : t('未来 30 天没有已安排的财报，稍后再来看看。')}
           action={
             onNextWeek ? (
@@ -350,7 +350,7 @@ export default function EarningsList({
         <span className="eyebrow hidden 2xl:block">{t('营收预期')}</span>
         <span className="eyebrow hidden 2xl:block">{t('市值')}</span>
         <span className="eyebrow">{t('预期波动')}</span>
-        <span className="eyebrow text-right">{t('AI 影响')}</span>
+        <span className="eyebrow text-right">{t('财报影响')}</span>
       </div>
 
       {groups.map((g) => {
@@ -438,7 +438,7 @@ export default function EarningsList({
                         <span className="text-ink-500">{est != null ? est.toFixed(2) : '—'}</span>
                         <span className="mx-1 text-ink-400">/</span>
                         <span className={cn('whitespace-nowrap', act != null ? 'font-medium text-ink-900' : 'text-ink-400')}>
-                          {act != null ? act.toFixed(2) : t('未公布')}
+                          {act != null ? act.toFixed(2) : t('尚未公布')}
                         </span>
                       </span>
                     </span>
@@ -491,7 +491,7 @@ export default function EarningsList({
                           <span className="text-ink-500">{est != null ? est.toFixed(2) : '—'}</span>
                           <span className="mx-1 text-ink-400">/</span>
                           <span className={cn('whitespace-nowrap', act != null ? 'text-ink-900' : 'text-ink-400')}>
-                            {act != null ? act.toFixed(2) : t('未公布')}
+                            {act != null ? act.toFixed(2) : t('尚未公布')}
                           </span>
                         </span>
                       </span>

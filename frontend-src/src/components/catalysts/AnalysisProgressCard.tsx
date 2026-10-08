@@ -64,7 +64,7 @@ function OwnerAnalysisProgressCard() {
 
   if (progressQ.loading && !progress) {
     return (
-      <section aria-label={t("新闻分析进度")} className="card-surface mt-4 px-5 py-4">
+      <section aria-label={t("分析进度")} className="card-surface mt-4 px-5 py-4">
         <SkeletonBlock className="h-5 w-44" />
         <SkeletonBlock className="mt-3 h-2 w-full" />
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
@@ -78,7 +78,7 @@ function OwnerAnalysisProgressCard() {
 
   if (progressQ.error && !progress) {
     return (
-      <section aria-label={t("新闻分析进度")} className="card-surface mt-4 px-5 py-4">
+      <section aria-label={t("分析进度")} className="card-surface mt-4 px-5 py-4">
         <div className="flex items-center gap-2">
           <Led tone="danger" />
           <p className="text-body-s font-medium text-ink-800">{t('分析进度暂不可用')}</p>
@@ -95,7 +95,7 @@ function OwnerAnalysisProgressCard() {
     progress.cancelled + progress.insufficientContext + progress.budgetBlocked;
   const sourceLabel =
     progress.batchSource === 'scheduled'
-      ? t('定时批次')
+      ? t('定时任务')
       : progress.batchSource === 'manual'
         ? t('手动任务')
         : t('尚无批次');
@@ -105,7 +105,7 @@ function OwnerAnalysisProgressCard() {
       initial={reduceMotion ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={reduceMotion ? { duration: 0 } : { duration: DUR_SECTION, ease: EASE_PAPER }}
-      aria-label={t("新闻分析进度")}
+      aria-label={t("分析进度")}
       aria-live="polite"
       className="card-surface mt-4 px-4 py-4 sm:px-5"
     >
@@ -113,7 +113,7 @@ function OwnerAnalysisProgressCard() {
         <div className="min-w-0">
           <h3 className="flex items-center gap-2 text-h3 text-ink-900">
             <AnalysisIcon size={14} className="text-ai-600" />
-            {t('新闻分析进度')}
+            {t('分析进度')}
           </h3>
           <div className="mt-1.5 flex items-center gap-2">
             <Led
@@ -154,7 +154,7 @@ function OwnerAnalysisProgressCard() {
       )}
 
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
-        <Metric label={t("总任务")} value={progress.total} />
+        <Metric label={t("任务总数")} value={progress.total} />
         <Metric label={t("已结束")} value={progress.finished} />
         <Metric label={t("成功")} value={progress.succeeded} tone="ok" />
         <Metric
@@ -167,9 +167,9 @@ function OwnerAnalysisProgressCard() {
           value={progress.rejected}
           tone={progress.rejected ? 'danger' : undefined}
         />
-        <Metric label={t("失败")} value={progress.failed} tone={progress.failed ? 'danger' : undefined} />
-        <Metric label={t("等待")} value={progress.waiting} tone={progress.waiting ? 'warn' : undefined} />
-        <Metric label={t("进行中")} value={progress.inProgress} tone={progress.inProgress ? 'ai' : undefined} />
+        <Metric label={t("处理失败")} value={progress.failed} tone={progress.failed ? 'danger' : undefined} />
+        <Metric label={t("等待处理")} value={progress.waiting} tone={progress.waiting ? 'warn' : undefined} />
+        <Metric label={t("正在处理")} value={progress.inProgress} tone={progress.inProgress ? 'ai' : undefined} />
       </div>
 
       <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-micro text-ink-400">

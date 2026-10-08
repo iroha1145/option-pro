@@ -35,7 +35,7 @@ for (const pathname of ['/', '/market']) {
   test(`valid index prices with unknown change remain visible on ${pathname}`, async ({ page }) => {
     const errors = await fixture(page);
     await page.goto(pathname);
-    const tape = page.getByRole('button', { name: /查看大盘强弱，SPX 最新价 6,123.45/ });
+    const tape = page.getByRole('button', { name: /查看美股概况，SPX 最新价 6,123.45/ });
     await expect(tape).toHaveCount(1);
     await expect(tape).toContainText('6,123.45');
     await expect(tape).toContainText('—');
@@ -46,14 +46,14 @@ for (const pathname of ['/', '/market']) {
     await expect(card).toContainText('6,123.45');
     await expect(card.getByLabel('涨跌数据缺失', { exact: true })).toHaveText('—');
     await expect(card).not.toContainText('0.00%');
-    const flat = page.getByRole('button', { name: /查看大盘强弱，IXIC 最新价 20,000.00，持平/ });
+    const flat = page.getByRole('button', { name: /查看美股概况，IXIC 最新价 20,000.00，持平/ });
     await expect(flat).toContainText('0.00%');
     for (const code of ['DJI', 'N225', 'SSE']) {
-      await expect(page.getByRole('button', { name: new RegExp(`查看大盘强弱，${code} `) })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: new RegExp(`查看美股概况，${code} `) })).toHaveCount(0);
       await expect(page.getByRole(pathname === '/' ? 'link' : 'button', { name: new RegExp(`${code} 详情`) })).toHaveCount(0);
     }
     if (pathname === '/market') {
-      const reading = page.getByRole('region', { name: '市场信号解读', exact: true });
+      const reading = page.getByRole('region', { name: '信号解读', exact: true });
       await expect(reading).toContainText('美股 2 个主要指数 0 涨 0 跌 1 平，1 个涨跌未知');
       await expect(reading).not.toContainText('2 平');
     }

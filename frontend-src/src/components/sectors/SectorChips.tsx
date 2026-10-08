@@ -46,7 +46,7 @@ export default function SectorChips({ sectors, value, onChange, className }: Sec
           options={sectors.map((sector) => ({ value: sector.id, label: sector.name }))}
           value={value}
           onChange={onChange}
-          ariaLabel={t('板块切换')}
+          ariaLabel={t('行业切换')}
           scrollable
         />
       </div>

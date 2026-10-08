@@ -34,7 +34,7 @@ export const SLOT_LABEL: Record<BriefSlot, string> = {
 export const REGIME_LABEL: Record<BriefRegime, string> = {
   broad_advance: t('广泛走强'),
   narrow_leadership: t('权重股撑盘'),
-  rotation: t('板块轮动'),
+  rotation: t('行业轮动'),
   risk_off: t('风险偏好收缩'),
   mixed: t('多空交织'),
   uncertain: t('判断待定'),
@@ -82,6 +82,44 @@ export const PRICED_IN_LABEL: Record<BriefPricedIn, string> = {
   partly: t('部分反映'),
   no: t('未反映'),
   unclear: t('不明'),
+};
+
+/*
+ * 判断标签的颜色：同一种含义在各段用同一个颜色。一致、支持用 ok（绿）；「部分……」用 warn（琥珀）；
+ * 背离、反驳用 danger（红）；值得留意的实质变化、新闻尚未反映在价格里用 brand（蓝）；
+ * 不明、待定、噪音、已反映用中性灰。这些不是价格方向，不用涨跌色——红涨绿跌模式下也不该互换。
+ */
+export const SUFFICIENCY_TONE: Record<BriefSufficiency, BadgeTone> = {
+  low: 'warn',
+  medium: 'neutral',
+  high: 'ok',
+};
+
+export const BREADTH_TONE: Record<BriefConsistency, BadgeTone> = {
+  confirms: 'ok',
+  diverges: 'danger',
+  mixed: 'warn',
+  unknown: 'neutral',
+};
+
+export const VERDICT_TONE: Record<BriefMacroVerdict, BadgeTone> = {
+  supports: 'ok',
+  contradicts: 'danger',
+  mixed: 'warn',
+  unknown: 'neutral',
+};
+
+export const CHANGE_TONE: Record<BriefSectorChange, BadgeTone> = {
+  substantive: 'brand',
+  noise: 'neutral',
+  unknown: 'neutral',
+};
+
+export const PRICED_IN_TONE: Record<BriefPricedIn, BadgeTone> = {
+  yes: 'neutral',
+  partly: 'warn',
+  no: 'brand',
+  unclear: 'neutral',
 };
 
 /* ------------------------------- 失败原因码 ------------------------------- */
@@ -218,7 +256,7 @@ export function generatedText(iso: string | null, tradingDate: string | null, ye
   const day = fmtNyDayKey(iso);
   if (!day) return null;
   const time = fmtNyHHmm(iso);
-  return t('生成于 美东 {time}', { time: day === tradingDate ? time : `${shortDate(day, year)} ${time}` });
+  return t('生成于 纽约时间 {time}', { time: day === tradingDate ? time : `${shortDate(day, year)} ${time}` });
 }
 
 /** 「下一个时段：开盘前 · 10-09 美东 08:40」。 */
@@ -226,7 +264,7 @@ export function nextSlotText(next: MarketBriefNextSlot | null, year?: string): s
   if (!next) return null;
   const day = fmtNyDayKey(next.at);
   if (!day) return null;
-  return t('下一个时段：{slot} 美东 {time}', { slot: slotTag(next.slot, day, year), time: fmtNyHHmm(next.at) });
+  return t('下一个时段：{slot} 纽约时间 {time}', { slot: slotTag(next.slot, day, year), time: fmtNyHHmm(next.at) });
 }
 
 /* ---------------------------------- 覆盖条 ---------------------------------- */
@@ -239,10 +277,10 @@ const BREADTH_BASIS_LABEL: Record<string, string> = {
 export const BLOCK_LABEL: Record<string, string> = {
   indices: t('指数'),
   market_signals: t('市场信号'),
-  market_regime: t('市场形态'),
+  market_regime: t('走势评分'),
   breadth_counts: t('全市场扫描'),
   themes: t('主题'),
-  sector_iv: t('板块波动率快照'),
+  sector_iv: t('行业波动率快照'),
   breakouts: t('突破雷达'),
   macro: t('宏观'),
   news: t('新闻'),
@@ -256,16 +294,16 @@ export const BLOCK_LABEL: Record<string, string> = {
  * 最能说明这份研判的数据新旧，排最前。没有登记的来源不进覆盖条。
  */
 export const THROUGH_LABEL: Record<string, string> = {
-  eod_batch: t('全市场扫描截止'),
-  macro: t('宏观截止'),
-  market_regime: t('市场形态截止'),
-  market_signals: t('市场信号截止'),
-  indices: t('指数截止'),
-  sector_iv: t('板块波动率截止'),
-  breakouts: t('突破雷达截止'),
-  news: t('新闻截止'),
-  earnings: t('财报截止'),
-  calendar: t('经济日历截止'),
+  eod_batch: t('全市场扫描截至'),
+  macro: t('宏观截至'),
+  market_regime: t('走势评分截至'),
+  market_signals: t('市场信号截至'),
+  indices: t('指数截至'),
+  sector_iv: t('行业波动率截至'),
+  breakouts: t('突破雷达截至'),
+  news: t('新闻截至'),
+  earnings: t('财报截至'),
+  calendar: t('经济日历截至'),
 };
 const THROUGH_ORDER = Object.keys(THROUGH_LABEL);
 
@@ -293,7 +331,7 @@ const fmtCount = (value: number) => value.toLocaleString('en-US');
 export function coverageItems(coverage: MarketBriefCoverage, year?: string): CoverageItem[] {
   const items: CoverageItem[] = [];
   if (coverage.universeSize !== null) {
-    items.push({ key: 'universe', label: t('股票池'), value: fmtCount(coverage.universeSize) });
+    items.push({ key: 'universe', label: t('股票范围'), value: fmtCount(coverage.universeSize) });
   }
   if (coverage.scoredCount !== null) {
     items.push({ key: 'scored', label: t('已评分'), value: fmtCount(coverage.scoredCount) });

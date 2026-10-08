@@ -16,6 +16,7 @@ export default function CollapsePresence({
   id,
   className,
   wrap,
+  appear = true,
   children,
 }: {
   open: boolean;
@@ -23,12 +24,14 @@ export default function CollapsePresence({
   className?: string;
   /** 只在可见期间套一层外壳（如表格里的 tr/td）：收起后外壳也不留空行。 */
   wrap?: (panel: ReactNode) => ReactNode;
+  /** false：挂载时就是展开的，直接显示到位，不播展开补间（例如页面一打开就展开的卡片）。 */
+  appear?: boolean;
   children: ReactNode;
 }) {
   // 选股表每行都挂一个：时长只在挂载时读一次，免得整表重渲染时逐行强制样式计算。
   const [collapseMs] = useState(() => readRootDurationMs('--acc-collapse', 250));
-  const phase = useOverlayPhase(open, collapseMs);
-  const [settled, setSettled] = useState(false);
+  const phase = useOverlayPhase(open, collapseMs, appear);
+  const [settled, setSettled] = useState(() => open && !appear);
   const [previousPhase, setPreviousPhase] = useState(phase);
   // 阶段一变就先收回 settled（同次渲染派生），收起的第一帧就恢复裁剪与补间。
   if (previousPhase !== phase) {

@@ -1,6 +1,6 @@
 /**
  * 情景曲线（/cta 主区）：若明日收于横轴价格，估算目标仓位为纵轴值。
- * 实线=完整敞口（含波动率调整），虚线=仅趋势（波动率冻结）；阴影带为主要
+ * 实线=完整仓位（含波动率调整），虚线=仅趋势（波动率固定）；阴影带为主要
  * 触发区间。曲线是分段线性的模型输出，不是预测路径。
  */
 import { useMemo } from 'react';
@@ -93,7 +93,7 @@ function scenarioOption(row: CtaInstrumentEstimate): ChartOption | null {
       /* Insight Cards 折线工艺：2.25px 圆头主线 + 细虚线对照；
          曲线是分段线性的模型输出，不平滑（平滑会在档位之间编出假读数） */
       insightLine(CH.brand500, {
-        name: t('完整敞口'),
+        name: t('完整仓位'),
         data: curve.full,
         markLine: {
           symbol: 'none',
@@ -152,7 +152,7 @@ function scenarioOption(row: CtaInstrumentEstimate): ChartOption | null {
         z: 3,
       }),
       insightLine(CH.ink400, {
-        name: t('仅趋势（波动率冻结）'),
+        name: t('仅趋势（波动率固定）'),
         data: curve.trend_only,
         lineStyle: { width: 1.5, type: [5, 4] as number[] },
         z: 2,
@@ -181,11 +181,11 @@ export default function ScenarioChart({ row }: { row: CtaInstrumentEstimate }) {
       <p className="mt-1 flex flex-wrap items-center gap-x-3 text-micro text-ink-400">
         <span className="inline-flex items-center gap-1">
           <span className="inline-block h-0 w-4 border-t-2 border-brand-500" aria-hidden />
-          {t('完整敞口（含波动率调整）')}
+          {t('完整仓位（含波动率调整）')}
         </span>
         <span className="inline-flex items-center gap-1">
           <span className="inline-block h-0 w-4 border-t border-dashed border-ink-400" aria-hidden />
-          {t('仅趋势（波动率冻结）')}
+          {t('仅趋势（波动率固定）')}
         </span>
       </p>
     </>

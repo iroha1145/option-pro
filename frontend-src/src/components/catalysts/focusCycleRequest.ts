@@ -20,7 +20,7 @@ export function buildFocusCycleRequestBody(
   if (retryCycleId) {
     const normalized = retryCycleId.trim();
     if (!/^mfc_[0-9a-f]{32}$/.test(normalized)) {
-      throw new Error(t('市场焦点周期编号无效'));
+      throw new Error(t('热点分析编号无效'));
     }
     body.retry_cycle_id = normalized;
     return body;
@@ -41,7 +41,7 @@ export function buildFocusCycleRequestBody(
 export function focusCyclePollPath(cycleId: string): string {
   const normalized = cycleId.trim();
   if (!/^mfc_[0-9a-f]{32}$/.test(normalized)) {
-    throw new Error(t('市场焦点周期编号无效'));
+    throw new Error(t('热点分析编号无效'));
   }
   return `/catalysts/market-focus-cycles/${encodeURIComponent(normalized)}`;
 }

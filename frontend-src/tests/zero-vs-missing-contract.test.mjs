@@ -343,7 +343,7 @@ test('市场时段读不到时显示时段未知', async () => {
   const page = await source('pages/Market.tsx');
   assert.doesNotMatch(codeOf(page), /status\?\.market \?\? 'closed'/);
   assert.match(page, /时段未知/);
-  assert.match(page, /时段读取中/);
+  assert.match(page, /正在读取交易时段/);
 });
 
 /* ---------------- P2-4 / P2-8：平盘是第三种状态 ---------------- */

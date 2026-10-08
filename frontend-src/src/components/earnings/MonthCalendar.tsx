@@ -114,7 +114,7 @@ export default function MonthCalendar({
   };
 
   return (
-    <section className="card-surface overflow-hidden" aria-label={t("月历")}>
+    <section className="card-surface overflow-hidden" aria-label={t("财报月历")}>
       {/* 头部：‹ › + Serif 月标题 + 今天 */}
       <div className="flex h-12 items-center justify-between border-b border-line px-4">
         <button
@@ -234,7 +234,7 @@ export default function MonthCalendar({
                           e.stopPropagation();
                           onSelectTicker(it.ticker, date);
                         }}
-                        aria-label={t('{ticker} {timing}财报，查看 AI 影响', { ticker: it.ticker, timing: timingLabel(it.timing) })}
+                        aria-label={t('{ticker} {timing}财报，查看财报影响分析', { ticker: it.ticker, timing: timingLabel(it.timing) })}
                         className={cn(
                           'flex h-5 items-center gap-1 rounded-xs px-1 transition-colors duration-fast',
                           active ? 'bg-brand-100' : 'hover:bg-brand-50',

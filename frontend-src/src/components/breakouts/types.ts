@@ -44,7 +44,7 @@ export const SETUP_CN: Record<SetupType, string> & Partial<Record<string, string
   GAP_HOLD: t('跳空企稳'),
   GAP_FADE: t('跳空回落'),
   RETEST_BREAKOUT: t('回踩突破'),
-  MOMENTUM_SPIKE: t('动量急拉'),
+  MOMENTUM_SPIKE: t('快速上涨'),
   RECOVERY_BREAKOUT: t('修复突破'),
 };
 
@@ -80,14 +80,14 @@ export const LIFECYCLE_CHIP_CLASS: Record<LifecycleTone, string> = {
 
 /* ---------------- 各项评分 ---------------- */
 export const SCORE_DEFS = [
-  { key: 'intrinsic_strength_score', label: t('内在强度') },
+  { key: 'intrinsic_strength_score', label: t('个股评分') },
   { key: 'base_quality_score', label: t('基底质量') },
   { key: 'breakout_confirmation_score', label: t('突破确认') },
   { key: 'liquidity_quality_score', label: t('流动性') },
   { key: 'chase_risk_score', label: t('追高风险') },
-  { key: 'sector_fit_score', label: t('板块契合') },
+  { key: 'sector_fit_score', label: t('行业契合') },
   { key: 'market_fit_score', label: t('市场契合') },
-  { key: 'alert_priority_score', label: t('警示优先级') },
+  { key: 'alert_priority_score', label: t('信号优先级') },
   { key: 'data_confidence_score', label: t('数据置信') },
 ] as const;
 

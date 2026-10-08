@@ -330,7 +330,7 @@ test('板块组件不再消费无后端依据的趋势、资金流和相关性�
   assert.equal(ivPanel.includes('meta.snapshotSource'), false);
   assert.match(ivPanel, /InfoHint hint=\{SCORE_HINTS\.sectorIvRank\}/);
   const scoreHints = fs.readFileSync(path.join(sourceRoot, 'lib', 'scoreHints.ts'), 'utf8');
-  assert.match(scoreHints, /本板块成分股中的百分位/);
+  assert.match(scoreHints, /本行业成分股中的百分位/);
   assert.match(scoreHints, /不是该股自己的历史高低位/);
   /* stale 提示必须留着：数据没刷新要让人看见 */
   assert.match(ivPanel, /meta\.stale/);

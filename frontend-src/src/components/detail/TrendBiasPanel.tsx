@@ -119,7 +119,7 @@ export default function TrendBiasPanel({
     if (error?.bizCode === 'public_snapshot_unavailable') {
       return (
         <div className="flex flex-col items-center rounded-md border border-line bg-card-warm px-4 py-6 text-center">
-          <p className="text-body-s text-ink-500">{t('该股尚未拉取数据，拉取后自动分析')}</p>
+          <p className="text-body-s text-ink-500">{t('该股尚未获取数据，获取后自动分析')}</p>
           <ManualStockPull ticker={ticker} minimal className="mt-2.5" onPulled={() => onPulled?.()} />
         </div>
       );

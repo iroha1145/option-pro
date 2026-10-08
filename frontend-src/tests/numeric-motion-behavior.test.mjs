@@ -385,6 +385,30 @@ test('overlay phases preserve their closing clock and cancel it when reopened', 
   assert.equal(h.value(), 'closed');
 });
 
+test('appear=false mounts an already-open panel without the entrance, later toggles animate as usual', () => {
+  const h = harness();
+  const { useOverlayPhase } = loadTransitions(h);
+  let open = true;
+  h.mount(() => useOverlayPhase(open, 150, false));
+  assert.equal(h.value(), 'open', '挂载时就是展开的：直接 open，不经过 preopen');
+  assert.equal(h.frames.size, 0, '不排入场补间的动画帧');
+  open = false;
+  h.render();
+  assert.equal(h.value(), 'closing', '之后收起照常播');
+  h.timeout(200);
+  assert.equal(h.value(), 'closed');
+  open = true;
+  h.render();
+  assert.equal(h.value(), 'preopen', '再展开照常从 preopen 补间');
+  h.frame(16);
+  assert.equal(h.value(), 'open');
+
+  const closed = harness();
+  const { useOverlayPhase: closedPhase } = loadTransitions(closed);
+  closed.mount(() => closedPhase(false, 150, false));
+  assert.equal(closed.value(), 'closed', '挂载时收着就还是 closed');
+});
+
 test('reduced motion closes overlays immediately and cancels a pending close', () => {
   const h = harness();
   const { useOverlayPhase } = loadTransitions(h);

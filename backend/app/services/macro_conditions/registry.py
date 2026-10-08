@@ -695,7 +695,7 @@ FACTORS: tuple[FactorSpec, ...] = (
     _factor(
         "effr_iorb_spread",
         "funding",
-        "EFFR−IORB 价差",
+        "EFFR−IORB 利差",
         "联邦基金有效利率减准备金余额利率，单位百分点。评分用绝对值，衡量政策利率传导是否顺畅。界面同时显示带符号原值。",
         series=("EFFR", "IORB"),
         transform="absolute_spread",
@@ -708,8 +708,8 @@ FACTORS: tuple[FactorSpec, ...] = (
     _factor(
         "cp_tbill_spread",
         "funding",
-        "商业票据−国库券价差",
-        "3 个月金融商业票据利率减 3 个月国库券贴现率，单位百分点。评分只取正值部分：正价差扩大代表短期信用融资变贵。界面同时显示带符号原值。",
+        "商业票据−国库券利差",
+        "3 个月金融商业票据利率减 3 个月国库券贴现率，单位百分点。评分只取正值部分：正利差扩大代表短期信用融资变贵。界面同时显示带符号原值。",
         series=("DCPF3M", "DTB3"),
         transform="positive_part_of_spread",
         score_method="supportive_low_percentile",

@@ -639,11 +639,11 @@
   padding: 4px 10px;
   color: var(--ink-600);
 }
-.t-tabs.selection-group .t-tab[aria-selected="true"] { color: var(--brand-700); font-weight: 500; }
+.t-tabs.selection-group .t-tab:is([aria-selected="true"], [aria-current="page"]) { color: var(--brand-700); font-weight: 500; }
 @media (hover: hover) and (pointer: fine) {
   .control-button:not(:disabled):not([aria-pressed="true"]):hover { background: var(--paper-2); border-color: var(--line-strong); color: var(--ink-800); }
   .filter-group .control-button:not(:disabled):not([aria-pressed="true"]):hover { border-color: transparent; }
-  .t-tabs.selection-group .t-tab:not([aria-selected="true"]):hover { color: var(--ink-900); background: var(--paper-2); }
+  .t-tabs.selection-group .t-tab:not([aria-selected="true"], [aria-current="page"]):hover { color: var(--ink-900); background: var(--paper-2); }
 }
 @media (pointer: coarse) {
   .control-button, .filter-group .control-button, .t-tabs.selection-group .t-tab { min-height: 44px; }
@@ -651,6 +651,58 @@
 @media (max-width: 767px), (pointer: coarse) {
   .touch-target { min-height: 44px; min-width: 44px; }
 }
+/* 页头右侧的搜索、设置、登录（2026-10-08）：手机页头只有 48px 高，44px 的描边按钮把上下沿
+   顶满。外层 .header-action 是透明的触控区（配 .touch-target，手机与触屏仍是 44px），
+   看得见的按钮由里面的 .header-chip 画，固定 32px；桌面没有 .touch-target 的下限，外层
+   就等于按钮本身。聚焦环画在按钮上，不画在更大的透明触控区上。 */
+.header-action {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+}
+.header-action:focus-visible { outline: none; box-shadow: none; }
+.header-action:focus-visible > .header-chip {
+  outline: 2px solid var(--brand-600);
+  outline-offset: 2px;
+}
+.header-chip {
+  display: inline-flex;
+  height: 2rem;
+  min-width: 2rem;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  background: var(--card-warm);
+  color: var(--ink-500);
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    color var(--duration-quick) var(--ease-smooth-out),
+    border-color var(--duration-quick) var(--ease-smooth-out),
+    background-color var(--duration-quick) var(--ease-smooth-out),
+    transform var(--duration-quick) var(--ease-smooth-out);
+}
+.header-chip-primary {
+  border-color: transparent;
+  background: var(--brand-600);
+  color: var(--on-accent);
+  padding: 0 0.75rem;
+  font-weight: 500;
+}
+.header-action[aria-expanded="true"] > .header-chip { border-color: var(--brand-400); color: var(--brand-600); }
+.header-action:disabled { cursor: wait; }
+.header-action:disabled > .header-chip { opacity: 0.6; }
+.header-action:not(:disabled):active > .header-chip { transform: scale(0.97); }
+@media (hover: hover) and (pointer: fine) {
+  .header-action:not(:disabled):hover > .header-chip { border-color: var(--line-strong); color: var(--ink-800); }
+  .header-action:not(:disabled):hover > .header-chip-primary { border-color: transparent; background: var(--brand-700); color: var(--on-accent); }
+}
+@media (prefers-reduced-motion: reduce) { .header-chip { transition: none; } }
 @media (prefers-reduced-motion: reduce) { .control-button { transition: none; } }
 
 /* 模型相关操作（2026-09-26 重做）。此前一律 bg-ai-600 实心青块：财报列表和新闻流
@@ -814,7 +866,6 @@
   .cloud-chart-tooltip { transition: none !important; }
 }
 @media (pointer: coarse) {
-  .color-mode-control { min-height: 44px; }
   .theme-switcher-control { min-height: 44px; min-width: 44px; }
 }
 .change-badge { font-family: inherit; font-weight: 500; white-space: nowrap; letter-spacing: -.015em; }

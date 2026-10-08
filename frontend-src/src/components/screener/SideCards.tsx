@@ -30,7 +30,7 @@ export function MethodCard({
       >
         <span className="eyebrow">
           {__t('评分方法 ·')}{' '}
-          {profile ? profile.name : loading ? __t('读取中') : __t('档位未知')}
+          {profile ? profile.name : loading ? __t('读取中') : __t('评分设置未知')}
         </span>
         <span className="t-acc-chevron text-ink-400">
           <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
@@ -48,7 +48,7 @@ export function MethodCard({
           ) : profileUnknown && error ? (
             <div className="mt-4">
               <p className="text-caption leading-[18px] text-ink-500">
-                {__t('评分档位读取失败，请重试。')}
+                {__t('评分设置读取失败，请重试。')}
               </p>
               {onRetry && (
                 <button onClick={onRetry} className="control-button mt-2">

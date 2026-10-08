@@ -79,7 +79,9 @@ test('分段控件实现 roving tabindex 与方向键', async () => {
   const segmented = codeOf(await source('components/shared/Segmented.tsx'));
   // 选中判定与 roving tabindex 是同一个谓词，别再各写一遍（审查 #113）
   assert.match(segmented, /const active = value === o\.value;/);
-  assert.match(segmented, /tabIndex=\{active \? 0 : -1\}/);
+  // 当前值不在选项里（新闻页停在「更多」菜单里的消息来源）时，第一项仍可用 Tab 进入
+  assert.match(segmented, /const hasSelection = options\.some\(\(option\) => option\.value === value\);/);
+  assert.match(segmented, /tabIndex=\{active \|\| \(!hasSelection && index === 0\) \? 0 : -1\}/);
   assert.match(segmented, /event\.key === 'ArrowRight' \|\| event\.key === 'ArrowDown'/);
   assert.match(segmented, /event\.key === 'ArrowLeft' \|\| event\.key === 'ArrowUp'/);
   assert.match(segmented, /event\.key === 'Home'/);

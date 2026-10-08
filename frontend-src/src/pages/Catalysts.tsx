@@ -1,10 +1,11 @@
 /**
- * §06 新闻催化剂（catalysts.md 完整实现）
- * 状态 hero · 热点带 · 市场焦点周期 · 标签页（feed/stocks/calendar/sources，URL 同步）
- * 过滤器条（URL query）· 新闻详情抽屉（AI 分析任务状态机）· 空态/骨架/503/移动端
+ * §06 新闻（catalysts.md 完整实现；页面名与导航名第二版起是「新闻」）
+ * 状态 hero · 热点带 · 热点追踪卡 · 栏目（feed/stocks/calendar 三项分段 + 「更多」菜单里的 sources/manage，URL 同步）
+ * 过滤器条（URL query）· 消息详情抽屉（分析任务状态机）· 空态/骨架/503/移动端
  */
-import { startTransition, useCallback, useMemo, useOptimistic, useState } from 'react';
+import { startTransition, useCallback, useEffect, useMemo, useOptimistic, useState } from 'react';
 import { useSearchParams } from 'react-router';
+import { useAccess } from '@/hooks/useAccess';
 import PageHeader from '@/components/shared/PageHeader';
 import Segmented from '@/components/shared/Segmented';
 import { BusyIcon } from '@/components/shared/IconSwap';
@@ -14,6 +15,7 @@ import AnalysisProgressCard from '@/components/catalysts/AnalysisProgressCard';
 import HotspotsStrip from '@/components/catalysts/HotspotsStrip';
 import FocusCycleCard from '@/components/catalysts/FocusCycleCard';
 import ManagePanel from '@/components/catalysts/ManagePanel';
+import MoreMenu from '@/components/catalysts/MoreMenu';
 import FilterBar from '@/components/catalysts/FilterBar';
 import { DEFAULT_FILTERS, sanitizeThemeId, type CatalystFilters } from '@/components/catalysts/filters';
 import FeedPanel from '@/components/catalysts/FeedPanel';
@@ -26,14 +28,16 @@ import type { CatalystNewsItem, NewsAnalysisStatus, NewsClassification } from '@
 import { addNewsPatch, type NewsPatches } from '@/components/catalysts/feedPatches';
 import { t as __t } from '../i18n/core.ts';
 
-type TabId = 'feed' | 'stocks' | 'calendar' | 'sources';
+type TabId = 'feed' | 'stocks' | 'calendar' | 'sources' | 'manage';
 
-const TABS: { id: TabId; label: string }[] = [
-  { id: 'feed', label: __t('新闻流') },
+/* 分段控件只留三项；消息来源与管理设置（仅所有者）从栏目行右侧的「更多」菜单进入，
+   地址参数仍是 ?tab=sources / ?tab=manage，可以直接打开。 */
+const VIEW_TABS: { id: TabId; label: string }[] = [
+  { id: 'feed', label: __t('新闻列表') },
   { id: 'stocks', label: __t('股票影响') },
   { id: 'calendar', label: __t('经济日历') },
-  { id: 'sources', label: __t('数据源') },
 ];
+const TAB_IDS: readonly TabId[] = ['feed', 'stocks', 'calendar', 'sources', 'manage'];
 
 /* URL 参数必须逐项校验（审计 P2-23）：分类与状态此前用强制类型断言直接透传，
    数值经 Number() 后未过滤 NaN —— 损坏的书签或手写查询串会让筛选器进入 UI
@@ -76,13 +80,21 @@ function parseFilters(sp: URLSearchParams): CatalystFilters {
 
 export default function Catalysts() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { isOwner, loading: accessLoading } = useAccess();
 
   /* URL 为唯一事实来源 */
-  const tab: TabId = useMemo(() => {
+  const urlTab: TabId = useMemo(() => {
     const t = searchParams.get('tab');
-    return TABS.some((x) => x.id === t) ? (t as TabId) : 'feed';
+    return TAB_IDS.find((id) => id === t) ?? 'feed';
   }, [searchParams]);
+  /* 管理设置只给所有者：身份确认后仍不是所有者就落到新闻列表；确认前先不动，免得所有者刷新页面被弹回。 */
+  const tab: TabId = urlTab === 'manage' && !isOwner && !accessLoading ? 'feed' : urlTab;
   const filters = useMemo(() => parseFilters(searchParams), [searchParams]);
+  /* 管理设置打开过一次就一直挂着（切走时只隐藏）：面板里「一次只做一件事」的忙碌状态在组件内，
+     卸载会让切回来的按钮不再转圈、还能立刻点下一项。
+     在渲染时记下「打开过」（React 文档里保存上一次渲染信息的写法），不放进副作用，省掉一轮多余的渲染。 */
+  const [manageMounted, setManageMounted] = useState(false);
+  if (tab === 'manage' && !manageMounted) setManageMounted(true);
   // 输入须立即回显；地址导航可能延后提交，不能用旧参数覆盖正在键入的字符。
   // 列表仍读取已提交的地址参数，输入反馈随同一次导航自动收敛。
   const [inputFilters, setInputFilters] = useOptimistic(filters);
@@ -105,6 +117,11 @@ export default function Catalysts() {
   );
 
   const setTab = useCallback((t: TabId) => syncUrl(inputFilters, t), [inputFilters, syncUrl]);
+  /* 身份确认后仍不是所有者：页面已落回新闻列表，地址里的 tab=manage 也一起清掉，
+     免得之后身份重试成功时页面又自己跳回管理设置。 */
+  useEffect(() => {
+    if (urlTab === 'manage' && !isOwner && !accessLoading) syncUrl(inputFilters, 'feed');
+  }, [urlTab, isOwner, accessLoading, inputFilters, syncUrl]);
   const setFilters = useCallback((f: CatalystFilters) => {
     startTransition(() => {
       setInputFilters(f);
@@ -161,7 +178,7 @@ export default function Catalysts() {
     <div>
       {/* B0 页头带 */}
       <PageHeader
-        title={__t("新闻催化剂")}
+        title={__t("新闻")}
         meta={
           <>
             {lastLoadedAt && (
@@ -181,7 +198,7 @@ export default function Catalysts() {
         }
       />
 
-      {/* 状态 hero：数据源状态 / 热点计算 / 分析可用性
+      {/* 状态 hero：来源状态 / 热点整理 / 分析服务
           刷新令牌此前只传给四个标签内容，顶部采集状态、热点带与焦点周期不会
           立即重新加载，按钮文案与实际刷新范围不一致（审计 P2-21）。 */}
       <StatusHero refreshToken={refreshToken} feedSettled={feedSettled} />
@@ -192,24 +209,23 @@ export default function Catalysts() {
       {/* B1 热点主题带（点击卡片打开代表新闻抽屉） */}
       <HotspotsStrip onOpenNews={openNews} refreshToken={refreshToken} />
 
-      {/* B2 市场焦点周期卡 */}
+      {/* B2 热点追踪卡 */}
       <div className="mt-6">
         <FocusCycleCard refreshToken={refreshToken} onDataRefreshed={onRefresh} />
       </div>
 
-      {/* B2.5 管理面板（owner 专属：数据刷新 / 后台任务 / 运行设置） */}
-      <ManagePanel onDataRefreshed={onRefresh} />
-
-
-      {/* 标签页（URL 同步 ?tab=） */}
-      <div className="mt-8 min-w-0">
-        <Segmented
-          options={TABS.map(({ id, label }) => ({ value: id, label }))}
-          value={tab}
-          onChange={setTab}
-          ariaLabel={__t('催化剂视图')}
-          scrollable
-        />
+      {/* 栏目行（URL 同步 ?tab=）：分段控件三项 + 右侧「更多」菜单（消息来源、管理设置） */}
+      <div className="mt-8 flex min-w-0 flex-wrap items-center gap-3">
+        <div className="min-w-0">
+          <Segmented
+            options={VIEW_TABS.map(({ id, label }) => ({ value: id, label }))}
+            value={tab}
+            onChange={setTab}
+            ariaLabel={__t('新闻栏目')}
+            scrollable
+          />
+        </div>
+        <MoreMenu current={tab === 'sources' || tab === 'manage' ? tab : null} showManage={isOwner} onSelect={setTab} />
       </div>
 
       {/* 过滤器条（feed / stocks 共享，写入 URL query） */}
@@ -232,6 +248,14 @@ export default function Catalysts() {
         {tab === 'stocks' && <StocksPanel filters={filters} refreshToken={refreshToken} />}
         {tab === 'calendar' && <CalendarPanel refreshToken={refreshToken} />}
         {tab === 'sources' && <SourcesPanel refreshToken={refreshToken} />}
+        {urlTab === 'manage' && tab === 'manage' && !isOwner && accessLoading && (
+          <p className="rounded-md border border-line bg-card-warm px-3 py-4 text-caption text-ink-500">{__t('正在确认登录身份…')}</p>
+        )}
+        {(tab === 'manage' || manageMounted) && isOwner && (
+          <div hidden={tab !== 'manage'}>
+            <ManagePanel onDataRefreshed={onRefresh} />
+          </div>
+        )}
       </div>
 
       {/* 新闻详情抽屉 */}

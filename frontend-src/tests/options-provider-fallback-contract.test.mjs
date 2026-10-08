@@ -167,7 +167,7 @@ test('详情错误只在明确缺失快照时显示手动拉取', async () => {
 
   assert.match(drawer, /manualRecovery = publicSnapshotMissing \|\| \(!error && !detail\)/);
   assert.match(drawer, /loginExpired[\s\S]*重新登录/);
-  assert.match(drawer, /rateLimited[\s\S]*请求较频繁/);
+  assert.match(drawer, /rateLimited[\s\S]*请求过于频繁/);
   assert.match(drawer, /manualRecovery \? \([\s\S]*<ManualStockPull/);
   // refresh 的签名带可选 options（force 世代），事件处理器一律箭头包装，
   // 防止 MouseEvent 流进 options 位。

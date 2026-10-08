@@ -350,7 +350,7 @@ test('个人自选读取失败不能冒充成空自选', async () => {
   // 系统默认列表只面向访客；个人空列表不能重新显示默认股票。
   assert.match(page, /!canManageWatchlist && !personal\.loading && !personalFailed/);
   // 失败要说出来并可重试
-  assert.match(page, /读不到你的自选列表/);
+  assert.match(page, /读不到关注列表/);
   assert.match(page, /personal\.refresh\(\)/);
 });
 

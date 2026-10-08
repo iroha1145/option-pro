@@ -12,6 +12,7 @@ export const STOCK_DATA: Dict = {
   "获取失败 {n}": ["Failed to fetch {n}", "取得失敗 {n}"],
   '状态未知 {n}': ['Unknown status {n}', '状態不明 {n}'],
   '暂无日线走势，准备状态读取失败': ['Daily chart unavailable; readiness check failed', '日足データがなく、準備状況も確認できません'],
+  '暂无每日走势，准备状态读取失败': ['Daily chart unavailable; readiness check failed', '日足データがなく、準備状況も確認できません'],
   "日线获取失败，稍后自动重试": ["Daily data could not be loaded; retrying automatically", "日足を取得できません。後で自動再試行します"],
   "日线已获取，正在更新图表": ["Daily data loaded; updating chart", "日足を取得済み。チャートを更新中"],
   '日线读取失败，请稍后重试': ['Daily chart could not be read; please retry later', '日足チャートを取得できません。後で再試行してください'],

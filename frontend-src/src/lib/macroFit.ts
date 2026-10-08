@@ -148,8 +148,8 @@ export const MACRO_MISSING_REASON: Record<string, string> = {
   unavailable: '宏观模块未启用',
   macro_module_unavailable: '宏观模块未启用',
   macro_snapshot_unavailable: '暂无宏观快照',
-  sector_unclassified: '该标的未归入板块，无暴露画像',
-  exposure_coverage_low: '该板块暴露观测不足，不给分',
+  sector_unclassified: '该标的未归入行业，无暴露画像',
+  exposure_coverage_low: '该行业暴露观测不足，不给分',
 };
 
 export function macroMissingReason(status: string | null | undefined): string | null {
@@ -166,7 +166,7 @@ export function macroMissingReason(status: string | null | undefined): string | 
 export const MACRO_SHADOW_HINT = {
   title: '宏观适配（0–100）',
   body:
-    '衡量当前经济环境对该股票所属板块是否有利，结合各项经济指标的历史位置和板块敏感度评分。65 分及以上为顺风，35 分及以下为逆风。',
+    '衡量当前经济环境对该股票所属行业是否有利，结合各项经济指标的历史位置和行业敏感度评分。65 分及以上为顺风，35 分及以下为逆风。',
   note:
     '此分数单独展示，不影响选股和突破信号排名。数据不足时留空；分数反映当前环境，不预测股价。',
 };

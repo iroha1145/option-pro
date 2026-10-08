@@ -54,10 +54,18 @@ async function applyThrottle(page) {
 
 async function openFiltersIfNeeded(page) {
   if (!profile.mobile) return;
-  const filterBtn = page.getByRole('button', { name: '筛选' });
+  // 旧版手机把整块筛选收在「筛选」后面；2026-10-08 起股票代码与时间范围常显，没有这个按钮就跳过
+  const filterBtn = page.getByRole('button', { name: '筛选', exact: true });
   if (!(await filterBtn.count())) return;
   const expanded = await filterBtn.getAttribute('aria-expanded');
   if (expanded !== 'true') await filterBtn.click();
+}
+
+/* 2026-10-08 起影响方向等条件收进「更多筛选」；旧版界面没有这个按钮就跳过 */
+async function openMoreFiltersIfNeeded(page) {
+  const more = page.getByRole('button', { name: '更多筛选' });
+  if (!(await more.count())) return;
+  if ((await more.first().getAttribute('aria-expanded')) !== 'true') await more.first().click();
 }
 
 async function waitNews(page) {
@@ -117,8 +125,9 @@ for (let i = 0; i < REPEATS; i += 1) {
   };
   page.on('response', onList24);
   await openFiltersIfNeeded(page);
-  if (profile.mobile === false && !(await page.getByRole('tab', { name: '24 时' }).count())) {
-    await page.getByRole('button', { name: '筛选' }).click();
+  if (profile.mobile === false && !(await page.getByRole('tab', { name: '24 时' }).count())
+    && (await page.getByRole('button', { name: '筛选', exact: true }).count())) {
+    await page.getByRole('button', { name: '筛选', exact: true }).click();
   }
   /* 展开筛选后用户会看一眼选项；这段时间预取 24h/12。0 则变成「展开后立刻点」。
      桌面常开 FilterBar：悬停「24 时」才预取，避免挂载时再抢一条整窗物化。 */
@@ -154,24 +163,25 @@ for (let i = 0; i < REPEATS; i += 1) {
   if (EXTRA) {
     await openFiltersIfNeeded(page);
     const searchStarted = await page.evaluate(() => performance.now());
-    await page.getByLabel('按代码过滤').fill('NVDA');
+    await page.getByLabel(/按代码过滤|按股票代码筛选/).fill('NVDA');
     await page.waitForFunction(() => new URL(location.href).searchParams.get('ticker') === 'NVDA', null, { timeout: 15_000 });
     await page.waitForFunction(() => {
       const title = document.querySelector('article h3');
-      const empty = /这个角度暂时没有新闻|暂时没有新闻/.test(document.body.innerText || '');
+      const empty = /这个角度暂时没有新闻|暂时没有新闻|当前条件下暂无新闻/.test(document.body.innerText || '');
       return !!(title && title.textContent && title.textContent.trim().length > 1) || empty;
     }, null, { timeout: 60_000 });
     searchMs = await page.evaluate(() => performance.now()) - searchStarted;
     searchTitle = (await page.locator('article h3').first().textContent().catch(() => ''))?.trim() || null;
 
+    await openMoreFiltersIfNeeded(page);
     const classStarted = await page.evaluate(() => performance.now());
     await page.getByRole('tab', { name: '利多' }).click();
     await page.waitForFunction(() => new URL(location.href).searchParams.get('cls') === 'bullish', null, { timeout: 15_000 });
-    await page.waitForFunction(() => /这个角度暂时没有新闻|暂时没有新闻/.test(document.body.innerText || '') || document.querySelector('article h3'), null, { timeout: 60_000 });
+    await page.waitForFunction(() => /这个角度暂时没有新闻|暂时没有新闻|当前条件下暂无新闻/.test(document.body.innerText || '') || document.querySelector('article h3'), null, { timeout: 60_000 });
     classMs = await page.evaluate(() => performance.now()) - classStarted;
     classReady = await page.evaluate(() => {
       const title = document.querySelector('article h3')?.textContent?.trim() || '';
-      const empty = /这个角度暂时没有新闻/.test(document.body.innerText || '');
+      const empty = /这个角度暂时没有新闻|当前条件下暂无新闻/.test(document.body.innerText || '');
       return { title, empty };
     });
   }

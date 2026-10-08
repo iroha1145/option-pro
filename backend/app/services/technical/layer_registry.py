@@ -8,7 +8,7 @@ from typing import Any
 
 LAYER_REGISTRY_VERSION = "optix-layer-registry-v1"
 
-# group -> layers the 算法与图层 menu lists
+# group -> layers the 图表设置 dialog lists (formerly 算法与图层)
 LAYERS: list[dict[str, Any]] = [
     {"id": "ma20", "group": "price", "kind": "ma", "label": "MA20"},
     {"id": "ma50", "group": "price", "kind": "ma", "label": "MA50"},

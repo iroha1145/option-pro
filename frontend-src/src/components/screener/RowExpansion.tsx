@@ -45,8 +45,8 @@ const DIM_HINTS: Record<string, ScoreHint> = {
 };
 
 function eodDetailLabel(value: string): string {
-  if (value === 'eligible') return t('合格');
-  if (value === 'watch') return t('观察');
+  if (value === 'eligible') return t('合格候选');
+  if (value === 'watch') return t('观察候选');
   if (value === 'rejected') return t('未通过');
   if (value === 'stock') return t('股票');
   if (value === 'etf') return 'ETF';
@@ -71,11 +71,11 @@ const closesCache = new Map<string, Promise<number[] | null>>();
 function dailyChartError(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.bizCode === 'public_snapshot_unavailable') {
-      return t('公开快照暂无该股票的日线图 · 可手动拉取');
+      return t('公开快照暂无该股票的日线图 · 可手动获取');
     }
     return error.message;
   }
-  return t('暂时取不到日线数据');
+  return t('暂时读不到日线数据');
 }
 
 function fetchDailyCloses(ticker: string, force = false): Promise<number[] | null> {
@@ -221,7 +221,7 @@ export default function RowExpansion({ row, layout = 'table', dollarVolume, sign
     <div className={cn('grid grid-cols-1 gap-x-8 gap-y-5 border-t border-line bg-card-warm/60 px-4 py-4', layout === 'table' && 'md:grid-cols-3')}>
       {/* ① 分项强度 breakdown（与行内微条同源） */}
       <div>
-        <p className="eyebrow">{t('分项强度')}</p>
+        <p className="eyebrow">{t('分项评分')}</p>
         <div className="mt-3 grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-2.5">
           {dims.map(({ key, label, value }) => {
             const w = weightOf(key);
@@ -251,13 +251,13 @@ export default function RowExpansion({ row, layout = 'table', dollarVolume, sign
           <div className="mt-4 space-y-1.5 border-t border-line pt-3" data-testid="screener-eod-row-details">
             <p className="eyebrow">{t('技术详情')}</p>
             <p className="text-caption text-ink-600">
-              {row.observationOnly ? t('技术观察') : t('合格综合')}
+              {row.observationOnly ? t('观察候选') : t('合格候选')}
               {row.status ? ` · ${eodDetailLabel(row.status)}` : ''}
               {row.familyLabel ? ` · ${row.familyLabel}` : ''}
               {row.stockOrEtfTrack ? ` · ${eodDetailLabel(row.stockOrEtfTrack)}` : ''}
             </p>
             {row.observationFamilyCount != null && row.observationFamilyCount > 0 && (
-              <p className="text-caption text-ink-500">{t('多家族观察')} · {row.observationFamilyCount}</p>
+              <p className="text-caption text-ink-500">{t('多方法观察')} · {row.observationFamilyCount}</p>
             )}
             {row.rejectionReasons && row.rejectionReasons.length > 0 && (
               <p className="text-micro text-ink-500">{row.rejectionReasons.map(eodDetailLabel).join(' · ')}</p>
@@ -304,7 +304,7 @@ export default function RowExpansion({ row, layout = 'table', dollarVolume, sign
             className="control-button"
           >
             <Icon name="radar" size={13} />
-            {t('相关突破事件')}
+            {t('相关突破')}
           </Link>
         </div>
         <div className="mt-3.5 border-t border-line pt-3">
@@ -317,14 +317,14 @@ export default function RowExpansion({ row, layout = 'table', dollarVolume, sign
           ) : signals.state === 'error' ? (
             <p><SoftBadge tone="warn" className="whitespace-normal">{t('信号读取失败 · 收起后重新展开可重试')}</SoftBadge></p>
           ) : signals.signals.length === 0 ? (
-            <p className="text-caption text-ink-400">{t('— 暂无信号')}</p>
+            <p className="text-caption text-ink-400">{t('暂无信号')}</p>
           ) : (
             /* 文字行排版（对齐日股展开区）：卡片 chip 一屏十来个太闹 */
             <SignalLines signals={signals.signals} />
           )}
         </div>
         <div className="mt-3 flex items-center justify-between border-t border-line pt-3">
-          <span className="text-micro text-ink-400">{row.dollarVolumeProxyAvailable ? t('20 日均成交额代理') : t('20 日均美元成交额')}</span>
+          <span className="text-micro text-ink-400">{row.dollarVolumeProxyAvailable ? t('20 日均成交额（估算）') : t('20 日均成交额（美元）')}</span>
           <span className="text-data-m text-ink-800 tnum">
             {dollarVolume === null ? '—' : `$${fmtCompact(dollarVolume)}`}
           </span>

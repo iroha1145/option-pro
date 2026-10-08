@@ -45,7 +45,7 @@ function ChipRow({ ev, showT1 }: { ev: BreakoutCurrentEvent; showT1: boolean }) 
       </span>
       {showT1 && <T1StatusChip status={ev.t1_status} />}
       <span className="radar-chip radar-chip-neutral ml-auto tnum">
-        {t('量能')} {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}
+        {t('相对量能')} {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}
       </span>
     </div>
   );
@@ -159,7 +159,7 @@ function SignalCard({ ev: initialEvent, index, flash, locate, onOpen, showT1 = f
       {/* 各项评分迷你条 */}
       <details className="radar-disclosure mt-3">
         <summary>
-          <span>{t('各项评分')}</span>
+          <span>{t('分项评分')}</span>
           <Icon name="chevron-down" size={14} className="radar-disclosure-arrow" />
         </summary>
         <ScoreBarsMini event={ev} className="pb-3 pt-1" />
@@ -171,7 +171,7 @@ function SignalCard({ ev: initialEvent, index, flash, locate, onOpen, showT1 = f
         {(ev.evidence ?? []).length > 0 && (
           <span className="radar-evidence-link inline-flex items-center gap-1 text-micro text-ink-500">
             <Icon name="doc-quote" size={12} />
-            {t('证据')} {(ev.evidence ?? []).length} {t('条')}
+            {t('依据')} {(ev.evidence ?? []).length} {t('条')}
           </span>
         )}
       </div>

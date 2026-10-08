@@ -89,7 +89,7 @@ test('板块选择复用 Segmented 键盘行为，真实滚动层提供布局偏
   assert.match(chips, /<HorizontalScroller/);
   // tablist 留在共享分段控件上，外层只管理滚动和自动显示当前项。
   assert.match(chips, /<Segmented/);
-  assert.match(chips, /ariaLabel=\{t\('板块切换'\)\}/);
+  assert.match(chips, /ariaLabel=\{t\('行业切换'\)\}/);
   assert.match(chips, /scrollLeftToCenterChild/);
   assert.match(chips, /behavior: 'instant'/);
   assert.doesNotMatch(chips, /scrollIntoView/);

@@ -222,12 +222,12 @@ test('持续轮询失败会提示，并在恢复后清除提示', async () => {
   h.render({ newsId: '9600', seed: item({ analysisStatus: 'queued', analysisJobId: 'job-1' }) });
   await settle();
   await h.fireDue(2000);
-  assert.doesNotMatch(collectText(h.tree()).join(' '), /任务状态暂时读不到/);
+  assert.doesNotMatch(collectText(h.tree()).join(' '), /暂时读不到分析进度/);
   await h.fireDue(5000);
-  assert.match(collectText(h.tree()).join(' '), /任务状态暂时读不到/);
+  assert.match(collectText(h.tree()).join(' '), /暂时读不到分析进度/);
   // 第二次失败后本地退避升到 10 秒。
   await h.fireDue(10_000);
-  assert.doesNotMatch(collectText(h.tree()).join(' '), /任务状态暂时读不到/);
+  assert.doesNotMatch(collectText(h.tree()).join(' '), /暂时读不到分析进度/);
   h.unmount();
 });
 
@@ -257,7 +257,7 @@ test('自动查询超时后可手动重新查询同一任务', async () => {
   await h.fireDue(2000);
   now = 5 * 60_000 + 1;
   await h.fireDue(3000);
-  assert.match(collectText(h.tree()).join(' '), /自动查询已暂停/);
+  assert.match(collectText(h.tree()).join(' '), /查询已暂停/);
   const retry = findButton(h.tree(), '重试');
   assert.ok(retry);
   const before = h.jobCalls.length;
@@ -265,7 +265,7 @@ test('自动查询超时后可手动重新查询同一任务', async () => {
   await settle();
   await h.fireDue(2000);
   assert.equal(h.jobCalls.length, before + 1);
-  assert.doesNotMatch(collectText(h.tree()).join(' '), /自动查询已暂停/);
+  assert.doesNotMatch(collectText(h.tree()).join(' '), /查询已暂停/);
   h.unmount();
 });
 
@@ -369,7 +369,7 @@ test('成功提交新任务 B 后，在途初始详情中的旧 completed A 不�
   h.setCreate(async () => job({ jobId: 'job-B', newsId: '9600', status: 'queued' }));
   h.render({ newsId: '9600', seed: completedItem() });
   await settle();
-  const start = findButton(h.tree(), '重新分析（强制）');
+  const start = findButton(h.tree(), '重新分析');
   assert.ok(start);
   start.props.onClick();
   const confirm = findNode(h.tree(), (node) => node.props?.open && node.props?.confirmLabel === '重新分析');
@@ -718,7 +718,7 @@ test('任务恢复读到 404 只提示记录不存在，不给重试钮也不再
   assert.equal(h.jobCalls.length, 1);
   const text = collectText(h.tree()).join(' ');
   assert.match(text, /任务记录已不存在/);
-  assert.doesNotMatch(text, /任务状态暂时读不到/);
+  assert.doesNotMatch(text, /暂时读不到分析进度/);
   assert.equal(findButton(h.tree(), '重试'), null, '404 不给必然再失败的重试');
   h.unmount();
 });
@@ -747,7 +747,7 @@ for (const initialStatus of ['queued', 'in_progress']) {
       assert.match(text, /任务记录已不存在/);
       assert.match(text, /任务记录缺失/);
       assert.doesNotMatch(text, /任务排队中|模型分析中/);
-      assert.ok(findButton(h.tree(), '生成 AI 分析'), '重新发起仍需确认');
+      assert.ok(findButton(h.tree(), '生成分析'), '重新发起仍需确认');
       assert.equal(h.createCalls.length, 0, '404 不得自动提交付费任务');
       h.unmount();
     });
@@ -756,7 +756,7 @@ for (const initialStatus of ['queued', 'in_progress']) {
 
 for (const [label, fresh, visible] of [
   ['已完成', () => completedItem(), /完整分析/],
-  ['未分析', () => item({ analysisStatus: 'pending', analysisJobId: null }), /生成 AI 分析/],
+  ['未分析', () => item({ analysisStatus: 'pending', analysisJobId: null }), /生成分析/],
 ]) {
   test(`任务 404 后补读详情为${label}：按新详情显示并撤掉缺失提示`, async () => {
     const h = harness();
@@ -780,7 +780,7 @@ test('任务查询 503 仍是可重试的读取失败，不按记录缺失处理
   await settle();
   for (let round = 0; round < 6; round += 1) await h.fireDue(30_000);
   const text = collectText(h.tree()).join(' ');
-  assert.match(text, /任务状态暂时读不到/);
+  assert.match(text, /暂时读不到分析进度/);
   assert.doesNotMatch(text, /任务记录缺失/);
   const retry = findButton(h.tree(), '重试');
   assert.ok(retry);
@@ -809,7 +809,7 @@ for (const [label, projected, expectedStatus] of [
     h.render({ newsId: '9600', seed: item() });
     await settle();
     assert.equal(h.newsCalls.length, 1);
-    const start = findButton(h.tree(), '生成 AI 分析');
+    const start = findButton(h.tree(), '生成分析');
     assert.ok(start, 'seed 已可见时就能提交');
     start.props.onClick();
     const confirm = findNode(h.tree(), (node) => node.props?.open && node.props?.confirmLabel === '生成分析');
@@ -839,7 +839,7 @@ test('初始详情失败后在 seed 上提交分析，补读成功应清除旧�
   h.render({ newsId: '9600', seed: item() });
   await settle();
   assert.match(collectText(h.tree()).join(' '), /详情更新失败/);
-  const start = findButton(h.tree(), '生成 AI 分析');
+  const start = findButton(h.tree(), '生成分析');
   assert.ok(start);
   start.props.onClick();
   const confirm = findNode(h.tree(), (node) => node.props?.open && node.props?.confirmLabel === '生成分析');

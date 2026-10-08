@@ -48,7 +48,7 @@ function ZoneBand({ ev }: { ev: BreakoutEventFull }) {
   if (!sz || !rz || !fin(sz.low) || !fin(sz.high) || !fin(rz.low) || !fin(rz.high) || !fin(ev.current_price)) {
     return (
       <p className="flex h-12 items-center justify-center rounded-md border border-line bg-card-warm text-caption text-ink-400">
-        {__t('暂无区带数据')}
+        {__t('暂无支撑阻力区数据')}
       </p>
     );
   }
@@ -100,7 +100,7 @@ function ZoneBand({ ev }: { ev: BreakoutEventFull }) {
           <span className="inline-block size-2 rounded-[2px] bg-down-600/25 ring-1 ring-down-600/40" />
           {__t('阻力区')} {fmtPrice(rz.low)}–{fmtPrice(rz.high)}
         </span>
-        <span className="text-ink-400">{__t('枢轴')} {fin(ev.pivot_price) ? fmtPrice(ev.pivot_price) : '—'}</span>
+        <span className="text-ink-400">{__t('突破价位')} {fin(ev.pivot_price) ? fmtPrice(ev.pivot_price) : '—'}</span>
         <span className="ml-auto text-brand-600">{__t('现价')} {fmtPrice(ev.current_price)}</span>
       </div>
     </div>
@@ -110,7 +110,7 @@ function ZoneBand({ ev }: { ev: BreakoutEventFull }) {
 /* ---------------- 信号进展（时间轴） ---------------- */
 function LifecycleTrack({ ev }: { ev: BreakoutEventFull }) {
   const list = ev.transitions ?? [];
-  if (!list.length) return <p className="text-caption text-ink-400">{__t('暂无轨迹数据')}</p>;
+  if (!list.length) return <p className="text-caption text-ink-400">{__t('暂无信号轨迹')}</p>;
   return (
     <ol className="no-scrollbar flex items-start gap-0 overflow-x-auto pb-1" aria-label={__t("信号进展")}>
       {list.map((t, i) => {
@@ -160,9 +160,9 @@ function CatalystDigest({ ticker }: { ticker: string }) {
   return (
     <div>
       {items === null && !failed && <SkeletonText lines={3} />}
-      {failed && <p className="text-caption text-ink-400">{__t('催化剂数据暂不可用')}</p>}
+      {failed && <p className="text-caption text-ink-400">{__t('相关消息暂不可用')}</p>}
       {/* 实际请求窗口是 72 小时（catalysts.ts window_hours=72），口径对齐（审计 2.3.3） */}
-      {items !== null && items.length === 0 && <p className="text-caption text-ink-400">{__t('该股近 72 小时暂无相关催化剂')}</p>}
+      {items !== null && items.length === 0 && <p className="text-caption text-ink-400">{__t('该股近 72 小时暂无相关消息')}</p>}
       {items !== null &&
         items.map((n) => (
           <div key={n.id} className="flex items-start gap-2 border-b border-line py-2 last:border-b-0">
@@ -253,7 +253,7 @@ export default function EventDetail({
             {detailError && (
               <div className="flex flex-wrap items-center gap-2 border-b border-warn-600/25 bg-warn-50 px-5 py-2 text-caption text-warn-700">
                 <Icon name="flag" size={13} />
-                <span>{__t('详情加载失败，暂显示列表中的信息。')}</span>
+                <span>{__t('详情读取失败，暂显示列表中的信息。')}</span>
                 {onRetryDetail && (
                   <button
                     type="button"
@@ -298,14 +298,14 @@ export default function EventDetail({
             <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-5">
               {/* 价格标尺放大版 */}
               <section>
-                <p className="eyebrow mb-2">{__t('价格标尺')}</p>
+                <p className="eyebrow mb-2">{__t('价位对照')}</p>
                 <QuoteIndicator symbol={event.ticker} />
                 {event.trigger_source === 'finnhub' && <p className="mb-2 text-micro text-ink-500">{__t('实时成交触发')} · {event.evidence_at ? `${hhmm(event.evidence_at)} ${__t('纽约')}` : __t('时间待更新')} · {__t('状态版本')} {event.state_version}</p>}
                 <PriceScale large invalidation={event.invalidation_price} trigger={event.event_price} target={event.target_price} current={event.current_price} />
                 {event.event_anchor?.kind === 'opening_range' && event.event_anchor.status === 'partial' && <p className="mt-2 text-caption text-ink-400">{__t('开盘区间低点缺失，暂无失效位')}</p>}
                 <div className="mt-1 flex flex-wrap gap-x-4 text-micro text-ink-400 tnum">
                   <span>{__t('跳空')} {fin(event.gap_pct) ? `${event.gap_pct >= 0 ? '+' : ''}${event.gap_pct.toFixed(2)}%` : '—'}</span>
-                  <span>{__t('量能')} {fin(event.rvol_time_of_day) ? `${event.rvol_time_of_day.toFixed(1)}×` : '—'}</span>
+                  <span>{__t('相对量能')} {fin(event.rvol_time_of_day) ? `${event.rvol_time_of_day.toFixed(1)}×` : '—'}</span>
                   <span>{__t('时段涨跌')} <LiveChange symbol={event.ticker} fallback={event.session_change_pct} size="sm" /></span>
                 </div>
               </section>
@@ -324,7 +324,7 @@ export default function EventDetail({
                 </section>
                 <section>
                   <p className="eyebrow mb-2">
-                    {__t('各项评分')}
+                    {__t('分项评分')}
                     <InfoHint hint={SCORE_HINTS.breakoutPriority} size={12} className="ml-1" />
                   </p>
                   <ScoreBarsFull event={event} />
@@ -340,7 +340,7 @@ export default function EventDetail({
               {/* 证据列表：后端未提供时整段隐藏，不显示假 0。 */}
               {(event.evidence ?? []).length > 0 && (
                 <section>
-                  <p className="eyebrow mb-2">{__t('证据列表 ·')} {(event.evidence ?? []).length} {__t('条')}</p>
+                  <p className="eyebrow mb-2">{__t('判断依据 ·')} {(event.evidence ?? []).length} {__t('条')}</p>
                   <ol className="relative ml-1.5 border-l-2 border-line pl-4">
                     {(event.evidence ?? []).map((line, i) => (
                     <motion.li
@@ -363,7 +363,7 @@ export default function EventDetail({
               <section>
                 <p className="eyebrow mb-2 flex items-center gap-1.5">
                   <Icon name="bolt" size={13} className="text-warn-700" />
-                  {__t('相关催化剂')}
+                  {__t('相关消息')}
                 </p>
                 <CatalystDigest ticker={event.ticker} />
               </section>
@@ -375,14 +375,14 @@ export default function EventDetail({
                 onClick={() => onOpenTicker(event.ticker)}
                 className="btn-primary whitespace-nowrap"
               >
-                {__t('查看个股详情')}
+                {__t('股票详情')}
                 <Icon name="arrow-up-right" size={13} />
               </button>
               <button
                 onClick={() => onShowTickerEvents(event.ticker)}
                 className="control-button"
               >
-                {__t('该代码全部事件')}
+                {__t('全部事件')}
               </button>
               <span className="ml-auto min-w-0 max-w-full break-all text-right font-mono text-micro text-ink-400 tnum">{event.event_id}</span>
             </div>

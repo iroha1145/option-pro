@@ -17,7 +17,7 @@
 // - 旧 spec 的 #owner-ai-toggle（runtime-settings 乐观锁 PUT + version_conflict 重试）
 //   在新 UI 无对应控件：AUDIT-live.md「当前无页面消费 settings/updateSettings/history/
 //   rollback」。该交互不移植（不伪造 UI）；owner 专属交互改由
-//   Watchlist.tsx L88-107「强制刷新」按钮的 disabled/title 状态验证（乐观锁逻辑仍在
+//   Watchlist.tsx ForceRefreshButton「更新数据」按钮的显示/title 状态验证（乐观锁逻辑仍在
 //   src/api/modules/runtime.ts，等未来设置页接入后再补 E2E）。
 import { expect, test } from "@playwright/test";
 import { captureEvidence } from "./support/evidence.mjs";
@@ -252,7 +252,7 @@ test('registration explains its password length without blocking legacy login', 
     await route.continue();
   });
   await page.goto(`${PASSWORD_BASE_URL}/login`);
-  await page.getByRole('button', { name: '注册', exact: true }).click();
+  await page.getByRole('button', { name: '注册账号', exact: true }).click();
   const username = page.getByLabel('用户名');
   const password = page.getByLabel('密码', { exact: true });
   const submit = page.locator('form button[type="submit"]');
@@ -275,7 +275,7 @@ test('registration explains its password length without blocking legacy login', 
   expect((await failedLogin).status()).toBe(401);
   await expect(page.getByRole('alert')).toHaveText('用户名或密码不正确');
 
-  await page.getByRole('button', { name: '注册', exact: true }).click();
+  await page.getByRole('button', { name: '注册账号', exact: true }).click();
   await username.fill('review-password-policy');
   await password.fill('review forest lantern 2026');
   const registration = page.waitForResponse((response) =>
@@ -312,24 +312,24 @@ test("password mode keeps public research readable and reserves owner controls f
   await page.goto(`${PASSWORD_BASE_URL}/`, { waitUntil: "domcontentloaded" });
   await expect(page).toHaveURL(/(\/|\/login)$/);
   if (new URL(page.url()).pathname === "/login") {
-    // 303 分支：从登录页走「以访客身份浏览（只读）」回公开面（落点 / 或 /watchlist 均可）
-    await page.getByRole("button", { name: "以访客身份浏览（只读）" }).click();
+    // 303 分支：从登录页走「以访客身份浏览」回公开面（落点 / 或 /watchlist 均可）
+    await page.getByRole("button", { name: "以访客身份浏览" }).click();
     await expect(page).toHaveURL(/(\/|\/watchlist)$/);
   }
   // 自选研究断言固定在 /watchlist 上做：走应用内导航（BrowserRouter 客户端路由）
-  await page.getByRole("link", { name: /自选/ }).click();
+  await page.getByRole("link", { name: /我的关注/ }).click();
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/watchlist`);
 
   // 访客可读研究数据（默认卡片视图显示代码与公司名）
   await expect(page.getByText("NVDA", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("英伟达", { exact: true }).first()).toBeVisible();
   await expectVisitorShell(page);
-  // Owner 专属「强制刷新」对访客禁用（Watchlist.tsx L88-107）
-  await expect(page.getByTitle("管理员登录后可更新数据")).toBeDisabled();
+  // Owner 专属「更新数据」对访客不显示（Watchlist.tsx ForceRefreshButton）
+  await expect(page.getByRole("button", { name: "更新数据" })).toHaveCount(0);
   await screenshot(page, "password-visitor-watchlist");
 
   // 应用内导航到催化页（http 文档不再变化，走 BrowserRouter 客户端路由）
-  await page.getByRole("link", { name: /催化/ }).click();
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: "新闻", exact: true }).click();
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/catalysts`);
   await page.waitForLoadState("networkidle");
   await expect(page.getByText("公开浏览可见的中文新闻标题").first()).toBeVisible();
@@ -339,7 +339,7 @@ test("password mode keeps public research readable and reserves owner controls f
   // ── 登录 ─────────────────────────────────────────────────────────────────
   await page.getByRole("link", { name: "登录", exact: true }).click();
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/login`);
-  await expect(page.getByRole("heading", { name: "登录研究工作台" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "登录账号" })).toBeVisible();
 
   const username = page.getByLabel("用户名");
   const password = page.getByLabel("密码", { exact: true });
@@ -382,11 +382,11 @@ test("password mode keeps public research readable and reserves owner controls f
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/watchlist`);
 
   // 登录成功后不得残留延迟跳转：过去的 400ms 定时器会把随后打开的页面拉回 /watchlist。
-  await page.getByRole("link", { name: /催化/ }).click();
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: "新闻", exact: true }).click();
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/catalysts`);
   await page.waitForTimeout(500);
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/catalysts`);
-  await page.getByRole("link", { name: /自选/ }).click();
+  await page.getByRole("link", { name: /我的关注/ }).click();
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/watchlist`);
 
   // 会话仅存于 HttpOnly Cookie：脚本不可见、口令不落任何浏览器存储
@@ -410,20 +410,19 @@ test("password mode keeps public research readable and reserves owner controls f
 
   // ── Owner 壳与 owner 专属控件 ─────────────────────────────────────────────
   await expectOwnerShell(page);
-  // Owner 专属控件：Watchlist 页头的「强制刷新」。title 随身份切换
-  // （Owner「更新自选行情与评分」/ 访客「管理员登录后可更新数据」），
-  // 因此这里同时断言按钮可用与 Owner 版提示，等于验证了那条身份边界。
-  const forceRefresh = page.getByRole("button", { name: "强制刷新" });
+  // Owner 专属控件：Watchlist 页头的「更新数据」，访客看不到（上面断言过），
+  // 这里同时断言按钮可用与 Owner 版提示，等于验证了那条身份边界。
+  const forceRefresh = page.getByRole("button", { name: "更新数据" });
   await expect(forceRefresh).toBeEnabled();
-  await expect(forceRefresh).toHaveAttribute("title", "更新自选行情与评分");
+  await expect(forceRefresh).toHaveAttribute("title", "更新关注股票的行情与评分");
   await screenshot(page, "password-owner-watchlist");
 
-  await page.getByRole("link", { name: /催化/ }).click();
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: "新闻", exact: true }).click();
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/catalysts`);
   await page.waitForLoadState("networkidle");
   await expect(page.getByText("公开浏览可见的中文新闻标题").first()).toBeVisible();
   await expectOwnerShell(page);
-  const analysisProgress = page.getByLabel("新闻分析进度");
+  const analysisProgress = page.getByLabel("分析进度", { exact: true });
   await expect(analysisProgress).toContainText("正在处理第 3 / 4 条");
   await expect(analysisProgress.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "50");
   await page.setViewportSize({ width: 320, height: 568 });
@@ -437,7 +436,7 @@ test("password mode keeps public research readable and reserves owner controls f
   // 分析进度每五秒会换成最新服务端快照。直接执行同步 DOM 滚动，
   // 避免 Playwright 等待元素稳定时恰逢快照刷新、旧节点被替换。
   await analysisProgress.evaluate(element => element.scrollIntoView({ block: "center" }));
-  await expect(page.getByLabel("新闻分析进度")).toBeVisible();
+  await expect(page.getByLabel("分析进度", { exact: true })).toBeVisible();
   await screenshot(page, "password-owner-analysis-progress-mobile");
   await page.setViewportSize({ width: 1280, height: 720 });
   await screenshot(page, "password-owner-catalysts");
@@ -455,7 +454,7 @@ test("password mode keeps public research readable and reserves owner controls f
   await expect(page.getByText("英伟达", { exact: true }).first()).toBeVisible();
 
   // 登出后公共研究面仍可读
-  await page.getByRole("link", { name: /催化/ }).click();
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: "新闻", exact: true }).click();
   await page.waitForLoadState("networkidle");
   await expect(page.getByText("公开浏览可见的中文新闻标题").first()).toBeVisible();
   await expectVisitorShell(page);
