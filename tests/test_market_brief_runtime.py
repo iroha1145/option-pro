@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -75,16 +76,21 @@ class FakeStream:
     def __init__(self, outcome: Any) -> None:
         self._outcome = outcome
 
-    def __enter__(self) -> FakeStream:
+    async def __aenter__(self) -> FakeStream:
         if isinstance(self._outcome, BaseException):
             raise self._outcome
         return self
 
-    def __exit__(self, *exc_info: Any) -> None:
+    async def __aexit__(self, *exc_info: Any) -> None:
         return None
 
-    def get_final_message(self) -> Any:
+    async def get_final_message(self) -> Any:
         return self._outcome
+
+    def __aiter__(self):
+        async def events():
+            yield SimpleNamespace(type="message_stop")
+        return events()
 
 
 class FakeMessages:
@@ -126,7 +132,8 @@ def test_request_shape_follows_the_documented_parameters() -> None:
     assert built["tools"][0]["max_uses"] == CONFIG.web_search_max_uses
     assert built["tools"][1]["max_content_tokens"] == CONFIG.web_fetch_max_content_tokens
     assert built["output_config"]["effort"] == "xhigh"
-    schema = built["output_config"]["format"]
+    assert "format" not in built["output_config"]
+    schema = request(replace(CONFIG, structured_output=True))["output_config"]["format"]
     assert schema["type"] == "json_schema"
     assert schema["schema"]["additionalProperties"] is False
     assert "headline" in schema["schema"]["properties"]
@@ -140,13 +147,13 @@ def test_request_shape_follows_the_documented_parameters() -> None:
         request(replace(CONFIG, prompt_cache_ttl="10m"))
 
 
-def test_structured_output_can_be_switched_off() -> None:
+def test_schema_prompt_is_default_and_structured_output_can_be_enabled() -> None:
     from app.services.market_brief.prompt import build_system_prompt
 
-    config = replace(CONFIG, structured_output=False)
+    config = CONFIG
     built = request(config)
     assert built["output_config"] == {"effort": "xhigh"}
-    assert "## 输出 JSON Schema" not in build_system_prompt(CONFIG)
+    assert "## 输出 JSON Schema" not in build_system_prompt(replace(CONFIG, structured_output=True))
     prompt = build_system_prompt(config)
     assert "## 输出 JSON Schema" in prompt and '"headline"' in prompt
     assert prompt == build_system_prompt(config)  # 逐字节稳定，缓存前缀不变
@@ -179,12 +186,12 @@ def test_successful_response_is_parsed_with_usage_and_sources() -> None:
             tool_use_id="srv_2",
             content=SimpleNamespace(type="web_fetch_result", url="https://www.bls.gov/ppi", content=SimpleNamespace(title="BLS PPI")),
         ),
+        SimpleNamespace(type="server_tool_use", id="srv_3", name="web_search", input={"query": "second query"}),
         SimpleNamespace(
             type="web_search_tool_result",
             tool_use_id="srv_3",
             content=SimpleNamespace(type="web_search_tool_result_error", error_code="max_uses_exceeded"),
         ),
-        text("先核实一下日程。"),
         json_text(),
     ]
     client = FakeClient([message(content, message_usage=usage(cache_write=900, cache_1h=800, cache_5m=100, cache_read=50, searches=2, fetches=1))])
@@ -210,6 +217,7 @@ def test_successful_response_is_parsed_with_usage_and_sources() -> None:
         {"url": "https://www.bls.gov/ppi", "title": "PPI", "via": "web_fetch"},
         {"url": "https://example.com/a", "title": "A", "via": "web_search"},
         {"query": "PPI release October 2026", "via": "web_search"},
+        {"query": "second query", "via": "web_search"},
     )
     assert len(client.messages.calls) == 1
     assert client.beta.messages.calls == []
@@ -219,7 +227,7 @@ def test_pause_turn_resends_the_paused_content_once_then_succeeds() -> None:
     paused_content = [SimpleNamespace(type="server_tool_use", id="srv_1", name="web_search", input={"query": "q"})]
     client = FakeClient([
         message(paused_content, stop_reason="pause_turn", message_id="msg_1", message_usage=usage(output_tokens=300, searches=1)),
-        message([json_text()], message_id="msg_2", message_usage=usage(output_tokens=700, searches=2)),
+        message([SimpleNamespace(type="web_search_tool_result", tool_use_id="srv_1", content=[]), json_text()], message_id="msg_2", message_usage=usage(output_tokens=700, searches=2)),
     ])
     built = request()
     result = runtime.invoke(client, built, config=CONFIG)
@@ -233,8 +241,10 @@ def test_pause_turn_resends_the_paused_content_once_then_succeeds() -> None:
     assert first["messages"] == built["messages"]
     # 续跑：原样追加 assistant 内容，不追加「继续」之类的用户消息；其余参数不变（缓存前缀一致）。
     assert second["messages"] == [*built["messages"], {"role": "assistant", "content": paused_content}]
+    assert first["diagnostics"] == {"previous_message_id": None}
+    assert second["diagnostics"] == {"previous_message_id": "msg_1"}
     assert second["messages"][-1]["content"] is paused_content
-    assert {key: value for key, value in second.items() if key not in {"messages", "timeout"}} == {
+    assert {key: value for key, value in second.items() if key not in {"messages", "timeout", "diagnostics"}} == {
         key: value for key, value in built.items() if key != "messages"
     }
 
@@ -359,13 +369,13 @@ def test_unexpected_stop_reason() -> None:
         (_status_error(anthropic.RateLimitError, 429), errors.PROVIDER_RATE_LIMITED),
         (_status_error(anthropic.BadRequestError, 400, {"type": "error", "error": {"type": "invalid_request_error", "message": "tools.0: bad"}}), errors.PROVIDER_REQUEST_REJECTED),
         (_status_error(anthropic.NotFoundError, 404), errors.PROVIDER_REQUEST_REJECTED),
-        (_status_error(anthropic.InternalServerError, 500), errors.PROVIDER_SERVER_ERROR),
-        (_status_error(anthropic.OverloadedError, 529), errors.PROVIDER_SERVER_ERROR),
+        (_status_error(anthropic.InternalServerError, 500), errors.SUBMISSION_OUTCOME_UNKNOWN),
+        (_status_error(anthropic.OverloadedError, 529), errors.SUBMISSION_OUTCOME_UNKNOWN),
         # 流内错误事件：HTTP 200，类型在响应体里。
-        (_status_error(anthropic.APIStatusError, 200, {"type": "error", "error": {"type": "overloaded_error"}}), errors.PROVIDER_SERVER_ERROR),
-        (_status_error(anthropic.APIStatusError, 200, {"type": "error", "error": {"type": "rate_limit_error"}}), errors.PROVIDER_RATE_LIMITED),
-        (anthropic.APIConnectionError(request=httpx2.Request("POST", "https://api.anthropic.com/v1/messages")), errors.PROVIDER_UNAVAILABLE),
-        (anthropic.APITimeoutError(request=httpx2.Request("POST", "https://api.anthropic.com/v1/messages")), errors.PROVIDER_UNAVAILABLE),
+        (_status_error(anthropic.APIStatusError, 200, {"type": "error", "error": {"type": "overloaded_error"}}), errors.SUBMISSION_OUTCOME_UNKNOWN),
+        (_status_error(anthropic.APIStatusError, 200, {"type": "error", "error": {"type": "rate_limit_error"}}), errors.SUBMISSION_OUTCOME_UNKNOWN),
+        (anthropic.APIConnectionError(request=httpx2.Request("POST", "https://api.anthropic.com/v1/messages")), errors.SUBMISSION_OUTCOME_UNKNOWN),
+        (anthropic.APITimeoutError(request=httpx2.Request("POST", "https://api.anthropic.com/v1/messages")), errors.SUBMISSION_OUTCOME_UNKNOWN),
     ],
 )
 def test_provider_errors_map_to_codes(error: Exception, code: str) -> None:
@@ -387,7 +397,7 @@ def test_failure_after_a_paused_round_keeps_its_usage() -> None:
         _status_error(anthropic.InternalServerError, 500),
     ])
     result = runtime.invoke(client, request(), config=CONFIG)
-    assert result.error_code == errors.PROVIDER_SERVER_ERROR
+    assert result.error_code == errors.SUBMISSION_OUTCOME_UNKNOWN
     assert result.usage["output_tokens"] == 1234
     assert result.usage["rounds"] == 1
 
@@ -439,5 +449,6 @@ def test_cost_uses_opus_prices_and_cache_ttl_split() -> None:
 
 def test_make_client_sets_timeout_and_retries() -> None:
     client = runtime.make_client("sk-ant-test", 12.5)
-    assert client.max_retries == 2
+    assert client.max_retries == 0
     assert client.timeout == 12.5
+    asyncio.run(client.close())

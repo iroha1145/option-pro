@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
@@ -408,7 +409,10 @@ def schema_identity(job_type: str, *, model: str | None = None) -> tuple[str, st
     }
     if model is None or uses_claude(model):
         identity["claude_features"] = {
-            "contract": "haiku-native-tools-json-v2",
+            "contract": (
+                "haiku-native-tools-prompt-json-v3"
+                if job_type == "earnings_impact" else "haiku-native-tools-json-v2"
+            ),
             "instructions": claude_instructions(request.instructions),
             "tools": claude_tools_for(job_type, {}),
             "reservation_tokens": CLAUDE_TOOL_TOKEN_RESERVATION,
@@ -910,6 +914,47 @@ def claude_instructions(instructions: str) -> str:
     )
 
 
+_CLAUDE_EARNINGS_ABBREVIATIONS = "EPS、GAAP、EBITDA、ETF、GDP、CPI、GPU、HBM、AUM、FCF"
+
+
+def claude_output_schema(job_type: str, schema: dict[str, Any]) -> dict[str, Any]:
+    """Strengthen provider encoding of the existing local output contract.
+
+    The local validation schema stays unchanged; completed native-JSON results
+    remain readable and paid receipts remain locally recoverable. New earnings
+    requests have a distinct v3 transport identity.
+    """
+    result = deepcopy(schema)
+    if job_type != "earnings_impact":
+        return result
+    rules = (
+        "必须写完整、非空的简体中文内容，不得使用x、占位符或空字符串。"
+        "缺少数据时，用中文说明具体缺少什么及对判断的影响，不得虚构。"
+        f"财报叙述只保留这些已认可缩写：{_CLAUDE_EARNINGS_ABBREVIATIONS}；"
+        "股票代码须对应本任务公司或受影响公司。其他缩写改用中文，BDC写作业务发展公司。"
+    )
+    fields = result["properties"]
+    fields["summary"]["description"] = (
+        "根据输入的财报阶段概述已有事实；已发布时说明实际业绩及关键差异，"
+        "尚未发布时不得将预期写成已公布结果。" + rules
+    )
+    fields["expectation"]["description"] = (
+        "已发布时逐项比较输入EPS和营收的actual与estimate，说明超预期、不及预期或持平；"
+        "尚未发布时围绕输入预期说明观察重点，不编造实际业绩。"
+        "仅有部分数据时使用已有字段，并说明其余字段缺口。" + rules
+    )
+    item = result["$defs"]["EarningsImpactItem"]["properties"]
+    item["reason"]["description"] = (
+        "解释输入公司业绩如何通过已知业务关系影响该上市公司，"
+        "说明与direction相符的传导方向及不确定性，不得把关联当作确定收益。" + rules
+    )
+    item["name"]["description"] = (
+        "受影响上市公司的通行简体中文名称；仅在本地规则允许时使用与ticker对应的注册简称。"
+        "名称必须非空，不得使用x或占位符，不得编造公司。"
+    )
+    return result
+
+
 def prepare_claude(settings: Any, job_type: str, payload: dict[str, Any]) -> Any:
     """Validate locally before the worker reserves or starts paid work."""
     if not runtime_configuration_valid(settings) or not uses_claude(settings.openai_model):
@@ -922,11 +967,13 @@ def prepare_claude(settings: Any, job_type: str, payload: dict[str, Any]) -> Any
         raise RuntimeError("ai_sdk_unavailable") from exc
     return prepare_message(
         settings,
+        job_type=job_type,
         instructions=claude_instructions(request.instructions),
         input_text=request.input_text,
-        schema=request.schema,
+        schema=claude_output_schema(job_type, request.schema),
         max_tokens=max_output_tokens_for(job_type, model=OFFICIAL_CLAUDE_MODEL),
         tools=claude_tools_for(job_type, payload),
+        output_mode="prompt_json" if job_type == "earnings_impact" else "native_json",
     )
 
 

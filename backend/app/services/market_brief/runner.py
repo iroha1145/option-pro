@@ -10,7 +10,7 @@ import copy
 import hashlib
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Sequence
 
@@ -23,7 +23,7 @@ from .claude_runtime import build_request, cost_microusd, invoke, make_client, r
 from .evidence import EvidencePack, build_evidence
 from .prompt import PROMPT_VERSION, build_system_prompt, build_user_message
 from .schema import SCHEMA_VERSION, BriefSlot, BriefTrigger, MarketBriefResult
-from .store import BriefRunRecord, BriefStore, new_run_id
+from .store import AdmissionRejected, AdmissionReplay, BriefRunRecord, BriefStore, new_run_id
 
 # 校验失败时可以整项删除的列表（* 代表列表下标）；其余位置的失败都算标量失败。
 _REMOVABLE_LISTS: frozenset[tuple[Any, ...]] = frozenset({
@@ -45,6 +45,7 @@ _WARNING_MESSAGE_CHARS = 160
 
 @dataclass(frozen=True)
 class BriefRunConfig:
+    daily_max_runs: int = 6
     model: str = "claude-opus-5-5"
     effort: str = "xhigh"
     max_output_tokens: int = 48_000
@@ -58,10 +59,9 @@ class BriefRunConfig:
     request_timeout_seconds: float = 1500.0
     evidence_max_bytes: int = 56_000
     prompt_cache_ttl: str = "5m"
-    # 结构化输出与网页工具并用没有文档背书（文档写明结构化输出与引用不兼容，而网页搜索结果
-    # 自带引用）。若首跑被 400 拒绝，关掉它：请求不带 output_config.format，改由系统提示词
-    # 附上 JSON Schema，解析与校验流程不变。
-    structured_output: bool = True
+    # 默认把 JSON Schema 放在固定系统提示词中，结果仍经过相同的本地校验。
+    # 可单独开启供应商结构约束；不能据此跳过内容与证据校验。
+    structured_output: bool = False
 
 
 @dataclass(frozen=True)
@@ -219,7 +219,7 @@ def _aware(now: datetime) -> datetime:
     return now.astimezone(timezone.utc)
 
 
-def run_brief(
+def _run_admitted(
     *,
     slot: BriefSlot,
     trading_date: date,
@@ -231,6 +231,7 @@ def run_brief(
     client_factory: Callable[[str, float], Any] | None = None,
     evidence_builder: Callable[..., Any] | None = None,
     on_request: Callable[[Mapping[str, Any]], None] | None = None,
+    _run_id: str,
 ) -> BriefRunRecord:
     """同步函数（阻塞网络 I/O），worker 里放线程调用。
 
@@ -247,10 +248,12 @@ def run_brief(
         raise ValueError(errors.ANTHROPIC_API_KEY_MISSING)
     started_at = _aware(now) if now is not None else datetime.now(timezone.utc)
     started = time.monotonic()
-    run_id = new_run_id(trading_date, slot)
+    run_id = _run_id
     collected: dict[str, Any] = {}
+    terminal_record: BriefRunRecord | None = None
 
     def finish(**fields: Any) -> BriefRunRecord:
+        nonlocal terminal_record
         duration = round(time.monotonic() - started, 3)
         record = BriefRunRecord(
             run_id=run_id,
@@ -264,6 +267,7 @@ def run_brief(
             duration_seconds=duration,
             **{**collected, **fields},
         )
+        terminal_record = record
         store.write_run(record)
         return record
 
@@ -303,12 +307,19 @@ def run_brief(
             on_request(request_meta)
         client = (client_factory or make_client)(api_key, config.request_timeout_seconds)
         # 预算从运行开始起算：worker 的任务超时管的是整次 run_brief，证据组装也在其中。
-        invocation = invoke(client, request, config=config, deadline=started + config.request_timeout_seconds)
+        def mark_submission() -> None:
+            store.mark_submitted(run_id)
+            collected["usage_complete"] = False
+
+        invocation = invoke(client, request, config=config,
+                            deadline=started + config.request_timeout_seconds,
+                            on_submission=mark_submission)
         collected.update(
             raw_output_text=invocation.text,
             external_sources=invocation.external_sources,
             usage=invocation.usage,
-            cost_microusd=cost_microusd(invocation.usage),
+            cost_microusd=cost_microusd(invocation.usage) if invocation.usage_complete else None,
+            usage_complete=invocation.usage_complete,
             continuation_count=invocation.continuation_count,
         )
         if invocation.error_code is not None:
@@ -326,10 +337,49 @@ def run_brief(
     except Exception as exc:
         # 程序错误：先留一条 runtime_error 让状态接口看得见，再原样抛给调用方。
         try:
-            finish(status="failed", error_code=errors.RUNTIME_ERROR, error_detail=type(exc).__name__)
+            # A completed receipt may already be durable while publishing the
+            # index failed. Never replace it with a generic failure record.
+            if terminal_record is None:
+                finish(status="failed",
+                       error_code=errors.SUBMISSION_OUTCOME_UNKNOWN if collected.get("usage_complete") is False else errors.RUNTIME_ERROR,
+                       error_detail=type(exc).__name__)
         except Exception as record_error:
             record_fallback_failure("market_brief_runtime_record", record_error)
         raise
+
+
+def run_brief(
+    *, slot: BriefSlot, trading_date: date, trigger: BriefTrigger, store: BriefStore,
+    config: BriefRunConfig, api_key: str, now: datetime | None = None,
+    client_factory: Callable[[str, float], Any] | None = None,
+    evidence_builder: Callable[..., Any] | None = None,
+    on_request: Callable[[Mapping[str, Any]], None] | None = None,
+    request_key: str | None = None,
+) -> BriefRunRecord:
+    """All entry points share durable admission before evidence or paid work."""
+    if slot not in ("pre_open", "post_close") or trigger not in ("scheduled", "manual"):
+        raise ValueError("invalid market brief slot or trigger")
+    if not api_key:
+        raise ValueError(errors.ANTHROPIC_API_KEY_MISSING)
+    started_at = _aware(now) if now is not None else datetime.now(timezone.utc)
+    record = BriefRunRecord(
+        run_id=new_run_id(trading_date, slot), slot=slot, trading_date=trading_date,
+        trigger=trigger, started_at=started_at, completed_at=None, status="failed",
+        model=config.model, effort=config.effort, cost_microusd=0,
+    )
+    try:
+        with store.admission(record, daily_max_runs=config.daily_max_runs, request_key=request_key):
+            return _run_admitted(
+                slot=slot, trading_date=trading_date, trigger=trigger, store=store,
+                config=config, api_key=api_key, now=started_at, client_factory=client_factory,
+                evidence_builder=evidence_builder, on_request=on_request, _run_id=record.run_id,
+            )
+    except AdmissionReplay as reused:
+        return reused.record
+    except AdmissionRejected as exc:
+        # Rejected starts do not consume another daily slot or replace the last
+        # report. Their existing durable predecessor remains available in status.
+        return replace(record, completed_at=started_at, error_code=str(exc))
 
 
 __all__ = ["BriefRunConfig", "run_brief", "validate_result"]

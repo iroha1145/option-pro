@@ -51,6 +51,16 @@ RUN_ERROR_CODES = frozenset({
     ANTHROPIC_API_KEY_MISSING,
 })
 
+SUBMISSION_OUTCOME_UNKNOWN = "submission_outcome_unknown"
+PROVIDER_STREAM_INCOMPLETE = "provider_stream_incomplete"
+PROVIDER_INVALID_TOOL_RESPONSE = "provider_invalid_tool_response"
+MARKET_BRIEF_IN_PROGRESS = "market_brief_in_progress"
+DAILY_RUN_LIMIT_REACHED = "daily_run_limit_reached"
+RUN_ERROR_CODES |= frozenset({SUBMISSION_OUTCOME_UNKNOWN, PROVIDER_STREAM_INCOMPLETE,
+                              PROVIDER_INVALID_TOOL_RESPONSE, MARKET_BRIEF_IN_PROGRESS,
+                              DAILY_RUN_LIMIT_REACHED})
+
+
 # ---- 证据块缺失原因（coverage.missing_blocks[].reason）----
 SNAPSHOT_MISSING = "snapshot_missing"  # 上游快照文件或条目不存在、已过硬期限、参数不匹配
 READ_FAILED = "read_failed"  # 读取或解析时出现意料之外的异常
@@ -62,6 +72,11 @@ OVER_BUDGET = "over_budget"  # 逐级裁剪后仍超字节预算，整块撤下
 BLOCK_REASONS = frozenset({SNAPSHOT_MISSING, READ_FAILED, DISABLED, UNAVAILABLE, EMPTY, OVER_BUDGET})
 
 __all__ = [
+    "SUBMISSION_OUTCOME_UNKNOWN",
+    "PROVIDER_STREAM_INCOMPLETE",
+    "PROVIDER_INVALID_TOOL_RESPONSE",
+    "MARKET_BRIEF_IN_PROGRESS",
+    "DAILY_RUN_LIMIT_REACHED",
     "ANTHROPIC_API_KEY_MISSING",
     "BLOCK_REASONS",
     "BUDGET_EXCEEDED",
