@@ -1033,13 +1033,45 @@ async def run_configured_once(
     if concurrency == 1:
         processed = await run_slot(owner)
     else:
-        # Each slot has its own lease and heartbeat. Database admission remains
-        # atomic across slots and processes; a cancelled group drains every
-        # stream through process_job's unknown-outcome accounting.
-        async with asyncio.TaskGroup() as group:
-            slots = [
-                group.create_task(run_slot(f"{owner}:slot-{slot}"))
-                for slot in range(concurrency)
-            ]
+        # Independent paid submissions must not be cancelled by a sibling's
+        # local failure (including claim_due failures before process_job).
+        # Collect every outcome before reporting errors to the worker loop.
+        slots = [
+            asyncio.create_task(run_slot(f"{owner}:slot-{slot}"))
+            for slot in range(concurrency)
+        ]
+        outcomes = asyncio.gather(*slots, return_exceptions=True)
+        try:
+            results = await asyncio.shield(outcomes)
+        except asyncio.CancelledError:
+            # An external round cancellation/deadline still stops every slot.
+            # Cancel once, then drain even if shutdown cancels us again: each
+            # process_job must close its stream and persist unknown accounting.
+            for slot in slots:
+                if not slot.done():
+                    slot.cancel()
+            while not outcomes.done():
+                try:
+                    await asyncio.shield(outcomes)
+                except asyncio.CancelledError:
+                    continue
+            raise
+        failures = [(index, result) for index, result in enumerate(results)
+                    if isinstance(result, BaseException)]
+        for index, error in failures:
+            logger.error(
+                "AI job slot failed owner=%s slot=%s",
+                owner, index, exc_info=(type(error), error, error.__traceback__),
+            )
+        if failures:
+            # Preserve the original type, message and traceback. Additional
+            # failures have their own log entries instead of an opaque group.
+            error = failures[0][1]
+            if isinstance(error, asyncio.CancelledError):
+                # gather represents a slot-local cancellation as a result.
+                # Only cancellation caught above belongs to the parent round;
+                # propagating this one would terminate the supervisor's loop.
+                raise RuntimeError("ai_job_slot_cancelled") from error
+            raise error
         processed = sum(slot.result() for slot in slots)
     return processed, "enabled" if analysis_enabled else "analysis_disabled"
