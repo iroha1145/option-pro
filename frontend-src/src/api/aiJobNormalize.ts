@@ -1,6 +1,7 @@
 import type { AiJob, AiJobStatus } from './types.ts';
 import { ApiError } from './client.ts';
 import { asRec } from './live.ts';
+import { normalizeEvidenceSources } from './evidenceSources.ts';
 import { getLocale, t } from '../i18n/core.ts';
 
 const KIND_MAP: Record<string, AiJob['kind']> = {
@@ -81,6 +82,14 @@ export function normalizeAiJob(raw: unknown, fallbackId?: string | null): AiJob 
       firstString(record, 'createdAt', 'submitted_at', 'created_at') ?? '',
     updatedAt:
       firstString(record, 'updatedAt', 'updated_at', 'completed_at') ?? '',
+    evidenceSources: normalizeEvidenceSources(record.evidence_sources),
+    model: firstString(record, 'model'),
+    reasoning: firstString(record, 'reasoning', 'reasoning_effort'),
+    usage: Object.fromEntries(
+      Object.entries(asRec(record.usage)).filter(([, value]) =>
+        value === null || (typeof value === 'number' && Number.isInteger(value) && value >= 0),
+      ),
+    ) as Record<string, number | null>,
     result,
     error:
       firstString(record, 'error', 'error_code', 'message') ?? undefined,
@@ -113,7 +122,7 @@ const AI_JOB_ERROR_TEXT = new Map<string, () => string>([
   ['manual_analysis_disabled', () => t('手动分析功能当前未启用')],
   ['scheduled_analysis_disabled', () => t('自动分析未开启，这次没有执行')],
   ['runtime_configuration_changed', () => t('分析设置已更改，请重新发起分析')],
-  ['submission_outcome_unknown', () => t('无法确认任务是否已提交给 AI 供应商，为避免重复收费已停止，可以重试')],
+  ['submission_outcome_unknown', () => t('无法确认模型服务是否收到分析请求，已停止重复提交，请先核对原任务状态')],
   ['provider_incomplete_max_output_tokens', () => t('分析内容过长，没有生成完整，请重试')],
   ['provider_credit_exhausted', () => t('AI 供应商余额耗尽，需充值')],
   ['provider_credit_exhausted_hold', () => t('AI 供应商余额耗尽，需充值')],
@@ -131,6 +140,9 @@ const AI_JOB_ERROR_TEXT = new Map<string, () => string>([
   ['local_storage_error', () => t('服务器保存数据时出错，请稍后重试')],
   ['schema_validation_failed', () => t('分析结果未通过格式检查，请重试')],
   ['invalid_job_payload', () => t('任务数据无效，无法分析')],
+  ...['provider_tool_result_invalid', 'provider_invalid_final_tool', 'provider_unknown_client_tool', 'provider_invalid_tool_response', 'provider_incomplete_tool_result', 'provider_unknown_server_tool', 'provider_tool_limit_exceeded'].map((code): [string, () => string] => [code, () => t('模型工具处理未通过检查，分析已停止')]),
+  ['provider_model_mismatch', () => t('模型服务返回的模型与分析设置不符，请检查服务配置')],
+  ['provider_empty_response', () => t('模型没有返回内容，请重试')],
   ['ai_empty_response', () => t('模型没有返回内容，请重试')],
   ['ai_input_too_large', () => t('输入数据过多，超出了分析上限')],
   ['daily_token_limit_reached', () => t('今日 Token 额度已用完，额度重置后再试')],
@@ -163,6 +175,7 @@ export function aiJobErrorMessage(code: string | null): string {
 
 /** 立刻重试只会再次被挡下的失败（开关、额度、余额、认证、服务未配置）：按钮写「关闭」而不是「重试」。 */
 const RETRY_BLOCKED_CODES: ReadonlySet<string> = new Set([
+  'submission_outcome_unknown',
   'manual_analysis_disabled',
   'scheduled_analysis_disabled',
   'daily_token_limit_reached',

@@ -79,8 +79,8 @@ def macro_conditions_context() -> dict[str, Any] | None:
 
 Mode = Literal["off", "read", "manual", "scheduled"]
 SubmissionSource = Literal["manual", "scheduled"]
-MODEL = "gpt-5.6-terra"
-REASONING = "max"
+MODEL = "claude-haiku-5-5"
+REASONING = "xhigh"
 EXECUTION_MODE = "background"
 NEWS_PROMPT_VERSION = ai_runtime.PROMPT_VERSIONS["news_impact"]
 FOCUS_PROMPT_VERSION = ai_runtime.PROMPT_VERSIONS["market_focus"]
@@ -1564,7 +1564,7 @@ class LocalCatalystIntelligence:
     ) -> None:
         if mode not in {"off", "read", "manual", "scheduled"}:
             raise ValueError("invalid catalyst mode")
-        if model != MODEL or reasoning != REASONING:
+        if not ai_runtime.analysis_identity_supported(model, reasoning):
             raise ValueError("local catalyst model configuration is fixed")
         if isinstance(max_queued, bool) or not 1 <= max_queued <= 10_000:
             raise ValueError("max_queued is invalid")
@@ -2007,6 +2007,9 @@ class LocalCatalystIntelligence:
         return payload if isinstance(payload, dict) else None
 
     def _read_ai_job(self, job_id: str) -> dict[str, Any] | None:
+        if not hasattr(self.ai_repository, "path"):
+            # Injected repositories have no file; retain their read interface.
+            return self.ai_repository.get_job(job_id)
         path = Path(self.ai_repository.path)
         if not path.is_file():
             return None
@@ -2275,18 +2278,18 @@ class LocalCatalystIntelligence:
             row.get("prompt_version"),
             row.get("schema_version"),
             row.get("schema_sha256"),
-            current_identity=expected_schema,
+            current_identity=(expected_schema if row.get("model") == self.model else None),
+            model=row.get("model"),
         )
         prompt = (
             NEWS_PROMPT_VERSION if expected_type == "news_impact" else FOCUS_PROMPT_VERSION
         )
         supported_prompts = ai_runtime.NEWS_READABLE_PROMPT_VERSIONS if expected_type == "news_impact" else {prompt}
-        return not (
-            row.get("model") != self.model
-            or row.get("reasoning") != self.reasoning
-            or row.get("execution_mode") != EXECUTION_MODE
-            or row.get("prompt_version") not in supported_prompts
-            or not schema_matches
+        return (
+            ai_runtime.analysis_identity_supported(row.get("model"), row.get("reasoning"))
+            and row.get("execution_mode") == EXECUTION_MODE
+            and row.get("prompt_version") in supported_prompts
+            and schema_matches
         )
 
     def _identity_public_job(
@@ -2321,8 +2324,7 @@ class LocalCatalystIntelligence:
         if (
             row is None
             or row.get("job_type") != "news_impact"
-            or row.get("model") != self.model
-            or row.get("reasoning") != self.reasoning
+            or not ai_runtime.analysis_identity_supported(row.get("model"), row.get("reasoning"))
             or row.get("execution_mode") != EXECUTION_MODE
             or NEWS_PROMPT_FAMILY_RE.fullmatch(
                 str(row.get("prompt_version") or "")
@@ -2336,6 +2338,11 @@ class LocalCatalystIntelligence:
                 str(row.get("schema_sha256") or "")
             )
             is None
+        ):
+            return None
+        if (
+            row.get("prompt_version") in ai_runtime.NEWS_READABLE_PROMPT_VERSIONS
+            and not self._has_current_job_identity(row, expected_type="news_impact")
         ):
             return None
         try:
@@ -2366,8 +2373,7 @@ class LocalCatalystIntelligence:
             row is None
             or row.get("job_type") != "market_focus"
             or row.get("status") != "completed"
-            or row.get("model") != self.model
-            or row.get("reasoning") != self.reasoning
+            or not ai_runtime.analysis_identity_supported(row.get("model"), row.get("reasoning"))
             or row.get("execution_mode") != EXECUTION_MODE
             or FOCUS_PROMPT_FAMILY_RE.fullmatch(
                 str(row.get("prompt_version") or "")
@@ -2383,6 +2389,11 @@ class LocalCatalystIntelligence:
             is None
             or not isinstance(row.get("result_json"), str)
             or not row.get("result_json")
+        ):
+            return None
+        if (
+            row.get("prompt_version") == FOCUS_PROMPT_VERSION
+            and not self._has_current_job_identity(row, expected_type="market_focus")
         ):
             return None
         try:
@@ -2405,8 +2416,7 @@ class LocalCatalystIntelligence:
                 candidate.get("job_type") != "market_focus"
                 or candidate.get("submission_source") != "scheduled"
                 or candidate.get("status") == "budget_blocked"
-                or candidate.get("model") != self.model
-                or candidate.get("reasoning") != self.reasoning
+                or not ai_runtime.analysis_identity_supported(candidate.get("model"), candidate.get("reasoning"))
                 or candidate.get("execution_mode") != EXECUTION_MODE
                 or created_at is None
                 or created_at > observed
@@ -2459,7 +2469,7 @@ class LocalCatalystIntelligence:
         *,
         expected_schema: tuple[str, str] | None = None,
     ) -> set[tuple[int, int, str]]:
-        current_schema = expected_schema or ai_runtime.schema_identity("news_impact")
+        current_schema = expected_schema or ai_runtime.schema_identity("news_impact", model=self.model)
         keys: set[tuple[int, int, str]] = set()
         for job in jobs:
             candidate = dict(job)
@@ -2594,6 +2604,11 @@ class LocalCatalystIntelligence:
             int(revision["change_sequence"]),
             str(revision["content_hash"]),
         )
+        input_context = {
+            **_news_input_context(payload),
+            "analysis_model": job.get("model"),
+            "analysis_reasoning": job.get("reasoning"),
+        }
         existing = connection.execute(
             """SELECT * FROM catalyst_local_analysis_links
                WHERE job_id=?""",
@@ -2604,7 +2619,7 @@ class LocalCatalystIntelligence:
                 """INSERT INTO catalyst_local_analysis_links(
                        news_id,change_sequence,content_hash,job_id,created_at,input_context_json
                    ) VALUES(?,?,?,?,?,?)""",
-                (*identity, str(job["job_id"]), _iso(created_at), _json(_news_input_context(payload))),
+                (*identity, str(job["job_id"]), _iso(created_at), _json(input_context)),
             )
             return True
         existing_identity = (
@@ -2629,7 +2644,7 @@ class LocalCatalystIntelligence:
             (
                 *identity,
                 _iso(created_at),
-                _json(_news_input_context(payload)),
+                _json(input_context),
                 str(job["job_id"]),
                 *existing_identity,
             ),
@@ -2637,6 +2652,60 @@ class LocalCatalystIntelligence:
         if repaired != 1:
             raise RuntimeError("news_job_link_repair_conflict")
         return True
+
+    def _backfill_news_analysis_identity(
+        self,
+        connection: sqlite3.Connection,
+        jobs: Mapping[str, dict[str, Any]],
+    ) -> None:
+        """Keep published result identity local, independent of later attempts."""
+        links = connection.execute(
+            """SELECT * FROM catalyst_local_analysis_links
+               WHERE CASE WHEN json_valid(input_context_json)
+                          THEN json_extract(input_context_json,'$.analysis_model')
+                     END IS NULL
+                  OR CASE WHEN json_valid(input_context_json)
+                          THEN json_extract(input_context_json,'$.analysis_sources')
+                     END IS NULL"""
+        ).fetchall()
+        updated = False
+        for link in links:
+            job = jobs.get(str(link["job_id"]))
+            if job is None or not ai_runtime.analysis_identity_supported(
+                job.get("model"), job.get("reasoning"),
+            ):
+                continue
+            if (
+                not self._has_current_job_identity(job, expected_type="news_impact")
+                and self._recoverable_completed_legacy_news_public_job(job) is None
+            ):
+                continue
+            payload = self._job_payload(job)
+            if payload is None or (
+                payload.get("news_id"), payload.get("change_sequence"), payload.get("content_hash"),
+            ) != (link["news_id"], link["change_sequence"], link["content_hash"]):
+                continue
+            if (
+                link["result_json"] is not None
+                and _loads(link["result_json"], None) != _loads(job.get("result_json"), None)
+            ):
+                continue
+            context = _loads(link["input_context_json"], _news_input_context(payload))
+            if not isinstance(context, dict):
+                context = _news_input_context(payload)
+            context.update({"analysis_model": job["model"], "analysis_reasoning": job["reasoning"]})
+            if job.get("status") == "completed":
+                context["analysis_sources"] = AIJobRepository.public(job).get("evidence_sources", [])
+            encoded = _json(context)
+            if encoded == link["input_context_json"]:
+                continue
+            connection.execute(
+                "UPDATE catalyst_local_analysis_links SET input_context_json=? WHERE job_id=?",
+                (encoded, link["job_id"]),
+            )
+            updated = True
+        if updated:
+            _reset_revision_cache()
 
     @staticmethod
     def _news_revision_row(
@@ -2675,7 +2744,7 @@ class LocalCatalystIntelligence:
         planned: list[dict[str, Any]] = []
         # schema_identity is deliberately not memoized; resolve it once here
         # instead of once per historical job.
-        current_schema = ai_runtime.schema_identity("news_impact")
+        current_schema = ai_runtime.schema_identity("news_impact", model=self.model)
         candidates = sorted(
             jobs.values(),
             key=lambda row: (
@@ -3429,7 +3498,7 @@ class LocalCatalystIntelligence:
                    WHERE result_json IS NULL AND job_id=? ORDER BY created_at""",
                 (target_job_id,),
             ).fetchall()
-        current_schema = ai_runtime.schema_identity("news_impact")
+        current_schema = ai_runtime.schema_identity("news_impact", model=self.model)
         current_revision_keys = self._current_news_job_revision_keys(
             jobs.values(),
             expected_schema=current_schema,
@@ -4495,6 +4564,7 @@ class LocalCatalystIntelligence:
                 )
                 analyses = self._publish_completed_news(connection, ai_jobs)
                 focus_results = self._publish_completed_focus(connection, ai_jobs)
+                self._backfill_news_analysis_identity(connection, ai_jobs)
                 self._audit_published_news_results(connection)
                 self._audit_published_focus_results(connection)
                 connection.commit()
@@ -4567,6 +4637,20 @@ class LocalCatalystIntelligence:
             row,
             as_of=as_of,
         )
+        analysis_model = None
+        analysis_reasoning = None
+        analysis_sources: list[dict[str, str]] = []
+        if isinstance(input_context, dict):
+            input_context = dict(input_context)
+            stored_model = input_context.pop("analysis_model", None)
+            stored_reasoning = input_context.pop("analysis_reasoning", None)
+            stored_sources = input_context.pop("analysis_sources", [])
+            if (
+                result is not None and current
+                and ai_runtime.analysis_identity_supported(stored_model, stored_reasoning)
+            ):
+                analysis_model, analysis_reasoning = stored_model, stored_reasoning
+                analysis_sources = stored_sources if isinstance(stored_sources, list) else []
         article = _available_article(row, as_of=as_of)
         # Published analysis determines the item status below. Its linked job
         # may be a newer attempt, but that state is only needed by detail reads.
@@ -4637,6 +4721,9 @@ class LocalCatalystIntelligence:
             "source_count": int(row.get("source_count") or 1),
             "analysis_status": status,
             "analysis": result,
+            "analysis_model": analysis_model,
+            "analysis_reasoning": analysis_reasoning,
+            "analysis_sources": analysis_sources,
             "analysis_input": input_context,
             # Private: False marks a previously accepted result that the public
             # boundary hides; filters and counts must not treat it as visible.
@@ -5903,7 +5990,7 @@ class LocalCatalystIntelligence:
         ) != (row["change_sequence"], row["content_hash"]):
             raise CatalystError("news_revision_changed", "News changed while reading the article", counts_for_circuit=False)
         payload.update(_news_request_source_fields(row))
-        schema_version, schema_hash = ai_runtime.schema_identity("news_impact")
+        schema_version, schema_hash = ai_runtime.schema_identity("news_impact", model=self.model)
         job, created = self.ai_repository.create_job(
             job_type="news_impact",
             payload=payload,
@@ -6872,7 +6959,7 @@ class LocalCatalystIntelligence:
         *,
         submission_source: SubmissionSource = "manual",
     ) -> tuple[dict[str, Any], bool]:
-        schema_version, schema_hash = ai_runtime.schema_identity("market_focus")
+        schema_version, schema_hash = ai_runtime.schema_identity("market_focus", model=self.model)
         return self.ai_repository.create_job(
             job_type="market_focus",
             payload=payload,
@@ -7267,7 +7354,7 @@ class LocalCatalystIntelligence:
                 submission_source=submission_source,
             )
 
-        schema_version, schema_hash = ai_runtime.schema_identity("market_focus")
+        schema_version, schema_hash = ai_runtime.schema_identity("market_focus", model=self.model)
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
@@ -7418,13 +7505,13 @@ class LocalCatalystIntelligence:
         ):
             return None
         cancel_requested = False
+        # Read-only: use the paid job identity for owners and visitors alike.
+        linked_job = self._read_ai_job(str(payload["job_id"]))
+        public_job = self._identity_public_job(
+            linked_job, expected_type="market_focus",
+        )
+        identity_job = public_job or self._recoverable_completed_focus_public_job(linked_job)
         if include_owner_state:
-            # Read-only: an unavailable AI store must not hide cycles.
-            linked_job = self._read_ai_job(str(payload["job_id"]))
-            public_job = self._identity_public_job(
-                linked_job,
-                expected_type="market_focus",
-            )
             cancel_requested = bool(
                 public_job and public_job.get("cancel_requested")
             )
@@ -7455,8 +7542,9 @@ class LocalCatalystIntelligence:
                 # visitors lose job_id below, so this is their only source of
                 # the event texts that bound source-named entities.
                 "_validation_payload": cycle_payload,
-                "model": self.model,
-                "reasoning_effort": self.reasoning,
+                "model": identity_job.get("model") if identity_job else None,
+                "reasoning_effort": identity_job.get("reasoning") if identity_job else None,
+                "evidence_sources": identity_job.get("evidence_sources", []) if identity_job else [],
                 "result": result,
             }
         )
@@ -7979,9 +8067,6 @@ class LocalCatalystIntelligence:
             rank = (completed_at, identity)
             if key not in latest or rank > latest[key]:
                 latest[key] = rank
-        expected_schema, expected_schema_hash = ai_runtime.schema_identity(
-            "news_impact"
-        )
         imported = 0
         rejected = 0
         with self._connect() as connection:
@@ -8007,9 +8092,14 @@ class LocalCatalystIntelligence:
                     and latest.get(key) == (completed_at, identity)
                     and raw.get("_is_latest", True) is not False
                 )
+                supported_identity = ai_runtime.analysis_identity_supported(
+                    raw.get("model"), raw.get("reasoning")
+                )
+                expected_schema, expected_schema_hash = ai_runtime.schema_identity(
+                    "news_impact", model=raw.get("model") if supported_identity else self.model
+                )
                 metadata_matches = (
-                    raw.get("model") == self.model
-                    and raw.get("reasoning") == self.reasoning
+                    supported_identity
                     and raw.get("prompt_version") in ai_runtime.NEWS_READABLE_PROMPT_VERSIONS
                     and (
                         raw.get("schema_version")
@@ -8076,8 +8166,8 @@ class LocalCatalystIntelligence:
                         inserted = connection.execute(
                             """INSERT OR IGNORE INTO catalyst_local_analysis_links(
                                    news_id,change_sequence,content_hash,job_id,result_json,
-                                   result_available_at,verified_at,created_at
-                               ) VALUES(?,?,?,?,?,?,?,?)""",
+                                   result_available_at,verified_at,created_at,input_context_json
+                               ) VALUES(?,?,?,?,?,?,?,?,?)""",
                             (
                                 news_id,
                                 sequence,
@@ -8087,6 +8177,11 @@ class LocalCatalystIntelligence:
                                 fake_job["completed_at"],
                                 _iso(),
                                 _iso(),
+                                _json({
+                                    **_news_input_context({}),
+                                    "analysis_model": fake_job["model"],
+                                    "analysis_reasoning": fake_job["reasoning"],
+                                }),
                             ),
                         ).rowcount
                         outcome = "imported"

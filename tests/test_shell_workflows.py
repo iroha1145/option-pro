@@ -1029,7 +1029,7 @@ def test_setup_separates_and_preserves_a_safe_service_secret(
     tmp_path: Path,
 ) -> None:
     root, environment = _setup_root(tmp_path)
-    secret = "sk-safe_token-1234567890"
+    secret = "sk-ant-safe_token-1234567890"
 
     result = subprocess.run(
         ["bash", "setup.sh"],
@@ -1049,7 +1049,8 @@ def test_setup_separates_and_preserves_a_safe_service_secret(
     assert "APP_PASSWORD_HASH=" not in deployment
     machine = dotenv_values(root / "machine.env")
     assert machine["MACROLENS_URL"] in {None, ""}
-    assert dotenv_values(root / "secrets.env")["OPENAI_API_KEY"] == secret
+    assert dotenv_values(root / "secrets.env")["ANTHROPIC_API_KEY"] == secret
+    assert dotenv_values(root / "secrets.env")["OPENAI_API_KEY"] in {None, ""}
     assert secret not in result.stdout + result.stderr
     assert stat.S_IMODE((root / ".env").stat().st_mode) == 0o600
     assert stat.S_IMODE((root / "machine.env").stat().st_mode) == 0o600
@@ -1207,6 +1208,7 @@ def test_setup_fails_closed_when_a_legacy_machine_value_cannot_be_preserved(
 @pytest.mark.parametrize(
     ("key", "expected_services"),
     [
+        ("ANTHROPIC_API_KEY", "backend worker"),
         ("OPENAI_API_KEY", "backend worker"),
         ("FINNHUB_API_KEY", "backend worker"),
         ("MARKETDATA_TOKEN", "backend worker"),

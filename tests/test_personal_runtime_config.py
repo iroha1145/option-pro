@@ -23,9 +23,9 @@ def test_personal_runtime_loads_the_committed_toml() -> None:
 
     assert config.features.breakout_enabled is True
     assert config.features.catalyst_mode == "scheduled"
-    assert config.ai.model == "gpt-5.6-terra"
-    assert config.ai.reasoning == "max"
-    assert config.ai.max_concurrency == 1
+    assert config.ai.model == "claude-haiku-5-5"
+    assert config.ai.reasoning == "xhigh"
+    assert config.ai.max_concurrency == 4
     assert config.ai.daily_max_jobs == 0
     assert config.ai.daily_budget_usd == 0.0
     assert config.ai.daily_token_limit == 10_000_000
@@ -47,7 +47,7 @@ def test_personal_ai_uses_a_daily_token_safety_limit() -> None:
     with pytest.raises(ValidationError):
         AIConfig(reasoning="high")
     with pytest.raises(ValidationError):
-        AIConfig(max_concurrency=2)
+        AIConfig(max_concurrency=5)
     with pytest.raises(ValidationError):
         AIConfig(daily_token_limit=102_399)
 
@@ -108,9 +108,9 @@ def test_legacy_environment_cannot_override_personal_runtime(
     settings = Settings(_env_file=None)
     breakout = BreakoutSettings(_env_file=None)
 
-    assert settings.openai_model == "gpt-5.6-terra"
-    assert settings.openai_reasoning == "max"
-    assert settings.openai_max_concurrency == 1
+    assert settings.openai_model == "claude-haiku-5-5"
+    assert settings.openai_reasoning == "xhigh"
+    assert settings.openai_max_concurrency == 4
     assert settings.openai_daily_max_jobs == 0
     assert settings.openai_daily_budget_usd == 0.0
     assert settings.openai_daily_token_limit == 10_000_000
@@ -143,3 +143,46 @@ def test_retired_strength_settings_do_not_block_startup(tmp_path, monkeypatch, s
     settings = Settings(_env_file=env_file, YAHOO_OPTION_MAX_IN_FLIGHT=2)
     assert settings.yahoo_option_max_in_flight == 2
     assert not ({name.lower() for name in retired} & settings.model_dump().keys())
+
+
+def test_claude_secret_is_independent_and_redacted(monkeypatch) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-claude-secret-sentinel")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-old-openai-secret-sentinel")
+    settings = Settings(_env_file=None)
+    assert settings.anthropic_api_key.get_secret_value() == "sk-ant-claude-secret-sentinel"
+    assert settings.openai_api_key.get_secret_value() == "sk-old-openai-secret-sentinel"
+    assert "sk-ant-claude-secret-sentinel" not in repr(settings)
+    assert "sk-old-openai-secret-sentinel" not in repr(settings)
+
+
+def test_claude_endpoint_environment_override_is_rejected(monkeypatch) -> None:
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://proxy.example")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
+@pytest.mark.parametrize(
+    ("model", "reasoning"),
+    [("claude-haiku-5-5", "max"), ("gpt-5.6-terra", "xhigh")],
+)
+def test_settings_reject_mixed_model_reasoning(model, reasoning) -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, openai_model=model, openai_reasoning=reasoning)
+
+
+@pytest.mark.parametrize("concurrency", [1, 2, 3, 4])
+def test_runtime_settings_accept_claude_parallelism(concurrency) -> None:
+    assert Settings(_env_file=None, openai_max_concurrency=concurrency).openai_max_concurrency == concurrency
+
+
+@pytest.mark.parametrize("concurrency", [0, 5])
+def test_runtime_settings_reject_out_of_range_parallelism(concurrency) -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, openai_max_concurrency=concurrency)
+
+
+def test_legacy_runtime_settings_require_single_concurrency() -> None:
+    settings = Settings(_env_file=None, openai_model="gpt-5.6-terra", openai_reasoning="max", openai_max_concurrency=1)
+    assert settings.openai_max_concurrency == 1
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, openai_model="gpt-5.6-terra", openai_reasoning="max", openai_max_concurrency=4)

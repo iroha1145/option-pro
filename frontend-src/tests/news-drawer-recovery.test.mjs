@@ -1,3 +1,4 @@
+import * as aiModelLabels from '../src/lib/aiModelLabel.ts';
 import { deferred } from './helpers/deferred.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -109,6 +110,7 @@ function harness(DateImpl = Date) {
         info: (title) => toasts.push(['info', title]),
       }) };
       if (id === '@/hooks/useShell') return { useShell: () => ({ openTicker() {} }) };
+      if (id === '@/lib/aiModelLabel') return aiModelLabels;
       if (id === '@/lib/format') return { fmtLocaleDateTime: () => 't', fmtLocaleTime: () => 't' };
       if (id === '@/api/queryRegistry') return { getQueryPrincipalGeneration: () => sessionGen };
       if (id === '@/lib/boundedReadRetry') return boundedReadRetry;

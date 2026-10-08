@@ -282,7 +282,9 @@ def _create_job(
         reserve = max(reserve, ai_job_runtime.EARNINGS_MANUAL_QUEUE_RESERVE)
     max_queued = settings.openai_job_max_queued + reserve
     ai_job_runtime.validate_job_payload(job_type, payload)
-    schema_version, schema_sha256 = ai_job_runtime.schema_identity(job_type)
+    schema_version, schema_sha256 = ai_job_runtime.schema_identity(
+        job_type, model=settings.openai_model,
+    )
     try:
         return _job_repository().create_job(
             job_type=job_type,

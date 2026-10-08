@@ -61,7 +61,7 @@ def _create_earnings_job(
     submission_source: str = "manual",
     force_retry: bool = False,
 ):
-    version, digest = runtime.schema_identity("earnings_impact")
+    version, digest = runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
     return repository.create_job(
         job_type="earnings_impact",
         payload={"ticker": "AAPL", "name": "Apple"},
@@ -109,7 +109,7 @@ def _create_budget_job(
             "allowed_tickers": [suffix],
         },
     }
-    version, digest = runtime.schema_identity(job_type)
+    version, digest = runtime.schema_identity(job_type, model="gpt-5.6-terra")
     return repository.create_job(
         job_type=job_type,
         payload=payloads[job_type],
@@ -1042,7 +1042,7 @@ def test_token_budget_blocks_before_provider_submission(tmp_path):
     claimed = repository.claim_due("budget-owner", lease_seconds=60)
     assert claimed is not None and claimed["job_id"] == job["job_id"]
 
-    reservation = runtime.token_reservation("market_focus")
+    reservation = runtime.token_reservation("market_focus", model="gpt-5.6-terra")
     token_limit = reservation - 1
     outcome = repository.mark_submission_started(
         job["job_id"],
@@ -1055,6 +1055,7 @@ def test_token_budget_blocks_before_provider_submission(tmp_path):
         daily_limit=4,
         daily_budget_usd=0,
         daily_token_limit=token_limit,
+        model="gpt-5.6-terra",
     )
 
     assert outcome == "daily_token_limit"
@@ -1072,7 +1073,7 @@ def test_high_output_task_is_blocked_before_provider_call(tmp_path, monkeypatch)
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     job, _ = _create_budget_job(repository, "market_focus", "A0000001")
     settings = _settings(repository.path)
-    reservation = runtime.token_reservation("market_focus")
+    reservation = runtime.token_reservation("market_focus", model="gpt-5.6-terra")
     settings.openai_daily_token_limit = reservation - 1
     settings.openai_manual_cooldown_seconds = 0
     calls = {"prepare": 0, "submit": 0}
@@ -1092,7 +1093,7 @@ def test_high_output_task_is_blocked_before_provider_call(tmp_path, monkeypatch)
     asyncio.run(process_job(repository, settings, claimed, owner))
 
     stored = repository.get_job(job["job_id"])
-    assert runtime.max_output_tokens_for("market_focus") == 49_152
+    assert runtime.max_output_tokens_for("market_focus", model="gpt-5.6-terra") == 49_152
     assert calls == {"prepare": 1, "submit": 0}
     assert stored["status"] == "budget_blocked"
     assert stored["error_code"] == "daily_token_limit_reached"
@@ -1111,7 +1112,7 @@ def test_completed_job_replaces_reservation_with_usage_cost(tmp_path):
     ) == "started"
     reserved = repository.get_job(job["job_id"])
     assert reserved["budget_charge_microusd"] == (
-        runtime.budget_reservation_microusd("earnings_impact")
+        runtime.budget_reservation_microusd("earnings_impact", model="gpt-5.6-terra")
     )
     usage = {
         "input_tokens": 100,
@@ -1126,6 +1127,7 @@ def test_completed_job_replaces_reservation_with_usage_cost(tmp_path):
     expected = runtime.settled_usage_cost_microusd(
         "earnings_impact",
         usage,
+        model="gpt-5.6-terra",
         fallback_microusd=reserved["budget_charge_microusd"],
     )
     assert expected == 1_005
@@ -1142,7 +1144,7 @@ def test_completed_charge_cannot_exceed_the_original_reservation(tmp_path):
     assert repository.mark_submission_started(
         job["job_id"], owner, daily_limit=4
     ) == "started"
-    reservation = runtime.budget_reservation_microusd("earnings_impact")
+    reservation = runtime.budget_reservation_microusd("earnings_impact", model="gpt-5.6-terra")
     repository.complete(
         job["job_id"],
         owner,
@@ -1280,7 +1282,7 @@ def test_unconfirmed_poll_timeout_keeps_its_token_reservation(
     snapshot = repository.budget_snapshot(daily_limit=0, daily_budget_usd=0)
 
     assert snapshot["token_budget_used_tokens"] == (
-        runtime.token_reservation("earnings_impact") if reserved else 0
+        runtime.token_reservation("earnings_impact", model="gpt-5.6-terra") if reserved else 0
     )
 
 
@@ -1288,9 +1290,9 @@ def test_used_tokens_plus_every_task_reservation_never_exceeds_cap(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     seed, _ = _create_budget_job(repository, "earnings_impact", "B0000001")
     used_tokens = 100_000
-    token_limit = (
-        used_tokens + runtime.minimum_token_reservation() - 1
-    )
+    token_limit = used_tokens + runtime.minimum_token_reservation(
+        model="gpt-5.6-terra"
+    ) - 1
     owner = "budget-seed-owner"
     claimed = repository.claim_due(owner, 60)
     assert repository.mark_submission_started(
@@ -1318,7 +1320,7 @@ def test_used_tokens_plus_every_task_reservation_never_exceeds_cap(tmp_path):
         owner = f"budget-owner-{job_type}"
         claimed = repository.claim_due(owner, 60)
         assert claimed is not None and claimed["job_id"] == job["job_id"]
-        assert used_tokens + runtime.token_reservation(job_type) > token_limit
+        assert used_tokens + runtime.token_reservation(job_type, model="gpt-5.6-terra") > token_limit
         assert repository.mark_submission_started(
             job["job_id"],
             owner,
@@ -1354,7 +1356,7 @@ def test_cancel_requested_is_visible_while_provider_job_is_active(tmp_path):
     assert public["cancellable"] is False
 
 
-def test_terra_runtime_defaults_are_explicit(monkeypatch):
+def test_claude_runtime_defaults_are_explicit(monkeypatch):
     for name in (
         "OPENAI_MODEL",
         "OPENAI_REASONING",
@@ -1363,10 +1365,21 @@ def test_terra_runtime_defaults_are_explicit(monkeypatch):
     ):
         monkeypatch.delenv(name, raising=False)
     settings = Settings(_env_file=None)
-    assert settings.openai_model == "gpt-5.6-terra"
-    assert settings.openai_reasoning == "max"
+    assert settings.openai_model == "claude-haiku-5-5"
+    assert settings.openai_reasoning == "xhigh"
     assert settings.openai_timeout_seconds == 900
     assert settings.openai_execution_mode == "background"
+
+
+def test_explicit_legacy_terra_configuration_remains_readable():
+    settings = Settings(
+        _env_file=None,
+        openai_model="gpt-5.6-terra",
+        openai_reasoning="max",
+    )
+
+    assert settings.openai_model == "gpt-5.6-terra"
+    assert settings.openai_reasoning == "max"
 
 
 def test_runtime_capability_rejects_non_official_configuration(tmp_path):
@@ -1470,7 +1483,7 @@ def test_job_dedupe_is_persistent_and_public_shape_hides_response_id(tmp_path):
 def test_job_dedupe_precedes_saturated_queue_capacity_check(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     first, created = _create_earnings_job(repository)
-    version, digest = runtime.schema_identity("earnings_impact")
+    version, digest = runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
 
     duplicate, created_again = repository.create_job(
         job_type="earnings_impact",
@@ -1500,7 +1513,7 @@ def test_job_identity_rejects_sync_mode_and_migrates_legacy_hash(tmp_path):
     background, created = _create_earnings_job(repository)
     assert created is True
 
-    version, digest = runtime.schema_identity("earnings_impact")
+    version, digest = runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
     with pytest.raises(ValueError, match="background_execution_required"):
         repository.create_job(
             job_type="earnings_impact",
@@ -1669,7 +1682,7 @@ def test_direct_background_completion_links_response_before_publish(
         daily_budget_usd=0,
     )
     assert snapshot["token_budget_used_tokens"] == runtime.token_reservation(
-        "earnings_impact"
+        "earnings_impact", model="gpt-5.6-terra"
     )
 
 
@@ -1710,10 +1723,10 @@ def test_owner_manual_output_caps_leave_reasoning_headroom():
     # 截断（provider_incomplete_max_output_tokens）。思考 tokens 计入输出上
     # 限，owner 手动型任务必须给 max 档留成倍余量；批量型暂保持原值（上限只
     # 影响预留与截断，不影响并发，见 runtime 注释）。
-    assert runtime.max_output_tokens_for("signal_analysis") == 65_536
-    assert runtime.max_output_tokens_for("option_alerts") == 49_152
-    assert runtime.max_output_tokens_for("earnings_impact") == 32_768
-    assert runtime.max_output_tokens_for("news_impact") == 32_768
+    assert runtime.max_output_tokens_for("signal_analysis", model="gpt-5.6-terra") == 65_536
+    assert runtime.max_output_tokens_for("option_alerts", model="gpt-5.6-terra") == 49_152
+    assert runtime.max_output_tokens_for("earnings_impact", model="gpt-5.6-terra") == 32_768
+    assert runtime.max_output_tokens_for("news_impact", model="gpt-5.6-terra") == 32_768
 
 
 def test_failure_detail_is_persisted_exposed_and_cleared_by_recovery(tmp_path):
@@ -1751,12 +1764,12 @@ def test_failure_detail_is_persisted_exposed_and_cleared_by_recovery(tmp_path):
     assert recovered["error_code"] is None
 
 
-def test_error_detail_migration_survives_v3_checksum_registry(tmp_path):
+def test_error_detail_migration_survives_v3_v4_checksum_registry(tmp_path):
     """精确复刻 2026-08-08 生产事故：老库带 v3 校验和 + 无 error_detail 列。
 
     加列改变建表文本 → 校验和改变；版本号没升时，老库 registry 里的 v3 行
     与新代码计算值不匹配，ensure_initialized 每次 RuntimeError，ai_jobs/
-    catalyst/focus 任务全停。修复=版本升到 v4：老行保留、新行独立成键。
+    catalyst/focus 任务全停。修复=版本升到 v5：老行保留、新行独立成键。
     """
     import hashlib as _hashlib
 
@@ -1779,12 +1792,20 @@ def test_error_detail_migration_survives_v3_checksum_registry(tmp_path):
     with repository._connect() as connection:
         connection.execute("ALTER TABLE ai_jobs DROP COLUMN error_detail")
         connection.execute(
-            "DELETE FROM ai_job_schema WHERE version IN ('ai-jobs-v3','ai-jobs-v4')"
+            "DELETE FROM ai_job_schema WHERE version IN ('ai-jobs-v3','ai-jobs-v4','ai-jobs-v5')"
         )
         connection.execute(
             """INSERT INTO ai_job_schema(version,checksum,applied_at)
                VALUES('ai-jobs-v3',?,?)""",
             (old_checksum, "2026-08-01T00:00:00Z"),
+        )
+        connection.execute(
+            """INSERT INTO ai_job_schema(version,checksum,applied_at)
+               VALUES('ai-jobs-v4',?,?)""",
+            (
+                "b436ff83ab65b48ca267a6ac87f51a426dcc54c26341d1fb16f6fe72d5a06ed6",
+                "2026-08-08T00:00:00Z",
+            ),
         )
         connection.commit()
 
@@ -1805,9 +1826,12 @@ def test_error_detail_migration_survives_v3_checksum_registry(tmp_path):
             ).fetchall()
         }
     assert "error_detail" in columns
-    # 老 v3 行原样保留（回滚安全），v4 行写入当前校验和。
+    # 老 v3/v4 行原样保留（回滚安全），v5 行写入当前校验和。
     assert registry["ai-jobs-v3"] == old_checksum
-    assert registry["ai-jobs-v4"] == repo_module._SCHEMA_CHECKSUM
+    assert registry["ai-jobs-v4"] == (
+        "b436ff83ab65b48ca267a6ac87f51a426dcc54c26341d1fb16f6fe72d5a06ed6"
+    )
+    assert registry["ai-jobs-v5"] == repo_module._SCHEMA_CHECKSUM
     assert reopened.get_job(row["job_id"]) is not None
 
 
@@ -1918,7 +1942,7 @@ def test_recovery_tool_reports_each_failure_and_continues(
 ):
     database = tmp_path / "ai-jobs.db"
     repository = AIJobRepository(database)
-    version, digest = runtime.schema_identity("earnings_impact")
+    version, digest = runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
 
     def failed_job(ticker, response_id):
         row, _created = repository.create_job(
@@ -2021,8 +2045,8 @@ def test_background_link_failure_is_not_retryable_as_a_known_submission(
         reasoning="max",
         execution_mode="background",
         prompt_version="earnings-impact-v2",
-        schema_version=runtime.schema_identity("earnings_impact")[0],
-        schema_sha256=runtime.schema_identity("earnings_impact")[1],
+        schema_version=runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")[0],
+        schema_sha256=runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")[1],
         max_queued=200,
         submission_source="scheduled",
         force_retry=True,
@@ -2151,7 +2175,7 @@ def test_elapsed_poll_window_releases_queue_when_provider_cancel_fails(
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     stalled, _ = _create_earnings_job(repository)
     settings = _settings(tmp_path / "ai-jobs.db")
-    schema_version, schema_sha256 = runtime.schema_identity("earnings_impact")
+    schema_version, schema_sha256 = runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
     next_job, created = repository.create_job(
         job_type="earnings_impact",
         payload={"ticker": "MSFT", "name": "Microsoft"},
@@ -2403,7 +2427,7 @@ def test_large_valid_signal_result_is_persisted_separately_from_request_limit(
     tmp_path,
 ):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
-    version, digest = runtime.schema_identity("signal_analysis")
+    version, digest = runtime.schema_identity("signal_analysis", model="gpt-5.6-terra")
     payload = {
         "ticker": "AAPL",
         "signals": {},
@@ -2500,7 +2524,7 @@ def test_daily_token_limit_is_reserved_before_provider_submission(
     tmp_path,
 ) -> None:
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
-    version, digest = runtime.schema_identity("earnings_impact")
+    version, digest = runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
 
     def create(ticker: str):
         return repository.create_job(
@@ -2563,7 +2587,7 @@ def test_daily_token_limit_is_reserved_before_provider_submission(
 
 def test_concurrent_token_reservations_cannot_cross_the_limit(tmp_path) -> None:
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
-    version, digest = runtime.schema_identity("earnings_impact")
+    version, digest = runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
 
     def create(ticker: str) -> dict:
         return repository.create_job(
@@ -2641,8 +2665,8 @@ def test_explicit_retry_requeues_safe_terminal_job_but_not_unknown_submission(
         reasoning="max",
         execution_mode="background",
         prompt_version="earnings-impact-v2",
-        schema_version=runtime.schema_identity("earnings_impact")[0],
-        schema_sha256=runtime.schema_identity("earnings_impact")[1],
+        schema_version=runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")[0],
+        schema_sha256=runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")[1],
         max_queued=200,
         force_retry=True,
     )
@@ -2661,8 +2685,8 @@ def test_explicit_retry_requeues_safe_terminal_job_but_not_unknown_submission(
         reasoning="max",
         execution_mode="background",
         prompt_version="earnings-impact-v2",
-        schema_version=runtime.schema_identity("earnings_impact")[0],
-        schema_sha256=runtime.schema_identity("earnings_impact")[1],
+        schema_version=runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")[0],
+        schema_sha256=runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")[1],
         max_queued=200,
         force_retry=True,
     )
@@ -2727,7 +2751,7 @@ def test_explicit_retry_keeps_a_valid_completed_result_settled(tmp_path):
 
 def test_explicit_retry_respects_the_queue_capacity_limit(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
-    version, digest = runtime.schema_identity("earnings_impact")
+    version, digest = runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
 
     def create(ticker: str, *, force_retry: bool = False):
         return repository.create_job(
@@ -2761,7 +2785,7 @@ def test_explicit_retry_respects_the_queue_capacity_limit(tmp_path):
 
 def test_worker_sync_job_creation_is_sealed(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
-    version, digest = runtime.schema_identity("earnings_impact")
+    version, digest = runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
     with pytest.raises(ValueError, match="background_execution_required"):
         repository.create_job(
             job_type="earnings_impact",
@@ -2922,7 +2946,7 @@ def test_unlinked_unknown_submission_frees_the_paid_slot_after_short_hold(
     repository.fail(stuck["job_id"], owner, "submission_outcome_unknown")
     assert repository.get_job(stuck["job_id"])["openai_response_id"] is None
 
-    version, digest = runtime.schema_identity("earnings_impact")
+    version, digest = runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
     follower, created = repository.create_job(
         job_type="earnings_impact",
         payload={"ticker": "MSFT", "name": "Microsoft"},
@@ -2988,7 +3012,7 @@ def test_linked_unknown_submission_keeps_the_full_quarantine(tmp_path):
             (aged, stuck["job_id"]),
         )
 
-    version, digest = runtime.schema_identity("earnings_impact")
+    version, digest = runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
     follower, created = repository.create_job(
         job_type="earnings_impact",
         payload={"ticker": "MSFT", "name": "Microsoft"},
@@ -3062,8 +3086,8 @@ def test_focus_cycle_creation_survives_a_full_bulk_queue(tmp_path):
             reasoning="max",
             execution_mode="background",
             prompt_version="earnings-impact-v2",
-            schema_version=runtime.schema_identity("earnings_impact")[0],
-            schema_sha256=runtime.schema_identity("earnings_impact")[1],
+            schema_version=runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")[0],
+            schema_sha256=runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")[1],
             max_queued=3,
         )
 
@@ -3075,8 +3099,8 @@ def test_focus_cycle_creation_survives_a_full_bulk_queue(tmp_path):
         reasoning="max",
         execution_mode="background",
         prompt_version="market-focus-v1",
-        schema_version=runtime.schema_identity("market_focus")[0],
-        schema_sha256=runtime.schema_identity("market_focus")[1],
+        schema_version=runtime.schema_identity("market_focus", model="gpt-5.6-terra")[0],
+        schema_sha256=runtime.schema_identity("market_focus", model="gpt-5.6-terra")[1],
         max_queued=3,
     )
     assert created is True
@@ -3110,7 +3134,7 @@ def test_manual_backlog_does_not_starve_the_scheduled_lane(tmp_path):
 
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     repository.initialize()
-    signal_version, signal_digest = runtime.schema_identity("signal_analysis")
+    signal_version, signal_digest = runtime.schema_identity("signal_analysis", model="gpt-5.6-terra")
 
     def manual_job(ticker: str):
         job, _ = repository.create_job(
@@ -3137,7 +3161,7 @@ def test_manual_backlog_does_not_starve_the_scheduled_lane(tmp_path):
     )
     for ticker in ("NVDA", "MSFT", "META", "TSLA"):
         manual_job(ticker)
-    news_version, news_digest = runtime.schema_identity("news_impact")
+    news_version, news_digest = runtime.schema_identity("news_impact", model="gpt-5.6-terra")
     scheduled, _ = repository.create_job(
         job_type="news_impact",
         payload={"ticker": "AMD", "title": "后台批任务", "allowed_tickers": ["AMD"]},
@@ -3168,7 +3192,7 @@ def test_manual_fast_lane_is_not_blocked_by_scheduled_in_flight(tmp_path):
     database = tmp_path / "ai-jobs.db"
     repository = AIJobRepository(database)
     repository.initialize()
-    version, digest = runtime.schema_identity("news_impact")
+    version, digest = runtime.schema_identity("news_impact", model="gpt-5.6-terra")
     scheduled, _ = repository.create_job(
         job_type="news_impact",
         payload={"ticker": "NVDA", "title": "背景批任务", "allowed_tickers": ["NVDA"]},
@@ -3191,7 +3215,7 @@ def test_manual_fast_lane_is_not_blocked_by_scheduled_in_flight(tmp_path):
         == "started"
     )
 
-    sig_version, sig_digest = runtime.schema_identity("signal_analysis")
+    sig_version, sig_digest = runtime.schema_identity("signal_analysis", model="gpt-5.6-terra")
     manual, _ = repository.create_job(
         job_type="signal_analysis",
         payload={"ticker": "AMD"},
@@ -3250,7 +3274,7 @@ def test_manual_fast_lane_is_not_blocked_by_scheduled_in_flight(tmp_path):
 def test_active_for_ticker_sees_only_running_jobs_of_the_same_type(tmp_path):
     path = tmp_path / "ai-jobs.db"
     repository = AIJobRepository(path)
-    version, digest = runtime.schema_identity("signal_analysis")
+    version, digest = runtime.schema_identity("signal_analysis", model="gpt-5.6-terra")
     row, _created = repository.create_job(
         job_type="signal_analysis",
         payload={

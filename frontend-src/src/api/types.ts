@@ -748,6 +748,12 @@ export interface OptionChain {
  * 活跃/终态集合见 api-contract §0.4。
  */
 export type AiJobStatus = 'queued' | 'in_progress' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+export interface EvidenceSource {
+  title: string;
+  url: string;
+  type: 'web_search' | 'web_fetch';
+}
+
 export interface AiJob {
   id: string;
   /** live 由契约 job_type 归一：earnings_impact/option_alerts/news_impact/signal_analysis/market_focus */
@@ -759,6 +765,11 @@ export interface AiJob {
   updatedAt: string;
   /** 按任务类型保留后端结构化结果；消费组件负责校验所属契约。 */
   result?: string | Record<string, unknown>;
+  /** Actual task identity and usage; never fill absent values from today's defaults. */
+  model?: string;
+  reasoning?: string;
+  usage?: Record<string, number | null>;
+  evidenceSources?: EvidenceSource[];
   error?: string;
   /** 失败诊断细节（owner 排障用；后端对非 owner 置空） */
   errorDetail?: string;

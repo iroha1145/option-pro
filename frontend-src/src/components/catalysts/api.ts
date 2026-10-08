@@ -34,6 +34,7 @@ import {
   buildFocusCycleRequestBody,
   focusCyclePollPath,
 } from '@/components/catalysts/focusCycleRequest';
+import { normalizeEvidenceSources } from '../../api/evidenceSources.ts';
 import { t as __t } from '../../i18n/core.ts';
 import { notifyCatalystReadsInvalidated, type CatalystInvalidateOptions } from './resourceSignals';
 
@@ -153,6 +154,8 @@ function nImpact(v: unknown): NewsImpactResult | null {
       .map(nStockImpact)
       .filter((x): x is TrustedStockImpact => x !== null),
     model: pickS(r, 'model') ?? '',
+    reasoning: pickS(r, 'reasoning', 'reasoning_effort'),
+    evidenceSources: normalizeEvidenceSources(r.evidence_sources),
     generatedAt: pickS(r, 'generatedAt', 'generated_at') ?? '',
   };
 }
@@ -207,7 +210,14 @@ function nAnalysisInput(value: unknown): NewsAnalysisInput | null {
 
 function nNewsItem(r: Rec): CatalystNewsItem {
   const impact = nImpact(r.analysis);
-  if (impact && !impact.generatedAt) impact.generatedAt = pickS(r, 'analyzed_at', 'available_at') ?? '';
+  if (impact) {
+    // These belong to the published result, not a newer queued reanalysis job.
+    impact.model = pickS(r, 'analysis_model') ?? impact.model;
+    impact.reasoning = pickS(r, 'analysis_reasoning') ?? impact.reasoning;
+    impact.evidenceSources = normalizeEvidenceSources(r.analysis_sources);
+
+    if (!impact.generatedAt) impact.generatedAt = pickS(r, 'analyzed_at', 'available_at') ?? '';
+  }
   const rawTitle = usefulZh(pickS(r, 'sourceTitle', 'source_title', 'title'));
   const rawSummary = usefulZh(pickS(r, 'summary'));
   const titleZh = usefulZh(pickS(r, 'titleZh', 'title_zh'));
@@ -326,6 +336,8 @@ function nCycleRecord(r: Rec): MarketFocusCycle {
     generatedAt: pickS(r, 'generatedAt', 'generated_at', 'completed_at') ?? '',
     trigger: pickS(r, 'trigger') === 'manual' || pickB(r, 'force') === true ? 'manual' : 'scheduled',
     model: pickS(r, 'model') ?? '',
+    reasoning: pickS(r, 'reasoning', 'reasoning_effort'),
+    evidenceSources: normalizeEvidenceSources(r.evidence_sources),
     newsCount: pickN(r, 'newsCount', 'news_count') ?? pickN(r, 'event_group_count') ?? 0,
     sampleLabel: pickN(r, 'newsCount', 'news_count') !== null ? __t('条') : __t('组事件'),
     status: pickS(r, 'status'),

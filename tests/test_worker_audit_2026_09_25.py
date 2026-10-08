@@ -1144,6 +1144,9 @@ def test_ai_jobs_task_caches_only_an_initialized_repository(
         settings=SimpleNamespace(
             openai_job_db_path=tmp_path / "ai-jobs.db",
             openai_api_key=SecretStr(""),
+            openai_model="gpt-5.6-terra",
+            openai_reasoning="max",
+            openai_max_concurrency=1,
         ),
     )
 

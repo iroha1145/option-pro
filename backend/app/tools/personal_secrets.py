@@ -36,8 +36,9 @@ _SAFE_HTTPS_AUTHORITY = re.compile(
 _UNSAFE_ENV_CHARACTERS = frozenset("#'\"\\$")
 _UNSAFE_TOKEN_CHARACTERS = _UNSAFE_ENV_CHARACTERS
 _REMOTE_SECRET_KEYS = frozenset(
-    {"OPENAI_API_KEY", "FINNHUB_API_KEY", "INTERNAL_API_TOKEN"}
+    {"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "FINNHUB_API_KEY", "INTERNAL_API_TOKEN"}
 )
+_ANTHROPIC_VALIDATION_URL = "https://api.anthropic.com/v1/models"
 _OPENAI_VALIDATION_URL = "https://api.openai.com/v1/models"
 _FINNHUB_VALIDATION_URL = "https://finnhub.io/api/v1/quote?symbol=AAPL"
 _MACROLENS_HEALTH_PATH = "/internal/v1/health"
@@ -353,6 +354,8 @@ def _format_valid(key: str, value: str) -> bool:
         return False
     if any(character in value for character in _UNSAFE_TOKEN_CHARACTERS):
         return False
+    if key == "ANTHROPIC_API_KEY" and not value.startswith("sk-ant-"):
+        return False
     if key == "OPENAI_API_KEY" and not value.startswith("sk-"):
         return False
     entry = _EXACT_SHAPES.get(key)
@@ -581,6 +584,13 @@ def validate_report(path: Path) -> dict[str, object]:
                     checked=False,
                     ok=True,
                     reason="local_validation_only",
+                )
+            )
+        elif key == "ANTHROPIC_API_KEY":
+            item.update(
+                _validate_connection(
+                    _ANTHROPIC_VALIDATION_URL,
+                    {"x-api-key": value, "anthropic-version": "2023-06-01"},
                 )
             )
         elif key == "OPENAI_API_KEY":

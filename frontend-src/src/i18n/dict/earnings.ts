@@ -140,7 +140,6 @@ export const EARNINGS: Dict = {
   "暂时无法读取分析设置，请稍后重试": ["Analysis settings are unavailable. Try again shortly.", "分析設定を読み込めません。しばらくしてから再試行してください。"],
   '财报关注范围已调整，这次分析不再需要': ["The earnings coverage window has changed; this analysis is no longer needed.", "決算の対象範囲が変更されたため、今回の分析は不要になりました。"],
   "分析内容未生成完整，请重试": ["The analysis is incomplete. Try again.", "分析の生成が途中で止まりました。再試行してください。"],
-  "未能确认上次分析结果，请重试": ["The previous analysis result could not be confirmed. Try again.", "前回の分析結果を確認できませんでした。再試行してください。"],
   '这份财报数据过大，无法分析': ["This earnings report's data is too large to analyze.", "この決算のデータが大きすぎて分析できません。"],
   '分析结果过大，无法保存': ["The analysis result is too large to save.", "分析結果が大きすぎて保存できません。"],
   '这次分析没有完成': ["This analysis didn't complete.", "今回の分析は完了しませんでした。"],

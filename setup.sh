@@ -149,12 +149,12 @@ configure_environment() {
         return
     fi
 
-    local openai_key macrolens_url macrolens_token
+    local anthropic_key macrolens_url macrolens_token
     local access_mode owner_password owner_password_confirm password_hash
-    read -rsp "OpenAI 接口密钥（可留空）: " openai_key
+    read -rsp "Claude 接口密钥（可留空）: " anthropic_key
     echo
-    if [ -n "$openai_key" ]; then
-        validate_service_secret "$openai_key"
+    if [ -n "$anthropic_key" ]; then
+        validate_service_secret "$anthropic_key"
     fi
     read -rp "MacroLens 地址（可留空）: " macrolens_url
     if [ -n "$macrolens_url" ]; then
@@ -194,10 +194,10 @@ configure_environment() {
         exit 1
     fi
 
-    set_file_value secrets.env OPENAI_API_KEY "$openai_key"
+    set_file_value secrets.env ANTHROPIC_API_KEY "$anthropic_key"
     set_file_value secrets.env INTERNAL_API_TOKEN "$macrolens_token"
     set_file_value machine.env MACROLENS_URL "$macrolens_url"
-    unset openai_key macrolens_token password_hash
+    unset anthropic_key macrolens_token password_hash
     echo -e "${GREEN}.env、machine.env 与 secrets.env 已生成，文件权限为 0600。${NC}"
 }
 

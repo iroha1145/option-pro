@@ -54,9 +54,9 @@ async def _run() -> dict:
         result = await task()
     finally:
         await task.aclose()
-    assert settings.openai_model == "gpt-5.6-terra"
-    assert settings.openai_reasoning == "max"
-    assert settings.openai_max_concurrency == 1
+    assert settings.openai_model == "claude-haiku-5-5"
+    assert settings.openai_reasoning == "xhigh"
+    assert settings.openai_max_concurrency == 4
     assert result.status == "idle"
     assert requests == [
         "/internal/v1/news/changes",

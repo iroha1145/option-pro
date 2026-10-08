@@ -1,4 +1,6 @@
+import AnalysisSources from '@/components/shared/AnalysisSources';
 import AnalysisIcon from '@/components/shared/AnalysisIcon';
+import { aiModelLabel } from '@/lib/aiModelLabel';
 /** 新闻详情抽屉：标题/来源/时间/原文外链/摘要 + 模型分析区（任务状态机：生成/重试/取消/轮询） */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -607,6 +609,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
     settledJob?.status === 'cancelled'
     || (!settledJob && item?.analysisStatus === 'pending' && item.analysisJobStatus === 'cancelled')
   );
+  const outcomeUnknown = (settledJob?.error ?? item?.analysisErrorCode) === 'submission_outcome_unknown';
   const failureText = newsAnalysisFailureText(
     settledJob?.status === 'failed' ? settledJob.error : item?.analysisErrorCode,
   );
@@ -787,7 +790,9 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
                 <p className="mt-3 border-t border-line pt-2.5 text-micro text-ink-400 tnum">
                   {__t('AI 生成于')}{' '}
                   {fmtLocaleTime(analysis.generatedAt)}
+                  {analysis.model.trim() ? ` · ${aiModelLabel(analysis.model, analysis.reasoning)}` : ''}
                 </p>
+                <AnalysisSources sources={analysis.evidenceSources} />
               </motion.div>
             )}
 
@@ -828,7 +833,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
                         {__t('生成 AI 分析')}
                       </button>
                     )}
-                    {(showCompleted || showFailed || showInsufficient || showCancelled) && (
+                    {!outcomeUnknown && (showCompleted || showFailed || showInsufficient || showCancelled) && (
                       <button
                         onClick={() => setConfirm('force')}
                         className="control-button ai-action"
