@@ -124,7 +124,7 @@ test('详情与加载更多的失败都会显示出来', async () => {
   const detail = codeOf(await source('components/breakouts/EventDetail.tsx'));
   const feed = codeOf(await source('components/catalysts/FeedPanel.tsx'));
   assert.doesNotMatch(page, /\.catch\(\(\) => undefined\);/);
-  assert.match(detail, /详情加载失败，暂显示列表中的信息/);
+  assert.match(detail, /详情读取失败，暂显示列表中的信息/);
   assert.doesNotMatch(feed, /catch \{\s*\n\s*\} finally/);
   assert.match(feed, /\{__t\('加载更多失败：'\)\}\{moreError\.message\}/);
 });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { ApiError } from '../../api/client.ts';
 import { getSecurityDiagnostics } from '../../api/modules/strengthDiagnostics.ts';
 import {
@@ -24,6 +24,8 @@ import {
 } from '../../lib/eodDiagnostics.ts';
 import { t } from '../../i18n/core.ts';
 import TextSwap from '@/components/shared/TextSwap';
+import Icon from '@/components/icons';
+import { cn } from '@/lib/utils';
 
 export interface SecurityDiagnosticsProps {
   profile: DiagnosticProfile;
@@ -43,7 +45,7 @@ const factorNames: Record<string, string> = {
 };
 const gateNames: Record<string, string> = {
   venue: t('证券资格'), currently_tradable: t('可交易'), price: t('价格'),
-  adv20: t('二十日平均成交额'), atr: t('波动幅度'), extension: t('价格延伸'),
+  adv20: t('20 日平均成交额'), atr: t('波动幅度'), extension: t('价格延伸'),
   structure: t('结构'), history: t('历史长度'), upthrust: t('冲高回落'),
   invalidation: t('形态失效'), score: t('分数'), coverage: t('因子覆盖'),
 };
@@ -99,7 +101,7 @@ function FactorDetails({ path, sources }: {
     <section className="mt-4 border-t border-line pt-4">
       <h5 className="text-body-s font-medium text-ink-800">{t('因子与分数构成')}</h5>
       {Object.keys(scoreGate).length > 0 && <div className="mt-3 rounded-md border border-line bg-paper-2 p-3 text-micro text-ink-600">
-        <h6 className="font-medium text-ink-800">{t('最终评分门（当前轨道）')}</h6>
+        <h6 className="font-medium text-ink-800">{t('最终评分条件（当前轨道）')}</h6>
         <div className="mt-1 grid gap-x-4 gap-y-1 sm:grid-cols-2">
           <span>{t('因子覆盖率')}{t('：')}{diagnosticPercent(scoreGate.coverage_ratio)} / {t('最低要求')} {diagnosticPercent(scoreGate.coverage_min)} · {gateText(scoreGate.coverage_passed)}</span>
           <span>{t('最低分')}{t('：')}{diagnosticNumber(scoreGate.score_floor)} · {gateText(scoreGate.score_floor_passed)}</span>
@@ -172,18 +174,18 @@ function PathCard({ path, sources }: {
           <h5 className="font-medium text-ink-800">{t('波动与延伸')}</h5>
           <div className="mt-1 grid gap-x-4 gap-y-1 text-micro text-ink-500 sm:grid-cols-2">
             <span>{t('实际波动幅度')}{t('：')}{pctPoint(path.atr_pct)}</span>
-            <span>{t('参照波动幅度')}{t('：')}{pctPoint(path.sector_median_atr_pct)}</span>
+            <span>{t('参考波动幅度')}{t('：')}{pctPoint(path.sector_median_atr_pct)}</span>
             <span>{t('波动门槛')}{t('：')}{pctPoint(path.atr_threshold_pct)}</span>
-            <span>{t('参照成员数')}{t('：')}{diagnosticNumber(path.atr_reference_n, 0)}</span>
-            <span>{t('参照来源')}{t('：')}{diagnosticAtrReference(path.atr_reference_source)}</span>
-            <span>{t('参照规则')}{t('：')}{diagnosticAtrPolicy(path.atr_reference_policy)}</span>
+            <span>{t('参考成员数')}{t('：')}{diagnosticNumber(path.atr_reference_n, 0)}</span>
+            <span>{t('参考来源')}{t('：')}{diagnosticAtrReference(path.atr_reference_source)}</span>
+            <span>{t('参考规则')}{t('：')}{diagnosticAtrPolicy(path.atr_reference_policy)}</span>
             <span>{t('价格延伸')}{t('：')}{diagnosticNumber(path.extension_atr, 2)} ATR</span>
             <span>{t('延伸上限')}{t('：')}{diagnosticNumber(path.extension_limit_atr, 2)} ATR</span>
           </div>
         </div>
         <div>
           <h5 className="font-medium text-ink-800">{t('资格与成交额')}</h5>
-          <p className="mt-1 text-micro text-ink-500">{t('二十日平均成交额')}{t('：')}{money(path.adv20)} · {t('成交额数据可作参考，但代理口径尚未认证，不代表已通过流动性门。')}</p>
+          <p className="mt-1 text-micro text-ink-500">{t('20 日平均成交额')}{t('：')}{money(path.adv20)} · {t('成交额数据可作参考，但代理口径尚未认证，不代表已通过流动性门。')}</p>
           <p className="mt-1 text-micro text-ink-500">{t('成交额资格')}{t('：')}{verifiedText(flags.dollar_liquidity_verified)} · {t('成交量时段')}{t('：')}{verifiedText(flags.volume_session_verified)}</p>
           {Object.keys(gates).length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">
             {Object.entries(gates).filter(([key]) => key !== 'score' && key !== 'coverage').map(([key, value]) => <span key={key} className="rounded border border-line px-2 py-1 text-micro text-ink-500">{gateNames[key] ?? t('其他条件')}: {key === 'adv20' && value === true && flags.dollar_liquidity_verified !== true ? t('代理值达到数值门槛，资格未认证') : gateText(value)}</span>)}
@@ -202,6 +204,9 @@ export default function SecurityDiagnostics({ profile, timeframe, publicationKey
   const [pending, setPending] = useState<{ key: string; seq: number } | null>(null);
   const [result, setResult] = useState<DiagnosticResult | null>(null);
   const [failure, setFailure] = useState<DiagnosticFailure | null>(null);
+  // 表单默认收起；展开只控制输入区，已有的查询结果、错误与加载提示不受影响。
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
   const seq = useRef(0);
   const symbol = fixedTicker || input.trim();
   const key = `${profile}|${timeframe}|${String(publicationKey ?? '')}|${symbol}`;
@@ -227,14 +232,14 @@ export default function SecurityDiagnostics({ profile, timeframe, publicationKey
     setFailure(null);
     if (!TICKER_PATTERN.test(symbol)) {
       setPending(null);
-      setFailure({ key: requestKey, message: t('请输入有效代码，最多三十二个字母、数字、点或连字符。') });
+      setFailure({ key: requestKey, message: t('请输入有效代码，最多 32 个字母、数字、点或连字符。') });
       return;
     }
     setPending({ key: requestKey, seq: requestSeq });
     void getSecurityDiagnostics(symbol, profile, timeframe, publicationKey).then((payload) => {
       if (seq.current !== requestSeq) return;
       if ((payload.requested_ticker ?? payload.ticker) !== symbol || payload.profile !== profile || payload.horizon !== timeframe) {
-        setFailure({ key: requestKey, message: t('返回的数据与所查代码或条件不符，请重试。') });
+        setFailure({ key: requestKey, message: t('返回的数据与查询代码或条件不符，请重试。') });
         return;
       }
       setResult({ key: requestKey, payload });
@@ -242,12 +247,12 @@ export default function SecurityDiagnostics({ profile, timeframe, publicationKey
       if (seq.current !== requestSeq) return;
       let message = t('读取失败，请稍后重试。');
       if (error instanceof ApiError && error.code === 404) message = t('该代码不在本批次证券目录中。');
-      else if (error instanceof ApiError && error.code === 503) message = t('该批次尚无完整诊断，请等待扫描完成后重试。');
+      else if (error instanceof ApiError && error.code === 503) message = t('本批次诊断尚未完成，请等待扫描结束后重试。');
       else if (error instanceof ApiError && error.code === 409) message = t('该代码对应多个不同证券，无法唯一识别。');
       else if (error instanceof ApiError && error.code === 429) {
         message = typeof error.retryAfter === 'number' && Number.isFinite(error.retryAfter) && error.retryAfter > 0
-          ? t('选股诊断查询过于频繁，请 {n} 秒后重试。', { n: Math.ceil(error.retryAfter) })
-          : t('选股诊断查询过于频繁，请稍后重试。');
+          ? t('查询过于频繁，请 {n} 秒后重试。', { n: Math.ceil(error.retryAfter) })
+          : t('查询过于频繁，请稍后重试。');
       }
       setFailure({ key: requestKey, message });
     }).finally(() => {
@@ -261,22 +266,34 @@ export default function SecurityDiagnostics({ profile, timeframe, publicationKey
   const sources = shown?.weight_provenance_sources ?? {};
   const paths = Array.isArray(shown?.paths) ? shown.paths : [];
   return (
-    <section className="card-surface min-w-0 p-4 sm:p-5" aria-label={t('按代码查询选股诊断')}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-h3 text-ink-900">{t('按代码查询选股诊断')}</h3>
-        </div>
-        <span className="rounded border border-line px-2 py-1 text-micro text-ink-500">{t('偏好')}{t('：')}{profile === 'balanced' ? t('均衡') : profile === 'conservative' ? t('稳健') : t('进取')} · {t('周期')}{t('：')}{timeframe === 'short' ? t('短期') : timeframe === 'mid' ? t('中期') : t('长期')}</span>
+    <section className="card-surface min-w-0 p-4 sm:p-5" aria-label={t('单股诊断')}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-h3 text-ink-900">
+          <button
+            type="button"
+            onClick={() => setOpen((value) => !value)}
+            aria-expanded={open}
+            aria-controls={panelId}
+            className="disclosure-trigger -mx-1 inline-flex items-center gap-2 rounded-lg px-1 py-0.5 text-left outline-none transition-colors duration-fast hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand-400/40"
+          >
+            <Icon name="search" size={15} className="text-ink-400" />
+            {t('单股诊断')}
+            <Icon name="chevron-down" size={14} className={cn('text-ink-400 transition-transform duration-fast', open && 'rotate-180')} />
+          </button>
+        </h3>
+        {open && <span className="rounded border border-line px-2 py-1 text-micro text-ink-500">{t('风险偏好')}{t('：')}{profile === 'balanced' ? t('均衡') : profile === 'conservative' ? t('稳健') : t('进取')} · {t('评分周期')}{t('：')}{timeframe === 'short' ? t('短期') : timeframe === 'mid' ? t('中期') : t('长期')}</span>}
       </div>
-      <form onSubmit={query} className="mt-4 flex flex-wrap items-end gap-2">
-        <label className="min-w-[140px] flex-1 text-body-s text-ink-700">
-          <span className="mb-1 block">{t('证券代码')}</span>
-          <input value={fixedTicker || input} onChange={(event) => { if (!fixedTicker) { seq.current += 1; setPending(null); setResult(null); setFailure(null); setInput(event.target.value); } }} readOnly={Boolean(fixedTicker)}
-            autoComplete="off" spellCheck={false} maxLength={32} placeholder={t('例如 AAPL，未上榜也可查询')}
-            className="h-11 w-full rounded-md border border-line-strong bg-card px-3 tnum text-body-s text-ink-800 outline-none transition-[box-shadow,border-color] duration-fast focus:border-brand-600 focus:shadow-focus-ring" />
-        </label>
-        <button type="submit" disabled={loading} aria-busy={loading} className="btn-primary"><TextSwap swapKey={loading ? 'busy' : 'idle'}>{loading ? t('查询中') : t('查询诊断')}</TextSwap></button>
-      </form>
+      <div id={panelId} hidden={!open}>
+        <form onSubmit={query} className="mt-4 flex flex-wrap items-end gap-2">
+          <label className="min-w-[140px] flex-1 text-body-s text-ink-700">
+            <span className="mb-1 block">{t('证券代码')}</span>
+            <input value={fixedTicker || input} onChange={(event) => { if (!fixedTicker) { seq.current += 1; setPending(null); setResult(null); setFailure(null); setInput(event.target.value); } }} readOnly={Boolean(fixedTicker)}
+              autoComplete="off" spellCheck={false} maxLength={32} placeholder={t('例如 AAPL，未上榜也可查询')}
+              className="h-11 w-full rounded-md border border-line-strong bg-card px-3 tnum text-body-s text-ink-800 outline-none transition-[box-shadow,border-color] duration-fast focus:border-brand-600 focus:shadow-focus-ring" />
+          </label>
+          <button type="submit" disabled={loading} aria-busy={loading} className="btn-primary"><TextSwap swapKey={loading ? 'busy' : 'idle'}>{loading ? t('查询中') : t('查询诊断')}</TextSwap></button>
+        </form>
+      </div>
       {loading && <p className="mt-4 text-body-s text-ink-500" role="status">{t('正在读取本批次诊断…')}</p>}
       {shownError && <p className="mt-4 rounded-md border border-line bg-paper-2 p-3 text-body-s text-ink-700" role="alert">{shownError}</p>}
       {shown && <div className="mt-5 space-y-4">
@@ -286,28 +303,28 @@ export default function SecurityDiagnostics({ profile, timeframe, publicationKey
             <span className="text-body-s text-ink-700">{diagnosticDataStatus(shown.data_status)}</span>
             {shown._stale && <span className="rounded bg-paper-2 px-2 py-0.5 text-micro text-ink-700">{t('旧数据')}</span>}
             {shown.historical_example && <span className="rounded bg-paper-2 px-2 py-0.5 text-micro text-ink-700">{t('历史示例')}</span>}
-            {shown.synthetic && <span className="rounded bg-paper-2 px-2 py-0.5 text-micro text-ink-700">{t('合成数据')}</span>}
+            {shown.synthetic && <span className="rounded bg-paper-2 px-2 py-0.5 text-micro text-ink-700">{t('模拟数据')}</span>}
             {onOpenDetail && shown.data_status !== 'out_of_scope' && <button type="button" onClick={() => onOpenDetail(shown.ticker)} className="ml-auto text-body-s text-brand-600 underline">{t('查看股票详情')}</button>}
           </div>
           {Object.keys(display).length > 0 && <p className="mt-2 text-body-s text-ink-700">{t('结果归属')}{t('：')}{diagnosticDisplayReason(display.display_reason)}
-            {display.in_observation === true && display.observation_rank != null ? ` · ${t('全资产观察名次（筛选前）')} ${display.observation_rank}` : ''}
+            {display.in_observation === true && display.observation_rank != null ? ` · ${t('全部候选名次（筛选前）')} ${display.observation_rank}` : ''}
             {display.in_observation === true && display.track_observation_rank != null ? ` · ${t('同类观察名次（筛选前）')} ${display.track_observation_rank}` : ''}
             {display.in_composite === true && display.composite_rank != null ? ` · ${t('综合名次（筛选前）')} ${display.composite_rank}` : ''}
           </p>}
           <div className="mt-2 grid gap-1 text-micro text-ink-500 sm:grid-cols-2">
             <span>{t('数据截止交易日')}{t('：')}{textValue(shown.served_session ?? shown.score_data_through)}</span>
-            <span>{t('快照保存时间')}{t('：')}{textValue(shown.snapshot_saved_at)}</span>
+            <span>{t('结果保存时间')}{t('：')}{textValue(shown.snapshot_saved_at)}</span>
             <span>{t('计算版本')}{t('：')}{textValue(shown.compute_version)}</span>
             <span>{t('特征版本')}{t('：')}{textValue(shown.feature_version)}</span>
             <span className="break-all sm:col-span-2">{t('来源标识')}{t('：')}{textValue(shown.source_hash)}</span>
           </div>
           {shown.coverage && <p className="mt-2 text-micro text-ink-500">{t('目录覆盖状态')}{t('：')}{diagnosticCoverageStatus(shown.coverage.status)}</p>}
-          {shown._stale && <p className="mt-2 text-body-s text-ink-700">{t('此结果不是最新收盘批次，请核对截止日期。')}</p>}
+          {shown._stale && <p className="mt-2 text-body-s text-ink-700">{t('当前不是最新收盘批次，请核对截止日期。')}</p>}
         </div>
         <div>
           <h4 className="text-body-s font-medium text-ink-800">{t('完整评分路径')} <span className="tnum">{paths.length}</span></h4>
           {paths.length ? <div className="mt-3 space-y-2">{paths.map((path, index) => <PathCard key={pathKey(path, index)} path={path} sources={sources} />)}</div>
-            : <p className="mt-3 rounded-md border border-line p-3 text-body-s text-ink-500">{t('本批次没有这只证券的评分路径。请查看上方目录状态和数据截止日。')}</p>}
+            : <p className="mt-3 rounded-md border border-line p-3 text-body-s text-ink-500">{t('本批次没有这只证券的评分路径，请核对目录状态和数据截止日。')}</p>}
         </div>
       </div>}
     </section>

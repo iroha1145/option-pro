@@ -121,12 +121,12 @@ export default function HistoryRail({
   let rowIndex = 0;
 
   return (
-    <section aria-label={t("历史事件回溯")} className="radar-history card-surface flex max-h-[560px] flex-col overflow-hidden">
+    <section aria-label={t("历史事件")} className="radar-history card-surface flex max-h-[560px] flex-col overflow-hidden">
       {/* 标题行 + 副标 */}
       <div className="shrink-0 border-b border-line px-4 pb-2.5 pt-3.5">
         <p className="flex items-baseline justify-between gap-2">
           <span className="text-body-s font-medium text-ink-900">
-            {t('历史事件回溯 ·')}{' '}
+            {t('历史事件 ·')}{' '}
             <span className="tnum">
               {total !== null ? t('共 {n} 条', { n: total }) : t('已加载 {n} 条{suffix}', { n: loadedCount, suffix: serverHasMore ? '+' : '' })}
             </span>
@@ -136,12 +136,12 @@ export default function HistoryRail({
           )}
         </p>
         <p className="mt-1 text-micro text-ink-400">
-          {t('按时间倒序')}
+          {t('最新在前')}
           {events.length !== loadedCount && (
             <span className="tnum"> {t('· 筛选出')} {events.length} {t('条')}</span>
           )}
           <span className="mx-1 text-ink-300" aria-hidden="true">·</span>
-          {t('点击行打开事件详情')}
+          {t('点击记录查看事件详情')}
         </p>
       </div>
 
@@ -153,7 +153,7 @@ export default function HistoryRail({
           <EmptyState
             variant="error"
             icon="doc-quote"
-            title={error.code === 503 ? t('事件数据暂不可用') : t('事件加载失败')}
+            title={error.code === 503 ? t('历史事件数据暂不可用') : t('历史事件读取失败')}
             description={error.code === 503 ? t('稍后刷新再试') : error.message}
             action={
               <button
@@ -167,14 +167,14 @@ export default function HistoryRail({
         ) : events.length === 0 ? (
           <EmptyState
             image="/empty-radar.svg"
-            title={t("暂无匹配的历史事件")}
+            title={t("没有符合条件的历史事件")}
             description={t("可放宽筛选条件，或等待下一轮扫描。")}
             action={
               <button
                 onClick={onRetry}
                 className="btn-primary"
               >
-                {t('重新加载')}
+                {t('重新读取')}
               </button>
             }
           />
@@ -255,7 +255,7 @@ export default function HistoryRail({
                   onClick={onLoadMore}
                   className="control-button"
                 >
-                  {t('加载更多')}
+                  {t('更多记录')}
                   <span className="text-micro text-ink-400 tnum">{t('剩')} {events.length - visible} {t('条')}</span>
                 </button>
               ) : serverHasMore ? (
@@ -272,7 +272,7 @@ export default function HistoryRail({
               )}
               {serverMoreError && (
                 <p className="text-micro text-danger-700">
-                  {t('加载更多失败：')}{serverMoreError.message}
+                  {t('更早事件读取失败：')}{serverMoreError.message}
                 </p>
               )}
             </div>

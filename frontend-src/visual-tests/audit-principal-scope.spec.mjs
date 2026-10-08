@@ -126,7 +126,7 @@ test('initial identity waits for both capability probes before mounting editable
   state.holdAi = false;
   await Promise.all(state.heldAi.splice(0).map(release => release()));
   await expect(page.getByRole('button', { name: '退出', exact: true })).toBeVisible();
-  const last = page.getByRole('tablist', { name: /^强度分档/ }).getByRole('tab', { name: /^C/ });
+  const last = page.getByRole('tablist', { name: /^评分分档/ }).getByRole('tab', { name: /^C/ });
   await last.click();
   await expect(last).toHaveAttribute('aria-selected', 'true');
   const original = await last.elementHandle();
@@ -212,7 +212,7 @@ test('same-principal focus and unavailable identity preserve the Screener draft 
   await expect(page.getByRole('button', { name: '退出 alice', exact: true })).toBeVisible();
   await page.locator('button.scan-trigger').click();
   await expect(page.getByRole('table').getByText('ALICE scan', { exact: true })).toBeVisible();
-  const profile = page.getByRole('tablist', { name: '偏好', exact: true });
+  const profile = page.getByRole('tablist', { name: '风险偏好', exact: true });
   await profile.getByRole('tab', { name: '进取', exact: true }).click();
   const profilesBefore = state.reads.filter(read => read.path === '/api/strength/profiles').length;
   await focusAndVerify(page);

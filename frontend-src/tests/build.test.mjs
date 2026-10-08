@@ -206,7 +206,7 @@ test('screener waiting state does not invent a percentage', async () => {
   ]);
   assert.doesNotMatch(page, /setProgress|Math\.exp\(-el/);
   assert.doesNotMatch(workbench, /扫描中[^\n]*\{pct\}|style=\{\{ width: `\$\{pct\}%`/);
-  assert.match(workbench, /扫描中 · 等待后台结果/);
+  assert.match(workbench, /扫描中，等待后台结果/);
   assert.match(workbench, /aria-busy=\{scanning\}/);
 });
 

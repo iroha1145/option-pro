@@ -193,7 +193,7 @@ test('visitors without quote access keep delayed indices and never open a stream
 
 test('an open radar detail follows new versions and reconciles missed states after reconnect', async ({ page }) => {
   const state = await fixture(page); state.quoteDelayMs = 750; await page.goto('/breakouts');
-  await page.getByRole('button', { name: '查看完整证据', exact: true }).click();
+  await page.getByRole('button', { name: '查看完整依据', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'AAPL 突破事件详情' });
   await expect(dialog).toBeVisible();
   state.radar = { ...state.radar, state_version: 1, lifecycle_state: 'TRIGGERED', trigger_source: 'finnhub', evidence_at: at, triggered_at: at };

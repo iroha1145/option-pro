@@ -155,83 +155,102 @@ for (const width of [390, 1440]) {
       expect(errors).toEqual([]);
     });
 
-    test('breakout status and score filters retain independent pressed states and compact corners', async ({ page }) => {
+    test('breakout status dropdown and score filters stay independent, summarised, and compact', async ({ page }) => {
       await page.goto('/breakouts');
       const toolbar = page.locator('[data-breakout-filters]');
-      const statuses = toolbar.getByRole('group', { name: '状态筛选', exact: true });
-      const scores = toolbar.getByRole('group', { name: '评分筛选', exact: true });
-      await expect(statuses).toBeVisible();
-      await expect(scores).toBeVisible();
+      // 状态收成一个下拉：触发器写着当前状态，七个选项一个不少。
+      const status = toolbar.getByRole('combobox', { name: '状态筛选', exact: true });
+      await expect(status).toBeVisible();
+      await expect(status).toContainText('全部');
       await expect.poll(() => activeSignalCount(page)).toBeGreaterThan(0);
       const baseline = await activeSignalCount(page);
 
-      const all = statuses.getByRole('button', { name: '全部', exact: true });
-      const confirmed = statuses.getByRole('button', { name: '已确认', exact: true });
-      await expect(all).toHaveAttribute('aria-pressed', 'true');
-      const selectionColors = await all.evaluate((button) => ({
+      await status.click();
+      await expect(page.getByRole('option')).toHaveCount(7);
+      await page.getByRole('option', { name: '已确认', exact: true }).click();
+      await expect(status).toContainText('已确认');
+      await expect.poll(() => activeSignalCount(page)).toBeLessThanOrEqual(baseline);
+      const confirmedCount = await activeSignalCount(page);
+
+      // 最低评分与排序收进「更多筛选」；折叠时摘要仍写明范围、状态、最低评分和排序。
+      const more = toolbar.getByTestId('breakout-more-filters');
+      const summary = more.getByTestId('breakout-filter-summary');
+      const scores = more.getByRole('group', { name: '评分筛选', exact: true });
+      await expect(more).not.toHaveAttribute('open', '');
+      await expect(scores).toBeHidden();
+      await expect(summary).toContainText('范围 全部信号');
+      await expect(summary).toContainText('状态 已确认');
+      await expect(summary).toContainText('最低评分 不限评分');
+      await expect(summary).toContainText('排序 跟随默认');
+      await more.locator('summary').click();
+      await expect(scores).toBeVisible();
+      await expect(more.getByRole('tablist', { name: '雷达排序算法', exact: true })).toBeVisible();
+
+      const unlimited = scores.getByRole('button', { name: '不限评分', exact: true });
+      await expect(unlimited).toHaveAttribute('aria-pressed', 'true');
+      const selectionColors = await unlimited.evaluate((button) => ({
         background: getComputedStyle(button).backgroundColor,
         foreground: getComputedStyle(button).color,
       }));
       // Cloud Monitor 式白色选中片，在浅灰轨道上仍有清晰层次。
       expect(selectionColors.background).toBe('rgb(255, 255, 255)');
-      const trackBackground = await statuses.evaluate((group) => getComputedStyle(group).backgroundColor);
+      const trackBackground = await scores.evaluate((group) => getComputedStyle(group).backgroundColor);
       expect(trackBackground).not.toBe(selectionColors.background);
-      await expect(all).not.toHaveCSS('box-shadow', 'none');
+      await expect(unlimited).not.toHaveCSS('box-shadow', 'none');
       expect(selectionColors.foreground).not.toBe('rgb(255, 255, 255)');
-      await confirmed.focus();
-      await page.keyboard.press('Space');
-      await expect(confirmed).toHaveAttribute('aria-pressed', 'true');
-      await expect(all).toHaveAttribute('aria-pressed', 'false');
-      await expect(statuses.locator('[aria-pressed="true"]')).toHaveCount(1);
-      await expect.poll(() => activeSignalCount(page)).toBeLessThanOrEqual(baseline);
-      const confirmedCount = await activeSignalCount(page);
 
       const eighty = scores.getByRole('button', { name: /80\s*分以上/ });
       await eighty.focus();
       await page.keyboard.press('Enter');
       await expect(eighty).toHaveAttribute('aria-pressed', 'true');
-      await expect(confirmed).toHaveAttribute('aria-pressed', 'true');
+      await expect(status).toContainText('已确认');
       await expect(scores.locator('[aria-pressed="true"]')).toHaveCount(1);
+      await expect(summary).toContainText('最低评分 80 分以上');
       await expect.poll(() => activeSignalCount(page)).toBeLessThanOrEqual(confirmedCount);
 
-      // 两个维度都可以恢复，不能只更新按钮外观而遗留隐藏过滤条件。
-      await all.click();
-      await scores.getByRole('button', { name: '评分不限', exact: true }).click();
+      // 两个维度都可以恢复，不能只更新控件外观而遗留隐藏过滤条件。
+      await status.click();
+      await page.getByRole('option', { name: '全部', exact: true }).click();
+      await expect(status).toContainText('全部');
+      await unlimited.click();
+      await expect(summary).toContainText('状态 全部');
+      await expect(summary).toContainText('最低评分 不限评分');
       await expect.poll(() => activeSignalCount(page)).toBe(baseline);
       const sixtyFive = scores.getByRole('button', { name: /65\s*分以上/ });
       await sixtyFive.click();
       await expect(scores.locator('[aria-pressed="true"]')).toHaveText(/65\s*分以上/);
       // aria-pressed 即时变化，CSS 颜色可能仍在本次过渡的首帧。
       // 用样式断言的自动重试等待最终状态，不以同步取样或固定休眠判断。
-      for (const selected of [all, sixtyFive]) {
-        await expect(selected).toHaveCSS('background-color', selectionColors.background);
-        await expect(selected).toHaveCSS('color', selectionColors.foreground);
-      }
+      await expect(sixtyFive).toHaveCSS('background-color', selectionColors.background);
+      await expect(sixtyFive).toHaveCSS('color', selectionColors.foreground);
 
-      const geometry = await toolbar.getByRole('button').evaluateAll((buttons) => buttons.map((button) => {
-        const style = getComputedStyle(button);
+      const measure = (nodes) => nodes.evaluateAll((items) => items.map((item) => {
+        const style = getComputedStyle(item);
         return {
           radius: Math.max(...[
             style.borderTopLeftRadius, style.borderTopRightRadius,
             style.borderBottomLeftRadius, style.borderBottomRightRadius,
           ].map(Number.parseFloat)),
-          height: button.getBoundingClientRect().height,
+          height: item.getBoundingClientRect().height,
         };
       }));
-      expect(geometry.length).toBeGreaterThanOrEqual(10);
-      expect(geometry.every((button) => button.radius <= (width === 390 ? 9 : 8))).toBe(true);
-      expect(geometry.every((button) => button.height >= (width === 390 ? 44 : 28))).toBe(true);
+      // 状态下拉的触发器（combobox）与评分按钮（button）都要紧凑。
+      const geometry = [
+        ...await measure(toolbar.getByRole('combobox')),
+        ...await measure(toolbar.getByRole('button')),
+      ];
+      expect(geometry.length).toBeGreaterThanOrEqual(4);
+      expect(geometry.every((control) => control.radius <= (width === 390 ? 9 : 8))).toBe(true);
+      expect(geometry.every((control) => control.height >= (width === 390 ? 44 : 28))).toBe(true);
       if (width === 390) {
-        for (const group of [statuses, scores]) {
-          const raisedAndVisible = await group.evaluate((rail) => {
-            const selected = rail.querySelector('[aria-pressed="true"]').getBoundingClientRect();
-            const track = rail.getBoundingClientRect();
-            const viewport = rail.closest('.selection-viewport').getBoundingClientRect();
-            return selected.top < track.top && selected.bottom > track.bottom
-              && selected.top - viewport.top >= 4 && viewport.bottom - selected.bottom >= 4;
-          });
-          expect(raisedAndVisible).toBe(true);
-        }
+        const raisedAndVisible = await scores.evaluate((rail) => {
+          const selected = rail.querySelector('[aria-pressed="true"]').getBoundingClientRect();
+          const track = rail.getBoundingClientRect();
+          const viewport = rail.closest('.selection-viewport').getBoundingClientRect();
+          return selected.top < track.top && selected.bottom > track.bottom
+            && selected.top - viewport.top >= 4 && viewport.bottom - selected.bottom >= 4;
+        });
+        expect(raisedAndVisible).toBe(true);
       }
       await noPageOverflow(page);
       await capture(page, `breakouts-filters-${width}`, toolbar);
@@ -240,9 +259,9 @@ for (const width of [390, 1440]) {
     test('breakout view scope supports keyboard and touch while retaining watchlist filtering', async ({ page }) => {
       await page.goto('/breakouts');
       const scope = page.getByRole('tablist', { name: '查看范围', exact: true });
-      const all = scope.getByRole('tab', { name: '查看全部', exact: true });
-      const watchlist = scope.getByRole('tab', { name: '查看自选', exact: true });
-      const history = page.getByRole('region', { name: '历史事件回溯', exact: true });
+      const all = scope.getByRole('tab', { name: '全部信号', exact: true });
+      const watchlist = scope.getByRole('tab', { name: '我的关注', exact: true });
+      const history = page.getByRole('region', { name: '历史事件', exact: true });
       const filteredHistory = history.getByText(/· 筛选出\s*\d+\s*条/);
       await expect(all).toHaveAttribute('aria-selected', 'true');
       await expect(scope.getByRole('tab')).toHaveCount(2);

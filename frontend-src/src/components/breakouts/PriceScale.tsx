@@ -35,7 +35,7 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
   const known = [invalidation, trigger, target, current].filter(fin);
   if (known.length < 2 || !fin(current)) {
     return (
-      <div className={cn('radar-price-scale w-full', className)} role="img" aria-label={t('价格标尺数据不足')}>
+      <div className={cn('radar-price-scale w-full', className)} role="img" aria-label={t('价位对照数据不足')}>
         <div className="flex h-9 items-center justify-center rounded-md bg-card-warm text-micro text-ink-400">
           {t('— 价位数据不足')}
         </div>
@@ -62,7 +62,7 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
     <div
       className={cn('radar-price-scale w-full', large && 'radar-price-scale-large', className)}
       role="img"
-      aria-label={t('价格标尺：失效 {invalid}，触发 {trigger}，目标 {target}，现价 {current}', {
+      aria-label={t('价位对照：失效 {invalid}，触发 {trigger}，目标 {target}，现价 {current}', {
         invalid: fin(invalidation) ? fmtPrice(invalidation) : '—',
         trigger: fin(trigger) ? fmtPrice(trigger) : '—',
         target: fin(target) ? fmtPrice(target) : '—',
