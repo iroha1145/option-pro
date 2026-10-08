@@ -2541,6 +2541,18 @@ class MarketFocusDominantEvent(StrictModel):
     affected_sectors: list[ZhShortText] = Field(max_length=10)
 
 
+# 只翻译输入已绑定的宏观程序状态；中间从句限定为分数与日期，不能借同句
+# 的「宏观环境」把另一家公司的 active 状态或英文正文一起放行。
+_MACRO_ACTIVE_DESCRIPTION = re.compile(
+    r"(宏观环境(?:块)?(?:"
+    r"综合分为[0-9]+(?:\.[0-9]+)?，"
+    r"处于[\u4e00-\u9fff]{1,10}区间，"
+    r"7日变化为-?[0-9]+(?:\.[0-9]+)?，"
+    r"数据截至[0-9]{4}年[0-9]{1,2}月[0-9]{1,2}日，"
+    r")?状态为)active(?=\s*(?:[，。！？!?；;\n]|$))"
+)
+
+
 class MarketFocusResult(SimplifiedChineseResult):
     cycle_id: Annotated[str, StringConstraints(min_length=1, max_length=100)]
     as_of: Annotated[str, StringConstraints(min_length=1, max_length=40)]
@@ -2558,6 +2570,27 @@ class MarketFocusResult(SimplifiedChineseResult):
     focus_ticker_assessments: list[MarketFocusTickerAssessment] = Field(max_length=20)
     no_new_material_catalyst: StrictBool
     insufficient_context: StrictBool
+
+    @field_validator("summary_zh", "market_summary", mode="before")
+    @classmethod
+    def translate_bound_macro_status(cls, value: Any, info: ValidationInfo) -> Any:
+        if (
+            isinstance(value, str)
+            and isinstance(info.context, dict)
+            and info.context.get("macro_conditions_status") == "active"
+        ):
+            def translate(match: re.Match[str]) -> str:
+                # 先保留原有证券语境检查，不能把「active，股票代码」等
+                # 引用抢先译掉，再以纯中文绕过绑定要求。
+                if _approved_span_requires_ticker_binding(
+                    "active", sentence=value,
+                    start=match.end() - len("active"), end=match.end(),
+                ):
+                    return match.group(0)
+                return f"{match.group(1)}有效"
+
+            return _MACRO_ACTIVE_DESCRIPTION.sub(translate, value)
+        return value
 
     @field_validator("as_of")
     @classmethod
@@ -2852,6 +2885,12 @@ def validate_result(job_type: str, raw_json: str, payload: dict) -> dict:
         context={
             "allowed_codes": allowed_codes,
             "source_texts": _validation_source_texts(job_type, payload),
+            "macro_conditions_status": (
+                payload["macro_conditions"].get("status")
+                if job_type == "market_focus"
+                and isinstance(payload.get("macro_conditions"), dict)
+                else None
+            ),
         },
     )
     data = result.model_dump(mode="json")
