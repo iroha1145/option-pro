@@ -241,8 +241,10 @@ def test_pause_turn_resends_the_paused_content_once_then_succeeds() -> None:
     assert first["messages"] == built["messages"]
     # 续跑：原样追加 assistant 内容，不追加「继续」之类的用户消息；其余参数不变（缓存前缀一致）。
     assert second["messages"] == [*built["messages"], {"role": "assistant", "content": paused_content}]
+    assert first["diagnostics"] == {"previous_message_id": None}
+    assert second["diagnostics"] == {"previous_message_id": "msg_1"}
     assert second["messages"][-1]["content"] is paused_content
-    assert {key: value for key, value in second.items() if key not in {"messages", "timeout"}} == {
+    assert {key: value for key, value in second.items() if key not in {"messages", "timeout", "diagnostics"}} == {
         key: value for key, value in built.items() if key != "messages"
     }
 

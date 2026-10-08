@@ -19,6 +19,8 @@ from typing import Any, Callable, Mapping, Sequence
 import anthropic
 import httpx2
 
+from app.services.claude_cache_diagnostics import BackgroundDiagnosticsStore, MISSING, diagnostic_field
+
 from . import errors
 from .schema import MarketBriefResult
 
@@ -391,6 +393,10 @@ async def _invoke(
     partial_usage: dict[str, Any] = {}
     request_started = False
     saw_message_start = False
+    diagnostic_store = BackgroundDiagnosticsStore()
+    previous_message_id = None
+    round_diagnostics = MISSING
+    diagnostic_started_at = time.time()
 
     def finish(*, error_code: str | None = None, error_detail: str | None = None,
                text: str | None = None, parsed: dict[str, Any] | None = None,
@@ -409,6 +415,7 @@ async def _invoke(
         )
 
     try:
+        previous_message_id = await diagnostic_store.previous("market_brief")
         while True:
             remaining = ends_at - clock()
             if remaining < minimum_remaining:
@@ -420,6 +427,8 @@ async def _invoke(
             partial_usage = {}
             request_started = False
             saw_message_start = False
+            diagnostic_started_at = time.time()
+            round_diagnostics = MISSING
             admission_started = time.monotonic()
             # Commit the submission marker before the SDK can send any bytes.
             if on_submission is not None:
@@ -435,14 +444,23 @@ async def _invoke(
             async with asyncio.timeout(socket_budget):
                 async with endpoint.stream(
                     **{**request, "messages": messages,
-                       "max_tokens": min(int(request["max_tokens"]), output_remaining)},
+                       "max_tokens": min(int(request["max_tokens"]), output_remaining),
+                       "diagnostics": {"previous_message_id": previous_message_id}},
                     timeout=min(remaining, budget),
                 ) as stream:
                     async for event in stream:
                         kind = _field(event, "type")
                         if kind == "message_start":
                             saw_message_start = True
-                            partial_usage = _usage_fields(_field(_field(event, "message"), "usage"))
+                            start_message = _field(event, "message")
+                            partial_usage = _usage_fields(_field(start_message, "usage"))
+                            round_message_id = _field(start_message, "id")
+                            diagnostic_started_at = time.time()
+                            round_diagnostics = diagnostic_field(start_message, "diagnostics")
+                            diagnostic_store.record(task="market_brief", model=request["model"],
+                                previous=previous_message_id, current=round_message_id,
+                                diagnostics=round_diagnostics, usage=_round_usage(partial_usage), complete=False,
+                                started_at=diagnostic_started_at)
                         elif kind == "message_delta":
                             delta_usage = _usage_fields(_field(event, "usage"))
                             # The SDK may drop TTL details on cumulative tool
@@ -459,6 +477,11 @@ async def _invoke(
             request_started = False
             rounds.append(message)
             reported_usage = partial_usage or _field(message, "usage")
+            diagnostic_store.record(task="market_brief", model=request["model"],
+                previous=previous_message_id, current=_field(message, "id"),
+                diagnostics=round_diagnostics if saw_message_start else diagnostic_field(message, "diagnostics"),
+                usage=_round_usage(reported_usage), complete=True, started_at=diagnostic_started_at)
+            previous_message_id = _field(message, "id")
             usage.update(_round_usage(reported_usage))
             partial_usage = {}
             if usage["output_tokens"] > config.output_token_ceiling:

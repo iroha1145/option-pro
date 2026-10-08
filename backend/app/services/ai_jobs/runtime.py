@@ -967,6 +967,7 @@ def prepare_claude(settings: Any, job_type: str, payload: dict[str, Any]) -> Any
         raise RuntimeError("ai_sdk_unavailable") from exc
     return prepare_message(
         settings,
+        job_type=job_type,
         instructions=claude_instructions(request.instructions),
         input_text=request.input_text,
         schema=claude_output_schema(job_type, request.schema),
