@@ -202,6 +202,63 @@ def test_news_and_market_focus_results_accept_simplified_chinese():
     assert focus["cycle_id"] == "cycle-20260715-01"
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "纽约证券交易所（NYSE）发布上市规则说明。",
+        "NYSE上市规则变化可能影响企业融资安排。",
+        "公司在NYSE挂牌，交易所披露的信息仍需进一步核实。",
+    ],
+)
+def test_zh_prose_accepts_nyse_exchange_abbreviation(text):
+    assert validate_simplified_chinese_text(text, None) == text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "NYSE stocks are likely to rise.",
+        "交易所提示NYSE stocks are likely to rise，仍需观察。",
+        "NYSE股票受到关注。",
+        "NYSE股价上涨。",
+        "股票代码为NYSE。",
+        "NYSE（股票代码）受到关注。",
+        "NYSEX发布上市规则说明。",
+    ],
+)
+def test_nyse_abbreviation_does_not_allow_english_prose_or_unbound_stocks(text):
+    with pytest.raises(
+        ValueError,
+        match="simplified_chinese_text_required|english_prose_not_allowed",
+    ):
+        validate_simplified_chinese_text(text, None, allowed_codes=("NVDA",))
+
+
+def test_market_focus_accepts_nyse_exchange_context_in_affected_fields():
+    result = _market_focus_result()
+    result["dominant_events"][0]["summary"] = "NYSE上市规则调整，相关企业仍需说明融资安排。"
+    result["market_uncertainties"][0] = "NYSE上市规则的实施时间仍有待核实。"
+    result["focus_ticker_assessments"][0]["summary"] = "NYSE上市规则变化可能影响板块预期，尚无公司直接受影响的证据。"
+
+    validated = validate_result(
+        "market_focus",
+        json.dumps(result, ensure_ascii=False),
+        _market_focus_payload(),
+    )
+    assert validated == result
+
+
+def test_market_focus_rejects_nyse_as_an_unbound_stock_in_prose():
+    result = _market_focus_result()
+    result["focus_ticker_assessments"][0]["summary"] = "NYSE股价上涨，可能影响板块预期。"
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "market_focus",
+            json.dumps(result, ensure_ascii=False),
+            _market_focus_payload(),
+        )
+
+
 def test_market_focus_prompt_explains_cross_field_evidence_semantics():
     request = runtime.build_runtime_request(
         "market_focus",

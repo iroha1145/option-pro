@@ -377,6 +377,7 @@ _MARKET_TERM_ABBREVIATIONS = frozenset(
         "IV",
         "MACD",
         "NDX",
+        "NYSE",
         "Non-GAAP",
         "OI",
         "OTM",
