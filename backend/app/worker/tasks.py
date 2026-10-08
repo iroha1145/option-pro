@@ -3327,6 +3327,7 @@ class MarketBriefTask:
         trading_date: date,
         trigger: str,
         now: datetime,
+        request_key: str | None = None,
     ) -> TaskResult:
         """跑一次研判；返回的结果还没有 next_delay，由调用方按自己的路径补上。"""
 
@@ -3351,6 +3352,7 @@ class MarketBriefTask:
                 config=self._config().to_run_config(),
                 api_key=self._settings.anthropic_api_key.get_secret_value(),
                 now=now,
+                **({"request_key": request_key} if request_key is not None else {}),
             )
             summary = self._run_summary(record)
         except Exception as error:
@@ -3415,8 +3417,14 @@ class MarketBriefTask:
             return self._idle(now, result="no_slot_due")
         trading_date, slot = due
         target = {"slot": slot, "trading_date": trading_date.isoformat()}
+        recover = getattr(self._get_store(), "recover_interrupted", None)
+        if callable(recover):
+            await _call_local(recover)
         if await _call_local(self._get_store().completed, trading_date, slot):
             return self._idle(now, result="slot_completed", **target)
+        attempted = getattr(self._get_store(), "attempted", None)
+        if callable(attempted) and await _call_local(attempted, trading_date, slot):
+            return self._idle(now, result="slot_attempted", **target)
         if self._last_scheduled_attempt == (trading_date, slot):
             # 这个窗口本进程已经跑过一次且没成功；原因在研判存储的 latest_attempt 里。
             return self._idle(now, result="slot_attempted", **target)
@@ -3479,6 +3487,9 @@ class MarketBriefTask:
             )
             return self._settle(request_ids, rejected)
         trading_date, slot = _market_brief_manual_target(now, requested)
+        request_key = f"worker-action:{request_ids[0]}" if request_ids else None
+        has_request = getattr(self._get_store(), "has_request", None)
+        replay = bool(request_key and callable(has_request) and await _call_local(has_request, request_key))
         daily_max_runs = int(self._config().daily_max_runs)
         daily_runs = int(
             await _call_local(
@@ -3486,7 +3497,7 @@ class MarketBriefTask:
                 now.astimezone(timezone.utc).date(),
             )
         )
-        if daily_runs >= daily_max_runs:
+        if daily_runs >= daily_max_runs and not replay:
             rejected = TaskResult(
                 status="idle",
                 error_code="daily_run_limit_reached",
@@ -3506,6 +3517,7 @@ class MarketBriefTask:
             trading_date=trading_date,
             trigger="manual",
             now=now,
+            request_key=request_key,
         )
         next_delay = await self._delay_after_manual(self._now())
         return self._settle(request_ids, replace(result, next_delay_seconds=next_delay))

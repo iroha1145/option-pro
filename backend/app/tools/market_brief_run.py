@@ -149,6 +149,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "error_detail": record.error_detail,
             "cost_usd": round(record.cost_microusd / 1_000_000, 4) if record.cost_microusd is not None else None,
             "usage": dict(record.usage),
+            "usage_complete": record.usage_complete,
             "duration_seconds": record.duration_seconds,
             "continuation_count": record.continuation_count,
             "validation_warnings": list(record.validation_warnings),

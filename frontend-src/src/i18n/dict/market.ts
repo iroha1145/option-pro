@@ -321,6 +321,10 @@ export const MARKET: Dict = {
   '程序出错': ['Internal error', 'プログラムエラー'],
   '服务器未配置模型密钥': ['No model API key is configured on the server', 'サーバーにモデルの API キーが設定されていません'],
   '今日次数已用完': ['Daily run limit reached', '本日の実行回数を使い切りました'],
+  '提交结果和费用尚未确认，请勿重复提交': ['The submission outcome and charges are not yet confirmed. Do not submit again.', '送信結果と料金はまだ確認できていません。再送信しないでください。'],
+  '模型回复未完整结束，未生成研判': ['The model response did not finish completely. No market brief was generated.', 'モデルの応答が最後まで完了しなかったため、市場レポートは生成されていません。'],
+  '工具返回结果不完整或格式有误，未生成研判': ['The tool response was incomplete or incorrectly formatted. No market brief was generated.', 'ツールの返却結果が不完全、または形式に誤りがあるため、市場レポートは生成されていません。'],
+  '研判正在生成，请等待结果': ['The market brief is being generated. Please wait for the result.', '市場レポートを生成中です。結果をお待ちください。'],
   '原因未知': ['Unknown reason', '原因不明'],
   '请求未成功': ['The request did not succeed', 'リクエストは成功しませんでした'],
 };

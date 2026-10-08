@@ -333,10 +333,10 @@ class MarketBriefConfig(StrictConfigModel):
     max_output_tokens: int = Field(default=48_000, ge=8_000, le=128_000)
     max_continuations: int = Field(default=4, ge=0, le=8)
     output_token_ceiling: int = Field(default=160_000, ge=8_000, le=1_000_000)
-    #: 单次请求的超时；Worker 任务整体超时是 1800 秒，单次请求不能比它更长。
+    #: 整次运行（含续跑）的绝对超时；不得超过 Worker 的 1800 秒任务预算。
     request_timeout_seconds: float = Field(default=1500.0, ge=30.0, le=1800.0)
     evidence_max_bytes: int = Field(default=56_000, ge=16_000, le=120_000)
-    #: 每个 UTC 日最多启动几次运行；手动补发超过它会被拒绝，控制花费。
+    #: 每个 UTC 日定时、手动和命令行合计的持久准入次数。
     daily_max_runs: int = Field(default=6, ge=1, le=24)
     #: 关掉后，最新研判与历史只对 Owner 可见。
     public_read: bool = True
@@ -378,6 +378,7 @@ class MarketBriefConfig(StrictConfigModel):
         from app.services.market_brief.runner import BriefRunConfig
 
         return BriefRunConfig(
+            daily_max_runs=self.daily_max_runs,
             model=self.model,
             effort=self.effort,
             max_output_tokens=self.max_output_tokens,

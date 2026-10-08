@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from collections import Counter
@@ -16,6 +17,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Sequence
 
 import anthropic
+import httpx2
 
 from . import errors
 from .schema import MarketBriefResult
@@ -61,10 +63,13 @@ class InvocationResult:
     external_sources: tuple[dict[str, Any], ...]
     model: str | None
     request_ids: tuple[str, ...]
+    usage_complete: bool = True
 
 
-def make_client(api_key: str, timeout: float) -> anthropic.Anthropic:
-    return anthropic.Anthropic(api_key=api_key, timeout=timeout, max_retries=2)
+def make_client(api_key: str, timeout: float) -> anthropic.AsyncAnthropic:
+    return anthropic.AsyncAnthropic(
+        api_key=api_key, base_url="https://api.anthropic.com", timeout=timeout, max_retries=0,
+    )
 
 
 def output_schema() -> dict[str, Any]:
@@ -77,7 +82,7 @@ def build_request(*, config: Any, system_text: str, user_text: str) -> dict[str,
     """拼出 messages.stream 的关键字参数。
 
     不传 thinking（Opus 5.5 自适应思考常开，显式关闭会 400），不传 temperature（会 400）。
-    缓存：系统提示词上一个显式断点（TTL 取配置，默认 1 小时），顶层自动缓存只用默认的
+    缓存：系统提示词上一个显式断点（TTL 取配置，默认 5 分钟），顶层自动缓存只用默认的
     5 分钟——网页工具会在工具结果后自动插入 5 分钟缓存写入，续跑请求里若顶层自动断点仍是
     1 小时，就会出现「1 小时条目排在 5 分钟条目之后」，这种顺序会被拒；1 小时断点在前、
     5 分钟尾巴在后则是文档允许的组合。续跑都在几分钟内发生，5 分钟够用。
@@ -261,28 +266,31 @@ def _external_sources(rounds: Sequence[Any]) -> tuple[dict[str, Any], ...]:
 def _final_text(message: Any) -> tuple[str | None, dict[str, Any] | None]:
     """最终一轮的文本与解析结果。
 
-    先取最后一个非空文本块解析；不成再试全部文本块拼接（结构化 JSON 被拆成多块时）。
-    搜索前的过渡文字可能落在早先的文本块里，所以不先拼接。
+    只拼接最后工具结果后的文本块；有多份 JSON 或额外说明时拒绝，
+    不回退到工具前的中间 JSON。关闭结构化输出时仍接受完整代码围栏。
     """
 
+    blocks = list(_field(message, "content") or [])
+    last_tool = max((
+        index for index, block in enumerate(blocks)
+        if _field(block, "type") == "server_tool_use"
+        or str(_field(block, "type") or "").endswith("_tool_result")
+    ), default=-1)
     texts = [
-        text
-        for block in _field(message, "content") or []
-        if _field(block, "type") == "text" and isinstance((text := _field(block, "text")), str) and text.strip()
+        _field(block, "text") for block in blocks[last_tool + 1:]
+        if _field(block, "type") == "text" and isinstance(_field(block, "text"), str)
     ]
-    if not texts:
+    if not texts or not "".join(texts).strip():
         return None, None
-    candidates = [texts[-1], "".join(texts)]
-    # 关闭结构化输出时模型偶尔会套一层 ```json 代码块；剥掉后再试。
-    candidates += [unfenced for text in candidates if (unfenced := _strip_code_fence(text)) is not None]
-    for candidate in candidates:
-        try:
-            parsed = json.loads(candidate)
-        except ValueError:
-            continue
-        if isinstance(parsed, dict):
-            return candidate, parsed
-    return "".join(texts), None
+    combined = "".join(texts)
+    # A fence is presentation only. Never select an earlier/intermediate JSON
+    # or ignore a second final object / trailing explanation.
+    candidate = _strip_code_fence(combined) or combined
+    try:
+        parsed = json.loads(candidate)
+    except ValueError:
+        return combined, None
+    return (candidate, parsed) if isinstance(parsed, dict) else (combined, None)
 
 
 def _strip_code_fence(text: str) -> str | None:
@@ -319,22 +327,57 @@ def _status_error(exc: anthropic.APIStatusError) -> tuple[str, str]:
     return errors.PROVIDER_REQUEST_REJECTED, detail
 
 
+_NATIVE_RESULTS = {
+    "web_search": "web_search_tool_result",
+    "web_fetch": "web_fetch_tool_result",
+    "code_execution": "code_execution_tool_result",
+    "bash_code_execution": "bash_code_execution_tool_result",
+    "text_editor_code_execution": "text_editor_code_execution_tool_result",
+}
+
+
+def _check_tools(message: Any, pending: dict[str, str], completed: set[str]) -> bool:
+    """Keep pairing state across pause_turn; no client tools are advertised."""
+    for block in _field(message, "content") or []:
+        kind = str(_field(block, "type") or "")
+        if kind == "tool_use":
+            return False
+        if kind == "server_tool_use":
+            identifier, name = _field(block, "id"), _field(block, "name")
+            if not identifier or name not in _NATIVE_RESULTS or identifier in pending or identifier in completed:
+                return False
+            pending[identifier] = _NATIVE_RESULTS[name]
+        elif kind.endswith("_tool_result"):
+            identifier = _field(block, "tool_use_id")
+            if pending.pop(identifier, None) != kind:
+                return False
+            completed.add(identifier)
+    return True
+
+
+def _usage_fields(value: Any) -> dict[str, Any]:
+    if isinstance(value, Mapping):
+        return dict(value)
+    if hasattr(value, "model_dump"):
+        return value.model_dump(exclude_unset=True)
+    return dict(vars(value)) if value is not None else {}
+
+
 def invoke(
-    client: Any,
-    request: Mapping[str, Any],
-    *,
-    config: Any,
-    deadline: float | None = None,
-    clock: Callable[[], float] = time.monotonic,
+    client: Any, request: Mapping[str, Any], *, config: Any,
+    deadline: float | None = None, clock: Callable[[], float] = time.monotonic,
+    on_submission: Callable[[], None] | None = None,
 ) -> InvocationResult:
-    """发出请求并处理 pause_turn 续跑；返回最终文本、解析结果、用量与来源。
+    """Synchronous runner boundary; all network I/O inside is cancellable async I/O."""
+    return asyncio.run(_invoke(client, request, config=config, deadline=deadline,
+                               clock=clock, on_submission=on_submission))
 
-    ``config.request_timeout_seconds`` 是整次运行（含续跑）的墙钟预算：``deadline`` 是它在
-    ``clock``（单调时钟）上的截止点，缺省从现在起算；runner 传入从运行开始起算的截止点，
-    证据组装的耗时也算在内。每次请求前检查剩余预算，不足就停下记 run_deadline_exceeded；
-    单次请求的 SDK 超时取剩余预算与 request_timeout_seconds 的较小值。
-    """
 
+async def _invoke(
+    client: Any, request: Mapping[str, Any], *, config: Any,
+    deadline: float | None, clock: Callable[[], float],
+    on_submission: Callable[[], None] | None,
+) -> InvocationResult:
     budget = float(config.request_timeout_seconds)
     ends_at = deadline if deadline is not None else clock() + budget
     minimum_remaining = min(MIN_REQUEST_SECONDS, budget / 4)
@@ -343,109 +386,148 @@ def invoke(
     rounds: list[Any] = []
     usage: Counter[str] = Counter()
     continuations = 0
+    pending: dict[str, str] = {}
+    completed: set[str] = set()
+    partial_usage: dict[str, Any] = {}
+    request_started = False
+    saw_message_start = False
 
-    def finish(
-        *,
-        error_code: str | None = None,
-        error_detail: str | None = None,
-        text: str | None = None,
-        parsed: dict[str, Any] | None = None,
-    ) -> InvocationResult:
+    def finish(*, error_code: str | None = None, error_detail: str | None = None,
+               text: str | None = None, parsed: dict[str, Any] | None = None,
+               usage_complete: bool = True) -> InvocationResult:
         last = rounds[-1] if rounds else None
+        known = usage.copy()
+        if not usage_complete:
+            known.update(_round_usage(partial_usage))
         return InvocationResult(
-            text=text,
-            parsed=parsed,
-            error_code=error_code,
-            error_detail=error_detail,
-            stop_reason=_field(last, "stop_reason"),
-            continuation_count=continuations,
-            usage={key: int(usage.get(key, 0)) for key in _USAGE_KEYS} | {"rounds": len(rounds)},
-            external_sources=_external_sources(rounds),
-            model=_field(last, "model"),
+            text=text, parsed=parsed, error_code=error_code, error_detail=error_detail,
+            stop_reason=_field(last, "stop_reason"), continuation_count=continuations,
+            usage={key: int(known.get(key, 0)) for key in _USAGE_KEYS} | {"rounds": len(rounds)},
+            external_sources=_external_sources(rounds), model=_field(last, "model"),
             request_ids=tuple(str(_field(item, "id")) for item in rounds if _field(item, "id")),
+            usage_complete=usage_complete,
         )
 
     try:
         while True:
             remaining = ends_at - clock()
             if remaining < minimum_remaining:
-                return finish(
-                    error_code=errors.RUN_DEADLINE_EXCEEDED,
-                    error_detail=(
-                        f"remaining={max(remaining, 0.0):.0f}s before request {len(rounds) + 1}, "
-                        f"run budget {budget:.0f}s"
-                    ),
-                )
-            # 流式请求的 SDK 超时作用于每次读取而不是总时长：它挡住卡死的连接，
-            # 真正的总时长上限靠上面每轮之前的预算检查。
-            with endpoint.stream(**{**request, "messages": messages}, timeout=min(remaining, budget)) as stream:
-                message = stream.get_final_message()
+                return finish(error_code=errors.RUN_DEADLINE_EXCEEDED,
+                              error_detail=f"remaining={max(remaining, 0.0):.0f}s before request {len(rounds) + 1}, run budget {budget:.0f}s")
+            output_remaining = int(config.output_token_ceiling) - usage["output_tokens"]
+            if output_remaining <= 0:
+                return finish(error_code=errors.BUDGET_EXCEEDED, error_detail="output budget exhausted")
+            partial_usage = {}
+            request_started = False
+            saw_message_start = False
+            admission_started = time.monotonic()
+            # Commit the submission marker before the SDK can send any bytes.
+            if on_submission is not None:
+                on_submission()
+            socket_budget = remaining - (time.monotonic() - admission_started)
+            if socket_budget <= 0:
+                return finish(error_code=errors.RUN_DEADLINE_EXCEEDED,
+                              error_detail="deadline reached during durable submission marking")
+            request_started = True
+            stopped = False
+            # This timeout cancels socket reads even if there are no events, or
+            # events arrive forever. The stream context then closes its HTTP response.
+            async with asyncio.timeout(socket_budget):
+                async with endpoint.stream(
+                    **{**request, "messages": messages,
+                       "max_tokens": min(int(request["max_tokens"]), output_remaining)},
+                    timeout=min(remaining, budget),
+                ) as stream:
+                    async for event in stream:
+                        kind = _field(event, "type")
+                        if kind == "message_start":
+                            saw_message_start = True
+                            partial_usage = _usage_fields(_field(_field(event, "message"), "usage"))
+                        elif kind == "message_delta":
+                            delta_usage = _usage_fields(_field(event, "usage"))
+                            # The SDK may drop TTL details on cumulative tool
+                            # usage. Never retain an initial breakdown for a later total.
+                            if any(key in delta_usage for key in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")):
+                                partial_usage.pop("cache_creation", None)
+                            partial_usage.update(delta_usage)
+                        elif kind == "message_stop":
+                            stopped = True
+                    if not stopped:
+                        return finish(error_code=errors.PROVIDER_STREAM_INCOMPLETE,
+                                      error_detail="stream ended without message_stop", usage_complete=False)
+                    message = await stream.get_final_message()
+            request_started = False
             rounds.append(message)
-            usage.update(_round_usage(_field(message, "usage")))
-            if _field(message, "stop_reason") != "pause_turn":
-                break
+            reported_usage = partial_usage or _field(message, "usage")
+            usage.update(_round_usage(reported_usage))
+            partial_usage = {}
             if usage["output_tokens"] > config.output_token_ceiling:
-                return finish(
-                    error_code=errors.BUDGET_EXCEEDED,
-                    error_detail=f"output_tokens={usage['output_tokens']} ceiling={config.output_token_ceiling}",
-                )
+                return finish(error_code=errors.BUDGET_EXCEEDED,
+                              error_detail=f"output_tokens={usage['output_tokens']} ceiling={config.output_token_ceiling}")
+            if not _check_tools(message, pending, completed):
+                return finish(error_code=errors.PROVIDER_INVALID_TOOL_RESPONSE,
+                              error_detail="unexpected or unpaired tool block")
+            stop_reason = _field(message, "stop_reason")
+            if stop_reason != "pause_turn":
+                break
             if continuations >= config.max_continuations:
-                return finish(
-                    error_code=errors.CONTINUATION_LIMIT,
-                    error_detail=f"still paused after {continuations} continuations",
-                )
-            # 追加而不是替换：连续的 assistant 消息由 API 合并成同一轮，前几轮的内容都要保留。
+                return finish(error_code=errors.CONTINUATION_LIMIT,
+                              error_detail=f"still paused after {continuations} continuations")
             messages = [*messages, {"role": "assistant", "content": _field(message, "content")}]
             continuations += 1
+    except TimeoutError:
+        return finish(error_code=errors.SUBMISSION_OUTCOME_UNKNOWN,
+                      error_detail="absolute run deadline interrupted the stream", usage_complete=False)
     except anthropic.APIStatusError as exc:
         code, detail = _status_error(exc)
-        return finish(error_code=code, error_detail=detail)
-    except anthropic.APIConnectionError as exc:
-        # 含 APITimeoutError（连接失败与读超时都归为供应商暂不可用）。
-        return finish(error_code=errors.PROVIDER_UNAVAILABLE, error_detail=_clip(f"{type(exc).__name__}: {exc}"))
+        # Only explicit rejection before message_start proves this request did
+        # not execute. HTTP 5xx and stream-internal errors remain ambiguous.
+        rejected = not saw_message_start and exc.status_code in {400, 401, 403, 404, 413, 422, 429}
+        if rejected:
+            partial_usage = {}
+            return finish(error_code=code, error_detail=detail)
+        return finish(error_code=errors.SUBMISSION_OUTCOME_UNKNOWN, error_detail=detail, usage_complete=False)
+    except (anthropic.APIConnectionError, httpx2.TransportError) as exc:
+        return finish(error_code=errors.SUBMISSION_OUTCOME_UNKNOWN,
+                      error_detail=_clip(f"{type(exc).__name__}: {exc}"), usage_complete=False)
+    except asyncio.CancelledError:
+        if request_started:
+            return finish(error_code=errors.SUBMISSION_OUTCOME_UNKNOWN,
+                          error_detail="stream cancelled", usage_complete=False)
+        raise
+    finally:
+        close = getattr(client, "close", None)
+        if close is not None:
+            try:
+                async with asyncio.timeout(2.0):
+                    await close()
+            except Exception:
+                pass
 
-    stop_reason = _field(message, "stop_reason")
     if stop_reason == "refusal":
         details = _field(message, "stop_details")
-        category = _field(details, "category")
-        explanation = _field(details, "explanation")
-        text, _parsed = _final_text(message)
-        return finish(
-            error_code=errors.PROVIDER_REFUSAL,
-            error_detail=_clip(f"category={category} {explanation or ''}".strip()),
-            text=text,
-        )
+        text, _ = _final_text(message)
+        return finish(error_code=errors.PROVIDER_REFUSAL,
+                      error_detail=_clip(f"category={_field(details, 'category')} {_field(details, 'explanation') or ''}"), text=text)
     if stop_reason in {"max_tokens", "model_context_window_exceeded"}:
-        text, _parsed = _final_text(message)
+        text, _ = _final_text(message)
         return finish(error_code=errors.OUTPUT_TRUNCATED, error_detail=f"stop_reason={stop_reason}", text=text)
-    if stop_reason not in {"end_turn", "stop_sequence"}:
-        text, _parsed = _final_text(message)
+    if stop_reason != "end_turn":
+        text, _ = _final_text(message)
         return finish(error_code=errors.UNEXPECTED_STOP_REASON, error_detail=f"stop_reason={stop_reason}", text=text)
+    if pending:
+        return finish(error_code=errors.PROVIDER_INVALID_TOOL_RESPONSE, error_detail="native tool results missing")
     text, parsed = _final_text(message)
     if parsed is None:
-        # 结构化输出与网页工具并用没有文档背书：结尾不是 JSON 时保留原文，不重试。
-        return finish(
-            error_code=errors.OUTPUT_NOT_JSON,
-            error_detail="no_text_block" if text is None else "final text is not a JSON object",
-            text=text,
-        )
+        return finish(error_code=errors.OUTPUT_NOT_JSON,
+                      error_detail="no_text_block" if text is None else "final text is not a JSON object", text=text)
     return finish(text=text, parsed=parsed)
 
 
 __all__ = [
-    "InvocationResult",
-    "MIN_REQUEST_SECONDS",
-    "PRICE_CACHE_READ_PER_MTOK",
-    "PRICE_CACHE_WRITE_1H_PER_MTOK",
-    "PRICE_CACHE_WRITE_5M_PER_MTOK",
-    "PRICE_INPUT_PER_MTOK",
-    "PRICE_OUTPUT_PER_MTOK",
-    "PRICE_WEB_SEARCH_EACH",
-    "REFUSAL_FALLBACK_BETA",
-    "build_request",
-    "cost_microusd",
-    "invoke",
-    "make_client",
-    "output_schema",
-    "request_summary",
+    "InvocationResult", "MIN_REQUEST_SECONDS", "PRICE_CACHE_READ_PER_MTOK",
+    "PRICE_CACHE_WRITE_1H_PER_MTOK", "PRICE_CACHE_WRITE_5M_PER_MTOK",
+    "PRICE_INPUT_PER_MTOK", "PRICE_OUTPUT_PER_MTOK", "PRICE_WEB_SEARCH_EACH",
+    "REFUSAL_FALLBACK_BETA", "build_request", "cost_microusd", "invoke",
+    "make_client", "output_schema", "request_summary",
 ]

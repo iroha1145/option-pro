@@ -96,6 +96,9 @@ export const ATTEMPT_ERROR_TEXT: Record<string, string> = {
   provider_request_rejected: t('请求被供应商拒绝'),
   provider_server_error: t('供应商故障'),
   provider_unavailable: t('无法连接'),
+  submission_outcome_unknown: t('提交结果和费用尚未确认，请勿重复提交'),
+  provider_stream_incomplete: t('模型回复未完整结束，未生成研判'),
+  provider_invalid_tool_response: t('工具返回结果不完整或格式有误，未生成研判'),
   provider_refusal: t('模型拒绝了本次请求'),
   output_truncated: t('输出被截断'),
   output_not_json: t('输出格式错误'),
@@ -108,6 +111,7 @@ export const ATTEMPT_ERROR_TEXT: Record<string, string> = {
   runtime_error: t('程序出错'),
   anthropic_api_key_missing: t('服务器未配置模型密钥'),
   daily_run_limit_reached: t('今日次数已用完'),
+  market_brief_in_progress: t('研判正在生成，请等待结果'),
 };
 
 /** 认识的码给短句，带后缀的（provider_refusal:cyber）按前缀认；其余显示原码。 */

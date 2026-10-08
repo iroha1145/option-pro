@@ -17,10 +17,11 @@ import json
 import os
 import re
 import secrets
+import sqlite3
 import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator, Mapping
 
@@ -28,6 +29,7 @@ from app.data_paths import get_data_paths
 from app.failure_diagnostics import record_fallback_failure
 from app.services.snapshot_read_cache import FingerprintedFileCache
 
+from . import errors
 from .scheduler import BriefSchedule, next_slot_at
 from .schema import SCHEMA_VERSION, BriefSlot, BriefTrigger
 
@@ -82,6 +84,7 @@ class BriefRunRecord:
     cost_microusd: int | None = None
     duration_seconds: float | None = None
     continuation_count: int = 0
+    usage_complete: bool = True
 
 
 def new_run_id(trading_date: date, slot: BriefSlot) -> str:
@@ -152,6 +155,7 @@ def _record_to_document(record: BriefRunRecord) -> dict[str, Any]:
         "cost_microusd": record.cost_microusd,
         "duration_seconds": record.duration_seconds,
         "continuation_count": int(record.continuation_count),
+        "usage_complete": record.usage_complete,
     }
 
 
@@ -185,6 +189,7 @@ def _record_from_document(document: Mapping[str, Any]) -> BriefRunRecord:
         cost_microusd=data.get("cost_microusd"),
         duration_seconds=data.get("duration_seconds"),
         continuation_count=int(data.get("continuation_count") or 0),
+        usage_complete=bool(data.get("usage_complete", True)),
     )
 
 
@@ -222,6 +227,7 @@ def _projection(record: BriefRunRecord) -> dict[str, Any]:
         "usage": usage,
         "cost_usd": round(record.cost_microusd / 1_000_000, 4) if record.cost_microusd is not None else None,
         "duration_seconds": record.duration_seconds,
+        "usage_complete": record.usage_complete,
     }
 
 
@@ -255,6 +261,15 @@ def _load_document(raw: bytes) -> dict[str, Any] | None:
     return document
 
 
+class AdmissionRejected(RuntimeError):
+    """A new run was not admitted; no provider call or run charge occurred."""
+
+
+class AdmissionReplay(Exception):
+    def __init__(self, record: BriefRunRecord) -> None:
+        self.record = record
+
+
 class BriefStore:
     def __init__(self, root: Path | None = None) -> None:
         """root 缺省为 get_data_paths().root / "market-brief"。"""
@@ -266,6 +281,171 @@ class BriefStore:
         self.index_path = self.root / "index.json"
         self.latest_path = self.root / "latest.json"
         self._lock_path = self.root / ".write.lock"
+        self._run_lock_path = self.root / ".run.lock"
+        self._admissions_path = self.root / "admissions.sqlite3"
+
+
+    @contextmanager
+    def _admissions(self, *, create: bool = True) -> Iterator[sqlite3.Connection]:
+        if create:
+            self.root.mkdir(parents=True, exist_ok=True)
+        if self.root.is_symlink() or self._admissions_path.is_symlink():
+            raise ValueError("market brief admission paths must not be symbolic links")
+        target = str(self._admissions_path) if create else self._admissions_path.as_uri() + "?mode=ro"
+        connection = sqlite3.connect(target, timeout=5, uri=not create)
+        connection.row_factory = sqlite3.Row
+        try:
+            if create:
+                os.chmod(self._admissions_path, 0o600)
+                connection.execute("PRAGMA synchronous=FULL")
+                connection.execute("""CREATE TABLE IF NOT EXISTS admissions (
+                    run_id TEXT PRIMARY KEY, trading_date TEXT NOT NULL, slot TEXT NOT NULL,
+                    trigger TEXT NOT NULL, started_at TEXT NOT NULL, model TEXT NOT NULL,
+                    effort TEXT NOT NULL, status TEXT NOT NULL, submitted_at TEXT,
+                    error_code TEXT, unknown_until TEXT
+                )""")
+                columns = {row[1] for row in connection.execute("PRAGMA table_info(admissions)")}
+                if "request_key" not in columns:
+                    connection.execute("ALTER TABLE admissions ADD COLUMN request_key TEXT")
+                connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS admissions_request_key ON admissions(request_key) WHERE request_key IS NOT NULL")
+                connection.commit()
+            yield connection
+        finally:
+            connection.close()
+
+    def mark_submitted(self, run_id: str) -> None:
+        with self._admissions() as connection:
+            updated = connection.execute(
+                "UPDATE admissions SET submitted_at=COALESCE(submitted_at,?) WHERE run_id=? AND status='running'",
+                (_iso_precise(datetime.now(timezone.utc)), run_id),
+            ).rowcount
+            if updated != 1:
+                raise RuntimeError("market brief admission lost before submission")
+            connection.commit()
+
+    def _settle_admission(self, record: BriefRunRecord) -> None:
+        if not self._admissions_path.exists():
+            return
+        unknown = not record.usage_complete
+        until = _iso_precise(record.started_at + timedelta(hours=24)) if unknown else None
+        with self._admissions() as connection:
+            connection.execute(
+                "UPDATE admissions SET status=?,error_code=?,unknown_until=? WHERE run_id=?",
+                (record.status, record.error_code, until, record.run_id),
+            )
+            connection.commit()
+
+    def _recover_abandoned(self) -> None:
+        # The process-wide run flock is held: a remaining running row can only
+        # belong to a crashed process. An already-written receipt wins recovery.
+        with self._admissions() as connection:
+            abandoned = connection.execute("SELECT * FROM admissions WHERE status='running'").fetchall()
+        for row in abandoned:
+            path = self.runs_dir / f"{row['trading_date']}-{row['slot']}-{row['run_id']}.json"
+            document = self._read(path)
+            if document and isinstance(document.get("record"), dict):
+                record = _record_from_document(document["record"])
+            else:
+                submitted = bool(row["submitted_at"])
+                record = BriefRunRecord(
+                    run_id=row["run_id"], trading_date=date.fromisoformat(row["trading_date"]),
+                    slot=row["slot"], trigger=row["trigger"], model=row["model"], effort=row["effort"],
+                    started_at=_parse_time(row["started_at"]), completed_at=datetime.now(timezone.utc),
+                    status="failed", error_code=errors.SUBMISSION_OUTCOME_UNKNOWN if submitted else errors.RUNTIME_ERROR,
+                    error_detail="process stopped before durable completion", usage_complete=not submitted,
+                    cost_microusd=None if submitted else 0,
+                )
+            # Also repairs a crash between receipt, index and projection writes.
+            self.write_run(record)
+
+    @contextmanager
+    def admission(self, record: BriefRunRecord, *, daily_max_runs: int, request_key: str | None = None) -> Iterator[None]:
+        """One paid run across CLI/workers; durable starts enforce the UTC-day cap.
+
+        Ambiguous outcomes quarantine only the same trading-date/slot for 24h.
+        Other independent slots can proceed; scheduled attempts are never replayed.
+        """
+        if type(daily_max_runs) is not int or daily_max_runs < 1:
+            raise ValueError("daily_max_runs must be positive")
+        if request_key is not None and (not isinstance(request_key, str) or not 1 <= len(request_key) <= 256):
+            raise ValueError("invalid market brief request key")
+        self.root.mkdir(parents=True, exist_ok=True)
+        if self.root.is_symlink() or self._run_lock_path.is_symlink():
+            raise ValueError("market brief run lock must not be a symbolic link")
+        descriptor = os.open(self._run_lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise AdmissionRejected(errors.MARKET_BRIEF_IN_PROGRESS) from exc
+            self._recover_abandoned()
+            with self._admissions() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                rows = connection.execute("SELECT * FROM admissions").fetchall()
+                if request_key is not None:
+                    previous = next((row for row in rows if row["request_key"] == request_key), None)
+                    if previous is not None:
+                        path = self.runs_dir / f"{previous['trading_date']}-{previous['slot']}-{previous['run_id']}.json"
+                        document = self._read(path)
+                        if document and isinstance(document.get("record"), dict):
+                            raise AdmissionReplay(_record_from_document(document["record"]))
+                        # Pruned or unreadable receipts never permit a second payment.
+                        raise AdmissionRejected(errors.MARKET_BRIEF_IN_PROGRESS)
+                day = record.started_at.astimezone(timezone.utc).date().isoformat()
+                known = {row["run_id"] for row in rows}
+                count = sum(row["started_at"][:10] == day for row in rows)
+                count += sum(str(item.get("started_at") or "")[:10] == day and item.get("run_id") not in known
+                             for item in self._index_runs())
+                if count >= daily_max_runs:
+                    raise AdmissionRejected(errors.DAILY_RUN_LIMIT_REACHED)
+                for row in rows:
+                    if row["trading_date"] != record.trading_date.isoformat() or row["slot"] != record.slot:
+                        continue
+                    until = _parse_time(row["unknown_until"])
+                    if (until is not None and until > record.started_at) or record.trigger == "scheduled":
+                        raise AdmissionRejected(errors.MARKET_BRIEF_IN_PROGRESS)
+                if record.trigger == "scheduled" and self.completed(record.trading_date, record.slot):
+                    raise AdmissionRejected(errors.MARKET_BRIEF_IN_PROGRESS)
+                connection.execute(
+                    "INSERT INTO admissions(run_id,trading_date,slot,trigger,started_at,model,effort,status,request_key) VALUES(?,?,?,?,?,?,?,'running',?)",
+                    (record.run_id, record.trading_date.isoformat(), record.slot, record.trigger,
+                     _iso_precise(record.started_at), record.model, record.effort, request_key),
+                )
+                connection.commit()
+            yield
+        finally:
+            os.close(descriptor)
+
+    def recover_interrupted(self) -> None:
+        """Worker startup/slot checks reconcile crashes without starting paid work."""
+        if not self._admissions_path.exists():
+            return
+        if self.root.is_symlink() or self._run_lock_path.is_symlink():
+            raise ValueError("market brief run lock must not be a symbolic link")
+        descriptor = os.open(self._run_lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return
+            self._recover_abandoned()
+        finally:
+            os.close(descriptor)
+
+    def has_request(self, request_key: str) -> bool:
+        if not self._admissions_path.exists():
+            return False
+        with self._admissions(create=False) as connection:
+            return connection.execute("SELECT 1 FROM admissions WHERE request_key=?", (request_key,)).fetchone() is not None
+
+    def attempted(self, trading_date: date, slot: BriefSlot) -> bool:
+        if not self._admissions_path.exists():
+            return False
+        with self._admissions(create=False) as connection:
+            return connection.execute(
+                "SELECT 1 FROM admissions WHERE trading_date=? AND slot=? LIMIT 1",
+                (trading_date.isoformat(), slot),
+            ).fetchone() is not None
 
     # ---- 写入 ----
 
@@ -351,6 +531,7 @@ class BriefStore:
                 {"version": STORE_VERSION, "saved_at": saved_at, "latest_success": success, "latest_failure": failure},
             )
             self._prune_runs({item["file"] for item in retained if isinstance(item.get("file"), str)})
+        self._settle_admission(record)
         return path
 
     def _prune_runs(self, keep: set[str]) -> None:
@@ -403,7 +584,15 @@ class BriefStore:
         """
 
         day = trading_date.isoformat()
-        return sum(1 for item in self._index_runs() if str(item.get("started_at") or "")[:10] == day)
+        rows = []
+        if self._admissions_path.exists():
+            with self._admissions(create=False) as connection:
+                rows = connection.execute("SELECT run_id,started_at FROM admissions").fetchall()
+        known = {row["run_id"] for row in rows}
+        return sum(row["started_at"][:10] == day for row in rows) + sum(
+            1 for item in self._index_runs()
+            if str(item.get("started_at") or "")[:10] == day and item.get("run_id") not in known
+        )
 
     def latest_record(self, *, status: RunStatus | None = "completed") -> BriefRunRecord | None:
         """最近一条运行记录（含证据包与原始输出）；status=None 时不限状态。"""
@@ -449,6 +638,7 @@ class BriefStore:
                 brief["usage"] = success.get("usage")
                 brief["cost_usd"] = success.get("cost_usd")
                 brief["duration_seconds"] = success.get("duration_seconds")
+                brief["usage_complete"] = success.get("usage_complete", True)
         latest_attempt = None
         if isinstance(failure, dict) and (
             brief is None or (failure.get("at") or "") > (brief.get("generated_at") or "")
@@ -474,6 +664,8 @@ class BriefStore:
 
 
 __all__ = [
+    "AdmissionRejected",
+    "AdmissionReplay",
     "BriefRunRecord",
     "BriefStore",
     "MODEL_LABELS",

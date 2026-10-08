@@ -79,14 +79,19 @@ class Client:
         outcome = self.queue.pop(0)
 
         class _Stream:
-            def __enter__(self_inner) -> Any:
+            async def __aenter__(self_inner) -> Any:
                 return self_inner
 
-            def __exit__(self_inner, *exc: Any) -> None:
+            async def __aexit__(self_inner, *exc: Any) -> None:
                 return None
 
-            def get_final_message(self_inner) -> Any:
+            async def get_final_message(self_inner) -> Any:
                 return outcome
+
+            def __aiter__(self_inner):
+                async def events():
+                    yield SimpleNamespace(type="message_stop")
+                return events()
 
         return _Stream()
 

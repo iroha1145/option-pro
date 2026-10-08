@@ -106,7 +106,7 @@ class FakeRunner:
         self.error_code = error_code
         self.calls: list[dict] = []
 
-    def __call__(self, *, slot, trading_date, trigger, store, config, api_key, now):
+    def __call__(self, *, slot, trading_date, trigger, store, config, api_key, now, request_key=None):
         self.calls.append(
             {
                 "slot": slot,

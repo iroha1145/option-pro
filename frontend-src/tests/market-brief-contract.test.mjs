@@ -145,6 +145,10 @@ test('失败原因码：任务列出的码给短句，errors.py 与 POST /runs �
     provider_rate_limited: '供应商限流',
     provider_server_error: '供应商故障',
     provider_unavailable: '无法连接',
+    submission_outcome_unknown: '提交结果和费用尚未确认，请勿重复提交',
+    provider_stream_incomplete: '模型回复未完整结束，未生成研判',
+    provider_invalid_tool_response: '工具返回结果不完整或格式有误，未生成研判',
+    market_brief_in_progress: '研判正在生成，请等待结果',
     provider_refusal: '模型拒绝了本次请求',
     output_truncated: '输出被截断',
     output_not_json: '输出格式错误',
@@ -157,8 +161,10 @@ test('失败原因码：任务列出的码给短句，errors.py 与 POST /runs �
 
   const errors = readRepo('backend/app/services/market_brief/errors.py');
   const constants = Object.fromEntries([...errors.matchAll(/^([A-Z_]+) = "([a-z_]+)"/gm)].map((m) => [m[1], m[2]]));
-  const runSet = /RUN_ERROR_CODES = frozenset\(\{([\s\S]*?)\}\)/.exec(errors)?.[1] ?? '';
-  const runCodes = [...runSet.matchAll(/([A-Z_]+),/g)].map((m) => constants[m[1]]);
+  const runSets = [...errors.matchAll(/RUN_ERROR_CODES\s*(?:=|\|=)\s*frozenset\(\{([\s\S]*?)\}\)/g)];
+  const runCodes = [...new Set(runSets.flatMap((set) =>
+    [...set[1].matchAll(/\b[A-Z_]+\b/g)].map((m) => constants[m[0]]),
+  ))];
   assert.ok(runCodes.length >= 10 && runCodes.every(Boolean), 'errors.py 的 RUN_ERROR_CODES 解析失败');
   for (const code of runCodes) assert.match(TEXT.ATTEMPT_ERROR_TEXT[code] ?? '', CJK, `运行失败码 ${code} 缺短句`);
 
@@ -167,6 +173,10 @@ test('失败原因码：任务列出的码给短句，errors.py 与 POST /runs �
   assert.ok(refusals.length >= 5, 'api/market_brief.py 的拒绝码解析失败');
   for (const code of refusals) {
     assert.notEqual(TEXT.triggerFailureText({ code: 409, bizCode: code, message: 'Conflict' }), 'Conflict', `拒绝码 ${code} 缺提示`);
+  }
+
+  for (const code of ['submission_outcome_unknown', 'provider_stream_incomplete', 'provider_invalid_tool_response']) {
+    assert.equal(TEXT.triggerFailureText({ code: 409, bizCode: code, message: 'Conflict' }), expected[code], `手动提交 ${code} 不得被通用失败覆盖`);
   }
 
   assert.equal(TEXT.attemptErrorText('provider_refusal:cyber'), '模型拒绝了本次请求', '带后缀的码按前缀认');
