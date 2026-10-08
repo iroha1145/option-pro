@@ -48,6 +48,8 @@ test('watchlist refresh waits for the real worker action and follows both refres
   assert.match(watchlist, /正在更新关注股票的行情与评分/);
   assert.doesNotMatch(watchlist, /setTimeout\(\(\) => setSpinning/);
   assert.doesNotMatch(watchlist, /已强制刷新自选快照/);
+  // 「更新数据」只对管理员显示：访客不再看到一枚禁用的按钮。
+  assert.match(watchlist, /function ForceRefreshButton[\s\S]*?if \(!isOwner\) return null;/);
   assert.match(watchlist, /rowStrengthAvailable/);
   assert.match(watchlist, /rowSignalsAvailable/);
 });

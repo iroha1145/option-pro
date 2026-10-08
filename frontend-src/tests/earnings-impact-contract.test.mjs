@@ -657,6 +657,13 @@ test('财报模型使用精确报告级接口、逐条进度和管理员批量�
   const api = fs.readFileSync(moduleSourcePath, 'utf8');
   const card = fs.readFileSync(cardSourcePath, 'utf8');
   const controls = fs.readFileSync(controlsSourcePath, 'utf8');
+  const page = fs.readFileSync(pageSourcePath, 'utf8');
+
+  // 管理员的批量设置收进具名展开区「财报设置」：仅管理员可见，更新日历按钮由页面传入。
+  assert.equal(controls.includes("aria-label={t('财报设置')}"), true);
+  assert.equal(controls.includes('aria-expanded={open}'), true);
+  assert.equal(controls.includes('if (!isOwner) return null;'), true);
+  assert.match(page, /<EarningsAnalysisControls[\s\S]*?calendarControls=\{\s*<EarningsRefreshButton/);
 
   assert.equal(card.includes('earningsApi.reportAnalysis'), true);
   assert.equal(card.includes('earningsApi.requestReportAnalysis'), true);
