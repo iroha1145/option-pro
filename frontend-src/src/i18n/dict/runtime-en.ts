@@ -2119,6 +2119,7 @@ export const EN: Record<string, string> = {
   "新闻列表": "News feed",
   "消息来源": "Sources",
   "新闻栏目": "News views",
+  "影响方向": "Impact direction",
   "分析 {ticker} 的技术信号、市场环境、期权和新闻，使用 1 次分析额度。": "Analyze {ticker}’s technical signals, market conditions, options and news. Uses 1 analysis credit.",
   "暂无技术信号": "No technical signals available",
   "开盘区间低点缺失，暂无失效位": "Opening-range low is missing; no invalidation level is available",

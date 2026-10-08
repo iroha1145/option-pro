@@ -417,4 +417,5 @@ export const CATALYSTS: Dict = {
   '新闻列表': ['News feed', 'ニュースフィード'],
   '消息来源': ['Sources', 'データソース'],
   '新闻栏目': ['News views', 'ニュースビュー'],
+  '影响方向': ['Impact direction', '影響の方向'],
 };

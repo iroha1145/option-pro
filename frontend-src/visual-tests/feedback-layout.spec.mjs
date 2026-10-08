@@ -91,8 +91,7 @@ for (const width of [390, 1440]) {
       await page.keyboard.press('Escape');
       await expect(page.getByRole('dialog')).toHaveCount(0);
 
-      if (width < 768) await page.getByRole('button', { name: '筛选', exact: true }).click();
-      const tickerFilter = page.getByPlaceholder('代码过滤');
+      const tickerFilter = page.getByPlaceholder('股票代码', { exact: true });
       const slowDevice = await page.context().newCDPSession(page);
       try {
         // 模拟较慢的设备：地址更新不能造成丢字，也不能抢走输入焦点。
@@ -102,7 +101,7 @@ for (const width of [390, 1440]) {
         await expect(tickerFilter).toHaveValue('NVDA');
         await expect(tickerFilter).toBeFocused();
         await expect(page).toHaveURL(/ticker=NVDA/);
-        await page.getByRole('button', { name: '清除代码过滤', exact: true }).click();
+        await page.getByRole('button', { name: '取消股票代码筛选', exact: true }).click();
         await expect(tickerFilter).toHaveValue('');
         await expect(page).not.toHaveURL(/ticker=/);
         await tickerFilter.focus();

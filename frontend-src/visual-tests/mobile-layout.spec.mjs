@@ -130,7 +130,7 @@ for (const viewport of VIEWPORTS) {
       await expect(firstTab).toBeFocused();
       await expect(firstTab).toHaveAttribute("aria-selected", "true");
       await expect(lastTab).toHaveAttribute("aria-selected", "false");
-      const filterRow = page.getByRole("button", { name: "筛选", exact: true }).locator("..");
+      const filterRow = page.getByTestId("catalyst-filter-row");
       const count = filterRow.getByText(/^\d+\s*条$/);
       let recoveredFeed = false;
       // Earlier real-backend tests share the request bucket. Honor an observed
