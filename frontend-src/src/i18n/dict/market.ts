@@ -147,10 +147,10 @@ export const MARKET: Dict = {
   '前值 {v}': ['prev {v}', '前回 {v}'],
   '今日仓位变化': ['Today’s position change', '本日のポジション変化'],
   '趋势 {a} · 波动率 {b}': ['Trend {a} · Vol {b}', 'トレンド{a} · ボラ{b}'],
-  '关注动态': ['Focus-pool movers', 'ウォッチプールの変動'],
+  '关注动态': ["Watchlist movers", "ウォッチリストの変動"],
   '刷新失败，显示上次成功的结果': ['Refresh failed — showing the last successful result', '更新に失敗——前回成功時の結果を表示中'],
   '部分读数刷新失败，显示上次成功的结果': ['Some readings failed to refresh — showing the last successful results', '一部の指標は更新に失敗——前回成功時の値を表示中'],
-  '暂无关注股票': ['No focus-pool tickers yet', 'ウォッチプール銘柄はまだありません'],
+  '暂无关注股票': ["No watchlist stocks yet", "ウォッチリスト銘柄はまだありません"],
   /* ---- cta-proxy-v2（2026-08-09 审计修正） ---- */
   '趋势指标': ['Trend indicators', 'トレンド指標'],
   '强度 {v}': ['Strength {v}', '強度 {v}'],

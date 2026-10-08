@@ -10,7 +10,7 @@ export const EARNINGS: Dict = {
   // ---------------- DensityStrip.tsx ----------------
   '每日财报数': ["Earnings per day", "1日あたりの決算数"],
   '每日财报数 · 未来 30 天': ["Earnings per day · Next 30 days", "1日あたりの決算数 · 今後30日間"],
-  '财报日程（纽约时间）': ['Earnings schedule (ET)', '決算スケジュール（米東部時間）'],
+  '财报日程（纽约时间）': ["Earnings schedule (ET)", "決算スケジュール（ニューヨーク時間）"],
   '每日财报数量': ["Daily earnings count", "1日あたりの決算件数"],
   '无财报': ["No earnings", "決算なし"],
   '今天': ["Today", "今日"],

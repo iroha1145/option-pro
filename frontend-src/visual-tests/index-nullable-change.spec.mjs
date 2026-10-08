@@ -53,7 +53,7 @@ for (const pathname of ['/', '/market']) {
       await expect(page.getByRole(pathname === '/' ? 'link' : 'button', { name: new RegExp(`${code} 详情`) })).toHaveCount(0);
     }
     if (pathname === '/market') {
-      const reading = page.getByRole('region', { name: '市场信号解读', exact: true });
+      const reading = page.getByRole('region', { name: '信号解读', exact: true });
       await expect(reading).toContainText('美股 2 个主要指数 0 涨 0 跌 1 平，1 个涨跌未知');
       await expect(reading).not.toContainText('2 平');
     }

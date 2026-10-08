@@ -14,11 +14,14 @@ const routes = [
   '/login',
 ];
 
-async function openAppearanceMenu(page) {
-  const trigger = page.getByRole('button', { name: /外观/ }).first();
+/* 2026-10-08 起页头只有一个「显示设置」菜单（语言、外观、涨跌颜色三组）；登录页仍是独立的外观开关。 */
+async function openAppearanceMenu(page, { login = false } = {}) {
+  const trigger = login
+    ? page.getByRole('button', { name: /外观/ }).first()
+    : page.getByRole('banner').getByRole('button', { name: '显示设置', exact: true });
   await expect(trigger).toBeVisible();
   await trigger.click();
-  await expect(page.getByRole('menu', { name: '外观' })).toBeVisible();
+  await expect(page.getByRole('menu', { name: login ? '外观' : '显示设置' })).toBeVisible();
   return trigger;
 }
 
@@ -60,15 +63,25 @@ test('manual dark and light override the device scheme and persist', async ({ pa
 
 test('appearance menu is keyboard operable and returns focus', async ({ page }) => {
   await page.goto('/');
-  const trigger = page.getByRole('button', { name: /外观/ }).first();
+  const trigger = page.getByRole('banner').getByRole('button', { name: '显示设置', exact: true });
   await trigger.focus();
   await page.keyboard.press('ArrowDown');
-  await expect(page.getByRole('menu', { name: '外观' })).toBeVisible();
+  await expect(page.getByRole('menu', { name: '显示设置' })).toBeVisible();
+  // 打开时焦点落在第一个已选项（当前语言），方向键在三组之间连续移动
+  await expect(page.getByRole('menuitemradio', { name: /简体中文/ })).toBeFocused();
+  await page.keyboard.press('ArrowDown');
   await expect(page.getByRole('menuitemradio', { name: '跟随系统' })).toBeFocused();
-  await page.keyboard.press('End');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
   await expect(page.getByRole('menuitemradio', { name: '深色' })).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.locator('html')).toHaveClass(/dark/);
+  await expect(trigger).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('End');
+  await expect(page.getByRole('menuitemradio', { name: '红涨绿跌' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('menu', { name: '显示设置' })).toHaveCount(0);
   await expect(trigger).toBeFocused();
 });
 
@@ -98,7 +111,7 @@ for (const signedIn of [false, true]) {
       await page.locator('form').getByRole('button', { name: '登录', exact: true }).click();
     }
     await expect(account).toBeVisible();
-    const trigger = header.getByRole('button', { name: /外观/ });
+    const trigger = header.getByRole('button', { name: '显示设置', exact: true });
     await expect(trigger).toBeVisible();
     // Login and logout have different widths. Check the actual action row rather
     // than an absolute x coordinate sampled before identity finishes loading.
@@ -128,7 +141,7 @@ for (const signedIn of [false, true]) {
 
 test('login page exposes the same control', async ({ page }) => {
   await page.goto('/login');
-  await openAppearanceMenu(page);
+  await openAppearanceMenu(page, { login: true });
   await page.getByRole('menuitemradio', { name: '深色' }).click();
   await expect(page.locator('html')).toHaveClass(/dark/);
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
@@ -149,10 +162,11 @@ test('research pages stay usable in dark mode on desktop and phone', async ({ pa
       // Real-backend runs share a request bucket. Initial identity confirmation
       // may honor up to 60s of Retry-After before the page can safely mount.
       await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible({ timeout: 75_000 });
-      await expect(page.getByRole('button', { name: /外观/ }).first()).toBeVisible();
+      // 页头是「显示设置」菜单，登录页是独立的外观开关
+      await expect(page.getByRole('button', { name: /外观|显示设置/ }).first()).toBeVisible();
       await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
 
-      const trigger = page.getByRole('button', { name: /外观/ }).first();
+      const trigger = page.getByRole('button', { name: /外观|显示设置/ }).first();
       await expect.poll(() => trigger.evaluate((el) => getComputedStyle(el).boxShadow)).not.toMatch(/255,\s*255,\s*255/);
 
       const focusCandidate = page.locator('[class*="focus-visible:ring-offset-"]:not(:disabled)').first();

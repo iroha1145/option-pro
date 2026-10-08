@@ -32,7 +32,7 @@ export const BREAKOUTS: Dict = {
   '区间持续指标': ['Range persistence', 'レンジ持続指標'],
   '判断依据 ·': ['Evidence ·', '根拠一覧 ·'],
   '条': ['items', '件'],
-  '相关消息': ['Related catalysts', '関連カタリスト'],
+  '相关消息': ["Related news", "関連ニュース"],
   '股票详情': ['View stock detail', '銘柄詳細を見る'],
   '全部事件': ['All events for this ticker', 'この銘柄の全イベント'],
 
@@ -220,7 +220,7 @@ export const BREAKOUTS: Dict = {
   '查看历史': ['Browse event history', 'イベント履歴を見る'],
   '其余当日信号 ·': ['Other signals today ·', '本日のその他のシグナル ·'],
   '信号优先级数据不足': ['Signal priority: insufficient data', 'シグナル優先度：データ不足'],
-  '该股近 72 小时暂无相关消息': ['No catalysts for this stock in the past 72 hours', '直近72時間、この銘柄に関連するカタリストなし'],
+  '该股近 72 小时暂无相关消息': ["No related news for this stock in the past 72 hours", "直近72時間、この銘柄に関連するニュースはありません"],
   '事件时效': ['Event freshness', 'イベント鮮度'],
   '评分构成不可用（数据不足）': ['Score breakdown unavailable (insufficient data)', 'スコア構成は利用できません（データ不足）'],
   '排序': ['Sort', '並び替え'],
@@ -241,7 +241,7 @@ export const BREAKOUTS: Dict = {
   '最低评分': ['Minimum score', '最低スコア'],
   '范围': ['Scope', '範囲'],
   '重新读取': ['Reload', '再読み込み'],
-  '相关消息暂不可用': ['Catalyst data temporarily unavailable', 'カタリストデータは一時的に利用できません'],
+  '相关消息暂不可用': ["Related news temporarily unavailable", "関連ニュースは一時的に利用できません"],
   '相对量能': ["Relative volume", "相対出来高"],
   '全部信号': ['All signals', 'すべてのシグナル'],
 };

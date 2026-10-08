@@ -124,7 +124,7 @@ export const MACRO: Dict = {
   /* ============ src/components/market/macro/FactorDetails.tsx（模块摘要行） ============ */
   '有效指标 —': ["Valid indicators —", "有効指標 —"],
   '截至': ['As of', '基準日'],
-  '有效指标不足': ['Fewer than', '有効ファクターが'],
+  '有效指标不足': ["Fewer than", "有効指標が"],
   '个门槛，本模块不出分（不按 50 补齐）。': [
     "valid factors, so this module doesn't output a score (it is not backfilled with 50).",
     '件未満のため、このモジュールはスコアを出しません（50点で補うこともありません）。',
@@ -213,7 +213,7 @@ export const MACRO: Dict = {
   '正面': ['Positive', 'ポジティブ'],
   '：': [': ', '：'],
   '负面': ['Negative', 'ネガティブ'],
-  '该行业各宏观指标方向不明显': ["No clear directional signal from this sector's macro factors", 'このセクターのマクロファクターに明確な方向性はありません'],
+  '该行业各宏观指标方向不明显': ["No clear directional signal from this sector's macro indicators", "このセクターのマクロ指標に明確な方向性はありません"],
   '技术 − 结构性宏观 =': ['Technical − structural macro =', 'テクニカル − 構造的マクロ ='],
   ' · 价格明显跑在环境前面': [' · Price is clearly running ahead of the backdrop', ' · 価格が環境に明らかに先行'],
   ' · 宏观先行改善，价格未跟上': [" · Macro improving first, price hasn't caught up", ' · マクロが先に改善、価格が追いついていない'],

@@ -161,8 +161,8 @@ for (const width of [390, 1440]) {
       page.on('pageerror', error => errors.push(error.message));
       await page.goto('/visual-tests/support/status-notice-harness.html');
       await expect(page.getByText('数据过期', { exact: true })).toBeVisible();
-      await expect(page.getByRole('status').filter({ hasText: '数据暂未刷新' })).toContainText('以下为最近一次结果');
-      const table = page.getByRole('table', { name: '板块隐含波动率排名表', exact: true });
+      await expect(page.getByRole('status').filter({ hasText: '数据暂未更新' })).toContainText('以下为最近一次结果');
+      const table = page.getByRole('table', { name: '行业隐含波动率排名表', exact: true });
       await expect(table.locator('tbody tr')).toHaveCount(2);
       await expect(table.locator('tbody tr').first()).toContainText('AAPL');
       await page.getByRole('button', { name: /切换排序/ }).click();
@@ -332,7 +332,7 @@ for (const width of [390, 1440]) {
 
     test('sector tabs support keyboard navigation and keep the indicator aligned after horizontal scrolling', async ({ page }) => {
       await page.goto('/sectors');
-      const list = page.getByRole('tablist', { name: '板块切换', exact: true });
+      const list = page.getByRole('tablist', { name: '行业切换', exact: true });
       await expect(list).toBeVisible();
       const tabs = list.getByRole('tab');
       await expect.poll(() => tabs.count()).toBeGreaterThan(2);
@@ -392,7 +392,7 @@ for (const width of [390, 1440]) {
       await expect(figures).toHaveCount(await cards.count());
       await expect(cards.first()).toContainText('当日');
       await expect(cards.first()).toContainText(/近\s*30\s*个交易日/);
-      await expect(figures.first()).toHaveAccessibleName(/日线走势，\d{4}-\d{2}-\d{2} 至 \d{4}-\d{2}-\d{2}，区间涨跌/);
+      await expect(figures.first()).toHaveAccessibleName(/每日走势，\d{4}-\d{2}-\d{2} 至 \d{4}-\d{2}-\d{2}，区间涨跌/);
       await expect(figures.first().locator('figcaption')).toContainText('区间涨跌');
       await expect(figures.first().locator('figcaption')).toContainText(/\d{2}-\d{2}\s*—\s*\d{2}-\d{2}/);
 
@@ -428,7 +428,7 @@ for (const width of [390, 1440]) {
     test('market SPX card opens the actual GSPC index rather than a stock fallback', async ({ page }) => {
       test.setTimeout(60_000);
       await page.goto('/market');
-      const indices = page.getByRole('region', { name: '指数概览', exact: true });
+      const indices = page.getByRole('region', { name: '市场指数', exact: true });
       const spx = indices.getByRole('button', { name: /SPX.*详情/ });
       await expect(spx).toBeVisible();
       await noPageOverflow(page);
