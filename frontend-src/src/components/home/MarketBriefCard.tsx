@@ -4,13 +4,15 @@
  * 60 秒读一次 latest。Owner 可以手动生成：提交后每 20 秒跟进一次，出现新研判或新的失败
  * 记录就停，最长 25 分钟。状态：首次加载骨架；读不到且没有旧数据 → 错误与重试；还没有
  * 任何研判 → 写明下一个时段；刷新失败但有旧数据 → 陈旧条；最近一次运行失败 → 一行说明，
- * 正文仍是上一份成功的研判。
+ * 正文仍是上一份成功的研判。标题行右侧可收起正文，收起与否记在本机，下次打开首页照旧。
  */
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { invalidateQueryPaths } from '@/api/queryRegistry';
 import { MARKET_BRIEF_LATEST_PATH, marketBriefApi } from '@/api/modules/marketBrief';
 import ConfirmDialog from '@/components/catalysts/ConfirmDialog';
+import Icon from '@/components/icons';
 import AnalysisIcon from '@/components/shared/AnalysisIcon';
+import CollapsePresence from '@/components/shared/CollapsePresence';
 import EmptyState from '@/components/shared/EmptyState';
 import IconSwap, { BusyIcon } from '@/components/shared/IconSwap';
 import { SkeletonBlock, SkeletonText } from '@/components/shared/Skeleton';
@@ -47,6 +49,26 @@ import { t } from '../../i18n/core.ts';
 const POLL_MS = 60_000;
 const FOLLOW_INTERVAL_MS = 20_000;
 const FOLLOW_TIMEOUT_MS = 25 * 60_000;
+const COLLAPSED_KEY = 'optix:market-brief-collapsed';
+
+function readCollapsed(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(COLLAPSED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function persistCollapsed(collapsed: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (collapsed) window.localStorage.setItem(COLLAPSED_KEY, '1');
+    else window.localStorage.removeItem(COLLAPSED_KEY);
+  } catch {
+    /* 隐私模式或存储已满：只在这次打开的页面里生效 */
+  }
+}
 
 interface Outcome {
   seq: number;
@@ -82,6 +104,8 @@ export default function MarketBriefCard({ className }: { className?: string }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [follow, setFollow] = useState<FollowBaseline | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+  const bodyId = useId();
   const submittingRef = useRef(false);
 
   const data = latestQ.data;
@@ -144,6 +168,12 @@ export default function MarketBriefCard({ className }: { className?: string }) {
     }
   }, [data, refreshLatest, toast]);
 
+  const toggleCollapsed = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    persistCollapsed(next);
+  };
+
   const retry = () => {
     invalidateQueryPaths([MARKET_BRIEF_LATEST_PATH]);
     refreshLatest({ force: true });
@@ -193,7 +223,7 @@ export default function MarketBriefCard({ className }: { className?: string }) {
 
   return (
     <section aria-label={t('市场综合研判')} className={cn('card-surface p-4 sm:p-5 lg:p-6', className)}>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line pb-4">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-ai-50 text-ai-600" aria-hidden="true">
             <AnalysisIcon size={17} />
@@ -210,7 +240,7 @@ export default function MarketBriefCard({ className }: { className?: string }) {
             {generated && <span className="text-micro text-ink-400 tnum">{generated}</span>}
           </div>
         )}
-        <div className="ml-auto flex shrink-0 items-center">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           {isOwner ? (
             <button
               type="button"
@@ -226,21 +256,41 @@ export default function MarketBriefCard({ className }: { className?: string }) {
           ) : !accessLoading && isVisitor ? (
             <span className="text-micro text-ink-400">{t('登录后可手动生成')}</span>
           ) : null}
+          {/* 无边框文字按钮（与正文里「上一份研判的复盘」同款）：标题行里不再多一个描边块；触屏仍是 44px 点按区。 */}
+          <button
+            type="button"
+            className="touch-target inline-flex items-center justify-center gap-1 rounded-sm px-1 text-caption text-ink-500 transition-colors duration-fast hover:text-ink-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+            onClick={toggleCollapsed}
+            aria-expanded={!collapsed}
+            aria-controls={collapsed ? undefined : bodyId}
+          >
+            <TextSwap swapKey={collapsed ? 'collapsed' : 'expanded'}>{collapsed ? t('展开') : t('收起')}</TextSwap>
+            <Icon
+              name="chevron-down"
+              size={14}
+              className={cn('shrink-0 transition-transform duration-ui', !collapsed && 'rotate-180')}
+            />
+          </button>
         </div>
       </div>
 
-      {busy && (
-        <p role="status" className="mt-3 flex items-center gap-1.5 text-caption text-ink-500">
-          <span className="size-1.5 shrink-0 animate-led-pulse rounded-full bg-ai-600" aria-hidden="true" />
-          <ThinkingLabel>{t('模型正在生成研判，通常需要几分钟')}</ThinkingLabel>
-        </p>
-      )}
-      {failed && <StatusNotice className="mt-4">{attemptFailureText(failed, year)}</StatusNotice>}
-      {state === 'stale' && (
-        <StaleStrip onRetry={retry} refreshing={latestQ.refreshing} className="mt-4" />
-      )}
+      {/* 首屏按记住的状态直接显示，不播展开补间；之后点「收起 / 展开」才有过渡。 */}
+      <CollapsePresence open={!collapsed} id={bodyId} appear={false}>
+        <div className="mt-4 border-t border-line">
+          {busy && (
+            <p role="status" className="mt-3 flex items-center gap-1.5 text-caption text-ink-500">
+              <span className="size-1.5 shrink-0 animate-led-pulse rounded-full bg-ai-600" aria-hidden="true" />
+              <ThinkingLabel>{t('模型正在生成研判，通常需要几分钟')}</ThinkingLabel>
+            </p>
+          )}
+          {failed && <StatusNotice className="mt-4">{attemptFailureText(failed, year)}</StatusNotice>}
+          {state === 'stale' && (
+            <StaleStrip onRetry={retry} refreshing={latestQ.refreshing} className="mt-4" />
+          )}
 
-      <div className="mt-4">{body}</div>
+          <div className="mt-4">{body}</div>
+        </div>
+      </CollapsePresence>
 
       <ConfirmDialog
         open={confirmOpen}

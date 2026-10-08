@@ -120,6 +120,29 @@ test('schema.py 的每个枚举值都有中文标签，归一器原样保留、�
     [['broad_advance', 'up'], ['risk_off', 'down']],
     '只有方向明确的两档用涨跌色',
   );
+  // 判断标签按含义着色：每个枚举值都有颜色；不是价格方向，不用涨跌色，也不借模型青瓷色。
+  const tonePairs = [
+    ['Sufficiency', TEXT.SUFFICIENCY_TONE],
+    ['Consistency', TEXT.BREADTH_TONE],
+    ['MacroVerdict', TEXT.VERDICT_TONE],
+    ['SectorChange', TEXT.CHANGE_TONE],
+    ['PricedIn', TEXT.PRICED_IN_TONE],
+  ];
+  for (const [name, tones] of tonePairs) {
+    assert.deepEqual(Object.keys(tones).sort(), [...literals[name]].sort(), `${name} 的颜色与 schema.py 不一致`);
+    for (const [value, tone] of Object.entries(tones)) {
+      assert.ok(['neutral', 'brand', 'ok', 'warn', 'danger'].includes(tone), `${name}.${value} 不能用 ${tone}`);
+    }
+  }
+  // 同一种含义在各段同一个颜色
+  assert.deepEqual([TEXT.BREADTH_TONE.confirms, TEXT.VERDICT_TONE.supports, TEXT.SUFFICIENCY_TONE.high], ['ok', 'ok', 'ok']);
+  assert.deepEqual([TEXT.BREADTH_TONE.mixed, TEXT.VERDICT_TONE.mixed, TEXT.PRICED_IN_TONE.partly], ['warn', 'warn', 'warn']);
+  assert.deepEqual([TEXT.BREADTH_TONE.diverges, TEXT.VERDICT_TONE.contradicts], ['danger', 'danger']);
+  assert.deepEqual([TEXT.CHANGE_TONE.substantive, TEXT.PRICED_IN_TONE.no], ['brand', 'brand']);
+  assert.deepEqual(
+    [TEXT.BREADTH_TONE.unknown, TEXT.VERDICT_TONE.unknown, TEXT.CHANGE_TONE.unknown, TEXT.CHANGE_TONE.noise, TEXT.PRICED_IN_TONE.unclear, TEXT.PRICED_IN_TONE.yes],
+    Array(6).fill('neutral'),
+  );
   for (const regime of literals.Regime) assert.equal(API.mapResult({ regime }).regime, regime);
   for (const level of literals.Sufficiency) assert.equal(API.mapResult({ evidence_sufficiency: level }).evidence_sufficiency, level);
   for (const value of literals.Consistency) {
@@ -353,4 +376,31 @@ test('卡片：Owner 用 .btn-ai 并在途 aria-busy，访客有登录提示，�
   assert.doesNotMatch(content, /\bt\(\s*(?:result|item|news|sector|source|brief)\b/, 'AI 正文不经 t()');
   const hint = read('lib/scoreHints.ts');
   assert.match(hint, /marketBriefSufficiency: \{[\s\S]{0,400}不是上涨概率/);
+});
+
+test('卡片可收起：标题行的「收起 / 展开」管住整块正文，状态记在本机；首屏不播展开补间', () => {
+  const card = read('components/home/MarketBriefCard.tsx');
+  assert.match(card, /const COLLAPSED_KEY = 'optix:market-brief-collapsed';/);
+  assert.match(card, /useState\(readCollapsed\)/);
+  assert.match(card, /onClick=\{toggleCollapsed\}\s*aria-expanded=\{!collapsed\}/);
+  assert.match(card, /t\('展开'\) : t\('收起'\)/);
+  const start = card.indexOf('<CollapsePresence open={!collapsed} id={bodyId} appear={false}>');
+  const end = card.indexOf('</CollapsePresence>');
+  assert.ok(start > 0 && end > start, '正文要包在 appear={false} 的 CollapsePresence 里');
+  const inner = card.slice(start, end);
+  for (const piece of ["t('模型正在生成研判", '<StatusNotice', '<StaleStrip', '{body}']) {
+    assert.ok(inner.includes(piece), `${piece} 应随正文一起收起`);
+  }
+  assert.ok(card.indexOf("t('市场综合研判')}</h2>") < start, '标题行不随正文收起');
+  // 读写本机存储都要兜住异常：隐私模式下 localStorage 访问会抛错
+  assert.match(card, /function readCollapsed\(\): boolean \{[\s\S]{0,200}try \{[\s\S]{0,120}\} catch \{/);
+  assert.match(card, /function persistCollapsed\(collapsed: boolean\): void \{[\s\S]{0,300}try \{[\s\S]{0,200}\} catch \{/);
+});
+
+test('研判底部的说明行不画菱形小点；其他卡片的同款说明行照旧', () => {
+  const content = read('components/home/MarketBriefContent.tsx');
+  assert.match(content, /<SourceNote\s+mark=\{false\}/);
+  const note = read('components/shared/SourceNote.tsx');
+  assert.match(note, /mark = true/);
+  assert.match(note, /\{mark && <span[^>]*aria-hidden="true">◆<\/span>\}/);
 });

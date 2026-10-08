@@ -986,6 +986,7 @@ export const EN: Record<string, string> = {
   "现在生成": "Generate now",
   "生成中": "Generating",
   "登录后可手动生成": "Sign in to generate manually",
+  "展开": "Expand",
   "模型正在生成研判，通常需要几分钟": "The model is writing the brief; this usually takes a few minutes",
   "现在生成一份市场综合研判？": "Generate a new market brief now?",
   "模型会读取当前的行情、广度、宏观、行业、新闻与日历证据重新成文，通常需要几分钟，会消耗模型用量并计入每日次数。": "The model reads the current price, breadth, macro, sector, news and calendar evidence and writes a new brief. It usually takes a few minutes, uses model capacity and counts toward the daily run limit.",

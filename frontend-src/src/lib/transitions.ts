@@ -45,12 +45,13 @@ export function readRootDurationMs(name: string, fallback: number): number {
  * First paint after `open` stays at rest (`closed`/`preopen`); the next frame
  * flips to `open` so the catalog CSS actually tweens.
  */
-export function useOverlayPhase(open: boolean, closeMs: number): OverlayPhase {
+export function useOverlayPhase(open: boolean, closeMs: number, appear = true): OverlayPhase {
   const reduced = usePrefersReducedMotion();
+  // appear=false：挂载时已经是打开的就直接停在 open，不从收起状态补间进来（之后的开合照常）。
   const [state, setState] = useState<{ open: boolean; reduced: boolean | null; phase: OverlayPhase }>({
     open,
     reduced,
-    phase: open ? (reduced ? 'open' : 'preopen') : 'closed',
+    phase: open ? (reduced || !appear ? 'open' : 'preopen') : 'closed',
   });
   let phase = state.phase;
   if (state.open !== open || state.reduced !== reduced) {

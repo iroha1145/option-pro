@@ -84,6 +84,44 @@ export const PRICED_IN_LABEL: Record<BriefPricedIn, string> = {
   unclear: t('不明'),
 };
 
+/*
+ * 判断标签的颜色：同一种含义在各段用同一个颜色。一致、支持用 ok（绿）；「部分……」用 warn（琥珀）；
+ * 背离、反驳用 danger（红）；值得留意的实质变化、新闻尚未反映在价格里用 brand（蓝）；
+ * 不明、待定、噪音、已反映用中性灰。这些不是价格方向，不用涨跌色——红涨绿跌模式下也不该互换。
+ */
+export const SUFFICIENCY_TONE: Record<BriefSufficiency, BadgeTone> = {
+  low: 'warn',
+  medium: 'neutral',
+  high: 'ok',
+};
+
+export const BREADTH_TONE: Record<BriefConsistency, BadgeTone> = {
+  confirms: 'ok',
+  diverges: 'danger',
+  mixed: 'warn',
+  unknown: 'neutral',
+};
+
+export const VERDICT_TONE: Record<BriefMacroVerdict, BadgeTone> = {
+  supports: 'ok',
+  contradicts: 'danger',
+  mixed: 'warn',
+  unknown: 'neutral',
+};
+
+export const CHANGE_TONE: Record<BriefSectorChange, BadgeTone> = {
+  substantive: 'brand',
+  noise: 'neutral',
+  unknown: 'neutral',
+};
+
+export const PRICED_IN_TONE: Record<BriefPricedIn, BadgeTone> = {
+  yes: 'neutral',
+  partly: 'warn',
+  no: 'brand',
+  unclear: 'neutral',
+};
+
 /* ------------------------------- 失败原因码 ------------------------------- */
 
 /**

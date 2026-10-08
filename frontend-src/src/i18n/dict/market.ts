@@ -219,6 +219,7 @@ export const MARKET: Dict = {
   '现在生成': ['Generate now', '今すぐ生成'],
   '生成中': ['Generating', '生成中'],
   '登录后可手动生成': ['Sign in to generate manually', 'ログインすると手動で生成できます'],
+  '展开': ['Expand', '開く'],
   '模型正在生成研判，通常需要几分钟': ['The model is writing the brief; this usually takes a few minutes', 'モデルがレポートを作成中です。通常は数分かかります'],
   '现在生成一份市场综合研判？': ['Generate a new market brief now?', '市場総合レポートを今すぐ生成しますか？'],
   '模型会读取当前的行情、广度、宏观、行业、新闻与日历证据重新成文，通常需要几分钟，会消耗模型用量并计入每日次数。': [

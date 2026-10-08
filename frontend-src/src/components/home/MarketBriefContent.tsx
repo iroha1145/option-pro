@@ -14,12 +14,17 @@ import { SCORE_HINTS } from '@/lib/scoreHints';
 import { cn } from '@/lib/utils';
 import {
   BREADTH_LABEL,
+  BREADTH_TONE,
   CHANGE_LABEL,
+  CHANGE_TONE,
   PRICED_IN_LABEL,
+  PRICED_IN_TONE,
   REGIME_LABEL,
   REGIME_TONE,
   SUFFICIENCY_LABEL,
+  SUFFICIENCY_TONE,
   VERDICT_LABEL,
+  VERDICT_TONE,
   coverageItems,
 } from './marketBriefText';
 import { t } from '../../i18n/core.ts';
@@ -157,7 +162,7 @@ export default function MarketBriefContent({ brief, year }: { brief: MarketBrief
         </p>
         <div className="flex flex-wrap items-center gap-2 pt-1">
           <SoftBadge tone={REGIME_TONE[result.regime]}>{REGIME_LABEL[result.regime]}</SoftBadge>
-          <SoftBadge>
+          <SoftBadge tone={result.evidence_sufficiency ? SUFFICIENCY_TONE[result.evidence_sufficiency] : 'neutral'}>
             {sufficiency}
             <InfoHint hint={SCORE_HINTS.marketBriefSufficiency} size={11} className="ml-1" />
           </SoftBadge>
@@ -167,7 +172,11 @@ export default function MarketBriefContent({ brief, year }: { brief: MarketBrief
       <div className="mt-6 grid gap-6 xl:grid-cols-2">
         <Part
           title={t('大盘与内部结构')}
-          badge={<SoftBadge title={t('广度与指数是否一致')}>{BREADTH_LABEL[result.internals.breadth_vs_index]}</SoftBadge>}
+          badge={
+            <SoftBadge tone={BREADTH_TONE[result.internals.breadth_vs_index]} title={t('广度与指数是否一致')}>
+              {BREADTH_LABEL[result.internals.breadth_vs_index]}
+            </SoftBadge>
+          }
         >
           <Summary text={result.internals.summary} />
           <Bullets items={result.internals.points} className="mt-3" />
@@ -175,7 +184,11 @@ export default function MarketBriefContent({ brief, year }: { brief: MarketBrief
 
         <Part
           title={t('宏观与跨资产验证')}
-          badge={<SoftBadge title={t('宏观与跨资产是否支持当前的股票叙事')}>{VERDICT_LABEL[result.macro_check.verdict]}</SoftBadge>}
+          badge={
+            <SoftBadge tone={VERDICT_TONE[result.macro_check.verdict]} title={t('宏观与跨资产是否支持当前的股票叙事')}>
+              {VERDICT_LABEL[result.macro_check.verdict]}
+            </SoftBadge>
+          }
         >
           <Summary text={result.macro_check.summary} />
           <Bullets items={result.macro_check.points} className="mt-3" />
@@ -191,7 +204,7 @@ export default function MarketBriefContent({ brief, year }: { brief: MarketBrief
                   <li key={`${sector.name}-${index}`}>
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="text-body-s font-medium text-ink-800">{sector.name}</span>
-                      <SoftBadge>{CHANGE_LABEL[sector.change]}</SoftBadge>
+                      <SoftBadge tone={CHANGE_TONE[sector.change]}>{CHANGE_LABEL[sector.change]}</SoftBadge>
                     </div>
                     {sector.note && <p className="mt-0.5 break-words text-body-s text-ink-600">{sector.note}</p>}
                   </li>
@@ -207,7 +220,7 @@ export default function MarketBriefContent({ brief, year }: { brief: MarketBrief
                   <li key={`${news.evidence_id ?? ''}-${index}`}>
                     <div className="flex items-start justify-between gap-3">
                       <p className="min-w-0 break-words text-body-s font-medium text-ink-800">{news.title_zh}</p>
-                      <SoftBadge className="mt-0.5 shrink-0" title={t('是否已反映在价格中')}>
+                      <SoftBadge tone={PRICED_IN_TONE[news.priced_in]} className="mt-0.5 shrink-0" title={t('是否已反映在价格中')}>
                         {PRICED_IN_LABEL[news.priced_in]}
                       </SoftBadge>
                     </div>
@@ -275,6 +288,7 @@ export default function MarketBriefContent({ brief, year }: { brief: MarketBrief
       )}
 
       <SourceNote
+        mark={false}
         className={result.prior_review || brief.externalSources.length > 0 ? undefined : 'mt-6'}
         text={t('程序汇总行情、广度、宏观、行业、新闻与日历证据，模型负责解释与找矛盾')}
       />
