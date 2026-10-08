@@ -27,6 +27,7 @@ def _prepared(**overrides):
         }),
         max_tokens=4096,
         tools=overrides.get("tools"),
+        output_mode=overrides.get("output_mode", "native_json"),
     )
 
 
@@ -592,7 +593,7 @@ def test_claude_schema_identity_tracks_json_protocol_without_changing_openai(mon
     monkeypatch.setattr(runtime.json, "dumps", capture)
     runtime.schema_identity("earnings_impact", model="claude-haiku-5-5")
     runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
-    assert identities[0]["claude_features"]["contract"] == "haiku-native-tools-json-v2"
+    assert identities[0]["claude_features"]["contract"] == "haiku-native-tools-prompt-json-v3"
     assert "claude_features" not in identities[1]
 
 
@@ -669,3 +670,26 @@ def test_candidate_retains_local_rejection_of_empty_placeholders_and_unapproved_
         result[field] = value
     with pytest.raises(ValidationError):
         validate_result("earnings_impact", json.dumps(result, ensure_ascii=False), {"ticker": "PENG"})
+
+
+@pytest.mark.parametrize("tools", [None, _tools()])
+def test_prompt_json_params_exactly_match_successful_control_request(tools):
+    native = _prepared(tools=tools)
+    expected = copy.deepcopy(native.params)
+    output_format = expected["output_config"].pop("format")
+    expected["system"][0]["text"] += (
+        '\n最终回答只输出一个完整JSON对象，不输出Markdown代码块、前言、解释或引用标记。'
+        '全部工具完成后才输出最终JSON，不要提前输出中间分析。'
+        '必须遵守下列结构定义并填写真正的分析内容，禁止空白和占位符：\n'
+    ) + json.dumps(output_format["schema"], ensure_ascii=False, separators=(",", ":"))
+    prepared = _prepared(tools=tools, output_mode="prompt_json")
+    assert prepared.params == expected
+    assert prepared.params["output_config"] == {"effort": "xhigh"}
+    assert prepared.params["system"][0]["cache_control"] == {"type": "ephemeral", "ttl": "5m"}
+    assert "Private task input" not in prepared.params["system"][0]["text"]
+    assert native.params["output_config"]["format"]["type"] == "json_schema"
+
+
+def test_unknown_output_mode_is_rejected_before_provider_submission():
+    with pytest.raises(ValueError, match="provider_output_mode_invalid"):
+        _prepared(output_mode="unknown")

@@ -6,7 +6,8 @@ from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
 import ipaddress
-from typing import Any
+import json
+from typing import Any, Literal
 from urllib.parse import urlsplit, urlunsplit
 
 from anthropic import AsyncAnthropic, Timeout, transform_schema
@@ -26,6 +27,12 @@ _RESULT_TYPES = {
 _TOOL_INSTRUCTIONS = (
     "\n只在需要核对公开事实、补全正文或复杂计算时使用对应工具。"
     "工具使用完成后，按指定 JSON 格式返回最终分析；不要在 JSON 结构之外添加说明。"
+)
+
+_PROMPT_JSON_INSTRUCTIONS = (
+    "\n最终回答只输出一个完整JSON对象，不输出Markdown代码块、前言、解释或引用标记。"
+    "全部工具完成后才输出最终JSON，不要提前输出中间分析。"
+    "必须遵守下列结构定义并填写真正的分析内容，禁止空白和占位符：\n"
 )
 
 
@@ -62,7 +69,10 @@ def prepare_message(
     schema: dict,
     max_tokens: int,
     tools: list[dict] | None = None,
+    output_mode: Literal["native_json", "prompt_json"] = "native_json",
 ) -> PreparedMessage:
+    if output_mode not in {"native_json", "prompt_json"}:
+        raise ValueError("provider_output_mode_invalid")
     key = settings.anthropic_api_key.get_secret_value().strip()
     if not key:
         raise RuntimeError("ai_not_configured")
@@ -88,6 +98,11 @@ def prepare_message(
     if tools:
         params["tools"] = deepcopy(tools)
         params["tool_choice"] = {"type": "auto", "disable_parallel_tool_use": True}
+    if output_mode == "prompt_json":
+        output_format = params["output_config"].pop("format")
+        params["system"][0]["text"] += _PROMPT_JSON_INSTRUCTIONS + json.dumps(
+            output_format["schema"], ensure_ascii=False, separators=(",", ":"),
+        )
     return PreparedMessage(
         api_key=key,
         timeout_seconds=float(settings.openai_timeout_seconds),

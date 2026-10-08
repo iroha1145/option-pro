@@ -409,7 +409,10 @@ def schema_identity(job_type: str, *, model: str | None = None) -> tuple[str, st
     }
     if model is None or uses_claude(model):
         identity["claude_features"] = {
-            "contract": "haiku-native-tools-json-v2",
+            "contract": (
+                "haiku-native-tools-prompt-json-v3"
+                if job_type == "earnings_impact" else "haiku-native-tools-json-v2"
+            ),
             "instructions": claude_instructions(request.instructions),
             "tools": claude_tools_for(job_type, {}),
             "reservation_tokens": CLAUDE_TOOL_TOKEN_RESERVATION,
@@ -917,9 +920,9 @@ _CLAUDE_EARNINGS_ABBREVIATIONS = "EPS、GAAP、EBITDA、ETF、GDP、CPI、GPU、
 def claude_output_schema(job_type: str, schema: dict[str, Any]) -> dict[str, Any]:
     """Strengthen provider encoding of the existing local output contract.
 
-    Keep the validation schema and v2 identity unchanged: the accepted business
-    result, model and resource policy are unchanged, and completed v2 results
-    must remain current. This schema is only used by Claude preparation.
+    The local validation schema stays unchanged; completed native-JSON results
+    remain readable and paid receipts remain locally recoverable. New earnings
+    requests have a distinct v3 transport identity.
     """
     result = deepcopy(schema)
     if job_type != "earnings_impact":
@@ -969,6 +972,7 @@ def prepare_claude(settings: Any, job_type: str, payload: dict[str, Any]) -> Any
         schema=claude_output_schema(job_type, request.schema),
         max_tokens=max_output_tokens_for(job_type, model=OFFICIAL_CLAUDE_MODEL),
         tools=claude_tools_for(job_type, payload),
+        output_mode="prompt_json" if job_type == "earnings_impact" else "native_json",
     )
 
 
