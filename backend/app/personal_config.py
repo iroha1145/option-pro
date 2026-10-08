@@ -5,7 +5,14 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 try:
     import tomllib
@@ -265,6 +272,120 @@ class MacroConfig(StrictConfigModel):
         return self
 
 
+def _clock_minutes(value: str, *, field: str) -> int:
+    parts = str(value).split(":")
+    if len(parts) != 2 or not all(len(part) == 2 and part.isdigit() for part in parts):
+        raise ValueError(f"{field} must use HH:MM")
+    hour, minute = (int(part) for part in parts)
+    if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+        raise ValueError(f"{field} must be a valid clock time")
+    return hour * 60 + minute
+
+
+class MarketBriefConfig(StrictConfigModel):
+    """首页「市场综合研判」：每个交易日开盘前 / 收盘后各一份，由 Claude 生成。
+
+    模型与 effort 钉死成字面量：换模型会改变费用口径与输出风格，必须改代码并过测试，
+    不能靠改配置悄悄完成。时刻一律是美东墙钟（America/New_York）。
+    """
+
+    enabled: bool = True
+    model: Literal["claude-opus-5-5"] = "claude-opus-5-5"
+    effort: Literal["low", "medium", "high", "xhigh", "max"] = "xhigh"
+    #: 默认排在宏观模块 08:30 刷新之后，让开盘前研判读到当天的宏观快照。
+    pre_open_time_et: str = "08:40"
+    post_close_offset_minutes: int = Field(default=30, ge=0, le=240)
+    #: 当日全市场批次（美东 22:00 起发布）迟迟不到时，过了这个时刻就不再等它。
+    post_close_fallback_time_et: str = "23:30"
+    grace_minutes: int = Field(default=150, ge=30, le=600)
+    web_search_max_uses: int = Field(default=10, ge=0, le=20)
+    web_fetch_max_uses: int = Field(default=8, ge=0, le=20)
+    web_fetch_max_content_tokens: int = Field(default=12_000, ge=1_000, le=100_000)
+    code_execution_tool: bool = False
+    refusal_fallback: bool = False
+    #: 结构化输出与网页工具并用没有文档背书（文档写明结构化输出与引用不兼容，而网页
+    #: 搜索结果自带引用），所以部署默认关：JSON Schema 附在系统提示词里，解析与校验流程
+    #: 不变。跑通过一次后可以改成 true 试结构化输出；若被 400 拒绝就改回。
+    structured_output: bool = False
+    #: 系统提示词显式缓存断点的 TTL；顶层自动缓存固定 5 分钟。
+    prompt_cache_ttl: Literal["5m", "1h"] = "1h"
+    max_output_tokens: int = Field(default=48_000, ge=8_000, le=128_000)
+    max_continuations: int = Field(default=4, ge=0, le=8)
+    output_token_ceiling: int = Field(default=160_000, ge=8_000, le=1_000_000)
+    #: 单次请求的超时；Worker 任务整体超时是 1800 秒，单次请求不能比它更长。
+    request_timeout_seconds: float = Field(default=1500.0, ge=30.0, le=1800.0)
+    evidence_max_bytes: int = Field(default=56_000, ge=16_000, le=120_000)
+    #: 每个 UTC 日最多启动几次运行；手动补发超过它会被拒绝，控制花费。
+    daily_max_runs: int = Field(default=6, ge=1, le=24)
+    #: 关掉后，最新研判与历史只对 Owner 可见。
+    public_read: bool = True
+
+    @field_validator("pre_open_time_et", "post_close_fallback_time_et")
+    @classmethod
+    def validate_clock_time(cls, value: str, info: ValidationInfo) -> str:
+        minutes = _clock_minutes(value, field=f"market_brief {info.field_name}")
+        return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+    @model_validator(mode="after")
+    def validate_slots(self) -> "MarketBriefConfig":
+        # 开盘前一份必须真的在开盘前生成，否则它和收盘后那份读到的是同一类数据。
+        if _clock_minutes(self.pre_open_time_et, field="pre_open_time_et") >= 9 * 60 + 30:
+            raise ValueError("market_brief pre_open_time_et must be before 09:30")
+        # 兜底时刻落在收盘后窗口开启之前时，收盘后那份永远不会等全市场批次。
+        fallback = _clock_minutes(
+            self.post_close_fallback_time_et,
+            field="post_close_fallback_time_et",
+        )
+        if fallback < 16 * 60 + self.post_close_offset_minutes:
+            raise ValueError(
+                "market_brief post_close_fallback_time_et must not precede "
+                "the regular close plus post_close_offset_minutes"
+            )
+        if self.output_token_ceiling < self.max_output_tokens:
+            raise ValueError(
+                "market_brief output_token_ceiling must be at least max_output_tokens"
+            )
+        return self
+
+    def to_run_config(self) -> Any:
+        """映射成 ``BriefRunConfig``（同名字段）。
+
+        延迟导入：配置层不在模块加载时引用 app.services，只带配置层的
+        精简部署树也能校验 personal.toml。
+        """
+
+        from app.services.market_brief.runner import BriefRunConfig
+
+        return BriefRunConfig(
+            model=self.model,
+            effort=self.effort,
+            max_output_tokens=self.max_output_tokens,
+            max_continuations=self.max_continuations,
+            output_token_ceiling=self.output_token_ceiling,
+            web_search_max_uses=self.web_search_max_uses,
+            web_fetch_max_uses=self.web_fetch_max_uses,
+            web_fetch_max_content_tokens=self.web_fetch_max_content_tokens,
+            code_execution_tool=self.code_execution_tool,
+            refusal_fallback=self.refusal_fallback,
+            structured_output=self.structured_output,
+            prompt_cache_ttl=self.prompt_cache_ttl,
+            request_timeout_seconds=self.request_timeout_seconds,
+            evidence_max_bytes=self.evidence_max_bytes,
+        )
+
+    def to_schedule(self) -> Any:
+        """映射成 ``BriefSchedule``（同名字段）；延迟导入的原因同上。"""
+
+        from app.services.market_brief.scheduler import BriefSchedule
+
+        return BriefSchedule(
+            pre_open_time_et=self.pre_open_time_et,
+            post_close_offset_minutes=self.post_close_offset_minutes,
+            post_close_fallback_time_et=self.post_close_fallback_time_et,
+            grace_minutes=self.grace_minutes,
+        )
+
+
 class StorageConfig(StrictConfigModel):
     retention_days: int = Field(default=90, ge=1, le=3650)
     backup_keep: int = Field(default=7, ge=1, le=100)
@@ -280,6 +401,7 @@ class PersonalConfig(StrictConfigModel):
     public_home: PublicHomeConfig = Field(default_factory=PublicHomeConfig)
     earnings: EarningsConfig = Field(default_factory=EarningsConfig)
     macro: MacroConfig = Field(default_factory=MacroConfig)
+    market_brief: MarketBriefConfig = Field(default_factory=MarketBriefConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
 
     @property

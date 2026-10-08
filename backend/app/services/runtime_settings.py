@@ -146,11 +146,24 @@ class RuntimeAlgorithmSettings(_StrictModel):
     radar_sort_algorithm: Literal["production", "t1_daily_priority"] = "production"
 
 
+class RuntimeMarketBriefSettings(_StrictModel):
+    """Owner 对首页市场综合研判的定时开关。
+
+    关掉只暂停两个定时槽；手动补发仍可用，personal.toml 的 enabled 才是总开关。
+    已落盘的旧文档没有这一段，读取时取默认值（开启）。
+    """
+
+    scheduled_enabled: bool = True
+
+
 class RuntimeSettings(_StrictModel):
     ai: RuntimeAISettings = Field(default_factory=RuntimeAISettings)
     catalyst: RuntimeCatalystSettings = Field(default_factory=RuntimeCatalystSettings)
     earnings: RuntimeEarningsSettings = Field(default_factory=RuntimeEarningsSettings)
     algorithms: RuntimeAlgorithmSettings = Field(default_factory=RuntimeAlgorithmSettings)
+    market_brief: RuntimeMarketBriefSettings = Field(
+        default_factory=RuntimeMarketBriefSettings
+    )
 
 
 class RuntimeAISettingsPatch(_StrictModel):
@@ -225,11 +238,16 @@ class RuntimeAlgorithmSettingsPatch(_StrictModel):
     radar_sort_algorithm: Optional[Literal["production", "t1_daily_priority"]] = None
 
 
+class RuntimeMarketBriefSettingsPatch(_StrictModel):
+    scheduled_enabled: Optional[bool] = None
+
+
 class RuntimeSettingsPatch(_StrictModel):
     ai: Optional[RuntimeAISettingsPatch] = None
     catalyst: Optional[RuntimeCatalystSettingsPatch] = None
     earnings: Optional[RuntimeEarningsSettingsPatch] = None
     algorithms: Optional[RuntimeAlgorithmSettingsPatch] = None
+    market_brief: Optional[RuntimeMarketBriefSettingsPatch] = None
 
 
 class RuntimeSettingsDocument(_StrictModel):

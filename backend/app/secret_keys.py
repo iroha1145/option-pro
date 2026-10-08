@@ -10,6 +10,7 @@ from __future__ import annotations
 
 SECRET_KEYS = (
     "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
     "FINNHUB_API_KEY",
     "MARKETDATA_TOKEN",
     "MASSIVE_API_KEY",

@@ -123,6 +123,7 @@ def test_environment_templates_separate_secrets_from_machine_edges() -> None:
     ]
     assert secret_keys == [
         "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
         "FINNHUB_API_KEY",
         "MARKETDATA_TOKEN",
         "MASSIVE_API_KEY",
@@ -133,8 +134,8 @@ def test_environment_templates_separate_secrets_from_machine_edges() -> None:
     ]
     all_keys = machine_keys + secret_keys
     assert len(machine_keys) == 7
-    assert len(secret_keys) == 8
-    assert len(all_keys) == 15
+    assert len(secret_keys) == 9
+    assert len(all_keys) == 16
     assert len(all_keys) == len(set(all_keys))
     assert not any(key.startswith("DEPLOY_" + "REQUIRE") for key in all_keys)
     assert not any(key.startswith("FOCUS_PRODUCER") for key in all_keys)
@@ -184,6 +185,7 @@ def test_environment_templates_separate_secrets_from_machine_edges() -> None:
         "public_home",
         "earnings_analysis",
         "macro_conditions",
+        "market_brief",
         "focus_refresh",
         "strength_refresh",
         "sector_iv_refresh",

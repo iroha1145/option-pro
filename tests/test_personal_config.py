@@ -8,7 +8,12 @@ import pytest
 from pydantic import ValidationError
 
 from app.legacy_env_adapter import LegacyMigrationConflict, migrate_legacy_environment
-from app.personal_config import AIConfig, AccessConfig, load_personal_config
+from app.personal_config import (
+    AIConfig,
+    AccessConfig,
+    MarketBriefConfig,
+    load_personal_config,
+)
 from app.tools.migrate_personal_config import migrate
 
 
@@ -31,6 +36,64 @@ def test_repository_personal_config_freezes_paid_runtime() -> None:
     assert config.public_home.signals_seconds == 900
     assert config.public_home.earnings_seconds == 21_600
     assert config.public_home.unusual_seconds == 1800
+
+
+def test_repository_market_brief_section_pins_model_and_maps_to_runtime_types() -> None:
+    config = load_personal_config().market_brief
+
+    assert config == MarketBriefConfig()
+    assert config.model == "claude-opus-5-5"
+    assert config.effort == "xhigh"
+    assert config.daily_max_runs == 6
+
+    # 映射是逐字段同名的：两侧任何一边改名，这里都会失败。
+    run_config = config.to_run_config()
+    for name in (
+        "model",
+        "effort",
+        "max_output_tokens",
+        "max_continuations",
+        "output_token_ceiling",
+        "web_search_max_uses",
+        "web_fetch_max_uses",
+        "web_fetch_max_content_tokens",
+        "code_execution_tool",
+        "refusal_fallback",
+        "request_timeout_seconds",
+        "evidence_max_bytes",
+    ):
+        assert getattr(run_config, name) == getattr(config, name), name
+    schedule = config.to_schedule()
+    for name in (
+        "pre_open_time_et",
+        "post_close_offset_minutes",
+        "post_close_fallback_time_et",
+        "grace_minutes",
+    ):
+        assert getattr(schedule, name) == getattr(config, name), name
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"model": "claude-sonnet-5"},
+        {"effort": "minimal"},
+        {"pre_open_time_et": "8:40"},
+        {"pre_open_time_et": "24:00"},
+        # 开盘前那份必须真的在开盘前生成。
+        {"pre_open_time_et": "09:30"},
+        # 兜底时刻不能早于收盘后窗口的开启时刻。
+        {"post_close_fallback_time_et": "16:15"},
+        {"post_close_offset_minutes": 241},
+        {"daily_max_runs": 0},
+        {"max_output_tokens": 64_000, "output_token_ceiling": 32_000},
+        {"request_timeout_seconds": 3_600.0},
+        {"unknown_switch": True},
+    ],
+)
+def test_market_brief_config_rejects_drift(overrides: dict) -> None:
+    with pytest.raises(ValidationError):
+        MarketBriefConfig.model_validate({**MarketBriefConfig().model_dump(), **overrides})
 
 
 @pytest.mark.parametrize(

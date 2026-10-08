@@ -69,6 +69,7 @@ def _process_secret_mutation(
 def test_option_pro_secret_allowlist_is_exact() -> None:
     expected = {
         "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
         "APP_PASSWORD_HASH",
         "INTERNAL_API_TOKEN",
         "FINNHUB_API_KEY",
@@ -101,6 +102,7 @@ def test_browser_settings_expose_only_option_pro_configuration_booleans(
 ) -> None:
     values = {
         "OPENAI_API_KEY": "sk-never-return-this",
+        "ANTHROPIC_API_KEY": "sk-ant-never-return-this",
         "FINNHUB_API_KEY": "finnhub-never-return-this",
         "MARKETDATA_TOKEN": "market-never-return-this",
         "INTERNAL_API_TOKEN": "internal-never-return-this",
@@ -113,6 +115,7 @@ def test_browser_settings_expose_only_option_pro_configuration_booleans(
     report = settings_status()
     assert report == {
         "openai": {"configured": True},
+        "anthropic": {"configured": True},
         "finnhub": {"configured": True},
         "marketdata": {"configured": True},
         "fred": {"configured": True},
@@ -570,6 +573,115 @@ def test_validation_uses_only_fixed_free_read_endpoints_and_headers(
     assert all(response.read_sizes == [4096] for response in responses)
 
 
+def test_anthropic_key_is_checked_against_the_free_models_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    path = tmp_path / "secrets.env"
+    monkeypatch.setattr(personal_secrets, "DEFAULT_SECRETS_PATH", path)
+    secret = "sk-ant-validation-sentinel"
+    personal_secrets.atomic_write({"ANTHROPIC_API_KEY": secret}, path)
+    requests: list[urllib.request.Request] = []
+    response = _FakeValidationResponse(body=b"anthropic-body-must-not-leak")
+
+    def fake_open(request: urllib.request.Request) -> _FakeValidationResponse:
+        requests.append(request)
+        return response
+
+    monkeypatch.setattr(personal_secrets, "_open_validation_request", fake_open)
+
+    assert personal_secrets.main(["validate"]) == 0
+    output = capsys.readouterr()
+    assert secret not in output.out + output.err
+    assert "anthropic-body-must-not-leak" not in output.out
+    assert "https://" not in output.out
+    # 只读的模型列表：不生成任何内容，也就不产生模型费用。
+    assert [request.full_url for request in requests] == [
+        "https://api.anthropic.com/v1/models"
+    ]
+    assert requests[0].get_method() == "GET"
+    headers = {key.lower(): value for key, value in requests[0].header_items()}
+    assert headers == {"x-api-key": secret, "anthropic-version": "2023-06-01"}
+    assert response.read_sizes == [4096]
+    item = json.loads(output.out)["secrets"]["ANTHROPIC_API_KEY"]
+    assert item == {
+        "configured": True,
+        "format_valid": True,
+        "connection_checked": True,
+        "connection_skipped": False,
+        "connection_ok": True,
+        "reason": "reachable",
+        "http_status": 200,
+    }
+
+
+def test_anthropic_key_must_be_reachable_for_validation_to_pass(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    path = tmp_path / "secrets.env"
+    monkeypatch.setattr(personal_secrets, "DEFAULT_SECRETS_PATH", path)
+    secret = "sk-ant-rejected-key-sentinel"
+    personal_secrets.atomic_write({"ANTHROPIC_API_KEY": secret}, path)
+
+    def reject(_request: urllib.request.Request):
+        raise urllib.error.HTTPError(
+            "https://api.anthropic.com/v1/models",
+            401,
+            "private-exception-message-sentinel",
+            None,
+            io.BytesIO(b"private-response-body-sentinel"),
+        )
+
+    monkeypatch.setattr(personal_secrets, "_open_validation_request", reject)
+
+    assert personal_secrets.main(["validate"]) == 1
+    output = capsys.readouterr()
+    serialized = output.out + output.err
+    assert secret not in serialized
+    assert "private-response-body-sentinel" not in serialized
+    assert "private-exception-message-sentinel" not in serialized
+    item = json.loads(output.out)["secrets"]["ANTHROPIC_API_KEY"]
+    assert item["connection_checked"] is True
+    assert item["connection_ok"] is False
+    assert item["reason"] == "authentication_failed"
+    assert item["http_status"] == 401
+
+
+def test_anthropic_key_format_requires_the_sk_ant_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert personal_secrets._format_valid(
+        "ANTHROPIC_API_KEY", "sk-ant-api03-valid-shape"
+    ) is True
+    # 一个 OpenAI 形状的密钥填错了位置：本地就判无效，不拿去连 Anthropic。
+    for wrong in ("sk-openai-shaped-key", "anthropic-key-without-prefix"):
+        assert personal_secrets._format_valid("ANTHROPIC_API_KEY", wrong) is False
+
+    path = tmp_path / "secrets.env"
+    monkeypatch.setattr(personal_secrets, "DEFAULT_SECRETS_PATH", path)
+    personal_secrets.atomic_write({"ANTHROPIC_API_KEY": "sk-openai-shaped-key"}, path)
+
+    def unexpected_network(_request: urllib.request.Request):
+        pytest.fail("a malformed Anthropic key reached the network")
+
+    monkeypatch.setattr(
+        personal_secrets,
+        "_open_validation_request",
+        unexpected_network,
+    )
+
+    assert personal_secrets.main(["validate"]) == 1
+    item = json.loads(capsys.readouterr().out)["secrets"]["ANTHROPIC_API_KEY"]
+    assert item["format_valid"] is False
+    assert item["reason"] == "format_invalid"
+    assert item["connection_skipped"] is True
+
+
 def test_validation_opener_disables_proxies_rejects_redirects_and_uses_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -960,6 +1072,7 @@ def test_real_owner_surfaces_never_return_secret_sentinels(
 ) -> None:
     sentinels = {
         "OPENAI_API_KEY": "sk-boundary-openai-sentinel",
+        "ANTHROPIC_API_KEY": "sk-ant-boundary-anthropic-sentinel",
         "FINNHUB_API_KEY": "boundary-finnhub-sentinel",
         "MARKETDATA_TOKEN": "boundary-marketdata-sentinel",
         "INTERNAL_API_TOKEN": "boundary-internal-sentinel",
@@ -985,6 +1098,9 @@ def test_real_owner_surfaces_never_return_secret_sentinels(
         "/api/catalysts/hotspots/status",
         "/api/catalysts/hotspots",
         "/api/catalysts/market-focus-cycles/latest",
+        "/api/market-brief/latest",
+        "/api/market-brief/history",
+        "/api/market-brief/status",
         "/",
         "/static/js/deck-api.js",
         "/static/js/deck-catalysts.js",
@@ -1020,6 +1136,7 @@ def test_every_registered_api_error_response_hides_secret_sentinels(
 ) -> None:
     sentinels = {
         "OPENAI_API_KEY": "sk-all-routes-openai-sentinel",
+        "ANTHROPIC_API_KEY": "sk-ant-all-routes-anthropic-sentinel",
         "FINNHUB_API_KEY": "all-routes-finnhub-sentinel",
         "MARKETDATA_TOKEN": "all-routes-marketdata-sentinel",
         "INTERNAL_API_TOKEN": "all-routes-internal-sentinel",

@@ -36,9 +36,17 @@ _SAFE_HTTPS_AUTHORITY = re.compile(
 _UNSAFE_ENV_CHARACTERS = frozenset("#'\"\\$")
 _UNSAFE_TOKEN_CHARACTERS = _UNSAFE_ENV_CHARACTERS
 _REMOTE_SECRET_KEYS = frozenset(
-    {"OPENAI_API_KEY", "FINNHUB_API_KEY", "INTERNAL_API_TOKEN"}
+    {
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "FINNHUB_API_KEY",
+        "INTERNAL_API_TOKEN",
+    }
 )
 _OPENAI_VALIDATION_URL = "https://api.openai.com/v1/models"
+# 列出模型是免费只读请求，能区分密钥无效（401）与服务不可用，不产生任何模型费用。
+_ANTHROPIC_VALIDATION_URL = "https://api.anthropic.com/v1/models"
+_ANTHROPIC_API_VERSION = "2023-06-01"
 _FINNHUB_VALIDATION_URL = "https://finnhub.io/api/v1/quote?symbol=AAPL"
 _MACROLENS_HEALTH_PATH = "/internal/v1/health"
 _VALIDATION_TIMEOUT_SECONDS = 3
@@ -355,6 +363,8 @@ def _format_valid(key: str, value: str) -> bool:
         return False
     if key == "OPENAI_API_KEY" and not value.startswith("sk-"):
         return False
+    if key == "ANTHROPIC_API_KEY" and not value.startswith("sk-ant-"):
+        return False
     entry = _EXACT_SHAPES.get(key)
     if entry is not None and not entry[0](value):  # type: ignore[operator]
         return False
@@ -588,6 +598,16 @@ def validate_report(path: Path) -> dict[str, object]:
                 _validate_connection(
                     _OPENAI_VALIDATION_URL,
                     {"Authorization": f"Bearer {value}"},
+                )
+            )
+        elif key == "ANTHROPIC_API_KEY":
+            item.update(
+                _validate_connection(
+                    _ANTHROPIC_VALIDATION_URL,
+                    {
+                        "x-api-key": value,
+                        "anthropic-version": _ANTHROPIC_API_VERSION,
+                    },
                 )
             )
         elif key == "FINNHUB_API_KEY":

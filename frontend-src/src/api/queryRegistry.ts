@@ -51,6 +51,7 @@ const QUERY_CONFIG: Record<string, QueryConfig> = {
   '/earnings/upcoming': { ttlMs: 60_000, persist: true, maxRestoreAgeMs: 7 * DAY_MS },
   '/sectors': { ttlMs: 120_000, persist: true, maxRestoreAgeMs: 7 * DAY_MS },
   '/macro/conditions': { ttlMs: 60_000, persist: true, maxRestoreAgeMs: 30 * DAY_MS },
+  '/market-brief/latest': { ttlMs: 60_000, persist: true, maxRestoreAgeMs: 3 * DAY_MS },
   '/breakouts/status': { ttlMs: 10_000 },
   '/breakouts/current': { ttlMs: 10_000 },
   '/breakouts/events': { ttlMs: 10_000 },

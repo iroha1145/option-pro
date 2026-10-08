@@ -18,3 +18,5 @@ numpy==2.0.2
 curl-cffi==0.15.0
 lxml==6.1.1
 openai==2.45.0
+# 首页市场综合研判（services/market_brief）调用 Claude Opus 5.5。
+anthropic==1.12.1

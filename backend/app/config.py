@@ -178,6 +178,12 @@ class Settings(BaseSettings):
     # is deliberately no FRED_BASE_URL setting and no proxy switch; tests
     # replace the network with an injected transport instead.
     fred_api_key: SecretStr = Field(default=SecretStr(""), alias="FRED_API_KEY")
+    # 首页市场综合研判只连 Anthropic 官方端点：同样没有 base URL 与代理开关，
+    # 测试注入假客户端。未配置时研判任务报 disabled，Worker 仍然健康。
+    anthropic_api_key: SecretStr = Field(
+        default=SecretStr(""),
+        alias="ANTHROPIC_API_KEY",
+    )
     finnhub_api_key: str = Field(default="", alias="FINNHUB_API_KEY")
     finnhub_base_url: AnyHttpUrl = Field(default="https://finnhub.io/api/v1", alias="FINNHUB_BASE_URL")
     finnhub_candle_fallback_enabled: bool = Field(default=True, alias="FINNHUB_CANDLE_FALLBACK_ENABLED")
@@ -396,6 +402,10 @@ class Settings(BaseSettings):
     @property
     def macro_conditions_configured(self) -> bool:
         return bool(self.fred_api_key.get_secret_value().strip())
+
+    @property
+    def market_brief_configured(self) -> bool:
+        return bool(self.anthropic_api_key.get_secret_value().strip())
 
 
 @lru_cache
