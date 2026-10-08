@@ -1030,16 +1030,50 @@ async def run_configured_once(
         if runtime.uses_claude(effective_settings.openai_model)
         else 1
     )
-    if concurrency == 1:
-        processed = await run_slot(owner)
-    else:
-        # Each slot has its own lease and heartbeat. Database admission remains
-        # atomic across slots and processes; a cancelled group drains every
-        # stream through process_job's unknown-outcome accounting.
-        async with asyncio.TaskGroup() as group:
-            slots = [
-                group.create_task(run_slot(f"{owner}:slot-{slot}"))
-                for slot in range(concurrency)
-            ]
-        processed = sum(slot.result() for slot in slots)
+    # Independent paid submissions must not be cancelled by a sibling's local
+    # failure. A single slot also needs a separate task so its own cancellation
+    # cannot masquerade as cancellation of the supervisor's parent round.
+    owners = [owner] if concurrency == 1 else [f"{owner}:slot-{slot}" for slot in range(concurrency)]
+    slots = [asyncio.create_task(run_slot(slot_owner)) for slot_owner in owners]
+    outcomes = asyncio.gather(*slots, return_exceptions=True)
+
+    def log_failures(results: list[Any], *, include_cancelled: bool) -> list[BaseException]:
+        failures: list[BaseException] = []
+        for index, result in enumerate(results):
+            if not isinstance(result, BaseException):
+                continue
+            if not include_cancelled and isinstance(result, asyncio.CancelledError):
+                continue
+            failures.append(result)
+            logger.error(
+                "AI job slot failed owner=%s slot=%s",
+                owner, index, exc_info=(type(result), result, result.__traceback__),
+            )
+        return failures
+
+    try:
+        results = await asyncio.shield(outcomes)
+    except asyncio.CancelledError:
+        # Stop slots once and drain despite repeated external cancellation.
+        # Preserve an earlier independent error, but do not log children that
+        # were normally cancelled in response to this parent interruption.
+        for slot in slots:
+            if not slot.done():
+                slot.cancel()
+        while not outcomes.done():
+            try:
+                await asyncio.shield(outcomes)
+            except asyncio.CancelledError:
+                continue
+        log_failures(outcomes.result(), include_cancelled=False)
+        raise
+    failures = log_failures(results, include_cancelled=True)
+    if failures:
+        # Preserve original exceptions; a child-local cancellation must become
+        # an ordinary error rather than terminate the supervisor's task loop.
+        error = failures[0]
+        if isinstance(error, asyncio.CancelledError):
+            raise RuntimeError("ai_job_slot_cancelled") from error
+        raise error
+    processed = sum(slot.result() for slot in slots)
     return processed, "enabled" if analysis_enabled else "analysis_disabled"

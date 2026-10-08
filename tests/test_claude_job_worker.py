@@ -593,3 +593,302 @@ def test_other_claude_job_types_keep_native_json_and_v2_identity(tmp_path, job_t
     assert actual.params["output_config"]["format"]["type"] == "json_schema"
     assert claude_provider._PROMPT_JSON_INSTRUCTIONS not in actual.params["system"][0]["text"]
     assert runtime.schema_identity(job_type, model="claude-haiku-5-5")[1] == v2_digest
+
+
+def test_claim_failure_does_not_cancel_paid_sibling_streams(tmp_path, monkeypatch):
+    import threading
+
+    repo = AIJobRepository(tmp_path / "jobs.db")
+    config = settings(repo.path).model_copy(update={"openai_max_concurrency": 4})
+    ids = [create_job(repo, payload={"ticker": ticker, "name": ticker}) for ticker in ("AAPL", "MSFT", "NVDA")]
+    effective = SimpleNamespace(
+        ai=SimpleNamespace(daily_max_jobs=0, daily_budget_usd=0, daily_token_limit=100_000_000,
+                           manual_analysis_cooldown_seconds=0, manual_analysis_enabled=True),
+        catalyst=SimpleNamespace(scheduled_analysis_enabled=True),
+        earnings=SimpleNamespace(scheduled_analysis_enabled=True),
+    )
+    monkeypatch.setattr("app.services.runtime_settings.get_effective_runtime_settings", lambda: effective)
+    monkeypatch.setattr(runtime, "prepare_claude", lambda _settings, _kind, payload: payload)
+    streams_started = threading.Event()
+    claim_failed = threading.Event()
+    original_claim = repo.claim_due
+    failure = RuntimeError("isolated claim failure")
+
+    def claim(owner, *args, **kwargs):
+        if owner.endswith(":slot-0"):
+            if not streams_started.wait(5):
+                raise AssertionError("paid sibling streams did not start")
+            claim_failed.set()
+            raise failure
+        return original_claim(owner, *args, **kwargs)
+
+    monkeypatch.setattr(repo, "claim_due", claim)
+
+    async def scenario():
+        release = asyncio.Event()
+        started, cancelled, finished = [], [], []
+
+        async def stream(payload, *, on_message_start=None):
+            ticker = payload["ticker"]
+            await on_message_start(f"msg_{ticker}")
+            started.append(ticker)
+            if len(started) == 3:
+                streams_started.set()
+            try:
+                await release.wait()
+                result = json.loads(message().content[0].text)
+                result["ticker"] = ticker
+                return message(text=json.dumps(result, ensure_ascii=False)).model_copy(update={"id": f"msg_{ticker}"})
+            except asyncio.CancelledError:
+                cancelled.append(ticker)
+                raise
+            finally:
+                finished.append(ticker)
+
+        monkeypatch.setattr(claude_provider, "stream_message", stream)
+        task = asyncio.create_task(worker.run_configured_once(
+            repo, config, "isolation", personal_config=SimpleNamespace(features=SimpleNamespace(catalyst_mode="scheduled")),
+        ))
+        try:
+            assert await asyncio.to_thread(claim_failed.wait, 5)
+            # Give the failed claim's future time to reach the pool coordinator.
+            await asyncio.sleep(0.05)
+            assert not task.done(), "the round must wait for independent paid siblings"
+            assert not cancelled
+            release.set()
+            with pytest.raises(RuntimeError) as caught:
+                await asyncio.wait_for(task, timeout=5)
+            assert caught.value is failure
+            assert sorted(finished) == sorted(started)
+        finally:
+            release.set()
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(scenario())
+    for identifier in ids:
+        row = repo.get_job(identifier)
+        assert row["status"] == "completed" and row["error_code"] is None
+        assert row["usage_total_tokens"] == 700
+        assert row["provider_result_json"] is not None
+
+
+def _pool_controls(tmp_path, monkeypatch):
+    config = settings(tmp_path / "pool.db").model_copy(update={"openai_max_concurrency": 4})
+    effective = SimpleNamespace(
+        ai=SimpleNamespace(daily_max_jobs=0, daily_budget_usd=0, daily_token_limit=100_000_000,
+                           manual_analysis_cooldown_seconds=0, manual_analysis_enabled=True),
+        catalyst=SimpleNamespace(scheduled_analysis_enabled=True),
+        earnings=SimpleNamespace(scheduled_analysis_enabled=True),
+    )
+    monkeypatch.setattr("app.services.runtime_settings.get_effective_runtime_settings", lambda: effective)
+    return config, SimpleNamespace(features=SimpleNamespace(catalyst_mode="scheduled"))
+
+
+def test_multiple_slot_errors_are_logged_individually_after_other_slots_finish(tmp_path, monkeypatch, caplog):
+    config, personal = _pool_controls(tmp_path, monkeypatch)
+    errors = [RuntimeError("first slot failure"), ValueError("second slot failure")]
+
+    async def scenario():
+        started, completed = [], []
+        all_started, release = asyncio.Event(), asyncio.Event()
+
+        async def run_once(repo, settings, owner, **kwargs):
+            index = int(owner.rsplit("-", 1)[1])
+            started.append(index)
+            if len(started) == 4:
+                all_started.set()
+            await all_started.wait()
+            if index < 2:
+                raise errors[index]
+            await release.wait()
+            completed.append(index)
+            return 1
+
+        monkeypatch.setattr(worker, "run_once", run_once)
+        task = asyncio.create_task(worker.run_configured_once(None, config, "pool", personal_config=personal))
+        try:
+            await all_started.wait()
+            await asyncio.sleep(0.01)
+            assert not task.done()
+            release.set()
+            with pytest.raises(RuntimeError) as caught:
+                await task
+            assert caught.value is errors[0]
+            assert sorted(completed) == [2, 3]
+        finally:
+            release.set()
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(scenario())
+    logged = [item.exc_info[1] for item in caplog.records if item.exc_info and "AI job slot failed" in item.message]
+    assert logged == errors
+
+
+@pytest.mark.parametrize("interruption", ["repeated_cancel", "deadline"])
+def test_external_pool_interruption_drains_every_slot_before_returning(tmp_path, monkeypatch, interruption):
+    config, personal = _pool_controls(tmp_path, monkeypatch)
+
+    async def scenario():
+        started, closing, closed = [], [], []
+        all_started, cleanup_started = asyncio.Event(), asyncio.Event()
+
+        async def run_once(repo, settings, owner, **kwargs):
+            started.append(owner)
+            if len(started) == 4:
+                all_started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                closing.append(owner)
+                if len(closing) == 4:
+                    cleanup_started.set()
+                # Model the asynchronous stream close and durable accounting.
+                await asyncio.sleep(0.04)
+                closed.append(owner)
+
+        monkeypatch.setattr(worker, "run_once", run_once)
+        task = asyncio.create_task(worker.run_configured_once(None, config, "pool", personal_config=personal))
+        try:
+            await asyncio.wait_for(all_started.wait(), timeout=2)
+            if interruption == "deadline":
+                with pytest.raises(TimeoutError):
+                    await asyncio.wait_for(task, timeout=0.01)
+            else:
+                task.cancel()
+                await asyncio.wait_for(cleanup_started.wait(), timeout=2)
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+            assert sorted(closed) == sorted(started)
+            assert len(closed) == 4
+            assert not [item for item in asyncio.all_tasks() if item is not asyncio.current_task() and not item.done()]
+        finally:
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(scenario())
+
+
+def test_slot_self_cancellation_reports_error_without_cancelling_parent_or_siblings(tmp_path, monkeypatch):
+    config, personal = _pool_controls(tmp_path, monkeypatch)
+
+    async def scenario():
+        started, completed = [], []
+        all_started, release = asyncio.Event(), asyncio.Event()
+
+        async def run_once(repo, settings, owner, **kwargs):
+            index = int(owner.rsplit("-", 1)[1])
+            started.append(index)
+            if len(started) == 4:
+                all_started.set()
+            await all_started.wait()
+            if index == 0:
+                asyncio.current_task().cancel("slot-local cancellation")
+                await asyncio.sleep(0)
+            await release.wait()
+            completed.append(index)
+            return 1
+
+        monkeypatch.setattr(worker, "run_once", run_once)
+        task = asyncio.create_task(worker.run_configured_once(None, config, "pool", personal_config=personal))
+        try:
+            await all_started.wait()
+            await asyncio.sleep(0.01)
+            assert not task.done()
+            release.set()
+            with pytest.raises(RuntimeError, match="ai_job_slot_cancelled") as caught:
+                await task
+            assert isinstance(caught.value.__cause__, asyncio.CancelledError)
+            assert not task.cancelled()
+            assert sorted(completed) == [1, 2, 3]
+        finally:
+            release.set()
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(scenario())
+
+
+def test_parent_cancel_preserves_prior_slot_error_without_logging_cancelled_siblings(tmp_path, monkeypatch, caplog):
+    config, personal = _pool_controls(tmp_path, monkeypatch)
+    failure = RuntimeError("claim failed before parent cancellation")
+
+    async def scenario():
+        started, closed = [], []
+        all_started, failed = asyncio.Event(), asyncio.Event()
+
+        async def run_once(repo, settings, owner, **kwargs):
+            index = int(owner.rsplit("-", 1)[1])
+            started.append(index)
+            if len(started) == 4:
+                all_started.set()
+            await all_started.wait()
+            if index == 0:
+                failed.set()
+                raise failure
+            try:
+                await asyncio.Event().wait()
+            finally:
+                await asyncio.sleep(0.01)
+                closed.append(index)
+
+        monkeypatch.setattr(worker, "run_once", run_once)
+        task = asyncio.create_task(worker.run_configured_once(None, config, "pool", personal_config=personal))
+        await asyncio.wait_for(failed.wait(), timeout=2)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert sorted(closed) == [1, 2, 3]
+
+    asyncio.run(scenario())
+    logged = [item.exc_info[1] for item in caplog.records if item.exc_info and "AI job slot failed" in item.message]
+    assert logged == [failure]
+
+
+@pytest.mark.parametrize("model,reasoning", [("claude-haiku-5-5", "xhigh"), ("gpt-5.6-terra", "max")])
+@pytest.mark.parametrize("outcome", ["normal", "self_cancel", "parent_cancel"])
+def test_single_slot_preserves_owner_and_distinguishes_cancel_sources(tmp_path, monkeypatch, model, reasoning, outcome):
+    config, personal = _pool_controls(tmp_path, monkeypatch)
+    config = config.model_copy(update={"openai_max_concurrency": 1, "openai_model": model, "openai_reasoning": reasoning})
+
+    async def scenario():
+        started = asyncio.Event()
+        owners, closed = [], []
+
+        async def run_once(repo, settings, owner, **kwargs):
+            owners.append(owner)
+            started.set()
+            try:
+                if outcome == "normal":
+                    return 1
+                if outcome == "self_cancel":
+                    asyncio.current_task().cancel("single slot cancellation")
+                    await asyncio.sleep(0)
+                await asyncio.Event().wait()
+            finally:
+                await asyncio.sleep(0.01)
+                closed.append(owner)
+
+        monkeypatch.setattr(worker, "run_once", run_once)
+        task = asyncio.create_task(worker.run_configured_once(None, config, "unchanged-owner", personal_config=personal))
+        await asyncio.wait_for(started.wait(), timeout=2)
+        if outcome == "parent_cancel":
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        elif outcome == "self_cancel":
+            with pytest.raises(RuntimeError, match="ai_job_slot_cancelled") as caught:
+                await task
+            assert isinstance(caught.value.__cause__, asyncio.CancelledError)
+            assert not task.cancelled()
+        else:
+            assert await task == (1, "enabled")
+        assert owners == closed == ["unchanged-owner"]
+
+    asyncio.run(scenario())
