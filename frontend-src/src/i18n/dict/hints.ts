@@ -299,7 +299,7 @@ export const HINTS: Dict = {
     '総合スコアで区分します：30未満は「明確に引き締め的」、30〜45は「やや引き締め的」、45〜55は「中立」、55〜70は「やや緩和的」、70以上は「明確に緩和的」。このラベルは過去と比べた環境の緩さ・引き締まりを説明するものです。',
   ],
   '历史基础': ['History basis', '履歴データの種別'],
-  "「按当前修订值回算」使用最新修订的数据重新计算历史分数；「当时记录的数据」保留功能上线后各次采集的原始结果。": ["“Recalculated with current revisions” uses the latest revised data to recompute historical scores. “Data recorded at the time” preserves the original results collected since this feature launched.", "「最新の改定値で再計算」は、最新データで過去のスコアを計算し直したものです。「当時記録したデータ」は、この機能の公開後に取得した各時点の結果を保存したものです。"],
+  "「按当前修订值回算」使用最新修订的数据重新计算历史分数；「当时记录的数据」保留功能上线后各次获取的原始结果。": ["“Recalculated with current revisions” uses the latest revised data to recompute historical scores. “Data recorded at the time” preserves the original results collected since this feature launched.", "「最新の改定値で再計算」は、最新データで過去のスコアを計算し直したものです。「当時記録したデータ」は、この機能の公開後に取得した各時点の結果を保存したものです。"],
   '流动性 · LIQUIDITY（0–100 分）': ['Liquidity (0–100)', '流動性 · LIQUIDITY（0–100点）'],
   '模块分 = 该模块内有效因子分数的等权均值，共 5 个因子，至少 3 个有效才出分。': [
     'Module score = the equal-weighted average of its valid factor scores. This module has 5 factors and needs at least 3 valid to publish a score.',

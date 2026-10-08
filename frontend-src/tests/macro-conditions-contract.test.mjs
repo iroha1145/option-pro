@@ -493,7 +493,7 @@ test('every module and factor referenced by the panel has hint copy', () => {
   assert.ok(SCORE_HINTS_MACRO.macroComposite.body.includes('至少 5 个模块'));
   assert.ok(SCORE_HINTS_MACRO.macroComposite.note.includes('当前读数在过去 5 年中的相对位置'));
   assert.ok(SCORE_HINTS_MACRO.macroHistoryBasis.body.includes('最新修订的数据重新计算历史分数'));
-  assert.ok(SCORE_HINTS_MACRO.macroHistoryBasis.body.includes('保留功能上线后各次采集的原始结果'));
+  assert.ok(SCORE_HINTS_MACRO.macroHistoryBasis.body.includes('保留功能上线后各次获取的原始结果'));
 });
 
 test('the panel polls macro data at fifteen minutes, not sixty seconds', async () => {

@@ -103,7 +103,6 @@ export const CATALYSTS: Dict = {
   /* ---------------- HotspotsStrip.tsx ---------------- */
   '查看代表新闻': ['View representative news', '代表ニュースを見る'],
   '热点主题带': ['Hotspot theme strip', '注目テーマ帯'],
-  '热点扫描': ['Hotspot scan', '注目テーマスキャン'],
   '活跃': ['Active', '稼働中'],
   '已暂停': ['Paused', '一時停止'],
   '热点主题带，可横向滚动': ['Hotspot theme strip, scroll horizontally', '注目テーマ帯、横スクロール可能'],
@@ -386,7 +385,7 @@ export const CATALYSTS: Dict = {
   '新闻模块未启用': ['News module disabled', 'ニュースモジュールが無効です'],
   '来源状态': ['Source status', 'データソース状態'],
   '正在获取': ["Fetching", "取得中"],
-  '热点整理': ['Hotspot compute', '注目テーマ計算'],
+  '热点整理': ["Hotspot grouping", "ホットテーマ整理"],
   '个热点': ['hotspot groups', '件の注目テーマ'],
   '分析服务': ['Analysis availability', '分析の利用可否'],
   '近 24 小时新闻': ['News in the last 24h', '直近24時間のニュース'],

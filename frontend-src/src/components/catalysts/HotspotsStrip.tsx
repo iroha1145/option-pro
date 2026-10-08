@@ -115,7 +115,7 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
           {statusQ.data && (
             <p className="hidden items-center gap-1.5 text-micro text-ink-400 sm:flex">
               <Led tone={statusQ.data.scanning ? 'brand' : 'muted'} pulse={statusQ.data.scanning} className="size-1.5" />
-              {__t('热点扫描')} {statusQ.data.scanning ? __t('活跃') : __t('已暂停')} · {fmtRelative(statusQ.data.updatedAt)}
+              {__t('热点整理')} {statusQ.data.scanning ? __t('活跃') : __t('已暂停')} · {fmtRelative(statusQ.data.updatedAt)}
             </p>
           )}
         </div>
