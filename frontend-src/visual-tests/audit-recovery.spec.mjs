@@ -190,12 +190,11 @@ test('repeated job lookup failures pause and resume the same job without a secon
   const state = await fixture(page, { owner: true });
   await page.goto('/stock/AAPL');
   // 「AI 股票分析」卡也有同名的「生成分析」，限定在期权解读卡内：先开确认，再确认。
-  const insight = page.locator('div')
-    .filter({ has: page.getByText('AI 期权解读', { exact: true }) })
-    .filter({ has: page.getByRole('button', { name: '生成分析', exact: true }) })
-    .last();
+  const insight = page.getByText('AI 期权解读', { exact: true }).locator('..').locator('..');
   await insight.getByRole('button', { name: '生成分析', exact: true }).click();
+  await expect(insight.getByText(/^分析 AAPL 当前到期日的/)).toBeVisible();
   await insight.getByRole('button', { name: '生成分析', exact: true }).click();
+  await expect.poll(() => state.jobPosts).toBe(1);
   const resume = page.getByRole('button', { name: '继续查询原任务', exact: true });
   await expect(resume).toBeVisible({ timeout: 18000 });
   expect(state.jobReads).toBe(5);
