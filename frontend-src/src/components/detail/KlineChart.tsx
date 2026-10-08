@@ -1048,10 +1048,7 @@ export default function KlineChart({
               ariaLabel={t('选择副图指标')} value={analysisOption.panes[0]?.id ?? ''}
               options={visiblePanes.map(pane => ({ value: pane.id, label: pane.label }))}
               onChange={setSelectedIndicator} className="min-w-0 max-w-full" />}
-          </> : <span className="text-micro text-ink-400">{t('未启用指标副图')}</span>}
-          <button type="button" className="ml-auto text-micro text-brand-600 underline-offset-2 hover:underline" onClick={() => setLayersOpen(true)}>
-            {t('选择指标图层')}
-          </button>
+          </> : <span className="text-micro text-ink-400">{t('未启用指标副图，可在图表设置中开启')}</span>}
         </div>
       )}
       <div ref={plotRef} className="relative mt-3 min-h-0 shrink-0" data-indicator-chart

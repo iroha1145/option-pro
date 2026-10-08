@@ -785,6 +785,14 @@ test("layer presets switch algorithm and pattern groups", async ({ page }) => {
   // 值与后端检测器闸门 _KEEP_QUALITY 齐平：高于它等于把后端已放行的形态再滤
   // 一遍，线上实测会滤成 0 条（自动形态上线后一直画不出来就是这么来的）。
   await dialog.getByRole("button", { name: "极简", exact: true }).click();
+  // 「显示细节」默认收起：滑杆不在页面里，已生效的参数以一行摘要留在收起的标题下；
+  // 展开后滑杆才出现，且收起不会改动任何设置。
+  const details = dialog.getByRole("button", { name: "显示细节", exact: true });
+  await expect(details).toHaveAttribute("aria-expanded", "false");
+  await expect(dialog.getByRole("slider", { name: "最低形态吻合度" })).toHaveCount(0);
+  await expect(dialog.getByText("最低形态吻合度 45%")).toBeVisible();
+  await details.click();
+  await expect(details).toHaveAttribute("aria-expanded", "true");
   await expect(dialog.getByRole("slider", { name: "最低形态吻合度" })).toHaveValue("45");
   await page.keyboard.press("Escape");
   await chartFilled(page);

@@ -182,7 +182,11 @@ test('tiny indicator values remain distinguishable, empty panes do not invent a 
   expect(errors).toEqual([]);
   errors = await open(page, 'empty');
   await expect(page.locator('[data-indicator-header]')).toHaveCount(1);
-  await expect(page.getByText('未启用指标副图')).toBeVisible();
+  await expect(page.getByText('未启用指标副图，可在图表设置中开启')).toBeVisible();
+  // 图层入口只剩工具栏的「图表设置」一个：副图区不再带第二个文字入口。
+  await expect(page.getByRole('button', { name: '选择指标图层' })).toHaveCount(0);
+  await page.getByRole('button', { name: '图表设置', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: '图表设置', exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
 

@@ -183,4 +183,5 @@ export const DRAWINGS: Dict = {
   '当前收盘价在最近 60 日高低区间中的相对位置，0 是区间底、1 是区间顶。': ['Where the current close sits within the last 60 days\' high-low range: 0 is the bottom of the range, 1 is the top.', '直近60日の高安レンジにおける現在の終値の位置。0がレンジ下限、1が上限です。'],
   "比较该股与标普 500 指数基金（SPY）的表现；缺少同日收盘价时不显示。": ["Compares the stock with the SPDR S&P 500 ETF (SPY). Hidden when matching daily closes are unavailable.", "銘柄の値動きをSPDR S&P 500 ETF（SPY）と比較します。同日の終値が揃わない場合は表示しません。"],
   '指标副图': ['Indicator panes', '指標サブチャート'],
+  '最低形态吻合度 {fit}% · 标签密度 {density}% · 形态数量上限 {max}': ['Minimum shape quality {fit}% · Label density {density}% · Max patterns {max}', '形状品質の下限 {fit}% · ラベル密度 {density}% · 最大パターン数 {max}'],
 };
