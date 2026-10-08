@@ -544,7 +544,8 @@ test('the market page places macro between the regime panel and the signal readi
   assert.ok(regime < macro && macro < signals, 'macro sits at B4');
   assert.match(text, /B4 宏观环境/);
   assert.match(text, /B5 信号解读/);
-  assert.match(text, /B7 联动卡/);
+  // 2026-10-08：页底联动卡删除，行业表现与 CTA 趋势走市场组二级标签。
+  assert.doesNotMatch(text, /LinkCards/);
 });
 
 // Reduced-motion, interruption and exact final values are exercised against the

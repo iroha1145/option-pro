@@ -1,7 +1,9 @@
 /**
  * 移动端底部 Dock（design.md §7.4）
  * 悬浮胶囊：离屏 12px + safe-area、圆角毛玻璃、墨色浮起阴影；
- * 五个入口同级单色（雷达不再是中央凸起圆钮）；「更多」上弹 sheet（spring-gentle）。
+ * 2026-10-08 第二版：与顶栏同一套一级入口——首页、我的关注、选股、市场四格常驻，
+ * 财报、新闻进「更多」上弹 sheet（同 iOS/Material 五格上限）；选股、市场两组的子页面
+ * 由页内二级标签切换。显示设置（语言、外观、涨跌颜色）只在页头设置菜单里改。
  */
 import { useEffect, useId, useState, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
@@ -15,31 +17,22 @@ import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { overlayVisible, useOverlayPhase } from '@/lib/transitions';
 import { isTopFocusScope } from '@/lib/focusScope';
 import Icon, { type IconName } from '@/components/icons';
-import Segmented from '@/components/shared/Segmented';
 import GlidePill from '@/components/shared/GlidePill';
-import { LOCALES, getLocale, setLocale, t } from '../i18n/core.ts';
+import { t } from '../i18n/core.ts';
 import { prefetchRouteOnIntent, routeIntentHandlers } from '../lib/prefetchRouteChunk.ts';
-import { setColorMode, type ColorMode } from '@/lib/colorPreference.ts';
-import { useColorMode } from '@/hooks/useColorMode.ts';
-import { setThemePreference, type ThemePreference } from '@/lib/themePreference.ts';
-import { useThemePreference } from '@/hooks/useAppearance.ts';
 
 /* setLocale() 整页重载才会切语言，模块级常量在加载期求值一次即可，不需要每次渲染重算 */
-const DOCK_ITEMS: { label: string; path: string; icon: IconName }[] = [
-  { label: t('首页'), path: '/', icon: 'candle' },
-  { label: t('自选'), path: '/watchlist', icon: 'star-line' },
-  { label: t('选股'), path: '/screener', icon: 'filter-funnel' },
-  { label: t('雷达'), path: '/breakouts', icon: 'radar' },
+/* match：选股、市场两格在任一子页都亮（与顶栏 isNavGroupActive 同口径） */
+const DOCK_ITEMS: { label: string; path: string; icon: IconName; match: readonly string[] }[] = [
+  { label: t('首页'), path: '/', icon: 'candle', match: ['/'] },
+  { label: t('我的关注'), path: '/watchlist', icon: 'star-line', match: ['/watchlist'] },
+  { label: t('选股'), path: '/screener', icon: 'filter-funnel', match: ['/screener', '/breakouts'] },
+  { label: t('市场'), path: '/market', icon: 'wallet-gauge', match: ['/market', '/sectors', '/cta'] },
 ];
 
 const MORE_ITEMS: { label: string; path: string; icon: IconName }[] = [
-  /* 板块从 Dock 移入「更多」（首页/自选/选股/雷达占满四个一级入口） */
-  { label: t('板块透视'), path: '/sectors', icon: 'layers' },
   { label: t('财报日历'), path: '/earnings', icon: 'calendar-spark' },
-  /* 不与 Dock 的雷达、首页共用图标：大盘用页头同款仪表，CTA 用趋势线 */
-  { label: t('美股大盘强弱'), path: '/market', icon: 'wallet-gauge' },
-  { label: t('CTA 趋势资金'), path: '/cta', icon: 'trend-line' },
-  { label: t('新闻催化'), path: '/catalysts', icon: 'bolt' },
+  { label: t('新闻'), path: '/catalysts', icon: 'bolt' },
 ];
 
 export default function MobileDock() {
@@ -80,16 +73,13 @@ function MobileDockContent() {
     };
   }, [moreOpen]);
 
-  const colorMode = useColorMode();
-  const themePreference = useThemePreference();
-
   const moreActive = MORE_ITEMS.some((m) => isNavPathActive(location.pathname, m.path));
   const dockGlideId = useId();
 
   const renderItem = (item: (typeof DOCK_ITEMS)[number]) => {
     /* 高亮口径与顶栏共用 isNavPathActive 语义：根路径精确匹配（裸 startsWith('/')
        对任何路径都真，首页会永远亮着），其余按段边界（/cta 不得点亮 /catalysts）。 */
-    const active = isNavPathActive(location.pathname, item.path);
+    const active = item.match.some((path) => isNavPathActive(location.pathname, path));
     return (
       <div key={item.path} className="relative flex flex-1">
         {active && (
@@ -175,53 +165,6 @@ function MobileDockContent() {
               </div>
               <p className="eyebrow px-5 pb-2 pt-1">{t('更多功能')}</p>
               <div className="px-3">
-                <div className="flex items-center justify-between gap-3 rounded-md px-3 py-3">
-                  <span className="flex items-center gap-3">
-                    <span className="flex size-9 items-center justify-center rounded-md border border-line bg-card-warm text-brand-600">
-                      <Icon name="languages" size={17} />
-                    </span>
-                    <span className="text-body-s font-medium text-ink-800">{t('界面语言')}</span>
-                  </span>
-                  <Segmented
-                    options={LOCALES.map((l) => ({ value: l.code, label: l.short }))}
-                    value={getLocale()}
-                    onChange={(code) => setLocale(code)}
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-3 rounded-md px-3 py-3">
-                  <span className="flex items-center gap-3">
-                    <span className="flex size-9 items-center justify-center rounded-md border border-line bg-card-warm text-brand-600">
-                      <Icon name="candle" size={17} />
-                    </span>
-                    <span className="text-body-s font-medium text-ink-800">{t('涨跌色彩')}</span>
-                  </span>
-                  <Segmented<ColorMode>
-                    options={[
-                      { value: 'western', label: t('绿涨红跌') },
-                      { value: 'asian', label: t('红涨绿跌') },
-                    ]}
-                    value={colorMode}
-                    onChange={setColorMode}
-                  />
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md px-3 py-3">
-                  <span className="flex items-center gap-3">
-                    <span className="flex size-9 items-center justify-center rounded-md border border-line bg-card-warm text-brand-600">
-                      <Icon name="moon-amc" size={17} />
-                    </span>
-                    <span className="text-body-s font-medium text-ink-800">{t('外观')}</span>
-                  </span>
-                  <Segmented<ThemePreference>
-                    options={[
-                      { value: 'system', label: t('跟随系统') },
-                      { value: 'light', label: t('浅色') },
-                      { value: 'dark', label: t('深色') },
-                    ]}
-                    value={themePreference}
-                    onChange={setThemePreference}
-                  />
-                </div>
-                <div className="mx-3 my-2 border-t border-line" />
                 {MORE_ITEMS.map((m) => (
                   <button
                     key={m.path}

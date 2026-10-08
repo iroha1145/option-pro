@@ -639,11 +639,11 @@
   padding: 4px 10px;
   color: var(--ink-600);
 }
-.t-tabs.selection-group .t-tab[aria-selected="true"] { color: var(--brand-700); font-weight: 500; }
+.t-tabs.selection-group .t-tab:is([aria-selected="true"], [aria-current="page"]) { color: var(--brand-700); font-weight: 500; }
 @media (hover: hover) and (pointer: fine) {
   .control-button:not(:disabled):not([aria-pressed="true"]):hover { background: var(--paper-2); border-color: var(--line-strong); color: var(--ink-800); }
   .filter-group .control-button:not(:disabled):not([aria-pressed="true"]):hover { border-color: transparent; }
-  .t-tabs.selection-group .t-tab:not([aria-selected="true"]):hover { color: var(--ink-900); background: var(--paper-2); }
+  .t-tabs.selection-group .t-tab:not([aria-selected="true"], [aria-current="page"]):hover { color: var(--ink-900); background: var(--paper-2); }
 }
 @media (pointer: coarse) {
   .control-button, .filter-group .control-button, .t-tabs.selection-group .t-tab { min-height: 44px; }
@@ -814,8 +814,7 @@
   .cloud-chart-tooltip { transition: none !important; }
 }
 @media (pointer: coarse) {
-  .color-mode-control { min-height: 44px; }
-  .theme-switcher-control { min-height: 44px; min-width: 44px; }
+  .theme-switcher-control, .settings-menu-control { min-height: 44px; min-width: 44px; }
 }
 .change-badge { font-family: inherit; font-weight: 500; white-space: nowrap; letter-spacing: -.015em; }
 .strength-track { background: var(--control-track); }

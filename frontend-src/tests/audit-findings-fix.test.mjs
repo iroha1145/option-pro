@@ -136,7 +136,9 @@ test('isNavPathActive 根路径精确匹配，/cta 不点亮 /catalysts', () => 
 test('Navbar 与 MobileDock 用边界匹配，文字高亮不跟 NavLink isActive', async () => {
   const nav = codeOf(await source('components/Navbar.tsx'));
   const dock = codeOf(await source('components/MobileDock.tsx'));
-  assert.match(nav, /isNavPathActive\(location\.pathname, item\.path\)/);
+  // 一级入口按组高亮：选股、市场两组看任一子页，组内仍是 isNavPathActive 的段边界匹配。
+  assert.match(nav, /isNavGroupActive\(location\.pathname, item\)/);
+  assert.match(codeOf(await source('lib/navigation.ts')), /isNavPathActive\(pathname, page\.path\)/);
   assert.match(nav, /end=\{item\.path === '\/'\}/);
   assert.doesNotMatch(nav, /location\.pathname\.startsWith/);
   assert.doesNotMatch(nav, /\(\{ isActive \}\)/);

@@ -32,6 +32,7 @@ import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import Segmented from '@/components/shared/Segmented';
 import FilterButton from '@/components/shared/FilterButton';
 import SelectionViewport from '@/components/shared/SelectionViewport';
+import SectionNav from '@/components/shared/SectionNav';
 import { fmtTimeHHMMSS } from '@/lib/format';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonCard } from '@/components/shared/Skeleton';
@@ -489,6 +490,7 @@ export default function Breakouts() {
 
   return (
     <div className="radar-page">
+      <SectionNav section="screen" />
       {/* 页头带：§03 眉题 + 衬线大标 + 副标 · 右侧紧凑状态条 */}
       <motion.header
         initial={{ opacity: 0, y: 14 }}

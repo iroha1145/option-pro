@@ -846,7 +846,8 @@ export default function Screener() {
     <div>
       {/* B0 页头带 */}
       <PageHeader
-        title={__t("选股扫描")}
+        section="screen"
+        title={__t("条件选股")}
         meta={
           <>
             {/* 手机上元信息折到标题下方、靠左排，这里跟着左对齐；桌面在页头右侧时才右对齐 */}

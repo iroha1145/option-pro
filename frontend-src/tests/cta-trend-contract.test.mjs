@@ -129,11 +129,13 @@ test('v2 读数拆解与新鲜度：强度/覆盖/最新交易日/快照时刻/�
 });
 
 test('CTA 只做并排联动，不混入 regime 或 Strength', () => {
-  /* 旧面板已剥离：大盘页不再渲染 <CtaTrendPanel>、不再轮询 ctaTrend，
-     只留指向 /cta 的引导卡。 */
+  /* 旧面板已剥离：大盘页不再渲染 <CtaTrendPanel>、不再轮询 ctaTrend。
+     2026-10-08 第二版导航删掉了引导卡，/cta 由市场组的二级标签进入。 */
   assert.doesNotMatch(marketPage, /CtaTrendPanel/);
   assert.doesNotMatch(marketPage, /ctaQ/);
-  assert.match(marketPage, /to="\/cta"/);
+  assert.match(marketPage, /section="market"/);
+  assert.match(ctaPage, /section="market"/);
+  assert.match(readFileSync(join(src, 'lib/navigation.ts'), 'utf8'), /pages: \[MARKET, SECTORS, CTA\]/);
   /* regimeMean 只读传入深读面板；页面的 bias/mean 计算不引用 CTA 数据。 */
   assert.match(ctaPage, /regimeMean=\{mean\}/);
   assert.match(ctaPage, /marketApi\.ctaTrend\(\)/);

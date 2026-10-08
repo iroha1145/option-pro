@@ -124,13 +124,14 @@ test('Tailwind up/down 色阶从 CSS 变量生成，而不是编译期写死 hex
   assert.doesNotMatch(config, /down:\s*\{[^}]*#E5484D/s);
 });
 
-test('顶栏与 Dock 共用 useColorMode，不再各自 useState', async () => {
-  const switcher = codeOf(await source('components/ColorModeSwitcher.tsx'));
+test('页头设置菜单读 useColorMode，不再自存涨跌习惯', async () => {
+  // 2026-10-08：页头三个显示控件合并为设置菜单，手机「更多」不再另放一份。
+  const settings = codeOf(await source('components/SettingsMenu.tsx'));
   const dock = codeOf(await source('components/MobileDock.tsx'));
-  assert.match(switcher, /useColorMode\(\)/);
-  assert.match(dock, /useColorMode\(\)/);
-  assert.doesNotMatch(switcher, /useState/);
-  assert.doesNotMatch(dock, /setLocalColorMode|getColorMode\(\)/);
+  assert.match(settings, /useColorMode\(\)/);
+  assert.match(settings, /setColorMode\(option\.value\)/);
+  assert.doesNotMatch(settings, /useState<ColorMode>|setLocalColorMode|getColorMode\(\)/);
+  assert.doesNotMatch(dock, /setColorMode|getColorMode\(\)/);
 });
 
 test('K 线 / 情景 / 仓位 / 迷你 K 在色彩习惯变化时重建 option', async () => {

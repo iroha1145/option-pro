@@ -109,7 +109,8 @@ export default function Sectors() {
   return (
     <div>
       <PageHeader
-        title={t("板块透视")}
+        section="market"
+        title={t("行业表现")}
         meta={
           <>
             <span className="hidden text-micro text-ink-400 tnum sm:inline">

@@ -13,7 +13,7 @@ export type IconName =
   | 'refresh' | 'wallet-gauge' | 'doc-quote' | 'logout' | 'arrow-up' | 'arrow-down' | 'minus'
   | 'check' | 'menu' | 'languages' | 'display' | 'user'
   | 'trend-line' | 'ray-right' | 'channel' | 'rect' | 'fib' | 'text-note'
-  | 'lock' | 'unlock' | 'eye' | 'eye-off' | 'undo' | 'redo' | 'expand' | 'compress';
+  | 'lock' | 'unlock' | 'eye' | 'eye-off' | 'undo' | 'redo' | 'expand' | 'compress' | 'sliders';
 
 interface IconProps extends SVGProps<SVGSVGElement> {
   name: IconName;
@@ -264,6 +264,15 @@ const PATHS: Record<IconName, ReactElement> = {
   compress: (
     <>
       <path d="M9.6 4.8v4H5.6M14.4 4.8v4h4M9.6 19.2v-4H5.6M14.4 19.2v-4h4" />
+    </>
+  ),
+  /* 设置：三条滑轨各带一个旋钮（页头合并后的显示设置入口） */
+  sliders: (
+    <>
+      <path d="M4.4 7h8.3M16.7 7h2.9M4.4 12h2.9M11.3 12h8.3M4.4 17h6.3M14.7 17h4.9" />
+      <circle cx="14.7" cy="7" r="2" />
+      <circle cx="9.3" cy="12" r="2" />
+      <circle cx="12.7" cy="17" r="2" />
     </>
   ),
 };

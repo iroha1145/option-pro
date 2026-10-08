@@ -46,6 +46,7 @@ export default function CtaTrend() {
   return (
     <div>
       <PageHeader
+        section="market"
         title={t('CTA 趋势资金')}
         meta={
           <>

@@ -220,16 +220,17 @@ test('系统外观监听兼容 addListener，清空本地存储会重置偏好',
   assert.match(sourceText, /event\.key !== THEME_KEY && event\.key !== null/);
 });
 
-test('顶栏、登录页与手机更多菜单都有外观开关', async () => {
+test('页头设置菜单（桌面与手机同一入口）与登录页都有外观开关', async () => {
   const navbar = codeOf(await source('components/Navbar.tsx'));
   const login = codeOf(await source('pages/Login.tsx'));
-  const dock = codeOf(await source('components/MobileDock.tsx'));
+  const settings = codeOf(await source('components/SettingsMenu.tsx'));
   const switcher = codeOf(await source('components/ThemeSwitcher.tsx'));
-  assert.match(navbar, /<ThemeSwitcher\s*\/>/);
-  assert.doesNotMatch(navbar, /<ThemeSwitcher[^>]*hidden/);
+  assert.match(navbar, /<SettingsMenu\s*\/>/);
+  assert.doesNotMatch(navbar, /<SettingsMenu[^>]*hidden/);
+  assert.match(settings, /setThemePreference\(option\.value\)/);
+  assert.match(settings, /跟随系统/);
+  assert.match(settings, /useThemePreference\(\)/);
   assert.match(login, /<ThemeSwitcher\s*\/>/);
-  assert.match(dock, /setThemePreference/);
-  assert.match(dock, /跟随系统/);
   assert.match(switcher, /useThemePreference\(\)/);
   assert.match(switcher, /setThemePreference/);
   assert.match(switcher, /role="menuitemradio"/);

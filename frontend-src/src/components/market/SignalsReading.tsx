@@ -15,6 +15,8 @@ import { MARKET_SIGNAL_HINTS, SCORE_HINTS } from '@/lib/scoreHints';
 import { SkeletonCard } from '@/components/shared/Skeleton';
 import { BusyIcon } from '@/components/shared/IconSwap';
 import Icon from '@/components/icons';
+import { Link } from 'react-router';
+import { routeIntentHandlers } from '@/lib/prefetchRouteChunk';
 import { t } from '../../i18n/core.ts';
 
 export interface TrendBias {
@@ -168,9 +170,21 @@ export default function SignalsReading({
       className="card-surface flex h-full flex-col p-6"
       aria-label={t("市场信号解读")}
     >
-      <div className="flex items-start justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
         <h3 className="text-h3 text-ink-900">{t('市场信号解读')}</h3>
-        <Icon name="flag" size={18} className="text-ink-400" />
+        {/* 原页底联动卡里的突破雷达入口：属于选股组，跨组跳转留在读信号的地方 */}
+        <Link
+          to="/breakouts"
+          {...routeIntentHandlers('/breakouts')}
+          className="group inline-flex min-h-8 items-center gap-1 text-caption font-medium text-brand-600 hover:text-brand-700"
+        >
+          {t('查看突破雷达')}
+          <Icon
+            name="arrow-up-right"
+            size={14}
+            className="transition-transform duration-fast group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+          />
+        </Link>
       </div>
 
       <div className="mt-5 grid flex-1 grid-cols-1 gap-6 lg:grid-cols-2">

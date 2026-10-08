@@ -82,7 +82,7 @@ const SURFACES = [
   ['components/Drawer.tsx', /t-panel-slide/, 't-panel-slide'],
   ['components/CommandPalette.tsx', /['"]t-modal/, 't-modal (command palette)'],
   ['components/catalysts/ConfirmDialog.tsx', /['"]t-modal/, 't-modal (confirm)'],
-  ['components/LanguageSwitcher.tsx', /t-dropdown/, 't-dropdown'],
+  ['components/SettingsMenu.tsx', /t-dropdown/, 't-dropdown'],
   ['components/shared/MenuSelect.tsx', /select-surface/, 'portal select (menu select)'],
   ['components/screener/FilterWorkbench.tsx', /<MenuSelect/, 'MenuSelect (screener)'],
   ['components/detail/OptionsPanel.tsx', /<MenuSelect/, 'MenuSelect (expirations)'],
@@ -209,7 +209,7 @@ test('chrome sources wire documented t-* hooks and drop stacked framer enter/exi
   assert.doesNotMatch(palette, /from 'framer-motion'/);
   const dialog = await source('components/catalysts/ConfirmDialog.tsx');
   assert.doesNotMatch(dialog, /from 'framer-motion'/);
-  const lang = await source('components/LanguageSwitcher.tsx');
+  const lang = await source('components/SettingsMenu.tsx');
   assert.doesNotMatch(lang, /from 'framer-motion'/);
   const method = await source('components/screener/SideCards.tsx');
   assert.doesNotMatch(method, /AnimatePresence/);

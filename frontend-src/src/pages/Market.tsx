@@ -1,15 +1,15 @@
 /**
- * §MKT 美股大盘强弱（/market，从指数 tape ?index= 进入）
+ * §MKT 美股概况（/market，从指数 tape ?index= 进入）
  * B1 指数概览（美股指数与其他市场分组） · B2 市场状态 · B3 形态六维 · B4 宏观环境 · B5 信号解读
  * 除 B1 的其他市场一组外，整页读数都只算美股：纽约时段、SPY 等美股 ETF、美国宏观数据。
- * B7 联动卡
+ * 2026-10-08 第二版导航：行业表现与 CTA 趋势由页头上方的二级标签进入，原 CTA 引导卡与
+ * 底部联动卡（板块透视、突破雷达）只剩跳转作用，已删除；突破雷达入口移到信号解读卡里。
  * 轮询：indices+status 60s / 形态+信号 300s / 宏观 15min（visibility 暂停，usePolling）
  */
 import { useMemo } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { useSearchParams } from 'react-router';
 import { useShell } from '@/hooks/useShell';
 import { marketApi } from '@/api/modules/market';
-import Icon from '@/components/icons';
 import { signalsApi } from '@/api/modules/signals';
 import { marketPulseApi } from '@/components/market/api';
 import { usePolling } from '@/hooks/usePolling';
@@ -23,7 +23,6 @@ import StatusCard from '@/components/market/StatusCard';
 import RegimePanel from '@/components/market/RegimePanel';
 import { regimeMean } from '@/lib/regime';
 import SignalsReading, { type TrendBias } from '@/components/market/SignalsReading';
-import LinkCards from '@/components/market/LinkCards';
 import MacroConditionsPanel from '@/components/market/macro/MacroConditionsPanel';
 import { pageRegionProps } from '@/lib/pageRegion';
 import { t } from '../i18n/core.ts';
@@ -61,7 +60,8 @@ export default function Market() {
     <div>
       {/* B0 页头带 */}
       <PageHeader
-        title={t('美股大盘强弱')}
+        section="market"
+        title={t('美股概况')}
         meta={
           <>
             {session ? (
@@ -138,26 +138,6 @@ export default function Market() {
         <MacroConditionsPanel technicalScore={mean} />
       </section>
 
-      {/* B4.5 CTA 趋势资金：已剥离为独立页 /cta，这里只留紧凑引导卡 */}
-      <section className="mt-8" aria-label={t("CTA 趋势资金")}>
-        {/* 窄屏错位修复：三列 flex 在手机上把标题/眉题挤成竖排。改为可换行，
-            链接在窄屏整行右对齐落到第二行（审计：390px 竖屏标题竖排） */}
-        <Link to="/cta" className="card-surface card-lift group flex flex-wrap items-center gap-x-4 gap-y-2.5 p-5">
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-line bg-brand-50 text-brand-600">
-            <Icon name="wallet-gauge" size={20} />
-          </span>
-          <span className="min-w-0 flex-1 basis-40 text-h3 text-ink-900">{t('CTA 趋势资金')}</span>
-          <span className="ml-auto flex shrink-0 items-center gap-1 text-caption font-medium text-brand-600">
-            {t('查看 CTA 趋势详情')}
-            <Icon
-              name="arrow-up-right"
-              size={16}
-              className="transition-[transform] duration-fast group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
-            />
-          </span>
-        </Link>
-      </section>
-
       {/* B5 信号解读 */}
       <div className="mt-8">
         <SignalsReading
@@ -172,12 +152,6 @@ export default function Market() {
           bias={bias}
         />
       </div>
-
-      {/* B7 联动卡 */}
-      <section className="mt-8" aria-label={t("联动视图")}>
-        <p className="eyebrow mb-3">{t('联动视图')}</p>
-        <LinkCards />
-      </section>
     </div>
   );
 }
