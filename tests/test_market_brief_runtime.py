@@ -117,7 +117,7 @@ def test_request_shape_follows_the_documented_parameters() -> None:
     assert built["model"] == "claude-opus-5-5"
     assert built["max_tokens"] == CONFIG.max_output_tokens
     assert "thinking" not in built and "temperature" not in built
-    assert built["system"][0]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
+    assert built["system"][0]["cache_control"] == {"type": "ephemeral", "ttl": "5m"}
     # 顶层自动缓存固定 5 分钟：1 小时断点在前、5 分钟尾巴在后是允许的顺序，反过来会被拒。
     assert built["cache_control"] == {"type": "ephemeral"}
     assert built["messages"] == [{"role": "user", "content": [{"type": "text", "text": "证据"}]}]

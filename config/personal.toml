@@ -96,8 +96,9 @@ refusal_fallback = false
 # 结构化输出与网页工具并用没有文档背书，默认关（JSON Schema 附在系统提示词里）；
 # 跑通过一次后可改 true 试，被 400 拒绝就改回。
 structured_output = false
-# 系统提示词缓存断点的 TTL（5m / 1h）；顶层自动缓存固定 5 分钟。
-prompt_cache_ttl = "1h"
+# 系统提示词缓存断点的 TTL（5m / 1h）；顶层自动缓存固定 5 分钟。两份研判相隔数小时，
+# 1 小时跨不过去，只有续跑与一小时内重跑能命中，默认 5m。
+prompt_cache_ttl = "5m"
 max_output_tokens = 48000
 # pause_turn 续跑次数上限与整次输出上限。
 max_continuations = 4

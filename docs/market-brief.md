@@ -46,7 +46,7 @@
 | `code_execution_tool` | `false` | 独立代码执行工具，默认关 |
 | `refusal_fallback` | `false` | 模型拒答时的回退，默认关 |
 | `structured_output` | `false` | 用结构化输出约束 JSON。它与网页工具并用没有文档背书（文档写明结构化输出与引用不兼容，网页搜索结果自带引用），所以默认关：JSON Schema 附在系统提示词里，解析与校验流程不变。跑通过一次后可改 `true` 试；若 `provider_request_rejected`（400）就改回 |
-| `prompt_cache_ttl` | `1h` | 系统提示词显式缓存断点的 TTL（`5m` / `1h`）；顶层自动缓存固定 5 分钟 |
+| `prompt_cache_ttl` | `5m` | 系统提示词显式缓存断点的 TTL（`5m` / `1h`）；顶层自动缓存固定 5 分钟。两份研判相隔数小时，只有同一次运行的续跑与一小时内的手动重跑能命中缓存 |
 | `max_output_tokens` / `output_token_ceiling` | `48000` / `160000` | 单次输出上限与整次（含续跑）输出上限，后者不能小于前者 |
 | `max_continuations` | `4` | `pause_turn` 续跑次数上限（0–8） |
 | `request_timeout_seconds` | `1500` | 单次请求超时，不能超过任务的 1800 秒总超时 |
@@ -184,6 +184,7 @@ for task in json.load(sys.stdin)["tasks"]:
 | `idle` + 运行错误码（如 `provider_rate_limited`、`provider_server_error`、`provider_refusal`、`schema_validation_failed`、`evidence_unavailable`） | 模型、供应商或证据不足导致的失败，不影响 Worker 健康；等下一个槽或手动补发 |
 | `degraded` + `market_brief_run_failed` | 程序异常。看 Worker 日志里的 `market brief run failed`；它会让 Worker 整体变成 degraded，部署校验会拒绝，修复后重启 Worker |
 | `degraded` + `runtime_settings_unavailable` | 运行设置文件读不出来，看 `runtime-settings.json` |
+| 续跑过的运行记录里 `usage.cache_read_input_tokens` 为 0 | 缓存前缀在上游被改了（系统提示词里混进了随运行变化的内容，或工具列表不稳定）；对照 `request_meta` 排查 |
 | `./personal.sh secrets validate` 里 `ANTHROPIC_API_KEY` 为 `format_invalid` | 密钥不是 `sk-ant-` 开头，多半粘贴错了位置 |
 | 同上为 `authentication_failed`（401） | Anthropic 拒绝了这把密钥 |
 

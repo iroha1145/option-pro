@@ -327,8 +327,9 @@ class MarketBriefConfig(StrictConfigModel):
     #: 搜索结果自带引用），所以部署默认关：JSON Schema 附在系统提示词里，解析与校验流程
     #: 不变。跑通过一次后可以改成 true 试结构化输出；若被 400 拒绝就改回。
     structured_output: bool = False
-    #: 系统提示词显式缓存断点的 TTL；顶层自动缓存固定 5 分钟。
-    prompt_cache_ttl: Literal["5m", "1h"] = "1h"
+    #: 系统提示词显式缓存断点的 TTL；顶层自动缓存固定 5 分钟。一天两份研判相隔数小时，
+    #: 1 小时的条目跨不过去，只有同一次运行的续跑与一小时内的手动重跑能命中，5 分钟就够。
+    prompt_cache_ttl: Literal["5m", "1h"] = "5m"
     max_output_tokens: int = Field(default=48_000, ge=8_000, le=128_000)
     max_continuations: int = Field(default=4, ge=0, le=8)
     output_token_ceiling: int = Field(default=160_000, ge=8_000, le=1_000_000)

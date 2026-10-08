@@ -57,7 +57,7 @@ class BriefRunConfig:
     refusal_fallback: bool = False
     request_timeout_seconds: float = 1500.0
     evidence_max_bytes: int = 56_000
-    prompt_cache_ttl: str = "1h"
+    prompt_cache_ttl: str = "5m"
     # 结构化输出与网页工具并用没有文档背书（文档写明结构化输出与引用不兼容，而网页搜索结果
     # 自带引用）。若首跑被 400 拒绝，关掉它：请求不带 output_config.format，改由系统提示词
     # 附上 JSON Schema，解析与校验流程不变。
