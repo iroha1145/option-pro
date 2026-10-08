@@ -27,13 +27,16 @@ def settings(path):
     )
 
 
-def create_job(repo):
+_V2_CLAUDE_EARNINGS_DIGEST = "90a0d7b406e0e84af3d618e715fe071404f26fe8a004cfcf5b6450ccd8407e8b"
+
+
+def create_job(repo, *, schema_digest=None, payload=None):
     version, digest = runtime.schema_identity("earnings_impact")
     created, _ = repo.create_job(
-        job_type="earnings_impact", payload={"ticker": "AAPL", "name": "Apple"},
+        job_type="earnings_impact", payload=payload or {"ticker": "AAPL", "name": "Apple"},
         model="claude-haiku-5-5", reasoning="xhigh", execution_mode="background",
         prompt_version=runtime.PROMPT_VERSIONS["earnings_impact"],
-        schema_version=version, schema_sha256=digest, max_queued=10,
+        schema_version=version, schema_sha256=schema_digest or digest, max_queued=10,
     )
     return created["job_id"]
 
@@ -117,7 +120,8 @@ def test_native_tool_json_goes_through_original_business_validation(tmp_path, mo
     asyncio.run(worker.run_once(repo, settings(repo.path), "owner"))
     row = repo.get_job(ident)
     assert len(calls) == 1
-    assert calls[0].params["output_config"]["format"]["type"] == "json_schema"
+    assert calls[0].params["output_config"] == {"effort": "xhigh"}
+    assert "最终回答只输出一个完整JSON对象" in calls[0].params["system"][0]["text"]
     receipt = repo.get_provider_result(ident)
     assert json.loads(receipt["output_text"]) == result
     assert receipt["stop_reason"] == "end_turn"
@@ -201,20 +205,12 @@ def test_active_stream_cancellation_and_timeout_keep_unknown_charge(tmp_path, mo
 @pytest.mark.parametrize("saved_stop_reason", ["end_turn", "tool_use"])
 def test_restart_recovers_paid_receipt_without_network(tmp_path, monkeypatch, saved_stop_reason):
     repo = AIJobRepository(tmp_path / "jobs.db")
-    ident = create_job(repo)
+    ident = create_job(repo, schema_digest=_V2_CLAUDE_EARNINGS_DIGEST)
     repo.claim_due("old-owner", 60)
     repo.mark_submission_started(ident, "old-owner", daily_limit=0)
     saved = runtime.claude_receipt(message())
     saved["stop_reason"] = saved_stop_reason
     repo.record_provider_result(ident, "old-owner", saved)
-    if saved_stop_reason == "tool_use":
-        # A paid receipt under the retired tool protocol must remain recoverable
-        # despite the new request identity. No provider response is reinterpreted.
-        with sqlite3.connect(repo.path) as connection:
-            connection.execute(
-                "UPDATE ai_jobs SET schema_sha256=? WHERE job_id=?",
-                ("a" * 64, ident),
-            )
     with sqlite3.connect(repo.path) as connection:
         connection.execute(
             "UPDATE ai_jobs SET lease_expires_at=? WHERE job_id=?",
@@ -228,6 +224,7 @@ def test_restart_recovers_paid_receipt_without_network(tmp_path, monkeypatch, sa
     asyncio.run(worker.run_once(AIJobRepository(repo.path), settings(repo.path), "new-owner"))
     assert repo.get_job(ident)["status"] == "completed"
     assert repo.get_job(ident)["usage_total_tokens"] == 700
+    assert repo.get_job(ident)["schema_sha256"] == _V2_CLAUDE_EARNINGS_DIGEST
 
 
 def test_publish_storage_failure_keeps_receipt_for_local_retry(tmp_path, monkeypatch):
@@ -303,20 +300,12 @@ def test_paid_claude_schema_recovery_is_local_and_preserves_accounting(tmp_path,
     from app.tools import recover_ai_schema_results
 
     repo = AIJobRepository(tmp_path / "jobs.db")
-    ident = create_job(repo)
+    ident = create_job(repo, schema_digest=_V2_CLAUDE_EARNINGS_DIGEST)
     repo.claim_due("owner", 60)
     repo.mark_submission_started(ident, "owner", daily_limit=0)
     saved = runtime.claude_receipt(message())
     saved["stop_reason"] = saved_stop_reason
     repo.record_provider_result(ident, "owner", saved)
-    if saved_stop_reason == "tool_use":
-        # A paid receipt under the retired tool protocol must remain recoverable
-        # despite the new request identity. No provider response is reinterpreted.
-        with sqlite3.connect(repo.path) as connection:
-            connection.execute(
-                "UPDATE ai_jobs SET schema_sha256=? WHERE job_id=?",
-                ("a" * 64, ident),
-            )
     repo.fail(ident, "owner", "schema_validation_failed")
     charge = repo.get_job(ident)["budget_charge_microusd"]
     monkeypatch.setattr(recover_ai_schema_results, "get_settings", lambda: settings(repo.path))
@@ -472,3 +461,135 @@ def test_configured_claude_slots_stream_together_and_drain_on_cancel(
     else:
         assert sum(row["status"] == "completed" for row in rows) == concurrency
         assert repo.claim_due("later", 60, max_concurrency=concurrency) is not None
+
+
+def test_claude_prompt_json_changes_only_earnings_identity_and_keeps_prepare_policies(tmp_path):
+    # Pinned to the production v2 contract before the provider encoding fix.
+    expected = {
+        ("earnings_impact", "claude-haiku-5-5"): "90a0d7b406e0e84af3d618e715fe071404f26fe8a004cfcf5b6450ccd8407e8b",
+        ("news_impact", "claude-haiku-5-5"): "68b3095ba0f47e559a5a7edd3daf6b091350546961ce398368684143bbb76a4a",
+        ("earnings_impact", "gpt-5.6-terra"): "efcf4a6d24e87c8bfcb8620183338d7ddd927a8df9290b1a8ee7f601a05e9265",
+        ("news_impact", "gpt-5.6-terra"): "d0e6936d8749cc96ed7fa8b3bf07bc64bd4cc1f5fb70d18ec0b0fbe3c35576fe",
+    }
+    for (job_type, model), digest in expected.items():
+        identity = runtime.schema_identity(job_type, model=model)
+        if (job_type, model) == ("earnings_impact", "claude-haiku-5-5"):
+            assert identity[1] != digest
+        else:
+            assert identity[1] == digest
+        assert runtime.schema_identity_current(job_type, runtime.PROMPT_VERSIONS[job_type], *identity, model=model)
+    prepared = runtime.prepare_claude(settings(tmp_path / "jobs.db"), "earnings_impact", {
+        "ticker": "PENG", "name": "PENG", "analysis_stage": "post_release_final",
+        "eps_actual": 1.0, "eps_estimate": 0.7844,
+        "revenue_actual": 566690000.0, "revenue_estimate": 524737643.0,
+    })
+    assert prepared.params["output_config"] == {"effort": "xhigh"}
+    schema = json.loads(prepared.params["system"][0]["text"].split(claude_provider._PROMPT_JSON_INSTRUCTIONS)[1])
+    assert "pattern" not in schema["properties"]["summary"]
+    assert schema["properties"]["output_language"]["enum"] == ["zh-CN"]
+    assert prepared.params["model"] == "claude-haiku-5-5"
+    assert prepared.params["output_config"]["effort"] == "xhigh"
+    assert prepared.params["max_tokens"] == 65536
+    assert prepared.params["thinking"] == {"type": "adaptive"}
+    assert prepared.params["system"][0]["cache_control"] == {"type": "ephemeral", "ttl": "5m"}
+    assert prepared.params["tools"] == runtime.claude_tools_for("earnings_impact", {})
+
+
+def test_completed_v2_earnings_result_remains_public_and_readable_by_report_api(tmp_path, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.api import ai
+
+    repo = AIJobRepository(tmp_path / "jobs.db")
+    payload = {
+        "ticker": "AAPL", "name": "Apple", "analysis_stage": "post_release_final",
+        "earnings_date": "2026-10-08", "year": 2026, "quarter": 4,
+        "report_id": "earnings:AAPL:2026-10-08:2026:q4",
+    }
+    ident = create_job(repo, schema_digest=_V2_CLAUDE_EARNINGS_DIGEST, payload=payload)
+    repo.claim_due("owner", 60)
+    repo.mark_submission_started(ident, "owner", daily_limit=0)
+    receipt = runtime.claude_receipt(message())
+    repo.record_provider_result(ident, "owner", receipt)
+    result = runtime.validate_result("earnings_impact", receipt["output_text"], payload)
+    repo.complete(ident, "owner", result, receipt["usage"])
+    row = repo.get_job(ident)
+    assert row["schema_sha256"] == _V2_CLAUDE_EARNINGS_DIGEST
+    assert repo.public(row)["result"] == result
+    monkeypatch.setattr(ai, "_job_repository", lambda: repo)
+    app = FastAPI()
+    app.include_router(ai.router)
+    with TestClient(app) as client:
+        response = client.get("/api/ai/earnings-impact/AAPL/reports/2026-10-08", params={"year": 2026, "quarter": 4})
+    assert response.status_code == 200
+    assert response.json()["status"] == "completed"
+    assert response.json()["result"] == result
+
+
+def test_unsubmitted_v2_earnings_is_rejected_without_paid_submission(tmp_path, monkeypatch):
+    repo = AIJobRepository(tmp_path / "jobs.db")
+    ident = create_job(repo, schema_digest=_V2_CLAUDE_EARNINGS_DIGEST)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("retired request identity must not start paid work")
+
+    monkeypatch.setattr(repo, "mark_submission_started", forbidden)
+    monkeypatch.setattr(claude_provider, "stream_message", forbidden)
+    asyncio.run(worker.run_once(repo, settings(repo.path), "owner"))
+    row = repo.get_job(ident)
+    assert row["status"] == "failed"
+    assert row["error_code"] == "runtime_configuration_changed"
+    assert row["submission_started_at"] is None
+    assert row["anthropic_message_id"] is None
+    assert (row["budget_charge_microusd"] or 0) == 0
+    assert row["usage_total_tokens"] == 0
+    assert repo.get_provider_result(ident) is None
+
+
+@pytest.mark.parametrize("analysis_stage", ["pre_release", "post_release_final"])
+def test_prompt_json_fixed_cached_prefix_fits_existing_input_and_reservation_bounds(tmp_path, analysis_stage):
+    payload = {"ticker": "PENG", "name": "PENG", "analysis_stage": analysis_stage}
+    prepared = runtime.prepare_claude(settings(tmp_path / "jobs.db"), "earnings_impact", payload)
+    fixed = runtime.prepare_claude(settings(tmp_path / "jobs.db"), "earnings_impact", {"ticker": "NEOG", "name": "NEOG", "analysis_stage": analysis_stage})
+    assert prepared.params["system"] == fixed.params["system"]
+    assert prepared.params["system"][0]["cache_control"] == {"type": "ephemeral", "ttl": "5m"}
+    # UTF-8 prompt/tool bytes bound token counts. Replace the actual bounded
+    # payload with the maximum accepted 60KB, leaving the fixed framing intact.
+    request = runtime.build_runtime_request("earnings_impact", payload)
+    payload_bytes = runtime.untrusted_json_size(payload)
+    fixed_input_bytes = len(request.input_text.encode("utf-8")) - payload_bytes
+    system_bytes = len(prepared.params["system"][0]["text"].encode("utf-8"))
+    tool_bytes = len(json.dumps(prepared.params["tools"], ensure_ascii=False).encode("utf-8"))
+    maximum_input_bytes = system_bytes + fixed_input_bytes + tool_bytes + runtime._MAX_UNTRUSTED_JSON_BYTES
+    bound = runtime.max_input_tokens_for("earnings_impact", model="claude-haiku-5-5")
+    assert maximum_input_bytes < bound
+    assert bound + prepared.params["max_tokens"] < runtime.CLAUDE_TOOL_TOKEN_RESERVATION
+    assert runtime.token_reservation("earnings_impact", model="claude-haiku-5-5") == 1_000_000
+    assert "PENG" not in prepared.params["system"][0]["text"]
+
+
+@pytest.mark.parametrize(("job_type", "payload", "v2_digest"), [
+    ("option_alerts", {"ticker": "AAPL", "alerts": [], "underlying_price": 100},
+     "2817085fe7f12590b30e2b0a5631952dda6ff31216b5a7468ec237af39efcdcd"),
+    ("signal_analysis", {"ticker": "AAPL", "signals": {}, "scores": {}, "as_of": "2026-10-08T00:00:00Z"},
+     "c96f6a0c9cc838df1a72a687983f31526cd0bdfb6155ff3d58e79d287387c18c"),
+    ("news_impact", {"news_id": 1, "change_sequence": 1, "content_hash": "a" * 64, "allowed_tickers": []},
+     "68b3095ba0f47e559a5a7edd3daf6b091350546961ce398368684143bbb76a4a"),
+    ("market_focus", {"cycle_id": "test-cycle", "as_of": "2026-10-08T00:00:00Z", "input_hash": "a" * 64,
+                      "allowed_event_group_ids": [], "allowed_tickers": []},
+     "dd5633bfa3b7683ca6c455b4ca4a4c611dec4d34baa2a8c33ff90ced7805ae8b"),
+])
+def test_other_claude_job_types_keep_native_json_and_v2_identity(tmp_path, job_type, payload, v2_digest):
+    config = settings(tmp_path / "jobs.db")
+    request = runtime.build_runtime_request(job_type, payload)
+    expected = claude_provider.prepare_message(
+        config, instructions=runtime.claude_instructions(request.instructions),
+        input_text=request.input_text, schema=request.schema,
+        max_tokens=runtime.max_output_tokens_for(job_type, model="claude-haiku-5-5"),
+        tools=runtime.claude_tools_for(job_type, payload),
+    )
+    actual = runtime.prepare_claude(config, job_type, payload)
+    assert actual.params == expected.params
+    assert actual.params["output_config"]["format"]["type"] == "json_schema"
+    assert claude_provider._PROMPT_JSON_INSTRUCTIONS not in actual.params["system"][0]["text"]
+    assert runtime.schema_identity(job_type, model="claude-haiku-5-5")[1] == v2_digest

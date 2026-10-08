@@ -27,6 +27,7 @@ def _prepared(**overrides):
         }),
         max_tokens=4096,
         tools=overrides.get("tools"),
+        output_mode=overrides.get("output_mode", "native_json"),
     )
 
 
@@ -592,5 +593,103 @@ def test_claude_schema_identity_tracks_json_protocol_without_changing_openai(mon
     monkeypatch.setattr(runtime.json, "dumps", capture)
     runtime.schema_identity("earnings_impact", model="claude-haiku-5-5")
     runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
-    assert identities[0]["claude_features"]["contract"] == "haiku-native-tools-json-v2"
+    assert identities[0]["claude_features"]["contract"] == "haiku-native-tools-prompt-json-v3"
     assert "claude_features" not in identities[1]
+
+
+def test_output_schema_preserves_const_as_enum_and_leaves_patterns_as_descriptions():
+    schema = {
+        "type": "object", "properties": {
+            "output_language": {"type": "string", "const": "zh-CN"},
+            "items": {"type": "array", "items": {"$ref": "#/$defs/Item"}},
+        }, "required": ["output_language", "items"],
+        "$defs": {"Item": {"type": "object", "properties": {
+            "ticker": {"type": "string", "pattern": r"^[A-Za-z0-9][A-Za-z0-9.\-^]*$", "minLength": 1},
+        }, "required": ["ticker"]}},
+    }
+    original = copy.deepcopy(schema)
+    output = _prepared(schema=schema).params["output_config"]["format"]["schema"]
+    assert output["properties"]["output_language"]["enum"] == ["zh-CN"]
+    assert "const" not in output["properties"]["output_language"]
+    ticker = output["$defs"]["Item"]["properties"]["ticker"]
+    assert "pattern" not in ticker
+    assert "pattern:" in ticker["description"]
+    assert "minLength" not in ticker
+    assert "minLength: 1" in ticker["description"]
+    assert schema == original
+
+
+def test_earnings_provider_schema_describes_chinese_prose_without_regex_grammar():
+    from app.services.ai_jobs import models, runtime
+
+    schema = runtime.build_runtime_request("earnings_impact", {}).schema
+    original = copy.deepcopy(schema)
+    candidate = runtime.claude_output_schema("earnings_impact", schema)
+    output = _prepared(schema=candidate).params["output_config"]["format"]["schema"]
+    item = output["$defs"]["EarningsImpactItem"]["properties"]
+    for field in (output["properties"]["summary"], output["properties"]["expectation"], item["reason"]):
+        assert "pattern" not in field
+        assert "不得使用x" in field["description"]
+        assert "缺少数据" in field["description"]
+        assert "BDC写作业务发展公司" in field["description"]
+    assert "pattern" not in item["name"]
+    assert item["relation"]["enum"] == ["competitor", "supplier", "customer", "etf", "opposing"]
+    assert item["direction"]["enum"] == ["bullish", "bearish", "mixed"]
+    assert output["properties"]["output_language"]["enum"] == ["zh-CN"]
+    assert "pattern" not in item["ticker"]
+    assert "pattern:" in item["ticker"]["description"]
+    for name in ("summary", "expectation"):
+        assert "已发布" in output["properties"][name]["description"]
+        assert "尚未发布" in output["properties"][name]["description"]
+    assert set(runtime._CLAUDE_EARNINGS_ABBREVIATIONS.split("、")) <= models._ALLOWED_EXACT_FOREIGN_SPANS
+    assert "BDC" not in runtime._CLAUDE_EARNINGS_ABBREVIATIONS.split("、")
+    assert schema == original
+    news = runtime.build_runtime_request("news_impact", {}).schema
+    assert runtime.claude_output_schema("news_impact", news) == news
+
+
+@pytest.mark.parametrize(("field", "value"), [
+    ("summary", ""), ("summary", "   "), ("summary", "x"),
+    ("expectation", ""), ("expectation", "x"),
+    ("reason", ""), ("reason", "x"), ("reason", "同为BDC，传导影响有限。"),
+])
+def test_candidate_retains_local_rejection_of_empty_placeholders_and_unapproved_abbreviations(field, value):
+    from pydantic import ValidationError
+    from app.services.ai_jobs.models import validate_result
+
+    result = {
+        "output_language": "zh-CN", "ticker": "PENG", "summary": "营收高于预期。",
+        "expectation": "每股收益高于预期。", "impacted": [{
+            "ticker": "QCOM", "name": "高通", "relation": "supplier",
+            "direction": "mixed", "reason": "公开业务关系可能形成传导。",
+        }],
+    }
+    if field == "reason":
+        result["impacted"][0][field] = value
+    else:
+        result[field] = value
+    with pytest.raises(ValidationError):
+        validate_result("earnings_impact", json.dumps(result, ensure_ascii=False), {"ticker": "PENG"})
+
+
+@pytest.mark.parametrize("tools", [None, _tools()])
+def test_prompt_json_params_exactly_match_successful_control_request(tools):
+    native = _prepared(tools=tools)
+    expected = copy.deepcopy(native.params)
+    output_format = expected["output_config"].pop("format")
+    expected["system"][0]["text"] += (
+        '\n最终回答只输出一个完整JSON对象，不输出Markdown代码块、前言、解释或引用标记。'
+        '全部工具完成后才输出最终JSON，不要提前输出中间分析。'
+        '必须遵守下列结构定义并填写真正的分析内容，禁止空白和占位符：\n'
+    ) + json.dumps(output_format["schema"], ensure_ascii=False, separators=(",", ":"))
+    prepared = _prepared(tools=tools, output_mode="prompt_json")
+    assert prepared.params == expected
+    assert prepared.params["output_config"] == {"effort": "xhigh"}
+    assert prepared.params["system"][0]["cache_control"] == {"type": "ephemeral", "ttl": "5m"}
+    assert "Private task input" not in prepared.params["system"][0]["text"]
+    assert native.params["output_config"]["format"]["type"] == "json_schema"
+
+
+def test_unknown_output_mode_is_rejected_before_provider_submission():
+    with pytest.raises(ValueError, match="provider_output_mode_invalid"):
+        _prepared(output_mode="unknown")
