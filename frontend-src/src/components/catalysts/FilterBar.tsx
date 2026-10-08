@@ -1,8 +1,13 @@
-/** 过滤器条：ticker / window_hours / classification / analysis_status / min_confidence / min_abs_impact / multi_source_only */
-import { useState, type CSSProperties } from 'react';
+/**
+ * 过滤器条：ticker / window_hours / classification / analysis_status / min_confidence / min_abs_impact / multi_source_only
+ * 常显：股票代码、时间范围、清空条件、条数。
+ * 更多筛选：影响方向、分析状态、置信度门槛、影响分门槛、多处报道；折叠时已选条件仍以徽标列出。
+ */
+import { useId, useState, type CSSProperties } from 'react';
 import { motion } from 'framer-motion';
 import Segmented from '@/components/shared/Segmented';
 import MenuSelect from '@/components/shared/MenuSelect';
+import SoftBadge from '@/components/shared/SoftBadge';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
 import Switch from '@/components/shared/Switch';
@@ -22,6 +27,12 @@ const STATUS_OPTIONS: { value: '' | NewsAnalysisStatus; label: string }[] = [
   { value: 'insufficient_context', label: t('信息不足') },
   { value: 'failed', label: t('分析失败') },
 ];
+
+const CLASSIFICATION_LABEL: Record<NewsClassification, string> = {
+  bullish: t('利多'),
+  bearish: t('利空'),
+  neutral: t('中性'),
+};
 
 function StatusDropdown({ value, onChange }: { value: '' | NewsAnalysisStatus; onChange: (v: '' | NewsAnalysisStatus) => void }) {
   return (
@@ -85,141 +96,151 @@ interface FilterBarProps {
 }
 
 export default function FilterBar({ filters, onChange, total, filtered }: FilterBarProps) {
-  const [mobileOpen, setMobileOpen] = useState(false);
+  /* 展开区的控件只在打开时挂载：分段控件的滑块在隐藏容器里量不到尺寸。 */
+  const [moreOpen, setMoreOpen] = useState(false);
+  const morePanelId = useId();
   const set = (patch: Partial<CatalystFilters>) => onChange({ ...filters, ...patch });
+
+  /* 收进「更多筛选」的条件：折叠后仍列出来，读者不会忘了还有条件在生效。 */
+  const moreSummary = [
+    filters.classification ? CLASSIFICATION_LABEL[filters.classification] : null,
+    filters.analysisStatus ? STATUS_OPTIONS.find((o) => o.value === filters.analysisStatus)?.label ?? filters.analysisStatus : null,
+    filters.minConfidence > 0 ? `${t('置信度 ≥')} ${Math.round(filters.minConfidence * 100)}%` : null,
+    filters.minAbsImpact > 0 ? `${t('影响分 ≥')} ${filters.minAbsImpact.toFixed(1)}` : null,
+    filters.multiSourceOnly ? t('多处报道') : null,
+  ].filter((label): label is string => label !== null);
 
   const activeCount =
     (filters.ticker ? 1 : 0) +
-    (filters.classification ? 1 : 0) +
-    (filters.analysisStatus ? 1 : 0) +
-    (filters.minConfidence > 0 ? 1 : 0) +
-    (filters.minAbsImpact > 0 ? 1 : 0) +
-    (filters.multiSourceOnly ? 1 : 0) +
+    moreSummary.length +
     (filters.themeId ? 1 : 0) +
     (filters.windowHours !== DEFAULT_FILTERS.windowHours ? 1 : 0);
 
-  const controls = (
-    <>
-      {/* ticker 过滤 */}
-      <div className="flex items-center gap-1.5">
-        <div className="relative">
-          <Icon name="search" size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input
-            value={filters.ticker}
-            onChange={(e) => set({ ticker: e.target.value.toUpperCase().replace(/[^A-Z0-9.^-]/g, '').slice(0, 12) })}
-            placeholder={t("代码过滤")}
-            className="h-8 w-28 rounded-md border border-line bg-card pl-7 pr-2 tnum text-caption text-ink-800 placeholder:text-ink-400 focus:border-brand-400 focus:outline-none"
-            aria-label={t("按代码过滤")}
-          />
-        </div>
-        {filters.ticker && (
-          <button onClick={() => set({ ticker: '' })} className="rounded-sm p-1 text-ink-400 hover:text-ink-600" aria-label={t("清除代码过滤")}>
-            <Icon name="x" size={12} />
-          </button>
-        )}
-      </div>
-
-      <Segmented
-        options={[
-          { value: '6', label: t('6 时') },
-          { value: '24', label: t('24 时') },
-          { value: '72', label: t('3 天') },
-          { value: '168', label: t('7 天') },
-        ]}
-        value={String(filters.windowHours)}
-        onChange={(v) => set({ windowHours: Number(v) })}
-        onOptionIntent={(v) => {
-          if (v === '24' && filters.windowHours !== 24) prefetchDefaultFeed(24, filters);
-        }}
-      />
-
-      <Segmented
-        options={[
-          { value: '', label: t('全部') },
-          { value: 'bullish', label: t('利多') },
-          { value: 'bearish', label: t('利空') },
-          { value: 'neutral', label: t('中性') },
-        ]}
-        value={filters.classification}
-        onChange={(v) => set({ classification: v as '' | NewsClassification })}
-      />
-
-      <StatusDropdown value={filters.analysisStatus} onChange={(v) => set({ analysisStatus: v })} />
-
-      <LabeledSlider
-        label={t("置信度 ≥")}
-        value={Math.round(filters.minConfidence * 100)}
-        min={0}
-        max={90}
-        step={5}
-        format={(v) => (v > 0 ? `${v}%` : t('不限'))}
-        onChange={(v) => set({ minConfidence: v / 100 })}
-      />
-
-      <LabeledSlider
-        label={t("影响分 ≥")}
-        value={filters.minAbsImpact}
-        min={0}
-        max={5}
-        step={0.5}
-        format={(v) => (v > 0 ? v.toFixed(1) : t('不限'))}
-        onChange={(v) => set({ minAbsImpact: v })}
-      />
-
-      {/* 多源确认开关 */}
-      <label className="flex cursor-pointer items-center gap-2">
-        <Switch
-          checked={filters.multiSourceOnly}
-          onToggle={() => set({ multiSourceOnly: !filters.multiSourceOnly })}
-        />
-        <span className={cn('whitespace-nowrap text-micro', filters.multiSourceOnly ? 'text-ink-800' : 'text-ink-400')}>{t('多源确认')}</span>
-      </label>
-
-      {activeCount > 0 && (
-        <button
-          onClick={() => onChange({ ...DEFAULT_FILTERS })}
-          className="flex items-center gap-1 rounded-md border border-line bg-card px-2 py-1.5 text-micro text-ink-500 shadow-btn transition-colors duration-fast hover:border-down-600/40 hover:text-down-700"
-        >
-          <Icon name="x" size={11} />
-          {t('清除过滤')}
-        </button>
-      )}
-    </>
-  );
-
   return (
     <div className="mt-5">
-      {/* 移动：筛选折叠钮 */}
-      <div className="flex items-center justify-between md:hidden">
-        <button
-          onClick={() => {
-            const next = !mobileOpen;
-            /* 副作用放在 updater 之外：StrictMode 会把 updater 调两次。 */
-            if (next && filters.windowHours !== 24) prefetchDefaultFeed(24, filters);
-            setMobileOpen(next);
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5" data-testid="catalyst-filter-row">
+        {/* ticker 过滤 */}
+        <div className="flex items-center gap-1.5">
+          <div className="relative">
+            <Icon name="search" size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
+            <input
+              value={filters.ticker}
+              onChange={(e) => set({ ticker: e.target.value.toUpperCase().replace(/[^A-Z0-9.^-]/g, '').slice(0, 12) })}
+              placeholder={t("股票代码")}
+              className="h-8 w-28 rounded-md border border-line bg-card pl-7 pr-2 tnum text-caption text-ink-800 placeholder:text-ink-400 focus:border-brand-400 focus:outline-none"
+              aria-label={t("按股票代码筛选")}
+            />
+          </div>
+          {filters.ticker && (
+            <button onClick={() => set({ ticker: '' })} className="rounded-sm p-1 text-ink-400 hover:text-ink-600" aria-label={t("取消股票代码筛选")}>
+              <Icon name="x" size={12} />
+            </button>
+          )}
+        </div>
+
+        <Segmented
+          options={[
+            { value: '6', label: t('6 时') },
+            { value: '24', label: t('24 时') },
+            { value: '72', label: t('3 天') },
+            { value: '168', label: t('7 天') },
+          ]}
+          value={String(filters.windowHours)}
+          onChange={(v) => set({ windowHours: Number(v) })}
+          onOptionIntent={(v) => {
+            if (v === '24' && filters.windowHours !== 24) prefetchDefaultFeed(24, filters);
           }}
-          aria-expanded={mobileOpen}
+        />
+
+        {/* 清空条件与条数常显，不随展开区收起 */}
+        <div className="ml-auto flex items-center gap-3">
+          {activeCount > 0 && (
+            <button
+              onClick={() => onChange({ ...DEFAULT_FILTERS })}
+              className="touch-target flex items-center gap-1 rounded-md border border-line bg-card px-2 py-1.5 text-micro text-ink-500 shadow-btn transition-colors duration-fast hover:border-down-600/40 hover:text-down-700"
+            >
+              <Icon name="x" size={11} />
+              {t('清空条件')}
+            </button>
+          )}
+          <CountNote total={total} filtered={filtered} />
+        </div>
+      </div>
+
+      {/* 更多筛选：收起时已选条件以徽标列出 */}
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <button
+          type="button"
+          onClick={() => setMoreOpen((open) => !open)}
+          aria-expanded={moreOpen}
+          aria-controls={morePanelId}
           className={cn(
-            'flex items-center gap-2 rounded-md border px-3 py-2 text-caption font-medium shadow-btn transition-colors duration-fast',
-            activeCount > 0 ? 'border-brand-400 bg-brand-50 text-brand-700' : 'border-line bg-card text-ink-600',
+            'disclosure-trigger flex items-center gap-2 rounded-md border px-3 py-1.5 text-caption font-medium shadow-btn transition-colors duration-fast',
+            moreSummary.length > 0 ? 'border-brand-400 bg-brand-50 text-brand-700' : 'border-line bg-card text-ink-600',
           )}
         >
           <Icon name="filter-funnel" size={14} />
-          {t('筛选')}{activeCount > 0 ? ` · ${activeCount}` : ''}
-          <Icon name="chevron-down" size={12} className={cn('transition-transform duration-fast', mobileOpen && 'rotate-180')} />
+          {t('更多筛选')}
+          <Icon name="chevron-down" size={12} className={cn('transition-transform duration-fast', moreOpen && 'rotate-180')} />
         </button>
-        <CountNote total={total} filtered={filtered} />
+        {moreSummary.length > 0 && (
+          <span className="flex min-w-0 flex-wrap items-center gap-1.5" data-testid="catalyst-more-filters-summary">
+            {moreSummary.map((label) => (
+              <SoftBadge key={label}>{label}</SoftBadge>
+            ))}
+          </span>
+        )}
       </div>
 
-      {/* 过滤面板 */}
-      <div className={cn('mt-3 md:mt-0', mobileOpen ? 'block' : 'hidden md:block')}>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 rounded-lg border border-line bg-card-warm/70 px-3.5 py-3 md:rounded-none md:border-0 md:bg-transparent md:px-0 md:py-0">
-          {controls}
-          <div className="ml-auto hidden items-center gap-3 md:flex">
-            <CountNote total={total} filtered={filtered} />
-          </div>
+      {moreOpen && (
+        <div
+          id={morePanelId}
+          className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-lg border border-line bg-card-warm/70 px-3.5 py-3"
+        >
+          <Segmented
+            ariaLabel={t('影响方向')}
+            options={[
+              { value: '', label: t('全部') },
+              { value: 'bullish', label: t('利多') },
+              { value: 'bearish', label: t('利空') },
+              { value: 'neutral', label: t('中性') },
+            ]}
+            value={filters.classification}
+            onChange={(v) => set({ classification: v as '' | NewsClassification })}
+          />
+
+          <StatusDropdown value={filters.analysisStatus} onChange={(v) => set({ analysisStatus: v })} />
+
+          <LabeledSlider
+            label={t("置信度 ≥")}
+            value={Math.round(filters.minConfidence * 100)}
+            min={0}
+            max={90}
+            step={5}
+            format={(v) => (v > 0 ? `${v}%` : t('不限'))}
+            onChange={(v) => set({ minConfidence: v / 100 })}
+          />
+
+          <LabeledSlider
+            label={t("影响分 ≥")}
+            value={filters.minAbsImpact}
+            min={0}
+            max={5}
+            step={0.5}
+            format={(v) => (v > 0 ? v.toFixed(1) : t('不限'))}
+            onChange={(v) => set({ minAbsImpact: v })}
+          />
+
+          {/* 多处报道开关 */}
+          <label className="flex cursor-pointer items-center gap-2">
+            <Switch
+              checked={filters.multiSourceOnly}
+              onToggle={() => set({ multiSourceOnly: !filters.multiSourceOnly })}
+            />
+            <span className={cn('whitespace-nowrap text-micro', filters.multiSourceOnly ? 'text-ink-800' : 'text-ink-400')}>{t('多处报道')}</span>
+          </label>
         </div>
-      </div>
+      )}
 
       {/* 激活的主题过滤 chip（热点带带入） */}
       {filters.themeId && (
@@ -232,7 +253,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
           <button
             type="button"
             onClick={() => set({ themeId: null })}
-            aria-label={t('清除主题过滤')}
+            aria-label={t('取消主题筛选')}
             className="control-button"
           >
             <Icon name="flame-line" size={12} />
@@ -249,7 +270,7 @@ function CountNote({ total, filtered }: { total: number | null; filtered: boolea
   return (
     <p className="text-micro text-ink-400 tnum">
       {total === null ? '—' : t('{n} 条', { n: total })}
-      {filtered && total !== null && <span className="text-ink-400"> {t('· 已过滤')}</span>}
+      {filtered && total !== null && <span className="text-ink-400"> {t('· 已筛选')}</span>}
     </p>
   );
 }

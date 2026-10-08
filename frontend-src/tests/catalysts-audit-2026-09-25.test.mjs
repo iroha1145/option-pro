@@ -405,7 +405,7 @@ test('FE-1 新提交的任务：状态从排队变进行中后仍继续轮询到
   });
   h.render({ newsId: '9600' });
   await settle();
-  await confirm(h, '生成 AI 分析', '生成分析');
+  await confirm(h, '生成分析', '生成分析');
   assert.equal(h.calls.post.length, 1);
   await h.clock.advance(2_000);
   await h.clock.advance(3_000);
@@ -433,7 +433,7 @@ test('FE-1 截止时间按本次轮询计：关抽屉超过 5 分钟后重开，
   await settle();
   await h.clock.advance(2_000);
   assert.ok(h.jobReads() >= before + 2, '重开后恢复读取与下一拍轮询都要发生');
-  assert.doesNotMatch(textOf(h.tree()), /自动查询已暂停/);
+  assert.doesNotMatch(textOf(h.tree()), /查询已暂停/);
   h.unmount();
 });
 
@@ -456,7 +456,7 @@ test('1-C 页面隐藏时暂停轮询、不计入 5 分钟，回到前台立即�
   doc.dispatch('visibilitychange');
   await settle();
   assert.equal(h.jobReads(), before + 1, '回到前台立即补查');
-  assert.doesNotMatch(textOf(h.tree()), /自动查询已暂停/, '隐藏时间不消耗自动查询额度');
+  assert.doesNotMatch(textOf(h.tree()), /查询已暂停/, '隐藏时间不消耗自动查询额度');
   h.unmount();
   assert.equal(doc.count('visibilitychange'), 0, '卸载后不留监听');
 });
@@ -509,7 +509,7 @@ test('FE-3 失败按错误码给文案：提示不露原始码，失败原因不
   const text = textOf(h.tree());
   assert.match(text, /模型服务余额不足，充值后可重试/);
   assert.doesNotMatch(text, /分析结果未通过检查/);
-  assert.ok(findButton(h.tree(), '重试分析（强制）'));
+  assert.ok(findButton(h.tree(), '重试分析'));
   h.unmount();
 });
 
@@ -550,8 +550,8 @@ test('FE-3 budget_blocked 在条目层与任务层同一口径：失败带原因
   h.render({ newsId: '9600' });
   await settle();
   assert.match(textOf(h.tree()), /今天的 AI 用量已用完，这次没有执行分析/);
-  assert.ok(findButton(h.tree(), '重试分析（强制）'));
-  assert.equal(findButton(h.tree(), '生成 AI 分析'), null, '不带 force 只会拿回同一条受限任务');
+  assert.ok(findButton(h.tree(), '重试分析'));
+  assert.equal(findButton(h.tree(), '生成分析'), null, '不带 force 只会拿回同一条受限任务');
   h.unmount();
 });
 
@@ -582,7 +582,7 @@ test('1-B 提交响应回来时抽屉已换到别的新闻：结果只回写列�
   });
   h.render({ newsId: '9600' });
   await settle();
-  await confirm(h, '生成 AI 分析', '生成分析');
+  await confirm(h, '生成分析', '生成分析');
   h.render({ newsId: '9601' });
   await settle();
   const newsReadsBefore = h.newsReads();
@@ -612,7 +612,7 @@ test('1-B 取消响应回来时已换到别的新闻：不写进新新闻', asyn
   });
   h.render({ newsId: '9600' });
   await settle();
-  await confirm(h, '取消任务', '取消任务');
+  await confirm(h, '取消分析', '取消分析');
   h.render({ newsId: '9601' });
   await settle();
   cancelled.resolve(aiJob({ status: 'cancelled', cancellable: false }));
@@ -634,7 +634,7 @@ test('1-E 排队中的任务当场取消：芯片、列表与提示一致，并�
   h.render({ newsId: '9600' });
   await settle();
   assert.equal(chipOf(h.tree()), 'queued');
-  await confirm(h, '取消任务', '取消任务');
+  await confirm(h, '取消分析', '取消分析');
   const tree = h.tree();
   const text = textOf(tree);
   assert.match(text, /已取消/);
@@ -642,8 +642,8 @@ test('1-E 排队中的任务当场取消：芯片、列表与提示一致，并�
   assert.equal(chipOf(tree), null, '不再显示「排队中」芯片');
   assert.doesNotMatch(text, /任务排队中|模型分析中/);
   assert.equal(h.updates.at(-1).analysisStatus, 'pending');
-  assert.ok(findButton(tree, '重试分析（强制）'));
-  assert.equal(findButton(tree, '生成 AI 分析'), null);
+  assert.ok(findButton(tree, '重试分析'));
+  assert.equal(findButton(tree, '生成分析'), null);
   h.unmount();
 });
 
@@ -661,10 +661,10 @@ test('1-E 运行中的任务请求取消：显示「取消中」，不再给取�
   });
   h.render({ newsId: '9600' });
   await settle();
-  await confirm(h, '取消任务', '取消任务');
+  await confirm(h, '取消分析', '取消分析');
   const tree = h.tree();
   assert.match(textOf(tree), /取消中/);
-  assert.equal(findButton(tree, '取消任务'), null);
+  assert.equal(findButton(tree, '取消分析'), null);
   const stepper = findNode(tree, (node) => typeof node.type === 'function' && node.type.name === 'JobStepper');
   assert.match(textOf(stepper.type(stepper.props)), /已请求取消，等待服务端确认/);
   assert.ok(h.toasts.some((row) => row[1] === '已请求取消'));
@@ -754,9 +754,9 @@ test('原因码文案：审计点名的码都有可读说法，未知码与排�
   assert.equal(analysisErrorText.analysisFailureReason('global_concurrency_limit'), null);
   assert.equal(analysisErrorText.newsAnalysisFailureText('some_new_code'), '这次分析没有完成，可以重试');
   assert.equal(analysisErrorText.newsAnalysisFailureText(null), '这次分析没有完成，可以重试');
-  assert.deepEqual(analysisErrorText.focusCycleOutcome('cancelled', 'x'), { title: '焦点周期已取消', reason: '可以重新触发计算' });
-  assert.equal(analysisErrorText.focusCycleOutcome('budget_blocked', null).title, '焦点周期没有执行');
-  assert.equal(analysisErrorText.focusCycleOutcome('failed', 'focus_prepare_expired').reason, '热点准备已过期，请重新计算');
+  assert.deepEqual(analysisErrorText.focusCycleOutcome('cancelled', 'x'), { title: '热点分析已取消', reason: '可以重新分析' });
+  assert.equal(analysisErrorText.focusCycleOutcome('budget_blocked', null).title, '热点分析没有执行');
+  assert.equal(analysisErrorText.focusCycleOutcome('failed', 'focus_prepare_expired').reason, '热点准备已过期，请重新分析');
 });
 
 /* ---------------- 焦点周期卡（真实 usePolling + remoteState） ---------------- */
@@ -851,7 +851,7 @@ function focusHarness({ latest, previous, trigger, poll }) {
 }
 
 function triggerButton(tree) {
-  return findNode(tree, (node) => node.type === 'button' && /触发新周期|重试焦点周期|周期计算中/.test(textOf(node)));
+  return findNode(tree, (node) => node.type === 'button' && /更新热点|重试分析|热点分析中/.test(textOf(node)));
 }
 
 async function startFocus(h) {
@@ -885,14 +885,14 @@ test('FE-6 焦点周期状态读取失败按退避重试，不停表清任务，
   assert.ok(triggerButton(h.tree()).props.disabled, '任务仍在跟踪，按钮不可点');
   await h.clock.advance(5_000);
   assert.equal(h.calls.poll.length, 2);
-  assert.match(textOf(h.tree()), /焦点周期状态暂时读不到，正在重试/);
+  assert.match(textOf(h.tree()), /热点分析状态暂时读不到，正在重试/);
   await h.clock.advance(9_999);
   assert.equal(h.calls.poll.length, 2, '第二次失败后退避到 10 秒');
   await h.clock.advance(1);
   assert.equal(h.calls.poll.length, 3);
   assert.doesNotMatch(textOf(h.tree()), /暂时读不到/);
   await h.clock.advance(2_000);
-  assert.ok(h.toasts.some((row) => row[0] === 'success' && row[1] === '新焦点周期已生成'));
+  assert.ok(h.toasts.some((row) => row[0] === 'success' && row[1] === '新一轮热点分析已生成'));
   h.unmount();
 });
 
@@ -908,7 +908,7 @@ test('FE-6 页面加载时已有周期在跑：低频跟踪 latest、禁用触�
   await settle();
   const button = triggerButton(h.tree());
   assert.ok(button.props.disabled);
-  assert.match(textOf(button), /周期计算中/);
+  assert.match(textOf(button), /热点分析中/);
   const latestReads = h.calls.latest;
   const previousReads = h.calls.previous;
   await h.clock.advance(15_000);
@@ -925,9 +925,9 @@ test('FE-6 页面加载时已有周期在跑：低频跟踪 latest、禁用触�
 
 test('FE-5 焦点周期终态按原因提示：预算受限与取消不再一律「计算失败」', async () => {
   for (const [final, kind, title, reason] of [
-    [focusJob({ status: 'budget_blocked', errorCode: 'daily_token_limit_reached' }), 'error', '焦点周期没有执行', '今天的 AI 用量已用完，这次没有执行分析'],
-    [focusJob({ status: 'cancelled' }), 'info', '焦点周期已取消', '可以重新触发计算'],
-    [focusJob({ status: 'failed', errorCode: 'market_focus_payload_mismatch' }), 'error', '焦点周期计算失败', '热点数据已更新，请重新计算'],
+    [focusJob({ status: 'budget_blocked', errorCode: 'daily_token_limit_reached' }), 'error', '热点分析没有执行', '今天的 AI 用量已用完，这次没有执行分析'],
+    [focusJob({ status: 'cancelled' }), 'info', '热点分析已取消', '可以重新分析'],
+    [focusJob({ status: 'failed', errorCode: 'market_focus_payload_mismatch' }), 'error', '热点分析失败', '热点数据已更新，请重新分析'],
   ]) {
     const h = focusHarness({ latest: () => cycle(), trigger: () => focusJob(), poll: () => final });
     h.mount();
@@ -951,7 +951,7 @@ test('FE-5 徽标与说明：预算受限显示中文，失败尝试写明原因
   assert.match(text, /额度已用完/);
   assert.match(text, /今天的 AI 用量已用完，这次没有执行分析/);
   assert.doesNotMatch(text, /budget_blocked/);
-  assert.match(textOf(triggerButton(h.tree())), /重试焦点周期/);
+  assert.match(textOf(triggerButton(h.tree())), /重试分析/);
   h.unmount();
 
   const h2 = focusHarness({
@@ -981,7 +981,7 @@ test('FE-7 刷新失败保留旧数据并给出说明与重试；没有旧数据
   let text = textOf(h.tree());
   assert.match(text, /主导事件/, '旧数据继续显示');
   assert.match(text, /最新状态读取失败，显示上次结果/);
-  assert.doesNotMatch(text, /暂无焦点周期数据/);
+  assert.doesNotMatch(text, /暂无热点分析/);
   const retry = findButton(h.tree(), '重试');
   assert.ok(retry);
   fail = false;
@@ -996,8 +996,8 @@ test('FE-7 刷新失败保留旧数据并给出说明与重试；没有旧数据
   h2.mount();
   await settle();
   text = textOf(h2.tree());
-  assert.match(text, /焦点周期暂时读不到，可以稍后重试/);
-  assert.doesNotMatch(text, /暂无焦点周期数据/);
+  assert.match(text, /热点分析暂时读不到，可以稍后重试/);
+  assert.doesNotMatch(text, /暂无热点分析/);
   assert.ok(findButton(h2.tree(), '重试'));
   h2.unmount();
 });
@@ -1023,40 +1023,48 @@ test('3-E 焦点卡的兜底与收尾定时器随卸载清理', async () => {
 
 /* ---------------- 页面：刷新只清一次缓存、补丁带时间戳 ---------------- */
 
-test('2-E 页面刷新：写操作已清缓存时不再清第二次；页头刷新照常清', async () => {
+/* 页面沙箱：所有子组件桩成元素类型字符串，地址参数、身份和写地址的回调都可注入。 */
+function pageHarness({ search = '', owner = false, accessLoading = false } = {}) {
   const runner = createReactStub();
   runner.React.useOptimistic = (value) => [value, () => {}];
   runner.React.startTransition = (fn) => fn();
-  let clears = 0;
+  const counts = { clears: 0 };
+  const urlWrites = [];
   const components = Object.fromEntries([
     '@/components/shared/PageHeader', '@/components/shared/Segmented', '@/components/icons',
     '@/components/catalysts/StatusHero', '@/components/catalysts/AnalysisProgressCard', '@/components/catalysts/HotspotsStrip',
-    '@/components/catalysts/FocusCycleCard', '@/components/catalysts/ManagePanel', '@/components/catalysts/FilterBar',
-    '@/components/catalysts/FeedPanel', '@/components/catalysts/StocksPanel', '@/components/catalysts/CalendarPanel',
-    '@/components/catalysts/SourcesPanel', '@/components/catalysts/NewsDrawer',
+    '@/components/catalysts/FocusCycleCard', '@/components/catalysts/ManagePanel', '@/components/catalysts/MoreMenu',
+    '@/components/catalysts/FilterBar', '@/components/catalysts/FeedPanel', '@/components/catalysts/StocksPanel',
+    '@/components/catalysts/CalendarPanel', '@/components/catalysts/SourcesPanel', '@/components/catalysts/NewsDrawer',
   ].map((id) => [id, { default: id.split('/').pop() }]));
   const clock = fakeClock();
   const Page = compile('pages/Catalysts.tsx', {
     react: runner.React,
     'react/jsx-runtime': passthroughJsx,
-    'react-router': { useSearchParams: () => [new URLSearchParams(''), () => {}] },
+    'react-router': { useSearchParams: () => [new URLSearchParams(search), (next) => { urlWrites.push(String(next)); }] },
+    '@/hooks/useAccess': { useAccess: () => ({ isOwner: owner, loading: accessLoading }) },
     ...components,
     '@/lib/aiModelLabel': aiModelLabels,
     '@/lib/format': { fmtTimeHHMMSS: () => 't' },
     '@/components/catalysts/filters': filters,
-    '@/components/catalysts/api': { clearCatalystReadCache: () => { clears += 1; } },
+    '@/components/catalysts/api': { clearCatalystReadCache: () => { counts.clears += 1; } },
     '@/components/catalysts/feedPatches': feedPatches,
     '../i18n/core.ts': i18n,
   }, { window: { setTimeout: clock.api.setTimeout, clearTimeout: clock.api.clearTimeout }, Date: clock.Date }).default;
   const read = runner.mount(() => Page());
+  return { runner, read, clock, counts, urlWrites };
+}
+
+test('2-E 页面刷新：写操作已清缓存时不再清第二次；页头刷新照常清', async () => {
+  const { runner, read, clock, counts } = pageHarness();
   const focus = findNode(read(), (node) => node.type === 'FocusCycleCard');
   focus.props.onDataRefreshed({ cacheCleared: true });
-  assert.equal(clears, 0);
+  assert.equal(counts.clears, 0);
   assert.equal(findNode(read(), (node) => node.type === 'FocusCycleCard').props.refreshToken, 1, '页面各区仍重新读取');
   findNode(read(), (node) => node.type === 'FocusCycleCard').props.onDataRefreshed();
-  assert.equal(clears, 1);
+  assert.equal(counts.clears, 1);
   findNode(read(), (node) => node.type === 'button' && /刷新/.test(textOf(node))).props.onClick({ type: 'click' });
-  assert.equal(clears, 2);
+  assert.equal(counts.clears, 2);
 
   const drawer = findNode(read(), (node) => node.type === 'NewsDrawer');
   drawer.props.onUpdate({ newsId: '1', analysisStatus: 'queued' });
@@ -1064,6 +1072,64 @@ test('2-E 页面刷新：写操作已清缓存时不再清第二次；页头刷�
   assert.equal(patches['1'].item.newsId, '1');
   assert.equal(patches['1'].at, clock.now(), '补丁记下回写时刻');
   runner.unmount();
+});
+
+/* ---------------- 页面：栏目只留三项，其余收进「更多」菜单 ---------------- */
+
+const viewTabs = (tree) => findNode(tree, (node) => node.type === 'Segmented' && node.props.ariaLabel === '新闻栏目');
+const panelTypes = (tree) => ['FeedPanel', 'StocksPanel', 'CalendarPanel', 'SourcesPanel', 'ManagePanel', 'FilterBar']
+  .filter((type) => findNode(tree, (node) => node.type === type));
+
+test('栏目分段只留新闻列表、股票影响、经济日历；消息来源经「更多」菜单进入并写入地址', () => {
+  const h = pageHarness();
+  const tree = h.read();
+  const tabs = viewTabs(tree);
+  assert.deepEqual(Array.from(tabs.props.options, (option) => option.label), ['新闻列表', '股票影响', '经济日历']);
+  assert.equal(tabs.props.value, 'feed');
+  assert.deepEqual(panelTypes(tree), ['FeedPanel', 'FilterBar']);
+  const more = findNode(tree, (node) => node.type === 'MoreMenu');
+  assert.equal(more.props.current, null);
+  assert.equal(more.props.showManage, false, '访客没有管理设置');
+  more.props.onSelect('sources');
+  assert.equal(h.urlWrites.at(-1), 'tab=sources');
+  viewTabs(h.read()).props.onChange('calendar');
+  assert.equal(h.urlWrites.at(-1), 'tab=calendar');
+  h.runner.unmount();
+});
+
+test('?tab=sources 仍能直接打开来源面板：筛选条隐藏，「更多」菜单标出当前项', () => {
+  const h = pageHarness({ search: 'tab=sources' });
+  const tree = h.read();
+  assert.deepEqual(panelTypes(tree), ['SourcesPanel']);
+  assert.equal(findNode(tree, (node) => node.type === 'MoreMenu').props.current, 'sources');
+  assert.equal(viewTabs(tree).props.value, 'sources', '分段控件里没有对应项，不会误亮别的栏目');
+  h.runner.unmount();
+});
+
+test('管理设置是所有者的栏目：?tab=manage 对所有者直接打开，对其他人退回新闻列表', () => {
+  const owner = pageHarness({ search: 'tab=manage', owner: true });
+  let tree = owner.read();
+  assert.deepEqual(panelTypes(tree), ['ManagePanel']);
+  const more = findNode(tree, (node) => node.type === 'MoreMenu');
+  assert.equal(more.props.current, 'manage');
+  assert.equal(more.props.showManage, true);
+  owner.runner.unmount();
+
+  const visitor = pageHarness({ search: 'tab=manage' });
+  tree = visitor.read();
+  assert.deepEqual(panelTypes(tree), ['FeedPanel', 'FilterBar'], '确认过不是所有者就落到新闻列表');
+  assert.equal(findNode(tree, (node) => node.type === 'MoreMenu').props.current, null);
+  visitor.runner.unmount();
+
+  const pending = pageHarness({ search: 'tab=manage', accessLoading: true });
+  assert.deepEqual(panelTypes(pending.read()), ['ManagePanel'], '身份还在确认时先不弹走，所有者刷新页面不会掉回列表');
+  pending.runner.unmount();
+});
+
+test('地址里的栏目参数不认识就当新闻列表', () => {
+  const h = pageHarness({ search: 'tab=catalysts' });
+  assert.deepEqual(panelTypes(h.read()), ['FeedPanel', 'FilterBar']);
+  h.runner.unmount();
 });
 
 /* ---------------- FeedPanel：补丁与翻页 ---------------- */
@@ -1203,7 +1269,7 @@ test('FE-4 补丁集合有上限，比快照新的补丁才会套用', () => {
   assert.equal(newer.items[0].analysisStatus, 'queued');
 });
 
-test('1-H 翻页结果被刷新后的缓存拒收：提示列表已更新；后台刷新期间禁用加载更多', async () => {
+test('1-H 翻页结果被刷新后的缓存拒收：提示列表已更新；后台刷新期间禁用查看更多', async () => {
   const h = feedHarness();
   h.setNow(1_000);
   await h.seed('feed:a', snapshotOf([feedItem('A', 'completed')], 'c1'));
@@ -1211,7 +1277,7 @@ test('1-H 翻页结果被刷新后的缓存拒收：提示列表已更新；后�
   h.setFeed(() => page.promise);
   h.render({});
   await settle();
-  findButton(h.tree(), '加载更多').props.onClick();
+  findButton(h.tree(), '查看更多').props.onClick();
   await settle();
   h.setNow(2_000);
   h.cache.invalidate();
@@ -1225,11 +1291,11 @@ test('1-H 翻页结果被刷新后的缓存拒收：提示列表已更新；后�
   const reload = deferred();
   const refreshing = h.cache.ensure('feed:a', h.policy, () => reload.promise, true);
   await settle();
-  assert.equal(findButton(h.tree(), '加载更多').props.disabled, true);
+  assert.equal(findButton(h.tree(), '查看更多').props.disabled, true);
   reload.resolve(snapshotOf([feedItem('A', 'completed')], 'c2'));
   await refreshing;
   await settle();
-  assert.equal(findButton(h.tree(), '加载更多').props.disabled, false);
+  assert.equal(findButton(h.tree(), '查看更多').props.disabled, false);
   h.unmount();
 });
 
@@ -1621,7 +1687,7 @@ test('unknown news submission does not offer forced retry', async () => {
   h.render({ newsId: '9600' });
   await settle();
   assert.match(textOf(h.tree()), /停止重复提交/);
-  assert.equal(findButton(h.tree(), '重试分析（强制）'), null);
+  assert.equal(findButton(h.tree(), '重试分析'), null);
   h.unmount();
 });
 

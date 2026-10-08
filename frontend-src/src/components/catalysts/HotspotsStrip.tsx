@@ -103,7 +103,7 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
     <section className="mt-6" aria-label={__t("热点主题带")}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h2 className="flex min-w-0 items-center gap-1.5 text-h2 text-ink-900">
-          {__t('市场关注的主题')}
+          {__t('市场热点')}
           <InfoHint hint={SCORE_HINTS.hotScore} side="bottom" size={12} />
         </h2>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -136,7 +136,7 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
             /* hotspots/status 计算中：带首卡替换为状态卡 */
             <div className="card-surface flex min-h-44 w-[260px] shrink-0 snap-start flex-col items-center justify-center p-5 text-center sm:w-[300px]">
               <Spinner size={20} tone="brand" />
-              <p className="mt-2.5 text-body-s font-medium text-ink-800">{__t('热点计算中…')}</p>
+              <p className="mt-2.5 text-body-s font-medium text-ink-800">{__t('正在整理热点…')}</p>
               <p className="mt-1 text-micro text-ink-400 tnum">
                 {statusQ.data?.etaSeconds != null ? __t('预计 {n}s', { n: statusQ.data.etaSeconds }) : __t('请稍候')}
               </p>
@@ -156,7 +156,7 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
           )}
           {!listQ.loading && !computing && !listFailed && items.length === 0 && (
             <div className="card-surface flex w-full flex-col items-center justify-center px-5 py-8 text-center">
-              <p className="text-body-s text-ink-500">{__t('当前窗口暂无热点分组')}</p>
+              <p className="text-body-s text-ink-500">{__t('当前时段暂无热点')}</p>
             </div>
           )}
           {!listQ.loading &&

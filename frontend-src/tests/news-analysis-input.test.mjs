@@ -126,25 +126,25 @@ test('抽屉只给已完成分析标注输入依据，保留原始公司名，�
     basis: 'article_body', article_status: 'available', reason: null, body_characters: 1742, truncated: true,
   } });
   const articleText = texts(renderDrawer(article));
-  assert.match(articleText, /原始标题.*Example Corp declares dividend/);
-  assert.match(articleText, /依据新闻正文节选分析/);
-  assert.doesNotMatch(articleText, /关联代码/);
+  assert.match(articleText, /原文标题.*Example Corp declares dividend/);
+  assert.match(articleText, /仅基于正文节选分析/);
+  assert.doesNotMatch(articleText, /相关标的/);
   const fullText = texts(renderDrawer({ ...article, analysisInput: { ...article.analysisInput, truncated: false } }));
-  assert.match(fullText, /依据新闻正文分析/);
-  assert.doesNotMatch(fullText, /依据新闻正文节选分析/);
+  assert.match(fullText, /基于新闻正文分析/);
+  assert.doesNotMatch(fullText, /仅基于正文节选分析/);
 
   const unavailable = await mappedNews({ ...base, analysis_input: {
     basis: 'title_summary', article_status: 'unavailable', reason: 'http_403', body_characters: 0, truncated: false,
   } });
   const unavailableText = texts(renderDrawer(unavailable));
-  assert.match(unavailableText, /仅依据标题与摘要分析.*未能取得正文/);
+  assert.match(unavailableText, /仅基于标题和摘要分析.*未能取得正文/);
   assert.doesNotMatch(unavailableText, /http_403/);
 
   const legacyText = texts(renderDrawer(await mappedNews(base)));
-  assert.match(legacyText, /仅依据标题与摘要分析/);
+  assert.match(legacyText, /仅基于标题和摘要分析/);
   const pendingText = texts(renderDrawer({ ...article, analysisStatus: 'pending', analysis: null }));
-  assert.doesNotMatch(pendingText, /依据新闻正文/);
-  assert.doesNotMatch(pendingText, /仅依据标题与摘要分析/);
+  assert.doesNotMatch(pendingText, /基于新闻正文|基于正文节选/);
+  assert.doesNotMatch(pendingText, /仅基于标题和摘要分析/);
   const failedText = texts(renderDrawer({ ...article, analysisStatus: 'failed', analysis: null }));
-  assert.doesNotMatch(failedText, /依据新闻正文/);
+  assert.doesNotMatch(failedText, /基于新闻正文|基于正文节选/);
 });

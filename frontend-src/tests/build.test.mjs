@@ -186,7 +186,7 @@ test('failed focus attempt keeps the latest successful result visible and retrya
   assert.match(apiSource, /normalized\.latestAttempt/);
   assert.match(cardSource, /最近一次更新失败，当前展示上次成功结果/);
   assert.match(cardSource, /triggerFocusCycle\(failedCycleId\)/);
-  assert.match(cardSource, /重试焦点周期/);
+  assert.match(cardSource, /重试分析/);
 });
 
 test('default catalyst feed requests translated analysis and preserves neutral articles', async () => {

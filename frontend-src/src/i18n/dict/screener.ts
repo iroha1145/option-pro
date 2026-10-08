@@ -162,7 +162,7 @@ export const SCREENER: Dict = {
   '动量': ['Momentum', 'モメンタム'],
   '波动': ['Volatility', 'ボラティリティ'],
   '全部周期': ['All timeframes', '全期間'],
-  '最新消息': ['Latest catalyst', '最新カタリスト'],
+  '最新消息': ["Latest news", "最新ニュース"],
   '消息倾向': ['News bias', 'ニュースの傾向'],
   '最高档': ['Top tier', '最上位帯'],
   '高分档': ['High tier', '高スコア帯'],

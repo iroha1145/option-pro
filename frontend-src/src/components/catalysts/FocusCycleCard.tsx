@@ -43,7 +43,7 @@ const HORIZON_LABEL: Record<'intraday' | 'days' | 'weeks' | 'uncertain', string>
 /* 周期阶段横向步进条：当前 brand 实心（静态，不脉冲）；已过实心灰；未来空心 */
 function StageStepper({ stage }: { stage: number }) {
   return (
-    <ol className="flex items-center" aria-label={t('周期阶段 {stage} / 4 · {name}', { stage, name: STAGES[stage - 1] })}>
+    <ol className="flex items-center" aria-label={t('热点阶段 {stage} / 4 · {name}', { stage, name: STAGES[stage - 1] })}>
       {STAGES.map((label, i) => {
         const idx = i + 1;
         const past = idx < stage;
@@ -93,7 +93,7 @@ function fmtCycleDate(iso: string, withTime: boolean): string {
 const CYCLE_STATUS_CN: Record<string, string> = {
   preparing: t('等待提交'),
   pending: t('排队中'),
-  in_progress: t('计算中'),
+  in_progress: t('分析中'),
   queued: t('排队中'),
   cancel_requested: t('取消中'),
   cancelled: t('已取消'),
@@ -178,10 +178,10 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
           <AnalysisSources sources={cycle.evidenceSources} />
         </div>
         {cycle.assessments.length > 0 && <section
-          aria-label={t('逐股评估')}
+          aria-label={t('股票影响')}
           className={cn('min-w-0 border-t border-line pt-4', !compact && 'lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0')}
         >
-          <h4 className="mb-3 text-caption font-medium text-ink-700">{t('逐股评估')}</h4>
+          <h4 className="mb-3 text-caption font-medium text-ink-700">{t('股票影响')}</h4>
           <div className="divide-y divide-line">
             {cycle.assessments.map((a, i) => {
               const d = DIR_ARROW[a.direction];
@@ -201,7 +201,7 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
                     {a.insufficientEvidence ? (
                       /* 后端在证据不足时强制 catalyst_bias 为 null。说「证据不足」，而不是画一个 0。 */
                       <SoftBadge tone="warn" className="shrink-0">
-                        {t('证据不足')}
+                        {t('依据不足')}
                       </SoftBadge>
                     ) : (
                       <ImpactValue value={a.catalystBias} bare />
@@ -309,7 +309,7 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
       setPollNotice(null);
       /* triggerFocusCycle 已清过读缓存；这里只让页面各区重新读取，不再清第二次（审计 2-E）。 */
       onDataRefreshed?.({ cacheCleared: true });
-      toast.info(t('焦点周期计算已提交'), t('完成后自动刷新'));
+      toast.info(t('热点分析已提交'), t('完成后自动刷新'));
       abandonPoll();
       if (!j.cycleId) {
         // 202 已受理但响应未携带周期编号：延迟拉取 latest 兜底，不误报失败
@@ -333,7 +333,7 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
           setPollNotice(null);
           latestQ.refresh();
           // latest 仍显示进行中时卡片会继续低频跟踪，不必让用户刷新页面。
-          toast.info(t('焦点周期仍在处理中'), t('卡片会继续自动检查结果'));
+          toast.info(t('热点分析仍在处理中'), t('卡片会继续自动检查结果'));
           return;
         }
         try {
@@ -348,7 +348,7 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
             // Update availability and history with the settled provider result.
             onDataRefreshed?.();
             if (next.status === 'completed') {
-              toast.success(t('新焦点周期已生成'));
+              toast.success(t('新一轮热点分析已生成'));
             } else {
               const outcome = focusCycleOutcome(next.status, next.errorCode);
               if (next.status === 'cancelled') toast.info(outcome.title, outcome.reason);
@@ -370,13 +370,13 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
             setJob(null);
             setPollNotice(null);
             latestQ.refresh();
-            toast.error(t('焦点周期记录已不存在'), t('已改为显示最新周期'));
+            toast.error(t('热点分析记录已不存在'), t('已改为显示最新一轮分析'));
             return;
           }
           /* 读取失败按退避继续查，不停表也不清任务：清掉会让卡片停在「计算中」、
              按钮却又能点（审计 FE-6）。 */
           failures += 1;
-          if (failures >= 2) setPollNotice(t('焦点周期状态暂时读不到，正在重试'));
+          if (failures >= 2) setPollNotice(t('热点分析状态暂时读不到，正在重试'));
           const retryDelay = boundedReadRetryDelayMs(failures - 1, error, AI_JOB_POLL_FAILURE_WAITS_MS);
           pollRef.current = window.setTimeout(() => void tick(), retryDelay);
           return;
@@ -410,7 +410,7 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
   return (
     /* 后续区块 rise-in 减量：直接呈现 */
     <section
-      aria-label={t("市场焦点周期")}
+      aria-label={t("热点追踪")}
       className="card-surface p-4 sm:p-5 lg:p-6"
     >
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
@@ -418,7 +418,7 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
           <span className="flex size-8 items-center justify-center rounded-md bg-ai-50 text-ai-600" aria-hidden="true">
             <AnalysisIcon size={17} />
           </span>
-          <h2 className="text-h3 text-ink-800">{t('市场焦点周期')}</h2>
+          <h2 className="text-h3 text-ink-800">{t('热点追踪')}</h2>
         </div>
         {isOwner ? (
           <button
@@ -430,19 +430,19 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
             {busy ? (
               <>
                 <Led tone="ai" pulse className="size-1.5 bg-white" />
-                {t('周期计算中')}{running && job.progress !== null ? ` ${job.progress}%` : ''}
+                {t('热点分析中')}{running && job.progress !== null ? ` ${job.progress}%` : ''}
               </>
             ) : (
               <>
                 <AnalysisIcon size={14} />
                 {outcomeUnknown ? t('任务状态待确认') : latestFailed
-                  ? t('重试焦点周期')
-                  : t('触发新周期')}
+                  ? t('重试分析')
+                  : t('更新热点')}
               </>
             )}
           </button>
         ) : (
-          <span className="text-micro text-ink-400">{t('登录后可手动触发新周期')}</span>
+          <span className="text-micro text-ink-400">{t('登录后可更新热点')}</span>
         )}
       </div>
 
@@ -474,10 +474,10 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
           </div>
         ) : latestState === 'error' ? (
           <StatusNotice action={retryLatest}>
-            <p>{t('焦点周期暂时读不到，可以稍后重试')}</p>
+            <p>{t('热点分析暂时读不到，可以稍后重试')}</p>
           </StatusNotice>
         ) : latestState === 'empty' ? (
-          <p className="text-body-s text-ink-500">{t('暂无焦点周期数据')}</p>
+          <p className="text-body-s text-ink-500">{t('暂无热点分析')}</p>
         ) : latestQ.data ? (
           <>
             {latestState === 'stale' && (
@@ -500,7 +500,7 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
           >
             <span className="flex min-w-0 items-start gap-2">
               <Icon name="doc-quote" size={14} className="mt-0.5 shrink-0 text-ink-400" />
-              <span>{t('与上一成功周期对照 ·')} {prevQ.data.dominantEvent}</span>
+              <span>{t('与上一轮成功的热点分析对照 ·')} {prevQ.data.dominantEvent}</span>
             </span>
             <Icon name="chevron-down" size={14} className={cn('shrink-0 transition-transform duration-ui', historyOpen && 'rotate-180')} />
           </button>
@@ -524,9 +524,9 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
 
       <ConfirmDialog
         open={confirmOpen}
-        title={t("触发新的市场焦点周期？")}
+        title={t("生成新一轮热点分析？")}
         description={t("根据当前热点生成新的市场分析，将消耗模型用量并计入每日额度；已有分析也会重新计算。")}
-        confirmLabel={t("开始计算")}
+        confirmLabel={t("生成分析")}
         onConfirm={() => void startJob()}
         onCancel={() => setConfirmOpen(false)}
       />

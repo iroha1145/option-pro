@@ -70,13 +70,13 @@ for (const width of [390, 1440]) {
       page.on('pageerror', error => errors.push(error.message));
       await page.goto('/catalysts');
       await expect(page.getByText('数据与分析说明', { exact: true })).toHaveCount(0);
-      const focus = page.getByRole('region', { name: '市场焦点周期', exact: true });
-      await expect(focus.getByRole('heading', { name: '逐股评估', exact: true })).toBeVisible();
-      await expect(focus).toContainText('证据不足');
+      const focus = page.getByRole('region', { name: '热点追踪', exact: true });
+      await expect(focus.getByRole('heading', { name: '股票影响', exact: true })).toBeVisible();
+      await expect(focus).toContainText('依据不足');
       await noPageOverflow(page);
       await capture(page, `catalyst-focus-${width}`, focus);
 
-      const history = focus.getByRole('button', { name: /与上一成功周期对照/ });
+      const history = focus.getByRole('button', { name: /与上一轮成功的热点分析对照/ });
       await history.click();
       await expect(history).toHaveAttribute('aria-expanded', 'true');
       await expect(focus.getByRole('heading', { name: '降息交易回摆', exact: true })).toBeVisible();
@@ -91,8 +91,7 @@ for (const width of [390, 1440]) {
       await page.keyboard.press('Escape');
       await expect(page.getByRole('dialog')).toHaveCount(0);
 
-      if (width < 768) await page.getByRole('button', { name: '筛选', exact: true }).click();
-      const tickerFilter = page.getByPlaceholder('代码过滤');
+      const tickerFilter = page.getByPlaceholder('股票代码', { exact: true });
       const slowDevice = await page.context().newCDPSession(page);
       try {
         // 模拟较慢的设备：地址更新不能造成丢字，也不能抢走输入焦点。
@@ -102,7 +101,7 @@ for (const width of [390, 1440]) {
         await expect(tickerFilter).toHaveValue('NVDA');
         await expect(tickerFilter).toBeFocused();
         await expect(page).toHaveURL(/ticker=NVDA/);
-        await page.getByRole('button', { name: '清除代码过滤', exact: true }).click();
+        await page.getByRole('button', { name: '取消股票代码筛选', exact: true }).click();
         await expect(tickerFilter).toHaveValue('');
         await expect(page).not.toHaveURL(/ticker=/);
         await tickerFilter.focus();
@@ -114,17 +113,40 @@ for (const width of [390, 1440]) {
         await slowDevice.send('Emulation.setCPUThrottlingRate', { rate: 1 });
         await slowDevice.detach();
       }
-      const views = page.getByRole('tablist', { name: '催化剂视图', exact: true });
-      await views.getByRole('tab', { name: '新闻流', exact: true }).focus();
+      const views = page.getByRole('tablist', { name: '新闻栏目', exact: true });
+      await expect(views.getByRole('tab')).toHaveText(['新闻列表', '股票影响', '经济日历']);
+      await views.getByRole('tab', { name: '新闻列表', exact: true }).focus();
       await page.keyboard.press('ArrowRight');
       await expect(views.getByRole('tab', { name: '股票影响', exact: true })).toHaveAttribute('aria-selected', 'true');
       await expect(views.getByRole('tab', { name: '股票影响', exact: true })).toBeFocused();
       await expect(page).toHaveURL(/tab=stocks/);
       await expect(page).toHaveURL(/ticker=NVDA/);
       await page.keyboard.press('End');
-      await expect(views.getByRole('tab', { name: '数据源', exact: true })).toHaveAttribute('aria-selected', 'true');
-      await expect(views.getByRole('tab', { name: '数据源', exact: true })).toBeFocused();
+      await expect(views.getByRole('tab', { name: '经济日历', exact: true })).toHaveAttribute('aria-selected', 'true');
+      await expect(views.getByRole('tab', { name: '经济日历', exact: true })).toBeFocused();
+      await expect(page).toHaveURL(/tab=calendar/);
+      // 消息来源收在栏目行右侧的「更多」菜单里：键盘打开、选中后焦点回到触发器，Esc 关闭并还焦点。
+      const moreMenu = page.getByTestId('catalyst-more-menu');
+      const moreTrigger = moreMenu.getByRole('button');
+      await moreTrigger.focus();
+      await page.keyboard.press('ArrowDown');
+      await expect(page.getByRole('menuitem', { name: '消息来源', exact: true })).toBeFocused();
+      await page.keyboard.press('Enter');
       await expect(page).toHaveURL(/tab=sources/);
+      await expect(page).toHaveURL(/ticker=NVDA/);
+      await expect(moreTrigger).toHaveText('消息来源');
+      await expect(moreTrigger).toBeFocused();
+      await moreTrigger.click();
+      await expect(page.getByRole('menu', { name: '更多', exact: true })).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('menu')).toHaveCount(0);
+      await expect(moreTrigger).toBeFocused();
+      // 停在消息来源时三个栏目都没选中：第一项仍可用 Tab 进入，键盘能回到新闻列表。
+      await page.keyboard.press('Shift+Tab');
+      await expect(views.getByRole('tab', { name: '新闻列表', exact: true })).toBeFocused();
+      await page.keyboard.press('Enter');
+      await expect(views.getByRole('tab', { name: '新闻列表', exact: true })).toHaveAttribute('aria-selected', 'true');
+      await expect(page).not.toHaveURL(/tab=sources/);
       await noPageOverflow(page);
       // 切换到另一页面时仍应返回页头，筛选焦点修复不能影响正常导航。
       await page.getByRole('link', { name: 'Optix Pro 首页', exact: true }).click();

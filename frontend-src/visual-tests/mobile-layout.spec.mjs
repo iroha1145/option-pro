@@ -90,9 +90,9 @@ for (const viewport of VIEWPORTS) {
       await page.getByRole("button", { name: "更多" }).click();
       const more = page.getByRole("dialog", { name: "更多功能" });
       await expect(more).toBeVisible();
-      await more.getByRole("button", { name: /新闻催化/ }).click();
+      await more.getByRole("button", { name: /新闻/ }).click();
       await expect(page).toHaveURL(/\/catalysts$/);
-      const tabs = page.getByRole("tablist", { name: "催化剂视图" });
+      const tabs = page.getByRole("tablist", { name: "新闻栏目" });
       await expect(tabs).toBeVisible();
       const tabViewport = page.locator(".selection-viewport").filter({ has: tabs });
       await expect
@@ -130,7 +130,7 @@ for (const viewport of VIEWPORTS) {
       await expect(firstTab).toBeFocused();
       await expect(firstTab).toHaveAttribute("aria-selected", "true");
       await expect(lastTab).toHaveAttribute("aria-selected", "false");
-      const filterRow = page.getByRole("button", { name: "筛选", exact: true }).locator("..");
+      const filterRow = page.getByTestId("catalyst-filter-row");
       const count = filterRow.getByText(/^\d+\s*条$/);
       let recoveredFeed = false;
       // Earlier real-backend tests share the request bucket. Honor an observed

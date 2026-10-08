@@ -14,7 +14,7 @@ const PROVIDER_TIMEOUT = t('模型服务长时间没有返回结果，请重试'
 const INCOMPLETE = t('分析内容未生成完整，请重试');
 const CREDIT = t('模型服务余额不足，充值后可重试');
 const NEWS_CHANGED = t('新闻内容已更新，请重新分析');
-const HOTSPOTS_CHANGED = t('热点数据已更新，请重新计算');
+const HOTSPOTS_CHANGED = t('热点数据已更新，请重新分析');
 
 const REASONS: Record<string, string> = {
   schema_validation_failed: t('模型返回的结果没有通过格式或语言检查，请重试'),
@@ -45,7 +45,7 @@ const REASONS: Record<string, string> = {
   ai_job_result_too_large: t('分析结果过大，无法保存'),
   news_identity_mismatch: NEWS_CHANGED,
   news_ticker_binding_mismatch: NEWS_CHANGED,
-  focus_prepare_expired: t('热点准备已过期，请重新计算'),
+  focus_prepare_expired: t('热点准备已过期，请重新分析'),
   market_focus_payload_mismatch: HOTSPOTS_CHANGED,
   market_focus_input_hash_mismatch: HOTSPOTS_CHANGED,
   market_focus_event_binding_mismatch: HOTSPOTS_CHANGED,
@@ -73,13 +73,13 @@ export function focusCycleOutcome(
   code: string | null | undefined,
 ): { title: string; reason: string } {
   if (status === 'cancelled' || status === 'canceled') {
-    return { title: t('焦点周期已取消'), reason: t('可以重新触发计算') };
+    return { title: t('热点分析已取消'), reason: t('可以重新分析') };
   }
   if (status === 'budget_blocked') {
-    return { title: t('焦点周期没有执行'), reason: analysisFailureReason(code) ?? QUOTA_USED };
+    return { title: t('热点分析没有执行'), reason: analysisFailureReason(code) ?? QUOTA_USED };
   }
   return {
-    title: t('焦点周期计算失败'),
-    reason: analysisFailureReason(code) ?? t('这次计算没有完成，可以重试'),
+    title: t('热点分析失败'),
+    reason: analysisFailureReason(code) ?? t('这次分析没有完成，可以重试'),
   };
 }

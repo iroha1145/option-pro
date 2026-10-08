@@ -60,7 +60,7 @@ function StockImpactCard({ imp, index }: { imp: TrustedStockImpact; index: numbe
         <span className="ml-auto tnum text-micro text-ink-400">{imp.horizon}</span>
       </div>
       <p className="mt-2 text-micro text-ink-500">
-        <span className="font-medium text-ink-600">{__t('机制 ·')} {imp.mechanism}</span>
+        <span className="font-medium text-ink-600">{__t('影响机制 ·')} {imp.mechanism}</span>
       </p>
       <p className="mt-1 text-body-s leading-relaxed text-ink-600">{imp.reason}</p>
     </motion.div>
@@ -355,7 +355,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
           markJobMissing(forNews, jobId);
           return;
         }
-        setJobNotice({ text: __t('任务状态暂时读不到'), retryable: true });
+        setJobNotice({ text: __t('暂时读不到分析进度'), retryable: true });
       }
     })();
     return () => {
@@ -417,7 +417,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
       if (Date.now() >= (pollDeadlineRef.current?.at ?? 0)) {
         stopPoll();
         if (openNewsRef.current === forNews) {
-          setJobNotice({ text: __t('自动查询已暂停，点击重试查看任务状态'), retryable: true, pollRetry: true });
+          setJobNotice({ text: __t('查询已暂停，重试可查看进度'), retryable: true, pollRetry: true });
           toast.error(__t('分析任务仍在处理中'), __t('稍后刷新页面可继续查看结果'));
         }
         return;
@@ -461,7 +461,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
             await refreshItem();
           } else if (next.status === 'insufficient_context') {
             await refreshItem();
-            if (sameNews()) toast.info(__t('规则判定信息不足'), __t('未调用模型'));
+            if (sameNews()) toast.info(__t('信息不足，未调用模型'));
           } else if (next.status === 'failed') {
             toast.error(__t('分析失败'), newsAnalysisFailureText(next.error));
             await refreshItem();
@@ -485,7 +485,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
         }
         pollFailuresRef.current += 1;
         if (pollFailuresRef.current >= 2) {
-          setJobNotice({ text: __t('任务状态暂时读不到，正在重试'), retryable: false });
+          setJobNotice({ text: __t('暂时读不到分析进度，正在重试'), retryable: false });
         }
         const delay = boundedReadRetryDelayMs(pollFailuresRef.current - 1, error, AI_JOB_POLL_FAILURE_WAITS_MS);
         pollRef.current = window.setTimeout(() => void tick(), delay);
@@ -527,8 +527,8 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
         };
         // 列表按新闻编号回写；抽屉只在仍停在这条新闻时才接收结果（审计 1-B）。
         onUpdate(nextItem);
-        if (settled) toast.info(__t('这条新闻已有任务结果'), __t('需要重新分析请使用强制重试'));
-        else toast.info(__t('分析任务已提交'), force ? __t('强制重新分析') : __t('可在本页查看进度'));
+        if (settled) toast.info(__t('这条新闻已有任务结果'), __t('需要重新分析，请点击分析区的按钮'));
+        else toast.info(__t('分析任务已提交'), force ? __t('重新分析') : __t('可在本页查看进度'));
         if (openNewsRef.current !== forNews) return;
         invalidateDetailRead();
         setJob({ ...j, newsId: j.newsId || forNews });
@@ -631,11 +631,11 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
         if (!confirm) onClose(); // 确认弹窗开启时 ESC/背板仅关弹窗
       }}
       width={640}
-      label={__t('新闻详情')}
+      label={__t('消息详情')}
       title={
         <span className="flex items-center gap-2">
           <Icon name="bolt" size={16} className="text-brand-600" />
-          <span className="text-h3 text-ink-900">{__t('新闻详情')}</span>
+          <span className="text-h3 text-ink-900">{__t('消息详情')}</span>
         </span>
       }
     >
@@ -666,7 +666,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
             <span className="tnum">
               {fmtLocaleDateTime(item.publishedAt)}
             </span>
-            {item.sourceCount > 1 && <SoftBadge className="tnum">{item.sourceCount} {__t('源确认')}</SoftBadge>}
+            {item.sourceCount > 1 && <SoftBadge className="tnum">{item.sourceCount} {__t('处报道')}</SoftBadge>}
             {item.isStale && <StaleChip />}
             <a
               href={item.url}
@@ -674,7 +674,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
               rel="noopener noreferrer"
               className="ml-auto inline-flex items-center gap-1 text-micro text-brand-600 transition-colors duration-fast hover:text-brand-500"
             >
-              {__t('原文')}
+              {__t('查看原文')}
               <Icon name="external" size={12} />
             </a>
           </div>
@@ -683,7 +683,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
           <h2 className="mt-3 font-display text-[22px] leading-[30px] font-medium text-ink-900">{item.titleZh}</h2>
           {(item.sourceTitle ?? item.title).trim() && (item.sourceTitle ?? item.title).trim() !== item.titleZh.trim() && (
             <p className="mt-2 break-words text-micro leading-relaxed text-ink-500">
-              <span className="font-medium">{__t('原始标题：')}</span>{item.sourceTitle ?? item.title}
+              <span className="font-medium">{__t('原文标题：')}</span>{item.sourceTitle ?? item.title}
             </p>
           )}
           {detailNotice && (
@@ -700,18 +700,18 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
 
           {/* 关联代码 */}
           {item.sourceTickers.length > 0 && <div className="mt-4 flex flex-wrap items-center gap-1.5">
-            <span className="shrink-0 text-micro text-ink-400">{__t('关联代码')}</span>
+            <span className="shrink-0 text-micro text-ink-400">{__t('相关标的')}</span>
             {item.sourceTickers.map((t) => (
               <TickerChip key={t} ticker={t} />
             ))}
           </div>}
 
           {/* ============ 模型分析区 ============ */}
-          <section className="mt-6 rounded-lg border border-line bg-card-warm/50 p-4" aria-label={__t("模型分析区")}>
+          <section className="mt-6 rounded-lg border border-line bg-card-warm/50 p-4" aria-label={__t("新闻分析区")}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="flex items-center gap-1.5 text-h3 text-ink-800">
                 <AnalysisIcon size={15} className="text-ai-600" />
-                {__t('模型分析')}
+                {__t('新闻分析')}
               </p>
               {jobMissing
                 ? <SoftBadge tone="warn">{__t('任务记录缺失')}</SoftBadge>
@@ -747,7 +747,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
                         onClick={() => setConfirm('cancel')}
                         className="mt-3 rounded-md border border-line bg-card px-3 py-1.5 text-caption text-ink-500 shadow-btn transition-colors duration-fast hover:border-down-600/40 hover:text-down-700"
                       >
-                        {__t('取消任务')}
+                        {__t('取消分析')}
                       </button>
                     )}
                   </div>
@@ -766,9 +766,9 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
                 <p className="mb-3 text-micro leading-relaxed text-ink-500">
                   {item.analysisInput?.basis === 'article_body'
                     ? item.analysisInput.truncated
-                      ? __t('依据新闻正文节选分析')
-                      : __t('依据新闻正文分析')
-                    : __t('仅依据标题与摘要分析')}
+                      ? __t('仅基于正文节选分析')
+                      : __t('基于新闻正文分析')
+                    : __t('仅基于标题和摘要分析')}
                   {item.analysisInput?.basis === 'title_summary' && item.analysisInput.articleStatus === 'unavailable'
                     ? <span className="ml-1">{__t('未能取得正文')}</span>
                     : null}
@@ -830,7 +830,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
                         className="btn-ai"
                       >
                         <AnalysisIcon size={13} />
-                        {__t('生成 AI 分析')}
+                        {__t('生成分析')}
                       </button>
                     )}
                     {!outcomeUnknown && (showCompleted || showFailed || showInsufficient || showCancelled) && (
@@ -839,7 +839,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
                         className="control-button ai-action"
                       >
                         <Icon name="refresh" size={13} />
-                        {showFailed || showInsufficient || showCancelled ? __t('重试分析（强制）') : __t('重新分析（强制）')}
+                        {showFailed || showInsufficient || showCancelled ? __t('重试分析') : __t('重新分析')}
                       </button>
                     )}
                   </>
@@ -855,7 +855,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
       {/* 费用确认弹窗 */}
       <ConfirmDialog
         open={confirm === 'create'}
-        title={__t("生成 AI 分析？")}
+        title={__t("生成新闻分析？")}
         description={__t("分析这条新闻的市场倾向与可能影响，将消耗模型用量，并计入每日额度和任务数量。")}
         confirmLabel={__t("生成分析")}
         onConfirm={() => void startAnalysis(false)}
@@ -863,7 +863,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
       />
       <ConfirmDialog
         open={confirm === 'force'}
-        title={__t("强制重新分析？")}
+        title={__t("重新生成新闻分析？")}
         description={__t("重新生成这条新闻的分析，将再次消耗模型用量并计入每日额度。操作过于频繁或分析功能关闭时无法执行。")}
         confirmLabel={__t("重新分析")}
         onConfirm={() => void startAnalysis(true)}
@@ -871,9 +871,9 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
       />
       <ConfirmDialog
         open={confirm === 'cancel'}
-        title={__t("取消分析任务？")}
+        title={__t("取消本次分析？")}
         description={__t("取消后可重新发起分析。")}
-        confirmLabel={__t("取消任务")}
+        confirmLabel={__t("取消分析")}
         danger
         onConfirm={() => void cancelJob()}
         onCancel={() => setConfirm(null)}

@@ -392,7 +392,7 @@ export const DETAIL: Dict = {
   '获取失败，请稍后重试': ['Failed to pull data — try again shortly', '取得に失敗しました。しばらくしてから再度お試しください。'],
   '价格行为评分': ['Price action score', 'プライスアクションスコア'],
   '突破记录': ['Breakout records', 'ブレイクアウト記録'],
-  '取消分析': ['Cancel analysis', '分析を取消'],
+  '取消分析': ["Cancel analysis", "分析を取消"],
   '面积图': ['Area chart', '面グラフ'],
   '涨跌测量': ['Measure move', '騰落を計測'],
 };
