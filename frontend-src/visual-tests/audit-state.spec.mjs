@@ -83,7 +83,7 @@ test('visitor quotes survive a failed poll and expose their own retry notice', a
   const failed = page.waitForResponse(response => new URL(response.url()).pathname === '/api/stocks/watchlist' && response.status() === 408);
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   await failed;
-  await expect(page.getByText('行情暂时读取失败，关注名单已保留。', { exact: true })).toBeVisible();
+  await expect(page.getByText('行情暂时读取失败，关注列表已保留。', { exact: true })).toBeVisible();
   await expect(page.locator('[data-quote-symbol="AAPL"]').first()).toContainText('100');
   expect(state.errors).toEqual([]);
 });

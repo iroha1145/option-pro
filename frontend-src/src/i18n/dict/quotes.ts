@@ -19,7 +19,6 @@ export const QUOTES: Dict = {
   '纽约': ['New York', 'ニューヨーク'],
   '实时': ['Live', 'リアルタイム'],
   "实时成交触发": ["Triggered by a live trade", "リアルタイムの約定で検出"],
-  '实时成交触发，完整行情确认中': ['Triggered by a live trade · awaiting full quote data', 'リアルタイムの約定で検出 · 詳細データを確認中'],
   '实时成交触发 · 完整行情确认中': ['Triggered by a live trade · awaiting full quote data', 'リアルタイムの約定で検出 · 詳細データを確認中'],
   '时间待更新': ['Time pending', '時刻の更新待ち'],
   '状态版本': ['State version', '状態バージョン'],

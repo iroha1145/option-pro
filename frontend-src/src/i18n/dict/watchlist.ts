@@ -11,7 +11,6 @@ export const WATCHLIST: Dict = {
   '登录账号已变化，请重新操作': ['Your sign-in identity has changed. Please try again.', 'ログイン情報が変わりました。もう一度操作してください。'],
   '已恢复关注': ['Restored to watchlist', 'ウォッチリストに戻しました'],
   '恢复失败': ['Could not restore', '元に戻せませんでした'],
-  '行情暂时读取失败，关注名单已保留。': ['Quotes could not be loaded. Your watchlist is still saved.', '相場を読み込めません。ウォッチリストは保存されています。'],
   '行情暂时读取失败，关注列表已保留。': ['Quotes could not be loaded. Your watchlist is still saved.', '相場を読み込めません。ウォッチリストは保存されています。'],
   "管理关注": ["Manage watchlist", "ウォッチリストを管理"],
   "添加股票代码": ["Add stock tickers", "銘柄コードを追加"],

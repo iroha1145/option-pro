@@ -1,7 +1,7 @@
 /**
  * B1 筛选条件（screener.md）
  * 常驻：分档 / 周期 / 偏好 / 扫描
- * 更多条件：预设、行业、价格、成交额与显示数量；折叠时仍展示当前约束（含显示数量上限）
+ * 更多筛选：预设、行业、价格、成交额与显示数量；折叠时仍展示当前约束（含显示数量上限）
  * 行 stagger 60ms；过滤器变更主按钮脉冲（box-shadow 呼吸 1.2s ×2）
  */
 import SoftBadge from '@/components/shared/SoftBadge';
@@ -263,7 +263,7 @@ export default function FilterWorkbench({
   const volumeSummary = dollarVolumeFilterSupported && draft.minDollarVol > 0
     ? `${__t('成交额下限')} ${DOLLAR_VOL_OPTIONS.find((option) => option.value === draft.minDollarVol)?.label ?? draft.minDollarVol}`
     : null;
-  // 显示数量收进「更多条件」后，折叠状态下仍要看得到返回上限。
+  // 显示数量收进「更多筛选」后，折叠状态下仍要看得到返回上限。
   const topNSummary = `${__t('显示数量')} ${TOPN_OPTIONS.find((option) => option.value === draft.topN)?.label ?? `Top ${draft.topN}`}`;
   const advancedSummary = [
     selectedPreset?.name,

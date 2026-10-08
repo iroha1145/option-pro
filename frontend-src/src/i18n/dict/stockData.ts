@@ -5,7 +5,6 @@ export const STOCK_DATA: Dict = {
   '行情': ['Quotes', '株価'],
   '状态读取失败，稍后自动重试': ['Status unavailable; retrying automatically', '状態を取得できません。後で自動再試行します'],
   "正在检查数据": ["Checking data", "データを確認中"],
-  '准备完成': ['Data ready', 'データ準備完了'],
   '数据已就绪': ['Data ready', 'データ準備完了'],
   "正在获取 {n}": ["Fetching {n}", "取得中 {n}"],
   '部分缺失 {n}': ['Incomplete {n}', '一部未取得 {n}'],

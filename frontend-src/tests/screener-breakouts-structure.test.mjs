@@ -27,14 +27,14 @@ function codeOf(text) {
     .join('\n');
 }
 
-test('显示数量在「更多条件」展开区里，折叠摘要仍写出返回上限', async () => {
+test('显示数量在「更多筛选」展开区里，折叠摘要仍写出返回上限', async () => {
   const workbench = codeOf(await source('components/screener/FilterWorkbench.tsx'));
   /* indexOf 找不到会返回 -1，slice 随之切出空串或错位片段，后面的 doesNotMatch 就空过了：先卡住标记在不在。 */
   const rowStart = workbench.indexOf('<motion.div variants={row}');
   const detailsStart = workbench.indexOf('<details');
   assert.ok(rowStart >= 0, '找不到主行起点 <motion.div variants={row}：标记改名后要同步本测试');
-  assert.ok(detailsStart >= 0, '找不到「更多条件」展开区 <details：标记改名后要同步本测试');
-  assert.ok(rowStart < detailsStart, '主行应在「更多条件」展开区之前');
+  assert.ok(detailsStart >= 0, '找不到「更多筛选」展开区 <details：标记改名后要同步本测试');
+  assert.ok(rowStart < detailsStart, '主行应在「更多筛选」展开区之前');
   const mainRow = workbench.slice(rowStart, detailsStart);
   assert.match(mainRow, /<ScanButton/, '切到的确实是主行：扫描按钮在里面');
   assert.doesNotMatch(mainRow, /TOPN_OPTIONS|最多显示数量|显示数量/, '显示数量不能留在主行');

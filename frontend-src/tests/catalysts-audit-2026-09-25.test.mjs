@@ -1024,7 +1024,9 @@ test('3-E 焦点卡的兜底与收尾定时器随卸载清理', async () => {
 /* ---------------- 页面：刷新只清一次缓存、补丁带时间戳 ---------------- */
 
 /* 页面沙箱：所有子组件桩成元素类型字符串，地址参数、身份和写地址的回调都可注入。 */
-function pageHarness({ search = '', owner = false, accessLoading = false } = {}) {
+function pageHarness({ search: initialSearch = '', owner = false, accessLoading = false } = {}) {
+  /* 地址写入只记账、不回灌；要模拟用户切栏目就调 navigate(next)。 */
+  let search = initialSearch;
   const runner = createReactStub();
   runner.React.useOptimistic = (value) => [value, () => {}];
   runner.React.startTransition = (fn) => fn();
@@ -1052,7 +1054,8 @@ function pageHarness({ search = '', owner = false, accessLoading = false } = {})
     '../i18n/core.ts': i18n,
   }, { window: { setTimeout: clock.api.setTimeout, clearTimeout: clock.api.clearTimeout }, Date: clock.Date }).default;
   const read = runner.mount(() => Page());
-  return { runner, read, clock, counts, urlWrites };
+  const navigate = (next) => { search = next; runner.rerender(); };
+  return { runner, read, clock, counts, urlWrites, navigate };
 }
 
 test('2-E 页面刷新：写操作已清缓存时不再清第二次；页头刷新照常清', async () => {
@@ -1128,6 +1131,33 @@ test('管理设置是所有者的栏目：?tab=manage 对所有者直接打开�
   assert.equal(findNode(pendingTree, (node) => node.type === 'MoreMenu').props.current, 'manage');
   assert.ok(findNode(pendingTree, (node) => node.type === 'p' && JSON.stringify(node.props?.children ?? '').includes('正在确认登录身份')));
   pending.runner.unmount();
+});
+
+test('管理设置打开过就一直挂着：切到别的栏目只隐藏，切回来还是同一个面板', () => {
+  /* 直接包住 ManagePanel 的那层 div：它的 hidden 决定面板显示与否 */
+  const panelBox = (tree) => {
+    const box = findNode(tree, (node) => node.type === 'div' && [node.props.children].flat().some((child) => child?.type === 'ManagePanel'));
+    assert.ok(box, '管理设置打开过，面板应当一直挂着');
+    return box;
+  };
+  const never = pageHarness({ owner: true });
+  assert.equal(findNode(never.read(), (node) => node.type === 'ManagePanel'), null, '没打开过就不挂');
+  never.runner.unmount();
+
+  const h = pageHarness({ owner: true });
+  h.navigate('tab=manage');
+  assert.equal(panelBox(h.read()).props.hidden, false);
+  h.navigate('tab=calendar');
+  let tree = h.read();
+  assert.ok(findNode(tree, (node) => node.type === 'CalendarPanel'), '已切到经济日历');
+  assert.equal(panelBox(tree).props.hidden, true, '管理设置仍挂着，只是隐藏');
+  h.navigate('');
+  tree = h.read();
+  assert.ok(findNode(tree, (node) => node.type === 'FeedPanel'));
+  assert.equal(panelBox(tree).props.hidden, true);
+  h.navigate('tab=manage');
+  assert.equal(panelBox(h.read()).props.hidden, false, '切回来直接显示');
+  h.runner.unmount();
 });
 
 test('地址里的栏目参数不认识就当新闻列表', () => {

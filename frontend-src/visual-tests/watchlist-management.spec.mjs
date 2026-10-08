@@ -223,12 +223,12 @@ test('quote failures preserve membership and a visible retry restores quotes', a
   const state = await fixture(page, ['AAPL']);
   state.failQuotes = true;
   await page.goto('/watchlist');
-  await expect(page.getByText('行情暂时读取失败，关注名单已保留。', { exact: true })).toBeVisible();
+  await expect(page.getByText('行情暂时读取失败，关注列表已保留。', { exact: true })).toBeVisible();
   await expect(remove(page, 'AAPL')).toBeAttached();
   expect(state.tickers).toEqual(['AAPL']);
   state.failQuotes = false;
-  await page.getByText('行情暂时读取失败，关注名单已保留。', { exact: true }).locator('..').getByRole('button', { name: '重试', exact: true }).click();
-  await expect(page.getByText('行情暂时读取失败，关注名单已保留。', { exact: true })).toBeHidden();
+  await page.getByText('行情暂时读取失败，关注列表已保留。', { exact: true }).locator('..').getByRole('button', { name: '重试', exact: true }).click();
+  await expect(page.getByText('行情暂时读取失败，关注列表已保留。', { exact: true })).toBeHidden();
   await expect(page.getByRole('button', { name: /AAPL Company/ })).toBeVisible();
   expect(state.errors).toEqual([]);
 });

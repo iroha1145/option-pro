@@ -91,11 +91,10 @@ export default function Catalysts() {
   const tab: TabId = urlTab === 'manage' && !isOwner && !accessLoading ? 'feed' : urlTab;
   const filters = useMemo(() => parseFilters(searchParams), [searchParams]);
   /* 管理设置打开过一次就一直挂着（切走时只隐藏）：面板里「一次只做一件事」的忙碌状态在组件内，
-     卸载会让切回来的按钮不再转圈、还能立刻点下一项。 */
+     卸载会让切回来的按钮不再转圈、还能立刻点下一项。
+     在渲染时记下「打开过」（React 文档里保存上一次渲染信息的写法），不放进副作用，省掉一轮多余的渲染。 */
   const [manageMounted, setManageMounted] = useState(false);
-  useEffect(() => {
-    if (tab === 'manage') setManageMounted(true);
-  }, [tab]);
+  if (tab === 'manage' && !manageMounted) setManageMounted(true);
   // 输入须立即回显；地址导航可能延后提交，不能用旧参数覆盖正在键入的字符。
   // 列表仍读取已提交的地址参数，输入反馈随同一次导航自动收敛。
   const [inputFilters, setInputFilters] = useOptimistic(filters);
