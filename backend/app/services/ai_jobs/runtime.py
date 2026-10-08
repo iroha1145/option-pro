@@ -408,7 +408,7 @@ def schema_identity(job_type: str, *, model: str | None = None) -> tuple[str, st
     }
     if model is None or uses_claude(model):
         identity["claude_features"] = {
-            "contract": "haiku-tools-v1",
+            "contract": "haiku-native-tools-json-v2",
             "instructions": claude_instructions(request.instructions),
             "tools": claude_tools_for(job_type, {}),
             "reservation_tokens": CLAUDE_TOOL_TOKEN_RESERVATION,

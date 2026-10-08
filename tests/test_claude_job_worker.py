@@ -94,6 +94,44 @@ def test_completed_claude_receipt_precedes_publication(tmp_path, monkeypatch):
     assert len(calls) == 1
 
 
+@pytest.mark.parametrize("valid_chinese", [True, False])
+def test_native_tool_json_goes_through_original_business_validation(tmp_path, monkeypatch, valid_chinese):
+    repo = AIJobRepository(tmp_path / "jobs.db")
+    ident = create_job(repo)
+    original = message()
+    result = json.loads(original.content[0].text)
+    if not valid_chinese:
+        result["summary"] = "Only English analysis."
+    payload = original.model_dump()
+    payload["content"] = [
+        {"type": "text", "text": "Checking public facts before analysis."},
+        {"type": "server_tool_use", "id": "srv_search", "name": "web_search", "input": {"query": "Apple"}},
+        {"type": "web_search_tool_result", "tool_use_id": "srv_search", "content": [{
+            "type": "web_search_result", "title": "Apple newsroom",
+            "url": "https://www.apple.com/newsroom/", "encrypted_content": "opaque",
+        }]},
+        {"type": "text", "text": json.dumps(result, ensure_ascii=False)},
+    ]
+    payload["usage"]["server_tool_use"] = {"web_search_requests": 1, "web_fetch_requests": 0}
+    calls = install_stream(monkeypatch, Message.model_validate(payload))
+    asyncio.run(worker.run_once(repo, settings(repo.path), "owner"))
+    row = repo.get_job(ident)
+    assert len(calls) == 1
+    assert calls[0].params["output_config"]["format"]["type"] == "json_schema"
+    receipt = repo.get_provider_result(ident)
+    assert json.loads(receipt["output_text"]) == result
+    assert receipt["stop_reason"] == "end_turn"
+    assert receipt["evidence_sources"] == [{
+        "type": "web_search", "title": "Apple newsroom", "url": "https://www.apple.com/newsroom/",
+    }]
+    if valid_chinese:
+        assert row["status"] == "completed"
+        assert json.loads(row["result_json"])["summary"] == result["summary"]
+    else:
+        assert row["error_code"] == "schema_validation_failed"
+        assert row["result_json"] is None
+
+
 @pytest.mark.parametrize("stage", ["before_message", "after_message"])
 def test_ambiguous_stream_failure_is_never_automatically_retried(tmp_path, monkeypatch, stage):
     repo = AIJobRepository(tmp_path / "jobs.db")
@@ -160,12 +198,23 @@ def test_active_stream_cancellation_and_timeout_keep_unknown_charge(tmp_path, mo
     assert closed == [True]
 
 
-def test_restart_recovers_paid_receipt_without_network(tmp_path, monkeypatch):
+@pytest.mark.parametrize("saved_stop_reason", ["end_turn", "tool_use"])
+def test_restart_recovers_paid_receipt_without_network(tmp_path, monkeypatch, saved_stop_reason):
     repo = AIJobRepository(tmp_path / "jobs.db")
     ident = create_job(repo)
     repo.claim_due("old-owner", 60)
     repo.mark_submission_started(ident, "old-owner", daily_limit=0)
-    repo.record_provider_result(ident, "old-owner", runtime.claude_receipt(message()))
+    saved = runtime.claude_receipt(message())
+    saved["stop_reason"] = saved_stop_reason
+    repo.record_provider_result(ident, "old-owner", saved)
+    if saved_stop_reason == "tool_use":
+        # A paid receipt under the retired tool protocol must remain recoverable
+        # despite the new request identity. No provider response is reinterpreted.
+        with sqlite3.connect(repo.path) as connection:
+            connection.execute(
+                "UPDATE ai_jobs SET schema_sha256=? WHERE job_id=?",
+                ("a" * 64, ident),
+            )
     with sqlite3.connect(repo.path) as connection:
         connection.execute(
             "UPDATE ai_jobs SET lease_expires_at=? WHERE job_id=?",
@@ -249,14 +298,25 @@ def test_claude_billing_preserves_actual_usage_above_reservation():
     ) == 600
 
 
-def test_paid_claude_schema_recovery_is_local_and_preserves_accounting(tmp_path, monkeypatch):
+@pytest.mark.parametrize("saved_stop_reason", ["end_turn", "tool_use"])
+def test_paid_claude_schema_recovery_is_local_and_preserves_accounting(tmp_path, monkeypatch, saved_stop_reason):
     from app.tools import recover_ai_schema_results
 
     repo = AIJobRepository(tmp_path / "jobs.db")
     ident = create_job(repo)
     repo.claim_due("owner", 60)
     repo.mark_submission_started(ident, "owner", daily_limit=0)
-    repo.record_provider_result(ident, "owner", runtime.claude_receipt(message()))
+    saved = runtime.claude_receipt(message())
+    saved["stop_reason"] = saved_stop_reason
+    repo.record_provider_result(ident, "owner", saved)
+    if saved_stop_reason == "tool_use":
+        # A paid receipt under the retired tool protocol must remain recoverable
+        # despite the new request identity. No provider response is reinterpreted.
+        with sqlite3.connect(repo.path) as connection:
+            connection.execute(
+                "UPDATE ai_jobs SET schema_sha256=? WHERE job_id=?",
+                ("a" * 64, ident),
+            )
     repo.fail(ident, "owner", "schema_validation_failed")
     charge = repo.get_job(ident)["budget_charge_microusd"]
     monkeypatch.setattr(recover_ai_schema_results, "get_settings", lambda: settings(repo.path))

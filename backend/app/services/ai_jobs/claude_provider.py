@@ -6,7 +6,6 @@ from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
 import ipaddress
-import json
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
@@ -16,7 +15,6 @@ from anthropic.types import CacheCreation, Message
 MODEL = "claude-haiku-5-5"
 EFFORT = "xhigh"
 BASE_URL = "https://api.anthropic.com"
-RESULT_TOOL_NAME = "record_analysis"
 _CODE_TOOLS = {"code_execution", "bash_code_execution", "text_editor_code_execution"}
 _RESULT_TYPES = {
     "web_search": "web_search_tool_result",
@@ -27,7 +25,7 @@ _RESULT_TYPES = {
 }
 _TOOL_INSTRUCTIONS = (
     "\n只在需要核对公开事实、补全正文或复杂计算时使用对应工具。"
-    "必须最后仅调用一次 record_analysis 返回最终分析；不要让中间说明成为最终结果。"
+    "工具使用完成后，按指定 JSON 格式返回最终分析；不要在最终结果中添加说明。"
 )
 
 
@@ -50,10 +48,10 @@ def prepare_message(
     key = settings.anthropic_api_key.get_secret_value().strip()
     if not key:
         raise RuntimeError("ai_not_configured")
-    output_config: dict[str, Any] = {"effort": EFFORT}
-    transformed = transform_schema(schema)
-    if not tools:
-        output_config["format"] = {"type": "json_schema", "schema": transformed}
+    output_config: dict[str, Any] = {
+        "effort": EFFORT,
+        "format": {"type": "json_schema", "schema": transform_schema(schema)},
+    }
     params: dict[str, Any] = {
         "model": MODEL,
         "max_tokens": max_tokens,
@@ -70,13 +68,7 @@ def prepare_message(
         }],
     }
     if tools:
-        params["tools"] = deepcopy(tools) + [{
-            "name": RESULT_TOOL_NAME,
-            "description": "Return the final validated analysis exactly once after any required server tools finish.",
-            "input_schema": transformed,
-            "strict": True,
-            "allowed_callers": ["direct"],
-        }]
+        params["tools"] = deepcopy(tools)
         params["tool_choice"] = {"type": "auto", "disable_parallel_tool_use": True}
     return PreparedMessage(
         api_key=key,
@@ -137,10 +129,6 @@ async def stream_message(
                 raise RuntimeError("provider_stream_incomplete")
             message = await stream.get_final_message()
             message.usage.cache_creation = cache_creation_details
-            # A response with no tool blocks otherwise cannot reveal that this
-            # request required a structured final tool rather than plain text.
-            if prepared.params.get("tools"):
-                object.__setattr__(message, "_analysis_result_tool_required", True)
             return message
     finally:
         # Cleanup must not replace a transport failure or cancellation with a
@@ -152,18 +140,22 @@ async def stream_message(
 
 
 def response_text(message: Message) -> str:
+    blocks = message.content
     if _has_tools(message):
-        if message.stop_reason != "tool_use":
+        if response_terminal_error(message) is not None:
             return ""
-        result, error = _structured_tool_result(message)
-        if error is not None or result is None:
-            return ""
-        return json.dumps(result.input, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
-    return "".join(block.text for block in message.content if block.type == "text")
+        # Tool loops can include explanatory text before or between calls. Only
+        # text after the final native call/result belongs to the JSON response.
+        final_tool_index = max(
+            index for index, block in enumerate(blocks)
+            if block.type == "server_tool_use" or block.type.endswith("_tool_result")
+        )
+        blocks = blocks[final_tool_index + 1:]
+    return "".join(block.text for block in blocks if block.type == "text")
 
 
 def _has_tools(message: Message) -> bool:
-    return bool(getattr(message, "_analysis_result_tool_required", False)) or any(
+    return any(
         block.type in {"tool_use", "server_tool_use"} or block.type.endswith("_tool_result")
         for block in message.content
     )
@@ -183,22 +175,6 @@ def _server_pairs(message: Message) -> tuple[dict[str, str], str | None]:
                 return completed, "provider_invalid_tool_response"
             completed[block.tool_use_id] = name
     return completed, "provider_incomplete_tool_result" if pending else None
-
-
-def _structured_tool_result(message: Message) -> tuple[Any | None, str | None]:
-    client_tools = [block for block in message.content if block.type == "tool_use"]
-    if any(block.name != RESULT_TOOL_NAME for block in client_tools):
-        return None, "provider_unknown_client_tool"
-    if len(client_tools) != 1:
-        return None, "provider_invalid_final_tool"
-    result = client_tools[0]
-    if not isinstance(result.input, dict) or getattr(getattr(result, "caller", None), "type", "direct") != "direct":
-        return None, "provider_invalid_final_tool"
-    # Finishing before another tool runs would make this result premature.
-    if any(block.type != "text" for block in message.content[message.content.index(result) + 1:]):
-        return None, "provider_invalid_final_tool"
-    _, error = _server_pairs(message)
-    return (result, None) if error is None else (None, error)
 
 
 def response_usage(message: Message) -> dict[str, int | None]:
@@ -240,14 +216,21 @@ def response_terminal_error(message: Message) -> str | None:
         return "provider_incomplete_max_output_tokens"
     if message.stop_reason == "refusal":
         return "provider_refusal"
-    if _has_tools(message):
-        if message.stop_reason != "tool_use":
-            return "provider_incomplete"
-        _, error = _structured_tool_result(message)
-        return error
+    if any(block.type == "tool_use" for block in message.content):
+        return "provider_unknown_client_tool"
     if message.stop_reason != "end_turn":
         return "provider_incomplete"
-    if not response_text(message).strip():
+    _, error = _server_pairs(message)
+    if error is not None:
+        return error
+    blocks = message.content
+    if _has_tools(message):
+        final_tool_index = max(
+            index for index, block in enumerate(blocks)
+            if block.type == "server_tool_use" or block.type.endswith("_tool_result")
+        )
+        blocks = blocks[final_tool_index + 1:]
+    if not any(block.type == "text" and block.text.strip() for block in blocks):
         return "provider_empty_response"
     return None
 

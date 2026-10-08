@@ -96,13 +96,15 @@ def test_v4_migration_preserves_registry_and_history(tmp_path, accounting):
         assert conn.execute("SELECT COUNT(*) FROM ai_job_schema WHERE version='ai-jobs-v5'").fetchone()[0] == 1
 
 
-def test_receipt_is_durable_private_idempotent_and_settles_once(tmp_path, accounting):
+@pytest.mark.parametrize("saved_stop_reason", ["end_turn", "tool_use"])
+def test_receipt_is_durable_private_idempotent_and_settles_once(tmp_path, accounting, saved_stop_reason):
     repo, ident = started(tmp_path, accounting)
+    saved = {**receipt(), "stop_reason": saved_stop_reason}
     repo.link_anthropic_message(ident, "owner", "msg_test")
-    repo.record_provider_result(ident, "owner", receipt())
-    repo.record_provider_result(ident, "owner", receipt())
+    repo.record_provider_result(ident, "owner", saved)
+    repo.record_provider_result(ident, "owner", saved)
     reopened = AIJobRepository(repo.path)
-    assert reopened.get_provider_result(ident) == receipt()
+    assert reopened.get_provider_result(ident) == saved
     row = reopened.get_job(ident)
     assert row["openai_response_id"] is None
     assert row["anthropic_message_id"] == "msg_test"

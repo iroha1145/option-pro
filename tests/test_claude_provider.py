@@ -293,11 +293,15 @@ def _search_result(call_id="srv_search", *, urls=None):
     ]}
 
 
-def _final(name=provider.RESULT_TOOL_NAME, call_id="tool_final"):
-    return {"type": "tool_use", "id": call_id, "name": name, "input": {"answer": "ok"}}
+def _final():
+    return {"type": "text", "text": '{"answer":"ok"}'}
 
 
-def _tool_events(blocks, *, stop_reason="tool_use", usage=None):
+def _client_tool(name="record_analysis"):
+    return {"type": "tool_use", "id": "tool_final", "name": name, "input": {"answer": "ok"}}
+
+
+def _tool_events(blocks, *, stop_reason="end_turn", usage=None):
     start = _sse_events()[0]
     start["message"]["usage"].update(usage or {})
     events = [start]
@@ -318,7 +322,7 @@ def _tool_events(blocks, *, stop_reason="tool_use", usage=None):
     return events
 
 
-def _stream_tools(monkeypatch, blocks, *, stop_reason="tool_use", usage=None):
+def _stream_tools(monkeypatch, blocks, *, stop_reason="end_turn", usage=None):
     requests = []
     def handler(request):
         requests.append(request)
@@ -332,26 +336,27 @@ def _stream_tools(monkeypatch, blocks, *, stop_reason="tool_use", usage=None):
     return message, requests, options
 
 
-def test_native_search_uses_strict_final_tool_and_sdk_stream(monkeypatch):
+def test_native_search_uses_json_format_and_sdk_stream(monkeypatch):
     tools = _tools()
     original = copy.deepcopy(tools)
     prepared = _prepared(tools=tools)
-    assert prepared.params["output_config"] == {"effort": "xhigh"}
+    assert prepared.params["output_config"]["effort"] == "xhigh"
+    assert prepared.params["output_config"]["format"]["type"] == "json_schema"
     assert prepared.params["tool_choice"] == {"type": "auto", "disable_parallel_tool_use": True}
-    final = prepared.params["tools"][-1]
-    assert final["name"] == "record_analysis" and final["strict"] is True
-    assert final["allowed_callers"] == ["direct"]
-    assert final["input_schema"]["additionalProperties"] is False
+    assert prepared.params["tools"] == tools
+    assert prepared.params["output_config"]["format"]["schema"]["additionalProperties"] is False
     assert prepared.params["system"][0]["cache_control"] == {"type": "ephemeral", "ttl": "5m"}
-    assert "record_analysis" in prepared.params["system"][0]["text"]
+    assert "record_analysis" not in prepared.params["system"][0]["text"]
     assert tools == original
     message, requests, _ = _stream_tools(monkeypatch, [
         {"type": "text", "text": "Intermediate explanation"},
-        _call(), _search_result(), _final(),
+        _call(), _search_result(),
+        {"type": "text", "text": '{"answer":'},
+        {"type": "text", "text": '"ok"}'},
     ], usage={"server_tool_use": {"web_search_requests": 1, "web_fetch_requests": 0}})
     body = json.loads(requests[0].content)
-    assert body["tools"][:3] == tools
-    assert "format" not in body["output_config"]
+    assert body["tools"] == tools
+    assert body["output_config"]["format"]["type"] == "json_schema"
     assert provider.response_text(message) == '{"answer":"ok"}'
     assert provider.response_terminal_error(message) is None
     assert provider.response_sources(message) == [{
@@ -364,10 +369,11 @@ def test_native_search_uses_strict_final_tool_and_sdk_stream(monkeypatch):
 
 
 @pytest.mark.parametrize(("blocks", "error"), [
-    ([_call(), _search_result()], "provider_invalid_final_tool"),
-    ([_final(), _final(call_id="tool_second")], "provider_invalid_final_tool"),
-    ([_final(name="unknown_client_tool")], "provider_unknown_client_tool"),
+    ([_call(), _search_result()], "provider_empty_response"),
+    ([_client_tool()], "provider_unknown_client_tool"),
+    ([_client_tool("unknown_client_tool")], "provider_unknown_client_tool"),
     ([_call(), _final()], "provider_incomplete_tool_result"),
+    ([_call(), _search_result("wrong_id"), _final()], "provider_invalid_tool_response"),
     ([_search_result(), _final()], "provider_invalid_tool_response"),
     ([_call(), _search_result(), _search_result(), _final()], "provider_invalid_tool_response"),
 ])
@@ -377,13 +383,13 @@ def test_invalid_tool_completions_are_not_published(monkeypatch, blocks, error):
     assert provider.response_text(message) == ""
 
 
-def test_tools_requested_without_final_tool_does_not_accept_plain_text(monkeypatch):
+def test_tools_requested_but_unused_accepts_json_text(monkeypatch):
     message, _, _ = _stream_tools(monkeypatch, [{"type": "text", "text": '{"answer":"not-final"}'}], stop_reason="end_turn")
-    assert provider.response_terminal_error(message) == "provider_incomplete"
-    assert provider.response_text(message) == ""
+    assert provider.response_terminal_error(message) is None
+    assert provider.response_text(message) == '{"answer":"not-final"}'
 
 
-@pytest.mark.parametrize("stop_reason", ["pause_turn", "max_tokens", "refusal"])
+@pytest.mark.parametrize("stop_reason", ["pause_turn", "max_tokens", "refusal", "tool_use", "stop_sequence", None])
 def test_tool_terminal_interruptions_are_not_continued_or_published(monkeypatch, stop_reason):
     message, requests, _ = _stream_tools(monkeypatch, [_call(), _search_result()], stop_reason=stop_reason)
     assert provider.response_terminal_error(message) is not None
@@ -420,16 +426,19 @@ def test_code_limit_is_shared_by_all_native_code_variants(monkeypatch):
     assert clients[0].is_closed()
 
 
-def test_final_tool_input_cannot_be_called_by_another_server_tool(monkeypatch):
-    final = _final()
+def test_client_tool_called_by_server_is_rejected(monkeypatch):
+    final = _client_tool()
     final["caller"] = {"type": "code_execution_20260120", "tool_id": "srv_code"}
     message, _, _ = _stream_tools(monkeypatch, [final])
-    assert provider.response_terminal_error(message) == "provider_invalid_final_tool"
+    assert provider.response_terminal_error(message) == "provider_unknown_client_tool"
     assert provider.response_text(message) == ""
 
 
-def test_native_fetch_and_code_usage_and_sources(monkeypatch):
+def test_native_search_fetch_and_code_usage_and_sources(monkeypatch):
     blocks = [
+        {"type": "text", "text": "Preparing public fact checks"},
+        _call(), _search_result(),
+        {"type": "text", "text": "Reading the document before final analysis"},
         _call("web_fetch", "srv_fetch"),
         {"type": "web_fetch_tool_result", "tool_use_id": "srv_fetch", "content": {
             "type": "web_fetch_result", "url": "https://www.anthropic.com/docs", "content": {
@@ -445,11 +454,16 @@ def test_native_fetch_and_code_usage_and_sources(monkeypatch):
         _final(),
     ]
     message, _, _ = _stream_tools(monkeypatch, blocks, usage={
-        "server_tool_use": {"web_search_requests": 0, "web_fetch_requests": 1},
+        "server_tool_use": {"web_search_requests": 1, "web_fetch_requests": 1},
     })
     assert provider.response_terminal_error(message) is None
+    assert provider.response_text(message) == '{"answer":"ok"}'
     assert provider.response_usage(message)["code_execution_requests"] == 1
+    assert provider.response_usage(message)["web_search_requests"] == 1
+    assert provider.response_usage(message)["web_fetch_requests"] == 1
     assert provider.response_sources(message) == [{
+        "title": "Official source", "url": "https://www.anthropic.com/news", "type": "web_search",
+    }, {
         "title": "Fetched document", "url": "https://www.anthropic.com/docs", "type": "web_fetch",
     }]
     assert "Private fetched body" not in json.dumps(provider.response_sources(message))
@@ -519,7 +533,7 @@ def test_server_tool_cumulative_usage_does_not_retain_initial_cache_split(monkey
     events.insert(-2, intermediate)
     # A later output-only receipt must not revive the initial breakdown.
     events.insert(-1, {"type": "message_delta", "delta": {
-        "stop_reason": "tool_use", "stop_sequence": None,
+        "stop_reason": "end_turn", "stop_sequence": None,
     }, "usage": {"output_tokens": 8759}})
     _transport_client(monkeypatch, lambda request: httpx2.Response(
         200, headers={"content-type": "text/event-stream"}, text=_sse(events),
@@ -554,3 +568,29 @@ def test_output_only_delta_retains_valid_initial_cache_split(monkeypatch):
     usage = provider.response_usage(message)
     assert usage["cache_creation_5m_input_tokens"] == 200
     assert usage["cache_creation_1h_input_tokens"] == 100
+
+
+def test_text_before_final_tool_result_cannot_be_used_as_final_json(monkeypatch):
+    message, _, _ = _stream_tools(monkeypatch, [
+        _final(), _call(), _search_result(),
+    ])
+    assert provider.response_terminal_error(message) == "provider_empty_response"
+    assert provider.response_text(message) == ""
+
+
+def test_claude_schema_identity_tracks_json_protocol_without_changing_openai(monkeypatch):
+    from app.services.ai_jobs import runtime
+
+    original_dumps = json.dumps
+    identities = []
+
+    def capture(value, *args, **kwargs):
+        if isinstance(value, dict) and "result_validation_contract" in value:
+            identities.append(copy.deepcopy(value))
+        return original_dumps(value, *args, **kwargs)
+
+    monkeypatch.setattr(runtime.json, "dumps", capture)
+    runtime.schema_identity("earnings_impact", model="claude-haiku-5-5")
+    runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
+    assert identities[0]["claude_features"]["contract"] == "haiku-native-tools-json-v2"
+    assert "claude_features" not in identities[1]
