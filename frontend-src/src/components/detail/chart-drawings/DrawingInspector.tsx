@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useId, useRef, useState } from 'react';
 import Icon from '@/components/icons';
 import SelectionViewport from '@/components/shared/SelectionViewport';
 import { cn } from '@/lib/utils';
@@ -13,7 +13,7 @@ const KIND_LABEL: Record<DrawingKind, string> = {
   channel: t('平行通道'),
   rectangle: t('矩形'),
   fibonacci: t('斐波那契'),
-  text: t('文字'),
+  text: t('文字批注'),
 };
 
 const IMPORT_ERROR: Record<string, string> = {
@@ -87,14 +87,16 @@ export default function DrawingInspector({
   onClear: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const [filesOpen, setFilesOpen] = useState(false);
+  const filesId = useId();
   const listed = [...(drawings ?? [])].sort((a, b) => a.zOrder - b.zOrder);
   return (
     <div className="flex flex-col gap-3 text-caption text-ink-600">
-      <p className="text-micro font-medium text-ink-500">{t('对象')}</p>
+      <p className="text-micro font-medium text-ink-500">{t('图形列表')}</p>
       {listed.length === 0 ? (
         <p className="text-micro text-ink-400">{t('当前没有手绘图形')}</p>
       ) : (
-        <ul className="flex flex-col gap-1" aria-label={t('对象')}>
+        <ul className="flex flex-col gap-1" aria-label={t('图形列表')}>
           {listed.map((item) => {
             const unresolvedItem = unresolvedIds.includes(item.id);
             return (
@@ -117,7 +119,7 @@ export default function DrawingInspector({
                 </button>
                 <button
                   type="button"
-                  aria-label={item.hidden ? t('显示') : t('隐藏')}
+                  aria-label={item.hidden ? t('显示图形') : t('隐藏图形')}
                   onClick={() => onToggleHidden?.(item.id)}
                   className="rounded-xs border border-line px-1.5 py-1 text-micro"
                 >
@@ -136,7 +138,6 @@ export default function DrawingInspector({
           })}
         </ul>
       )}
-      <p className="text-micro font-medium text-ink-500">{t('样式')}</p>
       {importError && (
         <p className="rounded-xs border border-warn-600/30 bg-warn-50 px-2 py-1 text-micro text-warn-700" role="alert">
           {IMPORT_ERROR[importError] ?? t('导入失败：数据无效')}
@@ -149,6 +150,7 @@ export default function DrawingInspector({
       )}
       {drawing ? (
         <>
+          <p className="text-micro font-medium text-ink-500">{t('图形样式')}</p>
           <div className="flex flex-wrap gap-1" role="group" aria-label={t('颜色')}>
             {COLORS.map((color) => (
               <button
@@ -229,30 +231,55 @@ export default function DrawingInspector({
             </label>
           )}
           <div className="flex flex-wrap gap-1">
-            <button type="button" aria-label={drawing.locked ? t('解锁') : t('锁定')} aria-pressed={drawing.locked} onClick={onLock} className="rounded-xs border border-line px-2 py-1 text-micro">
+            <button type="button" aria-label={drawing.locked ? t('解锁图形') : t('锁定图形')} aria-pressed={drawing.locked} onClick={onLock} className="rounded-xs border border-line px-2 py-1 text-micro">
               <Icon name={drawing.locked ? 'unlock' : 'lock'} size={13} className="mr-1 inline" />
-              {drawing.locked ? t('解锁') : t('锁定')}
+              {drawing.locked ? t('解锁图形') : t('锁定图形')}
             </button>
-            <button type="button" aria-label={drawing.hidden ? t('显示') : t('隐藏')} aria-pressed={drawing.hidden} onClick={onHide} className="rounded-xs border border-line px-2 py-1 text-micro">
+            <button type="button" aria-label={drawing.hidden ? t('显示图形') : t('隐藏图形')} aria-pressed={drawing.hidden} onClick={onHide} className="rounded-xs border border-line px-2 py-1 text-micro">
               <Icon name={drawing.hidden ? 'eye' : 'eye-off'} size={13} className="mr-1 inline" />
-              {drawing.hidden ? t('显示') : t('隐藏')}
+              {drawing.hidden ? t('显示图形') : t('隐藏图形')}
             </button>
             <button type="button" aria-label={t('上移一层')} onClick={() => onZ(1)} className="rounded-xs border border-line px-2 py-1 text-micro">{t('上移一层')}</button>
             <button type="button" aria-label={t('下移一层')} onClick={() => onZ(-1)} className="rounded-xs border border-line px-2 py-1 text-micro">{t('下移一层')}</button>
             <button type="button" aria-label={t('删除图形')} onClick={onDelete} className="rounded-xs border border-danger-600/40 px-2 py-1 text-micro text-danger-600">{t('删除图形')}</button>
           </div>
         </>
-      ) : (
-        <p className="text-micro text-ink-400">{t('当前没有手绘图形')}</p>
-      )}
-      <div className="flex flex-wrap gap-1 border-t border-line pt-2">
-        <button type="button" onClick={onExport} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导出 JSON')}</button>
-        {hasRejectedImport && onExportRejected ? (
-          <button type="button" onClick={onExportRejected} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导出上次未保存的导入文件')}</button>
-        ) : null}
-        <button type="button" onClick={() => fileRef.current?.click()} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导入 JSON')}</button>
-        <button type="button" onClick={onImportLocal} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导入本机绘图')}</button>
-        <button type="button" onClick={onClear} className="rounded-xs border border-danger-600/40 px-2 py-1 text-micro text-danger-600">{t('清除全部手绘')}</button>
+      ) : listed.length > 0 ? (
+        <p className="text-micro text-ink-400">{t('选中图形后，可修改颜色、线宽和线型')}</p>
+      ) : null}
+      <div className="border-t border-line pt-2">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            aria-expanded={filesOpen}
+            aria-controls={filesId}
+            onClick={() => setFilesOpen((open) => !open)}
+            className="flex min-h-8 flex-1 items-center justify-between gap-2 rounded-xs px-1 text-left text-micro font-medium text-ink-500 outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+          >
+            {t('绘图文件')}
+            <Icon
+              name="chevron-down"
+              size={13}
+              className={cn('shrink-0 text-ink-400 transition-transform duration-fast motion-reduce:transition-none', filesOpen && 'rotate-180')}
+            />
+          </button>
+          {hasRejectedImport && onExportRejected && !filesOpen ? (
+            <span className="shrink-0 text-micro text-warn-700">{t('有未保存的导入文件')}</span>
+          ) : null}
+        </div>
+        <div id={filesId} hidden={!filesOpen}>
+          {filesOpen && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              <button type="button" onClick={onExport} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导出绘图')}</button>
+              {hasRejectedImport && onExportRejected ? (
+                <button type="button" onClick={onExportRejected} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导出未保存的导入文件')}</button>
+              ) : null}
+              <button type="button" onClick={() => fileRef.current?.click()} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导入绘图')}</button>
+              <button type="button" onClick={onImportLocal} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导入本机绘图')}</button>
+              <button type="button" onClick={onClear} className="rounded-xs border border-danger-600/40 px-2 py-1 text-micro text-danger-600">{t('清空手绘')}</button>
+            </div>
+          )}
+        </div>
         <input
           ref={fileRef}
           type="file"

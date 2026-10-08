@@ -40,7 +40,7 @@ export const TOOL_HINTS: Record<string, ScoreHint> = {
     body: t('回撤位 0 / 0.236 / 0.382 / 0.5 / 0.618 / 0.786 / 1，外加扩展位 1.272 / 1.618；由高到低、由低到高两个方向都成立。'),
   },
   text: {
-    title: t('文字'),
+    title: t('文字批注'),
     body: t('在图上留一条纯文本批注，最多 240 字；内容为空不会保存。'),
   },
 };
@@ -62,11 +62,11 @@ export const LAYER_HINTS: Record<string, ScoreHint> = {
     body: t('标出横盘整理的阻力带、支撑带和形成时间。'),
   },
   pivots: {
-    title: t('pivot / invalidation'),
+    title: t('突破价与失效价'),
     body: t('突破参考价（pivot）是整理区的上沿；失效价（invalidation）表示该整理结构不再成立的价位。'),
   },
   auto_patterns: {
-    title: t('自动趋势线 / 通道 / 三角形 / 楔形'),
+    title: t('趋势线与形态'),
     body: t('根据已确认的高低点绘制趋势线、通道、三角形和楔形；触碰次数和间隔达到要求后才显示。'),
     note: t('几何质量表示形状的吻合程度，不代表涨跌概率。'),
   },
@@ -75,11 +75,11 @@ export const LAYER_HINTS: Record<string, ScoreHint> = {
     body: t('单根或两根 K 线的经典形态标记（如吞没、锤子），标在事件发生的那根上。'),
   },
   traps: {
-    title: t('Spring / Upthrust'),
+    title: t('假跌破与假突破'),
     body: t('假跌破收回（Spring）：跌破后迅速回到区间内。假突破回落（Upthrust）：突破后迅速跌回区间内。'),
   },
   breakouts: {
-    title: t('突破触发 / 测试 / 失败'),
+    title: t('突破进展'),
     body: t('显示突破后的进展：已触发、回踩测试或突破失败。'),
   },
   rsi: {
@@ -103,7 +103,7 @@ export const LAYER_HINTS: Record<string, ScoreHint> = {
     body: t('当前收盘价在最近 60 日高低区间中的相对位置，0 是区间底、1 是区间顶。'),
   },
   spy_rs: {
-    title: t('SPY Relative Strength'),
+    title: t('相对强弱（SPY）'),
     body: t('比较该股与标普 500 指数基金（SPY）的表现；缺少同日收盘价时不显示。'),
   },
 };

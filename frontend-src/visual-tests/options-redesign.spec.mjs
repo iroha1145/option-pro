@@ -40,9 +40,9 @@ test('一行对应一份真实存在的样例合约，行权价保留102.5及缺
   await expect(table(page).getByRole('button', { name: '查看 看跌（Put） · $100 明细', exact: true })).toHaveCount(0);
 });
 
-test('仅看异动包含精确3倍与零持仓合约，按成交量排序并可叠加看涨筛选', async ({ page }) => {
+test('只看异动包含精确3倍与零持仓合约，按成交量排序并可叠加看涨筛选', async ({ page }) => {
   await openHarness(page);
-  const alerts = range(page).getByRole('button', { name: '仅看异动', exact: true });
+  const alerts = range(page).getByRole('button', { name: '只看异动', exact: true });
   await alerts.click();
   await expect(alerts).toHaveAttribute('aria-pressed', 'true');
   const rows = table(page).getByRole('row');
@@ -124,7 +124,7 @@ test('390px下展示单合约卡片，筛选和报价明细不造成整页横向
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
   await expect(page.getByText('已取得 3/4 份合约的成交量', { exact: true })).toBeVisible();
 
-  await range(page).getByRole('button', { name: '仅看异动', exact: true }).click();
+  await range(page).getByRole('button', { name: '只看异动', exact: true }).click();
   await side(page).getByRole('button', { name: '看涨（Call）', exact: true }).click();
   await expect(list.getByRole('listitem')).toHaveCount(2);
   const trigger = list.getByRole('button', { name: call102, exact: true });
@@ -154,7 +154,7 @@ for (const width of [390, 1440]) {
     await expect(page.getByRole('heading', { level: 1 })).toContainText('AAPL');
     await expect(page.getByText('演示模式 · 当前行情与信号为示例数据', { exact: true })).toBeVisible();
 
-    const title = page.getByRole('heading', { name: '期权链', exact: true });
+    const title = page.getByRole('heading', { name: '期权报价', exact: true });
     await title.scrollIntoViewIfNeeded();
     // StockDetail currently gives the card no accessible region name; scope
     // through its actual heading instead of finding unrelated page tables.
@@ -170,7 +170,7 @@ for (const width of [390, 1440]) {
     await expect(collection).toBeVisible();
     await expect(panel.locator('[data-state="loading"]')).toHaveCount(0);
     await expect(contractButtons).toHaveCount(22); // 11 observed strikes × two demo legs.
-    await expect(panel.getByText(/^标的价\s*232\.10$/)).toBeVisible();
+    await expect(panel.getByText(/^标的现价\s*232\.10$/)).toBeVisible();
     if (width < 768) {
       await expect(collection.getByRole('listitem').first().getByText('参考价（每股）', { exact: true })).toBeVisible();
     } else {
@@ -201,7 +201,7 @@ for (const width of [390, 1440]) {
     await expect(side(page).getByRole('button', { name: '全部', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await expect(contractButtons).toHaveCount(22);
     await expect(panel.locator('[data-state="loading"]')).toHaveCount(0);
-    await expect(panel.getByText(/^标的价\s*232\.10$/)).toBeVisible();
+    await expect(panel.getByText(/^标的现价\s*232\.10$/)).toBeVisible();
     await expect(page).toHaveURL(/\/stock\/AAPL$/);
 
     const trigger = contractButtons.first();

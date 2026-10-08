@@ -42,7 +42,7 @@ function ContractDetail({ contract: c, onClose }: { contract: ChainContract; onC
     <div className="flex items-center justify-between gap-3">
       <h4 className="text-body-s font-medium text-ink-900">{contractName(c)}</h4>
       <button type="button" onClick={onClose} className="touch-target flex min-h-9 items-center justify-center gap-1 rounded-md px-2 text-caption text-ink-600 hover:bg-card" aria-label={t('收起合约明细')}>
-        {t('收起')}<Icon name="chevron-down" className="rotate-180" size={13} />
+        {t('收起明细')}<Icon name="chevron-down" className="rotate-180" size={13} />
       </button>
     </div>
     <dl className="mt-3 grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-4">
@@ -110,7 +110,7 @@ export default function ChainBrowser({ chain }: { chain: OptionChain }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SelectionViewport>
         <div className="filter-group" role="group" aria-label={t('合约范围')}>
-          {([['near', t('现价附近')], ['alerts', t('仅看异动')], ['all', t('全部合约')]] as const).map(([value, label]) => <FilterButton key={value} active={scope === value} onClick={() => { setScope(value); setSelectedId(null); }} >{label}</FilterButton>)}
+          {([['near', t('现价附近')], ['alerts', t('只看异动')], ['all', t('全部合约')]] as const).map(([value, label]) => <FilterButton key={value} active={scope === value} onClick={() => { setScope(value); setSelectedId(null); }} >{label}</FilterButton>)}
         </div>
         </SelectionViewport>
         <SelectionViewport>
@@ -136,13 +136,13 @@ export default function ChainBrowser({ chain }: { chain: OptionChain }) {
               <td className="min-w-28 px-3 py-3 text-right"><span className="text-ink-900 tnum">{number(c.volume)}</span><div className="mt-1.5 h-1 overflow-hidden rounded-sm bg-line" aria-hidden="true"><div className={cn('h-full', c.side === 'call' ? 'bg-brand-500/60' : 'bg-ink-400/55')} style={{ width: `${(c.volume ?? 0) / maxVolume * 100}%` }} /></div></td>
               <td className="px-3 py-3 text-right text-ink-600 tnum">{number(c.openInterest)}</td>
               <td className="px-3 py-3 text-right"><Ratio contract={c} />{c.activity.length > 0 && <span className="mt-0.5 block text-caption text-warn-700">{t('需关注')}</span>}</td>
-              <td className="px-3 py-3"><button type="button" className="control-button" onClick={(event) => openDetail(c.id, event.currentTarget)} aria-expanded={selectedId === c.id} aria-label={t('查看 {contract} 明细', { contract: contractName(c) })}>{t('明细')}</button></td>
+              <td className="px-3 py-3"><button type="button" className="control-button" onClick={(event) => openDetail(c.id, event.currentTarget)} aria-expanded={selectedId === c.id} aria-label={t('查看 {contract} 明细', { contract: contractName(c) })}>{t('查看明细')}</button></td>
             </tr>)}</tbody>
           </table>
         </div>
         <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line md:hidden" aria-label={t('期权合约列表')}>
           {visible.map((c) => <li key={c.id} className="p-3.5">
-            <div className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><SideLabel side={c.side} /><strong className="text-body-s text-ink-900 tnum">${strikeText(c.strike)}</strong></span><button type="button" onClick={(event) => openDetail(c.id, event.currentTarget)} aria-expanded={selectedId === c.id} aria-label={t('查看 {contract} 明细', { contract: contractName(c) })} className="control-button">{t('明细')}</button></div>
+            <div className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><SideLabel side={c.side} /><strong className="text-body-s text-ink-900 tnum">${strikeText(c.strike)}</strong></span><button type="button" onClick={(event) => openDetail(c.id, event.currentTarget)} aria-expanded={selectedId === c.id} aria-label={t('查看 {contract} 明细', { contract: contractName(c) })} className="control-button">{t('查看明细')}</button></div>
             <dl className="mt-3 grid grid-cols-3 gap-2 max-[359px]:grid-cols-[auto_1fr_1fr]">{[[t('参考价（每股）'), price(c.mid)], [t('成交量'), number(c.volume)], [t('持仓量'), number(c.openInterest)]].map(([label, value]) => <div key={label}><dt className="text-micro text-ink-500">{label}</dt><dd className="mt-1 text-caption text-ink-900 tnum">{value}</dd></div>)}</dl>
             {c.activity.length > 0 && <p className="mt-3 rounded-md bg-warn-50 px-2 py-1.5 text-caption text-warn-700">{reason(c)}</p>}
           </li>)}
@@ -150,7 +150,7 @@ export default function ChainBrowser({ chain }: { chain: OptionChain }) {
       </>}
       <details className="group/howto mt-3 rounded-md border border-line px-3 py-2 text-caption text-ink-500">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 font-medium text-ink-600 [&::-webkit-details-marker]:hidden">
-          <span>{t('这些数字怎么读？')}</span>
+          <span>{t('报价说明')}</span>
           <Icon name="chevron-down" size={14} className="shrink-0 transition-transform duration-fast group-open/howto:rotate-180 motion-reduce:transition-none" />
         </summary>
         <dl className="mt-2 grid gap-3 pb-2 sm:grid-cols-2">
@@ -158,7 +158,7 @@ export default function ChainBrowser({ chain }: { chain: OptionChain }) {
           <div><dt className="font-medium text-ink-800">{t('成交量与持仓量')}</dt><dd className="mt-1 leading-relaxed">{t('成交量是当天累计成交的张数；持仓量是上次更新时尚未平仓的张数。')}</dd></div>
           <div><dt className="font-medium text-ink-800">{t('关注规则')}</dt><dd className="mt-1 leading-relaxed">{t('满足任一条件即标记：成交量达到持仓量的 3 倍、零持仓有成交、成交至少 5,000 张，或估算金额至少 50 万美元。')}</dd></div>
           <div><dt className="font-medium text-ink-800">{t('缺失与估算')}</dt><dd className="mt-1 leading-relaxed">{t('「—」表示暂无数据。持仓量为零时，无法计算成交量与持仓量的倍数。')}</dd></div>
-          <div><dt className="font-medium text-ink-800">{t('覆盖范围')}</dt><dd className="mt-1 leading-relaxed">{t('仅统计当前股票、所选到期日的期权合约。')}</dd></div>
+          <div><dt className="font-medium text-ink-800">{t('统计范围')}</dt><dd className="mt-1 leading-relaxed">{t('仅统计当前股票、所选到期日的期权合约。')}</dd></div>
         </dl>
       </details>
     </section>

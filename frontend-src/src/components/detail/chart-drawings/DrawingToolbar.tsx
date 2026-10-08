@@ -15,7 +15,7 @@ const TOOLS: { id: DrawingTool; icon: IconName; label: string }[] = [
   { id: 'channel', icon: 'channel', label: t('平行通道') },
   { id: 'rectangle', icon: 'rect', label: t('矩形') },
   { id: 'fibonacci', icon: 'fib', label: t('斐波那契') },
-  { id: 'text', icon: 'text-note', label: t('文字') },
+  { id: 'text', icon: 'text-note', label: t('文字批注') },
 ];
 
 function toolButtonCls(active: boolean): string {
@@ -72,7 +72,7 @@ export default function DrawingToolbar({
   const quotaBlocked = syncStatus === 'unsynced' && syncHint === 'quota';
   const syncLabel =
     syncStatus === 'conflict'
-      ? t('绘图冲突：已保留本地版本，请选择')
+      ? t('绘图冲突：已保留本机版本，请选择')
       : quotaBlocked
         ? t('云端绘图配额已满，本次修改未保存，已恢复云端版本。')
       : syncStatus === 'unsynced' || syncStatus === 'load_failed' || syncStatus === 'write_failed'
@@ -113,7 +113,7 @@ export default function DrawingToolbar({
       </button>
       <button
         type="button"
-        aria-label={t('算法与图层')}
+        aria-label={t('图表设置')}
         aria-pressed={layersOpen || autoPatternsEnabled}
         onClick={() => (onOpenLayers ? onOpenLayers() : onToggleAuto())}
         className={toolButtonCls(layersOpen || autoPatternsEnabled)}
@@ -145,12 +145,12 @@ export default function DrawingToolbar({
         )}
         {syncStatus === 'conflict' && (
           <>
-            {syncHint === 'conflict' ? <span className="sr-only">{t('绘图冲突：已保留本地版本，请选择')}</span> : null}
-            <button type="button" className="underline-offset-2 hover:underline" onClick={onKeepLocal} aria-label={t('保留本地并重试')}>
-              {t('保留本地并重试')}
+            {syncHint === 'conflict' ? <span className="sr-only">{t('绘图冲突：已保留本机版本，请选择')}</span> : null}
+            <button type="button" className="underline-offset-2 hover:underline" onClick={onKeepLocal} aria-label={t('保留本机并重试同步')}>
+              {t('保留本机并重试同步')}
             </button>
-            <button type="button" className="underline-offset-2 hover:underline" onClick={onTakeServer} aria-label={t('使用服务器版本')}>
-              {t('使用服务器版本')}
+            <button type="button" className="underline-offset-2 hover:underline" onClick={onTakeServer} aria-label={t('使用云端版本')}>
+              {t('使用云端版本')}
             </button>
           </>
         )}

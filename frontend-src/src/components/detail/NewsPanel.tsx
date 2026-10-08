@@ -29,8 +29,8 @@ const MAX_ITEMS = 5;
 export default function NewsPanel({ ticker }: { ticker: string }) {
   if (isIndexSymbol(ticker)) {
     return <EmptyState icon="doc-quote" title={t('指数不适用公司新闻与财报摘要')}
-      description={t('当前新闻按公司归集；市场新闻可在催化剂页查看。')}
-      action={<Link to="/catalysts" className="text-caption font-medium text-brand-600">{t('去催化剂页浏览新闻流')}</Link>}
+      description={t('当前新闻按公司归集；市场新闻可在新闻页查看。')}
+      action={<Link to="/catalysts" className="text-caption font-medium text-brand-600">{t('浏览新闻')}</Link>}
       className="py-8" />;
   }
   return <StockNewsPanel key={ticker} ticker={ticker} />;
@@ -86,7 +86,7 @@ function StockNewsPanel({ ticker }: { ticker: string }) {
             </span>
             <span className="rounded-xs border border-ai-600/20 bg-card px-1.5 py-px text-micro font-medium text-ai-600">{t('简体中文')}</span>
             <Link to="/earnings" className="ml-auto flex items-center gap-1 text-caption font-medium text-ai-600 hover:text-ai-600/80">
-              {t('查看财报页')}
+              {t('查看财报')}
               <Icon name="chevron-right" size={13} />
             </Link>
           </div>
@@ -105,7 +105,7 @@ function StockNewsPanel({ ticker }: { ticker: string }) {
               to={`/catalysts?ticker=${encodeURIComponent(ticker)}`}
               className="btn-primary"
             >
-              {t('去催化剂页浏览新闻流')}
+              {t('浏览新闻')}
             </Link>
           }
           className="py-8"
@@ -138,7 +138,7 @@ function StockNewsPanel({ ticker }: { ticker: string }) {
           to={`/catalysts?ticker=${encodeURIComponent(ticker)}`}
           className="inline-flex items-center gap-1.5 text-caption font-medium text-brand-600 transition-colors duration-fast hover:text-brand-700"
         >
-          {t('更多相关新闻')}
+          {t('更多新闻')}
           <Icon name="arrow-up-right" size={13} />
         </Link>
       </div>

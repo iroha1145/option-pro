@@ -46,7 +46,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
             onClick={() => setConfirming(true)}
             className="btn-ai"
           >
-            {t('开始分析')}
+            {t('生成分析')}
           </button>
         )}
       </div>
@@ -92,7 +92,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
                   disabled={starting}
                   className="btn-ai"
                 >
-                  {t('开始分析')}
+                  {t('生成分析')}
                 </button>
                 <button
                   onClick={() => setConfirming(false)}
@@ -133,7 +133,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
                   disabled={job.cancelRequested}
                   className="text-ink-400 transition-colors hover:text-ink-600 disabled:cursor-default disabled:text-ink-300"
                 >
-                  {t('取消任务')}
+                  {t('取消分析')}
                 </button>
               </div>
               {deferral && !job.cancelRequested && (

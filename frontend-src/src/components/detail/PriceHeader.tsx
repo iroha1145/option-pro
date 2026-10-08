@@ -57,7 +57,7 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
         </div>
         <div className="ml-auto text-right">
           <p className="eyebrow">
-            {__t('强度分')}
+            {__t('评分')}
             <InfoHint hint={SCORE_HINTS.strengthComposite} side="bottom" align="end" size={12} className="ml-1" />
           </p>
           <StrengthBar score={detail?.strengthScore ?? Number.NaN} width={72} className="mt-1.5" />
@@ -78,7 +78,7 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
             value={<LivePrice symbol={symbol} fallback={detail?.price} fallbackAt={detail?.updatedAt} prefix="$" indicator={false} />}
             changePct={useLive ? quote?.change_pct : detail?.changePct}
             change={useLive ? quote?.change : detail?.change ?? null}
-            basis={__t('vs 昨收')}
+            basis={__t('较昨收')}
           />
         </div>
         <p className="pb-1.5 text-right text-micro text-ink-500 tnum">

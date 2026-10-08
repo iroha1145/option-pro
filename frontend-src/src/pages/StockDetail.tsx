@@ -141,13 +141,13 @@ export default function StockDetail() {
           image="/empty-chart.svg"
           title={
             is404
-              ? __t('代码不存在')
+              ? __t('未找到该股票')
               : loginExpired
-                ? __t('登录状态已失效')
+                ? __t('登录失效')
                 : rateLimited
-                  ? __t('请求较频繁')
+                  ? __t('请求过于频繁')
                   : manualRecovery
-                    ? __t('该标的暂无完整数据')
+                    ? __t('该股票暂无完整数据')
                     : __t('行情服务暂不可用')
           }
           description={
@@ -167,7 +167,7 @@ export default function StockDetail() {
                 to="/watchlist"
                 className="btn-primary"
               >
-                {__t('返回自选')}
+                {__t('返回关注')}
               </Link>
             ) : loginExpired ? (
               <Link
@@ -188,7 +188,7 @@ export default function StockDetail() {
                 className="btn-primary"
               >
                 <BusyIcon busy={refreshing} size={14} tone="on-accent" />
-                {refreshing ? __t('正在重试') : __t('重试')}
+                {refreshing ? __t('正在读取') : __t('重新读取')}
               </button>
             )
           }
@@ -271,7 +271,7 @@ export default function StockDetail() {
             ) : techSnapshotMissing ? (
               <>
                 <TechnicalPanel technical={null} />
-                <p className="mt-2 text-micro text-ink-400">{__t('拉取数据后显示')}</p>
+                <p className="mt-2 text-micro text-ink-400">{__t('获取数据后显示')}</p>
               </>
             ) : techError ? (
               techRetryRow
@@ -303,7 +303,7 @@ export default function StockDetail() {
             ) : techSnapshotMissing ? (
               <div className="mt-3 flex flex-col items-center rounded-md border border-line bg-card-warm px-4 py-8 text-center">
                 <Icon name="doc-quote" size={26} className="text-ink-300" />
-                <p className="mt-3 text-body-s font-medium text-ink-600">{__t('该股尚未拉取数据，拉取后自动分析')}</p>
+                <p className="mt-3 text-body-s font-medium text-ink-600">{__t('该股尚未获取数据，获取后自动分析')}</p>
                 <ManualStockPull ticker={detail.ticker} minimal className="mt-3" onPulled={handlePulled} />
               </div>
             ) : techError ? (
@@ -339,7 +339,7 @@ export default function StockDetail() {
 
       {/* 行4: 期权链 */}
       <div className="card-surface mt-6 p-5">
-        <h3 className="mb-4 text-h3 text-ink-900">{__t('期权链')}</h3>
+        <h3 className="mb-4 text-h3 text-ink-900">{__t('期权报价')}</h3>
         <OptionsPanel key={detail.ticker} ticker={detail.ticker} />
       </div>
 
