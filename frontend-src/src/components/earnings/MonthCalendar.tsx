@@ -234,7 +234,7 @@ export default function MonthCalendar({
                           e.stopPropagation();
                           onSelectTicker(it.ticker, date);
                         }}
-                        aria-label={t('{ticker} {timing}财报，查看 AI 影响', { ticker: it.ticker, timing: timingLabel(it.timing) })}
+                        aria-label={t('{ticker} {timing}财报，查看财报影响分析', { ticker: it.ticker, timing: timingLabel(it.timing) })}
                         className={cn(
                           'flex h-5 items-center gap-1 rounded-xs px-1 transition-colors duration-fast',
                           active ? 'bg-brand-100' : 'hover:bg-brand-50',

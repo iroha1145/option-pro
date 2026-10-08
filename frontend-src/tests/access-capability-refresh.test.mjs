@@ -159,7 +159,7 @@ for (const ticker of ['NVDA', null]) {
     const card = mountCard(t, h, false, ticker); await h.flushImmediate();
     const pending = JSON.stringify(card.read());
     assert.equal(h.access().aiPending, true);
-    assert.equal(pending.includes('AI 影响分析加载中'), ticker !== null);
+    assert.equal(pending.includes('财报影响分析加载中'), ticker !== null);
     assert.equal(pending.includes('选择公司'), ticker === null);
     assert.equal(card.reads(), 0, 'capability confirmation must still precede the first report read');
     h.resolveCapabilities(); await settle(); card.rerender(); await h.flushImmediate();

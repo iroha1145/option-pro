@@ -235,7 +235,7 @@ const BREADTH_BASIS_LABEL: Record<string, string> = {
 export const BLOCK_LABEL: Record<string, string> = {
   indices: t('指数'),
   market_signals: t('市场信号'),
-  market_regime: t('市场形态'),
+  market_regime: t('走势评分'),
   breadth_counts: t('全市场扫描'),
   themes: t('主题'),
   sector_iv: t('行业波动率快照'),
@@ -289,7 +289,7 @@ const fmtCount = (value: number) => value.toLocaleString('en-US');
 export function coverageItems(coverage: MarketBriefCoverage, year?: string): CoverageItem[] {
   const items: CoverageItem[] = [];
   if (coverage.universeSize !== null) {
-    items.push({ key: 'universe', label: t('股票池'), value: fmtCount(coverage.universeSize) });
+    items.push({ key: 'universe', label: t('股票范围'), value: fmtCount(coverage.universeSize) });
   }
   if (coverage.scoredCount !== null) {
     items.push({ key: 'scored', label: t('已评分'), value: fmtCount(coverage.scoredCount) });

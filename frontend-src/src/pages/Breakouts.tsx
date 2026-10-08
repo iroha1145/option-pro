@@ -80,7 +80,8 @@ const STATUS_CAPS: { value: StatusFilter; label: string }[] = [
   { value: 'CONFIRMED', label: __t('已确认') },
   { value: 'HOLDING', label: __t('保持中') },
   { value: 'RETESTING', label: __t('回踩中') },
-  { value: 'FAILED', label: __t('突破失败') },
+  /* 与卡片上的生命周期标签同名（LIFECYCLE_CN.FAILED）：同一状态只用一套中文 */
+  { value: 'FAILED', label: __t('已失效') },
 ];
 const SCORE_CAPS = [
   { value: 0, label: __t('不限评分') },

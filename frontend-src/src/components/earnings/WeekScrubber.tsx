@@ -181,7 +181,7 @@ export default function WeekScrubber({
                               e.stopPropagation();
                               onSelectTicker(it.ticker, date);
                             }}
-                            aria-label={__t('{ticker} {timing}财报，查看 AI 影响', { ticker: it.ticker, timing: timingLabel(it.timing) })}
+                            aria-label={__t('{ticker} {timing}财报，查看财报影响分析', { ticker: it.ticker, timing: timingLabel(it.timing) })}
                             className={cn(
                               'flex h-6 items-center gap-1 rounded-xs px-1.5 transition-[transform,background-color] duration-fast hover:-translate-y-px',
                               active ? 'bg-brand-100 text-brand-700' : 'bg-paper-2 text-ink-800 hover:bg-brand-50',

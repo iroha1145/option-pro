@@ -80,7 +80,7 @@ export default function CtaTrend() {
         </div>
       ) : snapshotMissing ? (
         <p className="mt-6 rounded-md border border-line bg-card-warm px-3 py-4 text-caption text-ink-500" {...pageRegionProps('cta', 'empty')}>
-          {t('CTA 估算尚未生成，首次计算完成后自动显示')}
+          {t('首次估算完成后自动显示')}
         </p>
       ) : ctaQ.error && !ctaQ.data ? (
         <div className="card-surface mt-6" {...pageRegionProps('cta', 'error')}>

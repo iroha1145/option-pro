@@ -60,7 +60,7 @@ export const HINTS: Dict = {
   '选股页的市场环境分是另一种算法：六项按权重合成并扣风险罚分。': ["The screener's market regime score is calculated differently: the six items are weighted and risk penalties are deducted.", "スクリーナーの地合いスコアは別の計算です：6項目を加重合成し、リスク減点を差し引きます。"],
   '六项走势评分的算术平均，每项各占六分之一，不加权、不扣罚分。趋势偏向按它判断：≥60 偏多、≤40 偏空，中间为中性。': ["The simple average of the six trend scores, each weighted one sixth, with no weighting or penalties. The trend bias uses it: ≥60 bullish, ≤40 bearish, neutral in between.", "6つの地合いスコアの単純平均で、各項目は6分の1ずつ、加重も減点もしません。トレンドの傾きはこの値で判定します：60以上は強気、40以下は弱気、その間は中立。"],
   '六项均分（0–100）': ["Six-item average (0–100)", "6項目の平均（0–100）"],
-  '六维加权：指数趋势 30% + 动量 20% + 宽度 20% + 量能 10% + 攻防价差 10% + 风险偏好 10%，再减去风险罚分×0.35。≥75 强风险偏好、≥60 温和偏强、≥40 中性震荡、<40 弱势高风险；核心数据缺失时不出正式分。': [
+  '六项加权：指数走势 30% + 动量 20% + 宽度 20% + 量能 10% + 攻防价差 10% + 风险偏好 10%，再减去风险罚分×0.35。≥75 强风险偏好、≥60 温和偏强、≥40 中性震荡、<40 弱势高风险；核心数据缺失时不出正式分。': [
     'Six weighted dimensions: index trend 30% + momentum 20% + breadth 20% + volume 10% + offense/defense spread 10% + risk appetite 10%, minus the risk penalty × 0.35. 75 or above is strongly risk-on, 60 or above mildly positive, 40 or above neutral and choppy, and below 40 weak with high risk. No official score is published while core data is missing.',
     '6つの軸を加重します：指数トレンド 30% + モメンタム 20% + 市場の広がり 20% + 出来高 10% + 攻守スプレッド 10% + リスク選好 10%。そこからリスク・ペナルティ×0.35 を差し引きます。75以上は強いリスクオン、60以上はやや強気、40以上は中立のもみ合い、40未満は弱くリスクの高い状態です。中核データが欠けている間は正式なスコアを出しません。',
   ],
@@ -69,7 +69,7 @@ export const HINTS: Dict = {
     'このスコアはスクリーナーのウェイト調整も動かします（例：弱い相場ではブレイクアウト系シグナルのウェイトを自動的に下げます）。',
   ],
 
-  '指数趋势（0–100）': ['Index trend (0–100)', '指数トレンド（0–100）'],
+  '指数走势（0–100）': ['Index trend (0–100)', '指数トレンド（0–100）'],
   '七个结构性事实的加权是非题：SPY 站上 50/200 日线（各 20%）、QQQ 站上 50/200 日线（各 15%）、IWM 与 RSP 站上 50 日线（各 10%）、SPY 200 日线斜率向上（10%）。是=100、否=0。': [
     'Seven structural yes/no facts, weighted: SPY above its 50- and 200-day MA (20% each), QQQ above its 50- and 200-day MA (15% each), IWM and RSP above their 50-day MA (10% each), and an upward-sloping SPY 200-day MA (10%). Yes = 100, no = 0.',
     '7つの構造的な事実を Yes/No で加重します：SPY が50日線・200日線の上（各20%）、QQQ が50日線・200日線の上（各15%）、IWM と RSP が50日線の上（各10%）、SPY の200日線の傾きが上向き（10%）。Yes=100、No=0 です。',

@@ -17,7 +17,7 @@ export default function StockDataCoverage({ state, className }: { state: ReturnT
       ))}
       <span className={cn('flex flex-wrap gap-x-3 gap-y-1', error || s.failed ? 'text-warn-700' : 'text-ink-400')}>
         {error ? <span>{t('状态读取失败，稍后自动重试')}</span> : loading && data === null ? <span>{t('正在检查数据')}</span> : <>
-          {s.ready === s.total && <span>{t('准备完成')}</span>}
+          {s.ready === s.total && <span>{t('数据已就绪')}</span>}
           {s.preparing > 0 && <span>{t('正在获取 {n}', { n: s.preparing })}</span>}
           {s.partial > 0 && <span>{t('部分缺失 {n}', { n: s.partial })}</span>}
           {s.stale > 0 && <span>{t('待更新 {n}', { n: s.stale })}</span>}

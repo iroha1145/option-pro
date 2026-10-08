@@ -422,7 +422,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
       const next = await loadImpact(ticker, { background: true });
       setPollAttempt((value) => value + 1);
       if (next?.result && !reportAnalysisNeedsPolling(next)) {
-        toast.success(__t('{ticker} AI 影响分析已生成', { ticker }));
+        toast.success(__t('{ticker} 财报影响分析已生成', { ticker }));
       }
     }, delay);
     return () => window.clearTimeout(timer);
@@ -535,10 +535,10 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
 
           {/* ---------- 加载骨架 ---------- */}
           {phase === 'loading' && (
-            <div aria-label={__t("AI 影响分析加载中")}>
+            <div aria-label={__t("财报影响分析加载中")}>
               <div className="flex items-center gap-2">
                 <AnalysisIcon size={16} className="text-ai-600" />
-                <span className="font-display text-[18px] leading-6 text-ink-900">{__t('AI 影响 ·')} {ticker}</span>
+                <span className="font-display text-[18px] leading-6 text-ink-900">{__t('财报影响 ·')} {ticker}</span>
               </div>
               <div className="mt-4 space-y-4">
                 <div className="skeleton-shimmer h-9 w-28 rounded-sm" />
@@ -628,7 +628,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               <span className="flex size-12 items-center justify-center rounded-lg bg-ai-50 text-ai-600">
                 <AnalysisIcon size={22} />
               </span>
-              <h3 className="mt-3 text-h3 text-ink-800">{__t('尚未生成 AI 影响')}</h3>
+              <h3 className="mt-3 text-h3 text-ink-800">{__t('尚未生成财报影响分析')}</h3>
               <p className="mt-1 max-w-[280px] text-caption text-ink-500">
                 {__t('分析 {ticker} 的财报对相关公司的影响。', { ticker })}
               </p>
@@ -752,7 +752,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               <Section>
                 <div className="flex items-center gap-2">
                   <AnalysisIcon size={16} className="text-ai-600" />
-                  <h3 className="font-display text-[18px] leading-6 text-ink-900">{__t('AI 影响 ·')} {impact.ticker}</h3>
+                  <h3 className="font-display text-[18px] leading-6 text-ink-900">{__t('财报影响 ·')} {impact.ticker}</h3>
                   {isFinalImpact(impact) ? (
                     <SoftBadge tone="up" className="ml-auto">
                       {__t('最终分析')}

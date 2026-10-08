@@ -850,7 +850,7 @@ function moverTrend(item: WatchlistItem) {
 }
 
 function moverTrendLabel(ticker: string, trend: { date: string }[], periodChange: number): string {
-  return t('{ticker} 日线走势，{start} 至 {end}，区间涨跌 {change}%', {
+  return t('{ticker} 每日走势，{start} 至 {end}，区间涨跌 {change}%', {
     ticker,
     start: trend[0].date,
     end: trend[trend.length - 1].date,
@@ -860,7 +860,7 @@ function moverTrendLabel(ticker: string, trend: { date: string }[], periodChange
 
 /** 还没有日线时区分「读取失败 / 已获取待重绘 / 获取失败 / 正在获取」。 */
 function moverPendingText(preparation: StockDataStatus | undefined, statusReadFailed: boolean): string {
-  if (statusReadFailed) return t('暂无日线走势，准备状态读取失败');
+  if (statusReadFailed) return t('暂无每日走势，准备状态读取失败');
   if (preparation?.resources.dailyChart.available) return t('日线已获取，正在更新图表');
   if (preparation?.status === 'failed' || preparation?.refreshStatus === 'failed') return t('日线获取失败，稍后自动重试');
   return t('正在获取日线，完成后自动显示');

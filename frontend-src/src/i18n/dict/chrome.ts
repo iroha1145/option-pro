@@ -8,12 +8,8 @@ export const CHROME: Dict = {
 
   /* 导航与页面名 */
   '首页': ['Home', 'ホーム'],
-  '自选': ['Watchlist', 'ウォッチリスト'],
   '选股': ['Screener', 'スクリーナー'],
-  '雷达': ['Radar', 'レーダー'],
-  '板块': ['Sectors', 'セクター'],
   '财报': ['Earnings', '決算'],
-  '催化': ['Catalysts', 'カタリスト'],
   '财报日历': ['Earnings calendar', '決算カレンダー'],
   /* 2026-10-08 第二版导航：一级 6 项与选股、市场两组的二级页面 */
   '我的关注': ['Watchlist', 'ウォッチリスト'],
@@ -45,8 +41,6 @@ export const CHROME: Dict = {
 
   /* 登录状态 */
   '登录': ['Sign in', 'サインイン'],
-  '大盘': ['Market', '地合い'],
-  'CTA': ['CTA', 'CTA'],
   '退出': ['Sign out', 'サインアウト'],
   "管理员已登录": ["Administrator signed in", "管理者としてログイン中"],
   '访客只读模式': ['Guest · read-only', 'ゲスト · 閲覧のみ'],

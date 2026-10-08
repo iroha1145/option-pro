@@ -55,7 +55,6 @@ export const MACRO: Dict = {
   '环境标签暂不可用': ['Regime label unavailable', '環境ラベルは利用できません'],
   '7 日变化': ['7-day change', '7日間の変化'],
   '有效类别': ["Valid categories", "有効カテゴリ"],
-  '数据截止': ['Data as of', 'データ基準日'],
 
   /* ============ src/components/market/macro/FactorDetails.tsx ============ */
   '重试': ['Retry', '再試行'],
@@ -84,11 +83,9 @@ export const MACRO: Dict = {
     'マクロデータは FRED、ニューヨーク連銀、FRB（連邦準備制度理事会）、シカゴ連銀、Cboe から取得しています。クロスアセットの代理指標には Option Pro の現行株式日足データソースを使用します。',
   ],
   '数据不全': ['Partial data missing', '一部データ欠落'],
-  '未启用': ['Disabled', '無効'],
   '尚未启用': ["Not enabled yet", "まだ有効になっていません"],
   '更新数据': ["Update data", "データを更新"],
   '正在提交…': ['Submitting…', '送信中…'],
-  '正在刷新': ['Refreshing', '更新中'],
   '更新失败': ["Update failed", "更新に失敗しました"],
   '宏观数据源尚未配置': ['Macro data source not yet configured', 'マクロデータソース未設定'],
   '宏观环境未启用': ['Macro conditions disabled', 'マクロ環境は無効です'],
@@ -126,7 +123,6 @@ export const MACRO: Dict = {
 
   /* ============ src/components/market/macro/FactorDetails.tsx（模块摘要行） ============ */
   '有效指标 —': ["Valid indicators —", "有効指標 —"],
-  '截止': ['As of', '基準日'],
   '截至': ['As of', '基準日'],
   '有效指标不足': ['Fewer than', '有効ファクターが'],
   '个门槛，本模块不出分（不按 50 补齐）。': [

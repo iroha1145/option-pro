@@ -187,10 +187,10 @@ function ImpactAction({ row, onSelect }: { row: EarningsRow; onSelect: () => voi
     : finalizing
       ? [t('分析中'), t('最终分析生成中')]
       : ready === true
-        ? [t('查看'), t('查看 AI 影响分析')]
+        ? [t('查看'), t('查看财报影响分析')]
         : ready === false
           ? [t('分析'), t('生成财报分析')]
-          : [t('AI 影响'), t('AI 影响分析')];
+          : [t('AI 影响'), t('财报影响分析')];
   return (
     <button
       onClick={(e) => {

@@ -275,7 +275,7 @@ for (const viewport of EARNINGS_DESKTOP_VIEWPORTS) {
       ]) {
         await expect(header.getByText(column, { exact: true })).toBeVisible();
       }
-      const rowAction = list.getByRole("button", { name: / (?:生成财报分析|AI 影响分析)$/ }).first();
+      const rowAction = list.getByRole("button", { name: / (?:生成财报分析|财报影响分析)$/ }).first();
       await expect(rowAction).toBeVisible();
       // 真实报价缺失时仍保留列，并明确说明原因，避免看起来像功能被删除。
       const moveHeader = header.getByText("预期波动", { exact: true });

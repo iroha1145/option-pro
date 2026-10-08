@@ -18,7 +18,6 @@ export const SECTORS: Dict = {
   '历史评分': ['Historical scores', '過去のスコア'],
   '高分股票': ["Top-scoring stocks", "高スコア銘柄"],
   '暂无行业高分股票数据。': ["No top-scoring stocks for this sector yet.", "このセクターの高スコア銘柄データはまだありません。"],
-  '强度': ['Strength', '強度'],
   '目录股票': ["Directory stocks", "リストの銘柄"],
   '暂未取得该行业的成分股。': ['Constituent stocks are not available for this sector yet.', 'このセクターの構成銘柄はまだ取得できていません。'],
 
@@ -58,7 +57,6 @@ export const SECTORS: Dict = {
   'IV 排名加载失败': ['Failed to load IV ranking', 'IV ランキングの読み込みに失敗しました'],
   '该行业暂无隐含波动率排名数据': ['No IV ranking data for this sector', 'このセクターの IV ランキングデータはありません'],
   '行业隐含波动率排名表': ['Sector implied volatility ranking table', 'セクター内の予想変動率ランキング表'],
-  '价': ['Price', '価格'],
   '股价': ['Price', '価格'],
   '行业排位': ['Rank within sector', 'セクター内順位'],
   '操作': ['Actions', '操作'],

@@ -189,7 +189,7 @@ test('覆盖条按样例给出：股票池、已评分、广度口径、最早�
   const brief = API.mapLatest(MOCK.getMarketBriefLatest()).brief;
   const items = TEXT.coverageItems(brief.coverage, '2026').map(({ label, value, warn }) => [label, value, Boolean(warn)]);
   assert.deepEqual(items, [
-    ['股票池', '5,894', false],
+    ['股票范围', '5,894', false],
     ['已评分', '4,410', false],
     ['广度口径', '11 只行业 ETF 代理', false],
     ['全市场扫描截至', '10-08', false],
