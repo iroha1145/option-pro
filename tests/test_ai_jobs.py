@@ -1376,6 +1376,7 @@ def test_explicit_legacy_terra_configuration_remains_readable():
         _env_file=None,
         openai_model="gpt-5.6-terra",
         openai_reasoning="max",
+        openai_max_concurrency=1,
     )
 
     assert settings.openai_model == "gpt-5.6-terra"

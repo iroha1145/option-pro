@@ -342,7 +342,12 @@ def _service(
         ai_settings=type(
             "AISettingsStub",
             (),
-            {"personal_etl_enabled": personal_etl_enabled},
+            {
+                "personal_etl_enabled": personal_etl_enabled,
+                "openai_model": "gpt-5.6-terra",
+                "openai_reasoning": "max",
+                "openai_max_concurrency": 1,
+            },
         )(),
     )
 

@@ -48,6 +48,8 @@ _LONG_CACHE_WRITE_MICROUSD_PER_MILLION = (
 )
 _LONG_OUTPUT_MICROUSD_PER_MILLION = 22_500_000
 _WEB_SEARCH_CALL_MICROUSD = 10_000
+# Verified 2026-10-08: prompts over 100K use 5x Haiku 5.5 rates.
+# https://platform.claude.com/docs/en/about-claude/pricing
 _CLAUDE_LONG_CONTEXT_THRESHOLD_TOKENS = 100_000
 _CLAUDE_INPUT_MICROUSD_PER_MILLION = 100_000
 _CLAUDE_CACHED_INPUT_MICROUSD_PER_MILLION = 10_000
@@ -668,7 +670,7 @@ def _ceil_token_cost_microusd(tokens: int, rate: int) -> int:
 
 
 def budget_reservation_microusd(job_type: str, *, model: str | None = None) -> int:
-    """Return the maximum billable cost allowed for one provider request."""
+    """Reserve a conservative estimate; native tools have no hard dollar cap."""
 
     input_tokens = max_input_tokens_for(job_type, model=model)
     output_tokens = max_output_tokens_for(job_type, model=model)
