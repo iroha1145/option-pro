@@ -99,7 +99,7 @@ export const DETAIL: Dict = {
   '分析队列已满，请约 {seconds} 秒后再试': ['The analysis queue is full. Try again in about {seconds} seconds.', '分析キューが満杯です。約 {seconds} 秒後に再試行してください。'],
   '分析队列已满，请稍后再试': ['The analysis queue is full. Please try again later.', '分析キューが満杯です。しばらくしてから再試行してください。'],
   '当前为只读模式，不能发起分析': ['Read-only mode is on, so analysis cannot be started', '閲覧専用モードのため、分析を開始できません'],
-  '技术信号已过期，请先手动拉取最新行情再分析': ['The technical signals are out of date. Pull the latest market data first, then analyze.', 'テクニカルシグナルが古くなっています。最新の相場データを取得してから分析してください。'],
+  '技术信号已过期，请先手动获取最新行情再分析': ['The technical signals are out of date. Pull the latest market data first, then analyze.', 'テクニカルシグナルが古くなっています。最新の相場データを取得してから分析してください。'],
   '暂时读不到分析设置，请稍后再试': ['Analysis settings are temporarily unavailable. Please try again later.', '分析設定を一時的に読み込めません。しばらくしてから再試行してください。'],
   'AI 分析服务尚未就绪，暂时不能发起分析': ['The AI analysis service is not ready yet, so analysis cannot be started', 'AI 分析サービスの準備ができていないため、まだ分析を開始できません'],
   'AI 供应商取消了这次分析，可以重试': ['The AI provider cancelled this analysis. You can retry.', 'AI プロバイダーがこの分析を取り消しました。再試行できます。'],

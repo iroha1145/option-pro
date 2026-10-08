@@ -71,11 +71,11 @@ async function fixture(page, tickers = [], owner = true) {
   return state;
 }
 
-const remove = (page, ticker) => page.getByRole('button', { name: `将 ${ticker} 移出自选`, exact: true });
-const manage = (page) => page.getByRole('button', { name: '管理自选', exact: true }).first();
+const remove = (page, ticker) => page.getByRole('button', { name: `移除关注 ${ticker}`, exact: true });
+const manage = (page) => page.getByRole('button', { name: '管理关注', exact: true }).first();
 async function openManager(page) {
   await manage(page).click();
-  const dialog = page.getByRole('dialog', { name: '管理自选' });
+  const dialog = page.getByRole('dialog', { name: '管理关注' });
   await expect(dialog).toBeVisible();
   return dialog;
 }
@@ -96,7 +96,7 @@ for (const width of [320, 390, 1440]) {
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
     await mkdir('test-results/watchlist', { recursive: true });
     await page.screenshot({ path: `test-results/watchlist/manager-${width}.png`, animations: 'disabled' });
-    await dialog.getByRole('button', { name: '保存自选', exact: true }).click();
+    await dialog.getByRole('button', { name: '保存关注', exact: true }).click();
     await expect(dialog).toBeHidden();
     await expect(manage(page)).toBeFocused();
     expect(state.writes).toEqual([{ add: ['MSFT', 'NVDA', 'SPY'], remove: ['AAPL'] }]);
@@ -105,12 +105,12 @@ for (const width of [320, 390, 1440]) {
     const second = await openManager(page);
     await second.getByLabel('全选', { exact: false }).check();
     await second.getByRole('button', { name: '移除所选（4）', exact: true }).click();
-    await second.getByRole('button', { name: '保存自选', exact: true }).click();
+    await second.getByRole('button', { name: '保存关注', exact: true }).click();
     await expect(second).toBeHidden();
-    await expect(page.getByText('清单还是空的', { exact: true })).toBeVisible();
+    await expect(page.getByText('暂无关注', { exact: true })).toBeVisible();
     await page.reload();
-    await expect(page.getByText('清单还是空的', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: /^将 .* 移出自选$/ })).toHaveCount(0);
+    await expect(page.getByText('暂无关注', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^移除关注 .+$/ })).toHaveCount(0);
     expect(state.tickers).toEqual([]);
     expect(state.errors).toEqual([]);
   });
@@ -121,22 +121,22 @@ test('invalid input and failed saves keep the draft; cancel makes no write', asy
   await page.goto('/watchlist');
   const dialog = await openManager(page);
   await dialog.getByLabel('添加股票代码').fill('MSFT INVALID!');
-  await dialog.getByRole('button', { name: '保存自选', exact: true }).click();
+  await dialog.getByRole('button', { name: '保存关注', exact: true }).click();
   await expect(dialog.getByRole('alert')).toContainText('INVALID!');
   expect(state.writes).toHaveLength(0);
   await dialog.getByLabel('添加股票代码').fill('MSFT');
   state.failWrite = true;
-  await dialog.getByRole('button', { name: '保存自选', exact: true }).click();
+  await dialog.getByRole('button', { name: '保存关注', exact: true }).click();
   await expect(dialog.getByRole('alert')).toContainText('保存失败');
   await expect(dialog.getByLabel('选择 MSFT', { exact: true })).toBeVisible();
   expect(state.tickers).toEqual(['AAPL']);
   state.failWrite = false; state.malformedWrite = true;
-  await dialog.getByRole('button', { name: '保存自选', exact: true }).click();
-  await expect(dialog.getByRole('alert')).toContainText('自选列表返回异常');
+  await dialog.getByRole('button', { name: '保存关注', exact: true }).click();
+  await expect(dialog.getByRole('alert')).toContainText('关注列表返回异常');
   state.malformedWrite = false;
   // Simulate an unrelated addition from another tab after this draft opened.
   state.tickers.push('AMD');
-  await dialog.getByRole('button', { name: '保存自选', exact: true }).click();
+  await dialog.getByRole('button', { name: '保存关注', exact: true }).click();
   await expect(dialog).toBeHidden();
   expect(state.tickers).toEqual(['AAPL', 'AMD', 'MSFT']);
   const again = await openManager(page);
@@ -164,40 +164,40 @@ test('deleting the final ticker ignores an older in-flight read and prevents dup
   await page.keyboard.press('Enter');
   expect(state.writes).toHaveLength(1);
   releaseWrite();
-  await expect(page.getByText('清单还是空的', { exact: true })).toBeVisible();
+  await expect(page.getByText('暂无关注', { exact: true })).toBeVisible();
   releaseRead();
   await expect(remove(page, 'AAPL')).toHaveCount(0);
   await page.reload();
-  await expect(page.getByText('清单还是空的', { exact: true })).toBeVisible();
+  await expect(page.getByText('暂无关注', { exact: true })).toBeVisible();
   expect(state.errors).toEqual([]);
 });
 
 test('detail toggle works without quote coverage and persists back to the watchlist', async ({ page }) => {
   const state = await fixture(page);
   await page.goto('/stock/AAPL');
-  await page.getByRole('button', { name: '加入自选', exact: true }).click();
-  await expect(page.getByRole('button', { name: '已加入自选', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: '加入关注', exact: true }).click();
+  await expect(page.getByRole('button', { name: '已关注', exact: true })).toHaveAttribute('aria-pressed', 'true');
   expect(state.tickers).toEqual(['AAPL']);
-  await page.getByRole('link', { name: '自选', exact: true }).first().click();
+  await page.getByRole('link', { name: '我的关注', exact: true }).first().click();
   await expect(remove(page, 'AAPL')).toBeAttached();
   await page.goto('/stock/AAPL');
-  await page.getByRole('button', { name: '已加入自选', exact: true }).click();
-  await expect(page.getByRole('button', { name: '加入自选', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await page.getByRole('button', { name: '已关注', exact: true }).click();
+  await expect(page.getByRole('button', { name: '加入关注', exact: true })).toHaveAttribute('aria-pressed', 'false');
   await page.goto('/watchlist');
-  await expect(page.getByText('清单还是空的', { exact: true })).toBeVisible();
+  await expect(page.getByText('暂无关注', { exact: true })).toBeVisible();
   expect(state.errors).toEqual([]);
 });
 
 test('visitors see only four defaults; personal read failures do not fall back to them', async ({ page }) => {
   const state = await fixture(page, [], false);
   await page.goto('/watchlist');
-  await expect(page.getByRole('link', { name: '登录后管理自选', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: '登录后管理关注', exact: true })).toBeVisible();
   await expect(page.locator('main [data-quote-symbol]')).toHaveCount(4);
-  await expect(page.getByRole('button', { name: /^将 .* 移出自选$/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^移除关注 .+$/ })).toHaveCount(0);
   expect(state.quoteReads).toEqual([defaults]);
   state.owner = true; state.failRead = true;
   await page.reload();
-  await expect(page.getByText('自选读取失败', { exact: true })).toBeVisible();
+  await expect(page.getByText('关注读取失败', { exact: true })).toBeVisible();
   await expect(page.locator('main [data-quote-symbol]')).toHaveCount(0);
   expect(state.writes).toHaveLength(0);
   expect(state.errors).toEqual([]);
@@ -208,7 +208,7 @@ test('batch cap does not partially add and changing accounts discards the previo
   await page.goto('/watchlist');
   const dialog = await openManager(page);
   await dialog.getByLabel('添加股票代码').fill('NVDA');
-  await dialog.getByRole('button', { name: '保存自选', exact: true }).click();
+  await dialog.getByRole('button', { name: '保存关注', exact: true }).click();
   await expect(dialog.getByRole('alert')).toContainText('最多保存 50');
   expect(state.writes).toHaveLength(0);
   state.owner = false; state.username = 'second-account'; state.tickers = ['MSFT'];
@@ -223,12 +223,12 @@ test('quote failures preserve membership and a visible retry restores quotes', a
   const state = await fixture(page, ['AAPL']);
   state.failQuotes = true;
   await page.goto('/watchlist');
-  await expect(page.getByText('行情暂时读取失败，自选名单已保留。', { exact: true })).toBeVisible();
+  await expect(page.getByText('行情暂时读取失败，关注名单已保留。', { exact: true })).toBeVisible();
   await expect(remove(page, 'AAPL')).toBeAttached();
   expect(state.tickers).toEqual(['AAPL']);
   state.failQuotes = false;
-  await page.getByText('行情暂时读取失败，自选名单已保留。', { exact: true }).locator('..').getByRole('button', { name: '重试', exact: true }).click();
-  await expect(page.getByText('行情暂时读取失败，自选名单已保留。', { exact: true })).toBeHidden();
+  await page.getByText('行情暂时读取失败，关注名单已保留。', { exact: true }).locator('..').getByRole('button', { name: '重试', exact: true }).click();
+  await expect(page.getByText('行情暂时读取失败，关注名单已保留。', { exact: true })).toBeHidden();
   await expect(page.getByRole('button', { name: /AAPL Company/ })).toBeVisible();
   expect(state.errors).toEqual([]);
 });
@@ -240,12 +240,12 @@ test('removing a non-final card offers undo and restores its exact order', async
   // 卡片上的移除钮悬停或键盘聚焦才显形；用键盘走一遍
   await remove(page, 'MSFT').focus();
   await page.keyboard.press('Enter');
-  const notice = page.getByRole('status').filter({ hasText: '已移出自选' });
+  const notice = page.getByRole('status').filter({ hasText: '已移除关注' });
   await expect(notice).toBeVisible();
   await expect.poll(() => state.tickers).toEqual(['AAPL', 'NVDA']);
   await notice.getByRole('button', { name: '撤销', exact: true }).click();
   await expect.poll(() => state.tickers).toEqual(['AAPL', 'MSFT', 'NVDA']);
-  await expect(page.getByRole('status').filter({ hasText: '已恢复到自选' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: '已恢复关注' })).toBeVisible();
   expect(state.writes.at(-1)).toEqual({ ticker: 'MSFT', original_order: ['AAPL', 'MSFT', 'NVDA'], principal_id: 'own_local' });
   expect(state.errors).toEqual([]);
 });
@@ -254,7 +254,7 @@ test('removing a non-final card offers undo and restores its exact order', async
 async function deleteWithNotice(page, symbol) {
   await remove(page, symbol).focus();
   await page.keyboard.press('Enter');
-  const notice = page.getByRole('status').filter({ hasText: '已移出自选' });
+  const notice = page.getByRole('status').filter({ hasText: '已移除关注' });
   await expect(notice).toBeVisible();
   await notice.getByRole('button', { name: '撤销', exact: true }).focus();
   return notice;
@@ -269,8 +269,8 @@ test('undo survives navigation and preserves another tab addition', async ({ pag
   state.tickers.push('AMD');
   await notice.getByRole('button', { name: '撤销', exact: true }).click();
   await expect.poll(() => state.tickers).toEqual(['AAPL', 'MSFT', 'NVDA', 'AMD']);
-  await expect(page.getByRole('status').filter({ hasText: '已恢复到自选' })).toBeVisible();
-  await page.getByRole('link', { name: '自选', exact: true }).first().click();
+  await expect(page.getByRole('status').filter({ hasText: '已恢复关注' })).toBeVisible();
+  await page.getByRole('link', { name: '我的关注', exact: true }).first().click();
   await expect(remove(page, 'MSFT')).toBeAttached();
   expect(state.errors).toEqual([]);
 });
@@ -285,8 +285,8 @@ for (const identity of ['unavailable', 'changed', 'signed-out']) {
     else { state.owner = false; state.username = identity === 'changed' ? 'second-account' : null; state.tickers = []; }
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     if (identity === 'unavailable') await expect(page.getByText('身份暂时无法确认，请稍后重试', { exact: true })).toBeVisible();
-    else if (identity === 'changed') await expect(page.getByText('清单还是空的', { exact: true })).toBeVisible();
-    else await expect(page.getByRole('link', { name: '登录后管理自选', exact: true })).toBeVisible();
+    else if (identity === 'changed') await expect(page.getByText('暂无关注', { exact: true })).toBeVisible();
+    else await expect(page.getByRole('link', { name: '登录后管理关注', exact: true })).toBeVisible();
     await notice.getByRole('button', { name: '撤销', exact: true }).click();
     await expect(page.getByRole('alert').filter({ hasText: '恢复失败' })).toBeVisible();
     expect(state.writes).toHaveLength(writes);
@@ -305,7 +305,7 @@ for (const failure of ['server', 'full', 'malformed']) {
     const before = [...state.tickers];
     await notice.getByRole('button', { name: '撤销', exact: true }).click();
     await expect(page.getByRole('alert').filter({ hasText: '恢复失败' })).toBeVisible();
-    await expect(page.getByRole('status').filter({ hasText: '已恢复到自选' })).toHaveCount(0);
+    await expect(page.getByRole('status').filter({ hasText: '已恢复关注' })).toHaveCount(0);
     expect(state.tickers).toEqual(before);
     expect(state.errors).toEqual([]);
   });
@@ -314,10 +314,10 @@ for (const failure of ['server', 'full', 'malformed']) {
 test('detail deletion can be undone after leaving the stock route', async ({ page }) => {
   const state = await fixture(page, ['AAPL', 'MSFT', 'NVDA']);
   await page.goto('/stock/MSFT');
-  await page.getByRole('button', { name: '已加入自选', exact: true }).click();
-  const notice = page.getByRole('status').filter({ hasText: '已移出自选' });
+  await page.getByRole('button', { name: '已关注', exact: true }).click();
+  const notice = page.getByRole('status').filter({ hasText: '已移除关注' });
   await expect(notice).toBeVisible();
-  await page.getByRole('link', { name: '自选', exact: true }).first().click();
+  await page.getByRole('link', { name: '我的关注', exact: true }).first().click();
   await notice.getByRole('button', { name: '撤销', exact: true }).click();
   await expect.poll(() => state.tickers).toEqual(['AAPL', 'MSFT', 'NVDA']);
   await expect(remove(page, 'MSFT')).toBeAttached();
@@ -348,7 +348,7 @@ test('server refuses undo after cookie account changes before the UI refreshes i
   await expect(page.getByRole('alert').filter({ hasText: '恢复失败' })).toBeVisible();
   expect(state.writes.at(-1).principal_id).toEqual('own_local');
   expect(state.tickers).toEqual(['AMD']);
-  await expect(page.getByRole('status').filter({ hasText: '已恢复到自选' })).toHaveCount(0);
+  await expect(page.getByRole('status').filter({ hasText: '已恢复关注' })).toHaveCount(0);
   expect(state.errors).toEqual([]);
 });
 
@@ -378,7 +378,7 @@ test('an old removal response is not offered as undo to a new confirmed account'
   const oldResponse = await completed;
   expect((await oldResponse.json()).undo.principal_id).toBe('own_local');
   await expect.poll(() => page.evaluate(() => window.watchlistChanges.length)).toBe(2);
-  await expect(page.getByRole('status').filter({ hasText: '已移出自选' })).toHaveCount(0);
+  await expect(page.getByRole('status').filter({ hasText: '已移除关注' })).toHaveCount(0);
   expect(state.tickers).toEqual(['AMD']);
   expect(state.errors).toEqual([]);
 });
@@ -395,7 +395,7 @@ for (const interruption of ['signed-out', 'identity-unavailable']) {
     await expect.poll(() => state.writes.length).toBe(1);
     if (interruption === 'signed-out') await page.getByRole('button', { name: '退出', exact: true }).click();
     else { state.failIdentity = true; await page.evaluate(() => window.dispatchEvent(new Event('focus'))); }
-    if (interruption === 'signed-out') await expect(page.getByRole('link', { name: '登录后管理自选', exact: true })).toBeVisible();
+    if (interruption === 'signed-out') await expect(page.getByRole('link', { name: '登录后管理关注', exact: true })).toBeVisible();
     else await expect(page.getByText('身份暂时无法确认，请稍后重试', { exact: true })).toBeVisible();
     if (interruption === 'signed-out') {
       await page.getByRole('link', { name: '登录', exact: true }).first().click();
@@ -412,7 +412,7 @@ for (const interruption of ['signed-out', 'identity-unavailable']) {
     releaseResponse();
     await expect(page.getByRole('alert').filter({ hasText: '移除失败' })).toBeVisible();
     await expect(remove(page, 'MSFT')).toHaveCount(0);
-    await expect(page.getByRole('status').filter({ hasText: '已移出自选' })).toHaveCount(0);
+    await expect(page.getByRole('status').filter({ hasText: '已移除关注' })).toHaveCount(0);
     expect(state.tickers).toEqual(['AAPL', 'NVDA']);
     expect(state.writes).toHaveLength(1);
     expect(state.errors).toEqual([]);

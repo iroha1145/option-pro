@@ -66,7 +66,7 @@ export function usePersonalWatchlist({ load = true }: { load?: boolean } = {}) {
     principalKey: string, operation: () => Promise<Result>, validate: (next: Result) => boolean,
   ) => {
     if (!isCurrentPrincipal(principalKey)) {
-      throw new ApiError(409, t('登录身份已变化，请重新操作'), { bizCode: 'watchlist_identity_changed' });
+      throw new ApiError(409, t('登录账号已变化，请重新操作'), { bizCode: 'watchlist_identity_changed' });
     }
     if (pendingWrites.has(principalKey)) throw new ApiError(409, t('请等待当前操作完成'));
     pendingWrites.add(principalKey);
@@ -74,11 +74,11 @@ export function usePersonalWatchlist({ load = true }: { load?: boolean } = {}) {
     const generation = life.current.generation;
     try {
       const next = await operation();
-      if (!validate(next)) throw new ApiError(502, t('自选修改尚未确认，请重试'));
+      if (!validate(next)) throw new ApiError(502, t('关注修改尚未确认，请重试'));
       // A route unmount does not revoke the principal, but a confirmed account
       // change or identity suspension must not publish the old result as current.
       if (!live.current.enabled || live.current.key !== principalKey) {
-        throw new ApiError(409, t('登录身份已变化，请重新操作'), { bizCode: 'watchlist_identity_changed' });
+        throw new ApiError(409, t('登录账号已变化，请重新操作'), { bizCode: 'watchlist_identity_changed' });
       }
       if (life.current.alive && life.current.key === principalKey && life.current.generation === generation) {
         setSnapshot({ key: principalKey, data: next, error: null, ready: true });

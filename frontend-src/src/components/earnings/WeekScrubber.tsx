@@ -82,7 +82,7 @@ export default function WeekScrubber({
         </button>
         <p className="flex flex-wrap items-baseline justify-center gap-x-2 text-center text-caption text-ink-600 tnum" aria-live="polite">
           <span>{fmtMDCN(days[0])} – {fmtMDCN(days[6])}</span>
-          <span className="font-sans text-micro text-ink-400">{__t('美东 ET')}</span>
+          <span className="font-sans text-micro text-ink-400">{__t('纽约时间')}</span>
         </p>
         <button
           onClick={() => onWeekChange(1)}

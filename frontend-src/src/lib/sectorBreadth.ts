@@ -10,14 +10,14 @@ export function sectorBreadthReading(
   const { available, expected, aboveCount } = coverage;
   const validAvailable = available !== null && Number.isInteger(available) && available > 0;
   const validExpected = validAvailable && expected !== null && Number.isInteger(expected) && expected >= available;
-  let reading = t('站上 50 日均线的板块占比 {pct}', { pct });
+  let reading = t('站上 50 日均线的行业占比 {pct}', { pct });
   if (validAvailable && aboveCount !== null && Number.isInteger(aboveCount) && aboveCount >= 0 && aboveCount <= available) {
     reading = validExpected && available === expected
-      ? t('{available} 个板块中，{above} 个站上 50 日均线，占比 {pct}', { available, above: aboveCount, pct })
-      : t('有数据的 {available} 个板块中，{above} 个站上 50 日均线，占比 {pct}', { available, above: aboveCount, pct });
+      ? t('{available} 个行业中，{above} 个站上 50 日均线，占比 {pct}', { available, above: aboveCount, pct })
+      : t('有数据的 {available} 个行业中，{above} 个站上 50 日均线，占比 {pct}', { available, above: aboveCount, pct });
   }
   if (validExpected && available < expected) {
-    reading += t('（数据覆盖 {available}/{expected} 个板块）', { available, expected });
+    reading += t('（数据覆盖 {available}/{expected} 个行业）', { available, expected });
   }
   return reading;
 }

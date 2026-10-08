@@ -343,7 +343,7 @@ for (const width of [390, 1440]) {
       await page.goto('/');
       await expect.poll(() => page.evaluate(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches))
         .toBe(true);
-      const movers = page.getByRole('region', { name: '关注池异动', exact: true });
+      const movers = page.getByRole('region', { name: '关注动态', exact: true });
       const cards = movers.getByTestId('watchlist-mover-card');
       const figures = movers.getByTestId('watchlist-daily-trend');
       await expect(figures.first()).toBeVisible();
@@ -352,7 +352,7 @@ for (const width of [390, 1440]) {
       await expect(cards.first()).toContainText('当日');
       await expect(cards.first()).toContainText(/近\s*30\s*个交易日/);
       await expect(figures.first()).toHaveAccessibleName(/日线走势，\d{4}-\d{2}-\d{2} 至 \d{4}-\d{2}-\d{2}，区间涨跌/);
-      await expect(figures.first().locator('figcaption')).toContainText('区间');
+      await expect(figures.first().locator('figcaption')).toContainText('区间涨跌');
       await expect(figures.first().locator('figcaption')).toContainText(/\d{2}-\d{2}\s*—\s*\d{2}-\d{2}/);
 
       // figcaption 的涨跌箭头也是 SVG；只有 figure 直属 SVG 才是走势图。

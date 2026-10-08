@@ -244,7 +244,7 @@ for (const viewport of EARNINGS_DESKTOP_VIEWPORTS) {
 
       const subject = page.locator('[aria-label="财报主体"]');
       const list = page.locator('[aria-label="即将公布"]');
-      const analysis = page.locator('[aria-label="AI 影响分析"]');
+      const analysis = page.locator('[aria-label="财报影响分析"]');
       await expect(subject).toBeVisible();
       // The API probe and earlier browser cases share this backend's IP
       // bucket. Recover only an observed 429 through the actual page action;

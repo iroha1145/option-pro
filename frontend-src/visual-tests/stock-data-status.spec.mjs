@@ -74,14 +74,14 @@ test('coverage distinguishes incomplete preparation, missing rows, and read fail
   await advance(page);
   await expect(coverage(page)).toContainText('状态读取失败');
   await expect(coverage(page)).toContainText('行情1/2');
-  await expect(coverage(page)).not.toContainText('数据已就绪');
+  await expect(coverage(page)).not.toContainText('准备完成');
   expect(state.requests.every((request) => request.method === 'GET')).toBeTruthy();
   await capture(page, 'coverage-read-failure');
 });
 
 test('requests deduplicate canonical tickers and use batches of at most 200', async ({ page }) => {
   const state = await fixture(page); await state.open();
-  await expect(coverage(page)).toContainText('数据已就绪');
+  await expect(coverage(page)).toContainText('准备完成');
   const requested = Array.from({ length: 403 }, (_, i) => `S${String(i).padStart(3, '0')}`);
   const before = statusRequests(state).length;
   await page.evaluate((tickers) => window.statusHarness.setTickers([...tickers, 's000', ' SPX ', '^GSPC', 'BRK.B', 'BRK-B']), requested);
@@ -101,7 +101,7 @@ test('requests deduplicate canonical tickers and use batches of at most 200', as
 
 test('hidden pages pause the 30-second status polling and resume immediately on visibility', async ({ page }) => {
   const state = await fixture(page); await state.open();
-  await expect(coverage(page)).toContainText('数据已就绪');
+  await expect(coverage(page)).toContainText('准备完成');
   const start = statusRequests(state).length;
   await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' }); document.dispatchEvent(new Event('visibilitychange')); });
   await advance(page, 60_000);

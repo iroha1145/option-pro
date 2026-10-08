@@ -189,7 +189,7 @@ function ImpactAction({ row, onSelect }: { row: EarningsRow; onSelect: () => voi
       : ready === true
         ? [t('查看'), t('查看 AI 影响分析')]
         : ready === false
-          ? [t('分析'), t('生成 AI 影响分析')]
+          ? [t('分析'), t('生成财报分析')]
           : [t('AI 影响'), t('AI 影响分析')];
   return (
     <button
@@ -277,7 +277,7 @@ export default function EarningsList({
         <section className="card-surface" aria-label={t("即将公布")}>
           <EmptyState
             image="/empty-chart.svg"
-            title={filteredByDay ? t('当日没有重点公司财报') : t('当前范围内没有重点公司财报')}
+            title={filteredByDay ? t('当日暂无重点公司财报') : t('当前范围内没有重点公司财报')}
             description={t('切换到「全部公司」查看其他公司的财报。')}
             action={
               onShowAll ? (
@@ -300,7 +300,7 @@ export default function EarningsList({
           image="/empty-chart.svg"
           /* 默认列表覆盖的是「近 3 天到未来 30 天」滚动窗口（审计 2.3.4）：
              写「本周清淡 · 跳到下周看看」会让用户以为还有下周数据没查。 */
-          title={filteredByDay ? t('当日无财报') : t('近一个月暂无财报')}
+          title={filteredByDay ? t('当日无财报') : t('未来 30 天暂无财报')}
           description={filteredByDay ? t('当日没有财报安排，可查看其他日期。') : t('未来 30 天没有已安排的财报，稍后再来看看。')}
           action={
             onNextWeek ? (
@@ -438,7 +438,7 @@ export default function EarningsList({
                         <span className="text-ink-500">{est != null ? est.toFixed(2) : '—'}</span>
                         <span className="mx-1 text-ink-400">/</span>
                         <span className={cn('whitespace-nowrap', act != null ? 'font-medium text-ink-900' : 'text-ink-400')}>
-                          {act != null ? act.toFixed(2) : t('未公布')}
+                          {act != null ? act.toFixed(2) : t('尚未公布')}
                         </span>
                       </span>
                     </span>
@@ -491,7 +491,7 @@ export default function EarningsList({
                           <span className="text-ink-500">{est != null ? est.toFixed(2) : '—'}</span>
                           <span className="mx-1 text-ink-400">/</span>
                           <span className={cn('whitespace-nowrap', act != null ? 'text-ink-900' : 'text-ink-400')}>
-                            {act != null ? act.toFixed(2) : t('未公布')}
+                            {act != null ? act.toFixed(2) : t('尚未公布')}
                           </span>
                         </span>
                       </span>

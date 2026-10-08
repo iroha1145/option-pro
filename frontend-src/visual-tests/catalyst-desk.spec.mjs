@@ -40,7 +40,7 @@ test("Catalyst Desk visual evidence: home /", async ({ page }) => {
   await expect(page).toHaveURL(/\/$/);
   // Real-backend runs share a request bucket. Initial identity confirmation
   // may honor up to 60s of Retry-After before the page can safely mount.
-  await expect(page.getByRole("region", { name: "指数概览" })).toBeVisible({ timeout: 75_000 });
+  await expect(page.getByRole("region", { name: "市场指数" })).toBeVisible({ timeout: 75_000 });
   await expectShell(page);
   await screenshot(page, "1440x900-home");
 });

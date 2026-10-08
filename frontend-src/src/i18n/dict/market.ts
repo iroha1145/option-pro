@@ -10,21 +10,19 @@ export const MARKET: Dict = {
   '暂无指数数据': ['No index data available', '指数データがありません'],
 
   /* src/pages/Home.tsx（首页：指数带 / 市场状态 / 雷达信号 / 财报临近 / 自选异动 / CTA 联动带） */
-  '雷达信号': ['Radar signals', 'レーダーシグナル'],
+  '突破信号': ['Breakout signals', 'ブレイクアウトシグナル'],
   '暂无突破信号': ['No breakout signals yet', 'ブレイクアウトのシグナルはまだありません'],
   '财报临近': ['Earnings approaching', 'まもなく決算'],
   '查看全部': ['View all', 'すべて見る'],
   '纽约时间': ['New York time', 'ニューヨーク時間'],
-  '六维形态均值': ['Six-dimension regime mean', '六軸レジーム平均'],
-  '扫描池': ['Scan pool', 'スキャンプール'],
+  '六项均分': ['Six-dimension regime mean', '六軸レジーム平均'],
+  '统计范围': ['Coverage', '集計範囲'],
   '上涨': ['Advancers', '値上がり'],
   '下跌': ['Decliners', '値下がり'],
-  '平盘': ['Unchanged', '変わらず'],
   'EPS 预期 {v}': ['EPS est. {v}', 'EPS予想 {v}'],
 
   /* src/components/market/LinkCards.tsx */
   '突破雷达': ['Breakout radar', 'ブレイクアウト・レーダー'],
-  '板块透视': ['Sector X-ray', 'セクター透視'],
 
   /* src/components/market/RegimePanel.tsx */
   '指数趋势': ['Index trend', '指数トレンド'],
@@ -52,10 +50,10 @@ export const MARKET: Dict = {
   '当前信号评分：{scores}。': ['Current signal scores: {scores}.', '現在のシグナルスコア：{scores}。'],
   '「{label}」{value}': ['{label} ({value})', '「{label}」{value}'],
   '主要指标：{items}。': ['Key indicators: {items}.', '主な指標：{items}。'],
-  '站上 50 日均线的板块占比 {pct}': ['Sector ETFs above their 50-day moving average: {pct}', '50日移動平均線を上回るセクターETFの割合は{pct}'],
-  '{available} 个板块中，{above} 个站上 50 日均线，占比 {pct}': ['{above} of {available} sector ETFs are above their 50-day moving average ({pct})', '{available}セクターのうち{above}セクターのETFが50日移動平均線を上回っています（{pct}）'],
-  '有数据的 {available} 个板块中，{above} 个站上 50 日均线，占比 {pct}': ['Of {available} sector ETFs with data, {above} are above their 50-day moving average ({pct})', 'データのある{available}セクターのうち{above}セクターのETFが50日移動平均線を上回っています（{pct}）'],
-  '（数据覆盖 {available}/{expected} 个板块）': [' (data coverage: {available}/{expected} sectors)', '（データ取得済み：{available}/{expected}セクター）'],
+  '站上 50 日均线的行业占比 {pct}': ['Sector ETFs above their 50-day moving average: {pct}', '50日移動平均線を上回るセクターETFの割合は{pct}'],
+  '{available} 个行业中，{above} 个站上 50 日均线，占比 {pct}': ['{above} of {available} sector ETFs are above their 50-day moving average ({pct})', '{available}セクターのうち{above}セクターのETFが50日移動平均線を上回っています（{pct}）'],
+  '有数据的 {available} 个行业中，{above} 个站上 50 日均线，占比 {pct}': ['Of {available} sector ETFs with data, {above} are above their 50-day moving average ({pct})', 'データのある{available}セクターのうち{above}セクターのETFが50日移動平均線を上回っています（{pct}）'],
+  '（数据覆盖 {available}/{expected} 个行业）': [' (data coverage: {available}/{expected} sectors)', '（データ取得済み：{available}/{expected}セクター）'],
   ' {flat} 平': [', {flat} unchanged', '・{flat}変わらず'],
   '，{unknown} 个涨跌未知': [', {unknown} with unknown change', '・{unknown}騰落不明'],
   '，标普 500 报 {price}（{pct}）': [', S&P 500 at {price} ({pct})', '、S&P500は{price}（{pct}）'],
@@ -81,7 +79,9 @@ export const MARKET: Dict = {
   '市场状态': ['Market status', '市場状況'],
   '纽约时间（ET）· 每秒更新': ['New York time (ET) · updates every second', 'ニューヨーク時間（ET）· 1秒ごとに更新'],
   '距下一开盘': ['Until the next open', '次の取引開始まで'],
+  '距开盘': ['Until the next open', '次の取引開始まで'],
   '距下一收盘': ['Until the next close', '次の取引終了まで'],
+  '距收盘': ['Until the next close', '次の取引終了まで'],
   '节假日': ['Holiday', '祝日'],
 
   /* src/pages/Market.tsx */
@@ -93,6 +93,7 @@ export const MARKET: Dict = {
   '时段读取中…': ['Loading session…', 'セッション取得中…'],
   '时段未知': ['Session unknown', 'セッション不明'],
   '指数概览': ['Index overview', '指数概況'],
+  '市场指数': ['Market indices', '市場指数'],
   '美股指数': ['US indices', '米国株指数'],
   '其他市场': ['Other markets', 'その他の市場'],
   '宏观环境': ['Macro conditions', 'マクロ環境'],
@@ -139,6 +140,7 @@ export const MARKET: Dict = {
   'CTA 趋势资金估算': ['CTA trend-flow estimate', 'CTAトレンド資金推定'],
   '基于 ETF 趋势的代理估算': ['Proxy estimate based on ETF trends', 'ETFトレンドに基づく代理推定'],
   'CTA 估算尚未生成，首次计算完成后自动显示': ['CTA estimates will appear after the first calculation completes', 'CTAの推定値は、初回の計算が終わると自動で表示されます'],
+  '首次估算完成后自动显示': ['Appears automatically once the first estimate completes', '初回の推定が完了すると自動で表示されます'],
   'CTA 估算读取失败': ['Failed to load the CTA estimate', 'CTA推定の読み込みに失敗'],
   '{proxy} 历史数据不足：已有 {bars} 根日线，需 {req} 根才能估算': ['{proxy} needs {req} daily bars for an estimate; {bars} are available', '{proxy}の推定には日足が{req}本必要です。現在は{bars}本あります'],
   '{proxy} 行情暂不可用': ['{proxy} price data is unavailable', '{proxy}の価格データを取得できません'],
@@ -151,10 +153,10 @@ export const MARKET: Dict = {
   '前值 {v}': ['prev {v}', '前回 {v}'],
   '今日仓位变化': ['Today’s position change', '本日のポジション変化'],
   '趋势 {a} · 波动率 {b}': ['Trend {a} · Vol {b}', 'トレンド{a} · ボラ{b}'],
-  '关注池异动': ['Focus-pool movers', 'ウォッチプールの変動'],
+  '关注动态': ['Focus-pool movers', 'ウォッチプールの変動'],
   '刷新失败，显示上次成功的结果': ['Refresh failed — showing the last successful result', '更新に失敗——前回成功時の結果を表示中'],
   '部分读数刷新失败，显示上次成功的结果': ['Some readings failed to refresh — showing the last successful results', '一部の指標は更新に失敗——前回成功時の値を表示中'],
-  '暂无关注标的': ['No focus-pool tickers yet', 'ウォッチプール銘柄はまだありません'],
+  '暂无关注股票': ['No focus-pool tickers yet', 'ウォッチプール銘柄はまだありません'],
   /* ---- cta-proxy-v2（2026-08-09 审计修正） ---- */
   '趋势指标': ['Trend indicators', 'トレンド指標'],
   '强度 {v}': ['Strength {v}', '強度 {v}'],
@@ -323,4 +325,5 @@ export const MARKET: Dict = {
   '今日次数已用完': ['Daily run limit reached', '本日の実行回数を使い切りました'],
   '原因未知': ['Unknown reason', '原因不明'],
   '请求未成功': ['The request did not succeed', 'リクエストは成功しませんでした'],
+  '区间涨跌': ['Period change', '期間騰落率'],
 };

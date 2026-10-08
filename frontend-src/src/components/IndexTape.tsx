@@ -24,11 +24,11 @@ function TapeItem({ q, flash, onOpen }: { q: IndexQuote; flash: 'up' | 'down' | 
     <button
       type="button"
       onClick={() => onOpen(q.code)}
-      title={t('查看大盘强弱 · {code}', { code: q.code })}
+      title={t('查看美股概况 · {code}', { code: q.code })}
       aria-label={
         tone === 'flat' || tone === 'unknown'
-          ? t('查看大盘强弱，{code} 最新价 {price}，{flat}', { code: q.code, price: fmtPrice(q.price), flat: tone === 'unknown' ? t('涨跌数据缺失') : t('持平') })
-          : t('查看大盘强弱，{code} 最新价 {price}，涨跌 {pct}', { code: q.code, price: fmtPrice(q.price), pct: fmtPct(q.changePct) })
+          ? t('查看美股概况，{code} 最新价 {price}，{flat}', { code: q.code, price: fmtPrice(q.price), flat: tone === 'unknown' ? t('涨跌数据缺失') : t('持平') })
+          : t('查看美股概况，{code} 最新价 {price}，涨跌 {pct}', { code: q.code, price: fmtPrice(q.price), pct: fmtPct(q.changePct) })
       }
       className={cn(
         'tick-flash inline-flex cursor-pointer items-center gap-2 rounded-xs px-1 transition-colors duration-fast hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600',

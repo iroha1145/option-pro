@@ -41,7 +41,7 @@ for (const width of [320, 390]) {
       const indicesReady = new Promise(resolve => { release = resolve; });
       const errors = await fixture(page, indicesReady);
       await page.goto(pathname);
-      const region = page.getByRole('region', { name: '指数概览', exact: true });
+      const region = page.getByRole('region', { name: '市场指数', exact: true });
       const skeleton = region.locator('[data-state="loading"]');
       await expect(skeleton.first()).toBeVisible();
       const expectedColumns = width < 360 ? 2 : 3;

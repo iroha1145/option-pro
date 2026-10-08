@@ -126,7 +126,7 @@ function CharStagger({ text, className, delayBase = 0 }: { text: string; classNa
 
 const FEATURES: { icon: IconName; title: string }[] = [
   { icon: 'radar', title: t('突破雷达') },
-  { icon: 'layers', title: t('板块透视') },
+  { icon: 'layers', title: t('行业表现') },
   { icon: 'spark-ai', title: t('财报 AI') },
 ];
 
@@ -201,23 +201,23 @@ export default function Login() {
     username_too_long: t("用户名过长，请缩短后重试"),
     username_invalid_characters: t("用户名包含不支持的字符，请重新输入"),
     username_reserved: t("该用户名不可用，请换一个"),
-    username_taken: t("该用户名已被使用，请换一个"),
+    username_taken: t("用户名已被使用，请换一个"),
     password_required: t("请输入密码"),
     password_too_long: t("密码过长，请缩短后重试"),
     password_invalid_characters: t("密码包含不支持的字符，请重新输入"),
-    registration_closed: t("注册名额已满，暂不接受新账号"),
+    registration_closed: t("账号名额已满，暂不开放注册"),
     invalid_credentials: t("用户名或密码不正确"),
   };
 
   const mapError = (e: unknown): { text: string; tone: 'error' | 'warn' } => {
     if (e instanceof ApiError) {
       if (e.bizCode === 'password_too_short') return { text: t('新密码至少需要 15 个字符'), tone: 'error' };
-      if (e.bizCode === 'password_too_common') return { text: t('这个密码过于常见，请换一个较长的短语'), tone: 'error' };
-      if (e.bizCode === 'login_cooldown') return { text: t('连续登录失败，请稍后再试'), tone: 'warn' };
+      if (e.bizCode === 'password_too_common') return { text: t('密码过于常见，请换个较长的短语'), tone: 'error' };
+      if (e.bizCode === 'login_cooldown') return { text: t('登录失败次数较多，请稍后再试'), tone: 'warn' };
       if (e.bizCode === 'registration_rate_limited') {
         return { text: t('注册过于频繁，请稍后再试'), tone: 'warn' };
       }
-      if (e.bizCode === 'https_required') return { text: t('登录需要 HTTPS'), tone: 'warn' };
+      if (e.bizCode === 'https_required') return { text: t('请通过 HTTPS 加密网址登录'), tone: 'warn' };
       if (e.bizCode && Object.hasOwn(accountErrorMessages, e.bizCode)) {
         return { text: accountErrorMessages[e.bizCode], tone: 'error' };
       }
@@ -306,7 +306,7 @@ export default function Login() {
               onClick={() => void logout()}
               className="h-10 rounded-md border border-line bg-card text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
             >
-              {t('退出并换账号')}
+              {t('切换账号')}
             </button>
           </div>
         </div>
@@ -382,7 +382,7 @@ export default function Login() {
               <span className="text-brand-600">
                 <Icon name="command" size={20} />
               </span>
-              <h2 className="font-display text-h2 text-ink-900">{t('登录研究工作台')}</h2>
+              <h2 className="font-display text-h2 text-ink-900">{t('登录账号')}</h2>
             </div>
 
             {/* 登录 / 注册切换：滑动指示条，沿用页面既有动效曲线 */}
@@ -410,7 +410,7 @@ export default function Login() {
                         transition={SPRING_INDICATOR}
                       />
                     )}
-                    <span className="relative">{value === 'login' ? t('登录') : t('注册')}</span>
+                    <span className="relative">{value === 'login' ? t('登录') : t('注册账号')}</span>
                   </button>
                 ))}
               </div>
@@ -418,7 +418,7 @@ export default function Login() {
 
             {serviceDown && (
               <p role="status" className="mt-4 flex items-center justify-between gap-2 rounded-xs border border-warn-600/30 bg-warn-50 px-2.5 py-1.5 text-caption text-warn-700">
-                {t('无法连接服务，登录暂不可用')}
+                {t('暂时连不上服务，请稍后登录')}
                 <button type="button" onClick={probeService} className="shrink-0 font-medium underline underline-offset-2">
                   {t('重试')}
                 </button>
@@ -448,7 +448,7 @@ export default function Login() {
                       setUsername(e.target.value);
                       userShake.clear();
                     }}
-                    placeholder={mode === 'register' ? t('起一个用户名') : t('用户名')}
+                    placeholder={mode === 'register' ? t('设置用户名') : t('用户名')}
                     maxLength={32}
                     className="h-full min-w-0 flex-1 bg-transparent text-[16px] text-ink-800 outline-none placeholder:text-ink-400 disabled:opacity-60"
                     autoComplete="username"
@@ -570,7 +570,7 @@ export default function Login() {
               onClick={() => navigate('/watchlist')}
               className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-md border border-line-strong bg-transparent text-body-s font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:bg-paper-2 hover:text-ink-800"
             >
-              {t('以访客身份浏览（只读）')}
+              {t('以访客身份浏览')}
             </button>
 
             <div className="mt-4 border-t border-line pt-3 text-center">
@@ -579,7 +579,7 @@ export default function Login() {
                 className="inline-flex items-center gap-1 text-caption font-medium text-brand-600 transition-colors hover:text-brand-700"
               >
                 <Icon name="chevron-right" size={13} className="rotate-180" />
-                {t('返回公开研究页面')}
+                {t('返回首页')}
               </Link>
             </div>
           </motion.div>

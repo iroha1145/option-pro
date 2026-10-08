@@ -246,7 +246,7 @@ test('same-page explicit logout retires customer content and write controls even
   // The cookie write is still pending. Neither the old account nor its controls may remain.
   await expect(page.getByText('ALICE snapshot', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '退出 alice', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('region', { name: '自选列表', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: '关注列表', exact: true })).toHaveCount(0);
   await Promise.all(state.heldLogout.splice(0).map(release => release()));
   await expect(page).toHaveURL(/\/watchlist$/);
   await expect(page.getByText('身份暂时无法确认，请稍后重试', { exact: true })).toBeVisible();
@@ -293,7 +293,7 @@ test('failed logout waits for confirmation before restoring the same customer an
 test('confirmed personal Watchlist keeps names prices and count on identity 503, pauses writes and retries identity', async ({ page }) => {
   const state = await fixture(page, { username: 'alice' });
   await page.goto('/watchlist');
-  const list = page.getByRole('region', { name: '自选列表', exact: true });
+  const list = page.getByRole('region', { name: '关注列表', exact: true });
   await expect(list.getByText('ALICE snapshot', { exact: true })).toBeVisible();
   await expect(list.getByText('100.00', { exact: true })).toBeVisible();
   await expect(list).toContainText('1 只标的');
@@ -302,8 +302,8 @@ test('confirmed personal Watchlist keeps names prices and count on identity 503,
   await expect(list.getByText('ALICE snapshot', { exact: true })).toBeVisible();
   await expect(list.getByText('100.00', { exact: true })).toBeVisible();
   await expect(list).toContainText('1 只标的');
-  await expect(list.getByRole('button', { name: '管理自选', exact: true })).toBeDisabled();
-  await expect(list.getByRole('button', { name: '将 AAPL 移出自选', exact: true })).toBeDisabled();
+  await expect(list.getByRole('button', { name: '管理关注', exact: true })).toBeDisabled();
+  await expect(list.getByRole('button', { name: '移除关注 AAPL', exact: true })).toBeDisabled();
   await expect(list.getByText('身份暂时无法确认，请稍后重试', { exact: true })).toBeVisible();
   const before = state.reads.filter(read => ['/api/account/watchlist', '/api/stocks/watchlist'].includes(read.path)).length;
   await page.evaluate(() => { window.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange')); });
@@ -311,7 +311,7 @@ test('confirmed personal Watchlist keeps names prices and count on identity 503,
   expect(state.reads.filter(read => ['/api/account/watchlist', '/api/stocks/watchlist'].includes(read.path)).length).toBe(before);
   state.failIdentity = false;
   await list.getByRole('button', { name: '重试', exact: true }).click();
-  await expect(list.getByRole('button', { name: '管理自选', exact: true })).toBeEnabled();
+  await expect(list.getByRole('button', { name: '管理关注', exact: true })).toBeEnabled();
   await expect(list.getByText('身份暂时无法确认，请稍后重试', { exact: true })).toHaveCount(0);
   await expect(list.getByText('ALICE snapshot', { exact: true })).toBeVisible();
   expect(state.reads.filter(read => read.path === '/api/account/watchlist' && read.method !== 'GET')).toEqual([]);
@@ -322,7 +322,7 @@ test('confirmed personal Watchlist keeps names prices and count on identity 503,
 test('first identity failure on Watchlist shows an error without a fabricated default or personal list', async ({ page }) => {
   const state = await fixture(page, { failIdentity: true, username: 'alice' });
   await page.goto('/watchlist');
-  const list = page.getByRole('region', { name: '自选列表', exact: true });
+  const list = page.getByRole('region', { name: '关注列表', exact: true });
   await expect(page.getByText('身份暂时无法确认，请稍后重试', { exact: true })).toBeVisible();
   await expect(list).toHaveCount(0);
   await expect(page.getByText('ALICE snapshot', { exact: true })).toHaveCount(0);
@@ -337,7 +337,7 @@ test('first identity failure on Watchlist shows an error without a fabricated de
 test('confirmed customer change discards the previous Watchlist before delayed new membership arrives', async ({ page }) => {
   const state = await fixture(page, { username: 'alice' });
   await page.goto('/watchlist');
-  const list = page.getByRole('region', { name: '自选列表', exact: true });
+  const list = page.getByRole('region', { name: '关注列表', exact: true });
   await expect(list.getByText('ALICE snapshot', { exact: true })).toBeVisible();
   state.username = 'bob'; state.holdPersonal = true;
   await focusAndVerify(page);
@@ -355,12 +355,12 @@ test('confirmed customer change discards the previous Watchlist before delayed n
 test('explicit watchlist 401 clears confirmed personal data even when the follow-up identity check fails', async ({ page }) => {
   const state = await fixture(page, { username: 'alice' });
   await page.goto('/watchlist');
-  const list = page.getByRole('region', { name: '自选列表', exact: true });
+  const list = page.getByRole('region', { name: '关注列表', exact: true });
   await expect(list.getByText('ALICE snapshot', { exact: true })).toBeVisible();
   state.unauthorized = true; state.failIdentity = true;
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(list.getByText('ALICE snapshot', { exact: true })).toHaveCount(0);
-  await expect(list.getByText('自选读取失败', { exact: true })).toBeVisible();
+  await expect(list.getByText('关注读取失败', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '退出 alice', exact: true })).toHaveCount(0);
   expect(state.errors).toEqual([]);
 });

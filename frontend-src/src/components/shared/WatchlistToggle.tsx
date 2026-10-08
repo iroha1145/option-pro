@@ -26,7 +26,7 @@ export default function WatchlistToggle({ ticker }: { ticker: string }) {
   /* 与页首「返回」同一副次级按钮：桌面 32px，窄屏和粗指针 44px；已加入时走 aria-pressed 的选中态 */
   const style = 'control-button touch-target';
   if (!canManageWatchlist && !personal.loading && !personal.error) {
-    return <Link className={style} to="/login" state={{ from: location.pathname }}><Icon name="plus" size={15} />{t('登录后加入自选')}</Link>;
+    return <Link className={style} to="/login" state={{ from: location.pathname }}><Icon name="plus" size={15} />{t('登录后加入关注')}</Link>;
   }
   const toggle = async () => {
     if (personal.error) { await personal.refresh(); return; }
@@ -36,11 +36,11 @@ export default function WatchlistToggle({ ticker }: { ticker: string }) {
         await removeWithUndo(ticker, personal.key);
       } else {
         await personal.add(ticker);
-        toast.success(t('已加入自选'), ticker);
+        toast.success(t('已关注'), ticker);
       }
     } catch (error) {
       setJustAdded(false);
-      toast.error(selected ? t('移除失败') : t('加入失败'), watchlistErrorMessage(error, personal.maxTickers));
+      toast.error(selected ? t('移除失败') : t('加入关注失败'), watchlistErrorMessage(error, personal.maxTickers));
     }
   };
   /* 勾只在「刚加入且已确认」时挂成庆祝版：写入回来时 tickers 与 busy 在同一次渲染
@@ -49,7 +49,7 @@ export default function WatchlistToggle({ ticker }: { ticker: string }) {
     ? <span className="t-success-check is-inline" data-state="in"><Icon name="check" size={15} /></span>
     : <Icon name="check" size={15} />;
   return <button className={style} aria-pressed={selected} aria-busy={personal.busy} disabled={personal.loading || personal.busy || !parseWatchlistInput(ticker).tickers.length}
-    title={selected ? t('移出自选') : undefined} onClick={() => void toggle()}>
+    title={selected ? t('取消关注') : undefined} onClick={() => void toggle()}>
     {/* 加号 ↔ 勾在同一格交叉淡换（09-icon-swap），写入在途时外层再换成加载圈，
         三种状态共用一个图标格，按钮宽度与文字位置都不跳（beUI button-stateful 的节奏）。 */}
     <IconSwap
@@ -58,7 +58,7 @@ export default function WatchlistToggle({ ticker }: { ticker: string }) {
       b={<Spinner size={13} tone="brand" />}
     />
     <TextSwap swapKey={personal.loading ? 'loading' : personal.error ? 'error' : selected ? 'in' : 'out'}>
-      {personal.loading ? t('正在读取自选…') : personal.error ? t('重试读取自选') : selected ? t('已加入自选') : t('加入自选')}
+      {personal.loading ? t('正在读取关注…') : personal.error ? t('重新读取') : selected ? t('已关注') : t('加入关注')}
     </TextSwap>
   </button>;
 }

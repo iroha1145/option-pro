@@ -49,7 +49,7 @@ export default function SessionLED({
         <SessionDot session={null} />
         {showLabel && (
           <span className="text-caption text-ink-400">
-            {loading ? t('时段读取中…') : t('时段未知')}
+            {loading ? t('正在读取交易时段…') : t('时段未知')}
           </span>
         )}
       </span>

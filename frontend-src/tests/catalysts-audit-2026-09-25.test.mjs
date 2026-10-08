@@ -1413,7 +1413,7 @@ const reportState = (partial = {}) => ({
 });
 const impactResult = { outputLanguage: 'zh-CN', ticker: 'NVDA', summary: '财报摘要', expectation: '预期', impacted: [] };
 
-test('FE-8 财报卡 5 分钟停表后给重新查询按钮，不再说「会自动显示」', async () => {
+test('FE-8 财报卡 5 分钟停表后给「查询进度」按钮，不再说「会自动显示」', async () => {
   const h = impactHarness({ reportAnalysis: async () => reportState({ status: 'in_progress' }), requestReportAnalysis: async () => reportState() });
   await h.clock.advance(0);
   assert.match(textOf(h.tree()), /分析完成后会自动显示，不用刷新页面。/);
@@ -1424,9 +1424,9 @@ test('FE-8 财报卡 5 分钟停表后给重新查询按钮，不再说「会自
   const reads = h.reads.length;
   await h.clock.advance(60_000);
   assert.equal(h.reads.length, reads, '停表后不再自动查');
-  findButton(h.tree(), '重新查询').props.onClick();
+  findButton(h.tree(), '查询进度').props.onClick();
   await h.clock.advance(2_000);
-  assert.equal(h.reads.length, reads + 1, '手动重新查询后恢复轮询');
+  assert.equal(h.reads.length, reads + 1, '手动点「查询进度」后恢复轮询');
   text = textOf(h.tree());
   assert.doesNotMatch(text, /自动查询已暂停/);
   h.unmount();

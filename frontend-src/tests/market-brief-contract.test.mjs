@@ -68,7 +68,7 @@ function schemaLiterals() {
 
 test('Home 在指数带之后、行2 之前挂市场综合研判卡', () => {
   const home = read('pages/Home.tsx');
-  const indexBand = home.indexOf("aria-label={t('指数概览')}");
+  const indexBand = home.indexOf("aria-label={t('市场指数')}");
   const card = home.indexOf('<MarketBriefCard className="mt-6 md:mt-8" />');
   const row2 = home.indexOf('行2：市场状态 + 雷达信号');
   assert.ok(indexBand > 0 && card > indexBand && row2 > card, '卡片应位于指数带与行2 之间');
