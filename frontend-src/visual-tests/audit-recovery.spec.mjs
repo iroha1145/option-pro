@@ -110,7 +110,7 @@ test('radar watchlist scope uses the signed-in personal selection', async ({ pag
   await page.goto('/breakouts');
   const current = page.getByRole('region', { name: '当日信号', exact: true });
   await expect(current).toContainText('AAOI');
-  await page.getByRole('tab', { name: '查看自选', exact: true }).click();
+  await page.getByRole('tab', { name: '我的关注', exact: true }).click();
   await expect(current).toContainText('AAOI');
   await expect(current).not.toContainText('NVDA');
   expect(state.requests.some(row => row.path === '/api/account/watchlist')).toBe(true);
@@ -125,7 +125,7 @@ test('lead signal keeps its base card when detail fails and retry fills the deta
   await expect(lead).toContainText('AAOI');
   const notice = lead.getByRole('status');
   await expect(notice).toContainText('补充详情暂时读不到，当前显示基础信号。');
-  await expect(lead.getByRole('button', { name: '查看完整证据' })).toBeVisible();
+  await expect(lead.getByRole('button', { name: '查看完整依据' })).toBeVisible();
   state.failLeadDetail = false;
   await notice.getByRole('button', { name: '重试' }).click();
   await expect(notice).toHaveCount(0);

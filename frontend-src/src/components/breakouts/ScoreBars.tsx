@@ -21,7 +21,7 @@ const disp = (v: unknown): string => (fin(v) ? String(Math.round(v)) : '—');
 
 export function ScoreBarsMini({ event, className }: { event: BreakoutEventFull; className?: string }) {
   return (
-    <div className={cn('radar-score-grid grid grid-cols-3 gap-x-3 gap-y-2.5', className)} aria-label={t("各项评分")}>
+    <div className={cn('radar-score-grid grid grid-cols-3 gap-x-3 gap-y-2.5', className)} aria-label={t("分项评分")}>
       {SCORE_DEFS.map((d, i) => {
         const v = event[d.key];
         return (
@@ -54,7 +54,7 @@ export function ScoreBarsMini({ event, className }: { event: BreakoutEventFull; 
 
 export function ScoreBarsFull({ event, className }: { event: BreakoutEventFull; className?: string }) {
   return (
-    <div className={cn('grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-2', className)} aria-label={t("各项评分")}>
+    <div className={cn('grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-2', className)} aria-label={t("分项评分")}>
       {SCORE_DEFS.map((d, i) => {
         const v = event[d.key];
         return (
@@ -89,7 +89,7 @@ export function RangePersistenceBars({ event, className }: { event: BreakoutEven
       { key: 'value', label: t('持续分'), value: rp.value },
       { key: 'ratio10d', label: t('10 日占比'), value: rp.ratio10d },
       { key: 'globalPercentile', label: t('全局分位'), value: rp.globalPercentile },
-      { key: 'sectorPercentile', label: t('板块分位'), value: rp.sectorPercentile },
+      { key: 'sectorPercentile', label: t('行业分位'), value: rp.sectorPercentile },
       { key: 'selfPercentile', label: t('自身分位'), value: rp.selfPercentile },
     ] as const;
     const statusCn: Record<string, string> = {

@@ -103,7 +103,7 @@ test('观察候选多于返回行时，界面标明只在前 N 名内筛选', as
   assert.match(page, /truncatedScope = useMemo/);
   assert.match(page, /const candidates = scanMeta\.observationN \?\? scanMeta\.screenedCount;/);
   assert.match(page, /if \(candidates <= returned\) return null;/);
-  assert.match(page, /\{__t\('仅在强度前'\)\} \{truncatedScope\.returned\} \{__t\('名内筛选'\)\}/);
+  assert.match(page, /\{__t\('仅在评分前'\)\} \{truncatedScope\.returned\} \{__t\('名内筛选'\)\}/);
 });
 
 test('截断提示优先使用观察候选数，真实零值不能退回全市场行情数量', async () => {
@@ -133,7 +133,7 @@ test('分档计数取后端整池分布，缺失时如实标注范围', async ()
 
   assert.match(page, /universeQ\.data\?\.tierDistribution \?\? null/);
   assert.match(page, /tierCountsCoverPool: distribution !== null/);
-  assert.match(workbench, /coversPool \? __t\('已评分候选池'\) : __t\('当前结果中的股票'\)/);
+  assert.match(workbench, /coversPool \? __t\('已评分股票'\) : __t\('当前结果中的股票'\)/);
 });
 
 test('分档分布任一档缺失即整体判为不可用', async () => {

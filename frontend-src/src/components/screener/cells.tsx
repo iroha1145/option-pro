@@ -46,7 +46,7 @@ export function ScoreCell({
         <span
           className="strength-track h-1 w-12 overflow-hidden rounded-pill bg-paper"
           role="progressbar"
-          aria-label={t('强度分 {score}，{band} {label}', { score, band: strength.band, label: strength.label })}
+          aria-label={t('评分 {score}，{band} {label}', { score, band: strength.band, label: strength.label })}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={score}
@@ -73,7 +73,7 @@ export function SubscoreTicks({ row, tipSide = 'top' }: { row: ScreenerRow; tipS
   const dims = subscoreDimsOf(row);
   return (
     <PointerTooltip
-      label={t('分项强度')}
+      label={t('分项评分')}
       side={tipSide}
       width={160}
       className="gap-1"
@@ -107,14 +107,14 @@ export function CatalystBadge({ summary, tipSide = 'top' }: { summary: CatalystS
   if (summary.failed) {
     // 批量接口失败：如实「—」（区别于真实 0），不编造计数
     return (
-      <SoftBadge title={t("催化剂数据暂不可用")} aria-label={t("催化剂数据不可用")}>
+      <SoftBadge title={t("消息数据暂不可用")} aria-label={t("消息数据不可用")}>
         —
       </SoftBadge>
     );
   }
   if (summary.count === 0) {
     return (
-      <SoftBadge aria-label={t("72 小时内无催化剂")}>
+      <SoftBadge aria-label={t("近 72 小时无相关消息")}>
         0
       </SoftBadge>
     );
@@ -125,13 +125,13 @@ export function CatalystBadge({ summary, tipSide = 'top' }: { summary: CatalystS
   const countText = `${summary.count}${summary.hasMore ? '+' : ''}`;
   return (
     <PointerTooltip
-      label={`${t('催化剂 · 72H')} · ${label} ${countText}`}
+      label={`${t('消息 · 近 72 小时')} · ${label} ${countText}`}
       side={tipSide}
       width={240}
       contentClassName="p-3"
       content={<>
         <span className="block text-micro text-ink-500">
-          {t('72h 窗口 · 利多')} <SoftBadge tone="up">{summary.pos}</SoftBadge>
+          {t('近 72 小时 · 利多')} <SoftBadge tone="up">{summary.pos}</SoftBadge>
           {' · '}{t('利空')} <SoftBadge tone="down">{summary.neg}</SoftBadge>
           {summary.pending != null ? (
             <>

@@ -105,41 +105,26 @@ export const HINTS: Dict = {
     '8項目の加重：VIX の水準 18% と1年パーセンタイル 7%、HYG−TLT 15% と HYG−IEF 10% のクレジット・スプレッド、10年金利の20日変化 10%、IEF−TLT のデュレーション 10%、SPY のドローダウン 18%、QQQ のドローダウン 12%。VIX が25超、クレジットの悪化、深いドローダウンといった極端な状態は別途ペナルティとして計上し、その35%相当を総合スコアから差し引きます。',
   ],
 
-  '突破质量 · 基底（0–100）': ['Breakout quality · base (0–100)', 'ブレイクアウトの質 · ベース（0–100）'],
+  '基底质量（0–100）': ['Base quality (0–100)', 'ベースの質（0–100）'],
   '突破前的基底打分：紧致度 25%、构筑时长 15%、阻力触碰质量 15%、量能收缩 15%、ATR 收缩 10%、支撑完好 10%、相对强度结构 10%。基底越规整、越「收敛」分越高。': [
     'Scores the base built before the breakout: tightness 25%, duration 15%, quality of the resistance touches 15%, volume contraction 15%, ATR contraction 10%, intact support 10%, relative-strength structure 10%. The cleaner and more tightly coiled the base, the higher the score.',
     'ブレイクアウト前のベースを採点します：タイトさ 25%、形成期間 15%、抵抗線へのタッチの質 15%、出来高の収縮 15%、ATR の収縮 10%、サポートの健全性 10%、相対強度の構造 10%。ベースが整い、収縮しているほど高スコアになります。',
   ],
 
-  '确认强度（0–100）': ['Confirmation strength (0–100)', '確認の強さ（0–100）'],
-  '突破当下的确认证据：收盘越过阻力区质量 20%、分时相对量能 20%、收盘位置 15%、站稳时长 15%、K 线实体 10%、上影线 10%、相对强度确认 10%。区间保持度可 ±4 分微调。': [
-    'The evidence confirming the breakout itself: quality of the close above the resistance zone 20%, intraday relative volume 20%, closing position 15%, time held above the level 15%, candle body 10%, upper wick 10%, relative-strength confirmation 10%. Range retention can adjust the result by ±4 points.',
-    'ブレイクアウトそのものを裏付ける証拠：抵抗帯を上抜けた終値の質 20%、日中の相対出来高 20%、終値の位置 15%、上抜けを維持した時間 15%、ローソク足の実体 10%、上ヒゲ 10%、相対強度の確認 10%。レンジの維持度で±4点の微調整が入ります。',
-  ],
+  '突破确认（0–100）': ['Breakout confirmation (0–100)', 'ブレイクアウト確認（0–100）'],
+  '突破当下的确认依据：收盘越过阻力区质量 20%、分时相对量能 20%、收盘位置 15%、站稳时长 15%、K 线实体 10%、上影线 10%、相对强度确认 10%。区间保持度可 ±4 分微调。': ['The evidence confirming the breakout itself: quality of the close above the resistance zone 20%, intraday relative volume 20%, closing position 15%, time held above the level 15%, candle body 10%, upper wick 10%, relative-strength confirmation 10%. Range retention can adjust the result by ±4 points.', 'ブレイクアウトそのものを裏付ける証拠：抵抗帯を上抜けた終値の質 20%、日中の相対出来高 20%、終値の位置 15%、上抜けを維持した時間 15%、ローソク足の実体 10%、上ヒゲ 10%、相対強度の確認 10%。レンジの維持度で±4点の微調整が入ります。'],
 
   '数据可信度（0–100）': ['Data reliability (0–100)', 'データの信頼性（0–100）'],
-  '衡量这条信号背后的数据完整度：基底/确认/流动性三族的数据覆盖率均值，再与市场形态置信度按 3:1 合成；缺市场形态时整体打 85 折。它不评价股票好坏，只评价证据是否齐全。': [
-    'Measures how complete the data behind this signal is: the mean data coverage of the base, confirmation, and liquidity families, blended 3:1 with market-regime confidence. When the market regime is missing, the whole score is scaled to 85%. It does not judge the stock — only whether the evidence is complete.',
-    'このシグナルの裏側にあるデータの完全性を測ります：ベース・確認・流動性の3ファミリーのデータカバレッジの平均を取り、市場レジームの信頼度と3:1で合成します。市場レジームが欠ける場合は全体を85%に縮めます。銘柄の良し悪しではなく、証拠が揃っているかだけを評価します。',
-  ],
+  '衡量这条信号背后的数据完整度：基底/确认/流动性三族的数据覆盖率均值，再与市场形态置信度按 3:1 合成；缺市场形态时整体打 85 折。它不评价股票好坏，只评价依据是否齐全。': ['Measures how complete the data behind this signal is: the mean data coverage of the base, confirmation, and liquidity families, blended 3:1 with market-regime confidence. When the market regime is missing, the whole score is scaled to 85%. It does not judge the stock — only whether the evidence is complete.', 'このシグナルの裏側にあるデータの完全性を測ります：ベース・確認・流動性の3ファミリーのデータカバレッジの平均を取り、市場レジームの信頼度と3:1で合成します。市場レジームが欠ける場合は全体を85%に縮めます。銘柄の良し悪しではなく、証拠が揃っているかだけを評価します。'],
 
   '追高风险（0–100，越高越危险）': ['Chase risk (0–100, higher is riskier)', '高値追いリスク（0–100、高いほど危険）'],
-  '与其他分数方向相反：距枢轴价的涨幅 30%、距 VWAP 20%、跳空/ATR 15%、上影线 15%、短线加速 10%、流动性风险 10%。超过 50 的部分会按 25% 直接从优先级分里扣除。': [
-    'This score runs in the opposite direction from the others: gain from the pivot price 30%, distance from VWAP 20%, gap/ATR 15%, upper wick 15%, short-term acceleration 10%, liquidity risk 10%. Whatever exceeds 50 is deducted from the priority score at 25%.',
-    '他のスコアとは向きが逆です：ピボット価格からの上昇率 30%、VWAP との乖離 20%、ギャップ/ATR 15%、上ヒゲ 15%、短期の加速 10%、流動性リスク 10%。50を超えた分は25%換算で優先度スコアから直接差し引かれます。',
-  ],
+  '与其他分数方向相反：距突破价位的涨幅 30%、距 VWAP 20%、跳空/ATR 15%、上影线 15%、短线加速 10%、流动性风险 10%。超过 50 的部分会按 25% 直接从优先级分里扣除。': ['This score runs in the opposite direction from the others: gain from the pivot price 30%, distance from VWAP 20%, gap/ATR 15%, upper wick 15%, short-term acceleration 10%, liquidity risk 10%. Whatever exceeds 50 is deducted from the priority score at 25%.', '他のスコアとは向きが逆です：ピボット価格からの上昇率 30%、VWAP との乖離 20%、ギャップ/ATR 15%、上ヒゲ 15%、短期の加速 10%、流動性リスク 10%。50を超えた分は25%換算で優先度スコアから直接差し引かれます。'],
 
   '优先级分（0–100）': ['Priority score (0–100)', '優先度スコア（0–100）'],
-  '排序用总分：突破质量 35% + 个股强度 25% + 市场契合 15% + 板块契合 10% + 数据可信度 10% + 事件新鲜度 5%，再减去追高罚分（0.25 × max(追高风险−50, 0)）。': [
-    'The total used for ranking: breakout quality 35% + stock strength 25% + market fit 15% + sector fit 10% + data reliability 10% + event freshness 5%, minus the chase penalty (0.25 × max(chase risk − 50, 0)).',
-    '並び替えに使う総合スコア：ブレイクアウトの質 35% + 個別銘柄の強度 25% + 市場適合度 15% + セクター適合度 10% + データの信頼性 10% + イベントの新しさ 5%。そこから高値追いペナルティ（0.25 × max(高値追いリスク−50, 0)）を差し引きます。',
-  ],
+  '排序用总分：突破质量 35% + 个股强度 25% + 市场契合 15% + 行业契合 10% + 数据可信度 10% + 事件时效 5%，再减去追高罚分（0.25 × max(追高风险−50, 0)）。': ['The total used for ranking: breakout quality 35% + stock strength 25% + market fit 15% + sector fit 10% + data reliability 10% + event freshness 5%, minus the chase penalty (0.25 × max(chase risk − 50, 0)).', '並び替えに使う総合スコア：ブレイクアウトの質 35% + 個別銘柄の強度 25% + 市場適合度 15% + セクター適合度 10% + データの信頼性 10% + イベントの新しさ 5%。そこから高値追いペナルティ（0.25 × max(高値追いリスク−50, 0)）を差し引きます。'],
 
   '突破质量 · 综合（0–100）': ['Breakout quality · composite (0–100)', 'ブレイクアウトの質 · 総合（0–100）'],
-  '基底质量 45% + 确认强度 45% + 流动性质量 10% 的加权合成。': [
-    'A weighted blend of base quality 45% + confirmation strength 45% + liquidity quality 10%.',
-    'ベースの質 45% + 確認の強さ 45% + 流動性の質 10% を加重合成したものです。',
-  ],
+  '基底质量 45% + 突破确认 45% + 流动性质量 10% 的加权合成。': ['A weighted blend of base quality 45% + breakout confirmation 45% + liquidity quality 10%.', 'ベースの質 45% + ブレイクアウト確認 45% + 流動性の質 10% を加重合成したものです。'],
 
   '流动性质量（0–100）': ['Liquidity quality (0–100)', '流動性の質（0–100）'],
   '20 日均成交额 25%、当日成交额 20%、成交额分位 15%、点差 10%、盘中数据完整度 10%、市值 10%、资产类型 10%。低流动性标的即使形态好也会被压低。': [
@@ -148,10 +133,7 @@ export const HINTS: Dict = {
   ],
 
   '个股强度（0–100）': ['Stock strength (0–100)', '個別銘柄の強度（0–100）'],
-  '与选股页同一套个股强度分（六族加权），只用该股价格/量能与对 SPY 的相对表现。': [
-    'The same stock-strength score used on the Screener page (six weighted families), based only on the stock’s price and volume plus its performance relative to SPY.',
-    'スクリーナーページと同じ個別銘柄の強度スコア（6ファミリーの加重）です。その銘柄の価格・出来高と SPY に対する相対パフォーマンスのみを使います。',
-  ],
+  '与选股页同一套个股评分（六族加权），只用该股价格/量能与对 SPY 的相对表现。': ['The same stock-strength score used on the Screener page (six weighted families), based only on the stock’s price and volume plus its performance relative to SPY.', 'スクリーナーページと同じ個別銘柄の強度スコア（6ファミリーの加重）です。その銘柄の価格・出来高と SPY に対する相対パフォーマンスのみを使います。'],
 
   '顶部分 / 底部分（各 0–100）': ['Top score / bottom score (0–100 each)', '天井スコア / 底スコア（各0–100）'],
   '每个指标独立输出两个证据分：「顶部分」= 该指标支持“过热/接近顶部”的证据强度；「底部分」= 支持“超卖/接近底部”的证据强度。二者互不排斥——例如放量对顶和底都是信号，宽度极弱既提示风险也提示接近底部。': [
@@ -526,4 +508,9 @@ export const HINTS: Dict = {
   '证据充分度（AI 判断）': ['Evidence sufficiency (AI judgment)', '根拠の充足度（AI 判断）'],
   "模型判断本次证据够不够支撑结论，分低、中、高三档。这次缺了哪些数据，见卡片上方的覆盖条。": ["The model’s judgment of whether this run’s evidence is enough to support its conclusion, in three levels: low, medium and high. Data missing from this run is listed in the coverage line at the top of the card.", "今回の根拠が結論を支えるのに十分かについての、モデルによる3段階の判断（低・中・高）です。今回欠けていたデータは、カード上部のカバレッジ欄に表示されます。"],
   "它说明证据是否够用，不是上涨概率。": ["It says whether the evidence is sufficient; it is not a probability that the market will rise.", "根拠が足りているかを示すもので、上昇確率ではありません。"],
+  '构成：真空型收缩 +12（收盘位置与能量潮偏多时降为 +8）/ 空头吸收 +10 / 吸收未确认 +3 / 多头吸收 −3；「未收缩且低量大涨」+6、「低量真空移动」+4 可叠加。该点数会从选股评分的突破维度中直接扣除。': ['Composition: vacuum contraction +12 (reduced to +8 when the close location and On-Balance Volume lean bullish) / bearish absorption +10 / unconfirmed absorption +3 / bullish absorption −3; "no contraction but a low-volume surge" +6 and "low-volume vacuum move" +4 can stack. The points are subtracted directly from the breakout dimension of the screener strength score.', '構成：真空収縮+12（終値位置とオンバランスボリュームが強気寄りなら+8に軽減）／売り方吸収+10／吸収未確認+3／買い方吸収−3。「未収縮での薄商い急騰」+6、「薄商いの真空的な値動き」+4が重なることがあります。このポイントはスクリーニング強度スコアのブレイク次元からそのまま減点されます。'],
+  '取值：多头吸收 +12 / 吸收未确认 +3 / 平衡收缩 +2 / 真空型收缩 −6（内部偏多）或 −10 / 空头吸收 −8。该修正直接加进选股评分的突破维度。': ["Values: bullish absorption +12 / unconfirmed absorption +3 / balanced contraction +2 / vacuum contraction −6 (with bullish internals) or −10 / bearish absorption −8. The adjustment is added directly to the screener strength score's breakout dimension.", '値：買い方吸収+12／吸収未確認+3／均衡収縮+2／真空収縮−6（内部が強気寄りの場合）または−10／売り方吸収−8。この補正はスクリーニング強度スコアのブレイク次元に直接加算されます。'],
+  '结构状态定基准（上升 82 / 仅高点抬升 66 / 仅低点抬升 62 / 区间震荡 50 / 高点压低 38 / 下降 24），K线形态各 ±6（合计封顶 ±10），假跌破收回 +8 / 假突破回落 −8。此分以 20% 权重进入选股评分的突破维度。': ["The structural state sets the anchor (uptrend 82 / higher highs only 66 / higher lows only 62 / range 50 / lower highs 38 / downtrend 24); candlestick patterns add ±6 each (±10 combined cap), failed breakdown +8 / failed breakout −8. The score enters the screener strength score's breakout dimension with a 20% weight.", '構造状態が基準点を決め（上昇82／高値切り上げのみ66／安値切り上げのみ62／レンジ50／高値切り下げ38／下降24）、ローソク足形状が各±6（合計上限±10）、ダマシの下抜け回復+8／ダマシの上抜け反落−8。このスコアはスクリーニング強度スコアのブレイク次元に20%のウェイトで入ります。'],
+  '选股评分的趋势维度含同口径的稳定项（权重 5%，波动越小越加分）；此处读数仅展示。': ["The strength score's trend dimension contains a stability term of the same definition (5% weight; lower volatility earns more). The reading here is display-only.", '強度スコアのトレンド次元には同じ定義の安定項が含まれます（ウェイト5%、ボラが小さいほど加点）。ここの読み値は表示専用です。'],
+  '进入选股评分时按折线映射：RSI≈68 附近得分最高（88 分），过弱与过热都降分——「强而未极端」才加分。': ['When it enters the screener strength score it is mapped by a piecewise curve: RSI≈68 scores highest (88); both washed-out and overheated readings lose points — "strong but not extreme" is what earns credit.', 'スクリーニング強度スコアへは折れ線マッピングで反映します。RSI≈68付近が最高（88点）で、弱すぎも過熱もどちらも減点——「強いが極端でない」状態だけが加点されます。'],
 };

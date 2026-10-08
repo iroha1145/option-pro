@@ -258,7 +258,7 @@ export const DETAIL: Dict = {
   失效位: ['Invalidation', '失効ライン'],
   阻力带: ['Resistance band', 'レジスタンス帯'],
   假突破风险: ['False-breakout risk', 'ダマシリスク'],
-  '相对量能': ['Relative volume', '相対的な出来高'],
+  '相对量能': ["Relative volume", "相対出来高"],
   '价格位移': ['Price displacement', '値幅'],
   价格行为: ['Price action', 'プライスアクション'],
   '{n} 次触碰 · 质量 {q}': ['{n} touches · quality {q}', 'タッチ {n} 回 · 品質 {q}'],

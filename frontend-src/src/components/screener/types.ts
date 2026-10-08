@@ -26,9 +26,9 @@ export const PROFILE_CN: Record<ProfilePref, string> = {
 };
 
 export const SORT_CN: Record<SortMode, string> = {
-  deterministic: __t('确定性'),
-  latest: __t('最新催化'),
-  impact: __t('影响力'),
+  deterministic: __t('默认排序'),
+  latest: __t('最新消息'),
+  impact: __t('消息倾向'),
 };
 
 export function tierOf(score: number): Tier {
@@ -75,21 +75,21 @@ export interface ScreenerStrengthPresentation {
 
 export function screenerStrengthPresentation(score: number): ScreenerStrengthPresentation {
   if (score >= 90) {
-    return { band: 'S', tone: 's', label: __t('顶尖'), barClass: 'bg-ok-700', textClass: 'text-ok-700', badgeTone: 'ok' };
+    return { band: 'S', tone: 's', label: __t('最高档'), barClass: 'bg-ok-700', textClass: 'text-ok-700', badgeTone: 'ok' };
   }
   if (score >= 85) {
-    return { band: 'A', tone: 'a-high', label: __t('极强'), barClass: 'bg-ok-600', textClass: 'text-ok-700', badgeTone: 'ok' };
+    return { band: 'A', tone: 'a-high', label: __t('高分档'), barClass: 'bg-ok-600', textClass: 'text-ok-700', badgeTone: 'ok' };
   }
   if (score >= 80) {
-    return { band: 'A', tone: 'a', label: __t('强势'), barClass: 'bg-brand-600', textClass: 'text-brand-700', badgeTone: 'brand' };
+    return { band: 'A', tone: 'a', label: __t('较高档'), barClass: 'bg-brand-600', textClass: 'text-brand-700', badgeTone: 'brand' };
   }
   if (score >= 70) {
-    return { band: 'B', tone: 'b', label: __t('较强'), barClass: 'bg-brand-400', textClass: 'text-brand-700', badgeTone: 'brand' };
+    return { band: 'B', tone: 'b', label: __t('中间档'), barClass: 'bg-brand-400', textClass: 'text-brand-700', badgeTone: 'brand' };
   }
   if (score >= 60) {
-    return { band: 'C', tone: 'c', label: __t('观察'), barClass: 'bg-warn-600', textClass: 'text-warn-700', badgeTone: 'warn' };
+    return { band: 'C', tone: 'c', label: __t('观察档'), barClass: 'bg-warn-600', textClass: 'text-warn-700', badgeTone: 'warn' };
   }
-  return { band: 'D', tone: 'd', label: __t('偏弱'), barClass: 'bg-ink-300', textClass: 'text-ink-600', badgeTone: 'neutral' };
+  return { band: 'D', tone: 'd', label: __t('低分档'), barClass: 'bg-ink-300', textClass: 'text-ink-600', badgeTone: 'neutral' };
 }
 
 /** 筛选条件（draft = 工作台编辑中；applied = 上次扫描快照） */

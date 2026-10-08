@@ -253,7 +253,7 @@ test.describe("spring tabs glide (#113 blocker 3+4)", () => {
   test.describe.configure({ timeout: 90_000 });
   test.use({ contextOptions: { reducedMotion: "no-preference" } });
 
-  const TIER_LIST = '[role="tablist"][aria-label^="强度分档"]';
+  const TIER_LIST = '[role="tablist"][aria-label^="评分分档"]';
   const TIER_PILL = `${TIER_LIST} [data-glide-pill]`;
   const tierList = (page) => page.locator(TIER_LIST);
   const tierTab = (page, name) => tierList(page).getByRole("tab", { name, exact: false });
@@ -334,7 +334,7 @@ test.describe("spring tabs glide (#113 blocker 3+4)", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openScreener(page);
     /* 数据无关地强制溢出：把分档条夹窄，保证横向可滚动 */
-    await page.addStyleTag({ content: '[aria-label^="强度分档"] { max-width: 150px !important; }' });
+    await page.addStyleTag({ content: '[aria-label^="评分分档"] { max-width: 150px !important; }' });
     const list = tierList(page);
     await expect
       .poll(() => list.evaluate((node) => node.scrollWidth - node.clientWidth))
@@ -403,9 +403,9 @@ test.describe("spring tabs under reduced motion", () => {
   test("pill lands on the active tab without spring travel", async ({ page }) => {
     await openScreener(page);
     expect(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches)).toBe(true);
-    const list = page.locator('[role="tablist"][aria-label^="强度分档"]');
+    const list = page.locator('[role="tablist"][aria-label^="评分分档"]');
     const target = list.getByRole("tab", { name: /^B/ }).first();
-    const pill = page.locator('[role="tablist"][aria-label^="强度分档"] [data-glide-pill]');
+    const pill = page.locator('[role="tablist"][aria-label^="评分分档"] [data-glide-pill]');
     await target.click();
     await expect
       .poll(

@@ -2,8 +2,8 @@ import { expect, test } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 
 const tips = (page) => page.locator('[data-pointer-tooltip]');
-const scores = (page) => page.locator('[data-pointer-tooltip-trigger][aria-label="分项强度"]');
-const catalysts = (page) => page.locator('[data-pointer-tooltip-trigger][aria-label^="催化剂"]');
+const scores = (page) => page.locator('[data-pointer-tooltip-trigger][aria-label="分项评分"]');
+const catalysts = (page) => page.locator('[data-pointer-tooltip-trigger][aria-label^="消息"]');
 const evidence = 'test-results/screener-tooltips-evidence';
 async function open(page, suffix = '') {
   // Product components use deterministic local fixtures; remote images/API calls
@@ -32,9 +32,9 @@ test('hovering a real result row does not open both cells; each cell owns only i
   await expect(tips(page)).toHaveCount(0);
   await scores(page).first().hover(); await shown(page);
   await expect(tips(page)).toContainText('短期'); await expect(tips(page)).toContainText('长期—');
-  await expect(tips(page)).not.toContainText('72h');
+  await expect(tips(page)).not.toContainText('72 小时');
   await catalysts(page).first().hover(); await shown(page);
-  await expect(tips(page)).toContainText('72h 窗口');
+  await expect(tips(page)).toContainText('近 72 小时');
   await expect(tips(page)).toContainText('发布新的产品');
   await expect(tips(page)).not.toContainText('突破质量');
   await capture(page,'table-single-catalyst');
@@ -73,7 +73,7 @@ for (const width of [390,1440]) {
     await page.setViewportSize({width,height:420}); await open(page,'?mode=edges');
     for (const corner of ['top-left','top-right','bottom-left','bottom-right']) {
       const group = page.locator(`[data-corner="${corner}"]`);
-      for (const target of [group.getByRole('button',{name:'分项强度'}),group.getByRole('button',{name:/催化剂/})]) {
+      for (const target of [group.getByRole('button',{name:'分项评分'}),group.getByRole('button',{name:/消息/})]) {
         await target.hover(); await shown(page);
         const box = await bounds(page), trigger = await target.boundingBox();
         if (corner.startsWith('top')) expect(box.y).toBeGreaterThan(trigger.y + trigger.height / 2);
@@ -130,7 +130,7 @@ test.describe('mobile card touch interaction', () => {
   test('touch shows anchored details, replaces them on another badge, and closes outside without expanding cards', async ({page}) => {
     await open(page,'?mode=cards');
     await scores(page).first().tap(); await shown(page); await bounds(page);
-    await catalysts(page).first().tap(); await shown(page); await expect(tips(page)).toContainText('72h 窗口');
+    await catalysts(page).first().tap(); await shown(page); await expect(tips(page)).toContainText('近 72 小时');
     await bounds(page); await capture(page,'mobile-card-touch');
     await catalysts(page).first().tap(); await expect(tips(page)).toHaveCount(0);
     await scores(page).first().tap(); await shown(page);
@@ -144,7 +144,7 @@ test('normal motion also swaps the tooltip without exit overlap or position anim
   await page.emulateMedia({reducedMotion:'no-preference'}); await open(page);
   await scores(page).first().hover(); await shown(page);
   await catalysts(page).first().hover(); await shown(page);
-  await expect(tips(page)).toContainText('72h 窗口');
+  await expect(tips(page)).toContainText('近 72 小时');
   expect(await tips(page).evaluate(el => getComputedStyle(el).transitionProperty)).toBe('none');
   await page.mouse.move(4,4); await expect(tips(page)).toHaveCount(0);
 });

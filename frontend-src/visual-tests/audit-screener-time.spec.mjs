@@ -53,7 +53,7 @@ async function fixture(page, options = {}) {
     return unavailable();
   });
   await page.goto('/screener');
-  await expect(page.getByRole('heading', { name: '选股扫描', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '条件选股', exact: true })).toBeVisible();
   return state;
 }
 
@@ -92,8 +92,8 @@ test('catalyst failure settles with retry and recovering news changes the real t
   const state = await fixture(page, { failCatalysts: true });
   await scan(page);
   await expect.poll(() => state.batches).toBeGreaterThan(0);
-  await page.getByRole('tab', { name: '最新催化', exact: true }).click();
-  const status = page.getByRole('status').filter({ hasText: '催化摘要读取失败，暂按强度排序' });
+  await page.getByRole('tab', { name: '最新消息', exact: true }).click();
+  const status = page.getByRole('status').filter({ hasText: '消息摘要读取失败，暂按评分排序' });
   await expect(status).toBeVisible();
   await expect(page.getByText('正在准备排序数据 · 剩余')).toHaveCount(0);
   const before = state.batches;
@@ -113,15 +113,16 @@ test('catalyst batches finish their full round despite a same-symbol discovery, 
     if (current.batches === 3) return new Promise(resolve => { releaseThird = () => { route.fulfill({ json: catalystResults(tickers) }).then(resolve); }; });
     return route.fulfill({ status: 503, json: { message: 'batch unavailable' } });
   } });
+  await page.getByTestId('screener-advanced-filters').locator('summary').click();
   await page.getByRole('combobox', { name: '最多显示数量', exact: true }).click();
   await page.getByRole('option', { name: '最多 120', exact: true }).click();
-  await page.getByRole('tab', { name: '最新催化', exact: true }).click();
+  await page.getByRole('tab', { name: '最新消息', exact: true }).click();
   await scan(page, 'T00');
   await expect.poll(() => state.batches).toBe(3);
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   expect(state.batches).toBe(3);
   releaseThird();
-  const status = page.getByRole('status').filter({ hasText: '催化摘要读取失败，暂按强度排序' });
+  const status = page.getByRole('status').filter({ hasText: '消息摘要读取失败，暂按评分排序' });
   await expect(status).toBeVisible();
   expect(state.catalystRequests.map(tickers => tickers.length)).toEqual([20, 20, 20]);
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
@@ -147,7 +148,7 @@ test('a late catalyst response from an older scan cannot enter the new result se
   await scan(page, 'T00');
   await expect.poll(() => typeof releaseOld).toBe('function');
   state.rows = [{ ...manyRows(1)[0], ticker: 'NEW', name: '新公司' }];
-  await page.getByRole('tablist', { name: '偏好', exact: true }).getByRole('tab', { name: '进取', exact: true }).click();
+  await page.getByRole('tablist', { name: '风险偏好', exact: true }).getByRole('tab', { name: '进取', exact: true }).click();
   await page.locator('button.scan-trigger').click();
   await expect(page.getByRole('table').getByText('NEW', { exact: true })).toBeVisible();
   releaseOld();
@@ -223,7 +224,7 @@ test('successful scan commits requested results while leaving a newer draft unto
     return route.fulfill({ json: scanBody('BALANCED') });
   } });
   await scan(page, 'BALANCED');
-  const profile = page.getByRole('tablist', { name: '偏好', exact: true });
+  const profile = page.getByRole('tablist', { name: '风险偏好', exact: true });
   await profile.getByRole('tab', { name: '进取', exact: true }).click();
   await page.locator('button.scan-trigger').click();
   await expect.poll(() => typeof releaseAggressive).toBe('function');
@@ -260,7 +261,7 @@ test('a failed discovery retains rows, marks them unverified and keeps the earli
   failDiscovery = true;
   await page.clock.fastForward(31_000);
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
-  await expect(page.getByText('数据未刷新').first()).toBeVisible();
+  await expect(page.getByText('数据未更新').first()).toBeVisible();
   await expect(page.getByRole('table').getByText('AAA', { exact: true })).toBeVisible();
   expect(await scanClock.innerText()).toBe(before);
   expect(state.errors).toEqual([]);
@@ -281,9 +282,9 @@ test('visible discovery marks an expired snapshot stale before its delayed GET r
   await page.clock.fastForward(31_000);
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   await expect.poll(() => typeof releaseRead).toBe('function');
-  await expect(page.getByText('数据未刷新').first()).toBeVisible();
+  await expect(page.getByText('数据未更新').first()).toBeVisible();
   releaseRead();
-  await expect(page.getByText('数据未刷新').first()).toBeVisible();
+  await expect(page.getByText('数据未更新').first()).toBeVisible();
   expect(state.errors).toEqual([]);
 });
 
@@ -303,7 +304,7 @@ test('late discovery cannot replace newer profile rows after another scan', asyn
   await page.clock.fastForward(31_000);
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   await expect.poll(() => typeof releaseOld).toBe('function');
-  await page.getByRole('tablist', { name: '偏好', exact: true }).getByRole('tab', { name: '进取', exact: true }).click();
+  await page.getByRole('tablist', { name: '风险偏好', exact: true }).getByRole('tab', { name: '进取', exact: true }).click();
   await scan(page, 'NEW');
   releaseOld();
   await expect(page.getByRole('table').getByText('NEW', { exact: true })).toBeVisible();
@@ -327,11 +328,11 @@ test('a late discovery failure cannot mark newer profile rows stale', async ({ p
   await page.clock.fastForward(31_000);
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   await expect.poll(() => typeof releaseOld).toBe('function');
-  await page.getByRole('tablist', { name: '偏好', exact: true }).getByRole('tab', { name: '进取', exact: true }).click();
+  await page.getByRole('tablist', { name: '风险偏好', exact: true }).getByRole('tab', { name: '进取', exact: true }).click();
   await scan(page, 'NEW');
   releaseOld();
   await expect(page.getByRole('table').getByText('NEW', { exact: true })).toBeVisible();
-  await expect(page.getByText('数据未刷新')).toHaveCount(0);
+  await expect(page.getByText('数据未更新')).toHaveCount(0);
   expect(state.errors).toEqual([]);
 });
 
@@ -353,7 +354,7 @@ test('an unmounted screener ignores a delayed published snapshot', async ({ page
   await expect.poll(() => typeof releaseOld).toBe('function');
   await page.getByRole('link', { name: '首页', exact: true }).click();
   releaseOld();
-  await expect(page.getByRole('heading', { name: '选股扫描', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: '条件选股', exact: true })).toHaveCount(0);
   expect(state.errors).toEqual([]);
 });
 
@@ -375,13 +376,13 @@ test('an unmounted screener ignores a delayed discovery failure', async ({ page 
   await expect.poll(() => typeof releaseFailure).toBe('function');
   await page.getByRole('link', { name: '首页', exact: true }).click();
   releaseFailure();
-  await expect(page.getByRole('heading', { name: '选股扫描', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: '条件选股', exact: true })).toHaveCount(0);
   await page.getByRole('link', { name: '选股', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '选股扫描', exact: true })).toBeVisible();
-  await expect(page.getByText('数据未刷新')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: '条件选股', exact: true })).toBeVisible();
+  await expect(page.getByText('数据未更新')).toHaveCount(0);
   await expect(page.getByText('扫描数据不可用', { exact: true })).toHaveCount(0);
   await scan(page);
-  await expect(page.getByText('数据未刷新')).toHaveCount(0);
+  await expect(page.getByText('数据未更新')).toHaveCount(0);
   expect(state.errors).toEqual([]);
 });
 
@@ -401,7 +402,7 @@ test('identity loss cancels an old owner read before it can submit a worker task
   await expect.poll(() => typeof releaseOld).toBe('function');
   state.owner = false;
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect(page.getByRole('button', { name: '刷新强度分', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '重算评分', exact: true })).toHaveCount(0);
   releaseOld();
   expect(posts).toBe(0);
   expect(state.errors).toEqual([]);
@@ -423,7 +424,7 @@ test('a superseded stale scan GET cannot start an obsolete owner task or change 
   });
   await page.locator('button.scan-trigger').click();
   await expect.poll(() => typeof releaseOld).toBe('function');
-  await page.getByRole('tablist', { name: '偏好', exact: true }).getByRole('tab', { name: '进取', exact: true }).click();
+  await page.getByRole('tablist', { name: '风险偏好', exact: true }).getByRole('tab', { name: '进取', exact: true }).click();
   await scan(page, 'NEW');
   releaseOld();
   await expect(page.getByRole('table').getByText('NEW', { exact: true })).toBeVisible();
@@ -452,9 +453,9 @@ test('a superseded worker wait stops polling after a newer scan wins', async ({ 
       return route.fulfill({ json: completedWorker(requested, { status: 'running' }) });
     },
   });
-  await page.getByRole('button', { name: '刷新强度分', exact: true }).click();
+  await page.getByRole('button', { name: '重算评分', exact: true }).click();
   await expect.poll(() => typeof releaseOldStatus).toBe('function');
-  await page.getByRole('tablist', { name: '偏好', exact: true }).getByRole('tab', { name: '进取', exact: true }).click();
+  await page.getByRole('tablist', { name: '风险偏好', exact: true }).getByRole('tab', { name: '进取', exact: true }).click();
   await scan(page, 'NEW');
   releaseOldStatus();
   await page.waitForTimeout(1_700);
@@ -482,7 +483,7 @@ test('owner refresh retries publication visibility without posting a second task
     },
   });
   await scan(page, 'INITIAL');
-  await page.getByRole('button', { name: '刷新强度分', exact: true }).click();
+  await page.getByRole('button', { name: '重算评分', exact: true }).click();
   await expect(page.getByRole('table').getByText('PUBLISHED', { exact: true })).toBeVisible();
   expect(posts).toBe(1);
   expect(readsAfterPost).toBe(2);
@@ -504,7 +505,7 @@ test('owner refresh stops after three unpublished reads, retaining the previous 
     },
   });
   await scan(page, 'INITIAL');
-  await page.getByRole('button', { name: '刷新强度分', exact: true }).click();
+  await page.getByRole('button', { name: '重算评分', exact: true }).click();
   await expect(page.getByText('扫描失败', { exact: true })).toBeVisible();
   await expect(page.getByRole('table').getByText('INITIAL', { exact: true })).toBeVisible();
   expect(posts).toBe(1);
@@ -527,7 +528,7 @@ test('missing publication after a completed task cannot cause another worker pos
     },
   });
   await scan(page, 'INITIAL');
-  await page.getByRole('button', { name: '刷新强度分', exact: true }).click();
+  await page.getByRole('button', { name: '重算评分', exact: true }).click();
   await expect(page.getByText('扫描数据不可用', { exact: true })).toBeVisible();
   await expect(page.getByRole('table').getByText('INITIAL', { exact: true })).toBeVisible();
   expect(posts).toBe(1);
@@ -547,10 +548,10 @@ test('retry after a failed owner refresh still posts a fresh worker task', async
     scanReply: route => route.fulfill({ json: scanBody(posts > 1 ? 'REFRESHED' : 'INITIAL') }),
   });
   await scan(page, 'INITIAL');
-  await page.getByRole('button', { name: '刷新强度分', exact: true }).click();
+  await page.getByRole('button', { name: '重算评分', exact: true }).click();
   await expect(page.getByText('扫描数据不可用', { exact: true })).toBeVisible();
   await expect(page.getByRole('table').getByText('INITIAL', { exact: true })).toBeVisible();
-  await page.getByRole('region', { name: '扫描结果', exact: true }).getByRole('button', { name: '重试', exact: true }).click();
+  await page.getByRole('region', { name: '筛选结果', exact: true }).getByRole('button', { name: '重试', exact: true }).click();
   await expect(page.getByRole('table').getByText('REFRESHED', { exact: true })).toBeVisible();
   expect(posts).toBe(2);
   expect(state.errors).toEqual([]);
@@ -574,11 +575,11 @@ test('worker queue and running phases reach the real scan interface before publi
       return route.fulfill({ json: completedWorker(requested) });
     },
   });
-  await page.getByRole('button', { name: '刷新强度分', exact: true }).click();
+  await page.getByRole('button', { name: '重算评分', exact: true }).click();
   await expect.poll(() => typeof releaseRunning).toBe('function');
   await expect(page.getByText('正在扫描… · 排队中')).toBeVisible();
   releaseRunning();
-  await expect(page.getByText('正在扫描… · 后台计算中')).toBeVisible();
+  await expect(page.getByText('正在扫描… · 正在计算')).toBeVisible();
   await expect(page.getByRole('table').getByText('PUBLISHED', { exact: true })).toBeVisible();
   expect(polls).toBe(2);
   expect(state.errors).toEqual([]);
@@ -599,8 +600,8 @@ test('timed-out owner task stays recoverable with its original request ID', asyn
       return route.fulfill({ json: completedWorker(parameters, { status: 'queued' }) });
     },
   });
-  await expect(page.getByRole('button', { name: '刷新强度分', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '刷新强度分', exact: true }).click();
+  await expect(page.getByRole('button', { name: '重算评分', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '重算评分', exact: true }).click();
   await expect.poll(() => polls).toBeGreaterThan(0);
   await page.clock.fastForward(7_319_000);
   await expect(page.getByText('扫描失败', { exact: true })).toHaveCount(0);
@@ -635,7 +636,7 @@ for (const recoveredStatus of ['failed', 'missing']) {
       },
       scanReply: route => route.fulfill({ json: scanBody('RECOVERED') }),
     });
-    await page.getByRole('button', { name: '刷新强度分', exact: true }).click();
+    await page.getByRole('button', { name: '重算评分', exact: true }).click();
     await expect(page.getByRole('table').getByText('RECOVERED', { exact: true })).toBeVisible();
     expect(statusReads).toBe(1);
     expect(posts).toBe(1);
@@ -647,7 +648,7 @@ test('Retry repeats the failed profile and preserves a draft edited after the fa
   const state = await fixture(page);
   await scan(page);
   state.failAggressive = true;
-  const profile = page.getByRole('tablist', { name: '偏好', exact: true });
+  const profile = page.getByRole('tablist', { name: '风险偏好', exact: true });
   await profile.getByRole('tab', { name: '进取', exact: true }).click();
   await page.getByTestId('screener-advanced-filters').locator('summary').click();
   await page.getByRole('textbox', { name: '最低价格', exact: true }).fill('40');
@@ -657,7 +658,7 @@ test('Retry repeats the failed profile and preserves a draft edited after the fa
   await page.getByRole('textbox', { name: '最低价格', exact: true }).fill('80');
   state.failAggressive = false;
   const before = state.scans.filter(item => item.profile === 'aggressive').length;
-  await page.getByRole('region', { name: '扫描结果', exact: true }).getByRole('button', { name: '重试', exact: true }).click();
+  await page.getByRole('region', { name: '筛选结果', exact: true }).getByRole('button', { name: '重试', exact: true }).click();
   await expect.poll(() => state.scans.filter(item => item.profile === 'aggressive').length).toBe(before + 1);
   expect(state.scans.at(-1).min_price).toBe('40');
   await expect(page.getByText('扫描数据不可用', { exact: true })).toHaveCount(0);
@@ -680,7 +681,7 @@ test('native table row expands through a real keyboard button without activating
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   const id = await toggle.getAttribute('aria-controls');
   await expect(page.locator(`[id=${JSON.stringify(id)}]`)).toBeVisible();
-  const tooltip = row.getByRole('button', { name: '分项强度', exact: true });
+  const tooltip = row.getByRole('button', { name: '分项评分', exact: true });
   await tooltip.focus();
   await page.keyboard.press('Enter');
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
@@ -696,9 +697,9 @@ test('reset all clears the macro filter that caused an empty result', async ({ p
   await scan(page);
   await page.getByRole('button', { name: '宏观适配', exact: true }).click();
   await page.getByRole('tab', { name: '中性', exact: true }).click();
-  await expect(page.getByText('当前条件无命中', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '重置全部条件', exact: true }).click();
-  await expect(page.getByText('当前条件无命中', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('没有符合条件的股票', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '重置条件', exact: true }).click();
+  await expect(page.getByText('没有符合条件的股票', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('table').getByText('AAA', { exact: true })).toBeVisible();
   await expect(page.getByRole('table').getByText('BBB', { exact: true })).toBeVisible();
   await expect(page.getByRole('tab', { name: '中性', exact: true })).toHaveAttribute('aria-selected', 'false');
@@ -719,7 +720,7 @@ test('removed comparison card leaves tier filtering and scoring explanation avai
   await page.getByRole('tab', { name: '顺风', exact: true }).click();
   await expect(page.getByText('强度分布 · 候选比较', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '只看 S 档', exact: true })).toHaveCount(0);
-  const tiers = page.getByRole('tablist', { name: /强度分档/ });
+  const tiers = page.getByRole('tablist', { name: /评分分档/ });
   await tiers.getByRole('tab', { name: /^S/ }).click();
   await scan(page, 'S');
   await expect(tiers.getByRole('tab', { name: /^S/ })).toHaveAttribute('aria-selected', 'true');
@@ -767,17 +768,17 @@ test('narrow screener keeps scoring details and real factor weights after card r
 
 test('reset from aggressive actually scans balanced and preserves old profile through failure and retry', async ({ page }) => {
   const state = await fixture(page);
-  const profile = page.getByRole('tablist', { name: '偏好', exact: true });
+  const profile = page.getByRole('tablist', { name: '风险偏好', exact: true });
   await profile.getByRole('tab', { name: '进取', exact: true }).click();
-  await page.getByRole('tablist', { name: '周期', exact: true }).getByRole('tab', { name: '短期', exact: true }).click();
+  await page.getByRole('tablist', { name: '评分周期', exact: true }).getByRole('tab', { name: '短期', exact: true }).click();
   await scan(page);
   const method = page.getByRole('button', { name: /评分方法/ });
   await expect(method).toContainText('进取');
   await page.getByRole('button', { name: '宏观适配', exact: true }).click();
   await page.getByRole('tab', { name: '中性', exact: true }).click();
-  await expect(page.getByText('当前条件无命中', { exact: true })).toBeVisible();
+  await expect(page.getByText('没有符合条件的股票', { exact: true })).toBeVisible();
   state.holdBalanced = true;
-  await page.getByRole('button', { name: '重置全部条件', exact: true }).click();
+  await page.getByRole('button', { name: '重置条件', exact: true }).click();
   await expect.poll(() => typeof state.releaseBalanced).toBe('function');
   expect(state.scans.at(-1).profile).toBe('balanced');
   expect(state.scans.at(-1).timeframe).toBe('mid');
@@ -791,7 +792,7 @@ test('reset from aggressive actually scans balanced and preserves old profile th
   state.holdBalanced = false;
   state.failBalanced = false;
   const before = state.scans.filter(item => item.profile === 'balanced').length;
-  await page.getByRole('region', { name: '扫描结果', exact: true }).getByRole('button', { name: '重试', exact: true }).click();
+  await page.getByRole('region', { name: '筛选结果', exact: true }).getByRole('button', { name: '重试', exact: true }).click();
   await expect.poll(() => state.scans.filter(item => item.profile === 'balanced').length).toBe(before + 1);
   await expect(method).toContainText('均衡');
   await expect(page.getByRole('table').getByText('甲公司', { exact: true })).toBeVisible();
@@ -818,6 +819,7 @@ for (const width of [320, 390]) {
       market_breadth_score: 70, market_volume_score: 65, risk_appetite_score: 75,
       risk_on_spread_score: 60, warnings: [],
     } } });
+    await page.getByTestId('screener-advanced-filters').locator('summary').click();
     await page.getByRole('combobox', { name: '最多显示数量', exact: true }).click();
     await page.getByRole('option', { name: 'Top 40', exact: true }).click();
     await page.locator('button.scan-trigger').click();

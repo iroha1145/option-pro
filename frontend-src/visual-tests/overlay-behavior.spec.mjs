@@ -207,7 +207,7 @@ test('mobile sheet can sit beneath the palette and restores scrolling after both
 });
 
 test('nonmodal scan history still closes by clicking outside', async ({ page }) => {
-  await harness(page); await page.getByRole('button',{name:'扫描历史'}).click();
+  await harness(page); await page.getByRole('button',{name:'扫描记录'}).click();
   await expect(page.getByRole('dialog',{name:'最近扫描记录'})).toBeVisible();
   await page.locator('#background-button').click();
   await expect(page.getByRole('dialog',{name:'最近扫描记录'})).toBeHidden();
@@ -221,7 +221,7 @@ for (const [start, resized] of [[390, 1440], [1440, 320]]) {
     });
     await page.setViewportSize({ width: start, height: 900 });
     await page.goto('/screener');
-    const trigger = page.getByRole('button', { name: '扫描历史', exact: true });
+    const trigger = page.getByRole('button', { name: '扫描记录', exact: true });
     await trigger.click();
     const history = page.getByRole('dialog', { name: '最近扫描记录', exact: true });
     for (const width of [start, resized, start]) {

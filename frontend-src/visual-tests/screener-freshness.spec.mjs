@@ -24,7 +24,7 @@ async function applySemiconductorView(page) {
 }
 
 async function refreshAppliedView(page) {
-  await page.getByRole('button', { name: '刷新强度分' }).click();
+  await page.getByRole('button', { name: '重算评分' }).click();
 }
 
 async function selectSemiconductorsAndRefresh(page) {
@@ -74,7 +74,7 @@ test('A07 a later EOD software read wins over a late semiconductor batch refresh
   await openProductionScreener(page);
   await applySemiconductorView(page);
   await refreshAppliedView(page);
-  await expect(page.getByRole('button', { name: '刷新强度分' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '重算评分' })).toBeDisabled();
   await expect.poll(async () => (await readScreenerStats(request)).post_count).toBe(1);
   await page.getByTestId('screener-advanced-filters').getByRole('button', { name: '半导体', exact: true }).click();
   await page.getByTestId('screener-advanced-filters').getByRole('button', { name: '软件', exact: true }).click();
@@ -98,7 +98,7 @@ test('A08 ten same-parameter refresh activations share one EOD computation', asy
   });
   await openProductionScreener(page);
   await applySemiconductorView(page);
-  await page.getByRole('button', { name: '刷新强度分' }).evaluate((button) => {
+  await page.getByRole('button', { name: '重算评分' }).evaluate((button) => {
     for (let index = 0; index < 10; index += 1) button.click();
   });
   await expect(page.getByText('NVDA').filter({ visible: true }).first()).toBeVisible({ timeout: 90_000 });
@@ -228,7 +228,7 @@ test('F02 mobile 390 shows scan date on cards after refresh', async ({ page, req
 });
 
 for (const [locale, heading] of [
-  ['zh', '选股扫描'],
+  ['zh', '条件选股'],
   ['en', 'Screener'],
   ['ja', 'スクリーナー'],
 ]) {

@@ -89,7 +89,7 @@ export const MACRO: Dict = {
   '更新数据': ["Update data", "データを更新"],
   '正在提交…': ['Submitting…', '送信中…'],
   '正在刷新': ['Refreshing', '更新中'],
-  '更新失败': ["Update failed", "更新に失敗"],
+  '更新失败': ["Update failed", "更新に失敗しました"],
   '宏观数据源尚未配置': ['Macro data source not yet configured', 'マクロデータソース未設定'],
   '宏观环境未启用': ['Macro conditions disabled', 'マクロ環境は無効です'],
   '管理员配置经济数据平台（FRED）的访问密钥后，即可开始更新宏观数据。': ['Macro data can start updating once an administrator configures a FRED access key.', '管理者が経済データサービス（FRED）のアクセスキーを設定すると、マクロデータの更新が始まります。'],

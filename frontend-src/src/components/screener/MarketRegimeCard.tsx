@@ -24,14 +24,14 @@ interface RegimeDim {
 function liveDims(r: MarketRegimeInfo): RegimeDim[] {
   const d: MarketRegimeDims = r.dims;
   return [
-    { key: 'index_trend', label: t('指数趋势'), value: d.indexTrend, hintKey: 'regimeTrend' },
+    { key: 'index_trend', label: t('指数走势'), value: d.indexTrend, hintKey: 'regimeTrend' },
     { key: 'momentum', label: t('市场动量'), value: d.momentum, hintKey: 'regimeMomentum' },
     { key: 'breadth', label: t('市场广度'), value: d.breadth, hintKey: 'regimeBreadth' },
     { key: 'volume', label: t('量能配合'), value: d.volume, hintKey: 'regimeVolume' },
     { key: 'risk_appetite', label: t('风险偏好'), value: d.riskAppetite, hintKey: 'regimeRiskAppetite' },
     {
       key: 'risk_on_spread',
-      label: t('强弱价差'),
+      label: t('攻防价差'),
       value: d.riskOnSpread,
       hintKey: 'regimeRiskOn',
     },
@@ -72,13 +72,13 @@ export default function MarketRegimeCard({ market }: { market: MarketStrength })
     <div className="card-surface p-5">
       <div className="flex items-baseline justify-between">
         <p className="eyebrow">
-          {t('市场形态')}
+          {t('走势评分')}
           <InfoHint hint={SCORE_HINTS.marketRegime} side="bottom" size={12} className="ml-1" />
         </p>
         {regime && regime.score !== null ? (
           <span className="metric-value text-data-m text-ink-900 tnum">{regime.score}</span>
         ) : (
-          <span className="text-micro text-ink-400 tnum">{t('6 维')}</span>
+          <span className="text-micro text-ink-400 tnum">{t('六项')}</span>
         )}
       </div>
       {regime && (regime.label || regime.spreadLabel) && (
