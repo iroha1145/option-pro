@@ -184,4 +184,7 @@ export const DRAWINGS: Dict = {
   "比较该股与标普 500 指数基金（SPY）的表现；缺少同日收盘价时不显示。": ["Compares the stock with the SPDR S&P 500 ETF (SPY). Hidden when matching daily closes are unavailable.", "銘柄の値動きをSPDR S&P 500 ETF（SPY）と比較します。同日の終値が揃わない場合は表示しません。"],
   '指标副图': ['Indicator panes', '指標サブチャート'],
   '最低形态吻合度 {fit}% · 标签密度 {density}% · 形态数量上限 {max}': ['Minimum shape quality {fit}% · Label density {density}% · Max patterns {max}', '形状品質の下限 {fit}% · ラベル密度 {density}% · 最大パターン数 {max}'],
+  '绘图文件': ['Drawing files', '描画ファイル'],
+  '选中图形后，可修改颜色、线宽和线型': ['Select a drawing to change its color, width and line style', '図形を選択すると、色・線幅・線種を変更できます'],
+  '有未保存的导入文件': ['Unsaved import available', '未保存の取り込みファイルあり'],
 };

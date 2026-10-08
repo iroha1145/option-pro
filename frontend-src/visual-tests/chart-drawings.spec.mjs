@@ -743,6 +743,10 @@ test("clear all removes every drawing in the scope", async ({ page }) => {
   await placeHorizontal(page, 0.58, 0.55);
   await expandChart(page);
   await expect(drawingRows(page)).toHaveCount(2);
+  // 导出、导入、清空收在「绘图文件」里，默认收起：先展开，清空仍要过确认窗口。
+  const files = toolButton(page, "绘图文件");
+  await expect(files).toHaveAttribute("aria-expanded", "false");
+  await files.click();
   await toolButton(page, "清空手绘").first().click();
   await toolButton(page, "确认清空").first().click();
   await expect(drawingRows(page)).toHaveCount(0);
