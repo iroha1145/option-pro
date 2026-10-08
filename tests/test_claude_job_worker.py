@@ -813,3 +813,82 @@ def test_slot_self_cancellation_reports_error_without_cancelling_parent_or_sibli
             await asyncio.gather(task, return_exceptions=True)
 
     asyncio.run(scenario())
+
+
+def test_parent_cancel_preserves_prior_slot_error_without_logging_cancelled_siblings(tmp_path, monkeypatch, caplog):
+    config, personal = _pool_controls(tmp_path, monkeypatch)
+    failure = RuntimeError("claim failed before parent cancellation")
+
+    async def scenario():
+        started, closed = [], []
+        all_started, failed = asyncio.Event(), asyncio.Event()
+
+        async def run_once(repo, settings, owner, **kwargs):
+            index = int(owner.rsplit("-", 1)[1])
+            started.append(index)
+            if len(started) == 4:
+                all_started.set()
+            await all_started.wait()
+            if index == 0:
+                failed.set()
+                raise failure
+            try:
+                await asyncio.Event().wait()
+            finally:
+                await asyncio.sleep(0.01)
+                closed.append(index)
+
+        monkeypatch.setattr(worker, "run_once", run_once)
+        task = asyncio.create_task(worker.run_configured_once(None, config, "pool", personal_config=personal))
+        await asyncio.wait_for(failed.wait(), timeout=2)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert sorted(closed) == [1, 2, 3]
+
+    asyncio.run(scenario())
+    logged = [item.exc_info[1] for item in caplog.records if item.exc_info and "AI job slot failed" in item.message]
+    assert logged == [failure]
+
+
+@pytest.mark.parametrize("model,reasoning", [("claude-haiku-5-5", "xhigh"), ("gpt-5.6-terra", "max")])
+@pytest.mark.parametrize("outcome", ["normal", "self_cancel", "parent_cancel"])
+def test_single_slot_preserves_owner_and_distinguishes_cancel_sources(tmp_path, monkeypatch, model, reasoning, outcome):
+    config, personal = _pool_controls(tmp_path, monkeypatch)
+    config = config.model_copy(update={"openai_max_concurrency": 1, "openai_model": model, "openai_reasoning": reasoning})
+
+    async def scenario():
+        started = asyncio.Event()
+        owners, closed = [], []
+
+        async def run_once(repo, settings, owner, **kwargs):
+            owners.append(owner)
+            started.set()
+            try:
+                if outcome == "normal":
+                    return 1
+                if outcome == "self_cancel":
+                    asyncio.current_task().cancel("single slot cancellation")
+                    await asyncio.sleep(0)
+                await asyncio.Event().wait()
+            finally:
+                await asyncio.sleep(0.01)
+                closed.append(owner)
+
+        monkeypatch.setattr(worker, "run_once", run_once)
+        task = asyncio.create_task(worker.run_configured_once(None, config, "unchanged-owner", personal_config=personal))
+        await asyncio.wait_for(started.wait(), timeout=2)
+        if outcome == "parent_cancel":
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        elif outcome == "self_cancel":
+            with pytest.raises(RuntimeError, match="ai_job_slot_cancelled") as caught:
+                await task
+            assert isinstance(caught.value.__cause__, asyncio.CancelledError)
+            assert not task.cancelled()
+        else:
+            assert await task == (1, "enabled")
+        assert owners == closed == ["unchanged-owner"]
+
+    asyncio.run(scenario())
