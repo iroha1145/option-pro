@@ -488,3 +488,69 @@ def test_sources_include_actual_citations_without_thinking_or_cited_body():
     assert provider.response_sources(message) == [{
         "title": "Citation", "url": "https://www.anthropic.com/source", "type": "web_search",
     }]
+
+
+@pytest.mark.parametrize("final_details", [None, {
+    "ephemeral_5m_input_tokens": 14000, "ephemeral_1h_input_tokens": 7796,
+}])
+def test_server_tool_cumulative_usage_does_not_retain_initial_cache_split(monkeypatch, final_details):
+    from app.services.ai_jobs.runtime import settled_usage_cost_microusd
+
+    events = _tool_events([_call(), _search_result(), _final()], usage={
+        "input_tokens": 30, "cache_creation_input_tokens": 7721,
+        "cache_read_input_tokens": 0, "cache_creation": {
+            "ephemeral_5m_input_tokens": 7721, "ephemeral_1h_input_tokens": 0,
+        },
+    })
+    # A server-side tool loop emits cumulative receipts, not per-round additions.
+    intermediate = {"type": "message_delta", "delta": {
+        "stop_reason": None, "stop_sequence": None,
+    }, "usage": {"input_tokens": 70, "cache_creation_input_tokens": 12000,
+                 "cache_read_input_tokens": 7721, "output_tokens": 2000}}
+    final_usage = {
+        "input_tokens": 124, "cache_creation_input_tokens": 21796,
+        "cache_read_input_tokens": 23125, "output_tokens": 8759,
+        "output_tokens_details": {"thinking_tokens": 8393},
+        "server_tool_use": {"web_search_requests": 1, "web_fetch_requests": 1},
+    }
+    if final_details is not None:
+        final_usage["cache_creation"] = final_details
+    events[-2]["usage"] = final_usage
+    events.insert(-2, intermediate)
+    # A later output-only receipt must not revive the initial breakdown.
+    events.insert(-1, {"type": "message_delta", "delta": {
+        "stop_reason": "tool_use", "stop_sequence": None,
+    }, "usage": {"output_tokens": 8759}})
+    _transport_client(monkeypatch, lambda request: httpx2.Response(
+        200, headers={"content-type": "text/event-stream"}, text=_sse(events),
+    ))
+    message = asyncio.run(provider.stream_message(_prepared(tools=_tools())))
+    usage = provider.response_usage(message)
+    assert usage["input_tokens"] == 45045
+    assert usage["cache_creation_input_tokens"] == 21796
+    assert usage["cached_input_tokens"] == 23125
+    assert usage["output_tokens"] == 8759
+    assert usage["reasoning_tokens"] == 8393
+    assert usage["web_search_requests"] == usage["web_fetch_requests"] == 1
+    assert usage["cache_creation_5m_input_tokens"] == (14000 if final_details else None)
+    assert usage["cache_creation_1h_input_tokens"] == (7796 if final_details else None)
+    unknown_cost = settled_usage_cost_microusd("earnings_impact", usage, fallback_microusd=757880)
+    known_hour = {**usage, "cache_creation_5m_input_tokens": 0,
+                  "cache_creation_1h_input_tokens": 21796}
+    hour_cost = settled_usage_cost_microusd("earnings_impact", known_hour, fallback_microusd=757880)
+    assert 0 < unknown_cost <= hour_cost < 757880
+    if final_details is None:
+        assert unknown_cost == hour_cost
+    malformed = {**usage, "cache_creation_5m_input_tokens": 7721,
+                 "cache_creation_1h_input_tokens": 0}
+    assert settled_usage_cost_microusd("earnings_impact", malformed, fallback_microusd=757880) == 757880
+
+
+def test_output_only_delta_retains_valid_initial_cache_split(monkeypatch):
+    message, _, _ = _stream_tools(monkeypatch, [_final()], usage={
+        "cache_creation_input_tokens": 300,
+        "cache_creation": {"ephemeral_5m_input_tokens": 200, "ephemeral_1h_input_tokens": 100},
+    })
+    usage = provider.response_usage(message)
+    assert usage["cache_creation_5m_input_tokens"] == 200
+    assert usage["cache_creation_1h_input_tokens"] == 100

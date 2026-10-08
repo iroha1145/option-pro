@@ -11,7 +11,7 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from anthropic import AsyncAnthropic, Timeout, transform_schema
-from anthropic.types import Message
+from anthropic.types import CacheCreation, Message
 
 MODEL = "claude-haiku-5-5"
 EFFORT = "xhigh"
@@ -101,10 +101,26 @@ async def stream_message(
     try:
         async with client.messages.stream(**prepared.params) as stream:
             completed = False
+            cache_creation_tokens = None
+            cache_creation_details = None
             counts = {"web_search": 0, "web_fetch": 0, "code": 0, "total": 0}
             async for event in stream:
-                if event.type == "message_start" and on_message_start is not None:
-                    await on_message_start(event.message.id)
+                if event.type == "message_start":
+                    cache_creation_tokens = event.message.usage.cache_creation_input_tokens
+                    cache_creation_details = deepcopy(event.message.usage.cache_creation)
+                    if on_message_start is not None:
+                        await on_message_start(event.message.id)
+                elif event.type == "message_delta":
+                    # SDK 1.12.1 updates cumulative creation totals but retains
+                    # the initial TTL breakdown. Never combine different snapshots.
+                    creation = event.usage.cache_creation_input_tokens
+                    details = getattr(event.usage, "cache_creation", None)
+                    if details is not None:
+                        cache_creation_details = CacheCreation.model_validate(details)
+                    elif creation is not None and creation != cache_creation_tokens:
+                        cache_creation_details = None
+                    if creation is not None:
+                        cache_creation_tokens = creation
                 elif event.type == "message_stop":
                     completed = True
                 elif event.type == "content_block_start" and event.content_block.type == "server_tool_use":
@@ -120,6 +136,7 @@ async def stream_message(
             if not completed:
                 raise RuntimeError("provider_stream_incomplete")
             message = await stream.get_final_message()
+            message.usage.cache_creation = cache_creation_details
             # A response with no tool blocks otherwise cannot reveal that this
             # request required a structured final tool rather than plain text.
             if prepared.params.get("tools"):

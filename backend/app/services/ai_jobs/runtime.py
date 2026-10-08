@@ -738,9 +738,10 @@ def settled_usage_cost_microusd(
         one_hour = usage.get("cache_creation_1h_input_tokens")
         five_minute = usage.get("cache_creation_5m_input_tokens")
         if one_hour is None and five_minute is None:
-            # This runtime requests only 5m caching. Old receipts may omit
-            # the lifetime breakdown while retaining total creation usage.
-            one_hour, five_minute = 0, writes
+            # Streamed server-tool iterations may omit the final TTL breakdown.
+            # Price unknown writes at the higher 1h rate without pretending that
+            # the requested system-cache TTL describes every server-side write.
+            one_hour, five_minute = writes, 0
         if (
             type(one_hour) is not int or type(five_minute) is not int
             or one_hour < 0 or five_minute < 0
