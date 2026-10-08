@@ -168,6 +168,8 @@ expected = {
     # catch-all message ("all twelve task types") read like stale wording rather
     # than the accurate count it actually was.
     "macro_conditions",
+    # 首页市场综合研判；缺 ANTHROPIC_API_KEY 时报 disabled，不进 critical。
+    "market_brief",
 }
 actual = {item.get("task_name") for item in payload.get("tasks", [])}
 tasks = {

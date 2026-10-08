@@ -22,6 +22,7 @@ def _configured(name: str) -> dict[str, bool]:
 def settings_status() -> dict[str, object]:
     return {
         "openai": _configured("OPENAI_API_KEY"),
+        "anthropic": _configured("ANTHROPIC_API_KEY"),
         "finnhub": _configured("FINNHUB_API_KEY"),
         "marketdata": _configured("MARKETDATA_TOKEN"),
         # Only the boolean crosses the wire. No length, prefix, suffix, hash or

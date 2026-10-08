@@ -7,11 +7,14 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 import ipaddress
 import json
+import time
 from typing import Any, Literal
 from urllib.parse import urlsplit, urlunsplit
 
 from anthropic import AsyncAnthropic, Timeout, transform_schema
 from anthropic.types import CacheCreation, Message
+
+from app.services.claude_cache_diagnostics import BackgroundDiagnosticsStore, MISSING, diagnostic_field
 
 MODEL = "claude-haiku-5-5"
 EFFORT = "xhigh"
@@ -41,6 +44,7 @@ class PreparedMessage:
     params: dict[str, Any]
     api_key: str = field(repr=False)
     timeout_seconds: float
+    diagnostic_task: str = "ai_jobs:unknown"
 
 
 def _output_schema(schema: dict[str, Any]) -> dict[str, Any]:
@@ -70,6 +74,7 @@ def prepare_message(
     max_tokens: int,
     tools: list[dict] | None = None,
     output_mode: Literal["native_json", "prompt_json"] = "native_json",
+    job_type: str | None = None,
 ) -> PreparedMessage:
     if output_mode not in {"native_json", "prompt_json"}:
         raise ValueError("provider_output_mode_invalid")
@@ -107,6 +112,7 @@ def prepare_message(
         api_key=key,
         timeout_seconds=float(settings.openai_timeout_seconds),
         params=params,
+        diagnostic_task=f"ai_jobs:{job_type}" if job_type else "ai_jobs:unknown",
     )
 
 
@@ -123,14 +129,24 @@ async def stream_message(
         timeout=Timeout(prepared.timeout_seconds, connect=30.0),
         max_retries=0,
     )
+    store = BackgroundDiagnosticsStore()
+    diagnostics = MISSING
+    diagnostic_started_at = time.time()
     try:
-        async with client.messages.stream(**prepared.params) as stream:
+        previous = await store.previous(prepared.diagnostic_task)
+        async with client.messages.stream(**{**prepared.params, "diagnostics": {"previous_message_id": previous}}) as stream:
             completed = False
             cache_creation_tokens = None
             cache_creation_details = None
             counts = {"web_search": 0, "web_fetch": 0, "code": 0, "total": 0}
             async for event in stream:
                 if event.type == "message_start":
+                    current = event.message.id
+                    diagnostic_started_at = time.time()
+                    diagnostics = diagnostic_field(event.message, "diagnostics")
+                    store.record(task=prepared.diagnostic_task, model=prepared.params["model"],
+                                 previous=previous, current=current, diagnostics=diagnostics,
+                                 usage=event.message.usage, complete=False, started_at=diagnostic_started_at)
                     cache_creation_tokens = event.message.usage.cache_creation_input_tokens
                     cache_creation_details = deepcopy(event.message.usage.cache_creation)
                     if on_message_start is not None:
@@ -162,6 +178,9 @@ async def stream_message(
                 raise RuntimeError("provider_stream_incomplete")
             message = await stream.get_final_message()
             message.usage.cache_creation = cache_creation_details
+            store.record(task=prepared.diagnostic_task, model=prepared.params["model"],
+                         previous=previous, current=message.id, diagnostics=diagnostics,
+                         usage=message.usage, complete=True, started_at=diagnostic_started_at)
             return message
     finally:
         # Cleanup must not replace a transport failure or cancellation with a

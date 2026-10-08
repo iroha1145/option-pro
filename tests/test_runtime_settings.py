@@ -20,6 +20,7 @@ from app.services.runtime_settings import (
     RuntimeAlgorithmSettingsPatch,
     RuntimeCatalystSettingsPatch,
     RuntimeEarningsSettingsPatch,
+    RuntimeMarketBriefSettingsPatch,
     RuntimeSettingsPatch,
     RuntimeSettingsDocumentV1,
     RuntimeSettingsRevisionNotFound,
@@ -162,6 +163,47 @@ def test_algorithm_defaults_can_change_independently_and_roll_back(
     )
     assert restored.settings.algorithms.screener_ranking_algorithm == "production"
     assert restored.settings.algorithms.radar_sort_algorithm == "production"
+
+
+def test_market_brief_schedule_switch_defaults_on_and_survives_old_documents(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "runtime-settings.json"
+    store = make_store(path)
+    assert store.read().settings.market_brief.scheduled_enabled is True
+
+    # 首页研判上线前写下的文档没有 market_brief 段：照常读取，取默认值。
+    payload = store.read().model_dump(mode="json")
+    payload["version"] = 3
+    payload["updated_at"] = "2026-10-01T00:00:00Z"
+    del payload["settings"]["market_brief"]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    legacy = store.read()
+    assert legacy.version == 3
+    assert legacy.settings.market_brief.scheduled_enabled is True
+
+    paused = store.update(
+        RuntimeSettingsPatch(
+            market_brief=RuntimeMarketBriefSettingsPatch(scheduled_enabled=False),
+        ),
+        expected_version=3,
+    )
+    assert paused.settings.market_brief.scheduled_enabled is False
+    # 只动了这一个开关，其余段保持原值。
+    assert paused.settings.ai == legacy.settings.ai
+    assert paused.settings.earnings == legacy.settings.earnings
+    assert get_effective_runtime_settings(store).market_brief.scheduled_enabled is False
+
+    client = make_client(store)
+    response = client.put(
+        "/api/runtime-settings",
+        json={
+            "expected_version": paused.version,
+            "settings": {"market_brief": {"scheduled_enabled": True}},
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["settings"]["market_brief"] == {"scheduled_enabled": True}
 
 
 def test_default_store_uses_existing_data_dir_without_a_new_path_variable(

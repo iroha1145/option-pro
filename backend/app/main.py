@@ -55,6 +55,7 @@ from app.api import (
     earnings,
     macro_conditions,
     market,
+    market_brief,
     options,
     quotes,
     runtime_settings,
@@ -306,6 +307,10 @@ _PUBLIC_READ_API_PATHS = {
     # no worker action, no model spend. The refresh POST is deliberately absent.
     "/api/macro/conditions",
     "/api/macro/conditions/history",
+    # 首页市场综合研判：只读 Worker 写好的研判存储，不调模型、不触发供应商。
+    # 状态与手动补发（/status、/runs）刻意不在这里。
+    "/api/market-brief/latest",
+    "/api/market-brief/history",
     "/api/signals/market",
     "/api/catalysts/status",
     "/api/catalysts/feed",
@@ -751,6 +756,8 @@ app.include_router(quotes.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
 # Macro reads are public research content; the refresh route carries its own
 # owner and same-origin dependencies on top of this router-wide gate.
 app.include_router(macro_conditions.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
+# 研判的读接口对访客公开；/status 与 /runs 在路由上自带 Owner 与同源依赖。
+app.include_router(market_brief.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
 app.include_router(signals.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
 app.include_router(ai.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(catalysts.router, dependencies=_PUBLIC_READ_DEPENDENCIES)

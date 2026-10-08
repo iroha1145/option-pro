@@ -36,6 +36,7 @@ import { EASE_PAPER, GROW_X } from '@/lib/motion';
 import { fmtCountdown, fmtNyTime, fmtRelative, fmtTimeHHMMSS } from '@/lib/format';
 import { instrumentName, signed } from '@/components/cta/ctaMeta';
 import EconomicCalendarCard from '@/components/catalysts/EconomicCalendarCard';
+import MarketBriefCard from '@/components/home/MarketBriefCard';
 import PageHeader from '@/components/shared/PageHeader';
 import StaleStrip from '@/components/shared/StaleStrip';
 import StockDataCoverage from '@/components/shared/StockDataCoverage';
@@ -406,6 +407,8 @@ export default function Home() {
           </>
         )}
       </section>
+
+      <MarketBriefCard className="mt-6 md:mt-8" />
 
       {/* 行2：市场状态 + 雷达信号。栅格默认 stretch，两卡同高、底边对齐；
           lg 以下雷达排到市场状态前面，手机首屏在指数之后就能看到信号

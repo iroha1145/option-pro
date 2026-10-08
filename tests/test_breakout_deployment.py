@@ -59,6 +59,7 @@ def test_deployment_checks_only_the_unified_worker_inventory() -> None:
         "breakout_refresh",
         "retention",
         "macro_conditions",
+        "market_brief",
     ):
         assert f'"{task_name}"' in script
     # The gate must name the offending task rather than print one catch-all line

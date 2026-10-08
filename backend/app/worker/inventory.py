@@ -11,6 +11,7 @@ DEFAULT_TASK_NAMES = (
     "sector_iv_refresh",
     "earnings_analysis",
     "macro_conditions",
+    "market_brief",
     "focus_refresh",
     "strength_refresh",
     "breakout_refresh",

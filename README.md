@@ -191,7 +191,7 @@ curl --fail http://127.0.0.1:2000/ready
 ./scripts/compose.sh exec -T worker python -m app.worker --healthcheck
 ```
 
-统一工作进程应且只应报告十三项任务：
+统一工作进程应且只应报告十五项任务：
 
 - `breakout`
 - `catalyst_sync`
@@ -200,8 +200,10 @@ curl --fail http://127.0.0.1:2000/ready
 - `maintenance`
 - `stock_directory`
 - `public_home`
+- `sector_iv_refresh`
 - `earnings_analysis`
 - `macro_conditions`
+- `market_brief`
 - `focus_refresh`
 - `strength_refresh`
 - `breakout_refresh`
@@ -216,6 +218,7 @@ curl --fail http://127.0.0.1:2000/ready
 - `optix.db`
 - `catalyst-cache.db`
 - `macro-conditions.db`
+- `market-brief/`
 - `public-home-snapshot-v1.json`
 - `ai-jobs.db`
 - `optix-worker.db`
@@ -265,6 +268,20 @@ v1 只用于展示与研究，**不写入任何正式股票评分**。
 [运维](docs/macro-conditions/operations.md)
 
 个股图的手动画线、账户同步和自动技术形态见 [docs/chart-drawings.md](docs/chart-drawings.md)。
+
+## 首页市场综合研判
+
+首页每个交易日生成两份市场综合研判（开盘前、收盘后），由 Claude Opus 5.5 解释程序算好的指数、广度、板块、宏观与新闻证据。它不给涨跌概率，也不构成买卖、仓位或目标价建议。
+
+```bash
+./personal.sh secrets set ANTHROPIC_API_KEY   # 未配置时任务报 disabled，Worker 仍然健康
+```
+
+- 工作进程任务：`market_brief`（定时两个槽与 Owner 手动补发共用同一个任务）
+- 只读接口 `/api/market-brief/latest`、`/api/market-brief/history` 对访客开放；状态与手动补发仅 Owner
+- 配置：`config/personal.toml` 的 `[market_brief]` 段
+
+槽位、手动补发、费用口径与排障见 [docs/market-brief.md](docs/market-brief.md)。
 
 ## 本地验证
 

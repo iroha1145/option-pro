@@ -4,11 +4,12 @@ import asyncio
 import inspect
 import logging
 import math
+import re
 import sqlite3
 import threading
 import time
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
@@ -3131,6 +3132,418 @@ class MacroConditionsTask:
         return await self._run("manual")
 
 
+# 等当日全市场批次时 5 分钟看一次；算不出任何日历槽时一小时后再看。
+MARKET_BRIEF_EOD_POLL_SECONDS = 300.0
+MARKET_BRIEF_FALLBACK_DELAY_SECONDS = 3_600.0
+# 手动补发后，若当前窗口的定时槽还没跑过，一分钟后由定时路径补上。
+MARKET_BRIEF_DUE_RECHECK_SECONDS = 60.0
+_MARKET_BRIEF_SLOTS = frozenset({"pre_open", "post_close"})
+# 手动补发不指定槽位时的分界：美东中午前补开盘前那份，之后补收盘后那份。
+_MARKET_BRIEF_MANUAL_SPLIT_MINUTES = 12 * 60
+# Worker 状态表与动作表都接受的错误码形状（动作表上限 64 字符，取两者交集）。
+_MARKET_BRIEF_ERROR_CODE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+
+
+def _market_brief_error_code(value: Any, *, fallback: str) -> str:
+    text = str(value or "")
+    return text if _MARKET_BRIEF_ERROR_CODE.fullmatch(text) else fallback
+
+
+def _market_brief_manual_target(now: datetime, requested: str | None) -> tuple[date, str]:
+    """手动补发对应的 (交易日, 槽)。
+
+    交易日取美东当日，非交易日取上一交易日；没指定槽位时按美东钟点决定。
+    """
+
+    from app.services.market_calendar import ET, is_trading_day, previous_trading_day
+
+    local = now.astimezone(ET)
+    today = local.date()
+    trading_date = today if is_trading_day(today) else previous_trading_day(today)
+    if requested is None:
+        minutes = local.hour * 60 + local.minute
+        requested = (
+            "pre_open" if minutes < _MARKET_BRIEF_MANUAL_SPLIT_MINUTES else "post_close"
+        )
+    return trading_date, requested
+
+
+class MarketBriefTask:
+    """首页「市场综合研判」：开盘前 / 收盘后两个定时槽与 Owner 手动补发共用一个任务。
+
+    - personal.toml 关闭或缺 ANTHROPIC_API_KEY 时报 disabled，Worker 仍然健康；
+    - 模型或供应商失败只记进研判存储和本轮 details，任务保持 idle：一次付费调用
+      失败不该让部署闸门拒绝上线。只有程序异常才 degraded；
+    - 一个槽跑过（无论成败）就等下一个槽，不在窗口内自动重试，免得失败时反复
+      花钱；要补就由 Owner 手动发起，手动补发受每日次数上限约束。
+    """
+
+    def __init__(
+        self,
+        owner_id: str,
+        *,
+        settings: Any,
+        personal_config: Any | None = None,
+        store_factory: Callable[[], Any] | None = None,
+        runner: Callable[..., Any] | None = None,
+        now: Callable[[], datetime] | None = None,
+        eod_session_reader: Callable[[], date | None] | None = None,
+        runtime_settings_reader: Callable[[], Any] | None = None,
+    ) -> None:
+        self.owner_id = f"{owner_id}:market-brief"
+        # 构造时不读 settings 的任何字段：测试与精简部署传入的设置对象未必带
+        # Anthropic 相关字段，缺省按「未配置」处理。
+        self._settings = settings
+        self._personal_config = personal_config or get_personal_config()
+        self._store_factory = store_factory
+        self._store: Any = None
+        self._runner = runner
+        self._now = now or (lambda: datetime.now(timezone.utc))
+        self._eod_session_reader = eod_session_reader
+        self._runtime_settings_reader = runtime_settings_reader
+        # 本进程里定时路径最近一次动手的 (交易日, 槽)。手动补发会提前唤醒循环，
+        # 醒来时要能分清「这个窗口还没跑」与「跑过但失败」——后者不再自动重跑。
+        self._last_scheduled_attempt: tuple[date, str] | None = None
+
+    def _config(self) -> Any:
+        return self._personal_config.market_brief
+
+    def _schedule(self) -> Any:
+        return self._config().to_schedule()
+
+    def _get_store(self) -> Any:
+        if self._store is None:
+            if self._store_factory is not None:
+                self._store = self._store_factory()
+            else:
+                from app.services.market_brief import BriefStore
+
+                self._store = BriefStore()
+        return self._store
+
+    def next_calendar_run_at(self, now: datetime) -> datetime | None:
+        """TaskSpec 的日历回调：下一个槽的开窗时刻。
+
+        Supervisor 在自己的异常处理之外调用它（运行前写 resume_at、重启时恢复
+        排程），这里一抛错整个 Worker 进程就会退出，所以失败只记一笔，当作没有
+        日历时刻处理。
+        """
+
+        try:
+            from app.services.market_brief import next_slot_at
+
+            upcoming = next_slot_at(now, self._schedule())
+        except Exception as error:
+            record_fallback_failure("market_brief_next_slot", error)
+            return None
+        return upcoming[0] if upcoming is not None else None
+
+    def _delay_to_next_slot(self, now: datetime) -> float:
+        from app.services.market_brief import next_slot_at
+
+        upcoming = next_slot_at(now, self._schedule())
+        if upcoming is None:
+            return MARKET_BRIEF_FALLBACK_DELAY_SECONDS
+        # 先换成 UTC 再相减：同一时区的两个 aware 时间相减按墙钟算，夏令时切换日
+        # 会差一小时。
+        delay = (
+            upcoming[0].astimezone(timezone.utc) - now.astimezone(timezone.utc)
+        ).total_seconds()
+        return max(60.0, min(86_400.0, delay))
+
+    async def _delay_after_manual(self, now: datetime) -> float:
+        """手动补发提前唤醒了循环：当前窗口的定时槽若还没跑过，尽快补上。"""
+
+        from app.services.market_brief import due_slot
+
+        due = due_slot(now, self._schedule())
+        if due is not None and due != self._last_scheduled_attempt:
+            if not await _call_local(self._get_store().completed, *due):
+                return MARKET_BRIEF_DUE_RECHECK_SECONDS
+        return self._delay_to_next_slot(now)
+
+    def _disabled_reason(self) -> str | None:
+        if not self._config().enabled:
+            return "market_brief_disabled"
+        if not bool(getattr(self._settings, "market_brief_configured", False)):
+            return "anthropic_api_key_missing"
+        return None
+
+    @staticmethod
+    def _disabled(reason: str) -> TaskResult:
+        return TaskResult(
+            status="disabled",
+            error_code=reason,
+            details={"result": "disabled", "reason": reason},
+            next_delay_seconds=MARKET_BRIEF_FALLBACK_DELAY_SECONDS,
+        )
+
+    def _idle(self, now: datetime, **details: Any) -> TaskResult:
+        return TaskResult(
+            status="idle",
+            details=details,
+            next_delay_seconds=self._delay_to_next_slot(now),
+        )
+
+    async def _scheduled_enabled(self) -> bool:
+        reader = self._runtime_settings_reader
+        if reader is None:
+            from app.services.runtime_settings import get_effective_runtime_settings
+
+            reader = get_effective_runtime_settings
+        effective = await _call_local(reader)
+        return bool(effective.market_brief.scheduled_enabled)
+
+    @staticmethod
+    def _run_summary(record: Any) -> dict[str, Any]:
+        """写进任务状态的摘要：只放标识、结果和费用，原始输出与证据留在研判存储。"""
+
+        cost = record.cost_microusd
+        duration = record.duration_seconds
+        return {
+            "run_id": str(record.run_id)[:120],
+            "slot": str(record.slot),
+            "trading_date": record.trading_date.isoformat(),
+            "trigger": str(record.trigger),
+            "status": str(record.status),
+            "error_code": (
+                _market_brief_error_code(
+                    record.error_code, fallback="market_brief_run_failed"
+                )
+                if record.error_code
+                else None
+            ),
+            "cost_usd": round(cost / 1_000_000, 4) if cost is not None else None,
+            "duration_seconds": (
+                round(float(duration), 1) if duration is not None else None
+            ),
+            "continuation_count": int(record.continuation_count or 0),
+        }
+
+    async def _run_brief(
+        self,
+        *,
+        slot: str,
+        trading_date: date,
+        trigger: str,
+        now: datetime,
+        request_key: str | None = None,
+    ) -> TaskResult:
+        """跑一次研判；返回的结果还没有 next_delay，由调用方按自己的路径补上。"""
+
+        runner = self._runner
+        if runner is None:
+            from app.services.market_brief import run_brief
+
+            runner = run_brief
+        target = {
+            "slot": slot,
+            "trading_date": trading_date.isoformat(),
+            "trigger": trigger,
+        }
+        try:
+            # 证据组装与一次长时间的模型请求都是阻塞 I/O，放线程里跑。
+            record = await _call_local(
+                runner,
+                slot=slot,
+                trading_date=trading_date,
+                trigger=trigger,
+                store=self._get_store(),
+                config=self._config().to_run_config(),
+                api_key=self._settings.anthropic_api_key.get_secret_value(),
+                now=now,
+                **({"request_key": request_key} if request_key is not None else {}),
+            )
+            summary = self._run_summary(record)
+        except Exception as error:
+            # run_brief 自己把供应商失败记成 failed 记录，能抛到这里的是程序错误。
+            _logger.warning(
+                "market brief run failed slot=%s trigger=%s error_type=%s",
+                slot,
+                trigger,
+                type(error).__name__,
+                exc_info=True,
+            )
+            code = _public_error_code(error)
+            return TaskResult(
+                status="degraded",
+                error_code=(
+                    "market_brief_run_failed"
+                    if code == "task_failed"
+                    else _market_brief_error_code(code, fallback="market_brief_run_failed")
+                ),
+                details={
+                    "result": "error",
+                    **target,
+                    "error_type": type(error).__name__,
+                },
+            )
+        return TaskResult(
+            status="idle",
+            error_code=(
+                None
+                if summary["status"] == "completed"
+                else summary["error_code"] or "market_brief_run_failed"
+            ),
+            details={"result": "ran", **summary},
+        )
+
+    @bind_trusted_system_task
+    async def __call__(self) -> TaskResult:
+        now = self._now()
+        reason = self._disabled_reason()
+        if reason is not None:
+            return self._disabled(reason)
+        from app.services.market_brief import due_slot, post_close_fallback_reached
+        from app.services.runtime_settings import RuntimeSettingsStorageError
+
+        try:
+            scheduled_enabled = await self._scheduled_enabled()
+        except RuntimeSettingsStorageError:
+            return TaskResult(
+                status="degraded",
+                error_code="runtime_settings_unavailable",
+                details={"result": "runtime_settings_unavailable"},
+            )
+        if not scheduled_enabled:
+            return TaskResult(
+                status="paused",
+                details={"result": "paused", "reason": "scheduled_disabled"},
+                next_delay_seconds=self._delay_to_next_slot(now),
+            )
+        schedule = self._schedule()
+        due = due_slot(now, schedule)
+        if due is None:
+            return self._idle(now, result="no_slot_due")
+        trading_date, slot = due
+        target = {"slot": slot, "trading_date": trading_date.isoformat()}
+        recover = getattr(self._get_store(), "recover_interrupted", None)
+        if callable(recover):
+            await _call_local(recover)
+        if await _call_local(self._get_store().completed, trading_date, slot):
+            return self._idle(now, result="slot_completed", **target)
+        attempted = getattr(self._get_store(), "attempted", None)
+        if callable(attempted) and await _call_local(attempted, trading_date, slot):
+            return self._idle(now, result="slot_attempted", **target)
+        if self._last_scheduled_attempt == (trading_date, slot):
+            # 这个窗口本进程已经跑过一次且没成功；原因在研判存储的 latest_attempt 里。
+            return self._idle(now, result="slot_attempted", **target)
+        if slot == "post_close":
+            reader = self._eod_session_reader
+            if reader is None:
+                from app.services.market_brief.evidence import eod_batch_served_session
+
+                reader = eod_batch_served_session
+            # 读的是已发布批次（可能很大，首次要解析），放线程里。
+            served = await _call_local(reader)
+            batch_pending = served is None or served < trading_date
+            if batch_pending and not post_close_fallback_reached(now, trading_date, schedule):
+                return TaskResult(
+                    status="idle",
+                    details={
+                        "result": "waiting",
+                        "waiting": "eod_batch",
+                        **target,
+                        "eod_session": served.isoformat() if served else None,
+                    },
+                    next_delay_seconds=MARKET_BRIEF_EOD_POLL_SECONDS,
+                )
+        self._last_scheduled_attempt = (trading_date, slot)
+        result = await self._run_brief(
+            slot=slot,
+            trading_date=trading_date,
+            trigger="scheduled",
+            now=now,
+        )
+        return replace(result, next_delay_seconds=self._delay_to_next_slot(self._now()))
+
+    @bind_trusted_system_task
+    async def run_for_actions(self, actions: Sequence[Mapping[str, Any]]) -> TaskResult:
+        """Owner 手动补发：可以重跑已完成的槽，但受每个 UTC 日的次数上限约束。
+
+        同一时刻只会有一个排队中的研判动作（动作表按类型唯一），这里仍给每个
+        认领到的请求都写回结果：没写回的请求会被立即重新排队。
+        """
+
+        now = self._now()
+        request_ids = [
+            str(item["request_id"])
+            for item in actions
+            if isinstance(item, Mapping) and item.get("request_id")
+        ]
+        reason = self._disabled_reason()
+        if reason is not None:
+            return self._settle(request_ids, self._disabled(reason))
+        first = actions[0] if actions and isinstance(actions[0], Mapping) else {}
+        details = first.get("details")
+        parameters = details.get("parameters") if isinstance(details, Mapping) else None
+        requested = parameters.get("slot") if isinstance(parameters, Mapping) else None
+        if requested is not None and requested not in _MARKET_BRIEF_SLOTS:
+            rejected = TaskResult(
+                status="idle",
+                error_code="invalid_parameters",
+                details={"result": "rejected", "reason": "invalid_parameters"},
+                next_delay_seconds=await self._delay_after_manual(now),
+            )
+            return self._settle(request_ids, rejected)
+        trading_date, slot = _market_brief_manual_target(now, requested)
+        request_key = f"worker-action:{request_ids[0]}" if request_ids else None
+        has_request = getattr(self._get_store(), "has_request", None)
+        replay = bool(request_key and callable(has_request) and await _call_local(has_request, request_key))
+        daily_max_runs = int(self._config().daily_max_runs)
+        daily_runs = int(
+            await _call_local(
+                self._get_store().runs_on,
+                now.astimezone(timezone.utc).date(),
+            )
+        )
+        if daily_runs >= daily_max_runs and not replay:
+            rejected = TaskResult(
+                status="idle",
+                error_code="daily_run_limit_reached",
+                details={
+                    "result": "rejected",
+                    "reason": "daily_run_limit_reached",
+                    "slot": slot,
+                    "trading_date": trading_date.isoformat(),
+                    "daily_runs": daily_runs,
+                    "daily_max_runs": daily_max_runs,
+                },
+                next_delay_seconds=await self._delay_after_manual(now),
+            )
+            return self._settle(request_ids, rejected)
+        result = await self._run_brief(
+            slot=slot,
+            trading_date=trading_date,
+            trigger="manual",
+            now=now,
+            request_key=request_key,
+        )
+        next_delay = await self._delay_after_manual(self._now())
+        return self._settle(request_ids, replace(result, next_delay_seconds=next_delay))
+
+    @staticmethod
+    def _settle(request_ids: Sequence[str], result: TaskResult) -> TaskResult:
+        """把本轮结果逐个写回手动请求。
+
+        研判失败时任务本身仍是 idle（不影响 Worker 健康），但动作表要如实记成
+        失败并带上错误码；默认按任务状态判定会把失败的补发记成成功。
+        """
+
+        succeeded = result.status == "idle" and result.error_code is None
+        outcome = dict(result.details)
+        completions = [
+            {
+                "request_id": request_id,
+                "succeeded": succeeded,
+                "error_code": None if succeeded else result.error_code,
+                "result": outcome,
+            }
+            for request_id in request_ids
+        ]
+        return replace(result, details={**outcome, "action_completions": completions})
+
+
 # The maintenance TaskSpec and the per-label retries share these values, so a
 # failing label backs off exactly like a failing task would.
 MAINTENANCE_INTERVAL_SECONDS = 21_600.0
@@ -3561,6 +3974,11 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         settings=settings,
         personal_config=config,
     )
+    market_brief = MarketBriefTask(
+        owner_id,
+        settings=settings,
+        personal_config=config,
+    )
     strength_refresh_times_et = (_strength_refresh_slot_et(),)
     return (
         TaskSpec(
@@ -3662,6 +4080,23 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
             max_backoff_seconds=3600.0,
         ),
         TaskSpec(
+            "market_brief",
+            market_brief,
+            # 每轮结果都按下一个美东槽重排，这里只是首次唤醒；手动补发会提前唤醒
+            # 同一个任务，定时与手动共用这一个任务名。
+            interval_seconds=300.0,
+            enabled=True,
+            timeout_seconds=1_800.0,
+            failure_backoff_seconds=300.0,
+            max_backoff_seconds=3_600.0,
+            # 付费的模型请求跑到底再退出，结果如实记账，而不是记成被中断。
+            drain_on_shutdown=True,
+            # 重启不重跑：部署或崩溃后沿用状态库里的下一个槽，不按进程启动时间
+            # 再花一次模型费用。代价是运行中途崩溃的那个槽要等下一个槽或手动补发。
+            honor_persisted_schedule=True,
+            next_calendar_run_at=market_brief.next_calendar_run_at,
+        ),
+        TaskSpec(
             "focus_refresh",
             FocusRefreshTask(),
             interval_seconds=86_400.0,
@@ -3716,6 +4151,7 @@ __all__ = [
     "FocusRefreshTask",
     "MacroConditionsTask",
     "MaintenanceTask",
+    "MarketBriefTask",
     "DEFAULT_TASK_NAMES",
     "PublicHomeTask",
     "RetentionTask",

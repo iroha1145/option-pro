@@ -28,6 +28,7 @@ ActionType = Literal[
     "earnings_analysis",
     "earnings_calendar",
     "macro_conditions",
+    "market_brief",
     "retention",
 ]
 
@@ -40,6 +41,8 @@ _ACTION_TASKS: dict[str, str] = {
     "earnings_calendar": "public_home",
     # Scheduled and manual macro refreshes deliberately share one task name.
     "macro_conditions": "macro_conditions",
+    # 首页研判的定时槽与手动补发同样共用一个任务。
+    "market_brief": "market_brief",
     "retention": "retention",
 }
 _ACTION_COOLDOWNS: dict[str, float] = {
@@ -49,6 +52,9 @@ _ACTION_COOLDOWNS: dict[str, float] = {
     "earnings_analysis": 60.0,
     "earnings_calendar": 60.0,
     "macro_conditions": 300.0,
+    # 一次研判约 1.5–3 美元，成功后 10 分钟内不再接受新的补发；与
+    # api/market_brief.py 的 MARKET_BRIEF_COOLDOWN_SECONDS 一致（测试钉住）。
+    "market_brief": 600.0,
     "retention": 300.0,
 }
 

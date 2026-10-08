@@ -34,7 +34,8 @@ WORKER_HEALTH = (
     '{"task_name":"sector_iv_refresh","enabled":true,"status":"idle","consecutive_failures":0},'
     '{"task_name":"breakout_refresh"},'
     '{"task_name":"retention"},'
-    '{"task_name":"macro_conditions"}]}'
+    '{"task_name":"macro_conditions"},'
+    '{"task_name":"market_brief"}]}'
 )
 REMOVED_RUNTIME_KEYS = (
     "ACCESS_MODE",
@@ -1210,6 +1211,7 @@ def test_setup_fails_closed_when_a_legacy_machine_value_cannot_be_preserved(
     [
         ("ANTHROPIC_API_KEY", "backend worker"),
         ("OPENAI_API_KEY", "backend worker"),
+        ("ANTHROPIC_API_KEY", "backend worker"),
         ("FINNHUB_API_KEY", "backend worker"),
         ("MARKETDATA_TOKEN", "backend worker"),
         ("INTERNAL_API_TOKEN", "backend worker"),

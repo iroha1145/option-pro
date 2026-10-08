@@ -58,6 +58,7 @@ SCHEDULED_TASK_NAMES = {
     "public_home",
     "earnings_analysis",
     "macro_conditions",
+    "market_brief",
     "strength_refresh",
     "sector_iv_refresh",
 }
@@ -1512,6 +1513,7 @@ def test_worker_once_records_scheduled_tasks_and_isolates_failure(
             60,
         ),
         TaskSpec("macro_conditions", lambda: success("macro_conditions"), 60),
+        TaskSpec("market_brief", lambda: success("market_brief"), 60),
         TaskSpec("strength_refresh", lambda: success("strength_refresh"), 60),
         TaskSpec("sector_iv_refresh", lambda: success("sector_iv_refresh"), 60),
     )

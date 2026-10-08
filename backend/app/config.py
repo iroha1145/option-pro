@@ -406,6 +406,10 @@ class Settings(BaseSettings):
     def macro_conditions_configured(self) -> bool:
         return bool(self.fred_api_key.get_secret_value().strip())
 
+    @property
+    def market_brief_configured(self) -> bool:
+        return bool(self.anthropic_api_key.get_secret_value().strip())
+
 
 @lru_cache
 def get_settings() -> Settings:

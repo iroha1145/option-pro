@@ -72,6 +72,44 @@ refresh_times_et = ["08:30", "18:30"]
 manual_refresh_cooldown_seconds = 300
 scoring_version = "optix-macro-score-v1"
 
+[market_brief]
+# 首页「市场综合研判」：每个交易日开盘前、收盘后各一份。缺 ANTHROPIC_API_KEY 时
+# 任务报 disabled，Worker 仍然健康。时刻均为美东墙钟。
+enabled = true
+# 模型与 effort 只接受代码里钉死的取值；换模型要改代码。
+model = "claude-opus-5-5"
+effort = "xhigh"
+# 开盘前一份：排在宏观 08:30 刷新之后，必须早于 09:30。
+pre_open_time_et = "08:40"
+# 收盘后一份：收盘（早收盘日按 13:00）后多少分钟开窗，再等当日全市场批次。
+post_close_offset_minutes = 30
+# 等不到当日批次时，过了这个时刻就用现有数据生成。
+post_close_fallback_time_et = "23:30"
+# 开窗后多长时间内仍可补跑（Worker 停机后恢复）。
+grace_minutes = 150
+# 服务端联网工具的单次上限（web_search 每次 0.01 美元）。
+web_search_max_uses = 10
+web_fetch_max_uses = 8
+web_fetch_max_content_tokens = 12000
+code_execution_tool = false
+refusal_fallback = false
+# 结构化输出与网页工具并用没有文档背书，默认关（JSON Schema 附在系统提示词里）；
+# 跑通过一次后可改 true 试，被 400 拒绝就改回。
+structured_output = false
+# 系统提示词缓存断点的 TTL（5m / 1h）；顶层自动缓存固定 5 分钟。两份研判相隔数小时，
+# 1 小时跨不过去，只有续跑与一小时内重跑能命中，默认 5m。
+prompt_cache_ttl = "5m"
+max_output_tokens = 48000
+# pause_turn 续跑次数上限与整次输出上限。
+max_continuations = 4
+output_token_ceiling = 160000
+request_timeout_seconds = 1500.0
+evidence_max_bytes = 56000
+# 每个 UTC 日最多启动几次运行；手动补发超过它会被拒绝。
+daily_max_runs = 6
+# 关掉后最新研判与历史只对 Owner 可见。
+public_read = true
+
 [storage]
 retention_days = 90
 # 每个数据库（以及 runtime-settings.json）最多保留的备份份数，也是磁盘上限：

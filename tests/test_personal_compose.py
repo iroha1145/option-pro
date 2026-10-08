@@ -186,6 +186,7 @@ def test_environment_templates_separate_secrets_from_machine_edges() -> None:
         "public_home",
         "earnings_analysis",
         "macro_conditions",
+        "market_brief",
         "focus_refresh",
         "strength_refresh",
         "sector_iv_refresh",
