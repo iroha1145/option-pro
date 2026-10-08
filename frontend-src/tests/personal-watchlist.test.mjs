@@ -103,7 +103,7 @@ test('provider industry labels follow the selected interface language', () => {
 test('watchlist API failures map to locale copy instead of leftover Chinese', () => {
   assert.equal(
     api.watchlistErrorMessage(new api.ApiError(409, '自选最多 50 只股票', { bizCode: 'watchlist_full' }), 50),
-    '最多保存 50 只股票，请先移除一些代码',
+    '最多保存 50 只股票，请先移除部分股票',
   );
   assert.equal(
     api.watchlistErrorMessage(new api.ApiError(400, '股票代码格式不正确', { bizCode: 'invalid_ticker' })),
@@ -111,7 +111,7 @@ test('watchlist API failures map to locale copy instead of leftover Chinese', ()
   );
   assert.equal(
     api.watchlistErrorMessage(new api.ApiError(400, '请求无法完成', { bizCode: 'invalid_payload' })),
-    '请求无法完成',
+    '请求无法完成，请重试',
   );
   assert.equal(api.watchlistErrorMessage(new Error('保存失败，请重试')), '保存失败，请重试');
 });
@@ -153,9 +153,9 @@ test('a malformed successful write cannot be mistaken for deleting the entire wa
   let body = {};
   globalThis.fetch = async () => new Response(JSON.stringify(body));
   try {
-    await assert.rejects(api.accountApi.edit([], ['AAPL']), /自选列表返回异常/);
+    await assert.rejects(api.accountApi.edit([], ['AAPL']), /关注列表返回异常/);
     body = { tickers: ['AAPL', 'AAPL'], max_tickers: 50 };
-    await assert.rejects(api.accountApi.watchlist(), /自选列表返回异常/);
+    await assert.rejects(api.accountApi.watchlist(), /关注列表返回异常/);
     body = { tickers: [], max_tickers: 50 };
     assert.deepEqual(await api.accountApi.edit([], ['AAPL']), { tickers: [], maxTickers: 50 });
   } finally { globalThis.fetch = original; }
@@ -192,7 +192,7 @@ test('removal validates undo metadata and sends identity; restore sends server m
   try {
     for (const invalid of [undefined, { ...undo, principal_id: 1 }, { ...undo, principal_id: '' }, { ...undo, original_order: ['AAPL'] }, { ...undo, original_order: ['MSFT', 'MSFT'] }]) {
       body = { tickers: ['AAPL', 'NVDA'], max_tickers: 50, undo: invalid };
-      await assert.rejects(api.accountApi.remove('MSFT', 'admin'), /自选列表返回异常/);
+      await assert.rejects(api.accountApi.remove('MSFT', 'admin'), /关注列表返回异常/);
     }
     body = { tickers: ['AAPL', 'NVDA'], max_tickers: 50, undo };
     assert.deepEqual((await api.accountApi.remove('MSFT', 'admin')).undo, undo);

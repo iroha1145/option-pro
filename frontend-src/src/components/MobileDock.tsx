@@ -223,7 +223,7 @@ function MobileDockContent() {
                     <span className="block text-micro text-ink-400">
                       {isOwner || isSignedIn
                         ? (loggingOut ? t('正在退出…') : t('退出登录'))
-                        : t('登录后可保存自选股、手动更新数据')}
+                        : t('登录后可保存关注股票、手动更新数据')}
                     </span>
                   </span>
                 </button>
@@ -241,7 +241,7 @@ function MobileDockContent() {
                     <span className="flex size-9 items-center justify-center rounded-md border border-line bg-card-warm text-ink-400">
                       <Icon name="shield" size={17} />
                     </span>
-                    {t('退出并换账号')}
+                    {t('切换账号')}
                   </button>
                 )}
               </div>

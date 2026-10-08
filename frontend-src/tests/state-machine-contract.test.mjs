@@ -59,7 +59,7 @@ test('四处闪烁实现收敛到同一个 hook', async () => {
 
 test('桌面表格提供删除入口，且不会误触打开详情', async () => {
   const page = codeOf(await source('pages/Watchlist.tsx'));
-  assert.match(page, /从自选移除 \{ticker\}', \{ ticker: r\.ticker \}/);
+  assert.match(page, /移除关注 \{ticker\}', \{ ticker: r\.ticker \}/);
   assert.match(page, /event\.stopPropagation\(\);\s*\n\s*void onRemoveTicker\(r\.ticker\);/);
 });
 

@@ -320,7 +320,7 @@ test('创建失败文案：队列满、手动分析关闭、证据陈旧、只�
   assert.equal(message(new ApiError(429, 'Too Many Requests', { bizCode: 'ai_job_queue_full' })), '分析队列已满，请稍后再试');
   assert.equal(message(new ApiError(429, 'Too many requests; try again in 7s', { bizCode: 'rate_limited', retryAfter: 7 })), '请求过于频繁，请约 7 秒后再试');
   assert.equal(message(new ApiError(409, '手动分析已关闭', { bizCode: 'manual_analysis_disabled' })), '手动分析功能当前未启用');
-  assert.equal(message(new ApiError(409, '技术信号已过期', { bizCode: 'stale_signal_evidence' })), '技术信号已过期，请先手动拉取最新行情再分析');
+  assert.equal(message(new ApiError(409, '技术信号已过期', { bizCode: 'stale_signal_evidence' })), '技术信号已过期，请先手动获取最新行情再分析');
   assert.equal(message(new ApiError(409, '当前为只读模式', { bizCode: 'read_only_mode' })), '当前为只读模式，不能发起分析');
   assert.equal(message(new ApiError(503, 'Persistent AI analysis is not available', { bizCode: 'not_configured' })), 'AI 分析服务尚未就绪，暂时不能发起分析');
   assert.equal(message(new ApiError(413, 'Signal snapshot is too large for AI analysis')), '输入数据过多，超出了分析上限');

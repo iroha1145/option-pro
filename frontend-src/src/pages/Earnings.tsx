@@ -2,7 +2,7 @@ import AnalysisIcon from '@/components/shared/AnalysisIcon';
 import SoftBadge from '@/components/shared/SoftBadge';
 /**
  * §05 财报日历 × AI 影响（earnings.md 完整实现）
- * B0 页头带（AI 状态点 + owner 刷新日历 60s 冷却三态）
+ * B0 页头带（AI 状态点）· 右栏「财报设置」（owner：更新日历 60s 冷却三态、每日自动分析）
  * B1 美东周历 scrubber · B2 按日期分组即将公布表 · EPS 斜纹对照图
  * B3 AI 影响分析卡（缓存结果 / 409 生成 / 任务轮询 / 锁定态）· B5 本月密度条
  * 轮询 1800s（契约 TTL）· 空态 / 骨架 / 503 · 响应式（<md 卡片流 + 横滑 snap）
@@ -159,7 +159,7 @@ export default function Earnings() {
         window.clearInterval(timer);
         setRefreshStatus(null);
         setRefreshing(false);
-        followToastRef.current.info(t('日历仍在更新，完成后自动显示'));
+        followToastRef.current.info(t('日历更新中，完成后自动显示'));
         return;
       }
       invalidateQueryPaths(['/earnings/upcoming'], { reload: true });
@@ -229,7 +229,7 @@ export default function Earnings() {
     const cooldownRemain = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
     if (cooldownRemain > 0) {
       setRefreshStatus('cooldown');
-      toast.info(t('刷新冷却中，{n}s 后可再次刷新', { n: cooldownRemain }));
+      toast.info(t('更新冷却中，{n}s 后可再次更新', { n: cooldownRemain }));
       return;
     }
     setRefreshing(true);
@@ -258,7 +258,7 @@ export default function Earnings() {
       }
       if (fresh.refreshStatus === 'cooldown') {
         setRefreshStatus('cooldown');
-        toast.info(t('刷新冷却中，{n}s 后可再次刷新', { n: retrySeconds }));
+        toast.info(t('更新冷却中，{n}s 后可再次更新', { n: retrySeconds }));
         return;
       }
       setRefreshStatus('refreshed');
@@ -269,7 +269,7 @@ export default function Earnings() {
       if (q.data) {
         setRefreshStatus('failed_stale');
       } else {
-        toast.error(t('刷新失败'), t('操作未完成，请稍后重试'));
+        toast.error(t('更新失败'), t('操作未完成，请稍后重试'));
       }
     } finally {
       if (!following) setRefreshing(false);
@@ -388,7 +388,7 @@ export default function Earnings() {
   const loading = q.loading && !q.data;
   const error503 = q.error && !q.data;
 
-  /* 页头右侧：AI 状态点 + owner 刷新 */
+  /* 页头右侧：AI 状态点（更新日历在右栏的「财报设置」里，仅管理员可见） */
   const headerMeta = (
     <>
       <SoftBadge
@@ -435,15 +435,6 @@ export default function Earnings() {
       )}
       {!q.loading && q.error && q.data && (
         <span className="text-micro text-warn-700">{t('刷新失败 · 显示已有数据')}</span>
-      )}
-      {isOwner && (
-        <EarningsRefreshButton
-          cooldownUntil={cooldownUntil}
-          refreshing={refreshing}
-          refreshStatus={refreshStatus}
-          lastUpdatedAt={q.lastUpdatedAt}
-          onRefresh={() => void onRefresh()}
-        />
       )}
     </>
   );
@@ -492,7 +483,7 @@ export default function Earnings() {
           role="status"
         >
           <div>
-            <p className="text-caption font-medium text-warn-700">{t('财报数据暂时不完整')}</p>
+            <p className="text-caption font-medium text-warn-700">{t('财报数据不全')}</p>
             <p className="mt-0.5 text-micro text-ink-500">
               {t('当前显示 {n} 家公司的财报，部分公司数据缺失。', { n: items.length })}
             </p>
@@ -542,11 +533,11 @@ export default function Earnings() {
           <div>
             {/* 周 / 月视图切换（Segmented 滑块 260ms ease-paper；月历 accordion 320ms 展开） */}
             <div className="mb-3 flex items-center justify-between">
-              <p className="eyebrow">{t('财报日程（美东时间）')}</p>
+              <p className="eyebrow">{t('财报日程（纽约时间）')}</p>
               <Segmented
                 options={[
-                  { value: 'week' as const, label: t('周') },
-                  { value: 'month' as const, label: t('月') },
+                  { value: 'week' as const, label: t('周历') },
+                  { value: 'month' as const, label: t('月历') },
                 ]}
                 value={calView}
                 onChange={setCalView}
@@ -655,7 +646,7 @@ export default function Earnings() {
                       className="flex items-center gap-1 rounded-sm border border-line bg-card px-2 py-1 text-caption text-ink-500 shadow-btn transition-colors hover:text-ink-800"
                     >
                       <Icon name="x" size={12} />
-                      {t('清除筛选')}
+                      {t('清空条件')}
                     </button>
                   </div>
                 )}
@@ -681,7 +672,18 @@ export default function Earnings() {
 
         {/* B3 AI 影响 + 低交互图表，集中在右栏，列表保持可读宽度。 */}
         <div className="min-w-0 space-y-6 xl:col-span-4">
-          <EarningsAnalysisControls />
+          <EarningsAnalysisControls
+            calendarBusy={refreshing}
+            calendarControls={
+              <EarningsRefreshButton
+                cooldownUntil={cooldownUntil}
+                refreshing={refreshing}
+                refreshStatus={refreshStatus}
+                lastUpdatedAt={q.lastUpdatedAt}
+                onRefresh={() => void onRefresh()}
+              />
+            }
+          />
           {loading ? (
             <SkeletonCard />
           ) : (

@@ -15,7 +15,7 @@
 import { expect, test } from "@playwright/test";
 import { captureEvidence } from "./support/evidence.mjs";
 
-const paletteDialog = (page) => page.getByRole("dialog", { name: "命令面板" });
+const paletteDialog = (page) => page.getByRole("dialog", { name: "快捷查找" });
 const paletteInput = (page) => page.getByRole("combobox", { name: "搜索股票或功能" });
 const GLIDE_SELECTOR = "#command-palette-listbox [data-glide-list]";
 const glide = (page) => page.locator(GLIDE_SELECTOR);
@@ -152,7 +152,7 @@ test.describe("command palette glide highlight (#113 blocker 1+2)", () => {
        复位「已落笔」标志，所以这条路径同样会从旧股票行滑过来。 */
     await openPalette(page);
     await paletteInput(page).pressSequentially("NVDA");
-    const clear = page.getByRole("button", { name: "清除搜索" });
+    const clear = page.getByRole("button", { name: "清空搜索" });
     await expect(clear).toBeVisible();
     await page.keyboard.press("ArrowDown");
 
@@ -167,7 +167,7 @@ test.describe("command palette glide highlight (#113 blocker 1+2)", () => {
   test("clear button Enter clears the query and refocuses the input", async ({ page }) => {
     await openPalette(page);
     await paletteInput(page).pressSequentially("NVDA");
-    const clear = page.getByRole("button", { name: "清除搜索" });
+    const clear = page.getByRole("button", { name: "清空搜索" });
     await expect(clear).toBeVisible();
     await clear.focus();
     await page.keyboard.press("Enter");
@@ -181,7 +181,7 @@ test.describe("command palette glide highlight (#113 blocker 1+2)", () => {
   test("clear button Space clears the query as well", async ({ page }) => {
     await openPalette(page);
     await paletteInput(page).pressSequentially("TSLA");
-    const clear = page.getByRole("button", { name: "清除搜索" });
+    const clear = page.getByRole("button", { name: "清空搜索" });
     await clear.focus();
     await page.keyboard.press(" ");
     await expect(paletteInput(page)).toHaveValue("");
@@ -195,7 +195,7 @@ test.describe("command palette glide highlight (#113 blocker 1+2)", () => {
       navigations += 1;
     });
     /* 避开「首页」项（从 / 到 / 的同路径导航不可靠）：选「自选」功能项 */
-    const option = page.locator('#command-palette-listbox [role="option"]', { hasText: "自选" }).first();
+    const option = page.locator('#command-palette-listbox [role="option"]', { hasText: "我的关注" }).first();
     await option.focus();
     await page.keyboard.press("Enter");
     await page.waitForURL(/\/watchlist$/, { timeout: 5000 });

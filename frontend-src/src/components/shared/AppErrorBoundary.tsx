@@ -99,7 +99,7 @@ export default class AppErrorBoundary extends Component<Props, State> {
               boxShadow: 'var(--btn-shadow)',
             }}
           >
-            {t('清除本地数据并重新加载')}
+            {t('清除本机数据并重载')}
           </button>
         </div>
       </div>

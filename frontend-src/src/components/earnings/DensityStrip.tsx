@@ -38,10 +38,10 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
   const max = Math.max(...days.map((d) => d.rows.length), 1);
 
   return (
-    <section className="card-surface p-5" aria-label={t("本月财报密度")}>
+    <section className="card-surface p-5" aria-label={t("每日财报数")}>
       <div className="min-w-0">
         <div className="w-full min-w-0">
-          <p className="eyebrow">{t('本月财报密度 · 未来 30 天')}</p>
+          <p className="eyebrow">{t('每日财报数 · 未来 30 天')}</p>
           <motion.div
             className="mt-3 flex h-16 items-end gap-[3px]"
             role="list"

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 const drawer = (page) => page.getByRole('dialog', { name: '测试详情' });
-const palette = (page) => page.getByRole('dialog', { name: '命令面板' });
+const palette = (page) => page.getByRole('dialog', { name: '快捷查找' });
 const overflow = (page) => page.evaluate(() => ({ value: document.body.style.getPropertyValue('overflow'), priority: document.body.style.getPropertyPriority('overflow') }));
 const activeId = (page) => page.evaluate(() => document.activeElement?.id);
 async function harness(page) { await page.goto('/visual-tests/support/overlay-harness.html'); await expect(page.locator('#drawer-trigger')).toBeVisible(); }

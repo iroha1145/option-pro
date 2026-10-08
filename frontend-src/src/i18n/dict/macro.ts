@@ -156,8 +156,8 @@ export const MACRO: Dict = {
   ],
   '宏观模块未启用': ['Macro module disabled', 'マクロモジュールは無効です'],
   '暂无宏观快照': ['No macro snapshot yet', 'マクロスナップショットなし'],
-  '该标的未归入板块，无暴露画像': ["This ticker isn't classified into a sector, so there's no exposure profile", 'この銘柄はセクターに分類されていないため、エクスポージャー・プロファイルがありません'],
-  '该板块暴露观测不足，不给分': ["This sector's exposure observations are insufficient, so no score is given", 'このセクターのエクスポージャー観測が不足しているため、スコアを算出しません'],
+  '该标的未归入行业，无暴露画像': ["This ticker isn't classified into a sector, so there's no exposure profile", 'この銘柄はセクターに分類されていないため、エクスポージャー・プロファイルがありません'],
+  '该行业暴露观测不足，不给分': ["This sector's exposure observations are insufficient, so no score is given", 'このセクターのエクスポージャー観測が不足しているため、スコアを算出しません'],
   '宏观适配（0–100）': ['Macro fit (0–100)', 'マクロ適合度（0–100）'],
 
   /* ============ src/mocks/macro.ts ============ */
@@ -217,7 +217,7 @@ export const MACRO: Dict = {
   '正面': ['Positive', 'ポジティブ'],
   '：': [': ', '：'],
   '负面': ['Negative', 'ネガティブ'],
-  '该板块各宏观因子方向不明显': ["No clear directional signal from this sector's macro factors", 'このセクターのマクロファクターに明確な方向性はありません'],
+  '该行业各宏观指标方向不明显': ["No clear directional signal from this sector's macro factors", 'このセクターのマクロファクターに明確な方向性はありません'],
   '技术 − 结构性宏观 =': ['Technical − structural macro =', 'テクニカル − 構造的マクロ ='],
   ' · 价格明显跑在环境前面': [' · Price is clearly running ahead of the backdrop', ' · 価格が環境に明らかに先行'],
   ' · 宏观先行改善，价格未跟上': [" · Macro improving first, price hasn't caught up", ' · マクロが先に改善、価格が追いついていない'],

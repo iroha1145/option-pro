@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 const defaults = ['AAPL', 'MSFT', 'NVDA', 'SPY'];
-const region = (page) => page.getByRole('region', { name: '关注池异动', exact: true });
+const region = (page) => page.getByRole('region', { name: '关注动态', exact: true });
 const cards = (page) => region(page).getByTestId('watchlist-mover-card');
 const symbols = (page) => cards(page).evaluateAll((els) => els.map((el) => decodeURIComponent(el.getAttribute('href').split('/').at(-1))));
 const focus = (page) => page.evaluate(() => window.dispatchEvent(new Event('focus')));
@@ -109,7 +109,7 @@ test('identity and membership confirmation never flash the public movers', async
 test('an empty personal pool stays empty and sends no personal quote request', async ({ page }) => {
   const state = await fixture(page, { username: 'alice', members: { alice: [] } });
   await page.goto('/');
-  await expect(region(page)).toContainText('暂无关注标的');
+  await expect(region(page)).toContainText('暂无关注股票');
   await expect(cards(page)).toHaveCount(0);
   expect(state.quoteReads.every((read) => read.selection === null)).toBe(true);
 });

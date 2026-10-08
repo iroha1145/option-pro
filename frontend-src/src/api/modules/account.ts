@@ -16,19 +16,19 @@ const CJK = /[\u4e00-\u9fff]/;
 export function watchlistErrorMessage(error: unknown, maxTickers = 50): string {
   if (error instanceof ApiError) {
     if (error.bizCode === 'invalid_watchlist_undo') {
-      return t('撤销信息无效，请重新读取自选');
+      return t('无法撤销，请重新读取关注列表');
     }
     if (error.bizCode === 'watchlist_identity_changed') {
-      return t('登录身份已变化，请重新操作');
+      return t('登录账号已变化，请重新操作');
     }
     if (error.bizCode === 'watchlist_full') {
-      return t('最多保存 {count} 只股票，请先移除一些代码', { count: maxTickers });
+      return t('最多保存 {count} 只股票，请先移除部分股票', { count: maxTickers });
     }
     if (error.bizCode === 'invalid_ticker') {
       return t('股票代码格式不正确');
     }
     if (error.bizCode === 'invalid_payload') {
-      return t('请求无法完成');
+      return t('请求无法完成，请重试');
     }
   }
   if (error instanceof Error && error.message) {
@@ -69,7 +69,7 @@ function normalizeRemoval(body: unknown): WatchlistRemoval {
     || undo.original_order.length > data.maxTickers
     || typeof undo.principal_id !== 'string' || !undo.principal_id.trim()
     || data.tickers.includes(undo.ticker)) {
-    throw new ApiError(502, t('自选列表返回异常，请重试'));
+    throw new ApiError(502, t('关注列表返回异常，请重试'));
   }
   return { ...data, undo: { ticker: undo.ticker, original_order: undo.original_order, principal_id: undo.principal_id } };
 }
@@ -83,7 +83,7 @@ function normalizeWatchlist(body: unknown): AccountWatchlist {
     && parseWatchlistInput(value).tickers[0] === value)
     || !Number.isInteger(maxRaw) || maxRaw < 1 || raw.length > maxRaw
     || new Set(raw).size !== raw.length) {
-    throw new ApiError(502, t('自选列表返回异常，请重试'));
+    throw new ApiError(502, t('关注列表返回异常，请重试'));
   }
   return {
     tickers: raw,

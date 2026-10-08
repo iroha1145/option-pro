@@ -39,7 +39,7 @@ export default function EpsHatchChart({ items, title = t('EPS 预期 vs 实际')
       ...baseAnimation,
       grid: baseGrid({ top: 20, bottom: 4 }),
       tooltip: glassTooltip({
-        valueFormatter: (v: unknown) => (typeof v === 'number' ? `$${v.toFixed(2)}` : t('未公布')),
+        valueFormatter: (v: unknown) => (typeof v === 'number' ? `$${v.toFixed(2)}` : t('尚未公布')),
       }),
       xAxis: categoryAxis(labels),
       yAxis: valueAxis(),

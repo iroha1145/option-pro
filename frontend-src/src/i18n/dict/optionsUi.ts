@@ -49,7 +49,7 @@ export const OPTIONS_UI: Dict = {
   '关注规则': ['Review rules', '抽出条件'],
   "满足任一条件即标记：成交量达到持仓量的 3 倍、零持仓有成交、成交至少 5,000 张，或估算金额至少 50 万美元。": ["A contract is flagged if volume is at least 3× open interest, there is trading with zero open interest, volume reaches 5,000 contracts, or estimated traded value reaches $500,000.", "出来高が建玉の3倍以上、建玉ゼロで取引あり、出来高5,000枚以上、推定取引金額50万ドル以上のいずれかを満たすものを抽出します。"],
   '缺失与估算': ['Missing data and estimates', '欠測と推定'],
-  '统计范围': ['Scope', '集計範囲'],
+  '统计范围': ["Scope", "集計範囲"],
   "「—」表示暂无数据。持仓量为零时，无法计算成交量与持仓量的倍数。": ["“—” means data is unavailable. The volume-to-open-interest ratio cannot be calculated when open interest is zero.", "「—」はデータなしを示します。建玉がゼロの場合、出来高との倍率は計算できません。"],
   '看涨期权成交': ['Call volume', 'コール出来高'],
   '看跌期权成交': ['Put volume', 'プット出来高'],

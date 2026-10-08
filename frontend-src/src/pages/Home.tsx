@@ -358,7 +358,7 @@ export default function Home() {
       {/* 指数带（SPX/NDX/DJI/RUT/SOX/VIX，点击进 /market?index= 高亮定位） */}
       <section
         className="mt-5 md:mt-8"
-        aria-label={t('指数概览')}
+        aria-label={t('市场指数')}
         {...pageRegionProps(
           'home-indices',
           indicesQ.loading
@@ -436,7 +436,7 @@ export default function Home() {
           }}
         />
 
-        <SectionCard title={t('雷达信号')} to="/breakouts" updatedAt={breakoutsQ.lastUpdatedAt} className="order-first lg:order-none lg:col-span-2">
+        <SectionCard title={t('突破信号')} to="/breakouts" updatedAt={breakoutsQ.lastUpdatedAt} className="order-first lg:order-none lg:col-span-2">
           <ListBody
             loading={breakoutsQ.loading}
             error={breakoutsQ.error}
@@ -464,7 +464,7 @@ export default function Home() {
             refreshing={earningsQ.refreshing}
             onRetry={() => earningsQ.refresh()}
             isEmpty={earnings.length === 0}
-            emptyTitle={t('近一个月暂无财报')}
+            emptyTitle={t('未来 30 天暂无财报')}
           >
             <div className="divide-y divide-line">
               {earnings.map((it) => (
@@ -476,14 +476,14 @@ export default function Home() {
           </ListBody>
         </SectionCard>
 
-        <SectionCard title={t('关注池异动')} to="/watchlist" updatedAt={moverQ.lastUpdatedAt} className="lg:col-span-2">
+        <SectionCard title={t('关注动态')} to="/watchlist" updatedAt={moverQ.lastUpdatedAt} className="lg:col-span-2">
           <ListBody
             loading={moverQ.loading}
             error={moverQ.error}
             refreshing={moverQ.refreshing}
             onRetry={() => moverQ.refresh()}
             isEmpty={movers.length === 0}
-            emptyTitle={t('暂无关注标的')}
+            emptyTitle={t('暂无关注股票')}
             skeleton={<MoverListSkeleton rows={5} />}
           >
             {/* 异动最大的一只作主条目（大图 + 区间说明 + 强度），其余为紧凑行；
@@ -544,7 +544,7 @@ export default function Home() {
           ) : ctaQ.error && !ctaQ.data ? (
             <p className="mt-3 flex items-center justify-between gap-2 rounded-md bg-paper-2 px-3 py-2.5 text-caption text-ink-500">
               {ctaQ.error.bizCode === 'public_snapshot_unavailable'
-                ? t('CTA 估算尚未生成，首次计算完成后自动显示')
+                ? t('首次估算完成后自动显示')
                 : t('CTA 估算读取失败')}
               <button
                 onClick={() => ctaQ.refresh()}
@@ -661,19 +661,19 @@ function MarketStatusPanel({
 
       <div className="mt-3">
         <div className="flex items-center justify-between border-t border-line py-2">
-          <span className="text-caption text-ink-500">{t('距下一开盘')}</span>
+          <span className="text-caption text-ink-500">{t('距开盘')}</span>
           <span className="text-data-m text-brand-600 tnum" suppressHydrationWarning>
             {status?.next_open ? fmtCountdown(status.next_open, now) : '—'}
           </span>
         </div>
         <div className="flex items-center justify-between border-t border-line py-2">
-          <span className="text-caption text-ink-500">{t('距下一收盘')}</span>
+          <span className="text-caption text-ink-500">{t('距收盘')}</span>
           <span className="text-data-m text-brand-600 tnum" suppressHydrationWarning>
             {status?.next_close ? fmtCountdown(status.next_close, now) : '—'}
           </span>
         </div>
         <div className="flex items-center justify-between border-y border-line py-2">
-          <span className="text-caption text-ink-500">{t('六维形态均值')}</span>
+          <span className="text-caption text-ink-500">{t('六项均分')}</span>
           <span className="flex items-baseline gap-2">
             <span className="metric-value text-data-m text-ink-900">
               {mean === null ? '—' : mean.toFixed(1)}
@@ -684,13 +684,13 @@ function MarketStatusPanel({
       </div>
 
       <p className="mt-3 text-micro text-ink-400">
-        {t('扫描池')}
+        {t('统计范围')}
         {breadth.total !== null && <span className="tnum"> · {breadth.total}</span>}
       </p>
       <div className="mb-4 mt-1.5 grid grid-cols-3 gap-2">
         <MiniStat label={t('上涨')} value={breadth.adv} tone="up" />
         <MiniStat label={t('下跌')} value={breadth.dec} tone="down" />
-        <MiniStat label={t('平盘')} value={breadth.flat} tone="flat" />
+        <MiniStat label={t('持平')} value={breadth.flat} tone="flat" />
       </div>
 
       {/* 辅助指标直接展示；缺失读数仍遵守原有数据纪律，不补零。 */}
@@ -738,7 +738,7 @@ function GrowStrength({ score, delay = 0, className }: { score: number | null | 
   return (
     <span
       className={cn('inline-flex items-center gap-2', className)}
-      aria-label={valid ? t('强度分 {score}', { score: score.toFixed(1) }) : t('强度分缺失')}
+      aria-label={valid ? t('评分 {score}', { score: score.toFixed(1) }) : t('评分缺失')}
     >
       <motion.span
         className="strength-track block h-1 w-14 shrink-0 overflow-hidden rounded-pill"
@@ -902,7 +902,7 @@ function WatchlistMoverLead({ item, index: i, preparation, statusReadFailed }: M
         <span className="metric-value min-w-0 text-ink-900">
           <LivePrice symbol={item.ticker} fallback={item.price} fallbackAt={item.updatedAt} className={LEAD_PRICE} />
         </span>
-        <span className="shrink-0 text-micro text-ink-400">{trend ? t('近 {count} 个交易日', { count: trend.length }) : t('日线走势')}</span>
+        <span className="shrink-0 text-micro text-ink-400">{trend ? t('近 {count} 个交易日', { count: trend.length }) : t('每日走势')}</span>
       </div>
       {spark && trend && periodChange !== null ? (
         /* md 起与右侧紧凑行并排：图随这一栏的高度长高，封顶 220px，再高就把 30 日的
@@ -911,7 +911,7 @@ function WatchlistMoverLead({ item, index: i, preparation, statusReadFailed }: M
           <Sparkline data={spark} width={480} height={104} change={periodChange} variant="area" stretch className="h-[104px] w-full md:h-auto md:max-h-[220px] md:min-h-[104px] md:flex-1" />
           <figcaption className="mt-1 flex items-center justify-between gap-2 text-micro text-ink-400 tnum">
             <span>{trend[0].date.slice(5)} — {trend[trend.length - 1].date.slice(5)}</span>
-            <span className="flex items-center gap-1.5"><span className="font-sans">{t('区间')}</span><ChangeBadge value={periodChange} size="sm" /></span>
+            <span className="flex items-center gap-1.5"><span className="font-sans">{t('区间涨跌')}</span><ChangeBadge value={periodChange} size="sm" /></span>
           </figcaption>
         </figure>
       ) : (
@@ -953,7 +953,7 @@ function WatchlistMoverRow({ item, preparation, statusReadFailed }: MoverProps) 
           </span>
           {periodChange !== null && (
             <span className="flex items-center gap-1.5">
-              <span className="text-micro text-ink-400">{t('区间')}</span>
+              <span className="text-micro text-ink-400">{t('区间涨跌')}</span>
               <ChangeBadge value={periodChange} size="sm" />
             </span>
           )}

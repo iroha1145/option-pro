@@ -72,7 +72,7 @@ export default function MacroFitPanel({
               </p>
             )}
             {!positive && !negative && (
-              <p className="text-caption text-ink-400">{t('该板块各宏观因子方向不明显')}</p>
+              <p className="text-caption text-ink-400">{t('该行业各宏观指标方向不明显')}</p>
             )}
             {typeof technicalGap === 'number' && Number.isFinite(technicalGap) && (
               <p className="text-micro text-ink-400">

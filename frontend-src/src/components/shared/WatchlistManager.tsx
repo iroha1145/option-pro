@@ -48,7 +48,7 @@ export default function WatchlistManager({ tickers, maxTickers, busy, onSave, on
     }
     const next = [...new Set([...draft, ...parsed.tickers])];
     if (next.length > maxTickers) {
-      setError(t('最多保存 {count} 只股票，请先移除一些代码', { count: maxTickers }));
+      setError(t('最多保存 {count} 只股票，请先移除部分股票', { count: maxTickers }));
       return null;
     }
     setError('');
@@ -80,7 +80,7 @@ export default function WatchlistManager({ tickers, maxTickers, busy, onSave, on
         <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={`${id}-title`} data-focus-overlay={id}
           className="pointer-events-auto flex max-h-[90dvh] w-full max-w-[640px] flex-col overflow-hidden rounded-xl border border-line bg-card shadow-sh-3">
           <header className="flex shrink-0 items-start justify-between gap-3 border-b border-line p-4 sm:px-6">
-            <h2 id={`${id}-title`} className="min-w-0 text-h3 text-ink-900">{t('管理自选')}</h2>
+            <h2 id={`${id}-title`} className="min-w-0 text-h3 text-ink-900">{t('管理关注')}</h2>
             <button className="inline-flex size-11 shrink-0 items-center justify-center rounded-md text-ink-400 hover:bg-paper-2 disabled:opacity-50" aria-label={t('关闭')} onClick={onClose} disabled={busy}><Icon name="x" size={18} /></button>
           </header>
           <div className="min-h-0 overflow-y-auto overscroll-contain p-4 sm:px-6">
@@ -105,14 +105,14 @@ export default function WatchlistManager({ tickers, maxTickers, busy, onSave, on
                 <input type="checkbox" checked={selected.has(symbol)} aria-label={t('选择 {ticker}', { ticker: symbol })} disabled={busy} onChange={() => setSelected((current) => { const next = new Set(current); if (next.has(symbol)) next.delete(symbol); else next.add(symbol); return next; })} className="size-4 shrink-0 accent-brand-600" />
                 <span className="truncate tnum font-medium">{symbol}</span>
               </label>)}
-            </div> : <p className="py-6 text-center text-caption text-ink-400">{t('保存后自选列表将为空。')}</p>}
+            </div> : <p className="py-6 text-center text-caption text-ink-400">{t('保存后关注列表将为空。')}</p>}
             {error && <p role="alert" className="mt-3 break-words rounded-md bg-danger-50 px-3 py-2 text-caption text-danger-700">{error}</p>}
           </div>
           <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-line bg-card-warm p-4 sm:px-6">
             <p className="text-caption text-ink-500" aria-live="polite">{t('新增 {add} · 移除 {remove}', { add: delta.add.length, remove: delta.remove.length })}</p>
             <div className="ml-auto flex gap-2">
               <button className={secondary} onClick={onClose} disabled={busy}>{t('取消')}</button>
-              <button className="btn-primary" onClick={() => void save()} disabled={busy || !changed} aria-busy={busy}><TextSwap swapKey={busy ? 'busy' : 'idle'}>{busy ? t('正在保存…') : t('保存自选')}</TextSwap></button>
+              <button className="btn-primary" onClick={() => void save()} disabled={busy || !changed} aria-busy={busy}><TextSwap swapKey={busy ? 'busy' : 'idle'}>{busy ? t('正在保存…') : t('保存关注')}</TextSwap></button>
             </div>
           </footer>
         </div>

@@ -95,12 +95,12 @@ export const WIRED: Dict = {
   '{ticker} 行业 IV 排位 {rank}，打开详情': ['{ticker} sector IV rank {rank}, open details', '{ticker} セクターIVランク {rank}、詳細を開く'],
   '数据时间 {time}。': ['Data as of {time}.', 'データ基準時刻 {time}。'],
   '持平 0 {suffix}': ['Flat 0 {suffix}', '変わらず 0 {suffix}'],
-  '强度分 {score}': ['Strength score {score}', '強度スコア {score}'],
+  '评分 {score}': ['Score {score}', 'スコア {score}'],
 
   // ── 页面级 toast / 空态 / 筛选（pages）───────────────────────────────
-  '刷新冷却中，{n}s 后可再次刷新': ['Refresh is cooling down; you can refresh again in {n}s', '更新はクールダウン中です。{n}秒後に再度更新できます'],
+  '更新冷却中，{n}s 后可再次更新': ['Refresh is cooling down; you can refresh again in {n}s', '更新はクールダウン中です。{n}秒後に再度更新できます'],
   '日历已更新 · {n} 条': ['Calendar updated · {n} item||Calendar updated · {n} items', 'カレンダーを更新しました · {n}件'],
-  '冷却中，{n}s 后可刷新': ['Cooling down; refresh in {n}s', 'クールダウン中、{n}秒後に更新可能'],
+  '冷却中，{n}s 后可更新': ['Cooling down; refresh in {n}s', 'クールダウン中、{n}秒後に更新可能'],
   '已登录 {name}': ['Signed in as {name}', '{name} でログインしました'],
   '推导依据：六项均分 {mean}（≥60 偏多 · ≤40 偏空）': ["Basis: six-item average {mean} (≥60 bullish · ≤40 bearish)", "根拠：6項目平均 {mean}（≥60 強気 · ≤40 弱気）"],
   '没有找到 {path} 对应的页面。链接可能已失效或地址输入有误。': ['No page found for {path}. The link may be broken or the address mistyped.', '{path} に該当するページが見つかりません。リンクが無効か、アドレスが誤っている可能性があります。'],
@@ -119,8 +119,8 @@ export const WIRED: Dict = {
   '成交额≥{v}': ['Dollar volume ≥{v}', '売買代金 ≥{v}'],
   '评分≥{n}': ['Strength ≥{n}', '強度 ≥{n}'],
   '统计截至 {time}': ['As of {time}', '{time} 時点の集計'],
-  '将 {ticker} 移出自选': ['Remove {ticker} from watchlist', '{ticker} をウォッチリストから削除'],
-  '自选保存在账号 {username} 下': ['Watchlist saved under account {username}', 'ウォッチリストはアカウント {username} に保存されます'],
+  '移除关注 {ticker}': ['Remove {ticker} from watchlist', '{ticker} をウォッチリストから削除'],
+  '关注股票保存在账号 {username} 下': ['Watchlist saved under account {username}', 'ウォッチリストはアカウント {username} に保存されます'],
 
   // ── 期权异动证据（detail/optionAnalysis）────────────────────────────
   '成交量/持仓量 {ratio} 倍': ['Volume/OI {ratio}×', '出来高/建玉 {ratio}倍'],
@@ -214,6 +214,6 @@ export const WIRED: Dict = {
   '公开快照暂无该股票的日线图 · 可手动获取': ["The saved public snapshot doesn't include this stock's daily chart · pull live data manually", '保存済み公開スナップショットにこの銘柄の日足がありません · 手動で取得できます'],
   '数据不足': ['Insufficient data', 'データ不足'],
   '宏观适配（0–100）': ['Macro fit (0–100)', 'マクロ適合度（0–100）'],
-  "衡量当前经济环境对该股票所属板块是否有利，结合各项经济指标的历史位置和板块敏感度评分。65 分及以上为顺风，35 分及以下为逆风。": ["Rates how favorable the economy is for the stock’s sector, using each indicator’s historical range and the sector’s sensitivity. Scores of 65 or more indicate a tailwind; 35 or less, a headwind.", "経済指標の過去の水準とセクターの感応度から、現在の経済環境がその銘柄の属するセクターに有利かを評価します。65点以上は追い風、35点以下は向かい風です。"],
+  "衡量当前经济环境对该股票所属行业是否有利，结合各项经济指标的历史位置和行业敏感度评分。65 分及以上为顺风，35 分及以下为逆风。": ["Rates how favorable the economy is for the stock’s sector, using each indicator’s historical range and the sector’s sensitivity. Scores of 65 or more indicate a tailwind; 35 or less, a headwind.", "経済指標の過去の水準とセクターの感応度から、現在の経済環境がその銘柄の属するセクターに有利かを評価します。65点以上は追い風、35点以下は向かい風です。"],
   "此分数单独展示，不影响选股和突破信号排名。数据不足时留空；分数反映当前环境，不预测股价。": ["Shown separately from stock and breakout rankings. Left blank when data is insufficient. It describes current conditions rather than forecasting prices.", "銘柄やブレイクアウトの順位とは別に表示します。データ不足時は空欄です。現在の環境を示すもので、株価の予測ではありません。"],
 };

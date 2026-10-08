@@ -62,7 +62,7 @@ for (const width of [1440, 390]) {
     await page.request.post('/test/reset');
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    const movers = page.getByRole('region', { name: '关注池异动', exact: true });
+    const movers = page.getByRole('region', { name: '关注动态', exact: true });
     const symbols = () => movers.getByTestId('watchlist-mover-card').evaluateAll((nodes) =>
       nodes.map((node) => decodeURIComponent(node.getAttribute('href').split('/').at(-1))).sort());
     for (const [account, members] of [['first', ['AMD', 'NVDA']], ['second', ['AAPL']]]) {
@@ -84,7 +84,7 @@ for (const width of [1440, 390]) {
     const emptied = await page.request.put('/api/account/watchlist', { headers, data: { tickers: [] } });
     expect(emptied.status()).toBe(200);
     await page.reload();
-    await expect(movers).toContainText('暂无关注标的');
+    await expect(movers).toContainText('暂无关注股票');
     await expect.poll(symbols).toEqual([]);
     expect((await (await page.request.get('/test/state')).json()).provider_calls).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

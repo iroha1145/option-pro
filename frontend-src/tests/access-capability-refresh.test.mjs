@@ -160,12 +160,12 @@ for (const ticker of ['NVDA', null]) {
     const pending = JSON.stringify(card.read());
     assert.equal(h.access().aiPending, true);
     assert.equal(pending.includes('AI 影响分析加载中'), ticker !== null);
-    assert.equal(pending.includes('选择一只标的'), ticker === null);
+    assert.equal(pending.includes('选择公司'), ticker === null);
     assert.equal(card.reads(), 0, 'capability confirmation must still precede the first report read');
     h.resolveCapabilities(); await settle(); card.rerender(); await h.flushImmediate();
     assert.equal(card.reads(), ticker ? 1 : 0);
     assert.equal(JSON.stringify(card.read()).includes('Saved analysis'), ticker !== null);
-    assert.equal(JSON.stringify(card.read()).includes('选择一只标的'), ticker === null);
+    assert.equal(JSON.stringify(card.read()).includes('选择公司'), ticker === null);
   });
 }
 
