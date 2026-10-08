@@ -107,13 +107,13 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
           <input
             value={filters.ticker}
             onChange={(e) => set({ ticker: e.target.value.toUpperCase().replace(/[^A-Z0-9.^-]/g, '').slice(0, 12) })}
-            placeholder={t("代码过滤")}
+            placeholder={t("股票代码")}
             className="h-8 w-28 rounded-md border border-line bg-card pl-7 pr-2 tnum text-caption text-ink-800 placeholder:text-ink-400 focus:border-brand-400 focus:outline-none"
-            aria-label={t("按代码过滤")}
+            aria-label={t("按股票代码筛选")}
           />
         </div>
         {filters.ticker && (
-          <button onClick={() => set({ ticker: '' })} className="rounded-sm p-1 text-ink-400 hover:text-ink-600" aria-label={t("清除代码过滤")}>
+          <button onClick={() => set({ ticker: '' })} className="rounded-sm p-1 text-ink-400 hover:text-ink-600" aria-label={t("取消股票代码筛选")}>
             <Icon name="x" size={12} />
           </button>
         )}
@@ -172,7 +172,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
           checked={filters.multiSourceOnly}
           onToggle={() => set({ multiSourceOnly: !filters.multiSourceOnly })}
         />
-        <span className={cn('whitespace-nowrap text-micro', filters.multiSourceOnly ? 'text-ink-800' : 'text-ink-400')}>{t('多源确认')}</span>
+        <span className={cn('whitespace-nowrap text-micro', filters.multiSourceOnly ? 'text-ink-800' : 'text-ink-400')}>{t('多处报道')}</span>
       </label>
 
       {activeCount > 0 && (
@@ -181,7 +181,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
           className="flex items-center gap-1 rounded-md border border-line bg-card px-2 py-1.5 text-micro text-ink-500 shadow-btn transition-colors duration-fast hover:border-down-600/40 hover:text-down-700"
         >
           <Icon name="x" size={11} />
-          {t('清除过滤')}
+          {t('清空条件')}
         </button>
       )}
     </>
@@ -232,7 +232,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
           <button
             type="button"
             onClick={() => set({ themeId: null })}
-            aria-label={t('清除主题过滤')}
+            aria-label={t('取消主题筛选')}
             className="control-button"
           >
             <Icon name="flame-line" size={12} />
@@ -249,7 +249,7 @@ function CountNote({ total, filtered }: { total: number | null; filtered: boolea
   return (
     <p className="text-micro text-ink-400 tnum">
       {total === null ? '—' : t('{n} 条', { n: total })}
-      {filtered && total !== null && <span className="text-ink-400"> {t('· 已过滤')}</span>}
+      {filtered && total !== null && <span className="text-ink-400"> {t('· 已筛选')}</span>}
     </p>
   );
 }

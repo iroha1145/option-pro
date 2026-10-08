@@ -423,7 +423,7 @@ test("password mode keeps public research readable and reserves owner controls f
   await page.waitForLoadState("networkidle");
   await expect(page.getByText("公开浏览可见的中文新闻标题").first()).toBeVisible();
   await expectOwnerShell(page);
-  const analysisProgress = page.getByLabel("新闻分析进度");
+  const analysisProgress = page.getByLabel("分析进度", { exact: true });
   await expect(analysisProgress).toContainText("正在处理第 3 / 4 条");
   await expect(analysisProgress.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "50");
   await page.setViewportSize({ width: 320, height: 568 });
@@ -437,7 +437,7 @@ test("password mode keeps public research readable and reserves owner controls f
   // 分析进度每五秒会换成最新服务端快照。直接执行同步 DOM 滚动，
   // 避免 Playwright 等待元素稳定时恰逢快照刷新、旧节点被替换。
   await analysisProgress.evaluate(element => element.scrollIntoView({ block: "center" }));
-  await expect(page.getByLabel("新闻分析进度")).toBeVisible();
+  await expect(page.getByLabel("分析进度", { exact: true })).toBeVisible();
   await screenshot(page, "password-owner-analysis-progress-mobile");
   await page.setViewportSize({ width: 1280, height: 720 });
   await screenshot(page, "password-owner-catalysts");

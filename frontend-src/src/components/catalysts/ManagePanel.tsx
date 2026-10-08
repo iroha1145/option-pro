@@ -32,27 +32,27 @@ import { t as __t } from '../../i18n/core.ts';
 import TextSwap from '@/components/shared/TextSwap';
 
 const REFRESH_OPS: { op: RefreshOperation; label: string }[] = [
-  { op: 'news', label: __t('新闻流') },
-  { op: 'calendar', label: __t('经济日历') },
-  { op: 'source_health', label: __t('数据源状态') },
+  { op: 'news', label: __t('更新消息') },
+  { op: 'calendar', label: __t('更新日历') },
+  { op: 'source_health', label: __t('检查来源') },
 ];
 
 const WORKER_ACTIONS: { action: WorkerActionType; label: string }[] = [
-  { action: 'focus_refresh', label: __t('焦点股票池') },
-  { action: 'strength_refresh', label: __t('强势雷达') },
+  { action: 'focus_refresh', label: __t('重点股票') },
+  { action: 'strength_refresh', label: __t('选股评分') },
   { action: 'breakout_refresh', label: __t('突破雷达') },
 ];
 
 const TASK_CN: Record<string, string> = {
   breakout: __t('突破扫描'),
-  catalyst_sync: __t('催化剂同步'),
-  focus: __t('焦点池'),
-  ai_jobs: __t('AI 任务'),
-  maintenance: __t('维护'),
-  public_home: __t('公共快照'),
-  focus_refresh: __t('焦点刷新'),
-  strength_refresh: __t('强势刷新'),
-  breakout_refresh: __t('突破刷新'),
+  catalyst_sync: __t('同步消息'),
+  focus: __t('重点股票'),
+  ai_jobs: __t('分析任务'),
+  maintenance: __t('系统维护'),
+  public_home: __t('公开数据'),
+  focus_refresh: __t('重点股票更新'),
+  strength_refresh: __t('选股评分更新'),
+  breakout_refresh: __t('突破雷达更新'),
   retention: __t('数据保留'),
 };
 
@@ -155,7 +155,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
       if (!claimed) return;
       try {
         const t = await adminApi.catalystRefresh(op);
-        toast.info(__t('{label}刷新已入队', { label }), t.reason ?? undefined);
+        toast.info(__t('{label}已入队', { label }), t.reason ?? undefined);
         // 轻量轮询（最多 5 次），完成后刷新页面数据
         if (t.requestId) {
           for (let i = 0; i < 5; i += 1) {
@@ -163,22 +163,22 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
             try {
               const st = await adminApi.catalystRefreshStatus(t.requestId);
               if (st.status === 'completed') {
-                toast.success(__t('{label}刷新完成', { label }));
+                toast.success(__t('{label}已完成', { label }));
                 onDataRefreshed?.();
                 break;
               }
               if (st.status === 'failed') {
-                toast.error(__t('{label}刷新失败', { label }), st.reason ?? undefined);
+                toast.error(__t('{label}失败', { label }), st.reason ?? undefined);
                 break;
               }
             } catch (e) {
-              toast.error(__t('{label}刷新状态读取失败', { label }), errText(e));
+              toast.error(__t('{label}状态读取失败', { label }), errText(e));
               break;
             }
           }
         }
       } catch (e) {
-        toast.error(__t('{label}刷新未受理', { label }), errText(e));
+        toast.error(__t('{label}未受理', { label }), errText(e));
       } finally {
         setBusyOp((current) => (current === `r-${op}` ? null : current));
       }
@@ -199,7 +199,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
         const t = await adminApi.workerAction(action);
         if (t.reason === 'cooldown') toast.info(__t('{label}仍在冷却', { label }), __t('稍后自动执行或重试'));
         else if (t.reason === 'already_running') toast.info(__t('{label}正在执行', { label }), __t('已有任务正在进行'));
-        else toast.success(__t('{label}刷新已入队', { label }));
+        else toast.success(__t('{label}更新已入队', { label }));
         adminApi.workerStatus().then(
           (health) => {
             setWorker(health);
@@ -245,7 +245,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
       toast.success(__t('运行设置已保存'), __t('版本 v{version}', { version: next.version }));
     } catch (e) {
       if (e instanceof ApiError && (e.bizCode === 'version_conflict' || e.code === 409)) {
-        toast.error(__t('设置已被其他会话修改'), __t('已重新载入最新版本'));
+        toast.error(__t('设置已在别处修改，请重新核对'), __t('已重新载入最新版本'));
         void loadOwnerState();
       } else {
         toast.error(__t('保存失败'), errText(e));
@@ -262,7 +262,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
       const history = await adminApi.runtimeHistory();
       const prev = history.filter((h) => !h.current && h.version < doc.version).sort((a, b) => b.version - a.version)[0];
       if (!prev) {
-        toast.info(__t('没有可回滚的历史版本'));
+        toast.info(__t('暂无可恢复的旧设置'));
         return;
       }
       const next = await adminApi.rollbackRuntimeSettings(doc.version, prev.version);
@@ -275,9 +275,9 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
       invalidateQueryPaths(['/breakouts/current', '/breakouts/events'], { reload: true });
       resetMarketReadPrefixes(['/strength/scan']);
       bumpAlgorithmViewGeneration();
-      toast.success(__t('已回滚到 v{version}', { version: prev.version }), __t('当前版本 v{version}', { version: next.version }));
+      toast.success(__t('已恢复到 v{version}', { version: prev.version }), __t('当前版本 v{version}', { version: next.version }));
     } catch (e) {
-      toast.error(__t('回滚失败'), errText(e));
+      toast.error(__t('恢复失败'), errText(e));
     } finally {
       setSaving(false);
     }
@@ -294,7 +294,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
   return (
     /* 后续区块 rise-in 减量：直接呈现 */
     <section
-      aria-label={__t("催化剂管理面板")}
+      aria-label={__t("消息管理")}
       className="card-surface mt-6 overflow-hidden"
     >
       <button
@@ -304,7 +304,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
       >
         <span className="flex items-center gap-2.5">
           <Icon name="shield" size={15} className="text-brand-600" />
-          <span className="text-body-s font-medium text-ink-800">{__t('管理面板 · 数据刷新 / 后台任务 / 运行设置')}</span>
+          <span className="text-body-s font-medium text-ink-800">{__t('管理设置')}</span>
         </span>
         <span className="flex items-center gap-2.5">
           {worker && (
@@ -328,7 +328,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
             className="overflow-hidden"
           >
             <div className="grid grid-cols-1 gap-3 border-t border-line px-5 py-4 lg:grid-cols-3">
-              <SectionCard title={__t("数据刷新")} hint={__t("更新所选数据，不消耗分析额度")}>
+              <SectionCard title={__t("更新数据")} hint={__t("更新所选数据，不消耗分析额度")}>
                 <div className="flex flex-wrap gap-2">
                   {REFRESH_OPS.map((o) => (
                     <ActionButton key={o.op} label={o.label} busy={busyOp === `r-${o.op}`} onClick={() => void runRefresh(o.op, o.label)} />
@@ -362,12 +362,12 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
                   <p className="text-micro text-ink-400">{__t('运行设置不可用 ·')} {docErr}</p>
                 ) : draft ? (
                   <div className="space-y-2">
-                    <Toggle label={__t("允许手动分析")} value={draft.manual} onChange={(v) => setDraft({ ...draft, manual: v })} />
+                    <Toggle label={__t("手动分析")} value={draft.manual} onChange={(v) => setDraft({ ...draft, manual: v })} />
                     <Toggle label={__t("定时分析")} value={draft.scheduled} onChange={(v) => setDraft({ ...draft, scheduled: v })} />
                     <div className="rounded-md border border-line bg-card-warm px-3 py-2">
-                      <span className="mb-1.5 block text-caption text-ink-700">{__t('雷达默认排序')}</span>
+                      <span className="mb-1.5 block text-caption text-ink-700">{__t('雷达排序')}</span>
                       <Segmented<'production' | 't1_daily_priority'>
-                        ariaLabel={__t('雷达默认排序')}
+                        ariaLabel={__t('雷达排序')}
                         scrollable
                         options={[
                           { value: 'production', label: __t('原雷达排序') },
@@ -389,7 +389,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
                         disabled={saving}
                         className="control-button"
                       >
-                        {__t('回滚上一版')}
+                        {__t('恢复上一版')}
                       </button>
                       <button
                         onClick={() => void saveSettings()}

@@ -118,11 +118,11 @@ export default function StocksPanel({ filters }: { filters: CatalystFilters; ref
       return (
         <EmptyState
           image="/empty-news.svg"
-          title={t("当前窗口暂无已分析出方向性影响的股票")}
+          title={t("当前范围暂无明确方向的股票分析")}
           description={
             rows && rows.length > 0
               ? t('{n} 只候选股票的新闻尚未分析或影响为中性，暂不上榜', { n: rows.length })
-              : t('放宽时间窗或清除过滤后重试')
+              : t('放宽时间范围或清空条件后重试')
           }
         />
       );
@@ -167,13 +167,13 @@ export default function StocksPanel({ filters }: { filters: CatalystFilters; ref
               <span className="text-ink-400">/</span>
               <SoftBadge>{r.neutral}</SoftBadge>
             </span>
-            <span className="hidden w-14 text-right text-micro text-ink-500 tnum sm:block" title={t("来源数")}>
+            <span className="hidden w-14 text-right text-micro text-ink-500 tnum sm:block" title={t("来源数量")}>
               {r.sourceDiversity} {t('源')}
             </span>
-            <span className="hidden w-16 text-right text-micro text-ink-400 tnum lg:block" title={t("最新新闻")}>
+            <span className="hidden w-16 text-right text-micro text-ink-400 tnum lg:block" title={t("最新消息")}>
               {fmtRelative(r.latestAt)}
             </span>
-            <span className="w-12 shrink-0 text-right text-data-m text-ink-800 tnum" title={t("相关新闻数")}>
+            <span className="w-12 shrink-0 text-right text-data-m text-ink-800 tnum" title={t("消息数量")}>
               {r.count}
               <span className="ml-0.5 text-micro font-normal text-ink-400">{t('条')}</span>
             </span>
@@ -196,7 +196,7 @@ export default function StocksPanel({ filters }: { filters: CatalystFilters; ref
         <p className="hidden eyebrow md:block">{t('多/空/中')}</p>
         <p className="hidden w-14 text-right eyebrow sm:block">{t('来源')}</p>
         <p className="hidden w-16 text-right eyebrow lg:block">{t('最新')}</p>
-        <p className="w-12 text-right eyebrow">{t('新闻')}</p>
+        <p className="w-12 text-right eyebrow">{t('消息')}</p>
         <span className="w-3.5" />
       </div>
       {content}

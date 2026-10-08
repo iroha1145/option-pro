@@ -86,9 +86,9 @@ test('failed news count reads show uncertainty and a retry on a narrow screen', 
   const state = await fixture(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/catalysts');
-  await expect(page.getByText('新闻数量暂不可确认', { exact: true })).toBeVisible();
+  await expect(page.getByText('暂时无法确认新闻数量', { exact: true })).toBeVisible();
   await expect(page.getByText('暂时无法确认是否有待分析新闻，请稍后重试', { exact: true })).toBeVisible();
-  await page.getByText('新闻数量暂不可确认', { exact: true }).scrollIntoViewIfNeeded();
+  await page.getByText('暂时无法确认新闻数量', { exact: true }).scrollIntoViewIfNeeded();
   await screenshot(page, 'news-count-unknown-mobile.png');
   expect(state.errors).toEqual([]);
 });
@@ -97,7 +97,7 @@ test('repeated job status failures become visible while the original task remain
   const state = await fixture(page, { showJob: true });
   await page.goto('/catalysts');
   await page.getByRole('button', { name: '本地快讯', exact: true }).press('Enter');
-  const notice = page.getByText('任务状态暂时读不到，正在重试', { exact: true });
+  const notice = page.getByText('暂时读不到分析进度，正在重试', { exact: true });
   await expect(notice).toBeVisible({ timeout: 18_000 });
   expect(state.jobReads).toBeGreaterThanOrEqual(3);
   await screenshot(page, 'news-job-status-retry-desktop.png');

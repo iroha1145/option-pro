@@ -406,7 +406,7 @@ function nCycle(raw: unknown): MarketFocusCycle {
 }
 
 const STREAM_CN: Record<string, string> = {
-  news: __t('新闻采集流'),
+  news: __t('新闻获取流'),
   calendar: __t('经济日历流'),
 };
 
@@ -919,7 +919,7 @@ export const catalystsContract = {
         if (fromStatus.length) return fromStatus;
         const streams = asRec(asRec(statusBody).streams);
         const streamNames: Record<string, string> = {
-          news: __t('新闻采集流'),
+          news: __t('新闻获取流'),
           calendar: __t('经济日历流'),
         };
         const realStreams = Object.entries(streams).map(([key, raw]) => {
@@ -934,12 +934,12 @@ export const catalystsContract = {
             lastFetchedAt: pickS(r, 'last_success_at', 'data_through') ?? '',
             itemsToday: pickN(r, 'items_last_24h', 'itemsLast24h'),
             note: active
-              ? __t('后台采集流最近一次执行成功')
-              : pickS(r, 'last_error_code') ?? __t('后台采集流状态异常'),
+              ? __t('后台获取流最近一次执行成功')
+              : pickS(r, 'last_error_code') ?? __t('后台获取流状态异常'),
           };
         });
         if (realStreams.length) return realStreams;
-        throw new ApiError(503, __t('数据源状态暂不可用'));
+        throw new ApiError(503, __t('来源状态暂不可用'));
       },
     ),
   /** maxAgeMs：周期进行中时卡片按 15 秒跟踪，共享读缓存不能把跟踪拉长到 30 秒一次。 */
@@ -950,7 +950,7 @@ export const catalystsContract = {
       cachedGet('/catalysts/market-focus-cycles/latest').then((data) => {
         const previous = asRec(asRec(data).previous_successful_cycle);
         if (!Object.keys(previous).length) {
-          throw new ApiError(404, __t('暂无更早的成功焦点周期'), {
+          throw new ApiError(404, __t('暂无更早的成功热点分析'), {
             bizCode: 'previous_focus_cycle_not_found',
           });
         }

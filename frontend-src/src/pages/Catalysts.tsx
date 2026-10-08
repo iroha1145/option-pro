@@ -29,10 +29,10 @@ import { t as __t } from '../i18n/core.ts';
 type TabId = 'feed' | 'stocks' | 'calendar' | 'sources';
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: 'feed', label: __t('新闻流') },
+  { id: 'feed', label: __t('新闻列表') },
   { id: 'stocks', label: __t('股票影响') },
   { id: 'calendar', label: __t('经济日历') },
-  { id: 'sources', label: __t('数据源') },
+  { id: 'sources', label: __t('消息来源') },
 ];
 
 /* URL 参数必须逐项校验（审计 P2-23）：分类与状态此前用强制类型断言直接透传，
@@ -161,7 +161,7 @@ export default function Catalysts() {
     <div>
       {/* B0 页头带 */}
       <PageHeader
-        title={__t("新闻催化剂")}
+        title={__t("新闻")}
         meta={
           <>
             {lastLoadedAt && (
@@ -207,7 +207,7 @@ export default function Catalysts() {
           options={TABS.map(({ id, label }) => ({ value: id, label }))}
           value={tab}
           onChange={setTab}
-          ariaLabel={__t('催化剂视图')}
+          ariaLabel={__t('新闻栏目')}
           scrollable
         />
       </div>

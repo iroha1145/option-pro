@@ -397,7 +397,7 @@ test('catalyst calendar with no confirmed snapshot stays in an error state on id
   const state = await fixture(page, { username: 'alice', failIdentity: true, calendarAvailable: true });
   await page.goto('/catalysts?tab=calendar');
   await expect(page.getByText('身份暂时无法确认，请稍后重试', { exact: true })).toBeVisible();
-  await expect(page.getByText('本窗口暂无经济事件', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('当前范围暂无经济事件', { exact: true })).toHaveCount(0);
   await expect(page.getByTestId('catalyst-cache-status')).toHaveCount(0);
   expect(state.reads.filter(read => read.path === '/api/catalysts/calendar')).toEqual([]);
   state.failIdentity = false;
@@ -411,7 +411,7 @@ test('retained catalyst feed suspends pagination while identity is unavailable',
   const state = await fixture(page, { username: 'alice', feedAvailable: true });
   await page.goto('/catalysts');
   await expect(page.getByText('ALICE 催化快照', { exact: true })).toBeVisible();
-  const more = page.getByRole('button', { name: '加载更多', exact: true });
+  const more = page.getByRole('button', { name: '查看更多', exact: true });
   await expect(more).toBeEnabled();
   state.holdFeedNext = true;
   await more.click();
@@ -436,10 +436,10 @@ test('retained catalyst feed suspends pagination while identity is unavailable',
 test('confirmed empty catalyst calendar still reports identity errors with a working retry', async ({ page }) => {
   const state = await fixture(page, { username: 'alice', calendarAvailable: true, calendarEmpty: true });
   await page.goto('/catalysts?tab=calendar');
-  await expect(page.getByText('本窗口暂无经济事件', { exact: true })).toBeVisible();
+  await expect(page.getByText('当前范围暂无经济事件', { exact: true })).toBeVisible();
   state.failIdentity = true;
   await focusAndVerify(page, 503);
-  await expect(page.getByText('本窗口暂无经济事件', { exact: true })).toBeVisible();
+  await expect(page.getByText('当前范围暂无经济事件', { exact: true })).toBeVisible();
   const status = page.getByTestId('catalyst-cache-status');
   await expect(status).toContainText('身份暂时无法确认，请稍后重试');
   state.failIdentity = false;
