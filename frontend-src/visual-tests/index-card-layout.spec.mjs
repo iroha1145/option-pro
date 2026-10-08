@@ -81,7 +81,7 @@ for (const width of [320, 390]) {
 test('market page lists US indices apart from other markets and counts only US ones in the reading', async ({ page }) => {
   const errors = await fixture(page, Promise.resolve());
   await page.goto('/market');
-  await expect(page.getByRole('heading', { level: 1, name: '美股大盘强弱', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: '美股概况', exact: true })).toBeVisible();
   const region = page.getByRole('region', { name: '市场指数', exact: true });
   const labels = (scope) => scope.locator('button[aria-label$="详情"]').evaluateAll(els => els.map(el => el.getAttribute('aria-label')));
   await expect.poll(() => labels(region.getByRole('group', { name: '美股指数', exact: true })))

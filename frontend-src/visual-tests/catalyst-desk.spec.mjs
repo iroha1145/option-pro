@@ -65,12 +65,14 @@ test("Catalyst Desk visual evidence: /breakouts", async ({ page }) => {
     await page.goto("/breakouts", { waitUntil: "domcontentloaded" });
   } else {
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await page.getByRole("link", { name: /雷达/ }).click();
+    // 2026-10-08 起突破雷达在「选股」组里：先进选股，再点二级标签
+    await page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: "选股", exact: true }).click();
+    await page.getByRole("navigation", { name: "选股页面" }).getByRole("link", { name: "突破雷达", exact: true }).click();
     await page.waitForLoadState("domcontentloaded");
   }
   await expect(page).toHaveURL(/\/breakouts$/);
   await expectShell(page);
-  await expect(page.getByRole("link", { name: /雷达/ })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("navigation", { name: "选股页面" }).getByRole("link", { name: "突破雷达", exact: true })).toHaveAttribute("aria-current", "page");
   await screenshot(page, "1440x900-breakouts");
 });
 

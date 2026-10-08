@@ -41,10 +41,11 @@ async function goNews(page) {
   const more = dock.getByRole('button', { name: '更多' });
   if (await more.count() && await more.isVisible()) {
     await more.click({ timeout: 15_000 });
-    await page.getByRole('button', { name: /新闻催化/ }).click({ timeout: 15_000 });
+    // 2026-10-08 起「更多」里叫「新闻」（旧版叫「新闻催化」），两种界面都认
+    await page.getByRole('dialog', { name: '更多功能' }).getByRole('button', { name: /^(新闻催化|新闻)$/ }).click({ timeout: 15_000 });
     return;
   }
-  const navNews = page.getByRole('link', { name: /^催化$/ });
+  const navNews = page.getByRole('link', { name: /^(催化|新闻)$/ });
   if (await navNews.count() && await navNews.first().isVisible()) {
     await navNews.first().click({ timeout: 15_000 });
     return;

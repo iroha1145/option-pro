@@ -30,9 +30,10 @@ test('实验室计时仍以真实新闻标题为准，不用骨架屏冒充完�
   assert.match(interact, /dialog\?\.querySelector\('h2'\)/);
   assert.match(interact, /drawer_detail_ms/);
   assert.match(interact, /OPTIX_PERF_INTERACT_EXTRA/);
-  assert.match(interact, /按代码过滤/);
+  assert.match(interact, /按代码过滤\|按股票代码筛选/);
+  assert.match(interact, /openMoreFiltersIfNeeded\(page\)/);
   const spa = await read('scripts/perf/measure_spa.mjs');
-  assert.match(spa, /新闻催化/);
+  assert.match(spa, /新闻催化\|新闻/);
   assert.match(spa, /更多/);
   assert.doesNotMatch(spa, /text=新闻/);
   const pages = await read('scripts/perf/measure_pages.mjs');

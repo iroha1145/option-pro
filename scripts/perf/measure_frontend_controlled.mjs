@@ -85,7 +85,7 @@ async function sample(base) {
     await page.getByRole('button', { name: '更多', exact: true }).click();
     phase = 'warm_return';
     const start = await page.evaluate(() => performance.now());
-    await page.getByRole('dialog', { name: '更多功能', exact: true }).getByRole('button', { name: /新闻催化/ }).click();
+    await page.getByRole('dialog', { name: '更多功能', exact: true }).getByRole('button', { name: /^(新闻催化|新闻)$/ }).click();
     await ready();
     const warm_return = await metrics(); warm_return.ready_ms -= start;
     // Preserve the measured ready time, then let requests finish before closing

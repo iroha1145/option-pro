@@ -55,7 +55,8 @@ async function screenshot(page, name) {
 test('missing market field stays unknown on the market and home pages', async ({ page }) => {
   const state = await fixture(page);
   await page.goto('/market');
-  const card = page.getByRole('region', { name: '市场状态', exact: true });
+  // 美股概况页这张卡叫「交易时段」，首页那张仍叫「市场状态」
+  const card = page.getByRole('region', { name: '交易时段', exact: true });
   await expect(card).toContainText('时段未知');
   await expect(card).not.toContainText('休市');
   await screenshot(page, 'market-unknown-desktop.png');
