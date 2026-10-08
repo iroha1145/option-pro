@@ -28,10 +28,15 @@ for (const width of [320, 390]) {
       const search = header.locator('button.touch-target:visible').first();
       const login = header.locator('a[href="/login"]');
       await expect(login).toBeVisible();
+      const headerBox = await header.first().boundingBox();
       for (const control of [search, login]) {
         const bounds = await control.boundingBox();
         expect(bounds?.width).toBeGreaterThanOrEqual(44);
         expect(bounds?.height).toBeGreaterThanOrEqual(44);
+        // 触控区 44px 是透明的；看得见的按钮只画 32px，不顶满 48px 高的手机页头（2026-10-08 用户反馈）。
+        const chip = await control.locator('.header-chip').boundingBox();
+        expect(chip?.height).toBeLessThanOrEqual(32);
+        expect((chip?.y ?? 0) - (headerBox?.y ?? 0)).toBeGreaterThanOrEqual(6);
       }
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
       await login.click();

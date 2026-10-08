@@ -105,12 +105,12 @@ export default function SettingsMenu({ className }: { className?: string }) {
         aria-expanded={open}
         aria-label={t('显示设置')}
         title={t('显示设置')}
-        className={cn(
-          'settings-menu-control flex size-9 shrink-0 items-center justify-center rounded-md border shadow-btn transition-colors duration-fast md:h-8 md:w-8',
-          open ? 'border-brand-400 text-brand-600' : 'border-line bg-card-warm text-ink-500 hover:text-ink-800',
-        )}
+        /* 外层是透明触控区（手机 44px），看得见的 32px 按钮在 .header-chip；展开态由 aria-expanded 着色 */
+        className="touch-target header-action"
       >
-        <Icon name="sliders" size={15} />
+        <span className="header-chip">
+          <Icon name="sliders" size={15} />
+        </span>
       </button>
       {mounted && (
         <div

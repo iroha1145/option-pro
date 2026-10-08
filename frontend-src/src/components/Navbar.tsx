@@ -173,7 +173,8 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
         </nav>
 
         {/* 右侧操作区 */}
-        <div className="ml-auto flex items-center gap-2.5 md:gap-3.5 xl:ml-0">
+        {/* 手机上每个操作外面都有 44px 的透明触控区，按钮之间已隔开 12px，间距收到 4px */}
+        <div className="ml-auto flex items-center gap-1 md:gap-3.5 xl:ml-0">
           <button
             onClick={onOpenPalette}
             /* 一级入口收成 6 项后 xl 不再拥挤，文字搜索框从 md 起常显（此前 xl–2xl 只留图标）。 */
@@ -188,10 +189,12 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
           </button>
           <button
             onClick={onOpenPalette}
-            className="touch-target flex size-9 items-center justify-center rounded-md border border-line bg-card-warm text-ink-500 shadow-btn md:hidden"
+            className="touch-target header-action md:hidden"
             aria-label={t("搜索")}
           >
-            <Icon name="search" size={16} />
+            <span className="header-chip">
+              <Icon name="search" size={15} />
+            </span>
           </button>
 
           <span className="hidden shrink-0 items-center gap-2 md:flex" aria-label={t('市场时段：{label}', { label: status?.label ?? t('未知') })}>
@@ -205,18 +208,20 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
             <button
               onClick={handleLogout}
               disabled={loggingOut}
-              className="touch-target flex h-8 max-w-[140px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-card px-3 text-caption text-ink-500 shadow-btn transition-colors duration-fast hover:text-ink-800 disabled:cursor-wait disabled:opacity-60 md:max-w-none"
+              className="touch-target header-action max-w-[140px] md:max-w-none"
             >
-              <Icon name="logout" size={14} className="shrink-0" />
-              <span className="truncate">{username ? t('退出 {name}', { name: username }) : t('退出')}</span>
+              <span className="header-chip px-3">
+                <Icon name="logout" size={14} className="shrink-0" />
+                <span className="truncate">{username ? t('退出 {name}', { name: username }) : t('退出')}</span>
+              </span>
             </button>
           ) : (
             <Link
               to="/login"
               {...routeIntentHandlers('/login')}
-              className="btn-primary btn-sm touch-target shrink-0 whitespace-nowrap"
+              className="touch-target header-action"
             >
-              {t('登录')}
+              <span className="header-chip header-chip-primary">{t('登录')}</span>
             </Link>
           )}
         </div>
