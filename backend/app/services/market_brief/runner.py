@@ -12,6 +12,7 @@ import json
 import time
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from pydantic import ValidationError
@@ -19,7 +20,8 @@ from pydantic import ValidationError
 from app.failure_diagnostics import record_fallback_failure
 
 from . import errors
-from .claude_runtime import build_request, cost_microusd, invoke, make_client, request_summary
+from .claude_runtime import (build_request, cost_microusd, invoke, make_client, request_summary,
+                             RequestAdmissionRejected, request_budget_reservation_microusd)
 from .evidence import EvidencePack, build_evidence
 from .prompt import PROMPT_VERSION, build_system_prompt, build_user_message
 from .schema import SCHEMA_VERSION, BriefSlot, BriefTrigger, MarketBriefResult
@@ -46,6 +48,9 @@ _WARNING_MESSAGE_CHARS = 160
 @dataclass(frozen=True)
 class BriefRunConfig:
     daily_max_runs: int = 6
+    shared_daily_budget_usd: float = 0
+    shared_budget_start_at: datetime | None = None
+    budget_path: Path | None = None
     model: str = "claude-opus-5-5"
     effort: str = "xhigh"
     max_output_tokens: int = 48_000
@@ -249,7 +254,12 @@ def _run_admitted(
     started_at = _aware(now) if now is not None else datetime.now(timezone.utc)
     started = time.monotonic()
     run_id = _run_id
-    collected: dict[str, Any] = {}
+    collected: dict[str, Any] = {
+        "usage": {key: 0 for key in ("input_tokens", "output_tokens", "cache_creation_input_tokens",
+                 "cache_creation_1h_input_tokens", "cache_creation_5m_input_tokens",
+                 "cache_read_input_tokens", "web_search_requests", "web_fetch_requests")},
+        "cost_microusd": 0, "usage_complete": True, "request_rounds": (),
+    }
     terminal_record: BriefRunRecord | None = None
 
     def finish(**fields: Any) -> BriefRunRecord:
@@ -311,14 +321,51 @@ def _run_admitted(
             store.mark_submitted(run_id)
             collected["usage_complete"] = False
 
+        budget = None
+        if config.shared_daily_budget_usd > 0:
+            from app.services.model_budget import SharedModelBudget
+            budget = SharedModelBudget(
+                config.budget_path or store.root.parent / "ai-jobs.db",
+                config.shared_daily_budget_usd, brief_store_path=store.root,
+                accounting_start_at=config.shared_budget_start_at,
+            )
+
+        def before_request(round_index: int, max_tokens: int) -> None:
+            if budget is None:
+                return
+            from app.services.model_budget import DailyBudgetExceeded
+            reservation = request_budget_reservation_microusd(config, max_tokens=max_tokens)
+            try:
+                budget.bootstrap_brief_history(unknown_reservation_microusd=reservation, exclude_run_id=run_id)
+                store.reconcile_request_rounds(budget)
+                first = budget.reserve_brief_request(run_id, round_index, reservation)
+            except DailyBudgetExceeded as exc:
+                raise RequestAdmissionRejected(errors.DAILY_BUDGET_USD_REACHED) from exc
+            if not first:
+                raise RequestAdmissionRejected(errors.SUBMISSION_OUTCOME_UNKNOWN)
+
+        def round_result(metadata: dict[str, Any]) -> None:
+            # Durable billing evidence precedes ledger settlement. If either
+            # write fails, the held reservation survives rather than guessing.
+            store.write_request_round(run_id, metadata)
+            collected["request_rounds"] = (*collected["request_rounds"], copy.deepcopy(metadata))
+            if budget is not None:
+                budget.settle_brief_request(
+                    run_id, metadata["round_index"], cost_microusd=metadata["cost_microusd"],
+                    accounting_complete=metadata["accounting_complete"],
+                    confirmed_unbilled=metadata["confirmed_unbilled"],
+                )
+
         invocation = invoke(client, request, config=config,
                             deadline=started + config.request_timeout_seconds,
-                            on_submission=mark_submission)
+                            on_submission=mark_submission, before_request=before_request,
+                            on_round_result=round_result)
         collected.update(
             raw_output_text=invocation.text,
             external_sources=invocation.external_sources,
             usage=invocation.usage,
-            cost_microusd=cost_microusd(invocation.usage) if invocation.usage_complete else None,
+            cost_microusd=invocation.cost_microusd if invocation.usage_complete else None,
+            request_rounds=invocation.request_rounds,
             usage_complete=invocation.usage_complete,
             continuation_count=invocation.continuation_count,
         )

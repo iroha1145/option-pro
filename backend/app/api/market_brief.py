@@ -72,6 +72,28 @@ def _key_configured() -> bool:
     return get_settings().market_brief_configured
 
 
+def _shared_budget(now: datetime) -> dict[str, Any] | None:
+    settings = get_settings()
+    amount = float(getattr(settings, "model_daily_budget_usd", 0.0))
+    if amount <= 0:
+        return None
+    from app.services.model_budget import SharedModelBudget
+    from app.services.market_brief.claude_runtime import request_budget_reservation_microusd
+
+    config = _config().to_run_config()
+    reservation = request_budget_reservation_microusd(config)
+    budget = SharedModelBudget(
+        settings.openai_job_db_path, amount, brief_store_path=_store().root,
+        accounting_start_at=getattr(settings, "model_budget_start_at", None),
+    )
+    budget.bootstrap_brief_history(
+        now=now, unknown_reservation_microusd=reservation,
+    )
+    return budget.snapshot(
+        now=now, reservation_microusd=reservation,
+    )
+
+
 def _store() -> Any:
     from app.services.market_brief import BriefStore
 
@@ -241,6 +263,13 @@ def market_brief_status() -> dict[str, Any]:
         scheduled_enabled = None
     recent = store.history(limit=1)
     pending, cooldown_until = _worker_actions(now)
+    try:
+        shared_budget = _shared_budget(now)
+    except (OSError, sqlite3.Error, RuntimeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "shared_budget_unavailable"},
+        ) from exc
     return {
         "enabled": bool(config.enabled),
         "configured": _key_configured(),
@@ -253,6 +282,7 @@ def market_brief_status() -> dict[str, Any]:
         # 次数按 UTC 日历日计，与 Worker 的手动补发闸门同一口径。
         "daily_runs": int(store.runs_on(now.date())),
         "daily_max_runs": int(config.daily_max_runs),
+        "shared_budget": shared_budget,
     }
 
 
@@ -297,6 +327,23 @@ def request_market_brief_run(
                 "code": "daily_run_limit_reached",
                 "daily_runs": daily_runs,
                 "daily_max_runs": int(config.daily_max_runs),
+            },
+        )
+
+    try:
+        shared_budget = _shared_budget(observed)
+    except (OSError, sqlite3.Error, RuntimeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": "shared_budget_unavailable"},
+        ) from exc
+    if shared_budget is not None and not shared_budget["budget_available"]:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "daily_budget_usd_reached",
+                "daily_budget_usd": shared_budget["daily_budget_usd"],
+                "budget_remaining_usd": shared_budget["budget_remaining_usd"],
             },
         )
 

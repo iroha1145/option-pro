@@ -417,6 +417,7 @@ def test_owner_status_reports_schedule_queue_and_daily_runs(store: FakeStore) ->
         "cooldown_seconds": 600.0,
         "daily_runs": 2,
         "daily_max_runs": 6,
+        "shared_budget": None,
     }
     # 次数口径是 UTC 日历日。
     assert store.runs_on_days[-1] == datetime.now(timezone.utc).date()

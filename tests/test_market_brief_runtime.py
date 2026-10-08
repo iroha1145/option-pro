@@ -413,7 +413,7 @@ def test_iterations_replace_top_level_counts() -> None:
          "cache_creation": {"ephemeral_1h_input_tokens": 5, "ephemeral_5m_input_tokens": 0}},
         {"type": "compaction", "input_tokens": 200, "output_tokens": 20, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 2},
     ]
-    client = FakeClient([message([json_text()], message_usage=usage(input_tokens=999, output_tokens=999, iterations=iterations, searches=1))])
+    client = FakeClient([message([json_text()], message_usage=usage(input_tokens=100, output_tokens=10, cache_write=5, cache_read=1, iterations=iterations, searches=1))])
     result = runtime.invoke(client, request(), config=CONFIG)
     assert result.usage["input_tokens"] == 300
     assert result.usage["output_tokens"] == 30
@@ -434,17 +434,19 @@ def test_refusal_fallback_uses_the_beta_endpoint() -> None:
 
 
 def test_cost_uses_opus_prices_and_cache_ttl_split() -> None:
-    assert runtime.cost_microusd({"input_tokens": 1_000_000}) == 4_000_000
-    assert runtime.cost_microusd({"output_tokens": 1_000_000}) == 20_000_000
-    assert runtime.cost_microusd({"cache_read_input_tokens": 1_000_000}) == 200_000
+    zero = {key: 0 for key in ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "web_search_requests")}
+    assert runtime.cost_microusd({**zero, "input_tokens": 1_000_000}) == 4_000_000
+    assert runtime.cost_microusd({**zero, "output_tokens": 1_000_000}) == 20_000_000
+    assert runtime.cost_microusd({**zero, "cache_read_input_tokens": 1_000_000}) == 200_000
     assert runtime.cost_microusd({
-        "cache_creation_input_tokens": 3_000_000,
+        **zero, "cache_creation_input_tokens": 3_000_000,
         "cache_creation_1h_input_tokens": 1_000_000,
         "cache_creation_5m_input_tokens": 1_000_000,
-    }) == 8_000_000 + 5_000_000 + 8_000_000  # 没有明细的 1M 按 1 小时价
-    assert runtime.cost_microusd({"web_search_requests": 6}) == 60_000
-    assert runtime.cost_microusd({"input_tokens": 1}) == 4  # 微美元，四舍五入
-    assert runtime.cost_microusd({}) == 0
+    }) == 8_000_000 + 5_000_000 + 8_000_000
+    assert runtime.cost_microusd({**zero, "web_search_requests": 6}) == 60_000
+    assert runtime.cost_microusd({**zero, "input_tokens": 1}) == 4
+    assert runtime.cost_microusd(zero) == 0
+    assert runtime.cost_microusd({}) is None
 
 
 def test_make_client_sets_timeout_and_retries() -> None:

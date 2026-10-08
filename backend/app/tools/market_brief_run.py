@@ -87,8 +87,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     from app.services.market_calendar import is_trading_day
 
     now = datetime.now(timezone.utc)
+    settings = get_settings()
     section = getattr(get_personal_config(), "market_brief", None)
-    config = section.to_run_config() if section is not None else BriefRunConfig()
+    budget_options = (
+        {
+            "shared_daily_budget_usd": float(settings.model_daily_budget_usd),
+            "shared_budget_start_at": settings.model_budget_start_at,
+            "budget_path": settings.openai_job_db_path,
+        }
+        if float(getattr(settings, "model_daily_budget_usd", 0.0)) > 0 else {}
+    )
+    config = (
+        section.to_run_config(**budget_options)
+        if section is not None else BriefRunConfig(**budget_options)
+    )
     if args.no_structured_output:
         config = replace(config, structured_output=False)
     elif args.structured_output:
@@ -124,7 +136,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps(pack.payload, ensure_ascii=False, separators=(",", ":"))[:2000])
         return 0
 
-    api_key = _api_key(get_settings())
+    api_key = _api_key(settings)
     if not api_key:
         print(f"ANTHROPIC_API_KEY 未配置（{ANTHROPIC_API_KEY_MISSING}），没有发送请求。", file=sys.stderr)
         return 1

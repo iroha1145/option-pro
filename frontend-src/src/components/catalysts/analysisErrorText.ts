@@ -24,7 +24,7 @@ const REASONS: Record<string, string> = {
   daily_token_limit_reached: QUOTA_USED,
   daily_output_token_limit_reached: QUOTA_USED,
   budget_blocked: QUOTA_USED,
-  daily_budget_usd_reached: t('今天的 AI 预算已用完，这次没有执行分析'),
+  daily_budget_usd_reached: t('共享模型日预算不足，东京 09:00 重置后再试'),
   daily_job_limit_reached: t('今天的 AI 分析次数已用完，这次没有执行分析'),
   submission_outcome_unknown: t('无法确认模型服务是否收到分析请求，已停止重复提交，请先核对原任务状态'),
   provider_incomplete_max_output_tokens: INCOMPLETE,

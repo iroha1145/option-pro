@@ -1,3 +1,4 @@
+import * as aiBudget from '../src/api/aiBudget.ts';
 import * as evidenceSources from '../src/api/evidenceSources.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -120,6 +121,7 @@ function loadCatalystsModule(responses = {}) {
           `/catalysts/market-focus-cycles/${idValue}`,
       };
     }
+    if (id === '../../api/aiBudget.ts') return aiBudget;
     if (id === '../../api/evidenceSources.ts') return evidenceSources;
     if (id === '../../i18n/core.ts') return { t: stubT };
     if (id === './resourceSignals') return { notifyCatalystReadsInvalidated: () => {} };
@@ -359,4 +361,26 @@ test('经济日历按浏览器本地自然日请求前三天并传递时区偏�
     'utf8',
   );
   assert.match(panel, /useCalendarResource\(\)/);
+});
+
+
+test('owner status preserves shared USD snapshot while visitor status discards money fields', async () => {
+  for (const reason of ['available', 'owner_login_required']) {
+    const loaded = loadCatalystsModule({ '/catalysts/status': {
+      status: 'active', streams: {}, analysis_availability: {
+        enabled: reason === 'available', reason,
+        daily_budget_usd: 9.5, budget_used_usd: 0, budget_remaining_usd: 9.5,
+        dollar_budget_available: true, budget_basis: 'shared_usd',
+        daily_token_limit: 10000000, token_budget_used_tokens: 9483009,
+      },
+    } });
+    const result = await loaded.exports.catalystsContract.status();
+    if (reason === 'available') {
+      assert.equal(result.analysisAvailable, true);
+      assert.equal(result.analysisBudget.dailyBudgetUsd, 9.5);
+      assert.equal(result.analysisBudget.budgetUsedUsd, 0);
+      assert.equal(result.analysisBudget.budgetRemainingUsd, 9.5);
+      assert.equal(result.analysisBudget.budgetBasis, 'shared_usd');
+    } else assert.equal(result.analysisBudget, null);
+  }
 });

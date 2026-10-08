@@ -1,4 +1,4 @@
-import type { EvidenceSource } from '../api/types';
+import type { AiBudgetSnapshot, EvidenceSource } from '../api/types';
 /** Mock fixtures · 突破雷达 / 板块 / 财报 / 催化剂 / 期权 / AI 任务 / Worker */
 import { ApiError } from '@/api/client';
 import { Rng, round2, round4 } from './rng';
@@ -1041,6 +1041,7 @@ export interface CatalystsStatusDetail {
   analysisReason?: string | null;
   analysisModel?: string | null;
   analysisReasoning?: string | null;
+  analysisBudget?: AiBudgetSnapshot | null;
   analysisTriggerEnabled?: boolean | null;
   streams?: CatalystStreamHealth[];
   warnings?: string[];

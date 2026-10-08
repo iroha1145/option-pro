@@ -751,6 +751,14 @@ async def process_job(
         prepared = prepare(settings, job["job_type"], payload)
         require_live_lease()
         try:
+            shared_budget = float(getattr(settings, "model_daily_budget_usd", 0.0))
+            shared_options = (
+                {
+                    "shared_daily_budget_usd": shared_budget,
+                    "shared_budget_start_at": getattr(settings, "model_budget_start_at", None),
+                }
+                if shared_budget > 0 else {}
+            )
             submission_state = repository.mark_submission_started(
                 job["job_id"],
                 owner,
@@ -762,6 +770,7 @@ async def process_job(
                 unknown_submission_hold_seconds=int(
                     settings.openai_job_max_age_seconds
                 ),
+                **shared_options,
             )
         except RuntimeError as exc:
             if str(exc) == "ai_job_not_submittable":
@@ -867,6 +876,7 @@ async def process_job(
                     "input_tokens", "cached_input_tokens", "cache_creation_input_tokens",
                     "cache_creation_5m_input_tokens", "cache_creation_1h_input_tokens",
                     "output_tokens", "reasoning_tokens", "total_tokens",
+                    "web_search_requests", "web_fetch_requests", "code_execution_requests",
                 ), 0)
                 await _with_storage_retry(
                     repository.fail, job["job_id"], owner, code,

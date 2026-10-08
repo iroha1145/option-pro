@@ -182,7 +182,7 @@ async def update_runtime_settings(
             raise _safe_error(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
                 "retired_budget_setting",
-                "每日任务次数和美元预算设置已停用，只能写入零；请使用每日词元上限（daily_token_limit）",
+                "旧的每日任务次数和美元预算字段只能写入零；共享每日美元预算由服务器的 model_budget 配置设置",
             ) from exc
         raise _safe_error(
             status.HTTP_422_UNPROCESSABLE_ENTITY,

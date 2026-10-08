@@ -728,13 +728,16 @@ def settled_usage_cost_microusd(
     ):
         return max(0, int(fallback_microusd))
     cached_tokens = usage.get("cached_input_tokens")
+    claude = model is None or uses_claude(model)
     if (
         type(cached_tokens) is not int
         or cached_tokens < 0
         or cached_tokens > input_tokens
     ):
+        if claude:
+            return max(0, int(fallback_microusd))
         cached_tokens = 0
-    if model is None or uses_claude(model):
+    if claude:
         writes = usage.get("cache_creation_input_tokens")
         if type(writes) is not int or not 0 <= writes <= input_tokens - cached_tokens:
             # Unknown write accounting keeps the conservative reservation.
@@ -745,6 +748,12 @@ def settled_usage_cost_microusd(
             # Streamed server-tool iterations may omit the final TTL breakdown.
             # Price unknown writes at the higher 1h rate without pretending that
             # the requested system-cache TTL describes every server-side write.
+            one_hour, five_minute = writes, 0
+        elif one_hour is None and type(five_minute) is int and 0 <= five_minute <= writes:
+            one_hour = writes - five_minute
+        elif five_minute is None and type(one_hour) is int and 0 <= one_hour <= writes:
+            # Unknown remaining writes may have the higher TTL, so include them
+            # in the 1h estimate rather than inventing a cheap 5m attribution.
             one_hour, five_minute = writes, 0
         if (
             type(one_hour) is not int or type(five_minute) is not int
@@ -765,7 +774,7 @@ def settled_usage_cost_microusd(
             _ceil_token_cost_microusd(tokens, rate * multiplier)
             for tokens, rate in charges
         )
-        searches = usage.get("web_search_requests", 0)
+        searches = usage.get("web_search_requests")
         if type(searches) is not int or searches < 0:
             return max(token_cost, int(fallback_microusd))
         return token_cost + searches * _WEB_SEARCH_CALL_MICROUSD

@@ -1,3 +1,4 @@
+import * as aiBudget from '../src/api/aiBudget.ts';
 import * as evidenceSources from '../src/api/evidenceSources.ts';
 import * as aiModelLabels from '../src/lib/aiModelLabel.ts';
 import test from 'node:test';
@@ -46,7 +47,8 @@ function mappedNews(raw) {
       };
       if (id === '@/mocks/fixtures2') return {};
       if (id === '@/components/catalysts/focusCycleRequest') return {};
-      if (id === '../../api/evidenceSources.ts') return evidenceSources;
+      if (id === '../../api/aiBudget.ts') return aiBudget;
+    if (id === '../../api/evidenceSources.ts') return evidenceSources;
     if (id === '../../i18n/core.ts') return { t: (value) => value };
       if (id === './resourceSignals') return { notifyCatalystReadsInvalidated() {} };
       throw new Error(id);
@@ -83,7 +85,8 @@ function renderDrawer(seed) {
         'AnalysisStatusChip', 'ClassificationChip', 'ConfidenceLabel', 'ImpactValue', 'Led', 'StaleChip', 'TickerChip',
       ].map((name) => [name, passthrough]));
       if (id === './ConfirmDialog') return { default: passthrough };
-      if (id === '../../api/evidenceSources.ts') return evidenceSources;
+      if (id === '../../api/aiBudget.ts') return aiBudget;
+    if (id === '../../api/evidenceSources.ts') return evidenceSources;
     if (id === '../../i18n/core.ts') return { t: (value) => value };
       if (id in SHARED_UI_STUBS) return SHARED_UI_STUBS[id];
       throw new Error(id);

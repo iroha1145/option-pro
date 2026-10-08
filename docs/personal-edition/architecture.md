@@ -112,8 +112,8 @@ MacroLens 连接只使用正式名称 `MACROLENS_URL` 和 `INTERNAL_API_TOKEN`�
 
 新任务默认使用 Claude Haiku 5.5，推理强度为 `xhigh`，采用自适应思考（Adaptive Thinking）与严格结构化输出（Strict Structured Outputs）。系统提示使用 5 分钟提示缓存（Prompt Caching）。Claude 手动和定时任务共用总并发上限，默认最多同时运行 4 个，可设置为 1 到 4；不是每个通道各 4 个。遗留 OpenAI 任务的恢复处理保留手动与定时各 1 个的规则。新闻来源可以保留原文，但页面标题、摘要、等待提示和分析内容必须使用简体中文。
 
-每日词元（Token）额度由 `daily_token_limit` 设置，默认 1000 万。提交前以已结算用量与下一笔预留判断准入，终态按供应商报告对账，超额实际用量不会截断。原生服务端工具可在同一次请求中多轮处理，累计输入可能超过单轮 100 万词元的上下文容量，因此本地额度不是供应商费用的强制硬上限。Claude 思考输出计入输出用量；普通输入、缓存读取、缓存写入和工具请求分别保存，最终费用以供应商账单为准。
+启用 `[model_budget].daily_budget_usd = 9.5` 后，Haiku 与 Opus 共用应用日预算，词元上限只用于统计。每轮请求先预留估算费用，已报费用完整对账，未知预留继续占用所属窗口；这不保证供应商账单硬性封顶。预算按 UTC 日界、东京 09:00 重置。设置 `accounting_start_at` 后，首次窗口从实际生效时刻起算；本次起算前的 6 条未知记录保留但不占新窗口，仍不得重复付款。旧 `[ai].daily_budget_usd` 不承担共享预算，市场研判的 `daily_max_runs = 6` 仍是独立安全限制。详见[市场综合研判说明](../market-brief.md)。
 
 网页搜索（Web Search）和网页抓取（Web Fetch）各限 `max_uses=1`，网页内容预算约 8000 词元；代码执行（Code Execution）在本地流处理中最多接受 2 次，超过后停止，不自动发下一请求续跑。最终结果始终使用 JSON 输出格式（JSON Output Format），启用工具时仅提供原生服务器工具。原生工具与 JSON 格式的组合已通过实际请求验证；只有正常结束、工具调用与结果完整配对且通过中文与业务规则校验的结果才会保存。公开来源绑定已发布结果的原任务，最多展示 10 个链接；思考正文、中间工具内容和供应商消息编号不公开。旧 OpenAI 密钥仅保留历史任务取回、取消与回滚用途，历史结果保留原模型身份。迁移要求见[Claude 迁移说明](claude-migration.md)。
 
-`daily_max_jobs` 和 `daily_budget_usd` 已停用。历史配置与备份仍可读取、回滚，数值不会重新启用旧限制；新的运行设置请求只能将它们写为零，非零值返回 422 和 `retired_budget_setting`。
+旧 `[ai].daily_max_jobs` 和 `[ai].daily_budget_usd` 已停用，与新的 `[model_budget].daily_budget_usd` 不同。历史配置与备份仍可读取、回滚，数值不会重新启用旧限制；新的运行设置请求只能将旧字段写为零，非零值返回 422 和 `retired_budget_setting`。

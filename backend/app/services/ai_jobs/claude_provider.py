@@ -231,11 +231,20 @@ def _server_pairs(message: Message) -> tuple[dict[str, str], str | None]:
 
 def response_usage(message: Message) -> dict[str, int | None]:
     usage = message.usage
-    creation = usage.cache_creation_input_tokens
-    cached = usage.cache_read_input_tokens
+    def known(value: Any) -> int | None:
+        return value if type(value) is int and value >= 0 else None
+
+    creation = known(usage.cache_creation_input_tokens)
+    cached = known(usage.cache_read_input_tokens)
     # Optional cache counts default to None in the SDK. Preserve that distinction
     # in the returned fields while treating unreported caching as zero in sums.
-    input_tokens = usage.input_tokens + (creation or 0) + (cached or 0)
+    raw_input = getattr(usage, "input_tokens", None)
+    output_tokens = getattr(usage, "output_tokens", None)
+    if type(output_tokens) is not int or output_tokens < 0:
+        output_tokens = None
+    input_tokens = raw_input + creation + cached if all(
+        type(value) is int and value >= 0 for value in (raw_input, creation, cached)
+    ) else None
     cache_details = usage.cache_creation
     output_details = usage.output_tokens_details
     result = {
@@ -243,23 +252,31 @@ def response_usage(message: Message) -> dict[str, int | None]:
         "cached_input_tokens": cached,
         "cache_creation_input_tokens": creation,
         "cache_creation_5m_input_tokens": (
-            cache_details.ephemeral_5m_input_tokens if cache_details else None
+            known(cache_details.ephemeral_5m_input_tokens) if cache_details else None
         ),
         "cache_creation_1h_input_tokens": (
-            cache_details.ephemeral_1h_input_tokens if cache_details else None
+            known(cache_details.ephemeral_1h_input_tokens) if cache_details else None
         ),
-        "output_tokens": usage.output_tokens,
-        "reasoning_tokens": output_details.thinking_tokens if output_details else None,
-        "total_tokens": input_tokens + usage.output_tokens,
+        "output_tokens": output_tokens,
+        "reasoning_tokens": known(output_details.thinking_tokens) if output_details else None,
+        "total_tokens": input_tokens + output_tokens if input_tokens is not None and output_tokens is not None else None,
     }
-    if _has_tools(message) or usage.server_tool_use is not None:
-        server_usage = usage.server_tool_use
-        completed, _ = _server_pairs(message)
-        result.update({
-            "web_search_requests": (getattr(server_usage, "web_search_requests", 0) or 0),
-            "web_fetch_requests": (getattr(server_usage, "web_fetch_requests", 0) or 0),
-            "code_execution_requests": sum(name in _CODE_TOOLS for name in completed.values()),
-        })
+    server_usage = usage.server_tool_use
+    completed, _ = _server_pairs(message)
+    used_search = any(
+        block.type == "server_tool_use" and block.name == "web_search"
+        for block in message.content
+    )
+    used_fetch = any(
+        block.type == "server_tool_use" and block.name == "web_fetch"
+        for block in message.content
+    )
+    # Absence of a call in a fully received message proves zero; a call with no
+    # billing counter is unknown, even when its result and final JSON are valid.
+    for key, used in (("web_search_requests", used_search), ("web_fetch_requests", used_fetch)):
+        value = getattr(server_usage, key, None)
+        result[key] = 0 if value is None and not used else known(value)
+    result["code_execution_requests"] = sum(name in _CODE_TOOLS for name in completed.values())
     return result
 
 

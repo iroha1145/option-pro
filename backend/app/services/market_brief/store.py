@@ -85,6 +85,7 @@ class BriefRunRecord:
     duration_seconds: float | None = None
     continuation_count: int = 0
     usage_complete: bool = True
+    request_rounds: tuple[Mapping[str, Any], ...] = ()
 
 
 def new_run_id(trading_date: date, slot: BriefSlot) -> str:
@@ -156,6 +157,7 @@ def _record_to_document(record: BriefRunRecord) -> dict[str, Any]:
         "duration_seconds": record.duration_seconds,
         "continuation_count": int(record.continuation_count),
         "usage_complete": record.usage_complete,
+        "request_rounds": list(record.request_rounds),
     }
 
 
@@ -189,7 +191,11 @@ def _record_from_document(document: Mapping[str, Any]) -> BriefRunRecord:
         cost_microusd=data.get("cost_microusd"),
         duration_seconds=data.get("duration_seconds"),
         continuation_count=int(data.get("continuation_count") or 0),
-        usage_complete=bool(data.get("usage_complete", True)),
+        usage_complete=(data.get("usage_complete") is not False
+                        and all(type((data.get("usage") or {}).get(key)) is int and (data.get("usage") or {})[key] >= 0
+                                for key in ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "web_search_requests"))
+                        and type(data.get("cost_microusd")) is int and data["cost_microusd"] >= 0),
+        request_rounds=tuple(data.get("request_rounds") or ()),
     )
 
 
@@ -493,6 +499,59 @@ class BriefStore:
                 os.close(directory)
         except OSError as exc:
             record_fallback_failure("market_brief_store_dir_fsync", exc)
+
+    def reconcile_request_rounds(self, budget: Any) -> int:
+        """Finish saved accounting receipts without issuing another request."""
+        path = Path(budget.path)
+        if not path.exists():
+            return 0
+        with sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=5.0) as connection:
+            rows = connection.execute(
+                "SELECT run_id,round_index FROM model_budget_brief_requests WHERE round_index>0 AND status IN ('reserved','unknown')"
+            ).fetchall()
+        settled = 0
+        for run_id, index in rows:
+            if not _RUN_ID.fullmatch(run_id):
+                continue
+            receipt = self._read(self.root / "request-rounds" / run_id / f"{index}.json")
+            if receipt is None or receipt.get("round_index") != index:
+                continue
+            complete = receipt.get("accounting_complete") is True
+            unbilled = receipt.get("confirmed_unbilled") is True
+            cost = receipt.get("cost_microusd")
+            if not (complete or unbilled) or type(cost) is not int or cost < 0:
+                continue
+            if unbilled and cost != 0:
+                raise ValueError("market brief unbilled receipt has nonzero cost")
+            if not unbilled and not all(
+                type((receipt.get("usage") or {}).get(key)) is int and (receipt.get("usage") or {})[key] >= 0
+                for key in ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "web_search_requests")
+            ):
+                continue
+            budget.settle_brief_request(run_id, index, cost_microusd=cost,
+                                        accounting_complete=complete, confirmed_unbilled=unbilled)
+            settled += 1
+        return settled
+
+    def write_request_round(self, run_id: str, metadata: Mapping[str, Any]) -> Path:
+        """Save per-request billing evidence independently of final publication."""
+        index = metadata.get("round_index")
+        if not _RUN_ID.fullmatch(run_id) or type(index) is not int or index < 1:
+            raise ValueError("market brief request round identity invalid")
+        directory = self.root / "request-rounds" / run_id
+        if self.root.is_symlink() or directory.parent.is_symlink() or directory.is_symlink():
+            raise ValueError("market brief request round must not use symbolic links")
+        path = directory / f"{index}.json"
+        with self._write_lock():
+            previous = self._read(path)
+            value = {"version": STORE_VERSION, **dict(metadata)}
+            if previous is None and path.exists():
+                raise RuntimeError("market brief request round receipt unreadable")
+            if previous is not None and previous != value:
+                raise RuntimeError("market brief request round receipt conflict")
+            if previous is None:
+                self._write_json(path, value)
+        return path
 
     def record_path(self, record: BriefRunRecord) -> Path:
         """运行记录文件的位置（文件名带交易日与槽位，按名字就能找到）。"""

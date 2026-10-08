@@ -21,6 +21,13 @@ daily_budget_usd = 0.0
 daily_token_limit = 10000000
 execution_mode = "background"
 
+[model_budget]
+# Haiku 与 Opus 共用每日应用预算；正值启用后，日词元数只作统计。
+# 0 保持旧配置的词元额度。每日 UTC 00:00（东京 09:00）重置。
+daily_budget_usd = 0.0
+# 可选起算时刻，须带时区。之前的费用保留记录但不占新额度。
+# accounting_start_at = "2026-10-08T00:00:00Z"
+
 [catalyst]
 sync_seconds = 120
 focus_seconds = 1800

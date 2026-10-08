@@ -1,3 +1,4 @@
+import * as aiBudget from '../src/api/aiBudget.ts';
 import * as evidenceSources from '../src/api/evidenceSources.ts';
 import * as aiModelLabels from '../src/lib/aiModelLabel.ts';
 /**
@@ -209,6 +210,7 @@ function loadCatalystApi({ get, post, postCreate } = {}) {
     '@/api/live': live,
     '@/mocks/fixtures2': new Proxy({}, { get: () => () => { throw new Error('测试不应进入演示数据分支'); } }),
     '@/components/catalysts/focusCycleRequest': focusCycleRequest,
+    '../../api/aiBudget.ts': aiBudget,
     '../../api/evidenceSources.ts': evidenceSources,
     '../../i18n/core.ts': i18n,
     './resourceSignals': { notifyCatalystReadsInvalidated: () => { calls.invalidations += 1; } },
@@ -310,6 +312,7 @@ function drawerHarness({ get, post, postCreate, document: doc } = {}) {
       ImpactValue: 'ImpactValue', Led: 'Led', StaleChip: 'StaleChip', TickerChip: 'TickerChip',
     },
     './ConfirmDialog': { default: 'ConfirmDialog' },
+    '../../api/aiBudget.ts': aiBudget,
     '../../api/evidenceSources.ts': evidenceSources,
     '../../i18n/core.ts': i18n,
   }, {
@@ -829,6 +832,7 @@ function focusHarness({ latest, previous, trigger, poll }) {
     './analysisErrorText': analysisErrorText,
     './bits': { ImpactValue: 'ImpactValue', Led: 'Led' },
     './ConfirmDialog': { default: 'ConfirmDialog' },
+    '../../api/aiBudget.ts': aiBudget,
     '../../api/evidenceSources.ts': evidenceSources,
     '../../i18n/core.ts': i18n,
   }, {
@@ -1226,6 +1230,7 @@ function feedHarness() {
       AnalysisStatusChip: 'AnalysisStatusChip', ClassificationChip: 'ClassificationChip', ConfidenceLabel: 'ConfidenceLabel',
       ImpactValue: 'ImpactValue', StaleChip: 'StaleChip', TickerChip: 'TickerChip',
     },
+    '../../api/aiBudget.ts': aiBudget,
     '../../api/evidenceSources.ts': evidenceSources,
     '../../i18n/core.ts': i18n,
   }).default;
@@ -1496,6 +1501,7 @@ function impactHarness({ reportAnalysis, requestReportAnalysis }) {
     '@/components/shared/SourceNote': { default: 'SourceNote' },
     './PulseDot': { default: 'PulseDot' },
     '@/components/shared/Skeleton': { SkeletonText: 'SkeletonText' },
+    '../../api/aiBudget.ts': aiBudget,
     '../../api/evidenceSources.ts': evidenceSources,
     '../../i18n/core.ts': i18n,
   }, {
