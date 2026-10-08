@@ -159,7 +159,7 @@ test('stock chart paints after the ECharts security upgrade', async ({ page }) =
     const ctx = c.getContext('2d');
     return ctx && ctx.getImageData(0, 0, c.width, c.height).data.some((v, i) => i % 4 === 3 && v > 0);
   }).length)).toBeGreaterThan(0);
-  const area = page.getByRole('tab', { name: '面积', exact: true });
+  const area = page.getByRole('tab', { name: '面积图', exact: true });
   await area.click();
   await expect(area).toHaveAttribute('aria-selected', 'true');
 });
