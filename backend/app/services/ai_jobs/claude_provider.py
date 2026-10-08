@@ -36,6 +36,24 @@ class PreparedMessage:
     timeout_seconds: float
 
 
+def _output_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Preserve fixed values without adding regex grammar complexity."""
+    source = deepcopy(schema)
+
+    def normalize(value: Any) -> None:
+        if isinstance(value, dict):
+            if "const" in value:
+                value["enum"] = [value.pop("const")]
+            for child in value.values():
+                normalize(child)
+        elif isinstance(value, list):
+            for child in value:
+                normalize(child)
+
+    normalize(source)
+    return transform_schema(source)
+
+
 def prepare_message(
     settings: Any,
     *,
@@ -50,7 +68,7 @@ def prepare_message(
         raise RuntimeError("ai_not_configured")
     output_config: dict[str, Any] = {
         "effort": EFFORT,
-        "format": {"type": "json_schema", "schema": transform_schema(schema)},
+        "format": {"type": "json_schema", "schema": _output_schema(schema)},
     }
     params: dict[str, Any] = {
         "model": MODEL,

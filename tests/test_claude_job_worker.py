@@ -472,3 +472,31 @@ def test_configured_claude_slots_stream_together_and_drain_on_cancel(
     else:
         assert sum(row["status"] == "completed" for row in rows) == concurrency
         assert repo.claim_due("later", 60, max_concurrency=concurrency) is not None
+
+
+def test_candidate_claude_encoding_keeps_v2_result_identity_and_prepare_policies(tmp_path):
+    # Pinned to the production v2 contract before the provider encoding fix.
+    expected = {
+        ("earnings_impact", "claude-haiku-5-5"): "90a0d7b406e0e84af3d618e715fe071404f26fe8a004cfcf5b6450ccd8407e8b",
+        ("news_impact", "claude-haiku-5-5"): "68b3095ba0f47e559a5a7edd3daf6b091350546961ce398368684143bbb76a4a",
+        ("earnings_impact", "gpt-5.6-terra"): "efcf4a6d24e87c8bfcb8620183338d7ddd927a8df9290b1a8ee7f601a05e9265",
+        ("news_impact", "gpt-5.6-terra"): "d0e6936d8749cc96ed7fa8b3bf07bc64bd4cc1f5fb70d18ec0b0fbe3c35576fe",
+    }
+    for (job_type, model), digest in expected.items():
+        identity = runtime.schema_identity(job_type, model=model)
+        assert identity[1] == digest
+        assert runtime.schema_identity_current(job_type, runtime.PROMPT_VERSIONS[job_type], *identity, model=model)
+    prepared = runtime.prepare_claude(settings(tmp_path / "jobs.db"), "earnings_impact", {
+        "ticker": "PENG", "name": "PENG", "analysis_stage": "post_release_final",
+        "eps_actual": 1.0, "eps_estimate": 0.7844,
+        "revenue_actual": 566690000.0, "revenue_estimate": 524737643.0,
+    })
+    schema = prepared.params["output_config"]["format"]["schema"]
+    assert "pattern" not in schema["properties"]["summary"]
+    assert schema["properties"]["output_language"]["enum"] == ["zh-CN"]
+    assert prepared.params["model"] == "claude-haiku-5-5"
+    assert prepared.params["output_config"]["effort"] == "xhigh"
+    assert prepared.params["max_tokens"] == 65536
+    assert prepared.params["thinking"] == {"type": "adaptive"}
+    assert prepared.params["system"][0]["cache_control"] == {"type": "ephemeral", "ttl": "5m"}
+    assert prepared.params["tools"] == runtime.claude_tools_for("earnings_impact", {})
