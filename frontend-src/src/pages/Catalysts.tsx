@@ -179,6 +179,7 @@ export default function Catalysts() {
       {/* B0 页头带 */}
       <PageHeader
         title={__t("新闻")}
+        className="[&_h1]:basis-auto"
         meta={
           <>
             {lastLoadedAt && (
