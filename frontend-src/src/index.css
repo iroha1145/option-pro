@@ -884,6 +884,28 @@
   padding: 8px 0;
   line-height: 20px;
 }
+/* 新闻状态按自身可用宽度重排，避免手机刚过固定断点时把数字、单位挤碎。 */
+.news-status { container: news-status / inline-size; }
+.news-status-grid { display: grid; grid-template-columns: minmax(0, 1fr); }
+.news-status-cell + .news-status-cell { border-top: 1px solid var(--line); }
+.news-status-content { margin-top: .5rem; }
+@container news-status (min-width: 20em) {
+  .news-status-cell { display: grid; grid-template-columns: 6em minmax(0, 1fr); gap: 1rem; align-items: start; }
+  .news-status-label { padding-top: .2rem; }
+  .news-status-content { margin-top: 0; }
+}
+@container news-status (min-width: 34em) {
+  .news-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .news-status-cell { display: block; }
+  .news-status-cell:nth-child(2) { border-top: 0; }
+  .news-status-cell:nth-child(even) { border-left: 1px solid var(--line); }
+  .news-status-label { padding-top: 0; }
+  .news-status-content { margin-top: .5rem; }
+}
+@container news-status (min-width: 68em) {
+  .news-status-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .news-status-cell + .news-status-cell { border-top: 0; border-left: 1px solid var(--line); }
+}
 /* 触屏行情带整格可点；各段直接居中，不受字体与装饰点的基线差异影响。 */
 @media (pointer: coarse) {
   .marquee-track { height: 2.75rem; }

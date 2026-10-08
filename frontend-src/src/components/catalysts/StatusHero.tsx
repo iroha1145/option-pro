@@ -14,19 +14,14 @@ import { fmtRelative } from '@/lib/format';
 import { aiModelLabel } from '@/lib/aiModelLabel';
 import { afterLoadIdle } from '@/lib/afterLoadIdle';
 import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
-import { cn } from '@/lib/utils';
 import { t } from '../../i18n/core.ts';
 
-/* 分隔线跟着列数换：单列（<400）只画上边线；两列（400 起）画左线和第二行的上边线；四列（xl）只画左线。
-   两列时每格内容宽 = (视口 − 98) / 2，状态灯 +「已就绪 · 931 组热点」药丸要 149px，视口不到约 396 就放不下：
-   灯被挤到药丸上方独占一行，更窄时药丸里的字也折行，所以 400 以下改单列。 */
-function HeroCell({ label, index, children }: { label: string; index: number; children: React.ReactNode }) {
+/** 列数由状态栏自身宽度决定；手机上标签与内容成行，特别窄时再上下排列。 */
+function HeroCell({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className={cn('min-w-0 border-line px-4 py-4 sm:px-5',
-      index >= 1 && 'border-t', index === 1 && 'min-[400px]:border-t-0', index >= 2 && 'xl:border-t-0',
-      index % 2 === 1 && 'min-[400px]:border-l', index === 2 && 'xl:border-l')}>
-      <p className="eyebrow">{label}</p>
-      <div className="mt-2">{children}</div>
+    <div className="news-status-cell min-w-0 px-4 py-4 sm:px-5">
+      <p className="news-status-label eyebrow">{label}</p>
+      <div className="news-status-content min-w-0">{children}</div>
     </div>
   );
 }
@@ -100,22 +95,21 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
       aria-label={t("来源状态")}
-      className="card-surface mt-6"
+      className="card-surface news-status mt-5 sm:mt-6"
     >
-      <div className="grid grid-cols-1 min-[400px]:grid-cols-2 xl:grid-cols-4">
-        <HeroCell index={0} label={t("来源状态")}>
+      <div className="news-status-grid">
+        <HeroCell label={t("来源状态")}>
           {loading ? (
             <SkeletonBlock className="h-5 w-32 max-w-full" />
           ) : statusUnread ? (
             unreadCell
           ) : (
             <div className="flex flex-wrap items-center gap-2">
-              <Led tone={s?.collecting ? 'ok' : 'muted'} pulse={!!s?.collecting} />
               <SoftBadge tone={s?.collecting ? 'ok' : 'neutral'} size="md" className="whitespace-normal">
-                {s?.collecting ? t('正在获取') : t('已暂停')}
-                {s?.collecting && s.intervalMinutes != null && <span className="text-ink-500"> {t('· 每')} {s.intervalMinutes} {t('分钟')}</span>}
+                <Led tone={s?.collecting ? 'ok' : 'muted'} pulse={!!s?.collecting} />
+                <span>{s?.collecting ? t('正在获取') : t('已暂停')}</span>
               </SoftBadge>
-              <span className="text-micro text-ink-400 tnum">
+              <span className="whitespace-nowrap text-micro text-ink-400 tnum">
                 {s && s.sourcesTotal > 0 ? `${s.sourcesActive}/${s.sourcesTotal} ${s.streams?.length ? t('流') : t('源')}` : ''}
               </span>
             </div>
@@ -123,6 +117,9 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
           {s && (
             <p className="mt-1 flex flex-wrap items-center gap-x-2.5 text-micro text-ink-400 tnum">
               <span>{t('最近获取')} {fmtRelative(s.lastCrawlAt)}</span>
+              {s.collecting && s.intervalMinutes != null && (
+                <span className="whitespace-nowrap">{t('· 每')} {s.intervalMinutes} {t('分钟')}</span>
+              )}
               {s.streams?.map((st) => (
                 <SoftBadge key={st.name} tone={st.ok ? 'ok' : 'danger'} className="whitespace-normal [overflow-wrap:anywhere]">
                   <Led tone={st.ok ? 'ok' : 'danger'} className="size-1.5" />
@@ -133,31 +130,34 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
           )}
         </HeroCell>
 
-        <HeroCell index={1} label={t("热点整理")}>
+        <HeroCell label={t("热点整理")}>
           {hotState === 'loading' ? (
             <SkeletonBlock className="h-5 w-28 max-w-full" />
           ) : hotUnread ? (
             unreadCell
           ) : hs?.state === 'computing' ? (
             <div className="flex flex-wrap items-center gap-2">
-              <Led tone="warn" pulse />
-              <SoftBadge tone="warn" size="md">{t('正在整理热点…')}</SoftBadge>
+              <SoftBadge tone="warn" size="md" className="whitespace-normal">
+                <Led tone="warn" pulse />
+                <span>{t('正在整理热点…')}</span>
+              </SoftBadge>
               {hs.etaSeconds != null && (
                 <span className="text-micro text-ink-400 tnum">{t('预计')} {hs.etaSeconds}s</span>
               )}
             </div>
           ) : (
             <div className="flex flex-wrap items-center gap-2">
-              <Led tone={hs?.scanning ? 'brand' : 'muted'} pulse={!!hs?.scanning} />
               <SoftBadge tone={hs?.scanning ? 'brand' : 'neutral'} size="md" className="whitespace-normal">
-                {hs?.scanning ? t('已就绪') : t('已暂停')} · <span className="tnum">{hs?.groupCount ?? 0}</span> {t('个热点')}
+                <Led tone={hs?.scanning ? 'brand' : 'muted'} pulse={!!hs?.scanning} />
+                <span>{hs?.scanning ? t('已就绪') : t('已暂停')}</span>
               </SoftBadge>
+              <span className="whitespace-nowrap text-caption text-ink-600 tnum">{hs?.groupCount ?? 0} {t('个热点')}</span>
             </div>
           )}
           {hs && <p className="mt-1 text-micro text-ink-400 tnum">{t('更新')} {fmtRelative(hs.updatedAt)}</p>}
         </HeroCell>
 
-        <HeroCell index={2} label={t("分析服务")}>
+        <HeroCell label={t("分析服务")}>
           {loading ? (
             <SkeletonBlock className="h-5 w-28 max-w-full" />
           ) : statusUnread ? (
@@ -178,7 +178,7 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
             <p className="mt-1 break-words text-micro text-ink-400 tnum">
               {s.analysisModel?.trim() ? (
                 <>
-                  {t('模型')} {aiModelLabel(s.analysisModel, s.analysisReasoning)}
+                  {t('模型')} {aiModelLabel(s.analysisModel, s.analysisReasoning)?.replaceAll(' · ', '\u00a0·\u00a0')}
                 </>
               ) : s.queueDepth != null ? (
                 <>
@@ -193,7 +193,7 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
           </div>}
         </HeroCell>
 
-        <HeroCell index={3} label={t("近 24 小时新闻")}>
+        <HeroCell label={t("近 24 小时新闻")}>
           {newsQ.loading && !newsQ.data ? (
             <SkeletonBlock className="h-7 w-16" />
           ) : (

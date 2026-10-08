@@ -575,9 +575,6 @@ def test_prompt_json_fixed_cached_prefix_fits_existing_input_and_reservation_bou
      "c96f6a0c9cc838df1a72a687983f31526cd0bdfb6155ff3d58e79d287387c18c"),
     ("news_impact", {"news_id": 1, "change_sequence": 1, "content_hash": "a" * 64, "allowed_tickers": []},
      "68b3095ba0f47e559a5a7edd3daf6b091350546961ce398368684143bbb76a4a"),
-    ("market_focus", {"cycle_id": "test-cycle", "as_of": "2026-10-08T00:00:00Z", "input_hash": "a" * 64,
-                      "allowed_event_group_ids": [], "allowed_tickers": []},
-     "dd5633bfa3b7683ca6c455b4ca4a4c611dec4d34baa2a8c33ff90ced7805ae8b"),
 ])
 def test_other_claude_job_types_keep_native_json_and_v2_identity(tmp_path, job_type, payload, v2_digest):
     config = settings(tmp_path / "jobs.db")

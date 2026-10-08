@@ -68,9 +68,10 @@ function FundTapeItem({ symbol, onOpen }: { symbol: string; onOpen: () => void }
   const quote = useLiveQuote(symbol);
   return <button type="button" onClick={onOpen} title={t('{fund} · 美元价格', { fund: FUND_LABELS[symbol] })} className="inline-flex items-center gap-2 rounded-xs px-1 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">
     <span className="text-caption font-medium text-ink-800">{FUND_LABELS[symbol]}</span>
-    <span className="tnum text-micro text-ink-400">{symbol}</span>
-    <LivePrice symbol={symbol} prefix="$" indicator={false} className="tnum text-caption text-ink-600" />
-    <LiveChange symbol={symbol} fallback={quote?.change_pct} size="sm" />
+    <span className="tnum text-micro text-ink-400 [@media(pointer:coarse)]:text-caption">{symbol}</span>
+    {/* 触屏用同一字阶；价格的行内盒会给滚动数字留下下降空间，改成弹性盒后按可见数字居中。 */}
+    <LivePrice symbol={symbol} prefix="$" indicator={false} className="tnum text-caption text-ink-600 [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:[&>.tick-flash]:inline-flex" />
+    <LiveChange symbol={symbol} fallback={quote?.change_pct} size="sm" className="[@media(pointer:coarse)]:text-caption" />
   </button>;
 }
 

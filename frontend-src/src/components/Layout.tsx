@@ -6,7 +6,7 @@
  * v2：个股详情从右侧抽屉改为 /stock/:ticker 全屏整页（参考日股工作台），
  * openTicker 一律导航——抽屉基座与 StockDrawerBody 已随之撤除。
  */
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Outlet, useLocation, useNavigate, useNavigationType } from 'react-router';
 import Navbar from '@/components/Navbar';
 import IndexTape from '@/components/IndexTape';
@@ -35,6 +35,7 @@ export default function Layout() {
   const pageKey = JSON.stringify([location.pathname, role, username]);
   const previousPathname = useRef(location.pathname);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [dockHeight, setDockHeight] = useState(64);
 
   const openPalette = useCallback(() => setPaletteOpen(true), []);
   const openTicker = useCallback((ticker: string) => {
@@ -85,7 +86,7 @@ export default function Layout() {
           窄屏时会把文档撑出横向滚动条。clip 只裁剪绘制，不建立滚动容器、
           不影响 sticky，也不裁剪 position:fixed 的 Dock；
           InfoHint 自身已把可见浮层收敛在视口内，因此这里裁不到真实内容。 */}
-      <div className="flex min-h-[100dvh] flex-col overflow-x-clip">
+      <div className="flex min-h-[100dvh] flex-col overflow-x-clip [&>footer]:pb-[calc(var(--mobile-dock-height)+2rem+env(safe-area-inset-bottom))] xl:[&>footer]:pb-10" style={{ '--mobile-dock-height': `${dockHeight}px` } as CSSProperties}>
         <a className="skip-link" href="#main-content">{__t('跳到主要内容')}</a>
         <Navbar onOpenPalette={openPalette} />
         <IndexTape />
@@ -123,7 +124,7 @@ export default function Layout() {
           </div>
         </main>
         <Footer />
-        <MobileDock />
+        <MobileDock onHeightChange={setDockHeight} />
       </div>
 
       <CommandPalette

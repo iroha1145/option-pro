@@ -411,7 +411,9 @@ def schema_identity(job_type: str, *, model: str | None = None) -> tuple[str, st
         identity["claude_features"] = {
             "contract": (
                 "haiku-native-tools-prompt-json-v3"
-                if job_type == "earnings_impact" else "haiku-native-tools-json-v2"
+                if job_type == "earnings_impact"
+                else "haiku-native-tools-market-focus-prompt-json-v4"
+                if job_type == "market_focus" else "haiku-native-tools-json-v2"
             ),
             "instructions": claude_instructions(request.instructions),
             "tools": claude_tools_for(job_type, {}),
@@ -931,9 +933,26 @@ def claude_output_schema(job_type: str, schema: dict[str, Any]) -> dict[str, Any
 
     The local validation schema stays unchanged; completed native-JSON results
     remain readable and paid receipts remain locally recoverable. New earnings
-    requests have a distinct v3 transport identity.
+    requests have a distinct v3 transport identity; market focus uses v4.
     """
     result = deepcopy(schema)
+    if job_type == "market_focus":
+        fields = result["properties"]
+        for name in ("cycle_id", "as_of", "input_hash"):
+            fields[name]["description"] = (
+                f"必须逐字复制本次输入的{name}，不得为空、使用示例值或重新生成。"
+            )
+        for name, purpose in {
+            "title_zh": "概括本次市场焦点",
+            "summary_zh": "综合输入事件和市场状态，说明主要发现与限制",
+            "headline_summary": "概述输入新闻簇中的重要事件及其证据",
+            "market_summary": "说明输入市场状态与事件的关系，不重算程序评分",
+        }.items():
+            fields[name]["description"] = (
+                purpose + "。必须写有实质内容的非空简体中文，不得返回空字符串或占位符。"
+                "资料不足时说明具体缺少什么及判断限制，不得编造；仍须填写本字段。"
+            )
+        return result
     if job_type != "earnings_impact":
         return result
     rules = (
@@ -982,7 +1001,7 @@ def prepare_claude(settings: Any, job_type: str, payload: dict[str, Any]) -> Any
         schema=claude_output_schema(job_type, request.schema),
         max_tokens=max_output_tokens_for(job_type, model=OFFICIAL_CLAUDE_MODEL),
         tools=claude_tools_for(job_type, payload),
-        output_mode="prompt_json" if job_type == "earnings_impact" else "native_json",
+        output_mode="prompt_json" if job_type in {"earnings_impact", "market_focus"} else "native_json",
     )
 
 

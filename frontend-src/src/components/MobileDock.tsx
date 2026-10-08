@@ -48,18 +48,32 @@ const MORE_ITEMS: { label: string; path: string; icon: IconName }[] = NAV_GROUPS
   icon: DOCK_ICONS[group.path] ?? 'dots-grid',
 }));
 
-export default function MobileDock() {
+type MobileDockProps = { onHeightChange?: (height: number) => void };
+
+export default function MobileDock({ onHeightChange }: MobileDockProps) {
   const { pathname } = useLocation();
-  return <MobileDockContent key={pathname} />;
+  return <MobileDockContent key={pathname} onHeightChange={onHeightChange} />;
 }
 
-function MobileDockContent() {
+function MobileDockContent({ onHeightChange }: MobileDockProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { isOwner, isSignedIn, username, logout } = useAccess();
   const toast = useToast();
   const [loggingOut, setLoggingOut] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const dockRef = useRef<HTMLElement | null>(null);
+  // 字号、语言和屏宽都会改变底栏高度；页尾留白跟随实高，不让导航盖住最后一行。
+  useEffect(() => {
+    const dock = dockRef.current;
+    if (!dock || !onHeightChange) return;
+    const measure = () => onHeightChange(dock.getBoundingClientRect().height);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(dock);
+    return () => observer.disconnect();
+  }, [onHeightChange]);
   /* aria-modal 配套（审计 #60）：声明了模态就要真的困住焦点，Drawer 与
      CommandPalette 都调了 useFocusTrap，这里补齐。 */
   const sheetRef = useRef<HTMLDivElement | null>(null);
@@ -94,19 +108,19 @@ function MobileDockContent() {
        对任何路径都真，首页会永远亮着），其余按段边界（/cta 不得点亮 /catalysts）。 */
     const active = isNavGroupActive(location.pathname, item.group);
     return (
-      <div key={item.path} className="relative flex flex-1">
+      <div key={item.path} className="relative flex min-w-0 flex-1">
         {active && (
           <GlidePill layoutId={dockGlideId} className="inset-1 rounded-md bg-brand-50 shadow-none" />
         )}
         <Link
           to={item.path}
-          className="relative z-10 flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1 transition-transform duration-fast active:scale-[0.96]"
+          className="relative z-10 flex min-h-[44px] min-w-0 flex-1 flex-col items-center justify-center gap-1 py-2 transition-transform duration-fast active:scale-[0.96]"
           aria-label={item.label}
           aria-current={navAriaCurrent(location.pathname, item.group)}
           {...routeIntentHandlers(item.path)}
         >
-          <Icon name={item.icon} size={19} className={active ? 'text-brand-600' : 'text-ink-400'} />
-          <span className={cn('text-micro leading-none', active ? 'font-medium text-brand-600' : 'text-ink-400')}>{item.label}</span>
+          <Icon name={item.icon} size={19} className={cn('shrink-0', active ? 'text-brand-600' : 'text-ink-400')} />
+          <span className={cn('w-full px-1 text-center text-micro leading-tight [overflow-wrap:anywhere]', active ? 'font-medium text-brand-600' : 'text-ink-400')}>{item.label}</span>
         </Link>
       </div>
     );
@@ -117,24 +131,25 @@ function MobileDockContent() {
       {/* 悬浮导航 Dock：离屏 12px、小圆角、毛玻璃与轻阴影；
           雷达与其余入口同级同色，不再做中央凸起圆钮。 */}
       <nav
-        className="glass fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[60] mx-auto flex h-16 max-w-md items-stretch rounded-lg border border-line px-1.5 shadow-dock xl:hidden"
+        ref={dockRef}
+        className="glass fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[60] mx-auto flex min-h-16 max-w-md items-stretch rounded-lg border border-line px-1.5 shadow-dock xl:hidden"
         aria-label={t('移动端导航')}
       >
         {/* layoutRoot：Dock 是 fixed 容器，投影坐标必须收进条内（beUI Dock / tabs） */}
-        <motion.div layoutRoot className="flex h-full w-full items-stretch">
+        <motion.div layoutRoot className="flex min-w-0 w-full items-stretch">
           {DOCK_ITEMS.map(renderItem)}
-          <div className="relative flex flex-1">
+          <div className="relative flex min-w-0 flex-1">
             {moreActive && (
               <GlidePill layoutId={dockGlideId} className="inset-1 rounded-md bg-brand-50 shadow-none" />
             )}
             <button
               onClick={() => setMoreOpen(true)}
-              className="relative z-10 flex min-h-[44px] w-full flex-col items-center justify-center gap-1 transition-transform duration-fast active:scale-[0.96]"
+              className="relative z-10 flex min-h-[44px] min-w-0 w-full flex-col items-center justify-center gap-1 py-2 transition-transform duration-fast active:scale-[0.96]"
               aria-label={t('更多')}
               aria-current={moreActive ? 'page' : undefined}
             >
-              <Icon name="menu" size={19} className={moreActive ? 'text-brand-600' : 'text-ink-400'} />
-              <span className={cn('text-micro leading-none', moreActive ? 'font-medium text-brand-600' : 'text-ink-400')}>{t('更多')}</span>
+              <Icon name="menu" size={19} className={cn('shrink-0', moreActive ? 'text-brand-600' : 'text-ink-400')} />
+              <span className={cn('w-full px-1 text-center text-micro leading-tight [overflow-wrap:anywhere]', moreActive ? 'font-medium text-brand-600' : 'text-ink-400')}>{t('更多')}</span>
             </button>
           </div>
         </motion.div>
