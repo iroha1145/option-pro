@@ -57,7 +57,7 @@ export const CHROME: Dict = {
 
   /* 命令面板 */
   '快捷查找': ['Quick find', 'クイック検索'],
-  '打开命令面板': ['Open the command palette', 'コマンドパレットを開く'],
+  '搜索代码或功能': ["Search tickers or features", "銘柄や機能を検索"],
   '搜索': ['Search', '検索'],
   '搜索代码或功能…': ['Search tickers or actions…', 'ティッカーや操作を検索…'],
   '搜索股票代码、名称或功能…': ['Search tickers, names, or actions…', 'ティッカー・銘柄名・操作を検索…'],
@@ -193,7 +193,7 @@ export const CHROME: Dict = {
 
   /* 应用级错误边界 */
   "页面无法打开": ["Unable to open the app", "ページを開けません"],
-  "请先重新加载。若仍无法打开，可清除此设备的网站数据；本地绘图、未同步修改和显示偏好将被删除。": ["Try reloading first. If the app still does not open, clear its data on this device. Local drawings, unsynced edits and display preferences will be deleted.", "まず再読み込みしてください。開けない場合は、この端末のサイトデータを削除できます。端末内の描画、未同期の変更、表示設定が削除されます。"],
+  "请先重新加载。若仍无法打开，可清除本机的网站数据；本机绘图、未同步修改和显示偏好将被删除。": ["Try reloading first. If the app still does not open, clear its data on this device. Local drawings, unsynced edits and display preferences will be deleted.", "まず再読み込みしてください。開けない場合は、この端末のサイトデータを削除できます。端末内の描画、未同期の変更、表示設定が削除されます。"],
   "清除本机数据并重载": ["Clear local data and reload", "端末内のデータを削除して再読み込み"],
   "页面显示失败": ["Unable to display this page", "ページを表示できません"],
   "请重新加载页面。若仍无法显示，请稍后再试。": ["Reload the page. If it still does not load, try again later.", "ページを再読み込みしてください。表示されない場合は、時間をおいてお試しください。"],

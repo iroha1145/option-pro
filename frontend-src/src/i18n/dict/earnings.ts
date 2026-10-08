@@ -61,7 +61,7 @@ export const EARNINGS: Dict = {
   '查看财报影响分析': ["View AI impact analysis", "AI 影響分析を見る"],
   '分析': ["Analyze", "分析"],
   '生成财报分析': ["Generate earnings analysis", "決算分析を生成"],
-  'AI 影响': ["AI impact", "AI 影響"],
+  '财报影响': ["Earnings impact", "決算の影響"],
   '财报影响分析': ["Earnings impact analysis", "決算影響分析"],
   '即将公布': ["Upcoming earnings", "決算発表予定"],
   '当日无财报': ["No earnings that day", "その日の決算なし"],
@@ -199,11 +199,13 @@ export const EARNINGS: Dict = {
   '六': ["Sat", "土"],
   '日': ["Sun", "日"],
   '月历': ["Month", "月"],
+  '财报月历': ["Earnings month calendar", "決算の月カレンダー"],
   '上个月': ["Previous month", "前月"],
   '下个月': ["Next month", "翌月"],
 
   // ---------------- WeekScrubber.tsx ----------------
   '周历': ["Week", "週"],
+  '财报周历': ["Earnings week calendar", "決算の週カレンダー"],
   '上一周': ["Previous week", "前週"],
   '下一周': ["Next week", "翌週"],
 

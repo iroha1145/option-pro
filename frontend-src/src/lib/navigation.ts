@@ -2,7 +2,7 @@
  * 全站导航结构（2026-10-08 第二版）
  *
  * 一级 6 项：首页、我的关注、选股、市场、财报、新闻。选股（条件选股、突破雷达）
- * 与市场（美股概况、行业表现、CTA 趋势）两组的子页面用页内二级标签切换，
+ * 与市场（美股概况、行业表现、CTA 趋势资金）两组的子页面用页内二级标签切换，
  * 九个页面地址都不变。命令面板仍逐页列出全部页面（NAV_PAGES）。
  */
 import { isNavPathActive } from './utils.ts';
@@ -30,7 +30,8 @@ const SCREENER: NavPage = { label: t('条件选股'), path: '/screener' };
 const BREAKOUTS: NavPage = { label: t('突破雷达'), path: '/breakouts' };
 const MARKET: NavPage = { label: t('美股概况'), path: '/market' };
 const SECTORS: NavPage = { label: t('行业表现'), path: '/sectors' };
-const CTA: NavPage = { label: t('CTA 趋势'), path: '/cta' };
+/* 二级标签与页面标题同名（docs/UI_DESIGN_SYSTEM.md §9） */
+const CTA: NavPage = { label: t('CTA 趋势资金'), path: '/cta' };
 const EARNINGS: NavPage = { label: t('财报日历'), path: '/earnings' };
 const NEWS: NavPage = { label: t('新闻'), path: '/catalysts' };
 
@@ -49,6 +50,12 @@ export const NAV_GROUPS: readonly NavGroup[] = [
 export function isNavGroupActive(pathname: string, group: NavGroup): boolean {
   if (group.pages.length === 0) return isNavPathActive(pathname, group.path);
   return group.pages.some((page) => isNavPathActive(pathname, page.path));
+}
+
+/** 一级入口的 aria-current：正在看的就是这个入口指向的页面时写 page，只是同组其他子页时写 true */
+export function navAriaCurrent(pathname: string, group: NavGroup): 'page' | 'true' | undefined {
+  if (isNavPathActive(pathname, group.path)) return 'page';
+  return isNavGroupActive(pathname, group) ? 'true' : undefined;
 }
 
 export function navSectionPages(section: NavSection): readonly NavPage[] {

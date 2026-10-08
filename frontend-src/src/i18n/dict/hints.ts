@@ -132,7 +132,7 @@ export const HINTS: Dict = {
     '20日平均売買代金 25%、当日の売買代金 20%、売買代金のパーセンタイル 15%、スプレッド 10%、日中データの完全性 10%、時価総額 10%、資産タイプ 10%。流動性の低い銘柄は形が良くてもスコアを下げます。',
   ],
 
-  '个股强度（0–100）': ['Stock strength (0–100)', '個別銘柄の強度（0–100）'],
+  '个股评分（0–100）': ["Stock score (0–100)", "個別銘柄スコア（0–100）"],
   '与选股页同一套个股评分（六族加权），只用该股价格/量能与对 SPY 的相对表现。': ["The same stock score used on the Screener page (six weighted families), based only on the stock’s price and volume plus its performance relative to SPY.", "スクリーナーページと同じ個別銘柄スコア（6ファミリーの加重）です。その銘柄の価格・出来高と SPY に対する相対パフォーマンスのみを使います。"],
 
   '顶部分 / 底部分（各 0–100）': ['Top score / bottom score (0–100 each)', '天井スコア / 底スコア（各0–100）'],
@@ -200,7 +200,7 @@ export const HINTS: Dict = {
   '距 50 日均线': ['Distance from the 50-day MA', '50日移動平均との乖離'],
   '距 200 日均线': ['Distance from the 200-day MA', '200日移動平均との乖離'],
   '20 日涨跌': ['20-day change', '20日騰落率'],
-  '相对 SPY 强度': ['Relative strength versus SPY', 'SPY に対する相対強度'],
+  '相对 SPY 强度': ["Relative strength vs SPY", "SPY に対する相対強度"],
   '收盘位置': ['Closing position', '終値の位置'],
   'MACD 柱': ['MACD histogram', 'MACD ヒストグラム'],
   'SPY 距 20 日线': ['SPY distance from its 20-day MA', 'SPY と20日線の乖離'],

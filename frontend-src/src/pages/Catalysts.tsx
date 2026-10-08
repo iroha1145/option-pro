@@ -3,7 +3,7 @@
  * 状态 hero · 热点带 · 热点追踪卡 · 栏目（feed/stocks/calendar 三项分段 + 「更多」菜单里的 sources/manage，URL 同步）
  * 过滤器条（URL query）· 消息详情抽屉（分析任务状态机）· 空态/骨架/503/移动端
  */
-import { startTransition, useCallback, useMemo, useOptimistic, useState } from 'react';
+import { startTransition, useCallback, useEffect, useMemo, useOptimistic, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useAccess } from '@/hooks/useAccess';
 import PageHeader from '@/components/shared/PageHeader';
@@ -90,6 +90,12 @@ export default function Catalysts() {
   /* 管理设置只给所有者：身份确认后仍不是所有者就落到新闻列表；确认前先不动，免得所有者刷新页面被弹回。 */
   const tab: TabId = urlTab === 'manage' && !isOwner && !accessLoading ? 'feed' : urlTab;
   const filters = useMemo(() => parseFilters(searchParams), [searchParams]);
+  /* 管理设置打开过一次就一直挂着（切走时只隐藏）：面板里「一次只做一件事」的忙碌状态在组件内，
+     卸载会让切回来的按钮不再转圈、还能立刻点下一项。 */
+  const [manageMounted, setManageMounted] = useState(false);
+  useEffect(() => {
+    if (tab === 'manage') setManageMounted(true);
+  }, [tab]);
   // 输入须立即回显；地址导航可能延后提交，不能用旧参数覆盖正在键入的字符。
   // 列表仍读取已提交的地址参数，输入反馈随同一次导航自动收敛。
   const [inputFilters, setInputFilters] = useOptimistic(filters);
@@ -112,6 +118,11 @@ export default function Catalysts() {
   );
 
   const setTab = useCallback((t: TabId) => syncUrl(inputFilters, t), [inputFilters, syncUrl]);
+  /* 身份确认后仍不是所有者：页面已落回新闻列表，地址里的 tab=manage 也一起清掉，
+     免得之后身份重试成功时页面又自己跳回管理设置。 */
+  useEffect(() => {
+    if (urlTab === 'manage' && !isOwner && !accessLoading) syncUrl(inputFilters, 'feed');
+  }, [urlTab, isOwner, accessLoading, inputFilters, syncUrl]);
   const setFilters = useCallback((f: CatalystFilters) => {
     startTransition(() => {
       setInputFilters(f);
@@ -238,7 +249,14 @@ export default function Catalysts() {
         {tab === 'stocks' && <StocksPanel filters={filters} refreshToken={refreshToken} />}
         {tab === 'calendar' && <CalendarPanel refreshToken={refreshToken} />}
         {tab === 'sources' && <SourcesPanel refreshToken={refreshToken} />}
-        {tab === 'manage' && <ManagePanel onDataRefreshed={onRefresh} />}
+        {urlTab === 'manage' && tab === 'manage' && !isOwner && accessLoading && (
+          <p className="rounded-md border border-line bg-card-warm px-3 py-4 text-caption text-ink-500">{__t('正在确认登录身份…')}</p>
+        )}
+        {(tab === 'manage' || manageMounted) && isOwner && (
+          <div hidden={tab !== 'manage'}>
+            <ManagePanel onDataRefreshed={onRefresh} />
+          </div>
+        )}
       </div>
 
       {/* 新闻详情抽屉 */}

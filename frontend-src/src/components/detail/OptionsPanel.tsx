@@ -133,8 +133,8 @@ function AiOptionInsight({
             disabled={!hasEvidence}
             title={
               hasEvidence
-                ? t('使用当前期权链的 {n} 条异动记录', { n: evidence.length })
-                : t('当前期权链暂无符合条件的异动')
+                ? t('使用当前期权报价的 {n} 条异动记录', { n: evidence.length })
+                : t('当前期权报价暂无符合条件的异动')
             }
             className="btn-ai"
           >
@@ -412,7 +412,7 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
           loginExpired
             ? t('登录失效')
             : rateLimited
-              ? t('期权链请求较频繁')
+              ? t('期权报价请求过于频繁')
               : preparing ? t('期权数据准备中') : t('期权数据暂不可用')
         }
         description={

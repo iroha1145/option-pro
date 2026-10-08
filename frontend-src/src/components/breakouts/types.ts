@@ -80,7 +80,7 @@ export const LIFECYCLE_CHIP_CLASS: Record<LifecycleTone, string> = {
 
 /* ---------------- 各项评分 ---------------- */
 export const SCORE_DEFS = [
-  { key: 'intrinsic_strength_score', label: t('内在强度') },
+  { key: 'intrinsic_strength_score', label: t('个股评分') },
   { key: 'base_quality_score', label: t('基底质量') },
   { key: 'breakout_confirmation_score', label: t('突破确认') },
   { key: 'liquidity_quality_score', label: t('流动性') },

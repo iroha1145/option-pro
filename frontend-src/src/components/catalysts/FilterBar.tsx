@@ -173,7 +173,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
           type="button"
           onClick={() => setMoreOpen((open) => !open)}
           aria-expanded={moreOpen}
-          aria-controls={morePanelId}
+          aria-controls={moreOpen ? morePanelId : undefined}
           className={cn(
             'disclosure-trigger flex items-center gap-2 rounded-md border px-3 py-1.5 text-caption font-medium shadow-btn transition-colors duration-fast',
             moreSummary.length > 0 ? 'border-brand-400 bg-brand-50 text-brand-700' : 'border-line bg-card text-ink-600',

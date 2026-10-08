@@ -195,7 +195,7 @@ export default function FactorDetails({
   if (!modules.length) {
     return (
       <p className="card-surface p-5 text-body-s text-ink-500">
-        {t('暂无模块分数。数据接入后这里会显示七个模块。')}
+        {t('暂无类别分数。数据接入后这里会显示七个类别。')}
       </p>
     );
   }
@@ -215,7 +215,7 @@ export default function FactorDetails({
         return (
           <article
             key={module.moduleId}
-            aria-label={t('{name} 模块', { name: t(module.nameZh) })}
+            aria-label={t('{name} 类别', { name: t(module.nameZh) })}
           >
             <h3>
               <button
@@ -233,7 +233,7 @@ export default function FactorDetails({
             </h3>
             {!hasScore(module) && (
               <p className={cn('-mt-1 pb-3 pr-4 text-micro leading-relaxed text-ink-500', DETAIL_INSET)}>
-                {t('有效指标不足')} {module.minimumValidFactors ?? ''} {t('个门槛，本模块不出分（不按 50 补齐）。')}
+                {t('有效指标不足')} {module.minimumValidFactors ?? ''} {t('个门槛，本类别不出分（不按 50 补齐）。')}
               </p>
             )}
             <div

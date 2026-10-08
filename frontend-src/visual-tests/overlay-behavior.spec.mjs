@@ -126,7 +126,7 @@ test('drawing inspector shows styles only for a selected drawing and keeps file 
   await expect(workspace).toBeVisible();
   const colors = workspace.getByRole('group', { name: '颜色', exact: true });
   const files = workspace.getByRole('button', { name: '绘图文件', exact: true });
-  const fileActions = ['导出绘图', '导入绘图', '导入本机绘图', '清空手绘'];
+  const fileActions = ['导出绘图', '导入绘图文件', '导入本机绘图', '清空手绘'];
 
   // 没有任何手绘图形：只有列表空态，没有样式区；文件操作收在「绘图文件」里。
   await expect(workspace.getByText('当前没有手绘图形', { exact: true })).toBeVisible();

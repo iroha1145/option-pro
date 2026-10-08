@@ -274,7 +274,7 @@ export default function DrawingInspector({
               {hasRejectedImport && onExportRejected ? (
                 <button type="button" onClick={onExportRejected} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导出未保存的导入文件')}</button>
               ) : null}
-              <button type="button" onClick={() => fileRef.current?.click()} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导入绘图')}</button>
+              <button type="button" onClick={() => fileRef.current?.click()} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导入绘图文件')}</button>
               <button type="button" onClick={onImportLocal} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导入本机绘图')}</button>
               <button type="button" onClick={onClear} className="rounded-xs border border-danger-600/40 px-2 py-1 text-micro text-danger-600">{t('清空手绘')}</button>
             </div>

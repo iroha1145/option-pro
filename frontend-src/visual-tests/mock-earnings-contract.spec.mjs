@@ -24,7 +24,7 @@ test('real mock calendar keeps one report per company while retaining expansion 
   await expect.poll(() => visibleRows.count()).toBeGreaterThan(24);
 
   await page.getByRole('tab', { name: '月历', exact: true }).click();
-  const calendar = page.getByRole('region', { name: '月历', exact: true });
+  const calendar = page.getByRole('region', { name: '财报月历', exact: true });
   await expect(calendar.getByText('+1', { exact: true }).first()).toBeVisible();
   await calendar.getByRole('button', { name: '上个月', exact: true }).click();
   await expect(calendar.getByRole('button', { name: /^NVDA .*财报/ })).toHaveCount(0);

@@ -87,7 +87,7 @@ export const EOD_DIAGNOSTICS: Dict = {
   '全部候选名次（筛选前）': ['All asset watch rank (before display filters)', '全資産の観察順位（表示フィルター前）'],
   '同类观察名次（筛选前）': ['Same type watch rank (before display filters)', '同種別の観察順位（表示フィルター前）'],
   '综合名次（筛选前）': ['Composite rank (before display filters)', '総合順位（表示フィルター前）'],
-  '数据截止交易日': ['Data through session', 'データの最終取引日'],
+  '数据截至交易日': ['Data through session', 'データの最終取引日'],
   '结果保存时间': ['Snapshot saved', 'スナップショット保存時刻'],
   '计算版本': ['Compute version', '計算バージョン'],
   '特征版本': ['Feature version', '特徴量バージョン'],

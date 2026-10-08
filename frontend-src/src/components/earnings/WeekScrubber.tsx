@@ -69,7 +69,7 @@ export default function WeekScrubber({
   }, [flashing]);
 
   return (
-    <section className="card-surface overflow-hidden" aria-label={__t("周历")}>
+    <section className="card-surface overflow-hidden" aria-label={__t("财报周历")}>
       {/* 周切换条：触屏按钮 44px 不收缩，与日期至少留 8px；日期与「美东 ET」居中成组，放不下就各占一行。
           320 宽两侧内边距收到 8px，否则按钮之间只剩 166px，日期区间（162px）放不下。 */}
       <div className="flex h-11 items-center justify-between gap-2 border-b border-line px-4 max-[359px]:px-2 [@media(pointer:coarse)]:h-14">

@@ -4,9 +4,9 @@
  * 移动端折叠为 48px：Logo + ⌘K + 显示设置 + 登录/退出。
  */
 import { useLayoutEffect, useRef, useState } from 'react';
-import { Link, NavLink, useLocation, useNavigate } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { cn } from '@/lib/utils';
-import { NAV_GROUPS, NAV_PAGES, isNavGroupActive } from '@/lib/navigation';
+import { NAV_GROUPS, NAV_PAGES, isNavGroupActive, navAriaCurrent } from '@/lib/navigation';
 import { useNow } from '@/hooks/useNow';
 import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/hooks/useToast';
@@ -145,10 +145,12 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
             const active = isNavGroupActive(location.pathname, item);
             const intent = routeIntentHandlers(item.path);
             return (
-            <NavLink
+            /* 不用 NavLink：它只在自己的 to 命中时写 aria-current，组内其他子页（/breakouts、/cta…）
+               看着选中、读屏却不报「当前」。改由 navAriaCurrent 统一给 page / true。 */
+            <Link
               key={item.path}
               to={item.path}
-              end={item.path === '/'}
+              aria-current={navAriaCurrent(location.pathname, item)}
               data-active={active}
               {...intent}
               onPointerEnter={(event) => {
@@ -167,7 +169,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
               <span data-nav-label className="relative flex h-full items-center">
                 {item.label}
               </span>
-            </NavLink>
+            </Link>
             );
           })}
         </nav>
@@ -179,7 +181,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
             onClick={onOpenPalette}
             /* 一级入口收成 6 项后 xl 不再拥挤，文字搜索框从 md 起常显（此前 xl–2xl 只留图标）。 */
             className="touch-target hidden h-8 w-44 items-center gap-2 rounded-md border border-line bg-card-warm px-3 text-caption text-ink-400 transition-[border-color,box-shadow,color] duration-fast hover:border-line-strong hover:text-ink-500 focus-visible:border-brand-500 focus-visible:shadow-focus-ring md:flex 2xl:w-[220px]"
-            aria-label={t("打开命令面板")}
+            aria-label={t("搜索代码或功能")}
           >
             <Icon name="search" size={14} />
             <span className="flex-1 truncate text-left">{t('搜索代码或功能…')}</span>

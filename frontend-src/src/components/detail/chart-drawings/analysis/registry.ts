@@ -34,7 +34,7 @@ export const LAYERS: LayerDef[] = [
   { id: 'obv', group: 'pane', kind: 'obv', label: t('OBV') },
   { id: 'clv', group: 'pane', kind: 'clv', label: t('CLV') },
   { id: 'range_persistence', group: 'pane', kind: 'range', label: t('60日区间位置') },
-  { id: 'spy_rs', group: 'pane', kind: 'rs', label: t('相对强弱（SPY）') },
+  { id: 'spy_rs', group: 'pane', kind: 'rs', label: t('相对 SPY 强度') },
 ];
 
 export const GROUPS: { id: LayerGroup; label: string }[] = [

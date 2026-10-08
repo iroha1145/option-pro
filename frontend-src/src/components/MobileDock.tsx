@@ -20,20 +20,33 @@ import Icon, { type IconName } from '@/components/icons';
 import GlidePill from '@/components/shared/GlidePill';
 import { t } from '../i18n/core.ts';
 import { prefetchRouteOnIntent, routeIntentHandlers } from '../lib/prefetchRouteChunk.ts';
+import { NAV_GROUPS, NAV_PAGES, isNavGroupActive, navAriaCurrent, type NavGroup } from '../lib/navigation.ts';
 
-/* setLocale() 整页重载才会切语言，模块级常量在加载期求值一次即可，不需要每次渲染重算 */
-/* match：选股、市场两格在任一子页都亮（与顶栏 isNavGroupActive 同口径） */
-const DOCK_ITEMS: { label: string; path: string; icon: IconName; match: readonly string[] }[] = [
-  { label: t('首页'), path: '/', icon: 'candle', match: ['/'] },
-  { label: t('我的关注'), path: '/watchlist', icon: 'star-line', match: ['/watchlist'] },
-  { label: t('选股'), path: '/screener', icon: 'filter-funnel', match: ['/screener', '/breakouts'] },
-  { label: t('市场'), path: '/market', icon: 'wallet-gauge', match: ['/market', '/sectors', '/cta'] },
-];
+/* 与顶栏同一份 NAV_GROUPS：前四组放底栏，其余进「更多」（底栏五格上限）。分组成员不在这里另抄一份，
+   选股、市场两格在组内任一子页都亮，口径同顶栏的 isNavGroupActive。 */
+const DOCK_ICONS: Record<string, IconName> = {
+  '/': 'candle',
+  '/watchlist': 'star-line',
+  '/screener': 'filter-funnel',
+  '/market': 'wallet-gauge',
+  '/earnings': 'calendar-spark',
+  '/catalysts': 'bolt',
+};
+const DOCK_SLOTS = 4;
 
-const MORE_ITEMS: { label: string; path: string; icon: IconName }[] = [
-  { label: t('财报日历'), path: '/earnings', icon: 'calendar-spark' },
-  { label: t('新闻'), path: '/catalysts', icon: 'bolt' },
-];
+const DOCK_ITEMS: { label: string; path: string; icon: IconName; group: NavGroup }[] = NAV_GROUPS.slice(0, DOCK_SLOTS).map((group) => ({
+  label: group.label,
+  path: group.path,
+  icon: DOCK_ICONS[group.path] ?? 'dots-grid',
+  group,
+}));
+
+/* 「更多」里写页面名（财报日历、新闻），与页面标题一致 */
+const MORE_ITEMS: { label: string; path: string; icon: IconName }[] = NAV_GROUPS.slice(DOCK_SLOTS).map((group) => ({
+  label: NAV_PAGES.find((page) => page.path === group.path)?.label ?? group.label,
+  path: group.path,
+  icon: DOCK_ICONS[group.path] ?? 'dots-grid',
+}));
 
 export default function MobileDock() {
   const { pathname } = useLocation();
@@ -79,7 +92,7 @@ function MobileDockContent() {
   const renderItem = (item: (typeof DOCK_ITEMS)[number]) => {
     /* 高亮口径与顶栏共用 isNavPathActive 语义：根路径精确匹配（裸 startsWith('/')
        对任何路径都真，首页会永远亮着），其余按段边界（/cta 不得点亮 /catalysts）。 */
-    const active = item.match.some((path) => isNavPathActive(location.pathname, path));
+    const active = isNavGroupActive(location.pathname, item.group);
     return (
       <div key={item.path} className="relative flex flex-1">
         {active && (
@@ -89,7 +102,7 @@ function MobileDockContent() {
           to={item.path}
           className="relative z-10 flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1 transition-transform duration-fast active:scale-[0.96]"
           aria-label={item.label}
-          aria-current={active ? 'page' : undefined}
+          aria-current={navAriaCurrent(location.pathname, item.group)}
           {...routeIntentHandlers(item.path)}
         >
           <Icon name={item.icon} size={19} className={active ? 'text-brand-600' : 'text-ink-400'} />

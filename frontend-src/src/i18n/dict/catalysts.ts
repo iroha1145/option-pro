@@ -126,7 +126,6 @@ export const CATALYSTS: Dict = {
   '定时分析': ['Scheduled analysis', '定時分析'],
   '收盘技术（受限）': ['EOD technical (limited)', '終値テクニカル（制限）'],
   '原雷达排序': ['Original radar sort', '従来のレーダー順'],
-  '日线量价条件优先（试用）': ['Daily volume-price first (trial)', '日足の値嵩条件を優先（試用）'],
   '保存中…': ['Saving…', '保存中…'],
   '保存设置': ['Save settings', '設定を保存'],
   '正在读取…': ['Loading…', '読み込み中…'],
@@ -247,6 +246,7 @@ export const CATALYSTS: Dict = {
 
   /* ---------------- src/pages/Catalysts.tsx ---------------- */
   '股票影响': ['Stock impact', '銘柄インパクト'],
+  '逐股评估': ["Stock-by-stock assessment", "銘柄別の評価"],
   '数据来源': ['Sources', 'データソース'],
   '刷新本页数据': ["Refresh this page's data", 'このページのデータを更新'],
   '刷新': ['Refresh', '更新'],
@@ -350,6 +350,7 @@ export const CATALYSTS: Dict = {
   '更新数据': ['Update data', 'データを更新'],
   '手动分析': ['Allow manual analysis', '手動分析を許可'],
   '雷达排序': ['Default radar sort', 'レーダーのデフォルト並び替え'],
+  '雷达默认排序': ['Default radar sort', 'レーダーのデフォルト並び替え'],
   '恢复上一版': ['Roll back to previous version', '前のバージョンに戻す'],
   '影响机制 ·': ['Impact mechanism ·', '影響メカニズム ·'],
   '暂时读不到分析进度': ['Job status is temporarily unavailable', 'ジョブ状態を一時的に取得できません'],
@@ -361,6 +362,7 @@ export const CATALYSTS: Dict = {
   '暂时读不到分析进度，正在重试': ['Job status is temporarily unavailable. Retrying…', 'ジョブ状態を一時的に取得できません。再試行中…'],
   '需要重新分析，请点击分析区的按钮': ['To analyze it again, use the button in the analysis section.', '再分析するには、分析エリアのボタンを使用してください。'],
   '消息详情': ['News detail', 'ニュース詳細'],
+  '新闻详情': ['News detail', 'ニュース詳細'],
   '处报道': ['sources reporting', '件のソースが報道'],
   '查看原文': ['Original', '原文'],
   '原文标题：': ['Original headline: ', '原文の見出し：'],

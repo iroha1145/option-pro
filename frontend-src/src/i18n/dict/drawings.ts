@@ -47,6 +47,7 @@ export const DRAWINGS: Dict = {
   ],
   '导出绘图': ['Export drawings', '描画を書き出す'],
   '导入绘图': ['Import drawings', '描画を読み込む'],
+  '导入绘图文件': ['Import drawings', '描画を読み込む'],
   '导入本机绘图': ['Import local drawings', 'この端末の描画を取り込む'],
   '导入失败：数据无效': ['Import failed: invalid data', '取り込み失敗：データが無効です'],
   '图形样式': ['Drawing style', '図形のスタイル'],

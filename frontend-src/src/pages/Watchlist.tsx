@@ -794,7 +794,7 @@ export default function Watchlist() {
 
           {err && items.length > 0 && (
             <p className="mt-3 flex flex-wrap items-center gap-2 text-caption text-ink-500" role="status">
-              <SoftBadge tone="warn" className="whitespace-normal">{t('行情暂时读取失败，关注名单已保留。')}</SoftBadge>
+              <SoftBadge tone="warn" className="whitespace-normal">{t('行情暂时读取失败，关注列表已保留。')}</SoftBadge>
               <button className="control-button" disabled={wl.refreshing} onClick={() => wl.refresh({ force: true })}>{t('重试')}</button>
             </p>
           )}

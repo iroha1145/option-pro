@@ -178,7 +178,7 @@ export default function TriggerLadder({ row }: { row: CtaInstrumentEstimate }) {
                   </p>
                 )}
                 <p className="mt-0.5 text-micro text-ink-500 tnum">
-                  {t('仓位变化 Δ{v}', { v: signed(zone.est_position_change) })}
+                  {t('估算仓位变化 Δ{v}', { v: signed(zone.est_position_change) })}
                   {' · '}
                   {t('趋势 {a} · 波动率 {b}', { a: signed(zone.trend_change), b: signed(zone.vol_change) })}
                 </p>

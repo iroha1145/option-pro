@@ -71,7 +71,7 @@ for (const width of [390, 1440]) {
       await page.goto('/catalysts');
       await expect(page.getByText('数据与分析说明', { exact: true })).toHaveCount(0);
       const focus = page.getByRole('region', { name: '热点追踪', exact: true });
-      await expect(focus.getByRole('heading', { name: '股票影响', exact: true })).toBeVisible();
+      await expect(focus.getByRole('heading', { name: '逐股评估', exact: true })).toBeVisible();
       await expect(focus).toContainText('依据不足');
       await noPageOverflow(page);
       await capture(page, `catalyst-focus-${width}`, focus);
@@ -193,6 +193,27 @@ for (const width of [390, 1440]) {
       await expect(status).toContainText('已确认');
       await expect.poll(() => activeSignalCount(page)).toBeLessThanOrEqual(baseline);
       const confirmedCount = await activeSignalCount(page);
+
+      // 键盘也能用：焦点在下拉上按方向键打开，方向键挪到「保持中」回车选中；再打开按 Esc 关闭，焦点回到下拉。
+      await status.focus();
+      await page.keyboard.press('ArrowDown');
+      await expect(page.getByRole('listbox')).toBeVisible();
+      await expect(page.getByRole('option', { name: '已确认', exact: true })).toBeFocused();
+      await page.keyboard.press('ArrowDown');
+      await expect(page.getByRole('option', { name: '保持中', exact: true })).toBeFocused();
+      await page.keyboard.press('Enter');
+      await expect(status).toContainText('保持中');
+      await expect(status).toBeFocused();
+      await page.keyboard.press('ArrowDown');
+      await expect(page.getByRole('listbox')).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('listbox')).toHaveCount(0);
+      await expect(status).toBeFocused();
+      await expect(status).toContainText('保持中');
+      // 回到「已确认」，后面的评分筛选沿用原来的基准
+      await status.click();
+      await page.getByRole('option', { name: '已确认', exact: true }).click();
+      await expect(status).toContainText('已确认');
 
       // 最低评分与排序收进「更多筛选」；折叠时摘要仍写明范围、状态、最低评分和排序。
       const more = toolbar.getByTestId('breakout-more-filters');

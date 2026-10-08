@@ -178,10 +178,10 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
           <AnalysisSources sources={cycle.evidenceSources} />
         </div>
         {cycle.assessments.length > 0 && <section
-          aria-label={t('股票影响')}
+          aria-label={t('逐股评估')}
           className={cn('min-w-0 border-t border-line pt-4', !compact && 'lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0')}
         >
-          <h4 className="mb-3 text-caption font-medium text-ink-700">{t('股票影响')}</h4>
+          <h4 className="mb-3 text-caption font-medium text-ink-700">{t('逐股评估')}</h4>
           <div className="divide-y divide-line">
             {cycle.assessments.map((a, i) => {
               const d = DIR_ARROW[a.direction];

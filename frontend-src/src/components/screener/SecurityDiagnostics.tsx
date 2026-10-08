@@ -312,7 +312,7 @@ export default function SecurityDiagnostics({ profile, timeframe, publicationKey
             {display.in_composite === true && display.composite_rank != null ? ` · ${t('综合名次（筛选前）')} ${display.composite_rank}` : ''}
           </p>}
           <div className="mt-2 grid gap-1 text-micro text-ink-500 sm:grid-cols-2">
-            <span>{t('数据截止交易日')}{t('：')}{textValue(shown.served_session ?? shown.score_data_through)}</span>
+            <span>{t('数据截至交易日')}{t('：')}{textValue(shown.served_session ?? shown.score_data_through)}</span>
             <span>{t('结果保存时间')}{t('：')}{textValue(shown.snapshot_saved_at)}</span>
             <span>{t('计算版本')}{t('：')}{textValue(shown.compute_version)}</span>
             <span>{t('特征版本')}{t('：')}{textValue(shown.feature_version)}</span>

@@ -270,7 +270,7 @@ test.describe("macro conditions desktop", () => {
     ).toBeVisible();
     // 七个模块行（每行一个 article）
     for (const module of MODULES) {
-      await expect(page.getByRole("article", { name: `${module.zh} 模块`, exact: true })).toBeVisible();
+      await expect(page.getByRole("article", { name: `${module.zh} 类别`, exact: true })).toBeVisible();
     }
     // 评分定义收纳在现有帮助中，仍须说明历史位置与预测的区别。
     const scoreHelp = page.getByRole("button", { name: "宏观环境综合分（0–100 分）：查看说明", exact: true }).first();
@@ -280,11 +280,11 @@ test.describe("macro conditions desktop", () => {
     await expect(scoreExplanation).toContainText("不代表市场一定上涨");
     await page.keyboard.press("Escape");
     // 驱动因素两张卡
-    await expect(page.getByRole("region", { name: "7 日分数改善最多", exact: true })).toBeVisible();
-    await expect(page.getByRole("region", { name: "7 日分数恶化最多", exact: true })).toBeVisible();
-    // 访客看不到 Owner 刷新按钮
-    await expect(page.getByRole("button", { name: /刷新宏观数据/ })).toHaveCount(0);
-    await expect(page.getByText("登录后可手动刷新")).toBeVisible();
+    await expect(page.getByRole("region", { name: "7 日评分上升最多", exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "7 日评分下降最多", exact: true })).toBeVisible();
+    // 访客看不到 Owner 的「更新数据」按钮（2026-10-08 起按钮叫「更新数据」，旧断言查旧名会永远成立）
+    await expect(page.getByRole("region", { name: "宏观环境", exact: true }).getByRole("button", { name: "更新数据", exact: true })).toHaveCount(0);
+    await expect(page.getByText("登录后可手动更新")).toBeVisible();
     await expectNoHorizontalOverflow(page);
     await shot(page, "macro-active-1440-light");
   });
@@ -312,7 +312,7 @@ test.describe("macro conditions desktop", () => {
   test("factor details expand into a table with units and formula copy", async ({ page }) => {
     await stubApi(page, { conditions: conditions(), history: history() });
     await openMarket(page);
-    const accordion = page.getByLabel("因子详情", { exact: true });
+    const accordion = page.getByLabel("指标详情", { exact: true });
     const trigger = accordion.locator("h3 > button").filter({ hasText: "融资" });
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
     await trigger.click();
@@ -410,12 +410,12 @@ test.describe("macro conditions degraded states", () => {
       history: history(),
     });
     await openMarket(page);
-    await expect(page.getByText("部分数据缺失")).toBeVisible();
+    await expect(page.getByText("数据不全")).toBeVisible();
     await expect(page.getByText(/数据更新提示：/)).toBeVisible();
     // 图表未被清空，模块行仍在，缺分模块如实说明门槛
     await expect(page.getByRole("region", { name: "宏观环境历史", exact: true })).toBeVisible();
-    await expect(page.getByLabel("风险 模块")).toBeVisible();
-    await expect(page.getByText(/有效因子不足.*门槛，本模块不出分（不按 50 补齐）/)).toBeVisible();
+    await expect(page.getByLabel("风险 类别")).toBeVisible();
+    await expect(page.getByText(/有效指标不足.*门槛，本类别不出分（不按 50 补齐）/)).toBeVisible();
     await shot(page, "macro-degraded-1440");
   });
 
@@ -468,7 +468,7 @@ test.describe("macro conditions degraded states", () => {
       history: { status: "unavailable", points: [] },
     });
     await openMarket(page);
-    await expect(page.getByText("暂无正式综合分")).toBeVisible();
+    await expect(page.getByText("暂无综合分")).toBeVisible();
     await expect(
       page.getByText(/至少需要 5 类有效指标才能计算综合分/),
     ).toBeVisible();
@@ -508,12 +508,12 @@ for (const viewport of [
       await expect(section).toBeVisible();
       await expect(page.getByRole("region", { name: "宏观环境综合分", exact: true })).toBeVisible();
       for (const module of MODULES) {
-        await expect(page.getByRole("article", { name: `${module.zh} 模块`, exact: true })).toBeVisible();
+        await expect(page.getByRole("article", { name: `${module.zh} 类别`, exact: true })).toBeVisible();
       }
       await expectNoHorizontalOverflow(page);
       // 展开因子详情后仍然不允许横向滚动（320 用纵向卡片而非表格）
       await page
-        .getByLabel("因子详情", { exact: true })
+        .getByLabel("指标详情", { exact: true })
         .locator("h3 > button")
         .filter({ hasText: "流动性" })
         .click();
@@ -551,7 +551,7 @@ test.describe("macro conditions colour scheme and motion", () => {
     await openMarket(page);
     await expect(page.getByRole("region", { name: "宏观环境综合分", exact: true })).toBeVisible();
     for (const module of MODULES) {
-      await expect(page.getByRole("article", { name: `${module.zh} 模块`, exact: true })).toBeVisible();
+      await expect(page.getByRole("article", { name: `${module.zh} 类别`, exact: true })).toBeVisible();
     }
     await expectNoHorizontalOverflow(page);
     await shot(page, "macro-active-1440-dark-preference");

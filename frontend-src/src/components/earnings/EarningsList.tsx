@@ -181,7 +181,7 @@ function ImpactAction({ row, onSelect }: { row: EarningsRow; onSelect: () => voi
   // 就写「重分析中」，一条失败或被预算挡下的最终任务会让这一行永远显示在跑。
   const finalizing = exBool(row, 'finalizationInProgress') === true;
   /* 这一列只有 96px：标签必须短且单行，四个汉字会折行把 h-7 撑破。
-     列头已经写着「AI 影响」，按钮不必再重复一遍，状态交给配色区分。 */
+     列头已经写着「财报影响」，按钮不必再重复一遍，状态交给配色区分。 */
   const [label, title] = locked
     ? [t('最终'), t('查看最终分析')]
     : finalizing
@@ -190,7 +190,7 @@ function ImpactAction({ row, onSelect }: { row: EarningsRow; onSelect: () => voi
         ? [t('查看'), t('查看财报影响分析')]
         : ready === false
           ? [t('分析'), t('生成财报分析')]
-          : [t('AI 影响'), t('财报影响分析')];
+          : [t('查看'), t('查看财报影响分析')];
   return (
     <button
       onClick={(e) => {
@@ -350,7 +350,7 @@ export default function EarningsList({
         <span className="eyebrow hidden 2xl:block">{t('营收预期')}</span>
         <span className="eyebrow hidden 2xl:block">{t('市值')}</span>
         <span className="eyebrow">{t('预期波动')}</span>
-        <span className="eyebrow text-right">{t('AI 影响')}</span>
+        <span className="eyebrow text-right">{t('财报影响')}</span>
       </div>
 
       {groups.map((g) => {

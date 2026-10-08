@@ -1122,7 +1122,11 @@ test('管理设置是所有者的栏目：?tab=manage 对所有者直接打开�
   visitor.runner.unmount();
 
   const pending = pageHarness({ search: 'tab=manage', accessLoading: true });
-  assert.deepEqual(panelTypes(pending.read()), ['ManagePanel'], '身份还在确认时先不弹走，所有者刷新页面不会掉回列表');
+  const pendingTree = pending.read();
+  // 身份还在确认时先不弹走（所有者刷新页面不会掉回列表），也不留一片空白：给一句「正在确认登录身份…」
+  assert.deepEqual(panelTypes(pendingTree), [], '确认前不挂面板，也不落回新闻列表');
+  assert.equal(findNode(pendingTree, (node) => node.type === 'MoreMenu').props.current, 'manage');
+  assert.ok(findNode(pendingTree, (node) => node.type === 'p' && JSON.stringify(node.props?.children ?? '').includes('正在确认登录身份')));
   pending.runner.unmount();
 });
 

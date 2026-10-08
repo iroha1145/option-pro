@@ -172,7 +172,7 @@ export function ScanButton({
         {scanning ? (
           <>
             <Spinner size={18} tone="on-accent" />
-            <span className="text-body-s font-medium">{__t('扫描中，等待后台结果')}</span>
+            <span className="text-body-s font-medium">{__t('扫描中 · 等待后台结果')}</span>
           </>
         ) : (
           <>
@@ -318,7 +318,7 @@ export default function FilterWorkbench({
         <summary className="disclosure-trigger flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-2 rounded-lg py-1 text-caption text-ink-500 outline-none transition-colors duration-fast hover:text-ink-800 focus-visible:ring-2 focus-visible:ring-brand-400/40 [&::-webkit-details-marker]:hidden">
           <span className="inline-flex shrink-0 items-center gap-2 font-medium text-ink-700">
             <Icon name="filter-funnel" size={14} className="text-ink-400" />
-            {__t('更多条件')}
+            {__t('更多筛选')}
             <Icon name="chevron-down" size={13} className="text-ink-400 transition-transform group-open/filters:rotate-180" />
           </span>
           <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-micro text-ink-500" data-testid="screener-advanced-summary">
@@ -332,7 +332,7 @@ export default function FilterWorkbench({
           <div className="min-w-0">
             <FieldLabel>{__t('预设策略')}</FieldLabel>
             {presetsFailed ? (
-              <p className="flex h-8 items-center text-caption text-ink-400">{__t('预设暂不可用，使用默认分档')}</p>
+              <p className="flex h-8 items-center text-caption text-ink-400">{__t('预设暂不可用 · 使用默认分档')}</p>
             ) : presets === null ? (
               <div className="flex gap-2" aria-hidden="true">
                 {Array.from({ length: 3 }, (_, i) => (

@@ -107,7 +107,7 @@ export function FactorCard({ factor }: { factor: MacroFactor }) {
           </dd>
         </div>
         <div className="min-w-0">
-          <dt className="text-micro text-ink-400">{t('7 日分数变化')}</dt>
+          <dt className="text-micro text-ink-400">{t('7 日评分变化')}</dt>
           <dd>
             <ChangeBadge value={factor.scoreChange7d} size="sm" format="points" />
           </dd>

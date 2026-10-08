@@ -51,7 +51,7 @@ export default class AppErrorBoundary extends Component<Props, State> {
       >
         <p style={{ fontSize: '18px', fontWeight: 600 }}>{t('页面无法打开')}</p>
         <p style={{ marginTop: '.25rem', fontSize: '12px', color: 'var(--ink-600, #5b6472)' }}>
-          {t('请先重新加载。若仍无法打开，可清除此设备的网站数据；本地绘图、未同步修改和显示偏好将被删除。')}
+          {t('请先重新加载。若仍无法打开，可清除本机的网站数据；本机绘图、未同步修改和显示偏好将被删除。')}
         </p>
         <div
           style={{

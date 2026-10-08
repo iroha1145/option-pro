@@ -114,7 +114,7 @@ export default function MonthCalendar({
   };
 
   return (
-    <section className="card-surface overflow-hidden" aria-label={t("月历")}>
+    <section className="card-surface overflow-hidden" aria-label={t("财报月历")}>
       {/* 头部：‹ › + Serif 月标题 + 今天 */}
       <div className="flex h-12 items-center justify-between border-b border-line px-4">
         <button

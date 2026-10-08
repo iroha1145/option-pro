@@ -539,7 +539,7 @@ function BigScoreBars({ ev }: { ev: BreakoutEventFull }) {
    五段 0.0（审计 2.1.14）——那不是「推导」，是错误口径的编造。 */
 const CONTRIB_DEFS = [
   { key: 'breakout_quality', label: t('突破质量'), cls: 'bg-brand-600' },
-  { key: 'intrinsic_strength', label: t('内在强度'), cls: 'bg-brand-400' },
+  { key: 'intrinsic_strength', label: t('个股评分'), cls: 'bg-brand-400' },
   { key: 'market_fit', label: t('市场契合'), cls: 'bg-ai-600' },
   { key: 'sector_fit', label: t('行业契合'), cls: 'bg-ink-500' },
   { key: 'data_confidence', label: t('数据置信'), cls: 'bg-ink-300' },

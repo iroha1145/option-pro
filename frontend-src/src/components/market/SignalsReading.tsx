@@ -176,7 +176,7 @@ export default function SignalsReading({
         <Link
           to="/breakouts"
           {...routeIntentHandlers('/breakouts')}
-          className="group inline-flex min-h-8 items-center gap-1 text-caption font-medium text-brand-600 hover:text-brand-700"
+          className="touch-target group inline-flex min-h-8 items-center gap-1 text-caption font-medium text-brand-600 hover:text-brand-700"
         >
           {t('查看突破雷达')}
           <Icon

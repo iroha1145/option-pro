@@ -1051,8 +1051,8 @@ export default function Screener() {
               )}
               <Segmented<'observation' | 'composite'>
                 options={[
-                  { value: 'observation', label: __t('技术观察') },
-                  { value: 'composite', label: __t('合格综合') },
+                  { value: 'observation', label: __t('观察候选') },
+                  { value: 'composite', label: __t('合格候选') },
                 ]}
                 value={draft.resultSet}
                 onChange={(resultSet) => {
@@ -1218,7 +1218,7 @@ export default function Screener() {
                       )}
                       {applied.sectors.length > 0 && <SuggestButton label={__t("清除行业")} onClick={() => patchApplied({ sectors: [] })} />}
                       {(applied.priceMin != null || applied.priceMax != null) && (
-                        <SuggestButton label={__t("清除价格")} onClick={() => patchApplied({ priceMin: null, priceMax: null })} />
+                        <SuggestButton label={__t("清除价格范围")} onClick={() => patchApplied({ priceMin: null, priceMax: null })} />
                       )}
                       {appliedDollarVolumeFilterSupported && applied.minDollarVol > 0 && <SuggestButton label={__t("清除成交额限制")} onClick={() => patchApplied({ minDollarVol: 0 })} />}
                       <SuggestButton label={__t("重置条件")} onClick={resetAllFilters} />

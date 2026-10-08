@@ -162,12 +162,12 @@ export default function ManualStockPull({
         className={quiet ? 'control-button' : 'btn-primary min-h-11 w-full whitespace-normal sm:w-auto'}
       >
         <BusyIcon busy={running} size={13} tone={quiet ? 'brand' : 'on-accent'} />
-        {running ? t('正在获取行情数据') : result ? t('重新获取') : t('更新行情')}
+        {running ? t('正在更新行情') : result ? t('再次更新') : t('更新行情')}
       </button>
 
       {!running && !result && !error && (
         <p className="text-micro text-ink-500">
-          {isIndexSymbol(ticker) ? t('获取该指数的最新价格、日线与技术指标') : t('获取该股票的最新价格、日线与技术指标')}
+          {isIndexSymbol(ticker) ? t('更新该指数的最新价格、日线与技术指标') : t('更新该股票的最新价格、日线与技术指标')}
         </p>
       )}
 

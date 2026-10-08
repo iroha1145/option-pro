@@ -193,7 +193,7 @@ export default function MacroHistoryChart({
     <section className="card-surface flex h-full flex-col p-5" aria-label={t("宏观环境历史")}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <h3 className="text-h3 text-ink-900">
-          {t('评分历史')}
+          {t('综合分历史')}
           <InfoHint
             hint={SCORE_HINTS_MACRO.macroHistoryBasis}
             side="bottom"
@@ -279,7 +279,7 @@ export default function MacroHistoryChart({
 
       {modules.length > 0 && (
         <SelectionViewport>
-          <div className="mobile-selection-rail mt-3 flex flex-wrap gap-1.5" role="group" aria-label={t("叠加模块线")}>
+          <div className="mobile-selection-rail mt-3 flex flex-wrap gap-1.5" role="group" aria-label={t("叠加类别线")}>
             {modules.map((module) => {
               const active = shownModules.includes(module.moduleId);
               return (

@@ -139,7 +139,10 @@ test('Navbar 与 MobileDock 用边界匹配，文字高亮不跟 NavLink isActiv
   // 一级入口按组高亮：选股、市场两组看任一子页，组内仍是 isNavPathActive 的段边界匹配。
   assert.match(nav, /isNavGroupActive\(location\.pathname, item\)/);
   assert.match(codeOf(await source('lib/navigation.ts')), /isNavPathActive\(pathname, page\.path\)/);
-  assert.match(nav, /end=\{item\.path === '\/'\}/);
+  // 一级入口自己写 aria-current（NavLink 只在自己的 to 命中时才写，组内其他子页读屏不报「当前」）
+  assert.doesNotMatch(nav, /<NavLink/);
+  assert.match(nav, /aria-current=\{navAriaCurrent\(location\.pathname, item\)\}/);
+  assert.match(dock, /aria-current=\{navAriaCurrent\(location\.pathname, item\.group\)\}/);
   assert.doesNotMatch(nav, /location\.pathname\.startsWith/);
   assert.doesNotMatch(nav, /\(\{ isActive \}\)/);
   assert.match(dock, /isNavPathActive\(location\.pathname/);

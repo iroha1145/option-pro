@@ -19,7 +19,7 @@ export function supportsDollarVolumeFilter(input: {
 }
 
 export function eodEmptyEligibleLabel(reason?: string | null): string {
-  if (reason === 'consensus_insufficient') return t('合格综合为空：家族共识不足');
+  if (reason === 'consensus_insufficient') return t('合格候选为空：家族共识不足');
   if (reason === 'data_qualification_unverified') return t('合格综合为空：数据资格未核实');
   if (reason === 'technical_threshold') return t('合格综合为空：技术门槛未达到');
   return t('合格综合为空：没有完整候选');

@@ -162,11 +162,13 @@ test('research pages stay usable in dark mode on desktop and phone', async ({ pa
       // Real-backend runs share a request bucket. Initial identity confirmation
       // may honor up to 60s of Retry-After before the page can safely mount.
       await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible({ timeout: 75_000 });
-      // 页头是「显示设置」菜单，登录页是独立的外观开关
-      await expect(page.getByRole('button', { name: /外观|显示设置/ }).first()).toBeVisible();
+      // 页头是「显示设置」菜单，登录页是独立的外观开关：按页面分别断言，不用宽松的正则
+      const trigger = route === '/login'
+        ? page.getByRole('button', { name: '切换外观', exact: true })
+        : page.getByRole('banner').getByRole('button', { name: '显示设置', exact: true });
+      await expect(trigger).toBeVisible();
       await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
 
-      const trigger = page.getByRole('button', { name: /外观|显示设置/ }).first();
       await expect.poll(() => trigger.evaluate((el) => getComputedStyle(el).boxShadow)).not.toMatch(/255,\s*255,\s*255/);
 
       const focusCandidate = page.locator('[class*="focus-visible:ring-offset-"]:not(:disabled)').first();

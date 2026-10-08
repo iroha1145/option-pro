@@ -176,7 +176,7 @@ test('管理设置打开即展开：没有折叠开关，三个分区与按钮�
   await settle();
   const tree = h.read();
   const section = findAll(tree, (node) => node.type === 'section')[0];
-  assert.equal(section.props['aria-label'], '消息管理');
+  assert.equal(section.props['aria-label'], '管理设置');
   const text = textOf(tree);
   for (const label of ['管理设置', '更新数据', '后台任务', '运行设置']) assert.match(text, new RegExp(label));
   assert.equal(findAll(tree, (node) => node.props['aria-expanded'] !== undefined).length, 0, '不再有展开/收起的开关');

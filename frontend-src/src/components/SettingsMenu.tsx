@@ -27,8 +27,9 @@ const COLOR_OPTIONS: { value: ColorMode; label: string }[] = [
   { value: 'asian', label: t('红涨绿跌') },
 ];
 
+/* touch-target：手机上原来在「更多」抽屉里的是 44px 高的分段控件，挪进菜单后不能变矮 */
 const ITEM_CLASS =
-  'flex w-full items-center gap-2 rounded-xs px-2 py-1.5 text-left text-body-s transition-colors duration-fast focus-visible:bg-paper-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600';
+  'touch-target flex w-full items-center gap-2 rounded-xs px-2 py-1.5 text-left text-body-s transition-colors duration-fast focus-visible:bg-paper-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600';
 
 export default function SettingsMenu({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
@@ -70,6 +71,11 @@ export default function SettingsMenu({ className }: { className?: string }) {
   }, [open]);
 
   const onMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    /* 选项不进 Tab 顺序（tabIndex=-1，方向键移动）；Tab 离开即关闭，菜单不会留在页面上 */
+    if (e.key === 'Tab') {
+      setOpen(false);
+      return;
+    }
     const items = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ?? []);
     if (!items.length) return;
     const idx = items.indexOf(document.activeElement as HTMLButtonElement);
@@ -134,10 +140,11 @@ export default function SettingsMenu({ className }: { className?: string }) {
                   type="button"
                   role="menuitemradio"
                   aria-checked={active}
-                  onClick={() => {
-                    setOpen(false);
+                  tabIndex={-1}
+                  /* 选当前语言只关菜单、把焦点还给按钮；换语言会整页重载 */
+                  onClick={() => choose(() => {
                     if (!active) setLocale(l.code);
-                  }}
+                  })}
                   className={cn(ITEM_CLASS, active ? 'text-brand-600' : 'text-ink-700 hover:bg-paper-2')}
                 >
                   <span className="w-5 shrink-0 tnum text-micro text-ink-400">{l.short}</span>
@@ -157,6 +164,7 @@ export default function SettingsMenu({ className }: { className?: string }) {
                   type="button"
                   role="menuitemradio"
                   aria-checked={active}
+                  tabIndex={-1}
                   onClick={() => choose(() => setThemePreference(option.value))}
                   className={cn(ITEM_CLASS, active ? 'text-brand-600' : 'text-ink-700 hover:bg-paper-2')}
                 >
@@ -177,6 +185,7 @@ export default function SettingsMenu({ className }: { className?: string }) {
                   type="button"
                   role="menuitemradio"
                   aria-checked={active}
+                  tabIndex={-1}
                   onClick={() => choose(() => setColorMode(option.value))}
                   className={cn(ITEM_CLASS, active ? 'text-brand-600' : 'text-ink-700 hover:bg-paper-2')}
                 >

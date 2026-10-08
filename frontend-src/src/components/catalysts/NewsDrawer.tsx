@@ -631,11 +631,11 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
         if (!confirm) onClose(); // 确认弹窗开启时 ESC/背板仅关弹窗
       }}
       width={640}
-      label={__t('消息详情')}
+      label={__t('新闻详情')}
       title={
         <span className="flex items-center gap-2">
           <Icon name="bolt" size={16} className="text-brand-600" />
-          <span className="text-h3 text-ink-900">{__t('消息详情')}</span>
+          <span className="text-h3 text-ink-900">{__t('新闻详情')}</span>
         </span>
       }
     >

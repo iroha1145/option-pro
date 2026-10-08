@@ -292,7 +292,8 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
   );
 
   return (
-    <section aria-label={__t("消息管理")} className="card-surface overflow-hidden">
+    /* 无障碍名与可见标题、「更多」菜单项同名 */
+    <section aria-label={__t('管理设置')} className="card-surface overflow-hidden">
       <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
         <h2 className="flex items-center gap-2.5 text-body-s font-medium text-ink-800">
           <Icon name="shield" size={15} className="text-brand-600" />
@@ -344,13 +345,13 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
               <Toggle label={__t("手动分析")} value={draft.manual} onChange={(v) => setDraft({ ...draft, manual: v })} />
               <Toggle label={__t("定时分析")} value={draft.scheduled} onChange={(v) => setDraft({ ...draft, scheduled: v })} />
               <div className="rounded-md border border-line bg-card-warm px-3 py-2">
-                <span className="mb-1.5 block text-caption text-ink-700">{__t('雷达排序')}</span>
+                <span className="mb-1.5 block text-caption text-ink-700">{__t('雷达默认排序')}</span>
                 <Segmented<'production' | 't1_daily_priority'>
-                  ariaLabel={__t('雷达排序')}
+                  ariaLabel={__t('雷达默认排序')}
                   scrollable
                   options={[
                     { value: 'production', label: __t('原雷达排序') },
-                    { value: 't1_daily_priority', label: __t('日线量价条件优先（试用）') },
+                    { value: 't1_daily_priority', label: __t('日线量价优先（试用）') },
                   ]}
                   value={draft.radarSortAlgorithm}
                   onChange={(radarSortAlgorithm) => setDraft({

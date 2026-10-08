@@ -103,7 +103,7 @@ export const LAYER_HINTS: Record<string, ScoreHint> = {
     body: t('当前收盘价在最近 60 日高低区间中的相对位置，0 是区间底、1 是区间顶。'),
   },
   spy_rs: {
-    title: t('相对强弱（SPY）'),
+    title: t('相对 SPY 强度'),
     body: t('比较该股与标普 500 指数基金（SPY）的表现；缺少同日收盘价时不显示。'),
   },
 };

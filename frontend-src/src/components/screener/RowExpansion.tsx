@@ -251,7 +251,7 @@ export default function RowExpansion({ row, layout = 'table', dollarVolume, sign
           <div className="mt-4 space-y-1.5 border-t border-line pt-3" data-testid="screener-eod-row-details">
             <p className="eyebrow">{t('技术详情')}</p>
             <p className="text-caption text-ink-600">
-              {row.observationOnly ? t('技术观察') : t('合格综合')}
+              {row.observationOnly ? t('观察候选') : t('合格候选')}
               {row.status ? ` · ${eodDetailLabel(row.status)}` : ''}
               {row.familyLabel ? ` · ${row.familyLabel}` : ''}
               {row.stockOrEtfTrack ? ` · ${eodDetailLabel(row.stockOrEtfTrack)}` : ''}
@@ -315,7 +315,7 @@ export default function RowExpansion({ row, layout = 'table', dollarVolume, sign
               <span className="skeleton-shimmer h-5 w-14 rounded-xs" />
             </div>
           ) : signals.state === 'error' ? (
-            <p><SoftBadge tone="warn" className="whitespace-normal">{t('信号读取失败，收起后重新展开可重试')}</SoftBadge></p>
+            <p><SoftBadge tone="warn" className="whitespace-normal">{t('信号读取失败 · 收起后重新展开可重试')}</SoftBadge></p>
           ) : signals.signals.length === 0 ? (
             <p className="text-caption text-ink-400">{t('暂无信号')}</p>
           ) : (

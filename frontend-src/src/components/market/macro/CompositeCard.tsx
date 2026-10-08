@@ -60,7 +60,7 @@ export default function CompositeCard({
       aria-label={t("宏观环境综合分")}
     >
       <div className="flex items-start justify-between gap-3">
-        <h3 className="text-h3 text-ink-900">{t('综合评分')}</h3>
+        <h3 className="text-h3 text-ink-900">{t('综合分')}</h3>
         <span className="flex items-center gap-1 text-micro text-ink-400">
           {t('历史分位')}
           <InfoHint hint={SCORE_HINTS_MACRO.macroComposite} side="bottom" align="end" size={11} />

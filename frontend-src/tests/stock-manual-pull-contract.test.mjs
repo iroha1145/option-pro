@@ -63,7 +63,7 @@ test('stock pull UI reports truthful three-resource progress and persistence', a
   assert.match(control, /正在更新基础行情、日线与技术信号 · 共 3 项/);
   assert.match(control, /state\.ticker === ticker/);
   assert.match(control, /latestTickerRef\.current !== requestedTicker/);
-  assert.match(control, /获取该股票的最新价格、日线与技术指标/);
+  assert.match(control, /更新该股票的最新价格、日线与技术指标/);
   assert.doesNotMatch(control, /Massive|yfinance|兜底/);
   assert.match(control, /cause\.retryAfter/);
   assert.equal(control.includes('if (!isOwner) return null'), false);
