@@ -105,7 +105,7 @@ SQLite 表 `account_chart_drawings` 在 `accounts.db`，WAL、外键、账户删
 
 前端只在 `barFingerprint` + `ticker` + `range` + `adjustment` + `dataThrough` 与当前图一致时渲染。指纹是每根分析 K 线 `timestamp|open|high|low|close|volume|ext|quote_only` 的 SHA-256（算法串 `sha256-bar-ohlcv-v1`，随包下发；对不上就不画）。**这道闸门是失败即全隐，所以镜像必须逐位对齐**：后端哈希的是 `clean_series` 之后的行（会丢掉非有限值与 OHLC 不自洽的坏行），六位小数用显式的「远离零」半进位而不是 Python 默认的银行家舍入，两侧各钉同一个字面摘要做跨语言回归。包里带 `barCount` / `firstBarDate` / `lastBarDate`，前端据此按同一窗口取样，并在失配时显示可见的诊断行，而不是整套图层无声消失（CI 在闭市跑，盘中静默熄灯是看不见的）。待同步绘图队列按 `主体+ticker+range+adjustment` 持久化在 `option-pro:chart-drawing-outbox:v1`，与手绘文档和图层设置分开。SPY RS 只在能按日期对齐 SPY 收盘时下发，否则省略空副图。Strength 快照不一致时只显示快照日期，不生成价格几何。未收盘末根不进日线指标与形态。保留 `series_break_at`：断裂之后的一致段才分析。每条自动形态保留自己的 `volumeConfirmation`；量价模块只增加自己的 overlay。摆动点 HH/HL/LH/LL 由相邻已确认高低点比较得出，不是整段结构一个标签。
 
-「算法与图层」菜单由 Layer Registry 生成（不是在 `KlineChart.tsx` 里为每个算法写死开关）。预设：极简 / 结构分析 / 突破交易 / 动量 / 量价 / 全部。极简最多 3 个自动形态、6 个文字标签。设置键 `option-pro:chart-layers:v1:{principal}`，与手绘 `option-pro:chart-drawings:v1:…` 分开；登录主体持久化，访客用 localStorage。RSI/MACD/OBV/CLV/60日区间位置/SPY RS 走独立副图（按 kind 画：RSI 0–100 + 30/70，MACD 三线+柱，CLV −1..1）；Strength 标量走侧栏。手绘永远叠在自动层之上。自动层淡色虚线；测试/突破可强调。移动端菜单是底部抽屉。面积图不画副图与均线。1 小时图没有 5 分钟数据时不发明 opening range。
+「图表设置」弹窗（2026-10-08 起图表工具栏只留这一个入口，原「算法与图层」「选择指标图层」两个入口合并）由 Layer Registry 生成（不是在 `KlineChart.tsx` 里为每个算法写死开关）。预设：极简 / 结构分析 / 突破观察 / 动量 / 量价 / 全部。极简最多 3 个自动形态、6 个文字标签。设置键 `option-pro:chart-layers:v1:{principal}`，与手绘 `option-pro:chart-drawings:v1:…` 分开；登录主体持久化，访客用 localStorage。RSI/MACD/OBV/CLV/60日区间位置/SPY RS 走独立副图（按 kind 画：RSI 0–100 + 30/70，MACD 三线+柱，CLV −1..1）；Strength 标量走侧栏。手绘永远叠在自动层之上。自动层淡色虚线；测试/突破可强调。移动端菜单是底部抽屉。面积图不画副图与均线。1 小时图没有 5 分钟数据时不发明 opening range。
 
 自动层不可编辑、独立开关、比手绘更淡更虚，且不覆盖现有技术点位开关。
 
