@@ -29,9 +29,16 @@ function codeOf(text) {
 
 test('显示数量在「更多条件」展开区里，折叠摘要仍写出返回上限', async () => {
   const workbench = codeOf(await source('components/screener/FilterWorkbench.tsx'));
-  const mainRow = workbench.slice(workbench.indexOf('<motion.div variants={row}'), workbench.indexOf('<details'));
+  /* indexOf 找不到会返回 -1，slice 随之切出空串或错位片段，后面的 doesNotMatch 就空过了：先卡住标记在不在。 */
+  const rowStart = workbench.indexOf('<motion.div variants={row}');
+  const detailsStart = workbench.indexOf('<details');
+  assert.ok(rowStart >= 0, '找不到主行起点 <motion.div variants={row}：标记改名后要同步本测试');
+  assert.ok(detailsStart >= 0, '找不到「更多条件」展开区 <details：标记改名后要同步本测试');
+  assert.ok(rowStart < detailsStart, '主行应在「更多条件」展开区之前');
+  const mainRow = workbench.slice(rowStart, detailsStart);
+  assert.match(mainRow, /<ScanButton/, '切到的确实是主行：扫描按钮在里面');
   assert.doesNotMatch(mainRow, /TOPN_OPTIONS|最多显示数量|显示数量/, '显示数量不能留在主行');
-  const advanced = workbench.slice(workbench.indexOf('<details'));
+  const advanced = workbench.slice(detailsStart);
   assert.match(advanced, /data-screener-field="top-n"/);
   assert.match(advanced, /ariaLabel=\{__t\("最多显示数量"\)\}/);
   assert.match(advanced, /options=\{TOPN_OPTIONS\}/);
@@ -61,8 +68,24 @@ test('突破雷达：状态收成一个下拉，最低评分与排序收进更�
   const page = codeOf(await source('pages/Breakouts.tsx'));
   assert.match(page, /<MenuSelect\s+ariaLabel=\{__t\('状态筛选'\)\}\s+value=\{statusFilter\}/);
   assert.doesNotMatch(page, /STATUS_CAPS\.map/, '七个状态按钮不再平铺');
-  assert.equal(page.match(/\{ value: '[A-Z]+', label: __t\(/g).length, 7, '七个状态选项一个不少');
-  const more = page.slice(page.indexOf('data-testid="breakout-more-filters"'));
+  /* 只数 STATUS_CAPS 声明块里的选项：整页里别处也有大写取值的选项，数整页会把它们一并算进来。 */
+  const capsStart = page.indexOf('const STATUS_CAPS');
+  assert.ok(capsStart >= 0, '找不到 STATUS_CAPS 声明：改名后要同步本测试');
+  const capsEnd = page.indexOf('];', capsStart);
+  assert.ok(capsEnd > capsStart, '找不到 STATUS_CAPS 声明的结尾 ];');
+  const statusValues = Array.from(
+    page.slice(capsStart, capsEnd).matchAll(/\{ value: '([A-Z]+)', label: __t\(/g),
+    (match) => match[1],
+  );
+  assert.equal(statusValues.length, 7, '七个状态选项一个不少');
+  assert.deepEqual(
+    [...statusValues].sort(),
+    ['ALL', 'CONFIRMED', 'FAILED', 'HOLDING', 'RETESTING', 'TRIGGERED', 'WATCHING'],
+    '七个取值各一个，不重不漏',
+  );
+  const moreStart = page.indexOf('data-testid="breakout-more-filters"');
+  assert.ok(moreStart >= 0, '找不到 data-testid="breakout-more-filters"：标记改名后要同步本测试');
+  const more = page.slice(moreStart);
   assert.match(more, /SCORE_CAPS\.map/);
   assert.match(more, /options=\{SORT_OPTIONS\}/);
   assert.match(page, /const filterSummary: \[string, string\]\[\] = \[/);

@@ -29,6 +29,9 @@ const panel = [
 ]
   .map((f) => readFileSync(join(src, f), 'utf8'))
   .join('\n');
+/* 去掉块注释与行注释：文件头里的说明文字不能让「界面文案」断言碰巧通过。 */
+const stripComments = (text) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+const scenarioChart = stripComments(readFileSync(join(src, 'components/cta/ScenarioChart.tsx'), 'utf8'));
 const ctaPage = readFileSync(join(src, 'pages/CtaTrend.tsx'), 'utf8');
 const marketPage = readFileSync(join(src, 'pages/Market.tsx'), 'utf8');
 const marketModule = readFileSync(join(src, 'api/modules/market.ts'), 'utf8');
@@ -147,10 +150,13 @@ test('快照只读：marketGet /market/cta，无直连供应商路径', () => {
   assert.match(marketModule, /marketGet\('\/market\/cta'/);
 });
 
-test('情景双曲线（完整敞口 vs 波动率冻结）都在图上', () => {
-  assert.match(panel, /完整敞口（含波动率调整）/);
-  assert.match(panel, /仅趋势（波动率冻结）/);
-  assert.match(panel, /trend_only/);
+test('情景双曲线（完整仓位 vs 波动率固定）都在图上', () => {
+  /* 图例两行是界面真正显示的文案，走 t() 取词典；匹配对象是去掉注释后的代码 */
+  assert.match(scenarioChart, /t\('完整仓位（含波动率调整）'\)/);
+  assert.match(scenarioChart, /t\('仅趋势（波动率固定）'\)/);
+  assert.match(scenarioChart, /curve\.trend_only/);
+  /* 旧图例文案只剩文件头注释里，代码里不得再出现 */
+  assert.doesNotMatch(scenarioChart, /完整敞口（含波动率调整）|仅趋势（波动率冻结）/);
 });
 
 test('120 日仓位历史已接入独立页（原面板未使用的 history 字段）', () => {

@@ -218,10 +218,61 @@ test('2026-10-08 第二版文案：新标题与新空态、错误态仍能判出
   assert.equal(classifyPageReady({ ...base, path: '/stock/AAPL', heading: 'AAPL', bodyText: '请求过于频繁' }), 'error');
   assert.equal(classifyPageReady({ ...base, path: '/earnings', heading: '财报日历', bodyText: '财报日历 未来 30 天暂无财报' }), 'empty');
   assert.equal(classifyPageReady({ ...base, path: '/cta', heading: 'CTA 趋势资金', bodyText: 'CTA 趋势资金 首次估算完成后自动显示' }), 'empty');
-  assert.equal(classifyPageReady({ ...base, path: '/this-page-is-not-a-route', heading: '无此页面', hasNotFound: true }), 'empty');
+  /* hasNotFound 必须由文档文本算出来：直接传 hasNotFound: true 会绕过 snapshotFromDocument 里的「无此页面」匹配。 */
+  const notFoundDoc = makeDocument({
+    heading: '无此页面',
+    extra: [node('p', {}, [], '没有找到 /nowhere 对应的页面。链接可能已失效或地址输入有误。')],
+  });
+  const notFound = snapshotFromDocument(notFoundDoc, '/this-page-is-not-a-route');
+  assert.equal(notFound.hasNotFound, true, '正文含「无此页面」');
+  assert.equal(classifyPageReady(notFound), 'empty');
+  assert.equal(
+    classifyDocument(makeDocument({ heading: '加载中' }), '/this-page-is-not-a-route'),
+    'pending',
+    '正文没有这句话就不能判成空态',
+  );
   const screener = node('main', {}, [node('section', { 'aria-label': '筛选结果' }, [], '没有符合条件的股票')]);
   const snap = snapshotFromDocument({ querySelector: (sel) => queryAll(screener, sel)[0] ?? null, querySelectorAll: (sel) => queryAll(screener, sel), body: screener }, '/screener');
   assert.equal(snap.hasScanEmpty, true);
+});
+
+test('第二版新增的识别分支：快照字段与终态都从假文档的文本推导，不手填', () => {
+  const paragraph = (text) => node('p', {}, [], text);
+  const section = (label, text = '', children = []) => node('section', { 'aria-label': label }, children, text);
+  const docOf = (heading, ...extra) => makeDocument({ heading, extra });
+
+  /* 条件选股：结果区的无障碍名是「筛选结果」，还没开始扫描时写「设置条件，开始扫描」 */
+  const idle = docOf('条件选股', section('筛选结果', '设置条件，开始扫描'));
+  assert.equal(snapshotFromDocument(idle, '/screener').hasScanIdle, true);
+  assert.equal(classifyDocument(idle, '/screener'), 'idle');
+  const scanning = docOf('条件选股', section('筛选结果', '正在扫描'));
+  assert.equal(snapshotFromDocument(scanning, '/screener').hasScanIdle, false, '换一句话就不是 idle');
+
+  /* 美股概况：指数区的无障碍名是「市场指数」，指数卡是区内的按钮 */
+  const indices = (label) => docOf('美股概况', section(label, '', [node('button', {}, [], '标普 500')]));
+  assert.equal(snapshotFromDocument(indices('市场指数'), '/market').hasIndexOverview, true);
+  assert.equal(classifyDocument(indices('市场指数'), '/market'), 'content');
+  assert.equal(snapshotFromDocument(indices('别的区块'), '/market').hasIndexOverview, false, '换个无障碍名就找不到指数区');
+  assert.equal(classifyDocument(indices('别的区块'), '/market'), 'shell');
+
+  /* 我的关注：清单区的无障碍名是「关注列表」，只认这个区里的表格行 */
+  const tableRow = () => node('table', {}, [node('tbody', {}, [node('tr', {}, [node('td', {}, [], 'AAPL')])])]);
+  const watchlist = docOf('我的关注', section('关注列表', '', [tableRow()]));
+  assert.equal(snapshotFromDocument(watchlist, '/watchlist').hasWatchTableRow, true, '关注列表区被找到，区内的行算数');
+  assert.equal(classifyDocument(watchlist, '/watchlist'), 'content');
+  const strayRow = docOf('我的关注', section('关注列表', '暂无关注'), section('行情提示', '', [tableRow()]));
+  assert.equal(snapshotFromDocument(strayRow, '/watchlist').hasWatchTableRow, false, '关注列表之外的表格行不算');
+  assert.equal(classifyDocument(strayRow, '/watchlist'), 'empty');
+
+  /* 三个页面的文本终态；同一页面换一句话只算壳，说明结果确实来自这句文案 */
+  for (const [path, heading, text, expected] of [
+    ['/breakouts', '突破雷达', '信号读取失败', 'error'],
+    ['/sectors', '行业表现', '行业目录加载失败', 'error'],
+    ['/cta', 'CTA 趋势资金', '指数概况', 'content'],
+  ]) {
+    assert.equal(classifyDocument(docOf(heading, paragraph(text)), path), expected, `${path} 含「${text}」`);
+    assert.equal(classifyDocument(docOf(heading, paragraph('正在读取')), path), 'shell', `${path} 没有这句话时只算壳`);
+  }
 });
 
 test('真实 DOM：长说明/长错误/卡片/零命中/非默认语言', () => {
