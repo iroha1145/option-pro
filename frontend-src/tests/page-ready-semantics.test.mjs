@@ -208,6 +208,22 @@ test('选股壳和个股错误态不能算 content-ready', () => {
   }), 'content');
 });
 
+test('2026-10-08 第二版文案：新标题与新空态、错误态仍能判出终态', () => {
+  const base = { hasForm: true, hasWatchCards: false, hasWatchTableRow: false, hasScanTableRow: false, hasIndexCards: false };
+  assert.equal(classifyPageReady({ ...base, path: '/watchlist', heading: '我的关注', bodyText: '我的关注 暂无关注' }), 'empty');
+  assert.equal(classifyPageReady({ ...base, path: '/watchlist', heading: '我的关注', bodyText: '我的关注 关注读取失败' }), 'error');
+  assert.equal(classifyPageReady({ ...base, path: '/market', heading: '美股概况', bodyText: '美股概况 暂无指数行情' }), 'empty');
+  assert.equal(classifyPageReady({ ...base, path: '/sectors', heading: '行业表现', bodyText: '行业表现 暂无行业目录' }), 'empty');
+  assert.equal(classifyPageReady({ ...base, path: '/stock/ZZZZ', heading: 'ZZZZ', bodyText: '未找到该股票' }), 'empty');
+  assert.equal(classifyPageReady({ ...base, path: '/stock/AAPL', heading: 'AAPL', bodyText: '请求过于频繁' }), 'error');
+  assert.equal(classifyPageReady({ ...base, path: '/earnings', heading: '财报日历', bodyText: '财报日历 未来 30 天暂无财报' }), 'empty');
+  assert.equal(classifyPageReady({ ...base, path: '/cta', heading: 'CTA 趋势资金', bodyText: 'CTA 趋势资金 首次估算完成后自动显示' }), 'empty');
+  assert.equal(classifyPageReady({ ...base, path: '/this-page-is-not-a-route', heading: '无此页面', hasNotFound: true }), 'empty');
+  const screener = node('main', {}, [node('section', { 'aria-label': '筛选结果' }, [], '没有符合条件的股票')]);
+  const snap = snapshotFromDocument({ querySelector: (sel) => queryAll(screener, sel)[0] ?? null, querySelectorAll: (sel) => queryAll(screener, sel), body: screener }, '/screener');
+  assert.equal(snap.hasScanEmpty, true);
+});
+
 test('真实 DOM：长说明/长错误/卡片/零命中/非默认语言', () => {
   const longCopy = '跟踪自选股的价格、走势与市场信号。本页说明很长，其中提到暂无统一口径，但不能据此当作清单空结果。';
   const emptyWatch = makeDocument({

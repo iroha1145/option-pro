@@ -17,9 +17,9 @@ export function snapshotFromDocument(doc, path) {
   const heading = doc.querySelector('h1')?.textContent || '';
   const main = doc.querySelector('main');
   const results = [...(doc.querySelectorAll('[aria-label]') || [])]
-    .find((node) => /扫描结果|Scan results|スキャン結果/i.test(node.getAttribute('aria-label') || ''));
+    .find((node) => /扫描结果|筛选结果|Scan results|スキャン結果/i.test(node.getAttribute('aria-label') || ''));
   const watchList = [...(doc.querySelectorAll('[aria-label]') || [])]
-    .find((node) => /自选列表|Watchlist|ウォッチリスト/i.test(node.getAttribute('aria-label') || ''));
+    .find((node) => /自选列表|关注列表|Watchlist|ウォッチリスト/i.test(node.getAttribute('aria-label') || ''));
   const bodyText = doc.body?.innerText || doc.body?.textContent || '';
   const mainText = main?.innerText || main?.textContent || '';
   const resultsText = results?.innerText || results?.textContent || '';
@@ -56,15 +56,15 @@ export function snapshotFromDocument(doc, path) {
     hasWatchTableRow: !!(watchScope && watchScope.querySelector('table tbody tr')),
     hasScanHits: false,
     scanHitCount: Number.isFinite(parsedHits) ? parsedHits : null,
-    hasScanIdle: /设定条件，开始一次扫描|Set your filters and run a scan|条件を設定してスキャンを開始/i.test(resultsText),
-    hasScanEmpty: /当前条件无命中|暂无股票符合当前条件|No matches for the current filters|No stocks match|現在の条件に一致する銘柄がありません/i.test(resultsText),
+    hasScanIdle: /设定条件，开始一次扫描|设置条件，开始扫描|Set your filters and run a scan|条件を設定してスキャンを開始/i.test(resultsText),
+    hasScanEmpty: /当前条件无命中|没有符合条件的股票|暂无股票符合当前条件|No matches for the current filters|No stocks match|現在の条件に一致する銘柄がありません/i.test(resultsText),
     hasScanTableRow: !!(results && results.querySelector('table tbody tr, [data-ticker]')),
     hasScanError: /扫描失败|扫描数据不可用|Scan failed|スキャンに失敗/i.test(resultsText),
-    hasIndexOverview: !!(doc.querySelector('[aria-label="指数概览"]') || doc.querySelector('[aria-label="Index overview"]') || doc.querySelector('[aria-label="指数概要"]')),
+    hasIndexOverview: !!(doc.querySelector('[aria-label="指数概览"]') || doc.querySelector('[aria-label="市场指数"]') || doc.querySelector('[aria-label="Index overview"]') || doc.querySelector('[aria-label="Market indices"]') || doc.querySelector('[aria-label="指数概要"]') || doc.querySelector('[aria-label="市場指数"]')),
     hasIndexCards: !!doc.querySelector('[data-optix-region="home-indices"] a, [data-optix-region="market-indices"] button'),
     hasNewsArticle: !!doc.querySelector('article h3'),
     hasQuote: !!doc.querySelector('[data-quote-symbol], [aria-label*="K 线"], [aria-label*="candlestick"], [aria-label*="K-line"]'),
-    hasNotFound: /页面不存在|Page not found|ページが存在しません/i.test(bodyText),
+    hasNotFound: /页面不存在|无此页面|Page not found|ページが存在しません/i.test(bodyText),
   };
 }
 
@@ -76,11 +76,11 @@ export function classifyPageReady(snapshot) {
   const headingReady = () => {
     if (path === '/screener') return /选股|Screener|スクリーナー/i.test(heading);
     if (path === '/') return /首页|Home|ホーム/i.test(heading);
-    if (path === '/watchlist') return /自选|watchlist|ウォッチリスト/i.test(heading);
-    if (path === '/market') return /大盘|Market|地合い/i.test(heading);
+    if (path === '/watchlist') return /自选|关注|watchlist|ウォッチリスト/i.test(heading);
+    if (path === '/market') return /大盘|美股概况|Market|地合い|概況/i.test(heading);
     if (path === '/breakouts') return /突破|雷达|Breakout|Radar|ブレイクアウト/i.test(heading);
     if (path === '/earnings') return /财报|Earnings|決算/i.test(heading);
-    if (path === '/sectors') return /板块|Sectors|セクター|透視/i.test(heading);
+    if (path === '/sectors') return /板块|行业|Sectors?|セクター|透視/i.test(heading);
     if (path === '/cta') return /CTA|趋势资金|トレンド資金/i.test(heading);
     if (path === '/catalysts') return /新闻|催化|Catalyst|ニュース/i.test(heading);
     return Boolean(heading);
@@ -103,8 +103,8 @@ export function classifyPageReady(snapshot) {
   }
   if (path.startsWith('/stock/')) {
     if (snapshot.ariaBusy) return 'pending';
-    if (/行情服务暂不可用|请求较频繁|登录状态已失效|Quote service unavailable|Too many requests|Session expired/i.test(body)) return 'error';
-    if (/该标的暂无完整数据|该股票暂无数据|代码不存在|No complete data|No data for this stock|Unknown ticker/i.test(body)) return 'empty';
+    if (/行情服务暂不可用|请求较频繁|请求过于频繁|登录状态已失效|登录失效|Quote service unavailable|Too many requests|Session expired/i.test(body)) return 'error';
+    if (/该标的暂无完整数据|该股票暂无完整数据|该股票暂无数据|代码不存在|未找到该股票|No complete data|No data for this stock|Unknown ticker/i.test(body)) return 'empty';
     const symbol = path.slice('/stock/'.length);
     if (symbol && body.includes(symbol) && snapshot.hasQuote) return 'content';
     return 'shell';
@@ -113,42 +113,42 @@ export function classifyPageReady(snapshot) {
     if (!headingReady()) return 'pending';
     if (/数据暂不可用|加载失败|Failed to load|データを取得できません/i.test(body) && !snapshot.hasIndexCards) return 'error';
     if (snapshot.hasIndexOverview && snapshot.hasIndexCards) return 'content';
-    if (/暂无指数数据|No index data/i.test(body)) return 'empty';
+    if (/暂无指数数据|暂无指数行情|No index data/i.test(body)) return 'empty';
     return 'shell';
   }
   if (path === '/watchlist') {
     if (!headingReady()) return 'pending';
-    if (/自选读取失败|Watchlist failed|ウォッチリストの読み込みに失敗/i.test(body)) return 'error';
+    if (/自选读取失败|关注读取失败|Watchlist failed|ウォッチリストの読み込みに失敗/i.test(body)) return 'error';
     if (snapshot.hasWatchCards || snapshot.hasWatchTableRow) return 'content';
-    if (/清单还是空的|Your watchlist is empty|ウォッチリストは空です/i.test(body)) return 'empty';
+    if (/清单还是空的|暂无关注|Your watchlist is empty|ウォッチリストは空です/i.test(body)) return 'empty';
     return 'shell';
   }
   if (path === '/market') {
     if (!headingReady()) return 'pending';
     if (/数据暂不可用|加载失败|Failed to load/i.test(body) && !snapshot.hasIndexCards) return 'error';
     if (snapshot.hasIndexOverview && snapshot.hasIndexCards) return 'content';
-    if (/暂无指数数据|No index data/i.test(body)) return 'empty';
+    if (/暂无指数数据|暂无指数行情|No index data/i.test(body)) return 'empty';
     return 'shell';
   }
   if (path === '/breakouts') {
     if (!headingReady()) return 'pending';
-    if (/信号加载失败|扫描数据暂不可用|Failed to load signals/i.test(body)) return 'error';
-    if (/本轮暂无突破信号|没有符合筛选的信号|No breakout signals/i.test(body)) return 'empty';
+    if (/信号加载失败|信号读取失败|扫描数据暂不可用|Failed to load signals/i.test(body)) return 'error';
+    if (/本轮暂无突破信号|没有符合筛选的信号|没有符合筛选条件的信号|No breakout signals/i.test(body)) return 'empty';
     if (/个活跃|active signals/i.test(body) && /当日信号|Today/.test(body)) return 'content';
     return 'shell';
   }
   if (path === '/earnings') {
     if (!headingReady()) return 'pending';
     if (/财报列表不可用|日历数据不可用|Earnings (list )?unavailable/i.test(body)) return 'error';
-    if (/近一个月暂无财报|No upcoming earnings/i.test(body)) return 'empty';
+    if (/近一个月暂无财报|未来 30 天暂无财报|No upcoming earnings/i.test(body)) return 'empty';
     if (snapshot.hasScanTableRow || /重点公司|Featured/i.test(body)) return 'content';
     return 'shell';
   }
   if (path === '/sectors') {
     if (!headingReady()) return 'pending';
-    if (/板块目录加载失败|Failed to load sectors/i.test(body)) return 'error';
-    if (/暂无板块目录|No sector catalog/i.test(body)) return 'empty';
-    if (/板块总览|Sector overview|セクター/i.test(body) && /IV|强度|Strength/i.test(body)) return 'content';
+    if (/板块目录加载失败|行业目录加载失败|Failed to load sectors/i.test(body)) return 'error';
+    if (/暂无板块目录|暂无行业目录|No sector catalog/i.test(body)) return 'empty';
+    if (/板块总览|行业总览|Sector overview|セクター/i.test(body) && /IV|强度|评分|Strength|Score/i.test(body)) return 'content';
     return 'shell';
   }
   if (path === '/login') {
@@ -158,8 +158,8 @@ export function classifyPageReady(snapshot) {
   if (path === '/cta') {
     if (!headingReady()) return 'pending';
     if (/CTA 估算读取失败|failed to read/i.test(body)) return 'error';
-    if (/CTA 估算尚未生成|暂无数据|not generated yet/i.test(body)) return 'empty';
-    if (/指数总览|指数详情|Overview/i.test(body)) return 'content';
+    if (/CTA 估算尚未生成|首次估算完成后自动显示|暂无数据|暂无估算|not generated yet/i.test(body)) return 'empty';
+    if (/指数总览|指数概况|指数详情|Overview/i.test(body)) return 'content';
     return 'shell';
   }
   if (path === '/catalysts') {
