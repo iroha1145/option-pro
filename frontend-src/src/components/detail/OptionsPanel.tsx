@@ -508,7 +508,7 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
           className="mt-2"
           text={`${t('延迟行情')}${
             shownChain.asOf ? t(' · 数据获取于 {time}', { time: fmtRelative(shownChain.asOf) }) : ''
-          }${shownChain.stale ? t(' · 暂未刷新，显示最近一次结果') : ''}`}
+          }${shownChain.stale ? t(' · 暂未更新，显示最近一次结果') : ''}`}
         />
       )}
 

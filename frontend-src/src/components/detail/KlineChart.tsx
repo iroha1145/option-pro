@@ -1033,7 +1033,7 @@ export default function KlineChart({
       {data?._stale && (
         <p className="mt-3 flex items-center gap-1.5 rounded-xs border border-warn-600/30 bg-warn-50 px-2.5 py-1.5 text-caption text-warn-700">
           <Icon name="bell" size={13} />
-          {t('数据暂未刷新 · 显示最近一次结果（延迟行情）')}
+          {t('数据暂未更新 · 显示最近一次结果（延迟行情）')}
         </p>
       )}
 

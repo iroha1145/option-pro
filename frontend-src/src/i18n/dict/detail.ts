@@ -127,7 +127,7 @@ export const DETAIL: Dict = {
   '量': ['Vol', '出来高'],
   'K 线': ['Candlestick', 'ローソク足'],
   '面积': ['Area', '面グラフ'],
-  '数据暂未刷新 · 显示最近一次结果（延迟行情）': ['Data hasn\'t refreshed yet · showing the last available result (delayed quotes)', 'データ未更新 · 直近の結果を表示（遅延データ）'],
+  '数据暂未更新 · 显示最近一次结果（延迟行情）': ['Data hasn\'t refreshed yet · showing the last available result (delayed quotes)', 'データ未更新 · 直近の結果を表示（遅延データ）'],
   'K 线暂不可用': ['Candlestick chart unavailable', 'ローソク足チャートは利用できません'],
   '行情获取过于频繁，请稍后再试': ['Quote requests are too frequent. Try again shortly.', '相場の取得が頻繁すぎます。しばらくしてから再試行してください。'],
   '{ticker} 刚刚更新过，请稍后再试': ['{ticker} was just updated. Try again shortly.', '{ticker} は直前に更新されています。しばらくしてから再試行してください。'],
@@ -180,7 +180,7 @@ export const DETAIL: Dict = {
   '选择到期日': ['Select expiration', '限月を選択'],
   '标的现价': ['Underlying price', '原資産価格'],
   '· 标的现价不可用': ['· Underlying price unavailable', '· 原資産の現在値を取得できません'],
-  ' · 暂未刷新，显示最近一次结果': [' · not yet refreshed — showing the last available result', ' · 未更新、直近の結果を表示'],
+  ' · 暂未更新，显示最近一次结果': [' · not yet refreshed — showing the last available result', ' · 未更新、直近の結果を表示'],
   '行权价': ['Strike', '権利行使価格'],
   /* OptionsPanel UI 重构：摘要条 / 三带数据条表 / 移动卡片 / 图例 */
   '异动合约': ['Unusual contracts', '取引急増の銘柄'],
