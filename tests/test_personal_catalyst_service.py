@@ -342,7 +342,12 @@ def _service(
         ai_settings=type(
             "AISettingsStub",
             (),
-            {"personal_etl_enabled": personal_etl_enabled},
+            {
+                "personal_etl_enabled": personal_etl_enabled,
+                "openai_model": "gpt-5.6-terra",
+                "openai_reasoning": "max",
+                "openai_max_concurrency": 1,
+            },
         )(),
     )
 
@@ -809,7 +814,7 @@ def test_historical_news_never_exposes_future_job_state_or_result(
             ),
         )
 
-    schema_version, schema_hash = ai_runtime.schema_identity("news_impact")
+    schema_version, schema_hash = ai_runtime.schema_identity("news_impact", model="gpt-5.6-terra")
     repository = FakeAIRepository(
         {
             job_id: {
@@ -1056,7 +1061,7 @@ def test_unrelated_worker_degradation_does_not_block_catalyst(
 def test_analysis_job_endpoint_is_limited_to_news_jobs() -> None:
     news_id = "aij_" + "n" * 32
     other_id = "aij_" + "o" * 32
-    schema_version, schema_hash = ai_runtime.schema_identity("news_impact")
+    schema_version, schema_hash = ai_runtime.schema_identity("news_impact", model="gpt-5.6-terra")
     repository = FakeAIRepository(
         {
             news_id: {
@@ -1092,7 +1097,7 @@ def test_analysis_job_endpoint_is_limited_to_news_jobs() -> None:
 def test_analysis_job_accepts_only_the_known_v6_news_schema_transition() -> None:
     job_id = "aij_" + "v" * 32
     legacy_version, legacy_hash = ai_runtime.LEGACY_NEWS_V6_SCHEMA_IDENTITY
-    current_version, current_hash = ai_runtime.schema_identity("news_impact")
+    current_version, current_hash = ai_runtime.schema_identity("news_impact", model="gpt-5.6-terra")
     row = {
         "job_id": job_id,
         "job_type": "news_impact",
@@ -1124,7 +1129,7 @@ def test_analysis_job_accepts_only_the_known_v6_news_schema_transition() -> None
 
 def test_read_mode_can_cancel_a_news_job_created_before_the_mode_changed() -> None:
     job_id = "aij_" + "c" * 32
-    schema_version, schema_hash = ai_runtime.schema_identity("news_impact")
+    schema_version, schema_hash = ai_runtime.schema_identity("news_impact", model="gpt-5.6-terra")
     repository = FakeAIRepository(
         {
             job_id: {
@@ -1562,8 +1567,8 @@ def test_local_api_settings_keep_fixed_model_and_drop_remote_hmac_credentials(
     )
 
     assert settings.cache_db_path == tmp_path / "missing.db"
-    assert settings.model == "gpt-5.6-terra"
-    assert settings.reasoning == "max"
+    assert settings.model == "claude-haiku-5-5"
+    assert settings.reasoning == "xhigh"
     assert not hasattr(settings, "read_key_id")
     assert not hasattr(settings, "read_secret")
     with pytest.raises(ValueError):
@@ -1815,7 +1820,7 @@ def test_scheduled_work_in_flight_leaves_owner_analysis_available(
     tmp_path, monkeypatch,
 ):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
-    version, digest = ai_runtime.schema_identity("news_impact")
+    version, digest = ai_runtime.schema_identity("news_impact", model="gpt-5.6-terra")
     job, _ = repository.create_job(
         job_type="news_impact",
         payload={"ticker": "NVDA", "title": "后台批任务", "allowed_tickers": ["NVDA"]},

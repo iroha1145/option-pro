@@ -122,8 +122,8 @@ def test_environment_templates_separate_secrets_from_machine_edges() -> None:
         "DATA_DIR",
     ]
     assert secret_keys == [
-        "OPENAI_API_KEY",
         "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
         "FINNHUB_API_KEY",
         "MARKETDATA_TOKEN",
         "MASSIVE_API_KEY",
@@ -151,8 +151,9 @@ def test_environment_templates_separate_secrets_from_machine_edges() -> None:
     config = tomllib.loads(
         (ROOT / "config" / "personal.toml").read_text(encoding="utf-8")
     )
-    assert config["ai"]["model"] == "gpt-5.6-terra"
-    assert config["ai"]["reasoning"] == "max"
+    assert config["ai"]["model"] == "claude-haiku-5-5"
+    assert config["ai"]["reasoning"] == "xhigh"
+    assert config["ai"]["max_concurrency"] == 4
     assert config["ai"]["daily_budget_usd"] == 0.0
     assert config["ai"]["daily_token_limit"] == 10_000_000
     assert config["features"]["catalyst_mode"] == "scheduled"

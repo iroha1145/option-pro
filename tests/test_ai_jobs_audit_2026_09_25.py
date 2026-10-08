@@ -106,7 +106,7 @@ def _create(
     priority: int = 70,
     max_queued: int = 500,
 ):
-    version, digest = runtime.schema_identity(job_type)
+    version, digest = runtime.schema_identity(job_type, model="gpt-5.6-terra")
     row, created = repository.create_job(
         job_type=job_type,
         payload=payload or {"ticker": "AAPL", "name": "Apple"},
@@ -163,7 +163,8 @@ def _token_rows(repository: AIJobRepository):
     with repository._connect() as connection:
         return connection.execute(
             """SELECT job_type,status,error_code,openai_response_id,
-                      usage_total_tokens FROM ai_jobs"""
+                      usage_total_tokens,model,submission_started_at
+               FROM ai_jobs"""
         ).fetchall()
 
 
@@ -468,6 +469,7 @@ def test_run_once_passes_the_lane_controls_to_the_claim(tmp_path, monkeypatch):
         "lease_seconds": 60,
         "cooldown_seconds": 45,
         "unknown_submission_hold_seconds": 7200,
+        "max_concurrency": 1,
     }
 
 
@@ -551,7 +553,7 @@ def test_persistent_busy_on_complete_defers_and_recovers_without_resubmit(
     assert deferred["openai_response_id"] == "resp_paid_ok"
     assert _lane_free(repository, "scheduled") is False
     assert _daily_tokens_used(_token_rows(repository)) == runtime.token_reservation(
-        "earnings_impact"
+        "earnings_impact", model="gpt-5.6-terra"
     )
 
     async def retrieve(_settings, response_id):
@@ -600,7 +602,7 @@ def test_busy_poll_record_keeps_the_lane_and_the_reservation(tmp_path, monkeypat
     assert stored["openai_response_id"] == "resp_running"
     assert _lane_free(repository, "scheduled") is False
     assert _daily_tokens_used(_token_rows(repository)) == runtime.token_reservation(
-        "earnings_impact"
+        "earnings_impact", model="gpt-5.6-terra"
     )
     assert calls["submit"] == 1
 
@@ -1167,7 +1169,7 @@ def test_validator_changes_keep_queued_task_identities(job_type, identity):
     """The whitelist lives in the validator, not the prompt: pending jobs of
     the other four types must not flip to runtime_configuration_changed."""
 
-    assert runtime.schema_identity(job_type) == identity
+    assert runtime.schema_identity(job_type, model="gpt-5.6-terra") == identity
 
 
 # --- AI-7: earnings impact binds its inputs and accepts short lists
@@ -1223,7 +1225,7 @@ def test_earnings_impact_still_needs_one_company_besides_itself():
 
 
 def test_earnings_contract_change_moves_the_schema_identity():
-    schema_name, digest = runtime.schema_identity("earnings_impact")
+    schema_name, digest = runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
     schema = json.loads(runtime._validation_schema_json("earnings_impact"))
     instructions = runtime.build_runtime_request("earnings_impact", {}).instructions
 
@@ -1303,7 +1305,7 @@ def _signal_stubs(monkeypatch, repository, counter):
     monkeypatch.setattr(signals, "build_signal_context", dynamic_context)
 
     def create_job(job_type, payload, *, force_retry=False):
-        version, digest = runtime.schema_identity(job_type)
+        version, digest = runtime.schema_identity(job_type, model="gpt-5.6-terra")
         return repository.create_job(
             job_type=job_type,
             payload=payload,
@@ -1427,7 +1429,7 @@ def test_cancel_after_a_mid_submission_crash_stays_unknown(tmp_path, clock):
     assert stored["status"] == "failed"
     assert stored["error_code"] == "submission_outcome_unknown"
     assert _daily_tokens_used(_token_rows(repository)) == runtime.token_reservation(
-        "earnings_impact"
+        "earnings_impact", model="gpt-5.6-terra"
     )
     assert _lane_free(repository, "scheduled") is False
 
@@ -1489,10 +1491,10 @@ def test_unconfirmed_failures_with_a_response_id_keep_both_reservations(
     stored = repository.get_job(row["job_id"])
     snapshot = repository.budget_snapshot(daily_limit=0, daily_budget_usd=0)
     assert stored["budget_charge_microusd"] == runtime.budget_reservation_microusd(
-        "earnings_impact"
+        "earnings_impact", model="gpt-5.6-terra"
     )
     assert snapshot["token_budget_used_tokens"] == runtime.token_reservation(
-        "earnings_impact"
+        "earnings_impact", model="gpt-5.6-terra"
     )
 
 
@@ -1631,7 +1633,7 @@ def test_create_job_returns_the_decorated_earnings_row(tmp_path):
         },
         analysis_stage="post_release_final",
     )
-    version, digest = runtime.schema_identity("earnings_impact")
+    version, digest = runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
 
     def create():
         return repository.create_job(
@@ -1681,9 +1683,7 @@ def test_schema_checksums_are_pinned_to_their_versions():
         ),
     }
     assert observed == {
-        "ai-jobs-v4": (
-            "b436ff83ab65b48ca267a6ac87f51a426dcc54c26341d1fb16f6fe72d5a06ed6"
-        ),
+        "ai-jobs-v5": "2f06c215736fe635b8d29792bbb4eacd0c875a80a2357434bd4372893fb9ef74",
         "ai-job-sources-v1": (
             "1dc4fa74c9dfdad32936cd896d2422d18d771700b52d4779144bdfa2ac843feb"
         ),

@@ -16,7 +16,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ApiError } from '@/api/client';
-import { AI_JOB_DEFERRAL_CODES } from '@/api/aiJobNormalize';
+import { AI_JOB_DEFERRAL_CODES, aiJobKnownErrorMessage } from '@/api/aiJobNormalize';
 import { earningsApi } from '@/api/modules/earnings';
 import type {
   EarningsImpactDirection,
@@ -63,7 +63,7 @@ const ANALYSIS_ERROR_TEXT: Record<string, string> = {
   runtime_settings_unavailable: __t('暂时无法读取分析设置，请稍后重试'),
   scheduled_window_changed_to_5_days: __t('财报关注范围已调整，这次分析不再需要'),
   provider_incomplete_max_output_tokens: __t('分析内容未生成完整，请重试'),
-  submission_outcome_unknown: __t('未能确认上次分析结果，请重试'),
+  submission_outcome_unknown: __t('无法确认模型服务是否收到分析请求，已停止重复提交，请先核对原任务状态'),
   ai_job_payload_too_large: __t('这份财报数据过大，无法分析'),
   ai_job_result_too_large: __t('分析结果过大，无法保存'),
 };
@@ -77,7 +77,7 @@ function analysisErrorText(code: string | undefined | null, status: string): str
   if (!key) return '';
   if (isActive(status)) return ANALYSIS_ERROR_TEXT[key] ?? '';
   if (AI_JOB_DEFERRAL_CODES.has(key)) return __t('这次分析没有完成');
-  return ANALYSIS_ERROR_TEXT[key] ?? __t('这次分析没有完成');
+  return ANALYSIS_ERROR_TEXT[key] ?? aiJobKnownErrorMessage(key) ?? __t('这次分析没有完成');
 }
 const FINAL_STAGES = new Set([
   'final',
@@ -709,13 +709,13 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                   <p className="mt-0.5 text-micro text-ink-500">{errorMsg || __t('未知原因')}</p>
                 </div>
               )}
-              <button
+              {analysis?.errorCode !== 'submission_outcome_unknown' && <button
                 onClick={() => setPhase('needs-analysis')}
                 className="control-button mt-3"
               >
                 <Icon name="refresh" size={13} />
                 {__t('重试')}
-              </button>
+              </button>}
             </div>
           )}
 

@@ -27,6 +27,10 @@ load_runtime_environment()
 class Settings(BaseSettings):
     """Runtime configuration loaded from environment or .env."""
 
+    anthropic_api_key: SecretStr = Field(default=SecretStr(""), alias="ANTHROPIC_API_KEY")
+    # Fail closed if an operator exports a proxy endpoint. The runtime always
+    # calls Anthropic's official service.
+    anthropic_base_url: Literal[""] = Field(default="", alias="ANTHROPIC_BASE_URL")
     openai_api_key: SecretStr = Field(default=SecretStr(""), alias="OPENAI_API_KEY")
     # Deprecated provider switches remain as rejecting sentinels for one
     # migration release. They cannot alter the official Responses runtime.
@@ -43,11 +47,11 @@ class Settings(BaseSettings):
         default=False,
         alias="OPENAI_REQUIRE_ZDR",
     )
-    openai_model: Literal["gpt-5.6-terra"] = Field(
+    openai_model: Literal["claude-haiku-5-5", "gpt-5.6-terra"] = Field(
         default=_PERSONAL_CONFIG.ai.model,
         alias="OPENAI_MODEL",
     )
-    openai_reasoning: Literal["max"] = Field(
+    openai_reasoning: Literal["xhigh", "max"] = Field(
         default=_PERSONAL_CONFIG.ai.reasoning,
         alias="OPENAI_REASONING",
     )
@@ -61,7 +65,7 @@ class Settings(BaseSettings):
     openai_max_concurrency: int = Field(
         default=_PERSONAL_CONFIG.ai.max_concurrency,
         ge=1,
-        le=1,
+        le=4,
         alias="OPENAI_MAX_CONCURRENCY",
     )
     openai_daily_max_jobs: int = Field(
@@ -178,12 +182,6 @@ class Settings(BaseSettings):
     # is deliberately no FRED_BASE_URL setting and no proxy switch; tests
     # replace the network with an injected transport instead.
     fred_api_key: SecretStr = Field(default=SecretStr(""), alias="FRED_API_KEY")
-    # 首页市场综合研判只连 Anthropic 官方端点：同样没有 base URL 与代理开关，
-    # 测试注入假客户端。未配置时研判任务报 disabled，Worker 仍然健康。
-    anthropic_api_key: SecretStr = Field(
-        default=SecretStr(""),
-        alias="ANTHROPIC_API_KEY",
-    )
     finnhub_api_key: str = Field(default="", alias="FINNHUB_API_KEY")
     finnhub_base_url: AnyHttpUrl = Field(default="https://finnhub.io/api/v1", alias="FINNHUB_BASE_URL")
     finnhub_candle_fallback_enabled: bool = Field(default=True, alias="FINNHUB_CANDLE_FALLBACK_ENABLED")
@@ -363,6 +361,11 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_openai_runtime(self) -> "Settings":
+        expected_reasoning = "xhigh" if self.openai_model == "claude-haiku-5-5" else "max"
+        if self.openai_reasoning != expected_reasoning:
+            raise ValueError("AI model and reasoning must use a supported pair")
+        if self.openai_model == "gpt-5.6-terra" and self.openai_max_concurrency != 1:
+            raise ValueError("legacy OpenAI configuration supports concurrency 1 only")
         if self.allow_custom_openai_base_url:
             raise ValueError("custom OpenAI endpoints are disabled")
         if self.openai_custom_capabilities_confirmed:

@@ -5,7 +5,7 @@ Optix Pro 是面向个人使用的美股期权、突破信号与新闻分析工�
 - `backend`：提供网页、接口和查询，也接收所有者明确发起的任务。
 - `worker`：统一管理突破扫描、新闻同步、焦点快照、模型任务、刷新、备份与清理。
 
-两个容器共用同一镜像和数据卷。模型固定为 GPT-5.6 Terra，推理等级固定为 `max`，最大并发数固定为 1。新闻标题、摘要、等待提示和分析内容必须通过简体中文校验；来源原文只作为内部证据保留。
+两个容器共用同一镜像和数据卷。新分析默认使用 Claude Haiku 5.5，推理强度为 `xhigh`，Claude 默认总并发数为 4，可设置为 1 到 4。新闻标题、摘要、等待提示和分析内容必须通过简体中文校验；来源原文只作为内部证据保留。
 
 本项目不是实时行情终端，也不构成投资建议。Yahoo 等公开数据可能延迟、缺失或临时不可用，下单前仍需用券商行情核对。
 
@@ -58,8 +58,8 @@ chmod 600 .env machine.env secrets.env
 
 `secrets.env` 只保存九项服务端密钥：
 
-- `OPENAI_API_KEY`
 - `ANTHROPIC_API_KEY`
+- `OPENAI_API_KEY`（旧任务取回与回滚兼容）
 - `FINNHUB_API_KEY`
 - `MARKETDATA_TOKEN`
 - `MASSIVE_API_KEY`
@@ -85,26 +85,34 @@ chmod 600 .env machine.env secrets.env
 默认没有模型密钥，因此不会提交付费任务。需要启用时，在服务器上执行：
 
 ```bash
-./personal.sh secrets set OPENAI_API_KEY
+./personal.sh secrets set ANTHROPIC_API_KEY
 ```
 
-个人版只连接 OpenAI 官方响应接口（Responses API），不接受自定义模型代理。固定参数为：
+新分析只连接 Anthropic 官方消息接口（Messages API），不接受自定义地址或中转代理。默认参数为：
 
 ```toml
 [ai]
-model = "gpt-5.6-terra"
-reasoning = "max"
-max_concurrency = 1
+model = "claude-haiku-5-5"
+reasoning = "xhigh"
+max_concurrency = 4
 execution_mode = "background"
 ```
 
-供应商提交失败后的自动重试固定为零，不通过环境变量更改。
+`background` 表示任务在应用后台排队，工作进程（Worker）通过流式调用取得 Claude 结果；它不表示 Anthropic 提供了可取回的后台响应。分析采用自适应思考（Adaptive Thinking）、`xhigh` 推理强度、严格结构化输出（Strict Structured Outputs），并为重复使用的系统提示设置 5 分钟提示缓存（Prompt Caching）。缓存是否命中以供应商返回的实际用量为准。
 
-模型任务保留严格结构化输出、每日词元（Token）上限与冷却限制。手动与定时任务各有一个提交槽，同类任务依次执行。相同输入会先复用原任务，即使队列已满也不会重复计费；只有新任务在队列饱和时返回 429 和 `Retry-After: 60`。
+`OPENAI_API_KEY` 只用于迁移前已提交任务的取回、取消和回滚，须保留到旧任务处理完毕。旧结果继续记录原来的模型与推理强度，不会改标为 Claude。供应商提交失败后的自动重试固定为零；提交结果不明时停止重复提交，避免再次收费。
 
-每日词元上限默认 1000 万，通过 `daily_token_limit` 设置。系统在提交前预留任务用量，终态后按已有用量规则结算；费用记录用于统计，最终账单以供应商后台为准。旧的 `daily_max_jobs` 和 `daily_budget_usd` 只保留历史配置读取与回滚兼容，不再限制任务。运行设置接口拒绝这两个字段的新非零写入，返回 422 和 `retired_budget_setting`；可写入零清除旧值。
+模型任务保留每日词元（Token）额度与冷却限制。Claude 手动与定时任务共用 4 个并发名额，可通过 `max_concurrency` 设置为 1 到 4。旧 OpenAI 任务保留手动与定时各 1 个的恢复规则。相同输入会先复用原任务，即使队列已满也不会重复计费；只有新任务在队列饱和时返回 429 和 `Retry-After: 60`。
+
+每日词元额度默认 1000 万，通过 `daily_token_limit` 设置。这是本地提交准入和已报用量对账的额度，不是供应商强制执行的费用硬上限。原生工具的一次请求可能包含多轮内部处理，累计输入词元可以超过单轮 100 万词元的上下文容量；供应商报告的实际用量完整保存，超出本地额度也不会截断。不同模型对同一篇文本的词元数可能不同，Claude 的思考输出也计入输出用量并收费。普通输入、缓存读取、缓存写入和工具请求分别记录，最终账单以供应商后台为准。
+
+网页搜索（Web Search）和网页抓取（Web Fetch）各设 `max_uses=1`，抓取内容预算约 8000 词元；代码执行（Code Execution）在本地流处理中最多接受 2 次，达到限制停止本次处理。单次请求暂停或中断时不自动续跑。最终结果始终使用 JSON 输出格式（JSON Output Format）；启用工具时，仅提供原生网页搜索、网页抓取和代码执行工具。原生工具与 JSON 格式的组合已通过实际请求验证，结果仍须通过中文与业务规则校验。已完成分析最多提供 10 个“核对来源”链接，不展示思考正文或中间工具内容。
+
+旧的 `daily_max_jobs` 和 `daily_budget_usd` 只保留历史配置读取与回滚兼容，不再限制任务。运行设置接口拒绝这两个字段的新非零写入，返回 422 和 `retired_budget_setting`；可写入零清除旧值。
 
 密码模式下，未登录访客只能浏览公开研究数据和已有分析，不能创建、重试或取消模型任务。所有者登录后可在页头手动关闭或开启分析：关闭会同时停止新的手动分析和定时分析；重新开启只恢复手动分析，不会自动创建任务。
+
+迁移步骤、费用口径和验收要求见[Claude 迁移说明](docs/personal-edition/claude-migration.md)。配置与本地检查不代表真实调用验证或生产部署已经完成。
 
 ## 访问安全
 
@@ -160,7 +168,7 @@ mode = "private_network"
 
 ```bash
 ./personal.sh secrets status
-./personal.sh secrets set OPENAI_API_KEY
+./personal.sh secrets set ANTHROPIC_API_KEY
 ./personal.sh secrets set FINNHUB_API_KEY
 ./personal.sh secrets set MARKETDATA_TOKEN
 ./personal.sh secrets set MASSIVE_API_KEY
@@ -290,7 +298,7 @@ npm --prefix frontend-src run test:quotes
 
 界面源码与浏览器用例都在 `frontend-src/`，`frontend/` 只保存构建产物。`test:review` 与 `test:quotes` 自带本地开发服务器与模拟接口；`npm --prefix frontend-src run test:visual` 另外需要 `OPTIX_VISUAL_BASE_URL` 指向一个已经在运行的部署。
 
-持续集成（CI）只使用本地夹具和模拟连接，不访问真实 OpenAI、新闻源、行情源或生产数据库。检查通过只说明该提交通过测试与容器验证，不代表生产服务器已经更新。
+持续集成（CI）只使用本地夹具和模拟连接，不访问真实 Anthropic、OpenAI、新闻源、行情源或生产数据库。检查通过只说明该提交通过测试与容器验证，不代表生产服务器已经更新。
 
 ## 日常管理
 

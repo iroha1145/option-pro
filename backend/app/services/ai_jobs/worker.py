@@ -30,6 +30,83 @@ _MIN_LEASE_HEARTBEAT_INTERVAL_SECONDS = 5.0
 _STORAGE_WRITE_RETRIES = 3
 _STORAGE_WRITE_RETRY_DELAY_SECONDS = 0.25
 _LOCAL_STORAGE_ERROR = "local_storage_error"
+_CLAUDE_CANCEL_CHECK_SECONDS = 0.5
+
+
+async def _finish_claude_receipt(
+    repository: AIJobRepository,
+    job: dict[str, Any],
+    owner: str,
+    receipt: dict[str, Any],
+) -> None:
+    """Publish a previously persisted response without another paid request."""
+    usage = receipt["usage"]
+    terminal_error = receipt.get("terminal_error")
+    if terminal_error:
+        await _with_storage_retry(
+            repository.fail, job["job_id"], owner, str(terminal_error), usage=usage,
+        )
+        return
+    try:
+        from app.services.ai_jobs.models import validate_result
+
+        result = validate_result(
+            job["job_type"], receipt["output_text"], json.loads(job["payload_json"]),
+        )
+    except (TypeError, ValueError) as exc:
+        await _with_storage_retry(
+            repository.fail, job["job_id"], owner,
+            _public_error(exc, submitted=True, response_id=receipt["id"]),
+            usage=usage, detail=str(exc),
+        )
+        return
+    await _with_storage_retry(repository.complete, job["job_id"], owner, result, usage)
+
+
+async def _stream_claude_with_controls(
+    repository: AIJobRepository,
+    settings: Any,
+    job: dict[str, Any],
+    owner: str,
+    prepared: Any,
+) -> Any:
+    """Bound total runtime and honor cancellation while the lease stays live."""
+    from app.services.ai_jobs.claude_provider import stream_message
+
+    async def started(message_id: str) -> None:
+        # This identity is for diagnostics, never a remotely retrievable handle.
+        job["anthropic_message_id"] = message_id
+        await _with_storage_retry(
+            repository.link_anthropic_message, job["job_id"], owner, message_id,
+        )
+
+    operation = asyncio.create_task(stream_message(prepared, on_message_start=started))
+    deadline = time.monotonic() + float(settings.openai_background_poll_timeout_seconds)
+    try:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("claude_stream_total_timeout")
+            done, _ = await asyncio.wait(
+                {operation}, timeout=min(_CLAUDE_CANCEL_CHECK_SECONDS, remaining),
+            )
+            # A fully received paid response wins a concurrent cancellation.
+            if operation in done:
+                return operation.result()
+            current = await asyncio.to_thread(repository.get_job, job["job_id"])
+            if current is None or current.get("lease_owner") != owner:
+                raise RuntimeError("ai_job_lease_lost")
+            if current.get("cancel_requested_at"):
+                raise RuntimeError("claude_stream_cancel_requested")
+    finally:
+        if not operation.done():
+            operation.cancel()
+        try:
+            await operation
+        except BaseException:
+            # The caller owns the original outcome; closing the stream does not
+            # prove that Anthropic performed no billable work.
+            pass
 
 
 async def _with_storage_retry(
@@ -482,6 +559,7 @@ async def process_job(
     )
     submitted = bool(job.get("submission_started_at"))
     response_id = job.get("openai_response_id")
+    claude_job = runtime.uses_claude(job.get("model"))
     heartbeat_failures: list[Exception] = []
     owner_task = asyncio.current_task()
 
@@ -500,6 +578,13 @@ async def process_job(
             raise RuntimeError("ai_job_lease_lost")
 
     def persist_failure(code: str, detail: str | None = None) -> None:
+        if claude_job and submitted:
+            if repository.get_provider_result(job["job_id"]) is not None:
+                repository.defer(
+                    job["job_id"], owner, delay_seconds=2.0, error_code=code,
+                )
+                return
+            code = "submission_outcome_unknown"
         if response_id and code in {
             "ai_job_heartbeat_unavailable",
             "ai_job_lease_lost",
@@ -520,7 +605,9 @@ async def process_job(
         # 本地写库失败不是供应商的错，也不能写成可自动重试的终态：那会丢掉
         # 已付费的结果、放行车道并让调度器再付一次（2026-09-25 审计）。
         try:
-            if response_id:
+            if response_id or (
+                claude_job and repository.get_provider_result(job["job_id"]) is not None
+            ):
                 repository.defer(
                     job["job_id"],
                     owner,
@@ -565,6 +652,11 @@ async def process_job(
         if heartbeat.done():
             await heartbeat
         require_live_lease()
+        if claude_job:
+            receipt = repository.get_provider_result(job["job_id"])
+            if receipt is not None:
+                await _finish_claude_receipt(repository, job, owner, receipt)
+                return
         if response_id:
             await _resume_response(
                 repository,
@@ -629,7 +721,9 @@ async def process_job(
             repository.fail(job["job_id"], owner, source_disabled_error)
             return
 
-        current_identity = runtime.schema_identity(job["job_type"])
+        current_identity = runtime.schema_identity(
+            job["job_type"], model=str(settings.openai_model),
+        )
         schema_matches = runtime.schema_identity_current(
             job["job_type"],
             job.get("prompt_version"),
@@ -638,8 +732,8 @@ async def process_job(
             current_identity=current_identity,
         )
         if (
-            job["model"] != runtime.OFFICIAL_OPENAI_MODEL
-            or job["reasoning"] != runtime.OFFICIAL_REASONING_EFFORT
+            job["model"] != settings.openai_model
+            or job["reasoning"] != settings.openai_reasoning
             or job["execution_mode"] != runtime.OFFICIAL_EXECUTION_MODE
             or not runtime.runtime_configuration_valid(settings)
             or not schema_matches
@@ -653,11 +747,8 @@ async def process_job(
 
         require_live_lease()
         payload = json.loads(job["payload_json"])
-        prepared = runtime.prepare_background(
-            settings,
-            job["job_type"],
-            payload,
-        )
+        prepare = runtime.prepare_claude if claude_job else runtime.prepare_background
+        prepared = prepare(settings, job["job_type"], payload)
         require_live_lease()
         try:
             submission_state = repository.mark_submission_started(
@@ -666,6 +757,7 @@ async def process_job(
                 daily_limit=int(settings.openai_daily_max_jobs),
                 daily_budget_usd=float(settings.openai_daily_budget_usd),
                 daily_token_limit=int(settings.openai_daily_token_limit),
+                max_concurrency=int(settings.openai_max_concurrency),
                 cooldown_seconds=int(settings.openai_manual_cooldown_seconds),
                 unknown_submission_hold_seconds=int(
                     settings.openai_job_max_age_seconds
@@ -693,6 +785,24 @@ async def process_job(
         # outcome is unknown, so it must consume both budget and concurrency.
         require_live_lease()
         submitted = True
+        if claude_job:
+            message = await _stream_claude_with_controls(
+                repository, settings, job, owner, prepared,
+            )
+            receipt = runtime.claude_receipt(message)
+            if receipt["model"] != job["model"]:
+                await _with_storage_retry(
+                    repository.fail, job["job_id"], owner,
+                    "provider_model_mismatch", usage=receipt["usage"],
+                    detail="Claude returned an unexpected model identity",
+                )
+                return
+            await _with_storage_retry(
+                repository.record_provider_result, job["job_id"], owner, receipt,
+            )
+            require_live_lease()
+            await _finish_claude_receipt(repository, job, owner, receipt)
+            return
         response = await runtime.submit_background(
             settings,
             job["job_type"],
@@ -721,6 +831,10 @@ async def process_job(
         await _finish_response(repository, settings, job, owner, response)
     except asyncio.CancelledError:
         if not heartbeat_failures:
+            if claude_job and submitted:
+                persist_failure_or_record(
+                    "submission_outcome_unknown", "Claude stream interrupted locally",
+                )
             raise
         exc = heartbeat_failures[0]
         code = _public_error(
@@ -735,6 +849,35 @@ async def process_job(
         record_fallback_failure("ai_job_local_storage", exc)
         persist_local_storage_failure(exc)
     except Exception as exc:
+        if claude_job and submitted:
+            status_code = getattr(exc, "status_code", None)
+            rejected = (
+                not job.get("anthropic_message_id")
+                and status_code in {400, 401, 403, 404, 413, 422, 429}
+            )
+            if rejected:
+                code = _public_error(exc, submitted=True, response_id=None)
+                body = getattr(exc, "body", None)
+                if status_code == 400 and isinstance(body, dict):
+                    error = body.get("error", body)
+                    message = str(error.get("message", "")).lower() if isinstance(error, dict) else ""
+                    if "credit balance" in message:
+                        code = "provider_credit_exhausted"
+                zero_usage = dict.fromkeys((
+                    "input_tokens", "cached_input_tokens", "cache_creation_input_tokens",
+                    "cache_creation_5m_input_tokens", "cache_creation_1h_input_tokens",
+                    "output_tokens", "reasoning_tokens", "total_tokens",
+                ), 0)
+                await _with_storage_retry(
+                    repository.fail, job["job_id"], owner, code,
+                    usage=zero_usage, detail=f"Claude rejected request (HTTP {status_code})",
+                )
+            else:
+                persist_failure_or_record(
+                    "submission_outcome_unknown",
+                    f"Claude stream outcome unknown ({type(exc).__name__})",
+                )
+            return
         code = _public_error(
             exc,
             submitted=submitted,
@@ -777,6 +920,7 @@ async def run_once(
         int(settings.openai_job_lease_seconds),
         cooldown_seconds=int(settings.openai_manual_cooldown_seconds),
         unknown_submission_hold_seconds=int(settings.openai_job_max_age_seconds),
+        max_concurrency=int(settings.openai_max_concurrency),
     )
     if not job:
         return 0
@@ -869,16 +1013,33 @@ async def run_configured_once(
         or catalyst_scheduled_analysis_enabled
         or earnings_scheduled_analysis_enabled
     )
-    processed = await run_once(
-        repository,
-        effective_settings,
-        owner,
-        # The source-specific switches below decide whether an unsubmitted
-        # task may proceed. The global flag remains reserved for an unreadable
-        # runtime document, which is retryable rather than terminal.
-        allow_new_submissions=True,
-        new_submission_block_reason="analysis_disabled",
-        manual_analysis_enabled=manual_analysis_enabled,
-        scheduled_analysis_enabled=scheduled_analysis_enabled,
+    async def run_slot(slot_owner: str) -> int:
+        return await run_once(
+            repository,
+            effective_settings,
+            slot_owner,
+            # Source-specific switches decide whether unsent work may proceed.
+            allow_new_submissions=True,
+            new_submission_block_reason="analysis_disabled",
+            manual_analysis_enabled=manual_analysis_enabled,
+            scheduled_analysis_enabled=scheduled_analysis_enabled,
+        )
+
+    concurrency = (
+        min(4, max(1, int(effective_settings.openai_max_concurrency)))
+        if runtime.uses_claude(effective_settings.openai_model)
+        else 1
     )
+    if concurrency == 1:
+        processed = await run_slot(owner)
+    else:
+        # Each slot has its own lease and heartbeat. Database admission remains
+        # atomic across slots and processes; a cancelled group drains every
+        # stream through process_job's unknown-outcome accounting.
+        async with asyncio.TaskGroup() as group:
+            slots = [
+                group.create_task(run_slot(f"{owner}:slot-{slot}"))
+                for slot in range(concurrency)
+            ]
+        processed = sum(slot.result() for slot in slots)
     return processed, "enabled" if analysis_enabled else "analysis_disabled"

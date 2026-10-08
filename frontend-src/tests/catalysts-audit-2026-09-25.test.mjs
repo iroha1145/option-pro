@@ -1,3 +1,5 @@
+import * as evidenceSources from '../src/api/evidenceSources.ts';
+import * as aiModelLabels from '../src/lib/aiModelLabel.ts';
 /**
  * 2026-09-25 审计（第 5 节 FE-1 ~ FE-8 与催化剂相关的低优先级条目）回归。
  *
@@ -207,6 +209,7 @@ function loadCatalystApi({ get, post, postCreate } = {}) {
     '@/api/live': live,
     '@/mocks/fixtures2': new Proxy({}, { get: () => () => { throw new Error('测试不应进入演示数据分支'); } }),
     '@/components/catalysts/focusCycleRequest': focusCycleRequest,
+    '../../api/evidenceSources.ts': evidenceSources,
     '../../i18n/core.ts': i18n,
     './resourceSignals': { notifyCatalystReadsInvalidated: () => { calls.invalidations += 1; } },
   });
@@ -296,6 +299,7 @@ function drawerHarness({ get, post, postCreate, document: doc } = {}) {
       info: (title, body) => toasts.push(['info', title, body]),
     }) },
     '@/hooks/useShell': { useShell: () => ({ openTicker() {} }) },
+    '@/lib/aiModelLabel': aiModelLabels,
     '@/lib/format': { fmtLocaleDateTime: () => 't', fmtLocaleTime: () => 't' },
     '@/api/queryRegistry': { getQueryPrincipalGeneration: () => 0 },
     '@/lib/boundedReadRetry': boundedReadRetry,
@@ -306,6 +310,7 @@ function drawerHarness({ get, post, postCreate, document: doc } = {}) {
       ImpactValue: 'ImpactValue', Led: 'Led', StaleChip: 'StaleChip', TickerChip: 'TickerChip',
     },
     './ConfirmDialog': { default: 'ConfirmDialog' },
+    '../../api/evidenceSources.ts': evidenceSources,
     '../../i18n/core.ts': i18n,
   }, {
     window: { setTimeout: clock.api.setTimeout, clearTimeout: clock.api.clearTimeout },
@@ -813,6 +818,7 @@ function focusHarness({ latest, previous, trigger, poll }) {
     '@/lib/boundedReadRetry': boundedReadRetry,
     '@/lib/scoreHints': { SCORE_HINTS: {} },
     '@/lib/utils': { cn: (...xs) => xs.filter(Boolean).join(' ') },
+    '@/lib/aiModelLabel': aiModelLabels,
     '@/lib/format': { fmtLocaleDate: () => 'd', fmtLocaleDateTime: () => 'dt' },
     './api': { catalystsContract: {
       latestFocusCycle: async () => { calls.latest += 1; return latest(calls.latest); },
@@ -823,6 +829,7 @@ function focusHarness({ latest, previous, trigger, poll }) {
     './analysisErrorText': analysisErrorText,
     './bits': { ImpactValue: 'ImpactValue', Led: 'Led' },
     './ConfirmDialog': { default: 'ConfirmDialog' },
+    '../../api/evidenceSources.ts': evidenceSources,
     '../../i18n/core.ts': i18n,
   }, {
     window: { setTimeout: clock.api.setTimeout, clearTimeout: clock.api.clearTimeout },
@@ -1034,6 +1041,7 @@ test('2-E 页面刷新：写操作已清缓存时不再清第二次；页头刷�
     'react/jsx-runtime': passthroughJsx,
     'react-router': { useSearchParams: () => [new URLSearchParams(''), () => {}] },
     ...components,
+    '@/lib/aiModelLabel': aiModelLabels,
     '@/lib/format': { fmtTimeHHMMSS: () => 't' },
     '@/components/catalysts/filters': filters,
     '@/components/catalysts/api': { clearCatalystReadCache: () => { clears += 1; } },
@@ -1096,6 +1104,7 @@ function feedHarness() {
     '@/components/shared/InfoHint': { default: 'InfoHint' },
     '@/components/shared/SoftBadge': { default: 'SoftBadge' },
     '@/lib/utils': { cn: (...xs) => xs.filter(Boolean).join(' ') },
+    '@/lib/aiModelLabel': aiModelLabels,
     '@/lib/format': { fmtLocaleDate: () => 'd', fmtLocaleTime: () => 't', fmtRelative: () => 'r' },
     '@/lib/scoreHints': { SCORE_HINTS: {} },
     './api': { catalystsContract: { feed: (q) => feedImpl(q) } },
@@ -1117,6 +1126,7 @@ function feedHarness() {
       AnalysisStatusChip: 'AnalysisStatusChip', ClassificationChip: 'ClassificationChip', ConfidenceLabel: 'ConfidenceLabel',
       ImpactValue: 'ImpactValue', StaleChip: 'StaleChip', TickerChip: 'TickerChip',
     },
+    '../../api/evidenceSources.ts': evidenceSources,
     '../../i18n/core.ts': i18n,
   }).default;
   let props = { filters: filters.DEFAULT_FILTERS, onOpenNews() {}, patches: {}, refreshToken: 0, onFeedResult() {}, onClearFilters() {} };
@@ -1386,6 +1396,7 @@ function impactHarness({ reportAnalysis, requestReportAnalysis }) {
     '@/components/shared/SourceNote': { default: 'SourceNote' },
     './PulseDot': { default: 'PulseDot' },
     '@/components/shared/Skeleton': { SkeletonText: 'SkeletonText' },
+    '../../api/evidenceSources.ts': evidenceSources,
     '../../i18n/core.ts': i18n,
   }, {
     window: { setTimeout: clock.api.setTimeout, clearTimeout: clock.api.clearTimeout },
@@ -1533,4 +1544,107 @@ test('visual-tests 桩的任务响应改成真实形状：不再带 news_id 与 
   assert.match(stub, /job_type: 'news_impact'/);
   assert.match(stub, /submission_source: 'manual'/);
   assert.doesNotMatch(stub, /news_id|progress:/);
+});
+
+
+test('focus cycle keeps its historical model even when a newer attempt uses Claude', async () => {
+  const { api } = loadCatalystApi({ get: () => ({
+    cycle: { cycle_id: 'new-attempt', status: 'failed', model: 'claude-haiku-5-5', reasoning_effort: 'xhigh' },
+    latest_successful_cycle: {
+      cycle_id: 'old-result', status: 'completed', model: 'gpt-5.6-terra', reasoning_effort: 'max',
+      result: { title_zh: '历史结果', summary_zh: '历史摘要' },
+    },
+  }) });
+  const result = await api.catalystsContract.latestFocusCycle();
+  assert.equal(result.model, 'gpt-5.6-terra');
+  assert.equal(result.reasoning, 'max');
+});
+
+test('focus result displays only its own model and effort', async () => {
+  for (const [model, reasoning, expected] of [
+    ['claude-haiku-5-5', 'xhigh', 'Claude Haiku 5.5 · xhigh'],
+    ['gpt-5.6-terra', 'max', 'GPT-5.6 Terra · max'],
+  ]) {
+    const h = focusHarness({ latest: () => cycle({ model, reasoning }), trigger: () => focusJob(), poll: () => focusJob() });
+    h.mount();
+    await settle();
+    assert.ok(textOf(h.tree()).includes(expected));
+    h.unmount();
+  }
+});
+
+
+test('news result identity comes from the published result envelope, not the newer job', async () => {
+  const { api } = loadCatalystApi({ get: () => detail(newsRow({
+    analysis_status: 'completed', analysis: completedAnalysis,
+    analysis_model: 'gpt-5.6-terra', analysis_reasoning: 'max',
+  }), aiJob({ model: 'claude-haiku-5-5', reasoning: 'xhigh' })) });
+  const result = await api.catalystsContract.news('9600');
+  assert.equal(result.analysis.model, 'gpt-5.6-terra');
+  assert.equal(result.analysis.reasoning, 'max');
+  const missing = loadCatalystApi({ get: () => detail(newsRow({ analysis_status: 'completed', analysis: completedAnalysis }), aiJob({ model: 'claude-haiku-5-5', reasoning: 'xhigh' })) });
+  const old = await missing.api.catalystsContract.news('9600');
+  assert.equal(old.analysis.model, '');
+  assert.equal(old.analysis.reasoning, null);
+});
+
+
+test('news sources belong to the published result and reach the completed result panel', async () => {
+  const oldSources = [{ title: '旧结果证据', url: 'https://old.example/report', type: 'web_fetch' }];
+  const newerSources = [{ title: '新任务证据', url: 'https://new.example/report', type: 'web_search' }];
+  const h = drawerHarness({ get: () => detail(newsRow({
+    analysis_status: 'completed', analysis: completedAnalysis, analysis_sources: oldSources,
+  }), aiJob({ status: 'completed', evidence_sources: newerSources })) });
+  h.render({ newsId: '9600' });
+  await settle();
+  const panel = findNode(h.tree(), (node) => node.type === 'AnalysisSources');
+  assert.ok(panel);
+  assert.equal(panel.props.sources[0].url, 'https://old.example/report');
+  assert.equal(panel.props.sources.length, 1);
+  h.unmount();
+});
+
+test('focus normalization keeps saved result sources when the newer attempt fails', async () => {
+  const { api } = loadCatalystApi({ get: () => ({
+    cycle: { cycle_id: 'new', status: 'failed', evidence_sources: [{ title: '新', url: 'https://new.example/', type: 'web_search' }] },
+    latest_successful_cycle: { cycle_id: 'old', status: 'completed',
+      evidence_sources: [{ title: '旧', url: 'https://old.example/', type: 'web_fetch' }],
+      result: { title_zh: '旧结果', summary_zh: '旧摘要' },
+    },
+  }) });
+  const result = await api.catalystsContract.latestFocusCycle();
+  assert.equal(result.evidenceSources[0].url, 'https://old.example/');
+});
+
+test('unknown news submission does not offer forced retry', async () => {
+  const h = drawerHarness({ get: () => detail(newsRow({ analysis_status: 'failed' }), aiJob({ status: 'failed', error_code: 'submission_outcome_unknown' })) });
+  h.render({ newsId: '9600' });
+  await settle();
+  assert.match(textOf(h.tree()), /停止重复提交/);
+  assert.equal(findButton(h.tree(), '重试分析（强制）'), null);
+  h.unmount();
+});
+
+test('unknown focus submission disables new submissions while preserving status reads', async () => {
+  const h = focusHarness({
+    latest: () => cycle({ status: 'failed', errorCode: 'submission_outcome_unknown' }),
+    trigger: () => focusJob(), poll: () => focusJob(),
+  });
+  h.mount();
+  await settle();
+  const button = findButton(h.tree(), '任务状态待确认');
+  assert.ok(button);
+  assert.equal(button.props.disabled, true);
+  h.unmount();
+});
+
+test('unknown earnings submission does not offer another paid analysis', async () => {
+  const h = impactHarness({
+    reportAnalysis: () => ({ status: 'failed', errorCode: 'submission_outcome_unknown', locked: false, final: false, finalizationInProgress: false, result: null }),
+    requestReportAnalysis: () => { throw new Error('must not resubmit'); },
+  });
+  await h.clock.advance(0);
+  assert.match(textOf(h.tree()), /停止重复提交/);
+  assert.equal(findButton(h.tree(), '重试'), null);
+  h.unmount();
 });

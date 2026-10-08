@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import PrivateAttr
+from pydantic import PrivateAttr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.data_paths import explicit_data_path, get_data_paths
@@ -23,8 +23,16 @@ class CatalystSettings(BaseSettings):
     """
 
     _cache_db_path_override: Path | None = PrivateAttr(default=None)
-    model: Literal["gpt-5.6-terra"] = "gpt-5.6-terra"
-    reasoning: Literal["max"] = "max"
+    model: Literal["claude-haiku-5-5", "gpt-5.6-terra"] = "claude-haiku-5-5"
+    reasoning: Literal["xhigh", "max"] = "xhigh"
+
+    @model_validator(mode="after")
+    def _supported_analysis_identity(self) -> "CatalystSettings":
+        if (self.model, self.reasoning) not in {
+            ("claude-haiku-5-5", "xhigh"), ("gpt-5.6-terra", "max"),
+        }:
+            raise ValueError("unsupported catalyst model and reasoning")
+        return self
 
     model_config = SettingsConfigDict(
         env_ignore_empty=True,

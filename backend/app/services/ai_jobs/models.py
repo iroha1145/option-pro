@@ -2611,6 +2611,7 @@ class AIJobPublic(StrictModel):
     cycle_revision: Optional[StrictInt] = Field(default=None, ge=1)
     budget_charge_usd: float = Field(default=0.0, ge=0)
     usage: dict[str, Optional[StrictInt]] = Field(default_factory=dict)
+    evidence_sources: list[dict[str, str]] = Field(default_factory=list, max_length=10)
 
 
 class CancelRequest(StrictModel):

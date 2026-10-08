@@ -267,8 +267,8 @@ def migrate_legacy_environment(values: Mapping[str, str]) -> LegacyMigration:
         },
         "ai": {
             "model": defaults.ai.model,
-            "reasoning": "max",
-            "max_concurrency": 1,
+            "reasoning": defaults.ai.reasoning,
+            "max_concurrency": defaults.ai.max_concurrency,
             "daily_max_jobs": _integer(
                 values, "OPENAI_DAILY_MAX_JOBS", defaults.ai.daily_max_jobs
             ),

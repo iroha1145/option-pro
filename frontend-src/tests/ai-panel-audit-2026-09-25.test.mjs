@@ -1,3 +1,4 @@
+import * as aiModelLabels from '../src/lib/aiModelLabel.ts';
 /**
  * 2026-09-25 审计修复：个股 AI 面板（useAiJob / AiAnalysisCard / 期权解读）、错误码共用表、
  * 查询注册表恢复路径、行情快照、行展开手动重读，以及结构清理后的共用工具。
@@ -398,6 +399,7 @@ function renderSignalCard(state) {
     './api': { createSignalAnalysisJob: () => Promise.reject(new Error('unused')) },
     './useAiJob': { useAiJob: () => hookState(state) },
     '@/api/aiJobNormalize': normalize,
+    '@/lib/aiModelLabel': aiModelLabels,
     '@/lib/quoteSymbol': { isIndexSymbol: () => false },
   });
   return snapshot(stub.mount(() => exports.default({ ticker: 'NVDA' }))());
@@ -690,4 +692,25 @@ test('零引用的旧代码与死词条已清掉（接线检查）', () => {
   ]) {
     assert.equal(msgid in DICT, false, msgid);
   }
+});
+
+
+test('completed stock analysis labels its recorded model rather than the current default', () => {
+  for (const [model, reasoning, expected] of [
+    ['claude-haiku-5-5', 'xhigh', 'Claude Haiku 5.5 · xhigh'],
+    ['gpt-5.6-terra', 'max', 'GPT-5.6 Terra · max'],
+  ]) {
+    const view = renderSignalCard({ job: { id: 'saved-result', status: 'succeeded', model, reasoning, result: { summary: '已保存结果' } } });
+    assert.ok(view.text.includes(expected));
+  }
+  const unknown = renderSignalCard({ job: { id: 'legacy-without-identity', status: 'succeeded', result: { summary: '旧结果' } } });
+  assert.doesNotMatch(unknown.text, /Claude Haiku|GPT-5.6 Terra/);
+});
+
+
+test('unknown stock analysis submission offers close instead of retry', () => {
+  const view = renderSignalCard({ job: { id: 'unknown', status: 'failed', error: 'submission_outcome_unknown' } });
+  assert.match(view.text, /停止重复提交/);
+  assert.ok(view.buttons.some((button) => button.label === '关闭'));
+  assert.ok(!view.buttons.some((button) => button.label === '重试'));
 });

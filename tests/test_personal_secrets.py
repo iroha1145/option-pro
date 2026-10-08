@@ -68,6 +68,7 @@ def _process_secret_mutation(
 
 def test_option_pro_secret_allowlist_is_exact() -> None:
     expected = {
+        "ANTHROPIC_API_KEY",
         "OPENAI_API_KEY",
         "ANTHROPIC_API_KEY",
         "APP_PASSWORD_HASH",
@@ -101,6 +102,7 @@ def test_browser_settings_expose_only_option_pro_configuration_booleans(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     values = {
+        "ANTHROPIC_API_KEY": "sk-ant-never-return-this",
         "OPENAI_API_KEY": "sk-never-return-this",
         "ANTHROPIC_API_KEY": "sk-ant-never-return-this",
         "FINNHUB_API_KEY": "finnhub-never-return-this",
@@ -1071,6 +1073,7 @@ def test_real_owner_surfaces_never_return_secret_sentinels(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     sentinels = {
+        "ANTHROPIC_API_KEY": "sk-ant-boundary-claude-sentinel",
         "OPENAI_API_KEY": "sk-boundary-openai-sentinel",
         "ANTHROPIC_API_KEY": "sk-ant-boundary-anthropic-sentinel",
         "FINNHUB_API_KEY": "boundary-finnhub-sentinel",
@@ -1135,6 +1138,7 @@ def test_every_registered_api_error_response_hides_secret_sentinels(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     sentinels = {
+        "ANTHROPIC_API_KEY": "sk-ant-all-routes-claude-sentinel",
         "OPENAI_API_KEY": "sk-all-routes-openai-sentinel",
         "ANTHROPIC_API_KEY": "sk-ant-all-routes-anthropic-sentinel",
         "FINNHUB_API_KEY": "all-routes-finnhub-sentinel",
@@ -1249,3 +1253,60 @@ def test_validate_and_set_share_one_shape_predicate() -> None:
     assert personal_secrets._format_valid("FRED_API_KEY", good) is True
     assert personal_secrets._format_valid("FRED_API_KEY", good * 3) is False
     assert personal_secrets._format_valid("FRED_API_KEY", good.upper()) is False
+
+
+def test_claude_secret_set_preserves_legacy_key_and_never_echoes(
+    monkeypatch, tmp_path, capsys,
+) -> None:
+    path = tmp_path / "secrets.env"
+    monkeypatch.setattr(personal_secrets, "DEFAULT_SECRETS_PATH", path)
+    personal_secrets.atomic_write({"OPENAI_API_KEY": "sk-legacy-sentinel"}, path)
+    sentinel = "sk-ant-claude-sentinel"
+    _set_stdin(monkeypatch, sentinel)
+    assert personal_secrets.main(["set", "ANTHROPIC_API_KEY"]) == 0
+    output = capsys.readouterr()
+    assert sentinel not in output.out + output.err
+    values = dotenv_values(path)
+    assert values["ANTHROPIC_API_KEY"] == sentinel
+    assert values["OPENAI_API_KEY"] == "sk-legacy-sentinel"
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    assert personal_secrets.status_report(path)["ANTHROPIC_API_KEY"] == {"configured": True}
+
+
+def test_claude_validation_uses_official_read_only_models_endpoint(
+    monkeypatch, tmp_path,
+) -> None:
+    path = tmp_path / "secrets.env"
+    sentinel = "sk-ant-validation-sentinel"
+    personal_secrets.atomic_write({"ANTHROPIC_API_KEY": sentinel}, path)
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://proxy.example")
+    requests = []
+
+    def fake_open(request):
+        requests.append(request)
+        return _FakeValidationResponse()
+
+    monkeypatch.setattr(personal_secrets, "_open_validation_request", fake_open)
+    report = personal_secrets.validate_report(path)
+    assert report["secrets"]["ANTHROPIC_API_KEY"]["connection_ok"] is True
+    assert len(requests) == 1
+    request = requests[0]
+    assert request.full_url == "https://api.anthropic.com/v1/models"
+    assert request.get_method() == "GET"
+    assert request.data is None
+    assert {key.lower(): value for key, value in request.header_items()} == {
+        "x-api-key": sentinel, "anthropic-version": "2023-06-01",
+    }
+    assert sentinel not in json.dumps(report)
+
+
+def test_claude_invalid_key_shape_skips_network(monkeypatch, tmp_path) -> None:
+    path = tmp_path / "secrets.env"
+    personal_secrets.atomic_write({"ANTHROPIC_API_KEY": "sk-other-provider"}, path)
+    monkeypatch.setattr(
+        personal_secrets, "_open_validation_request",
+        lambda _request: pytest.fail("invalid key must not reach network"),
+    )
+    item = personal_secrets.validate_report(path)["secrets"]["ANTHROPIC_API_KEY"]
+    assert item["format_valid"] is False
+    assert item["reason"] == "format_invalid"

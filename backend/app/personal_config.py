@@ -51,7 +51,7 @@ class AccessConfig(StrictConfigModel):
     # 下面两个开关各自打开一个有限的「访客可发起」面，默认关闭：
     # - visitor_live_pulls: 个股手动拉取、日历 actual 外部补全
     #   （消耗 Massive/Yahoo/TradingView 等第三方行情额度）
-    # - visitor_ai_actions: 财报影响分析的提交（消耗 OpenAI 模型预算）
+    # - visitor_ai_actions: 财报影响分析的提交（消耗 Claude 模型预算）
     # 打开后仍保留原有的每 IP 限流、冷却与同源校验。
     # 板块 IV 使用公开的有界后台刷新队列，不依赖这两个开关。
     visitor_live_pulls: bool = False
@@ -100,9 +100,9 @@ class FeatureConfig(StrictConfigModel):
 
 
 class AIConfig(StrictConfigModel):
-    model: Literal["gpt-5.6-terra"] = "gpt-5.6-terra"
-    reasoning: Literal["max"] = "max"
-    max_concurrency: Literal[1] = 1
+    model: Literal["claude-haiku-5-5", "gpt-5.6-terra"] = "claude-haiku-5-5"
+    reasoning: Literal["xhigh", "max"] = "xhigh"
+    max_concurrency: int = Field(default=4, ge=1, le=4)
     # Retained for one migration cycle so old personal.toml files remain
     # readable. Zero means unlimited; the active safety boundary is Token use.
     daily_max_jobs: int = Field(default=0, ge=0, le=100_000)
@@ -113,6 +113,26 @@ class AIConfig(StrictConfigModel):
         le=100_000_000,
     )
     execution_mode: Literal["background"] = "background"
+
+    @model_validator(mode="before")
+    @classmethod
+    def preserve_legacy_concurrency_default(cls, value: Any) -> Any:
+        if (
+            isinstance(value, dict)
+            and value.get("model") == "gpt-5.6-terra"
+            and "max_concurrency" not in value
+        ):
+            return {**value, "max_concurrency": 1}
+        return value
+
+    @model_validator(mode="after")
+    def validate_model_reasoning(self) -> "AIConfig":
+        expected = "xhigh" if self.model == "claude-haiku-5-5" else "max"
+        if self.reasoning != expected:
+            raise ValueError("AI model and reasoning must use a supported pair")
+        if self.model == "gpt-5.6-terra" and self.max_concurrency != 1:
+            raise ValueError("legacy OpenAI configuration supports concurrency 1 only")
+        return self
 
 
 class CatalystConfig(StrictConfigModel):

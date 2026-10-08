@@ -36,12 +36,7 @@ _SAFE_HTTPS_AUTHORITY = re.compile(
 _UNSAFE_ENV_CHARACTERS = frozenset("#'\"\\$")
 _UNSAFE_TOKEN_CHARACTERS = _UNSAFE_ENV_CHARACTERS
 _REMOTE_SECRET_KEYS = frozenset(
-    {
-        "OPENAI_API_KEY",
-        "ANTHROPIC_API_KEY",
-        "FINNHUB_API_KEY",
-        "INTERNAL_API_TOKEN",
-    }
+    {"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "FINNHUB_API_KEY", "INTERNAL_API_TOKEN"}
 )
 _OPENAI_VALIDATION_URL = "https://api.openai.com/v1/models"
 # 列出模型是免费只读请求，能区分密钥无效（401）与服务不可用，不产生任何模型费用。
@@ -361,9 +356,9 @@ def _format_valid(key: str, value: str) -> bool:
         return False
     if any(character in value for character in _UNSAFE_TOKEN_CHARACTERS):
         return False
-    if key == "OPENAI_API_KEY" and not value.startswith("sk-"):
-        return False
     if key == "ANTHROPIC_API_KEY" and not value.startswith("sk-ant-"):
+        return False
+    if key == "OPENAI_API_KEY" and not value.startswith("sk-"):
         return False
     entry = _EXACT_SHAPES.get(key)
     if entry is not None and not entry[0](value):  # type: ignore[operator]
@@ -593,21 +588,18 @@ def validate_report(path: Path) -> dict[str, object]:
                     reason="local_validation_only",
                 )
             )
+        elif key == "ANTHROPIC_API_KEY":
+            item.update(
+                _validate_connection(
+                    _ANTHROPIC_VALIDATION_URL,
+                    {"x-api-key": value, "anthropic-version": _ANTHROPIC_API_VERSION},
+                )
+            )
         elif key == "OPENAI_API_KEY":
             item.update(
                 _validate_connection(
                     _OPENAI_VALIDATION_URL,
                     {"Authorization": f"Bearer {value}"},
-                )
-            )
-        elif key == "ANTHROPIC_API_KEY":
-            item.update(
-                _validate_connection(
-                    _ANTHROPIC_VALIDATION_URL,
-                    {
-                        "x-api-key": value,
-                        "anthropic-version": _ANTHROPIC_API_VERSION,
-                    },
                 )
             )
         elif key == "FINNHUB_API_KEY":

@@ -20,9 +20,9 @@ from app.tools.migrate_personal_config import migrate
 def test_repository_personal_config_freezes_paid_runtime() -> None:
     config = load_personal_config()
 
-    assert config.ai.model == "gpt-5.6-terra"
-    assert config.ai.reasoning == "max"
-    assert config.ai.max_concurrency == 1
+    assert config.ai.model == "claude-haiku-5-5"
+    assert config.ai.reasoning == "xhigh"
+    assert config.ai.max_concurrency == 4
     assert config.ai.daily_max_jobs == 0
     assert config.ai.daily_budget_usd == 0.0
     assert config.ai.daily_token_limit == 10_000_000
@@ -101,7 +101,7 @@ def test_market_brief_config_rejects_drift(overrides: dict) -> None:
     [
         ("model", "gpt-5.6-luna"),
         ("reasoning", "high"),
-        ("max_concurrency", 2),
+        ("max_concurrency", 5),
         ("execution_mode", "worker_sync"),
     ],
 )
@@ -140,8 +140,8 @@ def test_legacy_environment_is_reduced_to_typed_config_and_small_runtime_env() -
             }
         )
 
-    assert migration.config.ai.reasoning == "max"
-    assert migration.config.ai.max_concurrency == 1
+    assert migration.config.ai.reasoning == "xhigh"
+    assert migration.config.ai.max_concurrency == 4
     assert migration.config.features.catalyst_mode == "scheduled"
     assert migration.config.catalyst.sync_seconds == 240
     assert migration.secrets == {
@@ -219,8 +219,8 @@ def test_migration_command_writes_private_secrets_and_review_report(
         )
 
     migrated = load_personal_config(config_path)
-    assert migrated.ai.reasoning == "max"
-    assert migrated.ai.max_concurrency == 1
+    assert migrated.ai.reasoning == "xhigh"
+    assert migrated.ai.max_concurrency == 4
     assert secrets_path.read_text(encoding="utf-8") == (
         "OPENAI_API_KEY=secret-value\n"
         "MARKETDATA_TOKEN=market-secret\n"
@@ -273,3 +273,75 @@ def test_migration_fails_closed_when_canonical_and_legacy_aliases_conflict(
     serialized = report_path.read_text(encoding="utf-8")
     assert "https://new.example" not in serialized
     assert "https://old.example" not in serialized
+
+
+def test_old_personal_ai_configuration_remains_readable_without_rewriting(tmp_path: Path) -> None:
+    path = tmp_path / "personal.toml"
+    path.write_text('[ai]\nmodel = "gpt-5.6-terra"\nreasoning = "max"\nmax_concurrency = 1\n', encoding="utf-8")
+    config = load_personal_config(path).ai
+    assert config.model == "gpt-5.6-terra"
+    assert config.reasoning == "max"
+    assert config.max_concurrency == 1
+
+
+@pytest.mark.parametrize(
+    ("model", "reasoning"),
+    [("claude-haiku-5-5", "max"), ("gpt-5.6-terra", "xhigh")],
+)
+def test_personal_ai_rejects_mixed_provider_reasoning(model, reasoning) -> None:
+    with pytest.raises(ValidationError):
+        AIConfig(model=model, reasoning=reasoning)
+
+
+def test_config_migration_preserves_model_reasoning_pair() -> None:
+    from app.personal_config import PersonalConfig
+    from app.tools.migrate_personal_config import _toml
+    import tomllib
+
+    for model, reasoning in [("claude-haiku-5-5", "xhigh"), ("gpt-5.6-terra", "max")]:
+        config = PersonalConfig(ai=AIConfig(model=model, reasoning=reasoning, max_concurrency=1 if model == "gpt-5.6-terra" else 4))
+        restored = PersonalConfig.model_validate(tomllib.loads(_toml(config)))
+        assert restored.ai == config.ai
+
+
+@pytest.mark.parametrize("concurrency", [1, 2, 3, 4])
+def test_claude_personal_configuration_accepts_bounded_parallelism(concurrency) -> None:
+    assert AIConfig(max_concurrency=concurrency).max_concurrency == concurrency
+
+
+@pytest.mark.parametrize("concurrency", [0, 5])
+def test_claude_personal_configuration_rejects_out_of_range_parallelism(concurrency) -> None:
+    with pytest.raises(ValidationError):
+        AIConfig(max_concurrency=concurrency)
+
+
+@pytest.mark.parametrize("concurrency", [2, 3, 4])
+def test_legacy_openai_personal_configuration_keeps_concurrency_one(concurrency) -> None:
+    with pytest.raises(ValidationError):
+        AIConfig(model="gpt-5.6-terra", reasoning="max", max_concurrency=concurrency)
+
+
+def test_configuration_migration_preserves_operator_selected_parallelism() -> None:
+    from app.personal_config import PersonalConfig
+    from app.tools.migrate_personal_config import _toml
+    import tomllib
+    selected = PersonalConfig(ai=AIConfig(max_concurrency=3))
+    restored = PersonalConfig.model_validate(tomllib.loads(_toml(selected)))
+    assert restored.ai.max_concurrency == 3
+
+
+@pytest.mark.parametrize(
+    ("model", "reasoning", "expected_concurrency"),
+    [("gpt-5.6-terra", "max", 1), ("claude-haiku-5-5", "xhigh", 4)],
+)
+def test_personal_ai_omitted_concurrency_uses_provider_default(
+    tmp_path: Path, model: str, reasoning: str, expected_concurrency: int,
+) -> None:
+    path = tmp_path / "personal.toml"
+    original = f'[ai]\nmodel = "{model}"\nreasoning = "{reasoning}"\n'
+    path.write_text(original, encoding="utf-8")
+    config = load_personal_config(path).ai
+    assert config.model == model
+    assert config.reasoning == reasoning
+    assert config.max_concurrency == expected_concurrency
+    assert path.read_text(encoding="utf-8") == original

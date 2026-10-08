@@ -272,8 +272,16 @@ class AIJobsTask:
             # Cache only an initialized repository; a failed attempt retries
             # the explicit schema and recovery checks on the next run.
             self._repository = repository
-        secret = self._settings.openai_api_key.get_secret_value().strip()
-        if not secret:
+        from app.services.ai_jobs import runtime as ai_runtime
+
+        # Either credential can be needed during a provider transition: Claude
+        # for new work, OpenAI only for already-submitted legacy responses.
+        if not (
+            ai_runtime.api_key_configured(self._settings)
+            or ai_runtime.api_key_configured(
+                self._settings, model=ai_runtime.OFFICIAL_OPENAI_MODEL,
+            )
+        ):
             return TaskResult(
                 status="disabled",
                 details={"reason": "api_key_missing"},
@@ -504,7 +512,7 @@ class EarningsAnalysisTask:
         )
 
         schema_version, schema_sha256 = ai_runtime.schema_identity(
-            "earnings_impact"
+            "earnings_impact", model=self._settings.openai_model,
         )
         queued = 0
         existing = 0

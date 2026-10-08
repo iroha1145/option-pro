@@ -1,3 +1,4 @@
+import * as evidenceSources from '../src/api/evidenceSources.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -119,6 +120,7 @@ function loadCatalystsModule(responses = {}) {
           `/catalysts/market-focus-cycles/${idValue}`,
       };
     }
+    if (id === '../../api/evidenceSources.ts') return evidenceSources;
     if (id === '../../i18n/core.ts') return { t: stubT };
     if (id === './resourceSignals') return { notifyCatalystReadsInvalidated: () => {} };
     throw new Error(`unexpected import: ${id}`);

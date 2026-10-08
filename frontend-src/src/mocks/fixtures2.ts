@@ -1,3 +1,4 @@
+import type { EvidenceSource } from '../api/types';
 /** Mock fixtures · 突破雷达 / 板块 / 财报 / 催化剂 / 期权 / AI 任务 / Worker */
 import { ApiError } from '@/api/client';
 import { Rng, round2, round4 } from './rng';
@@ -966,6 +967,8 @@ export interface NewsImpactResult {
   causalSummary: string;
   trustedStockImpacts: TrustedStockImpact[];
   model: string;
+  reasoning?: string | null;
+  evidenceSources?: EvidenceSource[];
   generatedAt: string;
 }
 
@@ -1092,6 +1095,8 @@ export interface MarketFocusCycle {
   generatedAt: string;
   trigger: 'scheduled' | 'manual';
   model: string;
+  reasoning?: string | null;
+  evidenceSources?: EvidenceSource[];
   newsCount: number;
   summary: string;
   assessments: FocusCycleStockAssessment[];

@@ -622,6 +622,9 @@ def test_ai_worker_fails_closed_when_runtime_settings_are_unreadable(
     settings = SimpleNamespace(
         openai_job_db_path=tmp_path / "ai-jobs.db",
         openai_api_key=SecretStr("test-only-key"),
+        openai_model="gpt-5.6-terra",
+        openai_reasoning="max",
+        openai_max_concurrency=1,
         openai_job_lease_seconds=60,
         openai_manual_cooldown_seconds=30,
         openai_job_max_age_seconds=86_400,
@@ -656,6 +659,9 @@ def test_ai_worker_uses_fresh_runtime_budget_without_restart(
     settings = FakeSettings(
         openai_job_db_path=tmp_path / "ai-jobs.db",
         openai_api_key=SecretStr("test-only-key"),
+        openai_model="gpt-5.6-terra",
+        openai_reasoning="max",
+        openai_max_concurrency=1,
         openai_daily_max_jobs=4,
         openai_daily_budget_usd=2.0,
         openai_daily_token_limit=10_000_000,
@@ -863,7 +869,7 @@ def test_scheduled_pre_release_cap_ignores_other_jobs_but_keeps_global_cap(
         openai_execution_mode="background",
         openai_job_max_queued=200,
     )
-    news_version, news_digest = ai_runtime.schema_identity("news_impact")
+    news_version, news_digest = ai_runtime.schema_identity("news_impact", model="gpt-5.6-terra")
     for index in range(other_active):
         _row, created = repository.create_job(
             job_type="news_impact",
@@ -947,7 +953,7 @@ def test_existing_scheduled_pre_release_jobs_consume_the_independent_cap(
         openai_execution_mode="background",
         openai_job_max_queued=200,
     )
-    version, digest = ai_runtime.schema_identity("earnings_impact")
+    version, digest = ai_runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
     for index in range(10):
         payload = normalize_earnings_analysis_payload(
             {
@@ -1369,7 +1375,7 @@ def test_earnings_ai_worker_ignores_unrelated_catalyst_mode(
             return CopyableSettings(**values)
 
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
-    schema_version, schema_sha256 = runtime.schema_identity("earnings_impact")
+    schema_version, schema_sha256 = runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
     job, created = repository.create_job(
         job_type="earnings_impact",
         payload={"ticker": "AAPL", "name": "Apple"},
@@ -1384,6 +1390,9 @@ def test_earnings_ai_worker_ignores_unrelated_catalyst_mode(
     )
     assert created is True
     settings = CopyableSettings(
+        openai_model="gpt-5.6-terra",
+        openai_reasoning="max",
+        openai_max_concurrency=1,
         openai_job_lease_seconds=60,
         openai_timeout_seconds=900.0,
         openai_background_poll_timeout_seconds=1800.0,

@@ -1,3 +1,4 @@
+import AnalysisSources from '@/components/shared/AnalysisSources';
 import AnalysisIcon from '@/components/shared/AnalysisIcon';
 import SoftBadge from '@/components/shared/SoftBadge';
 import StatusNotice from '@/components/shared/StatusNotice';
@@ -21,6 +22,7 @@ import { SCORE_HINTS } from '@/lib/scoreHints';
 import { cn } from '@/lib/utils';
 import { DUR_SECTION, DUR_UI, EASE_PAPER, SPRING_POP } from '@/lib/motion';
 import { fmtLocaleDate, fmtLocaleDateTime } from '@/lib/format';
+import { aiModelLabel } from '@/lib/aiModelLabel';
 import { t } from '../../i18n/core.ts';
 
 const STAGES = [t('萌芽'), t('发酵'), t('主升'), t('退潮')] as const;
@@ -171,8 +173,9 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
             </ul>
           )}
           <p className="mt-4 break-all text-micro leading-5 text-ink-400 tnum">
-            {cycle.cycleId} · {cycle.trigger === 'manual' ? t('手动触发') : t('定时生成')} · {cycle.model}
+            {cycle.cycleId} · {cycle.trigger === 'manual' ? t('手动触发') : t('定时生成')}{cycle.model.trim() ? ` · ${aiModelLabel(cycle.model, cycle.reasoning)}` : ''}
           </p>
+          <AnalysisSources sources={cycle.evidenceSources} />
         </div>
         {cycle.assessments.length > 0 && <section
           aria-label={t('逐股评估')}
@@ -391,6 +394,9 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
   }, [abandonPoll, later, latestQ, onDataRefreshed, stopPoll, toast]);
 
   const busy = Boolean(running) || latestActive;
+  const outcomeUnknown = job?.errorCode === 'submission_outcome_unknown'
+    || latestQ.data?.latestAttempt?.errorCode === 'submission_outcome_unknown'
+    || latestQ.data?.errorCode === 'submission_outcome_unknown';
   const latestFailed = Boolean(latestQ.data?.latestAttempt)
     || SETTLED_FAILURE_STATUSES.has(latestQ.data?.status ?? '');
   /* 读取失败与业务空态分开：失败有旧数据就继续显示并标注，没有就给错误说明与重试（审计 FE-7）。 */
@@ -417,7 +423,7 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
         {isOwner ? (
           <button
             onClick={() => setConfirmOpen(true)}
-            disabled={busy}
+            disabled={busy || outcomeUnknown}
             aria-busy={busy}
             className="btn-primary"
           >
@@ -429,7 +435,7 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
             ) : (
               <>
                 <AnalysisIcon size={14} />
-                {latestFailed
+                {outcomeUnknown ? t('任务状态待确认') : latestFailed
                   ? t('重试焦点周期')
                   : t('触发新周期')}
               </>
