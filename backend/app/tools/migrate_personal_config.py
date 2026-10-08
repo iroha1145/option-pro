@@ -32,8 +32,8 @@ catalyst_mode = {_toml_string(config.features.catalyst_mode)}
 
 [ai]
 model = {_toml_string(config.ai.model)}
-reasoning = "max"
-max_concurrency = 1
+reasoning = {_toml_string(config.ai.reasoning)}
+max_concurrency = {config.ai.max_concurrency}
 daily_max_jobs = {config.ai.daily_max_jobs}
 daily_budget_usd = {config.ai.daily_budget_usd}
 daily_token_limit = {config.ai.daily_token_limit}

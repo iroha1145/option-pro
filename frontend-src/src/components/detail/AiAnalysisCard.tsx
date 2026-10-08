@@ -1,3 +1,4 @@
+import AnalysisSources from '@/components/shared/AnalysisSources';
 /**
  * AI 股票分析（signal_analysis 任务）
  * owner：确认费用 → 创建任务 → 按创建响应的 Retry-After 首查，之后 2/3/5/8/10 秒退避轮询
@@ -5,6 +6,7 @@
  * visitor：「登录后可用模型分析」
  */
 import { useState } from 'react';
+import { aiModelLabel } from '@/lib/aiModelLabel';
 import { Link } from 'react-router';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAccess } from '@/hooks/useAccess';
@@ -160,6 +162,8 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
           >
             <div className="mt-3 rounded-md border border-ai-600/25 bg-ai-50 px-3.5 py-3">
               <p className="text-body-s leading-relaxed text-ink-800">{resultSummary}</p>
+              {job.model?.trim() && <p className="mt-2 break-words text-micro text-ink-400">{aiModelLabel(job.model, job.reasoning)}</p>}
+              <AnalysisSources sources={job.evidenceSources} />
               <button onClick={reset} className="mt-2 text-caption font-medium text-ai-600 hover:text-ai-600/80">
                 {t('重新分析')}
               </button>

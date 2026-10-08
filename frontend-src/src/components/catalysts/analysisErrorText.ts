@@ -26,7 +26,7 @@ const REASONS: Record<string, string> = {
   budget_blocked: QUOTA_USED,
   daily_budget_usd_reached: t('今天的 AI 预算已用完，这次没有执行分析'),
   daily_job_limit_reached: t('今天的 AI 分析次数已用完，这次没有执行分析'),
-  submission_outcome_unknown: t('未能确认上次分析结果，请重试'),
+  submission_outcome_unknown: t('无法确认模型服务是否收到分析请求，已停止重复提交，请先核对原任务状态'),
   provider_incomplete_max_output_tokens: INCOMPLETE,
   provider_incomplete: INCOMPLETE,
   manual_analysis_disabled: t('AI 分析已关闭'),

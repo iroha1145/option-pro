@@ -34,7 +34,7 @@ JOB_TYPES = (
 )
 
 
-def _identity_the_long_way(job_type: str) -> str:
+def _identity_the_long_way(job_type: str, *, model: str) -> str:
     """Recompute the identity with the schema straight from Pydantic.
 
     Deliberately does not reuse the cached accessor: this is the pre-cache
@@ -47,8 +47,8 @@ def _identity_the_long_way(job_type: str) -> str:
         "result_validation_contract": rt.RESULT_VALIDATION_CONTRACT_VERSION,
         "schema": result_model_for(job_type).model_json_schema(mode="validation"),
         "schema_name": request.schema_name,
-        "max_input_tokens": rt.max_input_tokens_for(job_type),
-        "max_output_tokens": rt.max_output_tokens_for(job_type),
+        "max_input_tokens": rt.max_input_tokens_for(job_type, model=model),
+        "max_output_tokens": rt.max_output_tokens_for(job_type, model=model),
         "max_tool_calls": rt.max_tool_calls_for(job_type),
         "use_web_search": request.use_web_search,
     }
@@ -60,7 +60,9 @@ def _identity_the_long_way(job_type: str) -> str:
 
 @pytest.mark.parametrize("job_type", JOB_TYPES)
 def test_caching_the_schema_does_not_move_the_identity_hash(job_type: str) -> None:
-    assert rt.schema_identity(job_type)[1] == _identity_the_long_way(job_type)
+    assert rt.schema_identity(job_type, model="gpt-5.6-terra")[1] == (
+        _identity_the_long_way(job_type, model="gpt-5.6-terra")
+    )
 
 
 @pytest.mark.parametrize("job_type", JOB_TYPES)

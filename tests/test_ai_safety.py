@@ -50,7 +50,7 @@ def test_root_env_path_is_independent_of_working_directory():
     assert Settings.model_config.get("env_file") is None
 
 
-def test_terra_defaults_and_runtime_bounds(monkeypatch):
+def test_claude_defaults_and_runtime_bounds(monkeypatch):
     for name in (
         "OPENAI_MODEL",
         "OPENAI_REASONING",
@@ -59,8 +59,9 @@ def test_terra_defaults_and_runtime_bounds(monkeypatch):
     ):
         monkeypatch.delenv(name, raising=False)
     settings = Settings(_env_file=None)
-    assert settings.openai_model == "gpt-5.6-terra"
-    assert settings.openai_reasoning == "max"
+    assert settings.openai_model == "claude-haiku-5-5"
+    assert settings.openai_reasoning == "xhigh"
+    assert settings.openai_max_concurrency == 4
     assert settings.openai_timeout_seconds == 900
     assert settings.openai_max_retries == 0
     assert settings.openai_execution_mode == "background"
@@ -74,7 +75,7 @@ def test_terra_defaults_and_runtime_bounds(monkeypatch):
     with pytest.raises(ValidationError):
         Settings(_env_file=None, OPENAI_EXECUTION_MODE="worker_sync")
     with pytest.raises(ValidationError):
-        Settings(_env_file=None, OPENAI_MAX_CONCURRENCY=2)
+        Settings(_env_file=None, OPENAI_MAX_CONCURRENCY=5)
     with pytest.raises(ValidationError):
         Settings(_env_file=None, OPENAI_DAILY_TOKEN_LIMIT=102_399)
 

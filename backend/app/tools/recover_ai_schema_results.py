@@ -8,6 +8,7 @@ from typing import Any, Sequence
 
 from app.config import get_settings
 from app.services.ai_jobs import runtime
+from app.services.ai_jobs.models import validate_result
 from app.services.ai_jobs.repository import (
     RECOVERABLE_FAILURE_CODES,
     AIJobRepository,
@@ -48,7 +49,10 @@ async def recover(job_ids: Sequence[str], *, apply: bool) -> list[dict[str, Any]
         if row is None:
             output.append({"job_id": job_id, "status": "not_found"})
             continue
-        response_id = str(row.get("openai_response_id") or "")
+        claude_result = runtime.uses_claude(row.get("model"))
+        response_id = str(row.get(
+            "anthropic_message_id" if claude_result else "openai_response_id"
+        ) or "")
         if (
             row.get("status") != "failed"
             or row.get("error_code") not in RECOVERABLE_FAILURE_CODES
@@ -58,7 +62,8 @@ async def recover(job_ids: Sequence[str], *, apply: bool) -> list[dict[str, Any]
             output.append({"job_id": job_id, "status": "not_recoverable"})
             continue
         try:
-            response = await runtime.retrieve(settings, response_id)
+            receipt = repository.get_provider_result(job_id) if claude_result else None
+            response = None if claude_result else await runtime.retrieve(settings, response_id)
         except Exception as error:
             output.append(
                 {
@@ -68,10 +73,12 @@ async def recover(job_ids: Sequence[str], *, apply: bool) -> list[dict[str, Any]
                 }
             )
             continue
-        if str(getattr(response, "status", "") or "") != "completed":
+        if (claude_result and receipt is None) or (
+            not claude_result and str(getattr(response, "status", "") or "") != "completed"
+        ):
             output.append({"job_id": job_id, "status": "provider_not_completed"})
             continue
-        terminal_error = runtime.response_terminal_error(response)
+        terminal_error = receipt.get("terminal_error") if receipt else runtime.response_terminal_error(response)
         if terminal_error:
             output.append(
                 {
@@ -83,10 +90,9 @@ async def recover(job_ids: Sequence[str], *, apply: bool) -> list[dict[str, Any]
             continue
         try:
             payload = json.loads(str(row["payload_json"]))
-            result = runtime.response_result(
-                response,
-                str(row["job_type"]),
-                payload,
+            result = (
+                validate_result(str(row["job_type"]), receipt["output_text"], payload)
+                if receipt else runtime.response_result(response, str(row["job_type"]), payload)
             )
         except (json.JSONDecodeError, TypeError, ValueError) as error:
             output.append(

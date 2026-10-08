@@ -9,6 +9,7 @@ import { Led } from './bits';
 import SoftBadge from '@/components/shared/SoftBadge';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import { fmtRelative } from '@/lib/format';
+import { aiModelLabel } from '@/lib/aiModelLabel';
 import { afterLoadIdle } from '@/lib/afterLoadIdle';
 import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { cn } from '@/lib/utils';
@@ -166,10 +167,9 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
           )}
           {s && (
             <p className="mt-1 break-words text-micro text-ink-400 tnum">
-              {s.analysisModel ? (
+              {s.analysisModel?.trim() ? (
                 <>
-                  {t('模型')} {s.analysisModel}
-                  {s.analysisReasoning ? ` · ${s.analysisReasoning}` : ''}
+                  {t('模型')} {aiModelLabel(s.analysisModel, s.analysisReasoning)}
                 </>
               ) : s.queueDepth != null ? (
                 <>

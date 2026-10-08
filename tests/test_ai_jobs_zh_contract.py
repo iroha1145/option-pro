@@ -41,7 +41,7 @@ def _settings(path):
 
 
 def _create_job(repository: AIJobRepository, ticker: str):
-    version, digest = runtime.schema_identity("earnings_impact")
+    version, digest = runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
     return repository.create_job(
         job_type="earnings_impact",
         payload={"ticker": ticker, "name": ticker},
@@ -1935,18 +1935,18 @@ def test_runtime_uses_fixed_model_reasoning_background_and_per_task_limits(tmp_p
         assert params["store"] is True
         assert params["max_output_tokens"] == expected_tokens
         assert params["text"]["format"]["strict"] is True
-    assert runtime.max_output_tokens_for("news_impact") == 32_768
-    assert runtime.max_output_tokens_for("market_focus") == 49_152
+    assert runtime.max_output_tokens_for("news_impact", model="gpt-5.6-terra") == 32_768
+    assert runtime.max_output_tokens_for("market_focus", model="gpt-5.6-terra") == 49_152
 
 
 def test_runtime_policy_changes_schema_identity(monkeypatch):
-    _, before = runtime.schema_identity("news_impact")
+    _, before = runtime.schema_identity("news_impact", model="gpt-5.6-terra")
     monkeypatch.setitem(
         runtime.AI_TASK_MAX_OUTPUT_TOKENS,
         "news_impact",
-        runtime.max_output_tokens_for("news_impact") + 1,
+        runtime.max_output_tokens_for("news_impact", model="gpt-5.6-terra") + 1,
     )
-    _, after = runtime.schema_identity("news_impact")
+    _, after = runtime.schema_identity("news_impact", model="gpt-5.6-terra")
     assert after != before
 
 
@@ -2062,6 +2062,7 @@ def test_failed_jobs_without_usage_release_daily_token_budget(
     snapshot = repository.budget_snapshot(
         daily_limit=100,
         daily_budget_usd=100.0,
+        model="gpt-5.6-terra",
         daily_token_limit=200_000,
         cooldown_seconds=0,
     )
@@ -2090,7 +2091,12 @@ def test_provider_credit_warning_recovers_after_success_and_returns_on_new_failu
         return job
 
     def snapshot():
-        return repository.budget_snapshot(daily_limit=0, daily_budget_usd=0, now=clock[0])
+        return repository.budget_snapshot(
+            daily_limit=0,
+            daily_budget_usd=0,
+            now=clock[0],
+            model="gpt-5.6-terra",
+        )
 
     finish("OLD")
     finish("EMPTY", credit_failure=True)
@@ -2115,6 +2121,7 @@ def test_global_concurrency_limit_defers_a_second_paid_submission(tmp_path):
     pending_snapshot = repository.budget_snapshot(
         daily_limit=0,
         daily_budget_usd=0,
+        model="gpt-5.6-terra",
     )
     assert pending_snapshot["concurrency_available"] is True
     assert pending_snapshot["active_job"] is None
@@ -2130,6 +2137,7 @@ def test_global_concurrency_limit_defers_a_second_paid_submission(tmp_path):
     active_snapshot = repository.budget_snapshot(
         daily_limit=0,
         daily_budget_usd=0,
+        model="gpt-5.6-terra",
     )
     assert active_snapshot["concurrency_available"] is False
     assert active_snapshot["active_job"]["job_id"] == first["job_id"]
@@ -2219,14 +2227,15 @@ def test_recent_unknown_submission_holds_the_global_concurrency_slot(tmp_path):
     snapshot = repository.budget_snapshot(
         daily_limit=4,
         daily_budget_usd=2.0,
+        model="gpt-5.6-terra",
     )
     assert snapshot["concurrency_available"] is False
     assert snapshot["active_job"]["error_code"] == "submission_outcome_unknown"
     assert snapshot["token_budget_used_tokens"] == runtime.token_reservation(
-        "earnings_impact"
+        "earnings_impact", model="gpt-5.6-terra"
     )
     assert repository.get_job(first["job_id"])["budget_charge_microusd"] == (
-        runtime.budget_reservation_microusd("earnings_impact")
+        runtime.budget_reservation_microusd("earnings_impact", model="gpt-5.6-terra")
     )
 
 
@@ -2261,6 +2270,7 @@ def test_expired_unknown_submission_releases_other_jobs_without_retrying_it(
     snapshot = repository.budget_snapshot(
         daily_limit=4,
         daily_budget_usd=2.0,
+        model="gpt-5.6-terra",
         unknown_submission_hold_seconds=86400,
     )
     assert snapshot["concurrency_available"] is True
@@ -2332,7 +2342,8 @@ def test_explicit_provider_rejection_does_not_create_an_unknown_submission_lock(
     snapshot = repository.budget_snapshot(
         daily_limit=0,
         daily_budget_usd=0,
-        daily_token_limit=runtime.token_reservation("earnings_impact"),
+        model="gpt-5.6-terra",
+        daily_token_limit=runtime.token_reservation("earnings_impact", model="gpt-5.6-terra"),
     )
     assert snapshot["token_budget_used_tokens"] == 0
     assert snapshot["token_budget_available"] is True
@@ -2342,13 +2353,13 @@ def test_explicit_provider_rejection_does_not_create_an_unknown_submission_lock(
         second["job_id"],
         "second-owner",
         daily_limit=4,
-        daily_token_limit=runtime.token_reservation("earnings_impact"),
+        daily_token_limit=runtime.token_reservation("earnings_impact", model="gpt-5.6-terra"),
     ) == "started"
 
 
 def test_oversized_runtime_input_fails_before_paid_capacity_is_reserved(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
-    version, digest = runtime.schema_identity("earnings_impact")
+    version, digest = runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
     oversized = {"ticker": "AAA", "raw_context": "x" * 61_000}
 
     def create(payload):
@@ -2431,7 +2442,7 @@ def test_public_job_hides_new_shape_result_when_legacy_payload_lacks_identity(
     tmp_path,
 ):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
-    version, digest = runtime.schema_identity("news_impact")
+    version, digest = runtime.schema_identity("news_impact", model="gpt-5.6-terra")
     row, _ = repository.create_job(
         job_type="news_impact",
         payload={"news_id": 1},

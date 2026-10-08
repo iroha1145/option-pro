@@ -297,6 +297,7 @@ def test_v6_database_upgrades_without_rewriting_paid_history(tmp_path):
 
 def test_previous_prompt_remains_readable_without_refetch_or_repayment(story):
     _etl, ai, engine = story
+    engine.model, engine.reasoning = "gpt-5.6-terra", "max"
     job = engine.request_analysis(1, force=False)
     with sqlite3.connect(ai.path) as connection:
         connection.execute("UPDATE ai_jobs SET prompt_version='news-impact-zh-cn-v6',schema_sha256=? WHERE job_id=?", (runtime.LEGACY_NEWS_V6_SCHEMA_IDENTITY[1], job["job_id"]))
@@ -307,15 +308,17 @@ def test_previous_prompt_remains_readable_without_refetch_or_repayment(story):
 
 
 def test_legacy_news_contract_exception_is_exact_and_keeps_policy_guard(monkeypatch):
-    assert runtime.schema_identity("news_impact") == runtime.NEWS_CONTENT_SCHEMA_IDENTITY
-    assert runtime.news_schema_identity_matches("news-impact-zh-cn-v6", *runtime.LEGACY_NEWS_V6_SCHEMA_IDENTITY)
-    assert not runtime.news_schema_identity_matches("news-impact-zh-cn-v7", *runtime.LEGACY_NEWS_V6_SCHEMA_IDENTITY)
+    current = runtime.schema_identity("news_impact", model="gpt-5.6-terra")
+    assert current == runtime.NEWS_CONTENT_SCHEMA_IDENTITY
+    assert runtime.news_schema_identity_matches("news-impact-zh-cn-v6", *runtime.LEGACY_NEWS_V6_SCHEMA_IDENTITY, current_identity=current)
+    assert not runtime.news_schema_identity_matches("news-impact-zh-cn-v7", *runtime.LEGACY_NEWS_V6_SCHEMA_IDENTITY, current_identity=current)
     monkeypatch.setattr(runtime, "schema_identity", lambda _job: ("news_impact_zh_cn_v6", "another-policy"))
     assert not runtime.news_schema_identity_matches("news-impact-zh-cn-v6", *runtime.LEGACY_NEWS_V6_SCHEMA_IDENTITY)
 
 
 def test_pending_real_v6_contract_continues_in_worker_without_new_job(story, monkeypatch):
     _etl, ai, engine = story
+    engine.model, engine.reasoning = "gpt-5.6-terra", "max"
     job = engine.request_analysis(1, force=False)
     with sqlite3.connect(ai.path) as connection:
         connection.execute("UPDATE ai_jobs SET prompt_version='news-impact-zh-cn-v6',schema_sha256=? WHERE job_id=?", (runtime.LEGACY_NEWS_V6_SCHEMA_IDENTITY[1], job["job_id"]))

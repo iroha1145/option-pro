@@ -13,9 +13,9 @@ breakout_enabled = true
 catalyst_mode = "scheduled"
 
 [ai]
-model = "gpt-5.6-terra"
-reasoning = "max"
-max_concurrency = 1
+model = "claude-haiku-5-5"
+reasoning = "xhigh"
+max_concurrency = 4
 daily_max_jobs = 0
 daily_budget_usd = 0.0
 daily_token_limit = 10000000

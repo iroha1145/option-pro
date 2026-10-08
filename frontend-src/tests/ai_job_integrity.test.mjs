@@ -135,3 +135,30 @@ test('production option panel contains no hard-coded completion conclusion', asy
   assert.match(source, /underlyingPrice: activeChain\.spot/);
   assert.match(source, /expiration,/);
 });
+
+
+test('Claude jobs preserve their model, reasoning, and all reported cache usage', () => {
+  const usage = {
+    input_tokens: 2500, output_tokens: 120,
+    cached_input_tokens: 1500, cache_creation_input_tokens: 700,
+    cache_creation_5m_input_tokens: 700, cache_creation_1h_input_tokens: 0,
+    reasoning_tokens: null,
+    web_search_requests: 1, web_fetch_requests: 1, code_execution_requests: 2,
+  };
+  const job = normalizeAiJob({ model: 'claude-haiku-5-5', reasoning: 'xhigh', usage });
+  assert.equal(job.model, 'claude-haiku-5-5');
+  assert.equal(job.reasoning, 'xhigh');
+  assert.deepEqual(job.usage, usage);
+  assert.equal(job.usage.input_tokens, 2500, 'cache details must not be added to the reported total');
+});
+
+test('historical jobs keep their identity and absent usage is not guessed', () => {
+  const old = normalizeAiJob({ model: 'gpt-5.6-terra', reasoning: 'max', usage: { input_tokens: 40 } });
+  assert.equal(old.model, 'gpt-5.6-terra');
+  assert.equal(old.reasoning, 'max');
+  assert.equal(old.usage.cache_creation_input_tokens, undefined);
+  const unknown = normalizeAiJob({});
+  assert.equal(unknown.model, undefined);
+  assert.equal(unknown.reasoning, undefined);
+  assert.deepEqual(unknown.usage, {});
+});

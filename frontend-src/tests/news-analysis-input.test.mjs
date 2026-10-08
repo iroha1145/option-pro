@@ -1,3 +1,5 @@
+import * as evidenceSources from '../src/api/evidenceSources.ts';
+import * as aiModelLabels from '../src/lib/aiModelLabel.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -44,7 +46,8 @@ function mappedNews(raw) {
       };
       if (id === '@/mocks/fixtures2') return {};
       if (id === '@/components/catalysts/focusCycleRequest') return {};
-      if (id === '../../i18n/core.ts') return { t: (value) => value };
+      if (id === '../../api/evidenceSources.ts') return evidenceSources;
+    if (id === '../../i18n/core.ts') return { t: (value) => value };
       if (id === './resourceSignals') return { notifyCatalystReadsInvalidated() {} };
       throw new Error(id);
     },
@@ -70,6 +73,7 @@ function renderDrawer(seed) {
       if (id === '@/hooks/useAccess') return { useAccess: () => ({ isOwner: false, loading: false }) };
       if (id === '@/hooks/useToast') return { useToast: () => ({ info() {}, success() {}, error() {} }) };
       if (id === '@/hooks/useShell') return { useShell: () => ({ openTicker() {} }) };
+      if (id === '@/lib/aiModelLabel') return aiModelLabels;
       if (id === '@/lib/format') return { fmtLocaleDateTime: () => 'time', fmtLocaleTime: () => 'time' };
       if (id === '@/api/queryRegistry') return { getQueryPrincipalGeneration: () => 0 };
       if (id === '@/lib/boundedReadRetry') return retry;
@@ -79,7 +83,8 @@ function renderDrawer(seed) {
         'AnalysisStatusChip', 'ClassificationChip', 'ConfidenceLabel', 'ImpactValue', 'Led', 'StaleChip', 'TickerChip',
       ].map((name) => [name, passthrough]));
       if (id === './ConfirmDialog') return { default: passthrough };
-      if (id === '../../i18n/core.ts') return { t: (value) => value };
+      if (id === '../../api/evidenceSources.ts') return evidenceSources;
+    if (id === '../../i18n/core.ts') return { t: (value) => value };
       if (id in SHARED_UI_STUBS) return SHARED_UI_STUBS[id];
       throw new Error(id);
     },

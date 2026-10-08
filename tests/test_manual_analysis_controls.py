@@ -77,7 +77,7 @@ def _create_job(
     priority: int = 50,
     force_retry: bool = False,
 ):
-    version, digest = runtime.schema_identity("earnings_impact")
+    version, digest = runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
     return repository.create_job(
         job_type="earnings_impact",
         payload={"ticker": ticker, "name": ticker},
@@ -99,7 +99,7 @@ def _seed_source_legacy_jobs(
     specs: list[dict],
 ) -> list[dict]:
     repository.initialize()
-    version, digest = runtime.schema_identity("earnings_impact")
+    version, digest = runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
     payload_json = repository._canonical_payload({"ticker": "AAPL", "name": "AAPL"})
     rows = []
     with repository._connect() as connection:
@@ -364,6 +364,7 @@ def test_running_job_is_reused_across_sources_without_a_second_paid_job(tmp_path
     assert repository.budget_snapshot(
         daily_limit=4,
         daily_budget_usd=2.0,
+        model="gpt-5.6-terra",
     )["submitted_jobs"] == 1
 
 
@@ -415,6 +416,7 @@ def test_completed_result_is_reused_across_sources_with_its_original_source(
     assert repository.budget_snapshot(
         daily_limit=4,
         daily_budget_usd=2.0,
+        model="gpt-5.6-terra",
     )["submitted_jobs"] == 1
 
 

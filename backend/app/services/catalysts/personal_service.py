@@ -227,7 +227,9 @@ class PersonalCatalystService:
             return None
 
     def _ai_configured(self) -> bool:
-        secret = getattr(self.ai_settings, "openai_api_key", None)
+        model = getattr(self.ai_settings, "openai_model", self.settings.model)
+        key_field = "anthropic_api_key" if model == "claude-haiku-5-5" else "openai_api_key"
+        secret = getattr(self.ai_settings, key_field, None)
         if secret is None:
             return bool(self._ai_repository_injected or self._intelligence_injected)
         if hasattr(secret, "get_secret_value"):
@@ -313,6 +315,11 @@ class PersonalCatalystService:
             try:
                 capacity.update(
                     self.ai_repository.budget_snapshot(
+                        max_concurrency=int(getattr(self.ai_settings, "openai_max_concurrency", 1)),
+                        model=getattr(
+                            self.ai_settings, "openai_model",
+                            getattr(getattr(self.personal_config, "ai", None), "model", "claude-haiku-5-5"),
+                        ),
                         daily_limit=daily_limit,
                         daily_budget_usd=daily_budget,
                         daily_token_limit=daily_token_limit,
@@ -550,10 +557,9 @@ class PersonalCatalystService:
             row = self.ai_repository.get_job(job_id)
         if row is None or row.get("job_type") != "news_impact":
             return None
-        current_identity = ai_runtime.schema_identity("news_impact")
+        current_identity = ai_runtime.schema_identity("news_impact", model=row.get("model"))
         if (
-            row.get("model") != self.settings.model
-            or row.get("reasoning") != self.settings.reasoning
+            not ai_runtime.analysis_identity_supported(row.get("model"), row.get("reasoning"))
             or row.get("execution_mode") != "background"
             or row.get("prompt_version") not in ai_runtime.NEWS_READABLE_PROMPT_VERSIONS
             or not ai_runtime.schema_identity_current(
@@ -562,6 +568,7 @@ class PersonalCatalystService:
                 row.get("schema_version"),
                 row.get("schema_sha256"),
                 current_identity=current_identity,
+                model=row.get("model"),
             )
         ):
             return None
@@ -796,6 +803,9 @@ class PersonalCatalystService:
         item["source_title"] = source_title
         if analysis is None:
             item["analysis_input"] = None
+            item["analysis_model"] = None
+            item["analysis_reasoning"] = None
+            item["analysis_sources"] = []
             item.pop("analyzed_at", None)
             item.pop("available_at", None)
             if str(item.get("analysis_status")) == "completed":
@@ -1074,6 +1084,7 @@ class PersonalCatalystService:
             "focus_symbol_count",
             "model",
             "reasoning_effort",
+            "evidence_sources",
             "result",
         )
         return {
