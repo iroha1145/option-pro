@@ -21,7 +21,7 @@ import { t } from '../../i18n/core.ts';
 const RESULT_META = {
   hit: { text: t('已达成'), cls: 'bg-ok-50 text-ok-700' },
   failed: { text: t('已失效'), cls: 'bg-danger-50 text-danger-700' },
-  pending: { text: t('进行中'), cls: 'bg-brand-50 text-brand-700' },
+  pending: { text: t('观察中'), cls: 'bg-brand-50 text-brand-700' },
 } as const;
 
 export default function SignalList({
@@ -56,7 +56,7 @@ export default function SignalList({
       return (
         <div className="flex flex-col items-center rounded-md border border-line bg-card-warm px-4 py-8 text-center">
           <Icon name="radar" size={26} className="text-ink-300" />
-          <p className="mt-3 text-body-s font-medium text-ink-600">{t('该股尚未拉取数据，拉取后自动分析')}</p>
+          <p className="mt-3 text-body-s font-medium text-ink-600">{t('该股尚未获取数据，获取后自动分析')}</p>
           <ManualStockPull ticker={ticker} minimal className="mt-3" onPulled={() => onPulled?.()} />
         </div>
       );
@@ -85,7 +85,7 @@ export default function SignalList({
       <div className="flex flex-col items-center rounded-md border border-line bg-card-warm px-4 py-8 text-center">
         <Icon name="radar" size={28} className="text-ink-300" />
         <p className="mt-3 text-body-s font-medium text-ink-600">{index ? t('暂无技术信号') : t('近期暂无信号')}</p>
-        <p className="mt-1 text-caption text-ink-400">{index ? t('股票雷达暂不覆盖指数，指数行情与技术研究仍可查看。') : t('突破 / 放量 / 回踩等触发后将在此出现')}</p>
+        <p className="mt-1 text-caption text-ink-400">{index ? t('突破雷达暂不覆盖指数，指数行情与技术研究仍可查看。') : t('突破 / 放量 / 回踩等触发后将在此出现')}</p>
       </div>
     );
   }

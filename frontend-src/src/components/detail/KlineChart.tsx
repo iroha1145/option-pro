@@ -911,7 +911,7 @@ export default function KlineChart({
           <Segmented
             options={[
               { value: 'candle' as ChartMode, label: t('K 线') },
-              { value: 'area' as ChartMode, label: t('面积') },
+              { value: 'area' as ChartMode, label: t('面积图') },
             ]}
             value={mode}
             onChange={setMode}
@@ -927,7 +927,7 @@ export default function KlineChart({
                原手写样式在手机上只有约 28px 高。 */
             className="control-button h-9"
           >
-            {t('智能画线')}
+            {t('自动画线')}
           </button>
           {mode === 'area' && (
             <span className="text-micro text-ink-400">{t('面积图不支持副图与均线叠加')}</span>
@@ -943,20 +943,20 @@ export default function KlineChart({
               onClick={() => setBasis((prev) => (prev === 'close' ? 'wick' : 'close'))}
               className="control-button h-9"
             >
-              {t('收盘口径')}
+              {t('按收盘价')}
             </button>
           )}
           <button
             type="button"
             aria-pressed={measureActive}
-            aria-label={t('回撤测量尺')}
+            aria-label={t('涨跌测量尺')}
             onClick={() => {
               drawing.setTool('select');
               setMeasure((prev) => (prev.phase === 'idle' ? { phase: 'selectStart' } : { phase: 'idle' }));
             }}
             className="control-button h-9"
           >
-            {t('回撤')}
+            {t('涨跌测量')}
           </button>
         </div>
       </div>
@@ -1001,7 +1001,7 @@ export default function KlineChart({
                     : drawing.tool === 'channel' ? t('平行通道')
                       : drawing.tool === 'rectangle' ? t('矩形')
                         : drawing.tool === 'fibonacci' ? t('斐波那契')
-                          : t('文字'),
+                          : t('文字批注'),
           })}
           {' · '}
           {t('按 Esc 取消绘制')}
@@ -1026,7 +1026,7 @@ export default function KlineChart({
               placeholder={t('点击放置文字，然后输入内容')}
             />
           </label>
-          <button type="submit" className="rounded-xs border border-brand-400 bg-brand-50 px-2 py-1 text-micro text-brand-700">{t('保存文字')}</button>
+          <button type="submit" className="rounded-xs border border-brand-400 bg-brand-50 px-2 py-1 text-micro text-brand-700">{t('保存批注')}</button>
         </form>
       )}
 
@@ -1075,7 +1075,7 @@ export default function KlineChart({
                 image="/empty-chart.svg"
                 title={
                   error?.bizCode === 'public_snapshot_unavailable' && range === '1d'
-                    ? t('该标的暂无完整数据')
+                    ? t('该股票暂无完整数据')
                     : t('K 线暂不可用')
                 }
                 description={
@@ -1126,10 +1126,10 @@ export default function KlineChart({
       {measureActive && (
         <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-micro">
           {measure.phase === 'selectStart' && (
-            <span className="text-ink-400">{t('回撤尺：点击图表选择起点（Esc 退出）')}</span>
+            <span className="text-ink-400">{t('涨跌测量：点击图表选择起点（Esc 退出）')}</span>
           )}
           {measure.phase === 'selectEnd' && (
-            <span className="text-ink-400">{t('回撤尺：再次点击选择终点（Esc 退出）')}</span>
+            <span className="text-ink-400">{t('涨跌测量：再次点击选择终点（Esc 退出）')}</span>
           )}
           {measure.phase === 'done' && measurement && (
             <>
@@ -1159,7 +1159,7 @@ export default function KlineChart({
                 onClick={() => setMeasure({ phase: 'selectStart' })}
                 className="text-brand-600 underline-offset-2 hover:underline"
               >
-                {t('重测')}
+                {t('重新测量')}
               </button>
             </>
           )}
@@ -1238,7 +1238,7 @@ export default function KlineChart({
                 status: data.bars[data.bars.length - 1]?.quote_only ? t('（仅报价）') : '',
               })
             : ' '}
-          {data && <> · {t('美东')}</>}
+          {data && <> · {t('纽约时间')}</>}
         </span>
         <span className="tnum">
           {data ? t('读取于 {at}', { at: formatChartTime(data.as_of, '5m') }) : ''}

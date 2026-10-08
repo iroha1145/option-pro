@@ -436,10 +436,10 @@ for (const [name, render] of [['个股 AI 卡片', renderSignalCard], ['期权�
   test(`${name}：已请求取消时显示原因并禁用取消按钮`, () => {
     const view = render({ job: { id: 'job-1', status: 'in_progress', progress: null, cancelRequested: true } });
     assert.match(view.text, /已请求取消/);
-    assert.deepEqual(view.buttons.filter((b) => b.label === '取消任务').map((b) => b.disabled), [true]);
+    assert.deepEqual(view.buttons.filter((b) => b.label === '取消分析').map((b) => b.disabled), [true]);
     const active = render({ job: { id: 'job-1', status: 'in_progress', progress: null } });
     assert.match(active.text, /模型分析中…/);
-    assert.deepEqual(active.buttons.filter((b) => b.label === '取消任务').map((b) => b.disabled), [false]);
+    assert.deepEqual(active.buttons.filter((b) => b.label === '取消分析').map((b) => b.disabled), [false]);
   });
 
   test(`${name}：排队推迟显示原因，开始处理后不再显示旧码`, () => {

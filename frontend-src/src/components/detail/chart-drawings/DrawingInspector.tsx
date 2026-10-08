@@ -13,7 +13,7 @@ const KIND_LABEL: Record<DrawingKind, string> = {
   channel: t('平行通道'),
   rectangle: t('矩形'),
   fibonacci: t('斐波那契'),
-  text: t('文字'),
+  text: t('文字批注'),
 };
 
 const IMPORT_ERROR: Record<string, string> = {
@@ -90,11 +90,11 @@ export default function DrawingInspector({
   const listed = [...(drawings ?? [])].sort((a, b) => a.zOrder - b.zOrder);
   return (
     <div className="flex flex-col gap-3 text-caption text-ink-600">
-      <p className="text-micro font-medium text-ink-500">{t('对象')}</p>
+      <p className="text-micro font-medium text-ink-500">{t('图形列表')}</p>
       {listed.length === 0 ? (
         <p className="text-micro text-ink-400">{t('当前没有手绘图形')}</p>
       ) : (
-        <ul className="flex flex-col gap-1" aria-label={t('对象')}>
+        <ul className="flex flex-col gap-1" aria-label={t('图形列表')}>
           {listed.map((item) => {
             const unresolvedItem = unresolvedIds.includes(item.id);
             return (
@@ -117,7 +117,7 @@ export default function DrawingInspector({
                 </button>
                 <button
                   type="button"
-                  aria-label={item.hidden ? t('显示') : t('隐藏')}
+                  aria-label={item.hidden ? t('显示图形') : t('隐藏图形')}
                   onClick={() => onToggleHidden?.(item.id)}
                   className="rounded-xs border border-line px-1.5 py-1 text-micro"
                 >
@@ -136,7 +136,7 @@ export default function DrawingInspector({
           })}
         </ul>
       )}
-      <p className="text-micro font-medium text-ink-500">{t('样式')}</p>
+      <p className="text-micro font-medium text-ink-500">{t('图形样式')}</p>
       {importError && (
         <p className="rounded-xs border border-warn-600/30 bg-warn-50 px-2 py-1 text-micro text-warn-700" role="alert">
           {IMPORT_ERROR[importError] ?? t('导入失败：数据无效')}
@@ -229,13 +229,13 @@ export default function DrawingInspector({
             </label>
           )}
           <div className="flex flex-wrap gap-1">
-            <button type="button" aria-label={drawing.locked ? t('解锁') : t('锁定')} aria-pressed={drawing.locked} onClick={onLock} className="rounded-xs border border-line px-2 py-1 text-micro">
+            <button type="button" aria-label={drawing.locked ? t('解锁图形') : t('锁定图形')} aria-pressed={drawing.locked} onClick={onLock} className="rounded-xs border border-line px-2 py-1 text-micro">
               <Icon name={drawing.locked ? 'unlock' : 'lock'} size={13} className="mr-1 inline" />
-              {drawing.locked ? t('解锁') : t('锁定')}
+              {drawing.locked ? t('解锁图形') : t('锁定图形')}
             </button>
-            <button type="button" aria-label={drawing.hidden ? t('显示') : t('隐藏')} aria-pressed={drawing.hidden} onClick={onHide} className="rounded-xs border border-line px-2 py-1 text-micro">
+            <button type="button" aria-label={drawing.hidden ? t('显示图形') : t('隐藏图形')} aria-pressed={drawing.hidden} onClick={onHide} className="rounded-xs border border-line px-2 py-1 text-micro">
               <Icon name={drawing.hidden ? 'eye' : 'eye-off'} size={13} className="mr-1 inline" />
-              {drawing.hidden ? t('显示') : t('隐藏')}
+              {drawing.hidden ? t('显示图形') : t('隐藏图形')}
             </button>
             <button type="button" aria-label={t('上移一层')} onClick={() => onZ(1)} className="rounded-xs border border-line px-2 py-1 text-micro">{t('上移一层')}</button>
             <button type="button" aria-label={t('下移一层')} onClick={() => onZ(-1)} className="rounded-xs border border-line px-2 py-1 text-micro">{t('下移一层')}</button>
@@ -246,13 +246,13 @@ export default function DrawingInspector({
         <p className="text-micro text-ink-400">{t('当前没有手绘图形')}</p>
       )}
       <div className="flex flex-wrap gap-1 border-t border-line pt-2">
-        <button type="button" onClick={onExport} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导出 JSON')}</button>
+        <button type="button" onClick={onExport} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导出绘图')}</button>
         {hasRejectedImport && onExportRejected ? (
-          <button type="button" onClick={onExportRejected} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导出上次未保存的导入文件')}</button>
+          <button type="button" onClick={onExportRejected} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导出未保存的导入文件')}</button>
         ) : null}
-        <button type="button" onClick={() => fileRef.current?.click()} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导入 JSON')}</button>
+        <button type="button" onClick={() => fileRef.current?.click()} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导入绘图')}</button>
         <button type="button" onClick={onImportLocal} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导入本机绘图')}</button>
-        <button type="button" onClick={onClear} className="rounded-xs border border-danger-600/40 px-2 py-1 text-micro text-danger-600">{t('清除全部手绘')}</button>
+        <button type="button" onClick={onClear} className="rounded-xs border border-danger-600/40 px-2 py-1 text-micro text-danger-600">{t('清空手绘')}</button>
         <input
           ref={fileRef}
           type="file"

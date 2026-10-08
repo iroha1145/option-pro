@@ -399,7 +399,7 @@ for (const width of [390, 1440]) {
       await expect(heading).toContainText('^GSPC');
       await expect(heading).not.toContainText('NVDA');
       await expect(heading).not.toContainText('英伟达');
-      await expect(page.getByText('代码不存在', { exact: true })).toHaveCount(0);
+      await expect(page.getByText('未找到该股票', { exact: true })).toHaveCount(0);
 
       // 路由正确还不够：指数图必须有实际绘制内容，不能停在详情空壳。
       await expect.poll(() => page.locator('canvas').evaluateAll((canvases) => canvases.some((canvas) => {

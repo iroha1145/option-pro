@@ -121,7 +121,7 @@ test('area mode hides indicator UI and switching back restores the selected pane
   const errors = await open(page);
   await page.getByRole('combobox', { name: '选择副图指标' }).click();
   await page.getByRole('option', { name: 'RSI', exact: true }).click();
-  await page.getByRole('tab', { name: '面积', exact: true }).click();
+  await page.getByRole('tab', { name: '面积图', exact: true }).click();
   await expect(page.locator('[data-indicator-controls]')).toHaveCount(0);
   await expect(page.locator('[data-indicator-header]')).toHaveCount(0);
   const areaSeries = await page.evaluate(() => indicatorTest.getChart().getOption().series
@@ -214,9 +214,9 @@ test('hiding automatic structures does not reposition a nearby hand-drawn label'
   const marks = () => page.evaluate(() => indicatorTest.getChart().getOption().series[0].markLine?.data ?? []);
   await expect.poll(async () => (await marks()).length).toBe(1);
   const before = await marks();
-  await page.getByRole('button', { name: '算法与图层', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '算法与图层', exact: true });
-  const auto = dialog.getByRole('switch', { name: '自动趋势线/通道/三角形/楔形', exact: true });
+  await page.getByRole('button', { name: '图表设置', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '图表设置', exact: true });
+  const auto = dialog.getByRole('switch', { name: '趋势线与形态', exact: true });
   await expect(auto).toHaveAttribute('aria-checked', 'true');
   await auto.click();
   await page.keyboard.press('Escape');

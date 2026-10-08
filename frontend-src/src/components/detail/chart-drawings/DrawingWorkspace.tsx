@@ -140,9 +140,9 @@ export default function DrawingWorkspace({
       </div>
       <ConfirmDialog
         open={confirmClear}
-        title={t('清除全部手绘')}
-        description={t('确认清除当前标的与周期的全部手绘图形？此操作可撤销。')}
-        confirmLabel={t('确认清除')}
+        title={t('清空手绘')}
+        description={t('确认清空当前标的与周期的全部手绘图形？此操作可撤销。')}
+        confirmLabel={t('确认清空')}
         danger
         onConfirm={() => {
           controller.clearAll();

@@ -329,7 +329,7 @@ export default function LayerMenu({
         >
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-card px-5 py-3">
             <div className="min-w-0">
-              <h2 id={titleId} className="truncate text-body font-medium leading-tight text-ink-900">{t('算法与图层')}</h2>
+              <h2 id={titleId} className="truncate text-body font-medium leading-tight text-ink-900">{t('图表设置')}</h2>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
               <button
@@ -379,9 +379,9 @@ export default function LayerMenu({
               <div className="flex min-w-0 flex-1 flex-col gap-3">{secondaryGroups.map(groupCard)}</div>
             </div>
 
-            <Card title={t('高级')} className="mt-3">
+            <Card title={t('显示细节')} className="mt-3">
               <SliderRow
-                label={t('最低几何质量')}
+                label={t('最低形态吻合度')}
                 value={Math.round(settings.minShapeQuality * 100)}
                 step={5}
                 onApply={(next) => patch({ minShapeQuality: next / 100 })}
@@ -393,25 +393,25 @@ export default function LayerMenu({
                 onApply={(next) => patch({ labelDensity: next / 100 })}
               />
               <StepperRow
-                label={t('最大形态数')}
+                label={t('形态数量上限')}
                 value={settings.maxPatterns}
                 onChange={(next) => patch({ maxPatterns: next })}
               />
 
               <LayerRow
-                label={t('仅当前有效')}
+                label={t('只看有效形态')}
                 checked={settings.onlyActive}
                 onToggle={() => patch({ onlyActive: !settings.onlyActive })}
               />
               <LayerRow
-                label={t('显示已失效')}
+                label={t('显示失效形态')}
                 checked={settings.showInvalidated}
                 onToggle={() => patch({ showInvalidated: !settings.showInvalidated })}
               />
             </Card>
 
             {families && (
-              <Card title={t('选股上下文')} className="mt-3">
+              <Card title={t('选股评分')} className="mt-3">
                 <p className="mb-2 px-1.5 text-ink-400">{t('几何质量衡量形状的吻合程度')}</p>
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-1 px-1.5">
                   {(['short', 'mid', 'long', 'trend', 'breakout', 'price_action'] as const).map((name) => (

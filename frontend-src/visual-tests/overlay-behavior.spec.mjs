@@ -103,7 +103,7 @@ test('DrawingWorkspace, LayerMenu and nested confirmation keep one scroll and fo
   const workspace = page.getByRole('dialog', { name: '绘图工作区', exact: true });
   await expect(workspace).toBeVisible();
   await page.evaluate(() => window.overlayHarness.layers(true));
-  const layers = page.getByRole('dialog', { name: '算法与图层', exact: true });
+  const layers = page.getByRole('dialog', { name: '图表设置', exact: true });
   await expect(layers).toBeVisible();
   await page.keyboard.press('Tab');
   await expect.poll(() => layers.evaluate((el) => el.contains(document.activeElement))).toBe(true);
