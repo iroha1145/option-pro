@@ -335,7 +335,7 @@ export const CATALYSTS: Dict = {
   '检查来源': ['Check sources', 'ソースの確認'],
   '重点股票': ['Key stocks', '重点銘柄'],
   '选股评分': ['Screener scores', 'スクリーニングスコア'],
-  '同步消息': ['News sync', 'ニュース同期'],
+  '消息同步': ['News sync', 'ニュース同期'],
   '分析任务': ['AI jobs', 'AIジョブ'],
   '系统维护': ['Maintenance', 'メンテナンス'],
   '公开数据': ['Public snapshot', '公開スナップショット'],

@@ -2046,7 +2046,7 @@ export const EN: Record<string, string> = {
   "检查来源": "Check sources",
   "重点股票": "Key stocks",
   "选股评分": "Screener scores",
-  "同步消息": "News sync",
+  "消息同步": "News sync",
   "分析任务": "AI jobs",
   "系统维护": "Maintenance",
   "公开数据": "Public snapshot",

@@ -45,7 +45,7 @@ const WORKER_ACTIONS: { action: WorkerActionType; label: string }[] = [
 
 const TASK_CN: Record<string, string> = {
   breakout: __t('突破扫描'),
-  catalyst_sync: __t('同步消息'),
+  catalyst_sync: __t('消息同步'),
   focus: __t('重点股票'),
   ai_jobs: __t('分析任务'),
   maintenance: __t('系统维护'),
