@@ -275,6 +275,207 @@ def test_market_focus_prompt_explains_cross_field_evidence_semantics():
     )
 
 
+@pytest.mark.parametrize("field", ["summary_zh", "market_summary"])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "四是宏观环境块状态为active，综合分47.3、属中性，不构成方向判断。",
+        "本次市场状态块显示宏观环境综合分为47.3，处于中性区间，7日变化为0.1，数据截至2026年9月30日，状态为active，未陈旧。",
+    ],
+)
+def test_market_focus_translates_only_bound_macro_active_status(field, text):
+    result = _market_focus_result()
+    result[field] = text
+    payload = _market_focus_payload(macro_conditions={"status": "active"})
+    raw = json.dumps(result, ensure_ascii=False)
+
+    validated = validate_result("market_focus", raw, payload)
+    expected = {**result, field: text.replace("active", "有效")}
+    assert validated == expected
+    assert json.loads(raw) == result
+    assert validate_result(
+        "market_focus", json.dumps(validated, ensure_ascii=False), payload
+    ) == expected
+
+
+@pytest.mark.parametrize(
+    "macro",
+    [
+        None, {}, {"status": "inactive"}, {"status": "stale"},
+        {"status": "unavailable"}, {"status": "ACTIVE"},
+        {"status": ["active"]}, "active",
+    ],
+)
+def test_market_focus_does_not_translate_macro_status_without_exact_input(macro):
+    result = _market_focus_result()
+    result["summary_zh"] = "宏观环境块状态为active，综合分47.3。"
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "market_focus",
+            json.dumps(result, ensure_ascii=False),
+            _market_focus_payload(macro_conditions=macro),
+        )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "公司的状态为active，仍需观察。",
+        "active股票受到关注。",
+        "文章指出状态为active，仍需观察。",
+        "宏观环境保持中性，公司的状态为active，仍需观察。",
+        "宏观环境保持中性。状态为active，仍需观察。",
+        "宏观环境块状态为inactive，综合分47.3。",
+        "宏观环境块状态为activeStock，综合分47.3。",
+        "宏观环境块状态为active，公司 remains active。",
+        "The macro status is active.",
+        "宏观环境块状态为active，TSLA股价上涨。",
+        "宏观环境块状态为active，市場保持中性。",
+    ],
+)
+def test_bound_macro_translation_preserves_language_and_stock_checks(text):
+    result = _market_focus_result()
+    result["market_summary"] = text
+    with pytest.raises(ValidationError):
+        validate_result(
+            "market_focus",
+            json.dumps(result, ensure_ascii=False),
+            _market_focus_payload(macro_conditions={"status": "active"}),
+        )
+
+
+@pytest.mark.parametrize("field", ["summary_zh", "market_summary"])
+@pytest.mark.parametrize(
+    "suffix",
+    [
+        "股票上涨", "股价上涨", "（股票代码）", " 股票上涨",
+        " 股价上涨", " 代码", "：股票代码", ":股票代码",
+        "（代码）", "(股票代码)", "，股票代码", "，股价上涨",
+    ],
+)
+def test_macro_active_translation_does_not_erase_security_context(field, suffix):
+    result = _market_focus_result()
+    result[field] = f"宏观环境块状态为active{suffix}，证据不足。"
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "market_focus", json.dumps(result, ensure_ascii=False),
+            _market_focus_payload(macro_conditions={"status": "active"}),
+        )
+
+
+@pytest.mark.parametrize("suffix", ["", "。", "，综合分47.3。", "；综合分47.3。"])
+def test_macro_active_translation_accepts_delimited_enum_values(suffix):
+    result = _market_focus_result()
+    result["summary_zh"] = f"宏观环境块状态为active{suffix}"
+    validated = validate_result(
+        "market_focus", json.dumps(result, ensure_ascii=False),
+        _market_focus_payload(macro_conditions={"status": "active"}),
+    )
+    assert validated == {**result, "summary_zh": f"宏观环境块状态为有效{suffix}"}
+
+
+@pytest.mark.parametrize("field", ["title_zh", "headline_summary"])
+def test_bound_macro_translation_does_not_expand_to_other_fields(field):
+    result = _market_focus_result()
+    result[field] = "宏观环境块状态为active，综合分47.3。"
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "market_focus",
+            json.dumps(result, ensure_ascii=False),
+            _market_focus_payload(macro_conditions={"status": "active"}),
+        )
+
+
+def test_bound_macro_translation_does_not_expand_to_other_jobs():
+    result = _news_result()
+    result["summary_zh"] = "宏观环境块状态为active，综合分47.3。"
+    payload = {**_news_payload(), "macro_conditions": {"status": "active"}}
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result("news_impact", json.dumps(result, ensure_ascii=False), payload)
+
+
+@pytest.mark.parametrize("field", ["summary_zh", "market_summary"])
+@pytest.mark.parametrize("value", [None, 123, {}, ""])
+def test_bound_macro_translation_preserves_field_type_and_nonempty_checks(field, value):
+    result = _market_focus_result()
+    result[field] = value
+    with pytest.raises(ValidationError):
+        validate_result(
+            "market_focus",
+            json.dumps(result, ensure_ascii=False),
+            _market_focus_payload(macro_conditions={"status": "active"}),
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "error"),
+    [
+        ("cycle_id", "different-cycle", "market_focus_cycle_mismatch"),
+        ("input_hash", "b" * 64, "market_focus_input_hash_mismatch"),
+        ("as_of", "2026-07-15T13:00:00Z", "market_focus_as_of_mismatch"),
+    ],
+)
+def test_bound_macro_translation_preserves_input_identity_checks(field, value, error):
+    result = _market_focus_result()
+    result["summary_zh"] = "宏观环境块状态为active，综合分47.3。"
+    result[field] = value
+    with pytest.raises(ValueError, match=error):
+        validate_result(
+            "market_focus",
+            json.dumps(result, ensure_ascii=False),
+            _market_focus_payload(macro_conditions={"status": "active"}),
+        )
+
+
+def test_paid_macro_status_recovery_preserves_receipt_and_rejects_other_edits(tmp_path):
+    from anthropic.types import Message, Usage
+
+    repository = AIJobRepository(tmp_path / "jobs.db")
+    payload = _market_focus_payload(macro_conditions={"status": "active"})
+    version, digest = runtime.schema_identity("market_focus", model="claude-haiku-5-5")
+    row, _ = repository.create_job(
+        job_type="market_focus", payload=payload,
+        model="claude-haiku-5-5", reasoning="xhigh", execution_mode="background",
+        prompt_version=runtime.PROMPT_VERSIONS["market_focus"],
+        schema_version=version, schema_sha256=digest, max_queued=10,
+    )
+    job_id = row["job_id"]
+    repository.claim_due("owner", 60)
+    repository.mark_submission_started(job_id, "owner", daily_limit=0)
+    result = _market_focus_result()
+    result["summary_zh"] = "宏观环境块状态为active，综合分47.3。"
+    result["market_summary"] = "宏观环境状态为active，仍需观察。"
+    raw = json.dumps(result, ensure_ascii=False)
+    receipt = runtime.claude_receipt(Message(
+        id="msg_macro_status_test", type="message", role="assistant",
+        model="claude-haiku-5-5", stop_reason="end_turn", stop_sequence=None,
+        content=[{"type": "text", "text": raw}],
+        usage=Usage(
+            input_tokens=100, output_tokens=100,
+            cache_read_input_tokens=0, cache_creation_input_tokens=0,
+        ),
+    ))
+    repository.record_provider_result(job_id, "owner", receipt)
+    repository.fail(job_id, "owner", "schema_validation_failed")
+    before = repository.get_job(job_id)
+    saved_receipt = repository.get_provider_result(job_id)
+    validated = validate_result("market_focus", raw, payload)
+    with pytest.raises(RuntimeError, match="ai_job_recovery_result_mismatch"):
+        repository.recover_schema_validation_failure(
+            job_id, "msg_macro_status_test",
+            {**validated, "summary_zh": "宏观环境块状态为有效，综合分99.9。"},
+        )
+
+    repository.recover_schema_validation_failure(job_id, "msg_macro_status_test", validated)
+    after = repository.get_job(job_id)
+    assert after["status"] == "completed"
+    assert json.loads(after["result_json"]) == validated
+    assert repository.get_provider_result(job_id) == saved_receipt
+    assert saved_receipt["output_text"] == raw
+    assert after["budget_charge_microusd"] == before["budget_charge_microusd"]
+    assert after["usage_total_tokens"] == before["usage_total_tokens"] == 200
+
+
 def test_news_result_accepts_rule_10b5_1_identifier_in_real_fields():
     result = _news_result()
     result["summary_zh"] = (
