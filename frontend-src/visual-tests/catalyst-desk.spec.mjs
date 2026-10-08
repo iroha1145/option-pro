@@ -50,13 +50,13 @@ test("Catalyst Desk visual evidence: /catalysts", async ({ page }) => {
     await page.goto("/catalysts", { waitUntil: "domcontentloaded" });
   } else {
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await page.getByRole("link", { name: /催化/ }).click();
+    await page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: "新闻", exact: true }).click();
     await page.waitForLoadState("domcontentloaded");
   }
   await expect(page).toHaveURL(/\/catalysts$/);
   await expectShell(page);
   // NavLink 激活态（react-router 自动设置 aria-current="page"）
-  await expect(page.getByRole("link", { name: /催化/ })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: "新闻", exact: true })).toHaveAttribute("aria-current", "page");
   await screenshot(page, "1440x900-catalysts");
 });
 

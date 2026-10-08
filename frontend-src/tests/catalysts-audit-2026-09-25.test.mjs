@@ -1023,40 +1023,48 @@ test('3-E 焦点卡的兜底与收尾定时器随卸载清理', async () => {
 
 /* ---------------- 页面：刷新只清一次缓存、补丁带时间戳 ---------------- */
 
-test('2-E 页面刷新：写操作已清缓存时不再清第二次；页头刷新照常清', async () => {
+/* 页面沙箱：所有子组件桩成元素类型字符串，地址参数、身份和写地址的回调都可注入。 */
+function pageHarness({ search = '', owner = false, accessLoading = false } = {}) {
   const runner = createReactStub();
   runner.React.useOptimistic = (value) => [value, () => {}];
   runner.React.startTransition = (fn) => fn();
-  let clears = 0;
+  const counts = { clears: 0 };
+  const urlWrites = [];
   const components = Object.fromEntries([
     '@/components/shared/PageHeader', '@/components/shared/Segmented', '@/components/icons',
     '@/components/catalysts/StatusHero', '@/components/catalysts/AnalysisProgressCard', '@/components/catalysts/HotspotsStrip',
-    '@/components/catalysts/FocusCycleCard', '@/components/catalysts/ManagePanel', '@/components/catalysts/FilterBar',
-    '@/components/catalysts/FeedPanel', '@/components/catalysts/StocksPanel', '@/components/catalysts/CalendarPanel',
-    '@/components/catalysts/SourcesPanel', '@/components/catalysts/NewsDrawer',
+    '@/components/catalysts/FocusCycleCard', '@/components/catalysts/ManagePanel', '@/components/catalysts/MoreMenu',
+    '@/components/catalysts/FilterBar', '@/components/catalysts/FeedPanel', '@/components/catalysts/StocksPanel',
+    '@/components/catalysts/CalendarPanel', '@/components/catalysts/SourcesPanel', '@/components/catalysts/NewsDrawer',
   ].map((id) => [id, { default: id.split('/').pop() }]));
   const clock = fakeClock();
   const Page = compile('pages/Catalysts.tsx', {
     react: runner.React,
     'react/jsx-runtime': passthroughJsx,
-    'react-router': { useSearchParams: () => [new URLSearchParams(''), () => {}] },
+    'react-router': { useSearchParams: () => [new URLSearchParams(search), (next) => { urlWrites.push(String(next)); }] },
+    '@/hooks/useAccess': { useAccess: () => ({ isOwner: owner, loading: accessLoading }) },
     ...components,
     '@/lib/aiModelLabel': aiModelLabels,
     '@/lib/format': { fmtTimeHHMMSS: () => 't' },
     '@/components/catalysts/filters': filters,
-    '@/components/catalysts/api': { clearCatalystReadCache: () => { clears += 1; } },
+    '@/components/catalysts/api': { clearCatalystReadCache: () => { counts.clears += 1; } },
     '@/components/catalysts/feedPatches': feedPatches,
     '../i18n/core.ts': i18n,
   }, { window: { setTimeout: clock.api.setTimeout, clearTimeout: clock.api.clearTimeout }, Date: clock.Date }).default;
   const read = runner.mount(() => Page());
+  return { runner, read, clock, counts, urlWrites };
+}
+
+test('2-E 页面刷新：写操作已清缓存时不再清第二次；页头刷新照常清', async () => {
+  const { runner, read, clock, counts } = pageHarness();
   const focus = findNode(read(), (node) => node.type === 'FocusCycleCard');
   focus.props.onDataRefreshed({ cacheCleared: true });
-  assert.equal(clears, 0);
+  assert.equal(counts.clears, 0);
   assert.equal(findNode(read(), (node) => node.type === 'FocusCycleCard').props.refreshToken, 1, '页面各区仍重新读取');
   findNode(read(), (node) => node.type === 'FocusCycleCard').props.onDataRefreshed();
-  assert.equal(clears, 1);
+  assert.equal(counts.clears, 1);
   findNode(read(), (node) => node.type === 'button' && /刷新/.test(textOf(node))).props.onClick({ type: 'click' });
-  assert.equal(clears, 2);
+  assert.equal(counts.clears, 2);
 
   const drawer = findNode(read(), (node) => node.type === 'NewsDrawer');
   drawer.props.onUpdate({ newsId: '1', analysisStatus: 'queued' });
@@ -1064,6 +1072,64 @@ test('2-E 页面刷新：写操作已清缓存时不再清第二次；页头刷�
   assert.equal(patches['1'].item.newsId, '1');
   assert.equal(patches['1'].at, clock.now(), '补丁记下回写时刻');
   runner.unmount();
+});
+
+/* ---------------- 页面：栏目只留三项，其余收进「更多」菜单 ---------------- */
+
+const viewTabs = (tree) => findNode(tree, (node) => node.type === 'Segmented' && node.props.ariaLabel === '新闻栏目');
+const panelTypes = (tree) => ['FeedPanel', 'StocksPanel', 'CalendarPanel', 'SourcesPanel', 'ManagePanel', 'FilterBar']
+  .filter((type) => findNode(tree, (node) => node.type === type));
+
+test('栏目分段只留新闻列表、股票影响、经济日历；消息来源经「更多」菜单进入并写入地址', () => {
+  const h = pageHarness();
+  const tree = h.read();
+  const tabs = viewTabs(tree);
+  assert.deepEqual(Array.from(tabs.props.options, (option) => option.label), ['新闻列表', '股票影响', '经济日历']);
+  assert.equal(tabs.props.value, 'feed');
+  assert.deepEqual(panelTypes(tree), ['FeedPanel', 'FilterBar']);
+  const more = findNode(tree, (node) => node.type === 'MoreMenu');
+  assert.equal(more.props.current, null);
+  assert.equal(more.props.showManage, false, '访客没有管理设置');
+  more.props.onSelect('sources');
+  assert.equal(h.urlWrites.at(-1), 'tab=sources');
+  viewTabs(h.read()).props.onChange('calendar');
+  assert.equal(h.urlWrites.at(-1), 'tab=calendar');
+  h.runner.unmount();
+});
+
+test('?tab=sources 仍能直接打开来源面板：筛选条隐藏，「更多」菜单标出当前项', () => {
+  const h = pageHarness({ search: 'tab=sources' });
+  const tree = h.read();
+  assert.deepEqual(panelTypes(tree), ['SourcesPanel']);
+  assert.equal(findNode(tree, (node) => node.type === 'MoreMenu').props.current, 'sources');
+  assert.equal(viewTabs(tree).props.value, 'sources', '分段控件里没有对应项，不会误亮别的栏目');
+  h.runner.unmount();
+});
+
+test('管理设置是所有者的栏目：?tab=manage 对所有者直接打开，对其他人退回新闻列表', () => {
+  const owner = pageHarness({ search: 'tab=manage', owner: true });
+  let tree = owner.read();
+  assert.deepEqual(panelTypes(tree), ['ManagePanel']);
+  const more = findNode(tree, (node) => node.type === 'MoreMenu');
+  assert.equal(more.props.current, 'manage');
+  assert.equal(more.props.showManage, true);
+  owner.runner.unmount();
+
+  const visitor = pageHarness({ search: 'tab=manage' });
+  tree = visitor.read();
+  assert.deepEqual(panelTypes(tree), ['FeedPanel', 'FilterBar'], '确认过不是所有者就落到新闻列表');
+  assert.equal(findNode(tree, (node) => node.type === 'MoreMenu').props.current, null);
+  visitor.runner.unmount();
+
+  const pending = pageHarness({ search: 'tab=manage', accessLoading: true });
+  assert.deepEqual(panelTypes(pending.read()), ['ManagePanel'], '身份还在确认时先不弹走，所有者刷新页面不会掉回列表');
+  pending.runner.unmount();
+});
+
+test('地址里的栏目参数不认识就当新闻列表', () => {
+  const h = pageHarness({ search: 'tab=catalysts' });
+  assert.deepEqual(panelTypes(h.read()), ['FeedPanel', 'FilterBar']);
+  h.runner.unmount();
 });
 
 /* ---------------- FeedPanel：补丁与翻页 ---------------- */

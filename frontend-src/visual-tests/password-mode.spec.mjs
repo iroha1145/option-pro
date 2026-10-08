@@ -329,7 +329,7 @@ test("password mode keeps public research readable and reserves owner controls f
   await screenshot(page, "password-visitor-watchlist");
 
   // 应用内导航到催化页（http 文档不再变化，走 BrowserRouter 客户端路由）
-  await page.getByRole("link", { name: /催化/ }).click();
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: "新闻", exact: true }).click();
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/catalysts`);
   await page.waitForLoadState("networkidle");
   await expect(page.getByText("公开浏览可见的中文新闻标题").first()).toBeVisible();
@@ -382,7 +382,7 @@ test("password mode keeps public research readable and reserves owner controls f
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/watchlist`);
 
   // 登录成功后不得残留延迟跳转：过去的 400ms 定时器会把随后打开的页面拉回 /watchlist。
-  await page.getByRole("link", { name: /催化/ }).click();
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: "新闻", exact: true }).click();
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/catalysts`);
   await page.waitForTimeout(500);
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/catalysts`);
@@ -418,7 +418,7 @@ test("password mode keeps public research readable and reserves owner controls f
   await expect(forceRefresh).toHaveAttribute("title", "更新自选行情与评分");
   await screenshot(page, "password-owner-watchlist");
 
-  await page.getByRole("link", { name: /催化/ }).click();
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: "新闻", exact: true }).click();
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/catalysts`);
   await page.waitForLoadState("networkidle");
   await expect(page.getByText("公开浏览可见的中文新闻标题").first()).toBeVisible();
@@ -455,7 +455,7 @@ test("password mode keeps public research readable and reserves owner controls f
   await expect(page.getByText("英伟达", { exact: true }).first()).toBeVisible();
 
   // 登出后公共研究面仍可读
-  await page.getByRole("link", { name: /催化/ }).click();
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: "新闻", exact: true }).click();
   await page.waitForLoadState("networkidle");
   await expect(page.getByText("公开浏览可见的中文新闻标题").first()).toBeVisible();
   await expectVisitorShell(page);

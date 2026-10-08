@@ -90,9 +90,9 @@ for (const viewport of VIEWPORTS) {
       await page.getByRole("button", { name: "更多" }).click();
       const more = page.getByRole("dialog", { name: "更多功能" });
       await expect(more).toBeVisible();
-      await more.getByRole("button", { name: /新闻催化/ }).click();
+      await more.getByRole("button", { name: /新闻/ }).click();
       await expect(page).toHaveURL(/\/catalysts$/);
-      const tabs = page.getByRole("tablist", { name: "催化剂视图" });
+      const tabs = page.getByRole("tablist", { name: "新闻栏目" });
       await expect(tabs).toBeVisible();
       const tabViewport = page.locator(".selection-viewport").filter({ has: tabs });
       await expect
