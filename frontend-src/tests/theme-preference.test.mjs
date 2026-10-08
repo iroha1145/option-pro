@@ -236,6 +236,14 @@ test('页头设置菜单（桌面与手机同一入口）与登录页都有外�
   assert.match(switcher, /role="menuitemradio"/);
 });
 
+test('手机底栏不再放外观开关：外观只在页头设置菜单里改', async () => {
+  /* 去掉注释再匹配：文件头的说明里会提到「外观」，注释不算数。 */
+  const dock = codeOf(await source('components/MobileDock.tsx'));
+  assert.doesNotMatch(dock, /setThemePreference/, '底栏不再直接改外观偏好');
+  assert.doesNotMatch(dock, /跟随系统/, '底栏不再出现「跟随系统」选项');
+  assert.doesNotMatch(dock, /ThemeSwitcher/, '底栏也不能换个组件把外观开关放回来');
+});
+
 test('图表与热力在外观变化时重建 option / 订阅 useAppearance', async () => {
   const kline = codeOf(await source('components/detail/KlineChart.tsx'));
   const scenario = codeOf(await source('components/cta/ScenarioChart.tsx'));

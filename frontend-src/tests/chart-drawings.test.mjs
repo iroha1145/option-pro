@@ -1044,6 +1044,33 @@ test('fingerprint and dataThrough mismatch yields no auto marks', async (t) => {
   assert.equal(mapChartAnalysis({ option: { series: [] }, dataThrough: 'x', barFingerprint: 'y' }), null);
 });
 
+test('副图标题按图层编号取前端登记名；编号没登记时才用后端 label', async (t) => {
+  const { mapChartAnalysis, LAYERS } = await loadDrawings(t);
+  const pane = (id, label) => ({ id, label, kind: 'rs', values: { rs: [1] }, dates: ['2026-07-16'] });
+  const bundle = mapChartAnalysis({
+    ticker: 'AAPL',
+    range: '1d',
+    adjustment: 'raw',
+    dataThrough: '2026-07-16',
+    barFingerprint: 'abc',
+    indicatorPanes: [pane('spy_rs', 'SPY Relative Strength'), pane('mystery', 'Mystery pane')],
+  });
+  assert.ok(bundle);
+  assert.deepEqual(bundle.indicatorPanes.map((item) => item.id), ['spy_rs', 'mystery']);
+
+  /* 期望值从前端图层登记表读，不写死中文：这个名字以后可能还会调整。 */
+  const registered = LAYERS.find((layer) => layer.id === 'spy_rs' && layer.group === 'pane');
+  assert.ok(registered, 'spy_rs 是前端登记的副图图层');
+  assert.notEqual(
+    registered.label,
+    'SPY Relative Strength',
+    '前提：登记名与后端英文名不同，否则下面的断言分不出取的是哪一个',
+  );
+  const [spy, mystery] = bundle.indicatorPanes;
+  assert.equal(spy.label, registered.label, '已登记的编号用前端名字，后端 label 只作兜底');
+  assert.equal(mystery.label, 'Mystery pane', '没登记的编号保留后端 label');
+});
+
 test('layer toggles change real marks and MA series, not only filterOverlays', async (t) => {
   const {
     overlaysToMarks, overlaysToSeries, filterOverlays, settingsFromPreset, toggleLayer, analysisLayout,

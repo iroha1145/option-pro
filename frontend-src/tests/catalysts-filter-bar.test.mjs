@@ -205,6 +205,67 @@ test('展开后出现全部五项控件，改动经 onChange 写回；再收起�
   h.unmount();
 });
 
+test('展开区另外四个控件也经 onChange 写回：置信度滑杆换算成 0–1、影响分滑杆原值、分析状态、多处报道取反', () => {
+  const openMore = (initial) => {
+    const h = harness(initial);
+    findButton(h.tree(), '更多筛选').props.onClick();
+    return h;
+  };
+  const slider = (tree, label) =>
+    findNode(tree, (node) => node.type === 'input' && node.props.type === 'range' && node.props['aria-label'] === label);
+  /* 一次操作只写回一次；写回的整份条件 = 操作前的条件 + 只改这一项（其余原样保留）。
+     onChange 收到的对象来自编译沙箱，展开成本 realm 的普通对象后才能 deepEqual。 */
+  const assertWrittenOnce = (h, initial, patch) => {
+    assert.equal(h.changes.length, 1, '一次操作只写回一次');
+    assert.deepEqual({ ...h.changes[0] }, { ...filtersModule.DEFAULT_FILTERS, ...initial, ...patch });
+  };
+
+  /* 置信度：界面是 0–90 的百分数，条件里存的是 0–1 的小数。 */
+  const confidenceInitial = { minConfidence: 0.5, ticker: 'NVDA' };
+  const confidence = openMore(confidenceInitial);
+  const confidenceSlider = slider(confidence.tree(), '置信度 ≥');
+  assert.ok(confidenceSlider, '置信度滑杆');
+  assert.equal(confidenceSlider.props.value, 50, '条件 0.5 在界面上显示为 50');
+  assert.deepEqual([confidenceSlider.props.min, confidenceSlider.props.max, confidenceSlider.props.step], [0, 90, 5]);
+  confidenceSlider.props.onChange({ target: { value: '65' } });
+  assertWrittenOnce(confidence, confidenceInitial, { minConfidence: 0.65 });
+  confidence.unmount();
+
+  /* 影响分：界面值就是条件值，不做换算。 */
+  const impactInitial = { minAbsImpact: 1.5, classification: 'bullish' };
+  const impact = openMore(impactInitial);
+  const impactSlider = slider(impact.tree(), '影响分 ≥');
+  assert.ok(impactSlider, '影响分滑杆');
+  assert.equal(impactSlider.props.value, 1.5);
+  assert.deepEqual([impactSlider.props.min, impactSlider.props.max, impactSlider.props.step], [0, 5, 0.5]);
+  impactSlider.props.onChange({ target: { value: '3.5' } });
+  assertWrittenOnce(impact, impactInitial, { minAbsImpact: 3.5 });
+  impact.unmount();
+
+  /* 分析状态：写回的是下拉里真实存在的选项值，不是标签文字。 */
+  const statusInitial = { windowHours: 24 };
+  const status = openMore(statusInitial);
+  const select = findNode(status.tree(), (node) => node.type === 'MenuSelect' && node.props.ariaLabel === '分析状态');
+  assert.ok(select, '分析状态下拉');
+  assert.equal(select.props.value, '');
+  assert.ok(Array.from(select.props.options, (o) => o.value).includes('completed'), '选项里有 completed');
+  select.props.onChange('completed');
+  assertWrittenOnce(status, statusInitial, { analysisStatus: 'completed' });
+  status.unmount();
+
+  /* 多处报道：开关只给「切换」信号，写回的是当前值取反，两个方向都要对。 */
+  for (const [before, after] of [[false, true], [true, false]]) {
+    const initial = { multiSourceOnly: before, ticker: 'AAPL' };
+    const h = openMore(initial);
+    const toggle = findNode(h.tree(), (node) => node.type === 'Switch');
+    assert.ok(toggle, '多处报道开关');
+    assert.equal(toggle.props.checked, before);
+    toggle.props.onToggle();
+    assertWrittenOnce(h, initial, { multiSourceOnly: after });
+    h.unmount();
+  }
+});
+
 test('悬停或聚焦「24 时」仍预取默认列表，不再依赖手机端的整块折叠按钮', () => {
   const h = harness();
   const windowTabs = findNode(h.tree(), (node) => node.type === 'Segmented' && node.props.value === '72');

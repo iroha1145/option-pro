@@ -109,7 +109,8 @@ function harness({ current = null, showManage = false } = {}) {
   }, { document: doc }).default;
   const props = { current, showManage, onSelect: (view) => selected.push(view) };
   const read = runner.mount(() => MoreMenu(props));
-  // useRef 的创建顺序：根容器、触发器、菜单。
+  // useRef 的创建顺序：根容器、触发器、菜单。多一个或少一个 ref 都会让下面的对应关系错位，先卡住数量。
+  assert.equal(refs.length, 3, '组件应只创建根、触发器、菜单三个 ref；数量或顺序变了，本测试的对应关系要跟着改');
   const [rootRef, triggerRef, menuRef] = refs;
   const inside = { name: 'inside' };
   rootRef.current = { contains: (node) => node === inside };
@@ -140,6 +141,8 @@ function harness({ current = null, showManage = false } = {}) {
   };
   return {
     tree: () => read(),
+    refs: { root: rootRef, trigger: triggerRef, menu: menuRef },
+    root: () => findNode(read(), (node) => node.props['data-testid'] === 'catalyst-more-menu'),
     trigger: () => findNode(read(), (node) => node.type === 'button' && node.props['aria-haspopup'] === 'menu'),
     menu: () => findNode(read(), (node) => node.props.role === 'menu'),
     items: () => findAll(read(), (node) => node.props.role === 'menuitem'),
@@ -151,6 +154,22 @@ function harness({ current = null, showManage = false } = {}) {
     unmount: () => runner.unmount(),
   };
 }
+
+/* 上面的 harness 会手工往三个 ref 里塞假节点，所以行为用例即使组件没把 ref 绑到元素上也能过；
+   绑定本身只能在这里直接核对：渲染结果里的 props.ref 必须就是各自的 ref 对象。 */
+test('三个 ref 分别绑在根容器、触发按钮和菜单上，互不串用', () => {
+  const h = harness();
+  const root = h.root();
+  assert.ok(root, '找得到根容器');
+  assert.equal(root.props.ref, h.refs.root, '根容器绑 rootRef：点菜单外关闭靠它判断点击落点');
+  assert.equal(h.trigger().props.ref, h.refs.trigger, '触发按钮绑 triggerRef：Esc 与选中后把焦点还给它');
+  assert.equal(h.menu(), null, '关闭时菜单不挂载');
+  h.trigger().props.onClick();
+  assert.equal(h.menu().props.ref, h.refs.menu, '菜单绑 menuRef：打开后聚焦首项、方向键移动靠它找到菜单项');
+  assert.equal(h.root().props.ref, h.refs.root, '打开后根容器仍绑 rootRef');
+  assert.equal(new Set(Object.values(h.refs)).size, 3, '三个 ref 是三个不同的对象');
+  h.unmount();
+});
 
 test('触发器是菜单按钮：默认写「更多」，停在来源或管理设置时写当前项的名字并高亮', () => {
   const closed = harness();
