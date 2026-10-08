@@ -716,6 +716,7 @@ export const EN: Record<string, string> = {
   "虚线按最新修订数据重新计算；实线为当时记录的分数。": "Dashed lines use the latest revised data; solid lines show scores recorded at the time.",
   "有效指标 —": "Valid indicators —",
   "截止": "As of",
+  "截至": "As of",
   "有效指标不足": "Fewer than",
   "个门槛，本模块不出分（不按 50 补齐）。": "valid factors, so this module doesn't output a score (it is not backfilled with 50).",
   "暂无模块分数。数据接入后这里会显示七个模块。": "No module scores yet. Once data is connected, the seven modules will appear here.",

@@ -113,7 +113,7 @@ export function FactorCard({ factor }: { factor: MacroFactor }) {
           </dd>
         </div>
         <div className="min-w-0">
-          <dt className="text-micro text-ink-400">{t('数据截止')}</dt>
+          <dt className="text-micro text-ink-400">{t('数据截至')}</dt>
           <dd className="truncate text-micro text-ink-400 tnum">
             {factor.dataThrough ?? '—'}
           </dd>

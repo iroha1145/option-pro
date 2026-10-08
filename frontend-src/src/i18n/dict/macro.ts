@@ -127,6 +127,7 @@ export const MACRO: Dict = {
   /* ============ src/components/market/macro/FactorDetails.tsx（模块摘要行） ============ */
   '有效指标 —': ["Valid indicators —", "有効指標 —"],
   '截止': ['As of', '基準日'],
+  '截至': ['As of', '基準日'],
   '有效指标不足': ['Fewer than', '有効ファクターが'],
   '个门槛，本模块不出分（不按 50 补齐）。': [
     "valid factors, so this module doesn't output a score (it is not backfilled with 50).",

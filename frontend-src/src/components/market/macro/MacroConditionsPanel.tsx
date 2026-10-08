@@ -228,7 +228,7 @@ export default function MacroConditionsPanel({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-caption text-ink-400 tnum">
-            {t('数据截止')} {data.dataThrough ?? '—'}
+            {t('数据截至')} {data.dataThrough ?? '—'}
           </span>
           {chip && (
             <span

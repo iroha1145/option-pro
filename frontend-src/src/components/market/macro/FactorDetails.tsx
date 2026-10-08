@@ -55,7 +55,7 @@ function FactorTable({ factors }: { factors: MacroFactor[] }) {
             <th scope="col" className="w-[12%] pb-2 text-right font-medium">{t('历史分位')}</th>
             <th scope="col" className="w-[15%] pb-2 text-right font-medium">{t('7 日原值变化')}</th>
             <th scope="col" className="w-[12%] pb-2 text-right font-medium">{t('7 日评分变化')}</th>
-            <th scope="col" className="w-[11%] pb-2 text-right font-medium">{t('数据截止')}</th>
+            <th scope="col" className="w-[11%] pb-2 text-right font-medium">{t('数据截至')}</th>
           </tr>
         </thead>
         <tbody>
@@ -80,7 +80,7 @@ function ModuleSummary({
   panelDataThrough: string | null;
 }) {
   const scored = hasScore(module);
-  /* 七个模块通常与面板同一天截止，标题行已经写着「数据截止」；只有落后或
+  /* 七个模块通常与面板同一天截止，标题行已经写着「数据截至」；只有落后或
      超前于面板的模块才单独写出自己的日期，免得七行重复同一个日期。 */
   const ownDate =
     module.dataThrough === null || module.dataThrough !== panelDataThrough
@@ -129,7 +129,7 @@ function ModuleSummary({
           </span>
           {ownDate !== null && (
             <span className="text-ink-500 tnum">
-              {t('截止')} {ownDate}
+              {t('截至')} {ownDate}
             </span>
           )}
         </span>
