@@ -1737,6 +1737,17 @@ def test_active_market_focus_cycle_returns_409_with_safe_chinese_message() -> No
         (
             {
                 "budget_available": False,
+                "token_budget_available": True,
+                "job_limit_available": True,
+                "dollar_budget_available": False,
+            },
+            "daily_budget_usd_reached",
+            "共享日预算余额不足",
+            None,
+        ),
+        (
+            {
+                "budget_available": False,
                 "token_budget_available": False,
                 "job_limit_available": True,
                 "dollar_budget_available": True,

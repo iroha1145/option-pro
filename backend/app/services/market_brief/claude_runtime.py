@@ -12,7 +12,6 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from collections import Counter
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Sequence
 
@@ -61,11 +60,14 @@ class InvocationResult:
     error_detail: str | None
     stop_reason: str | None
     continuation_count: int
-    usage: dict[str, int]
+    usage: dict[str, int | None]
     external_sources: tuple[dict[str, Any], ...]
     model: str | None
     request_ids: tuple[str, ...]
-    usage_complete: bool = True
+    usage_complete: bool = False
+    request_rounds: tuple[dict[str, Any], ...] = ()
+    cost_microusd: int | None = None
+    stream_complete: bool = False
 
 
 def make_client(api_key: str, timeout: float) -> anthropic.AsyncAnthropic:
@@ -164,54 +166,123 @@ def _field(value: Any, name: str) -> Any:
     return getattr(value, name, None)
 
 
-def _int(value: Any) -> int:
-    return int(value) if isinstance(value, int) and not isinstance(value, bool) else 0
+def _int(value: Any) -> int | None:
+    return value if type(value) is int and value >= 0 else None
 
 
-def _round_usage(usage: Any) -> Counter[str]:
-    """单轮用量。有 iterations 时以它为准逐项求和，不再叠加顶层数字（否则重复计算）：
-    启用某些服务端步骤（压缩、回退等）时，顶层用量不含这些步骤。"""
+_COST_USAGE_KEYS = (
+    "input_tokens", "output_tokens", "cache_creation_input_tokens",
+    "cache_read_input_tokens", "web_search_requests",
+)
 
-    totals: Counter[str] = Counter()
-    if usage is None:
-        return totals
+
+def _round_usage(usage: Any, *, message: Any = None) -> dict[str, int | None]:
+    """Normalize one cumulative receipt without hiding unknown token counts."""
     iterations = _field(usage, "iterations")
-    entries: Sequence[Any] = iterations if isinstance(iterations, (list, tuple)) and iterations else [usage]
-    for entry in entries:
+    entries = iterations if isinstance(iterations, (list, tuple)) and iterations else [usage]
+    result: dict[str, int | None] = {}
+    for key in ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"):
+        values = [_int(_field(entry, key)) for entry in entries]
+        result[key] = sum(values) if all(value is not None for value in values) else None
+        if isinstance(iterations, (list, tuple)) and iterations:
+            ordinary = [_int(_field(entry, key)) for entry in entries if _field(entry, "type") != "compaction"]
+            compact = [_int(_field(entry, key)) for entry in entries if _field(entry, "type") == "compaction"]
+            top = _int(_field(usage, key))
+            if top is not None and all(value is not None for value in (*ordinary, *compact)) and sum(ordinary) != top:
+                result[key] = top + sum(compact)
+    for key, source_key in (("cache_creation_1h_input_tokens", "ephemeral_1h_input_tokens"),
+                            ("cache_creation_5m_input_tokens", "ephemeral_5m_input_tokens")):
+        values = []
+        for entry in entries:
+            value = _field(_field(entry, "cache_creation"), source_key)
+            # No writes means no TTL attribution is necessary.
+            values.append(0 if value is None and _field(entry, "cache_creation_input_tokens") == 0 else _int(value))
+        result[key] = sum(values) if all(value is not None for value in values) else None
+    for key, name in (("web_search_requests", "web_search"), ("web_fetch_requests", "web_fetch")):
+        value = _field(_field(usage, "server_tool_use"), key)
+        used = message is not None and any(
+            _field(block, "type") == "server_tool_use" and _field(block, "name") == name
+            for block in _field(message, "content") or []
+        )
+        result[key] = 0 if value is None and message is not None and not used else _int(value)
+    return result
+
+
+def _merge_usage(total: dict[str, int | None], increment: Mapping[str, int | None]) -> None:
+    for key in _USAGE_KEYS:
+        value = increment.get(key)
+        if value is None or (key in total and total[key] is None):
+            total[key] = None
+        else:
+            total[key] = int(total.get(key, 0)) + value
+
+
+def _accounting_valid(raw: Any, normalized: Mapping[str, Any]) -> bool:
+    if _field(raw, "_iterations_stale") is True:
+        return False
+    if any(_int(normalized.get(key)) is None for key in _COST_USAGE_KEYS):
+        return False
+    iterations = _field(raw, "iterations")
+    if iterations is not None and (not isinstance(iterations, (list, tuple)) or not iterations):
+        return False
+    if iterations is not None:
         for key in ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"):
-            totals[key] += _int(_field(entry, key))
+            top = _field(raw, key)
+            ordinary = [_int(_field(entry, key)) for entry in iterations if _field(entry, "type") != "compaction"]
+            if top is not None and (_int(top) is None or any(value is None for value in ordinary) or sum(ordinary) != top):
+                return False
+    for entry in iterations if iterations is not None else [raw]:
         creation = _field(entry, "cache_creation")
-        if creation is not None:
-            totals["cache_creation_1h_input_tokens"] += _int(_field(creation, "ephemeral_1h_input_tokens"))
-            totals["cache_creation_5m_input_tokens"] += _int(_field(creation, "ephemeral_5m_input_tokens"))
-    server = _field(usage, "server_tool_use")
-    if server is not None:
-        totals["web_search_requests"] += _int(_field(server, "web_search_requests"))
-        totals["web_fetch_requests"] += _int(_field(server, "web_fetch_requests"))
-    return totals
+        details = [_field(creation, key) for key in ("ephemeral_1h_input_tokens", "ephemeral_5m_input_tokens")]
+        if any(value is not None and _int(value) is None for value in details):
+            return False
+        if sum(value or 0 for value in details) > _field(entry, "cache_creation_input_tokens"):
+            return False
+    return True
 
 
-def cost_microusd(usage: Mapping[str, Any]) -> int:
-    """按 Opus 5.5 价格估算费用（微美元，四舍五入）。
-
-    缓存写入按 TTL 明细分别计价：网页搜索会在工具结果后自动插入 5 分钟缓存写入，
-    即使请求设置的是 1 小时。没有 TTL 明细的部分按 1 小时价计（偏保守）。
-    """
-
-    def tokens(key: str) -> int:
-        return _int(usage.get(key))
-
-    creation_1h = tokens("cache_creation_1h_input_tokens")
-    creation_5m = tokens("cache_creation_5m_input_tokens")
-    unattributed = max(0, tokens("cache_creation_input_tokens") - creation_1h - creation_5m)
+def cost_microusd(usage: Mapping[str, Any]) -> int | None:
+    """Estimate only known nonnegative usage; unknown TTL writes use 1h price."""
+    if any(_int(usage.get(key)) is None for key in _COST_USAGE_KEYS):
+        return None
+    one_hour = usage.get("cache_creation_1h_input_tokens")
+    five_minute = usage.get("cache_creation_5m_input_tokens")
+    if any(value is not None and _int(value) is None for value in (one_hour, five_minute)):
+        return None
+    creation_1h, creation_5m = one_hour or 0, five_minute or 0
+    writes = usage["cache_creation_input_tokens"]
+    if creation_1h + creation_5m > writes:
+        return None
+    unattributed = writes - creation_1h - creation_5m
     scaled = (
-        tokens("input_tokens") * PRICE_INPUT_PER_MTOK
+        usage["input_tokens"] * PRICE_INPUT_PER_MTOK
         + (creation_1h + unattributed) * PRICE_CACHE_WRITE_1H_PER_MTOK
         + creation_5m * PRICE_CACHE_WRITE_5M_PER_MTOK
-        + tokens("cache_read_input_tokens") * PRICE_CACHE_READ_PER_MTOK
-        + tokens("output_tokens") * PRICE_OUTPUT_PER_MTOK
+        + usage["cache_read_input_tokens"] * PRICE_CACHE_READ_PER_MTOK
+        + usage["output_tokens"] * PRICE_OUTPUT_PER_MTOK
     )
-    return (scaled + 500_000) // 1_000_000 + tokens("web_search_requests") * PRICE_WEB_SEARCH_EACH
+    return (scaled + 999_999) // 1_000_000 + usage["web_search_requests"] * PRICE_WEB_SEARCH_EACH
+
+
+def request_budget_reservation_microusd(config: Any, max_tokens: int | None = None) -> int:
+    """Shared precheck allowance in microdollars; the atomic gate repeats it."""
+    ceiling = config.max_output_tokens if max_tokens is None else max_tokens
+    input_allowance = PRICE_CACHE_WRITE_1H_PER_MTOK if config.prompt_cache_ttl == "1h" else PRICE_CACHE_WRITE_5M_PER_MTOK
+    return input_allowance + (ceiling * PRICE_OUTPUT_PER_MTOK + 999_999) // 1_000_000 + config.web_search_max_uses * PRICE_WEB_SEARCH_EACH
+
+
+def request_reservation_microusd(request: Mapping[str, Any], *, max_tokens: int) -> int:
+    """Application allowance, not a hard provider bill limit."""
+    ttl = (request.get("system") or [{}])[0].get("cache_control", {}).get("ttl", "5m")
+    input_allowance = PRICE_CACHE_WRITE_1H_PER_MTOK if ttl == "1h" else PRICE_CACHE_WRITE_5M_PER_MTOK
+    searches = sum(int(tool.get("max_uses", 0)) for tool in request.get("tools", []) if tool.get("name") == "web_search")
+    return input_allowance + (max_tokens * PRICE_OUTPUT_PER_MTOK + 999_999) // 1_000_000 + searches * PRICE_WEB_SEARCH_EACH
+
+
+class RequestAdmissionRejected(RuntimeError):
+    def __init__(self, code: str):
+        super().__init__(code)
+        self.code = code
 
 
 def _external_sources(rounds: Sequence[Any]) -> tuple[dict[str, Any], ...]:
@@ -369,16 +440,21 @@ def invoke(
     client: Any, request: Mapping[str, Any], *, config: Any,
     deadline: float | None = None, clock: Callable[[], float] = time.monotonic,
     on_submission: Callable[[], None] | None = None,
+    before_request: Callable[[int, int], None] | None = None,
+    on_round_result: Callable[[dict[str, Any]], None] | None = None,
 ) -> InvocationResult:
     """Synchronous runner boundary; all network I/O inside is cancellable async I/O."""
     return asyncio.run(_invoke(client, request, config=config, deadline=deadline,
-                               clock=clock, on_submission=on_submission))
+                               clock=clock, on_submission=on_submission,
+                               before_request=before_request, on_round_result=on_round_result))
 
 
 async def _invoke(
     client: Any, request: Mapping[str, Any], *, config: Any,
     deadline: float | None, clock: Callable[[], float],
     on_submission: Callable[[], None] | None,
+    before_request: Callable[[int, int], None] | None = None,
+    on_round_result: Callable[[dict[str, Any]], None] | None = None,
 ) -> InvocationResult:
     budget = float(config.request_timeout_seconds)
     ends_at = deadline if deadline is not None else clock() + budget
@@ -386,32 +462,62 @@ async def _invoke(
     endpoint = client.beta.messages if config.refusal_fallback else client.messages
     messages: list[Any] = list(request["messages"])
     rounds: list[Any] = []
-    usage: Counter[str] = Counter()
+    usage: dict[str, int | None] = {}
+    request_rounds: list[dict[str, Any]] = []
+    accounting_complete = True
+    round_admitted = False
+    round_recorded = False
+    round_index = 0
     continuations = 0
     pending: dict[str, str] = {}
     completed: set[str] = set()
     partial_usage: dict[str, Any] = {}
     request_started = False
+    request_attempted = False
+    response_received = False
     saw_message_start = False
     diagnostic_store = BackgroundDiagnosticsStore()
     previous_message_id = None
     round_diagnostics = MISSING
     diagnostic_started_at = time.time()
 
+    def record_round(*, normalized: dict[str, int | None], complete: bool,
+                     stream_complete: bool, confirmed_unbilled: bool = False,
+                     message: Any = None) -> None:
+        nonlocal round_recorded, accounting_complete
+        metadata = {
+            "round_index": round_index, "request_id": _field(message, "id"),
+            "usage": normalized, "accounting_complete": complete,
+            "stream_complete": stream_complete, "confirmed_unbilled": confirmed_unbilled,
+            "cost_microusd": 0 if confirmed_unbilled else cost_microusd(normalized) if complete else None,
+        }
+        request_rounds.append(metadata)
+        round_recorded = True
+        accounting_complete = accounting_complete and complete
+        if on_round_result is not None:
+            on_round_result(metadata)
+
     def finish(*, error_code: str | None = None, error_detail: str | None = None,
                text: str | None = None, parsed: dict[str, Any] | None = None,
                usage_complete: bool = True) -> InvocationResult:
         last = rounds[-1] if rounds else None
         known = usage.copy()
-        if not usage_complete:
-            known.update(_round_usage(partial_usage))
+        if not usage_complete and partial_usage:
+            for key, value in _round_usage(partial_usage).items():
+                if value is not None:
+                    known[key] = int(known.get(key) or 0) + value
+                elif key not in known:
+                    known[key] = None
+        complete = usage_complete and accounting_complete
+        cost = sum(item["cost_microusd"] for item in request_rounds) if complete else None
         return InvocationResult(
             text=text, parsed=parsed, error_code=error_code, error_detail=error_detail,
             stop_reason=_field(last, "stop_reason"), continuation_count=continuations,
-            usage={key: int(known.get(key, 0)) for key in _USAGE_KEYS} | {"rounds": len(rounds)},
+            usage={key: known.get(key, 0 if all(item["confirmed_unbilled"] for item in request_rounds) else None) for key in _USAGE_KEYS} | {"rounds": len(rounds)},
             external_sources=_external_sources(rounds), model=_field(last, "model"),
             request_ids=tuple(str(_field(item, "id")) for item in rounds if _field(item, "id")),
-            usage_complete=usage_complete,
+            usage_complete=complete, request_rounds=tuple(request_rounds), cost_microusd=cost,
+            stream_complete=bool(request_rounds) and all(item["stream_complete"] for item in request_rounds),
         )
 
     try:
@@ -421,30 +527,43 @@ async def _invoke(
             if remaining < minimum_remaining:
                 return finish(error_code=errors.RUN_DEADLINE_EXCEEDED,
                               error_detail=f"remaining={max(remaining, 0.0):.0f}s before request {len(rounds) + 1}, run budget {budget:.0f}s")
-            output_remaining = int(config.output_token_ceiling) - usage["output_tokens"]
+            output_remaining = int(config.output_token_ceiling) - int(usage.get("output_tokens") or 0)
             if output_remaining <= 0:
                 return finish(error_code=errors.BUDGET_EXCEEDED, error_detail="output budget exhausted")
             partial_usage = {}
+            round_index = len(rounds) + 1
+            round_admitted = False
+            round_recorded = False
             request_started = False
+            request_attempted = False
+            response_received = False
             saw_message_start = False
             diagnostic_started_at = time.time()
             round_diagnostics = MISSING
             admission_started = time.monotonic()
+            round_max_tokens = min(int(request["max_tokens"]), output_remaining)
+            if before_request is not None:
+                before_request(round_index, round_max_tokens)
+            round_admitted = True
             # Commit the submission marker before the SDK can send any bytes.
             if on_submission is not None:
                 on_submission()
             socket_budget = remaining - (time.monotonic() - admission_started)
             if socket_budget <= 0:
+                record_round(normalized={}, complete=True, stream_complete=False, confirmed_unbilled=True)
                 return finish(error_code=errors.RUN_DEADLINE_EXCEEDED,
                               error_detail="deadline reached during durable submission marking")
             request_started = True
+            # Billing eligibility never moves backwards when socket handling
+            # finishes: local receipt processing can still fail after payment.
+            request_attempted = True
             stopped = False
             # This timeout cancels socket reads even if there are no events, or
             # events arrive forever. The stream context then closes its HTTP response.
             async with asyncio.timeout(socket_budget):
                 async with endpoint.stream(
                     **{**request, "messages": messages,
-                       "max_tokens": min(int(request["max_tokens"]), output_remaining),
+                       "max_tokens": round_max_tokens,
                        "diagnostics": {"previous_message_id": previous_message_id}},
                     timeout=min(remaining, budget),
                 ) as stream:
@@ -467,24 +586,45 @@ async def _invoke(
                             # usage. Never retain an initial breakdown for a later total.
                             if any(key in delta_usage for key in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")):
                                 partial_usage.pop("cache_creation", None)
+                            if "iterations" in delta_usage:
+                                partial_usage.pop("_iterations_stale", None)
+                            elif "iterations" in partial_usage and any(
+                                key in delta_usage and delta_usage[key] != partial_usage.get(key)
+                                for key in ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
+                            ):
+                                partial_usage["_iterations_stale"] = True
                             partial_usage.update(delta_usage)
                         elif kind == "message_stop":
                             stopped = True
                     if not stopped:
+                        record_round(normalized=_round_usage(partial_usage), complete=False, stream_complete=False)
                         return finish(error_code=errors.PROVIDER_STREAM_INCOMPLETE,
                                       error_detail="stream ended without message_stop", usage_complete=False)
                     message = await stream.get_final_message()
+                    response_received = True
             request_started = False
             rounds.append(message)
-            reported_usage = partial_usage or _field(message, "usage")
+            # Final fields win over older stream snapshots, especially iterations;
+            # retain the independently tracked TTL snapshot to avoid the SDK's
+            # stale initial split after cumulative server-tool usage changes.
+            reported_usage = {**partial_usage, **_usage_fields(_field(message, "usage"))}
+            if "iterations" in partial_usage:
+                reported_usage["iterations"] = partial_usage["iterations"]
+            if "cache_creation" not in partial_usage and saw_message_start:
+                reported_usage.pop("cache_creation", None)
+            elif "cache_creation" in partial_usage:
+                reported_usage["cache_creation"] = partial_usage["cache_creation"]
+            normalized = _round_usage(reported_usage, message=message)
+            valid_usage = _accounting_valid(reported_usage, normalized)
             diagnostic_store.record(task="market_brief", model=request["model"],
                 previous=previous_message_id, current=_field(message, "id"),
                 diagnostics=round_diagnostics if saw_message_start else diagnostic_field(message, "diagnostics"),
-                usage=_round_usage(reported_usage), complete=True, started_at=diagnostic_started_at)
+                usage=normalized, complete=valid_usage, started_at=diagnostic_started_at)
             previous_message_id = _field(message, "id")
-            usage.update(_round_usage(reported_usage))
+            _merge_usage(usage, normalized)
+            record_round(normalized=normalized, complete=valid_usage, stream_complete=True, message=message)
             partial_usage = {}
-            if usage["output_tokens"] > config.output_token_ceiling:
+            if int(usage.get("output_tokens") or 0) > config.output_token_ceiling:
                 return finish(error_code=errors.BUDGET_EXCEEDED,
                               error_detail=f"output_tokens={usage['output_tokens']} ceiling={config.output_token_ceiling}")
             if not _check_tools(message, pending, completed):
@@ -493,30 +633,62 @@ async def _invoke(
             stop_reason = _field(message, "stop_reason")
             if stop_reason != "pause_turn":
                 break
+            if not valid_usage:
+                return finish(error_code=errors.PROVIDER_USAGE_INCOMPLETE, error_detail="cannot price or bound a continuation")
             if continuations >= config.max_continuations:
                 return finish(error_code=errors.CONTINUATION_LIMIT,
                               error_detail=f"still paused after {continuations} continuations")
             messages = [*messages, {"role": "assistant", "content": _field(message, "content")}]
             continuations += 1
+    except RequestAdmissionRejected as exc:
+        text, _ = _final_text(rounds[-1]) if rounds else (None, None)
+        return finish(error_code=exc.code, error_detail=str(exc), text=text,
+                      usage_complete=exc.code != errors.SUBMISSION_OUTCOME_UNKNOWN)
     except TimeoutError:
+        if round_admitted and not round_recorded:
+            record_round(normalized=_round_usage(partial_usage), complete=False, stream_complete=False)
         return finish(error_code=errors.SUBMISSION_OUTCOME_UNKNOWN,
                       error_detail="absolute run deadline interrupted the stream", usage_complete=False)
     except anthropic.APIStatusError as exc:
         code, detail = _status_error(exc)
         # Only explicit rejection before message_start proves this request did
         # not execute. HTTP 5xx and stream-internal errors remain ambiguous.
-        rejected = not saw_message_start and exc.status_code in {400, 401, 403, 404, 413, 422, 429}
+        rejected = not response_received and not saw_message_start and exc.status_code in {400, 401, 403, 404, 413, 422, 429}
         if rejected:
+            record_round(normalized={}, complete=True, stream_complete=False, confirmed_unbilled=True)
             partial_usage = {}
             return finish(error_code=code, error_detail=detail)
+        if round_admitted and not round_recorded:
+            record_round(normalized=_round_usage(partial_usage), complete=False, stream_complete=False)
         return finish(error_code=errors.SUBMISSION_OUTCOME_UNKNOWN, error_detail=detail, usage_complete=False)
     except (anthropic.APIConnectionError, httpx2.TransportError) as exc:
+        if round_admitted and not round_recorded:
+            record_round(normalized=_round_usage(partial_usage), complete=False, stream_complete=False)
         return finish(error_code=errors.SUBMISSION_OUTCOME_UNKNOWN,
                       error_detail=_clip(f"{type(exc).__name__}: {exc}"), usage_complete=False)
     except asyncio.CancelledError:
         if request_started:
+            if round_admitted and not round_recorded:
+                record_round(normalized=_round_usage(partial_usage), complete=False, stream_complete=False)
             return finish(error_code=errors.SUBMISSION_OUTCOME_UNKNOWN,
                           error_detail="stream cancelled", usage_complete=False)
+        if round_admitted and not round_recorded:
+            record_round(normalized={}, complete=not request_attempted, stream_complete=response_received,
+                         confirmed_unbilled=not request_attempted, message=message if response_received else None)
+        raise
+    except Exception:
+        if round_admitted and not round_recorded:
+            normalized = {}
+            if request_attempted:
+                try:
+                    normalized = _round_usage(partial_usage)
+                except Exception:
+                    # A broken normalizer must not replace an unknown paid
+                    # receipt with a zero-cost, confirmed-unbilled receipt.
+                    normalized = {key: None for key in _USAGE_KEYS}
+            record_round(normalized=normalized, complete=not request_attempted,
+                         stream_complete=response_received, confirmed_unbilled=not request_attempted,
+                         message=message if response_received else None)
         raise
     finally:
         close = getattr(client, "close", None)
@@ -552,5 +724,5 @@ __all__ = [
     "PRICE_CACHE_WRITE_1H_PER_MTOK", "PRICE_CACHE_WRITE_5M_PER_MTOK",
     "PRICE_INPUT_PER_MTOK", "PRICE_OUTPUT_PER_MTOK", "PRICE_WEB_SEARCH_EACH",
     "REFUSAL_FALLBACK_BETA", "build_request", "cost_microusd", "invoke",
-    "make_client", "output_schema", "request_summary",
+    "make_client", "output_schema", "request_summary", "request_budget_reservation_microusd",
 ]

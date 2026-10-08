@@ -754,6 +754,19 @@ export interface EvidenceSource {
   type: 'web_search' | 'web_fetch';
 }
 
+/** Owner-only quota snapshot; tokens are statistics when shared USD is active. */
+export interface AiBudgetSnapshot {
+  dailyBudgetUsd: number;
+  budgetUsedUsd: number | null;
+  budgetRemainingUsd: number | null;
+  dollarBudgetAvailable: boolean | null;
+  budgetBasis: 'shared_usd' | 'tokens';
+  budgetResetAt: string | null;
+  accountingStartAt: string | null;
+  dailyTokenLimit: number | null;
+  tokenBudgetUsedTokens: number | null;
+}
+
 export interface AiJob {
   id: string;
   /** live 由契约 job_type 归一：earnings_impact/option_alerts/news_impact/signal_analysis/market_focus */

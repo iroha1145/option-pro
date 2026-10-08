@@ -3208,6 +3208,16 @@ class MarketBriefTask:
     def _config(self) -> Any:
         return self._personal_config.market_brief
 
+    def _run_config(self) -> Any:
+        daily_budget = float(getattr(self._settings, "model_daily_budget_usd", 0.0))
+        if daily_budget <= 0:
+            return self._config().to_run_config()
+        return self._config().to_run_config(
+            shared_daily_budget_usd=daily_budget,
+            shared_budget_start_at=getattr(self._settings, "model_budget_start_at", None),
+            budget_path=getattr(self._settings, "openai_job_db_path", None),
+        )
+
     def _schedule(self) -> Any:
         return self._config().to_schedule()
 
@@ -3349,7 +3359,7 @@ class MarketBriefTask:
                 trading_date=trading_date,
                 trigger=trigger,
                 store=self._get_store(),
-                config=self._config().to_run_config(),
+                config=self._run_config(),
                 api_key=self._settings.anthropic_api_key.get_secret_value(),
                 now=now,
                 **({"request_key": request_key} if request_key is not None else {}),

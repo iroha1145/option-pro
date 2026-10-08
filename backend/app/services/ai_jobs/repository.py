@@ -13,6 +13,13 @@ from typing import Any, Iterable, Iterator, Mapping
 from urllib.parse import quote, urlsplit
 
 from app.failure_diagnostics import record_fallback_failure
+from app.services.model_budget import (
+    SharedModelBudget,
+    can_reserve_in_transaction,
+    initialize_schema as initialize_model_budget_schema,
+    totals_in_transaction as model_budget_totals,
+    usd_to_microusd,
+)
 from app.services.ai_jobs.models import (
     AIJobPublic,
     earnings_report_id,
@@ -311,6 +318,31 @@ def _reservation_released(
     return not response_id or code in _PROVIDER_CONFIRMED_UNBILLED_ERRORS
 
 
+def _confirmed_unbilled_claude_row(row: Mapping[str, Any]) -> bool:
+    """Recognize the worker's durable, explicit no-model-work rejection evidence.
+
+    An error code alone never proves zero cost. Require the complete zero usage
+    projection, the exact definitive HTTP rejection detail, and no response id.
+    """
+    return bool(
+        row["model"] == _CLAUDE_MODEL and row["status"] == "failed"
+        and row["openai_response_id"] is None and row["anthropic_message_id"] is None
+        and row["provider_result_json"] is None
+        and row["error_code"] in {
+            "provider_auth_failed", "provider_rate_limited",
+            "provider_request_rejected", "provider_credit_exhausted",
+        }
+        and row["error_detail"] in {
+            f"Claude rejected request (HTTP {status})"
+            for status in (400, 401, 403, 404, 413, 422, 429)
+        }
+        and all(row["usage_" + field] == 0 for field in (
+            "input_tokens", "cached_input_tokens", "output_tokens", "reasoning_tokens",
+            "total_tokens", *_CACHE_USAGE_FIELDS,
+        ))
+    )
+
+
 def _daily_tokens_used(token_rows: Iterable[Mapping[str, Any]]) -> int:
     """当日 token 账：已结算按实际用量，无用量的行按 _reservation_released。
 
@@ -535,7 +567,7 @@ class AIJobRepository:
             )
             missing_charges = connection.execute(
                 """SELECT job_id,job_type,model,submission_started_at,status,error_code,openai_response_id,
-                          budget_charge_microusd,
+                          budget_charge_microusd,error_detail,anthropic_message_id,provider_result_json,
                           usage_input_tokens,usage_cached_input_tokens,
                           usage_output_tokens,usage_reasoning_tokens,
                           usage_total_tokens,usage_cache_creation_input_tokens,
@@ -556,9 +588,24 @@ class AIJobRepository:
                     "total_tokens": missing["usage_total_tokens"],
                     **{field: missing["usage_" + field] for field in _CACHE_USAGE_FIELDS},
                 }
+                # The receipt carries tool counters that have no separate SQL
+                # columns. Recalculate from that durable evidence, not an
+                # incomplete token-only projection after process restart.
+                if missing["provider_result_json"]:
+                    try:
+                        receipt = json.loads(missing["provider_result_json"])
+                        receipt_usage = receipt.get("usage") if isinstance(receipt, dict) else None
+                        usage = dict(receipt_usage) if isinstance(receipt_usage, dict) else {}
+                    except (TypeError, ValueError):
+                        usage = {}
+                elif _confirmed_unbilled_claude_row(missing):
+                    # The worker persisted a definitive HTTP rejection plus
+                    # explicit zero counts before clearing its lease. It has
+                    # no message id/receipt and must remain free after restart.
+                    continue
                 has_terminal_usage = (
-                    missing["usage_input_tokens"] is not None
-                    and missing["usage_output_tokens"] is not None
+                    usage.get("input_tokens") is not None
+                    and usage.get("output_tokens") is not None
                     and missing["error_code"] != "submission_outcome_unknown"
                 )
                 if not has_terminal_usage and _reservation_released(
@@ -599,6 +646,7 @@ class AIJobRepository:
                 """,
                 (_SCHEMA_VERSION, _SCHEMA_CHECKSUM, _iso()),
             )
+            initialize_model_budget_schema(connection)
             connection.commit()
 
     @staticmethod
@@ -2153,6 +2201,8 @@ class AIJobRepository:
         *,
         daily_limit: int = 4,
         daily_budget_usd: float = 2.0,
+        shared_daily_budget_usd: float = 0,
+        shared_budget_start_at: datetime | None = None,
         daily_token_limit: int = 10_000_000,
         cooldown_seconds: int = 0,
         unknown_submission_hold_seconds: int = 86400,
@@ -2167,11 +2217,13 @@ class AIJobRepository:
         use the same occupancy predicate. Cooldown still affects manual work.
 
         The former count and dollar arguments remain API-compatible but do not
-        block work. Token reservations and concurrency admission happen under
-        the same SQLite write transaction.
+        block work. The separately configured shared dollar budget replaces
+        the token gate only for Haiku. Both models reserve against indexed
+        charges under this same SQLite write transaction.
         """
 
         del daily_limit, daily_budget_usd
+        shared_limit = usd_to_microusd(shared_daily_budget_usd)
         self._concurrency_limit(_CLAUDE_MODEL, max_concurrency)
         if not 102_400 <= int(daily_token_limit) <= 100_000_000:
             raise ValueError("daily_token_limit is invalid")
@@ -2183,6 +2235,11 @@ class AIJobRepository:
             + timedelta(days=1)
         )
         token_limit = int(daily_token_limit)
+        if shared_limit > 0:
+            SharedModelBudget(
+                self.path, shared_daily_budget_usd, self.path.parent / "market-brief",
+                accounting_start_at=shared_budget_start_at,
+            ).bootstrap_brief_history(now_dt)
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
@@ -2242,6 +2299,21 @@ class AIJobRepository:
                 )
                 connection.commit()
                 return verdict
+            shared_budget_enabled = shared_limit > 0 and row["model"] == _CLAUDE_MODEL
+            if shared_budget_enabled and not can_reserve_in_transaction(
+                connection, daily_budget_microusd=shared_limit,
+                reservation_microusd=reservation_microusd, now=now_dt,
+                accounting_start_at=shared_budget_start_at,
+            ):
+                connection.execute(
+                    """UPDATE ai_jobs SET status='budget_blocked',
+                           error_code='daily_budget_usd_reached',completed_at=?,
+                           next_attempt_at=NULL,lease_owner=NULL,lease_expires_at=NULL,
+                           updated_at=? WHERE job_id=? AND lease_owner=? AND status='pending'""",
+                    (now, now, job_id, owner),
+                )
+                connection.commit()
+                return "daily_budget_usd_reached"
             token_rows = connection.execute(
                 """SELECT job_type,model,submission_started_at,status,error_code,openai_response_id,
                           usage_total_tokens
@@ -2250,7 +2322,7 @@ class AIJobRepository:
                 (day_start, day_end),
             ).fetchall()
             tokens_used = _daily_tokens_used(token_rows)
-            if tokens_used + token_reservation > token_limit:
+            if not shared_budget_enabled and tokens_used + token_reservation > token_limit:
                 connection.execute(
                     """
                     UPDATE ai_jobs
@@ -2319,16 +2391,21 @@ class AIJobRepository:
                 or set(usage) - usage_fields - set(_TOOL_USAGE_FIELDS)):
             raise ValueError("ai_job_provider_usage_invalid")
         for field, value in usage.items():
-            if value is None and field in {"reasoning_tokens", "cached_input_tokens", *_CACHE_USAGE_FIELDS, *_TOOL_USAGE_FIELDS}:
+            if value is None:
                 continue
             if type(value) is not int or not 0 <= value <= 2**53 - 1:
                 raise ValueError("ai_job_provider_usage_invalid")
         creation = usage["cache_creation_input_tokens"] or 0
         writes = (usage["cache_creation_5m_input_tokens"] or 0) + (usage["cache_creation_1h_input_tokens"] or 0)
-        if ((usage["cached_input_tokens"] or 0) + creation > usage["input_tokens"]
+        input_tokens, output_tokens, total_tokens = (
+            usage["input_tokens"], usage["output_tokens"], usage["total_tokens"]
+        )
+        complete_totals = input_tokens is not None and output_tokens is not None
+        if ((input_tokens is not None and (usage["cached_input_tokens"] or 0) + creation > input_tokens)
                 or (usage["cache_creation_input_tokens"] is not None and writes > creation)
-                or usage["total_tokens"] != usage["input_tokens"] + usage["output_tokens"]
-                or (usage["reasoning_tokens"] or 0) > usage["output_tokens"]):
+                or (not complete_totals and total_tokens is not None)
+                or (complete_totals and total_tokens is not None and total_tokens != input_tokens + output_tokens)
+                or (output_tokens is not None and (usage["reasoning_tokens"] or 0) > output_tokens)):
             raise ValueError("ai_job_provider_usage_invalid")
         value = json.dumps({**receipt, "evidence_sources": sources}, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
         if len(value.encode("utf-8")) > 2 * _MAX_RESULT_JSON_BYTES:
@@ -3178,6 +3255,8 @@ class AIJobRepository:
         *,
         daily_limit: int,
         daily_budget_usd: float,
+        shared_daily_budget_usd: float = 0,
+        shared_budget_start_at: datetime | None = None,
         daily_token_limit: int = 10_000_000,
         cooldown_seconds: int = 0,
         unknown_submission_hold_seconds: int = 86400,
@@ -3197,10 +3276,19 @@ class AIJobRepository:
 
         self._concurrency_limit(_CLAUDE_MODEL, max_concurrency)
         self.ensure_initialized()
+        shared_limit = usd_to_microusd(shared_daily_budget_usd)
+        shared_budget_enabled = shared_limit > 0 and model in {None, _CLAUDE_MODEL}
         observed = now or _utcnow()
+        if shared_budget_enabled:
+            SharedModelBudget(
+                self.path, shared_daily_budget_usd, self.path.parent / "market-brief",
+                accounting_start_at=shared_budget_start_at,
+            ).bootstrap_brief_history(observed)
         day_start_dt = observed.replace(hour=0, minute=0, second=0, microsecond=0)
         day_end_dt = day_start_dt + timedelta(days=1)
         with self._connect() as connection:
+            connection.execute("BEGIN")
+            shared_totals = model_budget_totals(connection, observed, shared_budget_start_at) if shared_budget_enabled else None
             totals = connection.execute(
                 """
                 SELECT COUNT(*) AS submitted_jobs,
@@ -3269,13 +3357,31 @@ class AIJobRepository:
             token_budget_used + _minimum_task_token_reservation(model=model)
             <= token_limit
         )
+        dollar_budget_available = True
+        if shared_totals is not None:
+            from app.services.ai_jobs.runtime import AI_TASK_MAX_OUTPUT_TOKENS
+
+            charged_microusd = shared_totals["used_microusd"]
+            minimum_reservation = min(
+                _task_budget_reservation_microusd(job_type, model=_CLAUDE_MODEL)
+                for job_type in AI_TASK_MAX_OUTPUT_TOKENS
+            )
+            dollar_budget_available = (
+                (shared_budget_start_at is None or observed >= shared_budget_start_at)
+                and charged_microusd + minimum_reservation <= shared_limit
+            )
+            token_budget_available = True  # Observability only under the shared dollar gate.
         return {
             "daily_max_jobs": 0,
-            "daily_budget_usd": 0.0,
+            "daily_budget_usd": shared_limit / 1_000_000 if shared_budget_enabled else 0.0,
+            "budget_basis": "shared_usd" if shared_budget_enabled else "tokens",
+            "budget_timezone": "UTC",
+            "budget_reset_at": _iso(day_end_dt),
+            "accounting_start_at": _iso(shared_budget_start_at) if shared_budget_start_at else None,
             "daily_token_limit": token_limit,
             "submitted_jobs": submitted_jobs,
             "budget_used_usd": charged_microusd / 1_000_000,
-            "budget_remaining_usd": None,
+            "budget_remaining_usd": max(0, shared_limit - charged_microusd) / 1_000_000 if shared_budget_enabled else None,
             "usage_total_tokens": int(totals["total_tokens"] if totals else 0),
             "token_budget_used_tokens": token_budget_used,
             "token_budget_remaining_tokens": max(
@@ -3283,10 +3389,10 @@ class AIJobRepository:
                 token_limit - token_budget_used,
             ),
             "token_budget_available": token_budget_available,
-            "budget_available": token_budget_available,
+            "budget_available": dollar_budget_available if shared_budget_enabled else token_budget_available,
             "provider_credit_exhausted": credit_exhausted_recent,
             "job_limit_available": True,
-            "dollar_budget_available": True,
+            "dollar_budget_available": dollar_budget_available,
             "concurrency_available": len(occupants) < concurrency_limit,
             "active_jobs_count": len(occupants),
             "concurrency_limit": concurrency_limit,

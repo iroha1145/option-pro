@@ -168,6 +168,7 @@ test('失败原因码：任务列出的码给短句，errors.py 与 POST /runs �
     provider_rate_limited: '供应商限流',
     provider_server_error: '供应商故障',
     provider_unavailable: '无法连接',
+    provider_usage_incomplete: '模型用量未完整确认，请勿重复提交',
     submission_outcome_unknown: '提交结果和费用尚未确认，请勿重复提交',
     provider_stream_incomplete: '模型回复未完整结束，未生成研判',
     provider_invalid_tool_response: '工具返回结果不完整或格式有误，未生成研判',
@@ -177,7 +178,8 @@ test('失败原因码：任务列出的码给短句，errors.py 与 POST /runs �
     output_not_json: '输出格式错误',
     schema_validation_failed: '输出未通过校验',
     evidence_unavailable: '证据不足未生成',
-    budget_exceeded: '超出 token 上限',
+    budget_exceeded: '本次研判的输出用量已达上限',
+    daily_budget_usd_reached: '共享模型日预算不足，东京 09:00 重置后再试',
     daily_run_limit_reached: '今日次数已用完',
   };
   for (const [code, text] of Object.entries(expected)) assert.equal(TEXT.attemptErrorText(code), text, code);

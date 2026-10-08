@@ -197,7 +197,7 @@ class RuntimeAISettingsPatch(_StrictModel):
         if value is not None and value != 0:
             raise PydanticCustomError(
                 "retired_budget_setting",
-                "Count and dollar limits are retired; use daily_token_limit.",
+                "Legacy AI limits are retired; shared dollars use model_budget configuration.",
             )
         return value
 

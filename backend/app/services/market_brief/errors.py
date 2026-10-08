@@ -15,6 +15,8 @@ PROVIDER_RATE_LIMITED = "provider_rate_limited"
 PROVIDER_REQUEST_REJECTED = "provider_request_rejected"
 PROVIDER_SERVER_ERROR = "provider_server_error"
 PROVIDER_UNAVAILABLE = "provider_unavailable"
+PROVIDER_USAGE_INCOMPLETE = "provider_usage_incomplete"
+DAILY_BUDGET_USD_REACHED = "daily_budget_usd_reached"
 # 模型侧：安全分类器拒答、输出被截断、结尾不是 JSON、意料之外的停止原因。
 PROVIDER_REFUSAL = "provider_refusal"
 OUTPUT_TRUNCATED = "output_truncated"
@@ -39,6 +41,8 @@ RUN_ERROR_CODES = frozenset({
     PROVIDER_REQUEST_REJECTED,
     PROVIDER_SERVER_ERROR,
     PROVIDER_UNAVAILABLE,
+    PROVIDER_USAGE_INCOMPLETE,
+    DAILY_BUDGET_USD_REACHED,
     PROVIDER_REFUSAL,
     OUTPUT_TRUNCATED,
     OUTPUT_NOT_JSON,
@@ -93,6 +97,8 @@ __all__ = [
     "PROVIDER_REQUEST_REJECTED",
     "PROVIDER_SERVER_ERROR",
     "PROVIDER_UNAVAILABLE",
+    "PROVIDER_USAGE_INCOMPLETE",
+    "DAILY_BUDGET_USD_REACHED",
     "READ_FAILED",
     "RUNTIME_ERROR",
     "RUN_DEADLINE_EXCEEDED",

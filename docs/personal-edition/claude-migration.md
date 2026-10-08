@@ -46,7 +46,7 @@ Claude 默认最多同时运行 4 个任务，可设置为 1 到 4（包括 3）
 
 应用分别记录普通输入、缓存读取和缓存写入。公开用量中的 `input_tokens` 是输入总量，已包含缓存读取和写入；`cached_input_tokens` 与 `cache_creation_input_tokens` 是其中的部分，不能再加到总量上。写入细分保留为 `cache_creation_5m_input_tokens` 和 `cache_creation_1h_input_tokens`；未返回的用量保持缺失，不推算为零。工具请求分别记录为 `web_search_requests`、`web_fetch_requests` 和 `code_execution_requests`，不能将请求次数当作词元数。
 
-每日词元额度是应用本地的提交准入与已报用量对账边界，不是供应商强制执行的费用硬上限。原生服务端工具可以在一次请求内部多轮处理，累计输入词元可能超过单轮 100 万词元的上下文容量。实际报告的用量即使超出预留或每日额度，也完整保存，不截断为额度值；最终费用以供应商账单为准。
+启用 `[model_budget].daily_budget_usd = 9.5` 后，Haiku 与 Opus 共用应用日预算，词元上限只用于统计。每轮请求先预留估算费用，已报费用完整对账，未知预留继续占用所属窗口；这不保证供应商账单硬性封顶。预算按 UTC 日界、东京 09:00 重置。设置 `accounting_start_at` 后，首次窗口从实际生效时刻起算；本次起算前的 6 条未知记录保留但不占新窗口，仍不得重复付款。旧 `[ai].daily_budget_usd` 不承担共享预算，市场研判的 `daily_max_runs = 6` 仍是独立安全限制。详见[市场综合研判说明](../market-brief.md)。
 
 ## 发布验收
 

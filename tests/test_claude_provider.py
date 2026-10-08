@@ -244,6 +244,7 @@ def test_usage_cache_and_thinking_counts_are_not_double_counted():
         "cache_creation_input_tokens": 300, "cache_creation_5m_input_tokens": 200,
         "cache_creation_1h_input_tokens": 100, "output_tokens": 20,
         "reasoning_tokens": 15, "total_tokens": 830,
+        "web_search_requests": 0, "web_fetch_requests": 0, "code_execution_requests": 0,
     }
 
 
@@ -252,8 +253,8 @@ def test_usage_missing_fields_remain_unknown_and_zero_is_preserved():
     assert missing["cached_input_tokens"] is None
     assert missing["cache_creation_input_tokens"] is None
     assert missing["reasoning_tokens"] is None
-    assert missing["input_tokens"] == 10
-    assert missing["total_tokens"] == 30
+    assert missing["input_tokens"] is None
+    assert missing["total_tokens"] is None
     zero = provider.response_usage(_message(cache_read_input_tokens=0, cache_creation_input_tokens=0))
     assert zero["cached_input_tokens"] == 0
     assert zero["cache_creation_input_tokens"] == 0

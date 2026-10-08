@@ -278,6 +278,8 @@ class PersonalCatalystService:
             if runtime_settings is not None
             else self.personal_config.ai.daily_budget_usd
         )
+        shared_budget = float(getattr(self.ai_settings, "model_daily_budget_usd", 0.0))
+        shared_start = getattr(self.ai_settings, "model_budget_start_at", None)
         daily_token_limit = int(
             getattr(runtime_settings.ai, "daily_token_limit", 10_000_000)
             if runtime_settings is not None
@@ -290,11 +292,11 @@ class PersonalCatalystService:
         )
         capacity = {
             "daily_max_jobs": daily_limit,
-            "daily_budget_usd": daily_budget,
+            "daily_budget_usd": shared_budget if shared_budget > 0 else daily_budget,
             "daily_token_limit": daily_token_limit,
             "submitted_jobs": 0,
             "budget_used_usd": 0.0,
-            "budget_remaining_usd": daily_budget,
+            "budget_remaining_usd": shared_budget if shared_budget > 0 else daily_budget,
             "usage_total_tokens": 0,
             "token_budget_used_tokens": 0,
             "token_budget_remaining_tokens": daily_token_limit,
@@ -323,6 +325,11 @@ class PersonalCatalystService:
                         daily_limit=daily_limit,
                         daily_budget_usd=daily_budget,
                         daily_token_limit=daily_token_limit,
+                        **(
+                            {"shared_daily_budget_usd": shared_budget,
+                             "shared_budget_start_at": shared_start}
+                            if shared_budget > 0 else {}
+                        ),
                         cooldown_seconds=cooldown_seconds,
                         unknown_submission_hold_seconds=int(
                             getattr(
@@ -339,6 +346,22 @@ class PersonalCatalystService:
                 )
             except (OSError, sqlite3.Error, RuntimeError, TypeError, ValueError):
                 capacity["concurrency_available"] = False
+                if shared_budget > 0:
+                    capacity.update({
+                        "budget_available": False,
+                        "dollar_budget_available": False,
+                        "budget_used_usd": None,
+                        "budget_remaining_usd": None,
+                        "shared_budget_error_code": "shared_budget_unavailable",
+                    })
+        elif shared_budget > 0:
+            capacity.update({
+                "budget_available": False,
+                "dollar_budget_available": False,
+                "budget_used_usd": None,
+                "budget_remaining_usd": None,
+                "shared_budget_error_code": "shared_budget_unavailable",
+            })
         mode_enabled = self.mode in _INTERACTIVE_MODES
         manual_enabled = bool(
             mode_enabled
@@ -358,6 +381,10 @@ class PersonalCatalystService:
             reason = "not_configured"
         elif not worker_healthy:
             reason = "worker_unavailable"
+        elif capacity.get("shared_budget_error_code"):
+            reason = "shared_budget_unavailable"
+        elif not capacity["dollar_budget_available"]:
+            reason = "daily_budget_usd_reached"
         elif not capacity["token_budget_available"]:
             reason = "daily_token_limit"
         elif not capacity["concurrency_available"]:
@@ -426,6 +453,8 @@ class PersonalCatalystService:
             "not_configured": "ai_not_configured",
             "worker_unavailable": "worker_unavailable",
             "daily_token_limit": "daily_token_limit_reached",
+            "daily_budget_usd_reached": "daily_budget_usd_reached",
+            "shared_budget_unavailable": "shared_budget_unavailable",
             "analysis_in_progress": "analysis_in_progress",
             "cooldown_active": "analysis_cooldown_active",
             "settings_unavailable": "runtime_settings_unavailable",
@@ -434,6 +463,8 @@ class PersonalCatalystService:
         }.get(reason, "analysis_unavailable")
         message = {
             "daily_token_limit_reached": "今日 1000 万 Token 额度已用完",
+            "daily_budget_usd_reached": "共享日预算余额不足",
+            "shared_budget_unavailable": "共享预算暂时无法读取",
             "analysis_cooldown_active": "分析正在冷却中",
             "worker_unavailable": "后台工作进程暂不可用",
             "read_only_mode": "当前模式只允许读取新闻",
@@ -444,6 +475,7 @@ class PersonalCatalystService:
             message,
             retryable=reason in {
                 "worker_unavailable",
+                "shared_budget_unavailable",
                 "analysis_in_progress",
                 "cooldown_active",
             },

@@ -4,6 +4,13 @@
 import type { Dict } from './types';
 
 export const DETAIL: Dict = {
+  '模型用量未完整确认，请勿重复提交': ['Model usage is not fully confirmed. Do not submit again.', 'モデルの使用量を完全に確認できません。重複送信しないでください。'],
+  '共享预算暂时无法核对，请稍后重试': ['The shared budget cannot be verified right now. Try again later.', '共有予算を確認できません。しばらくしてから再試行してください。'],
+  '共享日预算 {limit} 美元 · 估算及预留 {used} · 剩余 {remaining}': ['Shared daily budget USD {limit} · Estimates and reservations {used} · Remaining {remaining}', '共有の日次予算 {limit} 米ドル · 概算と予約額 {used} · 残り {remaining}'],
+  'Haiku 与 Opus 共用，含未知任务占用；东京 09:00 重置': ['Shared by Haiku and Opus, including holds for unknown outcomes; resets at 09:00 Tokyo time', 'Haiku と Opus で共有し、結果未確認分の予約額を含みます。東京時間09:00にリセット'],
+  '共享日预算不足': ['Shared daily budget is insufficient', '共有の日次予算が不足しています'],
+  '共享模型日预算不足，东京 09:00 重置后再试': ['The shared daily model budget is insufficient. Try after it resets at 09:00 Tokyo time.', '共有のモデル日次予算が不足しています。東京時間09:00のリセット後に再試行してください。'],
+  '本次研判的输出用量已达上限': ['The output limit for this analysis was reached', 'この分析の出力上限に達しました'],
   "分析 {ticker} 的技术信号、市场环境、期权和新闻，使用 1 次分析额度。": ["Analyze {ticker}’s technical signals, market conditions, options and news. Uses 1 analysis credit.", "{ticker}のテクニカルシグナル、市場環境、オプション、ニュースを分析します。分析枠を1回分使用します。"],
   '暂无技术信号': ['No technical signals available', 'テクニカルシグナルはありません'],
   '开盘区间低点缺失，暂无失效位': ['Opening-range low is missing; no invalidation level is available', '寄り付きレンジの安値が不明なため、無効化水準は表示できません'],

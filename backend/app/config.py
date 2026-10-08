@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
@@ -79,6 +80,15 @@ class Settings(BaseSettings):
         ge=0.0,
         le=10_000.0,
         alias="OPENAI_DAILY_BUDGET_USD",
+    )
+    model_daily_budget_usd: float = Field(
+        default=_PERSONAL_CONFIG.model_budget.daily_budget_usd,
+        ge=0.0, le=10_000.0, multiple_of=0.01,
+        allow_inf_nan=False, alias="MODEL_DAILY_BUDGET_USD",
+    )
+    model_budget_start_at: datetime | None = Field(
+        default=_PERSONAL_CONFIG.model_budget.accounting_start_at,
+        alias="MODEL_BUDGET_START_AT",
     )
     openai_daily_token_limit: int = Field(
         default=_PERSONAL_CONFIG.ai.daily_token_limit,
@@ -219,6 +229,29 @@ class Settings(BaseSettings):
         populate_by_name=True,
     )
 
+    @field_validator("model_daily_budget_usd", mode="before")
+    @classmethod
+    def validate_model_budget_amount(cls, value: Any) -> Any:
+        if isinstance(value, bool):
+            raise ValueError("model budget must be a dollar amount")
+        return value
+
+    @field_validator("model_budget_start_at", mode="before")
+    @classmethod
+    def validate_model_budget_timestamp_input(cls, value: Any) -> Any:
+        if value is not None and not isinstance(value, (str, datetime)):
+            raise ValueError("model budget start must be an aware timestamp")
+        return value
+
+    @field_validator("model_budget_start_at")
+    @classmethod
+    def normalize_model_budget_start(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("model budget start must include a timezone")
+        return value.astimezone(timezone.utc)
+
     @field_validator("macrolens_url")
     @classmethod
     def validate_macrolens_url(cls, value: str) -> str:
@@ -284,6 +317,8 @@ class Settings(BaseSettings):
             "openai_max_concurrency": _PERSONAL_CONFIG.ai.max_concurrency,
             "openai_daily_max_jobs": _PERSONAL_CONFIG.ai.daily_max_jobs,
             "openai_daily_budget_usd": _PERSONAL_CONFIG.ai.daily_budget_usd,
+            "model_daily_budget_usd": _PERSONAL_CONFIG.model_budget.daily_budget_usd,
+            "model_budget_start_at": _PERSONAL_CONFIG.model_budget.accounting_start_at,
             "openai_daily_token_limit": _PERSONAL_CONFIG.ai.daily_token_limit,
             "openai_manual_cooldown_seconds": (
                 _PERSONAL_CONFIG.catalyst.manual_refresh_cooldown_seconds

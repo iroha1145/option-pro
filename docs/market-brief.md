@@ -1,6 +1,6 @@
 # 首页市场综合研判 · 运维
 
-首页「市场综合研判」每个交易日生成两份：开盘前一份，收盘后一份。生成工作由统一工作进程（Worker）里的 `market_brief` 任务完成，模型是 Claude Opus 5.5（`claude-opus-5-5`），推理强度（effort）为 `xhigh`。
+首页「市场综合研判」计划在交易日开盘前和收盘后各生成一份；是否生成取决于预算、证据和运行状态。生成工作由统一工作进程（Worker）里的 `market_brief` 任务完成，模型是 Claude Opus 5.5（`claude-opus-5-5`），推理强度（effort）为 `xhigh`。
 
 研判只解释公开数据：程序算数（广度、板块强弱、宏观分位），模型解释它们并找矛盾。它不给涨跌概率，也不构成买卖、仓位或目标价建议。
 
@@ -54,6 +54,18 @@
 | `daily_max_runs` | `6` | 每个 UTC 日最多启动几次运行；定时、手动和命令行共用持久准入，运行中和崩溃记录也计数 |
 | `public_read` | `true` | 关掉后最新研判与历史只对 Owner 可见，访客读到 401 |
 
+美国站另有共享的模型预算，Haiku 与 Opus 共用，旧 Terra 历史不计入：
+
+```toml
+[model_budget]
+daily_budget_usd = 9.5
+# accounting_start_at 填入本次实际生效的 UTC 时间；省略时沿用完整 UTC 日窗口。
+```
+
+`[model_budget].daily_budget_usd` 默认 0，兼容旧部署；生产设置为 9.5。它不同于已停用的 `[ai].daily_budget_usd`，后者及旧运行设置里的零值不能覆盖新的共享金额。不要把共享预算写到旧 `ai` 字段。启用正值后，`daily_token_limit` 只统计词元，不再作为 Claude 的每日准入门槛。
+
+预算每天 UTC 00:00、东京 09:00 重置。设置 `accounting_start_at` 时，首次窗口从该时刻开始；后续仍按上述日界重置。本次切换之前当天的已报费用和 6 条未知预留不占新的 9.5 美元，但旧记录完整保留，未知任务仍不可重复付款。
+
 Owner 还可以在运行设置里暂停定时生成（不需要重启）：
 
 ```json
@@ -102,10 +114,12 @@ curl -sS -X POST https://<host>/api/market-brief/runs \
 | `200` + `reason=already_running` + `error_code=market_brief_in_progress` | 已有补发在排队或在跑 |
 | `200` + `reason=cooldown` + `error_code=market_brief_cooldown` | 上一次补发成功后 600 秒冷却中 |
 | `409` `anthropic_api_key_missing` / `market_brief_disabled` / `worker_task_disabled` | 未配置或已关闭 |
+| `429` `daily_budget_usd_reached` | Haiku 与 Opus 共享日预算的余额不足以预留下一轮费用；东京 09:00 重置 |
 | `429` `daily_run_limit_reached` | 当日（UTC）运行次数已到 `daily_max_runs` |
 | `503` `worker_unavailable` / `worker_task_unavailable` / `worker_state_unavailable` | Worker 不可用 |
+| `503` `shared_budget_unavailable` | 无法读取或核对共享预算，暂停新请求；检查预算存储及日志后再试 |
 
-明确失败的补发不触发冷却，可以马上再试（仍受每日次数上限约束）；断流、超时或崩溃造成的未知提交，在同槽 24 小时隔离结束前不得重发。Worker 认领时会再查一次每日上限，超过就把这次请求记成失败（`daily_run_limit_reached`）。
+明确失败的补发不触发冷却，但仍受共享预算和每日次数限制；预算不足时重复补发也不会获得准入。断流、超时或崩溃造成的未知提交，在同槽 24 小时隔离结束前不得重发。Worker 认领时会再查一次每日上限，超过就把这次请求记成失败（`daily_run_limit_reached`）。
 
 也可以走通用的 Worker 动作接口 `POST /api/worker/actions/market_brief`，它不接受槽位参数，由 Worker 按钟点决定。
 
@@ -160,7 +174,11 @@ for task in json.load(sys.stdin)["tasks"]:
 
 ## 7. 费用口径
 
-按设计时的 Opus 5.5 价目估算（以 Anthropic 官方价目为准）：输入每百万词元 4 美元，5 分钟缓存写入 5 美元、一小时缓存写入 8 美元，缓存读取 0.20 美元，输出 20 美元；联网搜索每次 0.01 美元。单次研判约 1.5–3 美元，一个交易日两份约 3–6 美元。`daily_max_runs = 6` 是定时、手动与命令行合计的每日启动上限；只有通过原子准入的尝试计数，进程崩溃也不会释放该次数。所有入口同一时刻只准入一次实际运行。工作进程的手动动作编号同时作为持久幂等键；若结果已落盘而动作结算前进程退出，重启后只读取旧回执，不再付费调用。
+按设计时的 Opus 5.5 价目估算（以 Anthropic 官方价目为准）：输入每百万词元 4 美元，5 分钟缓存写入 5 美元、一小时缓存写入 8 美元，缓存读取 0.20 美元，输出 20 美元；联网搜索每次 0.01 美元。单次费用受输入、工具次数、续跑和思考输出影响，不能保证每日两份研判都能在余额内完成。`daily_max_runs = 6` 是定时、手动与命令行合计的每日启动上限；只有通过原子准入的尝试计数，进程崩溃也不会释放该次数。所有入口同一时刻只准入一次实际运行。工作进程的手动动作编号同时作为持久幂等键；若结果已落盘而动作结算前进程退出，重启后只读取旧回执，不再付费调用。
+
+Haiku 和 Opus 共用的 9.5 美元应用预算按每轮模型请求预留；Opus 的初次请求与每次续跑都检查剩余额度。已报用量按估算费用对账，结果未知的请求保留预留，防止重复花费。管理页面的“估算及预留”不是已付账单金额，也不是供应商强制执行的费用封顶。供应商报告的实际用量和估算费用不会截断为额度；原生工具内部多轮处理仍可能超过最初预估。
+
+`daily_max_runs = 6` 与共享金额是两条独立限制：有次数不代表还有预算，有预算也不代表可以无限重跑。首次切换通过 `accounting_start_at` 从生效时刻重新起算；旧 6 条未知记录保留但不占新窗口，之后新增的未知请求仍占用当前窗口的预算。
 
 每次运行的用量与估算费用（微美元精度）存在运行记录里。SDK 自动重试已关闭。完整轮次与中途已报告用量均保留；`usage_complete=false` 表示总用量未确认，此时 `cost_microusd` / `cost_usd` 为 `null`，不是零费用。缓存期限明细缺失时按保守写入价格估算，所有费用仍以供应商账单为准。Owner 读 `/latest` 时能看到最新一份的费用；Worker 任务状态的 `details.cost_usd` 是最近一次运行的费用。
 
@@ -182,7 +200,10 @@ for task in json.load(sys.stdin)["tasks"]:
 | `idle` + `details.waiting = eod_batch` | 当日全市场批次还没发布；到兜底时刻会用现有数据生成 |
 | `idle` + `details.result = slot_attempted` | 这个窗口已经跑过但失败；原因看 `/latest` 的 `latest_attempt` 或 `/history` 的 `error_code`，需要时手动补发 |
 | `idle` + 运行错误码（如 `provider_rate_limited`、`provider_server_error`、`provider_refusal`、`schema_validation_failed`、`evidence_unavailable`） | 模型、供应商或证据不足导致的失败，不影响 Worker 健康；等下一个槽或手动补发 |
-| `idle` + `submission_outcome_unknown` / `provider_stream_incomplete` | 提交结果或完整用量未确认；不要重复提交同一槽，查看持久记录与供应商账单。其他独立槽不受这条未知记录阻塞 |
+| `idle` + `daily_budget_usd_reached` | 共享日预算不足以预留下一轮，保留上一份研判，东京 09:00 重置后再检查 |
+| `provider_usage_incomplete` | 模型回复已结束，但收费项目的用量未完整确认；保留预留与记录，不要重复提交 |
+| `shared_budget_unavailable` | 无法核对共享预算；检查预算存储和日志，恢复读取后再试，不把缺失费用当作零 |
+| `idle` + `submission_outcome_unknown` / `provider_stream_incomplete` | 提交结果或完整用量未确认；不要重复提交同一槽，查看持久记录与供应商账单。其他独立槽仍需有足够共享预算才能准入 |
 | `idle` + `provider_invalid_tool_response` | 工具调用与结果不配对或出现未声明的客户端工具，未发布研判；保留实际已报告用量，不自动重试 |
 | `degraded` + `market_brief_run_failed` | 程序异常。看 Worker 日志里的 `market brief run failed`；它会让 Worker 整体变成 degraded，部署校验会拒绝，修复后重启 Worker |
 | `degraded` + `runtime_settings_unavailable` | 运行设置文件读不出来，看 `runtime-settings.json` |

@@ -134,6 +134,7 @@ export const ATTEMPT_ERROR_TEXT: Record<string, string> = {
   provider_request_rejected: t('请求被供应商拒绝'),
   provider_server_error: t('供应商故障'),
   provider_unavailable: t('无法连接'),
+  provider_usage_incomplete: t('模型用量未完整确认，请勿重复提交'),
   submission_outcome_unknown: t('提交结果和费用尚未确认，请勿重复提交'),
   provider_stream_incomplete: t('模型回复未完整结束，未生成研判'),
   provider_invalid_tool_response: t('工具返回结果不完整或格式有误，未生成研判'),
@@ -144,10 +145,11 @@ export const ATTEMPT_ERROR_TEXT: Record<string, string> = {
   continuation_limit: t('续写次数已用完'),
   schema_validation_failed: t('输出未通过校验'),
   evidence_unavailable: t('证据不足未生成'),
-  budget_exceeded: t('超出 token 上限'),
+  budget_exceeded: t('本次研判的输出用量已达上限'),
   run_deadline_exceeded: t('超出运行时长'),
   runtime_error: t('程序出错'),
   anthropic_api_key_missing: t('服务器未配置模型密钥'),
+  daily_budget_usd_reached: t('共享模型日预算不足，东京 09:00 重置后再试'),
   daily_run_limit_reached: t('今日次数已用完'),
   market_brief_in_progress: t('研判正在生成，请等待结果'),
 };
@@ -164,6 +166,7 @@ const WORKER_DOWN = t('后台服务暂不可用，请稍后重试。');
 
 /** POST /runs 拒绝受理的原因码（backend/app/api/market_brief.py）。 */
 export const TRIGGER_REFUSAL_TEXT: Record<string, string> = {
+  shared_budget_unavailable: t('共享预算暂时无法核对，请稍后重试'),
   market_brief_disabled: t('研判功能未启用'),
   worker_task_disabled: t('后台研判任务已停用'),
   worker_unavailable: WORKER_DOWN,

@@ -2,6 +2,8 @@ import AnalysisIcon from '@/components/shared/AnalysisIcon';
 /** 状态 hero：数据源状态 / 热点计算 / 分析可用性 / 今日新闻（真实契约口径，不可用原因如实标注） */
 import { motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
+import { useAccess } from '@/hooks/useAccess';
+import { sharedAiBudgetText } from '../../api/aiBudget.ts';
 import { usePolling } from '@/hooks/usePolling';
 import { remoteState } from '@/hooks/remoteState';
 import { catalystsContract } from './api';
@@ -34,12 +36,13 @@ const ANALYSIS_REASON_CN: Record<string, { label: string; tone: 'muted' | 'down'
   owner_login_required: { label: t('需管理员登录'), tone: 'muted' },
   not_configured: { label: t('未配置模型密钥'), tone: 'down' },
   ai_not_configured: { label: t('未配置模型密钥'), tone: 'down' },
+  shared_budget_unavailable: { label: t('共享预算暂时无法核对，请稍后重试'), tone: 'warn' },
   settings_unavailable: { label: t('运行设置不可用'), tone: 'down' },
   read_only_mode: { label: t('只读模式'), tone: 'muted' },
   manual_analysis_disabled: { label: t('手动分析已关闭'), tone: 'muted' },
   worker_unavailable: { label: t('后台服务暂不可用'), tone: 'down' },
   daily_token_limit: { label: t('今日分析用量已达上限'), tone: 'warn' },
-  daily_budget_usd_reached: { label: t('今日预算已用完'), tone: 'warn' },
+  daily_budget_usd_reached: { label: t('共享日预算不足'), tone: 'warn' },
   /* 这是上次请求的结果，并非实时余额；充值后的手动请求可以确认恢复。 */
   provider_credit_exhausted: { label: t('分析服务余额不足，充值后重试'), tone: 'down' },
   analysis_in_progress: { label: t('分析任务进行中'), tone: 'warn' },
@@ -77,7 +80,13 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
   const statusUnread = statusState === 'error' || statusState === 'stale';
   const hotUnread = hotState === 'error' || hotState === 'stale';
 
-  const reason = s?.analysisReason ? ANALYSIS_REASON_CN[s.analysisReason] ?? { label: t('模型分析不可用'), tone: 'down' as const } : null;
+  const sharedBudget = s?.analysisBudget && s.analysisBudget.dailyBudgetUsd > 0;
+  const reasonCode = sharedBudget && s?.analysisReason === 'daily_token_limit'
+    ? s.analysisBudget?.dollarBudgetAvailable === false ? 'daily_budget_usd_reached' : null
+    : s?.analysisReason;
+  const { isOwner } = useAccess();
+  const budgetText = isOwner && !statusUnread && reasonCode !== 'shared_budget_unavailable' ? sharedAiBudgetText(s?.analysisBudget) : null;
+  const reason = reasonCode ? ANALYSIS_REASON_CN[reasonCode] ?? { label: t('模型分析不可用'), tone: 'down' as const } : null;
   const unreadCell = (
     <SoftBadge tone="warn" size="md" className="whitespace-normal">
       <Led tone="warn" />
@@ -178,6 +187,10 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
               ) : null}
             </p>
           )}
+          {budgetText && <div className="mt-1 min-w-0 break-words text-micro leading-5 text-ink-400">
+            <p className="tnum">{budgetText.summary}</p>
+            <p>{budgetText.note}</p>
+          </div>}
         </HeroCell>
 
         <HeroCell index={3} label={t("近 24 小时新闻")}>

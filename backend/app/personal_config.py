@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ipaddress
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
@@ -97,6 +98,39 @@ class AccessConfig(StrictConfigModel):
 class FeatureConfig(StrictConfigModel):
     breakout_enabled: bool = True
     catalyst_mode: Literal["off", "read", "manual", "scheduled"] = "read"
+
+
+class ModelBudgetConfig(StrictConfigModel):
+    # Positive values enable one application budget for Haiku and Opus.
+    # Zero retains the legacy token policy for installations not opting in.
+    daily_budget_usd: float = Field(
+        default=0.0, ge=0.0, le=10_000.0, multiple_of=0.01,
+        allow_inf_nan=False,
+    )
+    accounting_start_at: datetime | None = None
+
+    @field_validator("daily_budget_usd", mode="before")
+    @classmethod
+    def reject_boolean_amount(cls, value: Any) -> Any:
+        if isinstance(value, bool):
+            raise ValueError("model budget must be a dollar amount")
+        return value
+
+    @field_validator("accounting_start_at", mode="before")
+    @classmethod
+    def require_timestamp_input(cls, value: Any) -> Any:
+        if value is not None and not isinstance(value, (str, datetime)):
+            raise ValueError("model budget start must be an aware timestamp")
+        return value
+
+    @field_validator("accounting_start_at")
+    @classmethod
+    def normalize_budget_start(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("model budget start must include a timezone")
+        return value.astimezone(timezone.utc)
 
 
 class AIConfig(StrictConfigModel):
@@ -368,7 +402,11 @@ class MarketBriefConfig(StrictConfigModel):
             )
         return self
 
-    def to_run_config(self) -> Any:
+    def to_run_config(
+        self, *, shared_daily_budget_usd: float = 0.0,
+        shared_budget_start_at: datetime | None = None,
+        budget_path: str | Path | None = None,
+    ) -> Any:
         """映射成 ``BriefRunConfig``（同名字段）。
 
         延迟导入：配置层不在模块加载时引用 app.services，只带配置层的
@@ -378,6 +416,9 @@ class MarketBriefConfig(StrictConfigModel):
         from app.services.market_brief.runner import BriefRunConfig
 
         return BriefRunConfig(
+            shared_daily_budget_usd=shared_daily_budget_usd,
+            shared_budget_start_at=shared_budget_start_at,
+            budget_path=budget_path,
             daily_max_runs=self.daily_max_runs,
             model=self.model,
             effort=self.effort,
@@ -417,6 +458,7 @@ class PersonalConfig(StrictConfigModel):
     access: AccessConfig = Field(default_factory=AccessConfig)
     features: FeatureConfig = Field(default_factory=FeatureConfig)
     ai: AIConfig = Field(default_factory=AIConfig)
+    model_budget: ModelBudgetConfig = Field(default_factory=ModelBudgetConfig)
     catalyst: CatalystConfig = Field(default_factory=CatalystConfig)
     breakout: BreakoutConfig = Field(default_factory=BreakoutConfig)
     quotes: QuotesConfig = Field(default_factory=QuotesConfig)

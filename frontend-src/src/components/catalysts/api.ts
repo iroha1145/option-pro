@@ -34,6 +34,7 @@ import {
   buildFocusCycleRequestBody,
   focusCyclePollPath,
 } from '@/components/catalysts/focusCycleRequest';
+import { normalizeAiBudgetSnapshot } from '../../api/aiBudget.ts';
 import { normalizeEvidenceSources } from '../../api/evidenceSources.ts';
 import { t as __t } from '../../i18n/core.ts';
 import { notifyCatalystReadsInvalidated, type CatalystInvalidateOptions } from './resourceSignals';
@@ -449,6 +450,7 @@ function nStatus(d: unknown): CatalystsStatusDetail {
       analysisReason,
       analysisModel: pickS(r, 'model'),
       analysisReasoning: pickS(r, 'reasoning'),
+      analysisBudget: analysisReason === 'owner_login_required' ? null : normalizeAiBudgetSnapshot(avail),
       analysisTriggerEnabled: pickB(r, 'analysis_trigger_enabled'),
       sourcesActive: streams.filter((s) => s.ok).length,
       sourcesTotal: streams.length,
