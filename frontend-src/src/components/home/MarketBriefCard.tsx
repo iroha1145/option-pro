@@ -245,7 +245,7 @@ export default function MarketBriefCard({ className }: { className?: string }) {
       <ConfirmDialog
         open={confirmOpen}
         title={t('现在生成一份市场综合研判？')}
-        description={t('模型会读取当前的行情、广度、宏观、板块、新闻与日历证据重新成文，通常需要几分钟，会消耗模型用量并计入每日次数。')}
+        description={t('模型会读取当前的行情、广度、宏观、行业、新闻与日历证据重新成文，通常需要几分钟，会消耗模型用量并计入每日次数。')}
         confirmLabel={t('开始生成')}
         onConfirm={() => void start()}
         onCancel={() => setConfirmOpen(false)}

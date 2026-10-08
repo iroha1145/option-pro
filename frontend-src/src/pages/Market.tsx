@@ -52,7 +52,7 @@ export default function Market() {
   const bias: TrendBias | null = useMemo(() => {
     const classify = (v: number): TrendBias['label'] => (v >= 60 ? '偏多' : v <= 40 ? '偏空' : '中性');
     if (mean !== null) {
-      return { label: classify(mean), basis: t('推导依据：六维形态均值 {mean}（≥60 偏多 · ≤40 偏空）', { mean: mean.toFixed(1) }) };
+      return { label: classify(mean), basis: t('推导依据：六项均分 {mean}（≥60 偏多 · ≤40 偏空）', { mean: mean.toFixed(1) }) };
     }
     return null;
   }, [mean]);
@@ -70,7 +70,7 @@ export default function Market() {
               <span className="inline-flex items-center gap-1.5">
                 <span className="inline-block size-2 rounded-full bg-ink-300" aria-hidden="true" />
                 <span className="text-caption text-ink-400">
-                  {statusQ.loading ? t('时段读取中…') : t('时段未知')}
+                  {statusQ.loading ? t('正在读取交易时段…') : t('时段未知')}
                 </span>
               </span>
             )}
@@ -86,7 +86,7 @@ export default function Market() {
       {/* B1 指数概览 */}
       <section
         className="mt-6"
-        aria-label={t("指数概览")}
+        aria-label={t("市场指数")}
         {...pageRegionProps(
           'market-indices',
           indicesQ.loading

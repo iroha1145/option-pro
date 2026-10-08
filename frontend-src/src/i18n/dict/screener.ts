@@ -12,7 +12,7 @@ export const SCREENER: Dict = {
   "稳定性 R": ["Stability R", "安定性 R"],
   "稳定性因子：低波动占45%、低跳空占35%、低回撤占20%；分数高表示走势较平稳，不表示跑赢市场。": ["Stability: 45% low volatility, 35% small gaps, and 20% low drawdown. A high score means smoother prices, not market outperformance.", "安定性：低変動45%、小さな窓35%、低ドローダウン20%。高得点は値動きが安定していることを示し、市場超過収益を意味しません。"],
   "行业因子当前停用：缺少已核实的行业分类，有效权重为零。": ["The industry factor is disabled: verified industry classifications are missing, so its effective weight is zero.", "業種因子は無効です。確認済み業種分類がないため、有効な重みはゼロです。"],
-  "全成员平均强度（0–100）": ["Full-member average strength (0–100)", "全構成銘柄の平均強度（0–100）"],
+  "全成员平均评分（0–100）": ["Full-member average score (0–100)", "全構成銘柄の平均スコア（0–100）"],
   "固定使用均衡、中期、趋势质量家族的有效评分，包含未入选与暂不宜入场的成员。无评分者不补零，并单独显示覆盖数。此统计不随观察榜数量和风险偏好变化。": ["Uses all available balanced, mid-term trend-quality scores, including unselected and entry-blocked members. Missing scores are excluded and coverage is shown separately. Result limits and selected risk profiles do not change this statistic.", "均衡・中期・トレンド品質の有効スコアを固定して使用し、未選出や新規参入不可の銘柄も含みます。欠損はゼロにせず、対象数を別表示します。表示上限やリスク設定では変わりません。"],
   "均分采用全体有有效评分的成员，固定为均衡、中期、趋势质量。": ["Average of all valid member scores: balanced, mid-term, trend quality.", "有効スコアを持つ全構成銘柄の平均：均衡・中期・トレンド品質。"],
   "基准收益": ["Benchmark return", "基準リターン"],
@@ -115,6 +115,7 @@ export const SCREENER: Dict = {
 
   /* ---------------- ResultTable.tsx ---------------- */
   '代码': ['Ticker', '銘柄'],
+  '股票代码': ['Ticker', '銘柄'],
   '强度分': ['Strength score', '強度スコア'],
   '分项': ['Subscores', 'サブスコア'],
   '价 / 涨跌': ['Price / Chg %', '価格 / 騰落率'],

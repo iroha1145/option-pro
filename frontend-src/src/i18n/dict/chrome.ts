@@ -27,24 +27,13 @@ export const CHROME: Dict = {
   '查看突破雷达': ['Open breakout radar', 'ブレイクアウト・レーダーを開く'],
   '显示设置': ['Display settings', '表示設定'],
   '涨跌颜色': ['Up/down colors', '騰落の色'],
-  '新闻催化': ['News catalysts', 'ニュース・カタリスト'],
   'Optix Pro 首页': ['Optix Pro home', 'Optix Pro ホーム'],
   '主导航': ['Main navigation', 'メインナビゲーション'],
   '移动端导航': ['Mobile navigation', 'モバイルナビゲーション'],
   '更多': ['More', 'その他'],
   '更多功能': ['More pages', 'その他の機能'],
-  '涨跌色彩': ['Price color', '騰落カラー'],
   '绿涨红跌': ['Green up', '緑高赤安'],
   '红涨绿跌': ['Red up', '赤高緑安'],
-  '当前：绿涨红跌（点击切换红涨绿跌）': [
-    'Current: Green up / Red down (Click to switch to Red up / Green down)',
-    '現在: 緑高赤安（クリックで赤高緑安に切替）',
-  ],
-  '当前：红涨绿跌（点击切换绿涨红跌）': [
-    'Current: Red up / Green down (Click to switch to Green up / Red down)',
-    '現在: 赤高緑安（クリックで緑高赤安に切替）',
-  ],
-  '切换涨跌色彩模式': ['Switch price color mode', '騰落カラーモードの切替'],
   '外观': ['Appearance', '外観'],
   '切换外观': ['Change appearance', '外観を変更'],
   '跟随系统': ['Match system', 'システムに合わせる'],
@@ -238,5 +227,4 @@ export const CHROME: Dict = {
   /* 语言切换器 */
   '语言': ['Language', '言語'],
   '界面语言': ['Interface language', '表示言語'],
-  '切换界面语言': ['Change interface language', '表示言語を変更'],
 };

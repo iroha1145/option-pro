@@ -72,9 +72,9 @@ function ColumnHeader({ period, className }: { period: SectorVm['period']; class
   return (
     <div className={cn(ROW_GRID, 'border-b border-line px-2 pb-2 text-micro font-medium text-ink-500', className)} aria-hidden="true">
       <span />
-      <span>{t('板块')}</span>
+      <span>{t('行业')}</span>
       <span className="col-span-2 text-right md:col-span-2">{t('{period}平均收益', { period: periodLabel(period) })}</span>
-      <span className="hidden md:block">{t('平均强度')}</span>
+      <span className="hidden md:block">{t('平均评分')}</span>
     </div>
   );
 }
@@ -106,8 +106,8 @@ function HeatRow({
         aria-pressed={selected}
         aria-label={
           hasReturn
-            ? t('{name}{period}平均收益 {ret}%，平均强度 {strength}', { name: sector.name, period: periodLabel(sector.period), ret: sector.avgReturn?.toFixed(2), strength: sector.avgStrength ?? t('暂无') })
-            : t('{name}暂无强度聚合', { name: sector.name })
+            ? t('{name}{period}平均收益 {ret}%，平均评分 {strength}', { name: sector.name, period: periodLabel(sector.period), ret: sector.avgReturn?.toFixed(2), strength: sector.avgStrength ?? t('暂无') })
+            : t('{name}暂无评分汇总', { name: sector.name })
         }
         className={cn(
           'group relative w-full rounded-md px-2 py-1.5 text-left transition-colors duration-fast',
@@ -165,13 +165,13 @@ function HeatRow({
           <span className="eyebrow block">{sector.name}</span>
           <span className="mt-1.5 block space-y-1 text-micro">
             <span className="flex items-center justify-between gap-2">
-              <span className="text-ink-500">{t('平均强度')}</span>
+              <span className="text-ink-500">{t('平均评分')}</span>
               <span className="text-ink-800 tnum">
                 {sector.avgStrength?.toFixed(1) ?? '—'}
               </span>
             </span>
             <span className="flex items-center justify-between gap-2">
-              <span className="text-ink-500">{t('强度领先')}</span>
+              <span className="text-ink-500">{t('评分最高')}</span>
               <span className="font-medium text-ink-800">
                 {leader
                   ? <><span className="">{leader.ticker}</span> <span className="tnum">{leader.score?.toFixed(1) ?? '—'}</span></>
@@ -179,7 +179,7 @@ function HeatRow({
               </span>
             </span>
             <span className="flex items-center justify-between gap-2 border-t border-line pt-1">
-              <span className="text-ink-500">{t('统计覆盖')}</span>
+              <span className="text-ink-500">{t('收益覆盖')}</span>
               <span className="text-ink-800 tnum">
                 {sector.coveredCount ?? '—'} / {sector.memberCount}
               </span>
@@ -230,7 +230,7 @@ export default function HeatMatrix({
       className={LIST_GRID}
       style={{ '--heat-rows': perColumn + 1 } as CSSProperties}
       role="group"
-      aria-label={t("板块平均收益热力矩阵")}
+      aria-label={t("行业平均收益排名")}
       initial="hidden"
       whileInView="shown"
       viewport={{ once: true, amount: 0.2 }}

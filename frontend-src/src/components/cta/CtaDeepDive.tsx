@@ -20,7 +20,7 @@ import { CTA_HINTS } from '@/lib/ctaHints';
 import { cn } from '@/lib/utils';
 import type { CtaInstrumentEstimate, CtaTrendPayload } from '@/api/types';
 import { t } from '../../i18n/core.ts';
-import { FLOW_META, POSITION_META, instrumentName, signed } from './ctaMeta';
+import { FLOW_META, POSITION_META, SUBMODEL_LABELS, instrumentName, signed } from './ctaMeta';
 import PositionHistoryChart from './PositionHistoryChart';
 import ScenarioChart from './ScenarioChart';
 import TriggerLadder from './TriggerLadder';
@@ -238,7 +238,7 @@ export default function CtaDeepDive({
                 <div className="mt-1.5 space-y-1.5">
                   {row.submodels && (['fast', 'medium', 'slow'] as const).map((key) => (
                     row.submodels![key] && (
-                      <SignalRow key={key} label={t(row.submodels![key].label)} signal={row.submodels![key].signal} />
+                      <SignalRow key={key} label={SUBMODEL_LABELS[key] ?? t(row.submodels![key].label)} signal={row.submodels![key].signal} />
                     )
                   ))}
                 </div>
@@ -288,7 +288,7 @@ export default function CtaDeepDive({
 
           {row.warnings.length > 0 && (
             <div className="mt-4 rounded-md bg-warn-50 px-3 py-2">
-              <p className="text-micro font-medium text-warn-700">{t('数据警告')}</p>
+              <p className="text-micro font-medium text-warn-700">{t('数据提醒')}</p>
               <ul className="mt-1 list-inside list-disc space-y-0.5 text-micro text-warn-700">
                 {row.warnings.map((w) => <li key={w}>{w}</li>)}
               </ul>
@@ -304,7 +304,7 @@ export default function CtaDeepDive({
               <span className="text-warn-700"> · {t('尚未更新至最近交易日')}</span>
             )}
             {row.intraday?.provisional && <span> · {t('盘中估算为暂定值，历史记录以收盘为准')}</span>}
-            {' · '}{t('方法 {v} · 代理={p}', { v: data.method_version ?? '—', p: row.proxy_symbol })}
+            {' · '}{t('方法 {v} · 代理基金 {p}', { v: data.method_version ?? '—', p: row.proxy_symbol })}
           </p>
         </>
       )}

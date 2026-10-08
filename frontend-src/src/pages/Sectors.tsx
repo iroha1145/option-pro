@@ -123,7 +123,7 @@ export default function Sectors() {
       />
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-y border-line py-3">
-        <p className="text-caption font-medium text-ink-700">{t('收益统计周期')}</p>
+        <p className="text-caption font-medium text-ink-700">{t('收益周期')}</p>
         <Segmented
           options={[
             { value: '1mo', label: t('1 个月') },
@@ -152,24 +152,24 @@ export default function Sectors() {
             {/* 横幅必须与页面事实一致（审计 2.2.10）：usePolling 失败不清空旧数据，
               * 有旧快照时下面显示的是上次成功的数值，要说「已过期」而不是「留空」。 */}
             {strengthQ.data
-              ? t('板块强度更新失败，当前显示上次结果（已过期{time}）。', {
+              ? t('行业评分更新失败，当前显示上次结果（已过期{time}）。', {
                   time: strengthQ.lastUpdatedAt
                     ? ` · ${fmtTimeHHMMSS(strengthQ.lastUpdatedAt)}`
                     : '',
                 })
-              : t('板块列表已加载，涨跌幅与强度数据暂不可用。')}
+              : t('行业列表已加载，涨跌幅与评分数据暂不可用。')}
           </span>
         </StatusNotice>
       )}
       {!strengthQ.error && strengthEnvelope.stale && (
         <StatusNotice className="mt-4">
-          {t('部分板块数据已过期，请结合各项数据日期查看。')}
+          {t('部分行业数据已过期，请结合各项数据日期查看。')}
         </StatusNotice>
       )}
 
       <section
         className="mt-6"
-        aria-label={t("板块总览")}
+        aria-label={t("行业总览")}
         {...pageRegionProps(
           'sectors',
           overviewLoading
@@ -190,7 +190,7 @@ export default function Sectors() {
             <EmptyState
               variant="error"
               image="/empty-chart.svg"
-              title={t("板块目录加载失败")}
+              title={t("行业目录加载失败")}
               description={catalogQ.error.message}
               action={
                 <button
@@ -210,8 +210,8 @@ export default function Sectors() {
           <div className="card-surface">
             <EmptyState
               image="/empty-chart.svg"
-              title={t("暂无板块目录")}
-              description={t("板块目录暂时为空，重试可重新拉取。")}
+              title={t("暂无行业目录")}
+              description={t("行业目录暂时为空，重试可重新获取。")}
               action={
                 <button
                   type="button"
@@ -251,7 +251,7 @@ export default function Sectors() {
                 variant="error"
                 icon="doc-quote"
                 title={t("IV 排名联动暂停")}
-                description={t("板块目录不可用，无法确定查询范围；恢复目录后自动继续。")}
+                description={t("行业目录不可用，无法确定查询范围；恢复目录后自动继续。")}
                 action={
                   <button
                     type="button"
@@ -274,8 +274,8 @@ export default function Sectors() {
             <div className="card-surface">
               <EmptyState
                 image="/empty-chart.svg"
-                title={t("暂无可查询的板块")}
-                description={t("板块信息不完整，暂无法查询隐含波动率排名。")}
+                title={t("暂无可查询的行业")}
+                description={t("行业信息不完整，暂无法查询隐含波动率排名。")}
                 action={
                   <button
                     type="button"
@@ -313,14 +313,14 @@ export default function Sectors() {
           )}
         </section>
 
-        <aside className="lg:col-span-5" aria-label={t("板块 IV 数据")}>
+        <aside className="lg:col-span-5" aria-label={t("行业 IV 数据")}>
           {catalogQ.error ? (
             <div className="card-surface">
               <EmptyState
                 variant="error"
                 icon="doc-quote"
                 title={t("IV 数据暂不可用")}
-                description={t("板块信息暂不可用，恢复后将自动更新。")}
+                description={t("行业信息暂不可用，恢复后将自动更新。")}
                 action={
                   <button
                     type="button"
@@ -339,8 +339,8 @@ export default function Sectors() {
             <div className="card-surface">
               <EmptyState
                 image="/empty-chart.svg"
-                title={t("暂无板块 IV 数据")}
-                description={t("等待板块目录提供有效查询范围，可重试拉取目录。")}
+                title={t("暂无行业 IV 数据")}
+                description={t("等待行业目录提供有效查询范围，可重试获取目录。")}
                 action={
                   <button
                     type="button"

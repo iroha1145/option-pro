@@ -515,7 +515,7 @@ test('the panel polls macro data at fifteen minutes, not sixty seconds', async (
   assert.match(text, /const REFRESH_FOLLOW_TIMEOUT_MS = 3 \* 60_000;/);
   // 访客看不到 Owner 动作
   assert.match(text, /isOwner \?/);
-  assert.match(text, /登录后可手动刷新/);
+  assert.match(text, /登录后可手动更新/);
 });
 
 test('the source note states the real sources', async () => {

@@ -152,7 +152,7 @@ function scenarioOption(row: CtaInstrumentEstimate): ChartOption | null {
         z: 3,
       }),
       insightLine(CH.ink400, {
-        name: t('仅趋势（波动率冻结）'),
+        name: t('仅趋势（波动率固定）'),
         data: curve.trend_only,
         lineStyle: { width: 1.5, type: [5, 4] as number[] },
         z: 2,
@@ -181,11 +181,11 @@ export default function ScenarioChart({ row }: { row: CtaInstrumentEstimate }) {
       <p className="mt-1 flex flex-wrap items-center gap-x-3 text-micro text-ink-400">
         <span className="inline-flex items-center gap-1">
           <span className="inline-block h-0 w-4 border-t-2 border-brand-500" aria-hidden />
-          {t('完整敞口（含波动率调整）')}
+          {t('完整仓位（含波动率调整）')}
         </span>
         <span className="inline-flex items-center gap-1">
           <span className="inline-block h-0 w-4 border-t border-dashed border-ink-400" aria-hidden />
-          {t('仅趋势（波动率冻结）')}
+          {t('仅趋势（波动率固定）')}
         </span>
       </p>
     </>

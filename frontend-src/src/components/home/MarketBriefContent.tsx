@@ -181,11 +181,11 @@ export default function MarketBriefContent({ brief, year }: { brief: MarketBrief
           <Bullets items={result.macro_check.points} className="mt-3" />
         </Part>
 
-        <Part title={t('板块与关键新闻')}>
+        <Part title={t('行业与关键新闻')}>
           {!hasSectorNews && <Summary text={null} />}
           {result.sectors.length > 0 && (
             <>
-              <SubLabel className="mt-2">{t('板块')}</SubLabel>
+              <SubLabel className="mt-2">{t('行业')}</SubLabel>
               <ul className="mt-1.5 space-y-2.5">
                 {result.sectors.map((sector, index) => (
                   <li key={`${sector.name}-${index}`}>
@@ -276,7 +276,7 @@ export default function MarketBriefContent({ brief, year }: { brief: MarketBrief
 
       <SourceNote
         className={result.prior_review || brief.externalSources.length > 0 ? undefined : 'mt-6'}
-        text={t('程序汇总行情、广度、宏观、板块、新闻与日历证据，模型负责解释与找矛盾')}
+        text={t('程序汇总行情、广度、宏观、行业、新闻与日历证据，模型负责解释与找矛盾')}
       />
     </div>
   );

@@ -60,7 +60,7 @@ export default function CompositeCard({
       aria-label={t("宏观环境综合分")}
     >
       <div className="flex items-start justify-between gap-3">
-        <h3 className="text-h3 text-ink-900">{t('综合分')}</h3>
+        <h3 className="text-h3 text-ink-900">{t('综合评分')}</h3>
         <span className="flex items-center gap-1 text-micro text-ink-400">
           {t('历史分位')}
           <InfoHint hint={SCORE_HINTS_MACRO.macroComposite} side="bottom" align="end" size={11} />
@@ -110,7 +110,7 @@ export default function CompositeCard({
 
       <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
         <StatLine
-          label={t("置信度")}
+          label={t("数据覆盖")}
           hintKey="macroConfidence"
           value={
             typeof composite.confidence === 'number'
@@ -119,14 +119,14 @@ export default function CompositeCard({
           }
         />
         <StatLine
-          label={t("有效模块")}
+          label={t("有效类别")}
           value={
             composite.validModuleCount === null
               ? '—'
               : `${composite.validModuleCount} / ${composite.totalModuleCount ?? 7}`
           }
         />
-        <StatLine label={t("数据截止")} value={dataThrough ?? '—'} />
+        <StatLine label={t("数据截至")} value={dataThrough ?? '—'} />
       </div>
 
       <p className="mt-4 border-t border-line pt-3 text-micro leading-relaxed text-ink-400">

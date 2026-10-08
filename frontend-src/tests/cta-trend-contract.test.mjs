@@ -96,7 +96,7 @@ test('v3 kind 细分：过零/饱和分开标注，饱和不冒充翻转', () =>
   assert.match(panel, /position_before/);
   /* 垫衬贴现价时区分缓冲边界与真实阈值 */
   assert.match(panel, /nearest_event_distance_pct/);
-  assert.match(panel, /最近断点 \{v\}%/);
+  assert.match(panel, /最近断点距离 \{v\}%/);
   /* 方向三角中性化：价格位置不用涨绿跌红（红绿只留净 Δ） */
   assert.match(panel, /border-b-ink-400/);
   assert.match(panel, /border-t-ink-400/);
@@ -124,7 +124,7 @@ test('v2 读数拆解与新鲜度：强度/覆盖/最新交易日/快照时刻/�
   assert.match(panel, /<TriggerLadder key=\{row\.instrument\}/);
   /* 页头时间 = 快照落盘时刻，不是浏览器请求时刻 */
   assert.match(ctaPage, /snapshot_saved_at/);
-  assert.match(ctaPage, /快照 \{time\}/);
+  assert.match(ctaPage, /记录时间 \{time\}/);
   assert.doesNotMatch(ctaPage, /\{t\('更新'\)\} \{fmtTimeHHMMSS\(ctaQ\.lastUpdatedAt\)\}/);
 });
 
@@ -169,7 +169,7 @@ test('hints 数字与后端 config 一致（镜子）', () => {
   assert.ok(hints.includes('现价上下 12%'));
   assert.ok(hints.includes('55%'));
   assert.ok(hints.includes('0.1'));
-  assert.ok(hints.includes('快 30% / 中 40% / 慢 30%'));
+  assert.ok(hints.includes('短期 30% / 中期 40% / 长期 30%'));
   assert.match(backendConfig, /SubmodelSpec\(\s*"fast", "快速（≈1 个月）", 0\.30/);
   assert.match(backendConfig, /SubmodelSpec\(\s*"medium", "中速（≈3 个月）", 0\.40/);
   assert.match(backendConfig, /"tsmom", 0\.40, horizon=21/);

@@ -374,6 +374,7 @@ export const CATALYSTS: Dict = {
   /* ---------------- src/pages/Catalysts.tsx ---------------- */
   '股票影响': ['Stock impact', '銘柄インパクト'],
   '数据源': ['Sources', 'データソース'],
+  '数据来源': ['Sources', 'データソース'],
   '新闻催化剂': ['News catalysts', 'ニュース・カタリスト'],
   '刷新本页数据': ["Refresh this page's data", 'このページのデータを更新'],
   '刷新': ['Refresh', '更新'],

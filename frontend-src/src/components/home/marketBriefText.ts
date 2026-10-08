@@ -34,7 +34,7 @@ export const SLOT_LABEL: Record<BriefSlot, string> = {
 export const REGIME_LABEL: Record<BriefRegime, string> = {
   broad_advance: t('广泛走强'),
   narrow_leadership: t('权重股撑盘'),
-  rotation: t('板块轮动'),
+  rotation: t('行业轮动'),
   risk_off: t('风险偏好收缩'),
   mixed: t('多空交织'),
   uncertain: t('判断待定'),
@@ -214,7 +214,7 @@ export function generatedText(iso: string | null, tradingDate: string | null, ye
   const day = fmtNyDayKey(iso);
   if (!day) return null;
   const time = fmtNyHHmm(iso);
-  return t('生成于 美东 {time}', { time: day === tradingDate ? time : `${shortDate(day, year)} ${time}` });
+  return t('生成于 纽约时间 {time}', { time: day === tradingDate ? time : `${shortDate(day, year)} ${time}` });
 }
 
 /** 「下一个时段：开盘前 · 10-09 美东 08:40」。 */
@@ -222,7 +222,7 @@ export function nextSlotText(next: MarketBriefNextSlot | null, year?: string): s
   if (!next) return null;
   const day = fmtNyDayKey(next.at);
   if (!day) return null;
-  return t('下一个时段：{slot} 美东 {time}', { slot: slotTag(next.slot, day, year), time: fmtNyHHmm(next.at) });
+  return t('下一个时段：{slot} 纽约时间 {time}', { slot: slotTag(next.slot, day, year), time: fmtNyHHmm(next.at) });
 }
 
 /* ---------------------------------- 覆盖条 ---------------------------------- */
@@ -238,7 +238,7 @@ export const BLOCK_LABEL: Record<string, string> = {
   market_regime: t('市场形态'),
   breadth_counts: t('全市场扫描'),
   themes: t('主题'),
-  sector_iv: t('板块波动率快照'),
+  sector_iv: t('行业波动率快照'),
   breakouts: t('突破雷达'),
   macro: t('宏观'),
   news: t('新闻'),
@@ -252,16 +252,16 @@ export const BLOCK_LABEL: Record<string, string> = {
  * 最能说明这份研判的数据新旧，排最前。没有登记的来源不进覆盖条。
  */
 export const THROUGH_LABEL: Record<string, string> = {
-  eod_batch: t('全市场扫描截止'),
-  macro: t('宏观截止'),
-  market_regime: t('市场形态截止'),
-  market_signals: t('市场信号截止'),
-  indices: t('指数截止'),
-  sector_iv: t('板块波动率截止'),
-  breakouts: t('突破雷达截止'),
-  news: t('新闻截止'),
-  earnings: t('财报截止'),
-  calendar: t('经济日历截止'),
+  eod_batch: t('全市场扫描截至'),
+  macro: t('宏观截至'),
+  market_regime: t('走势评分截至'),
+  market_signals: t('市场信号截至'),
+  indices: t('指数截至'),
+  sector_iv: t('行业波动率截至'),
+  breakouts: t('突破雷达截至'),
+  news: t('新闻截至'),
+  earnings: t('财报截至'),
+  calendar: t('经济日历截至'),
 };
 const THROUGH_ORDER = Object.keys(THROUGH_LABEL);
 

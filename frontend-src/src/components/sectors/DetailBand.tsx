@@ -57,12 +57,12 @@ export default function DetailBand({
       exit={{ height: 0, opacity: 0 }}
       transition={{ duration: DUR_UI, ease: EASE_PAPER }}
       className="overflow-hidden"
-      aria-label={t('{name} 板块详情', { name: sector.name })}
+      aria-label={t('{name} 行业详情', { name: sector.name })}
     >
       <div className="card-surface mt-6 p-4 md:p-6">
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line pb-3">
           <div>
-            <p className="eyebrow">{t('板块详情')}</p>
+            <p className="eyebrow">{t('行业详情')}</p>
             <h2 className="mt-1 font-display text-[18px] font-medium leading-[24px] text-ink-900">
               {sector.name}
             </h2>
@@ -71,7 +71,7 @@ export default function DetailBand({
             to={`/screener?sector=${encodeURIComponent(sector.id)}`}
             className="flex items-center gap-1 text-caption text-brand-600 transition-colors duration-fast hover:text-brand-500"
           >
-            {t('查看该板块扫描结果')}
+            {t('查看选股')}
             <Icon name="arrow-up-right" size={12} />
           </Link>
         </div>
@@ -91,7 +91,7 @@ export default function DetailBand({
           <Metric
             label={
               <>
-                {t('平均强度')}
+                {t('平均评分')}
                 <InfoHint hint={SCORE_HINTS.sectorFullStrength} side="bottom" size={11} className="ml-1" />
               </>
             }
@@ -133,10 +133,10 @@ export default function DetailBand({
 
         <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div>
-            <p className="eyebrow">{t('强度领先标的')}</p>
+            <p className="eyebrow">{t('高分股票')}</p>
             {sector.leaders.length === 0 ? (
               <p className="mt-3 text-body-s text-ink-400">
-                {t('暂无领先标的数据。')}
+                {t('暂无行业高分股票数据。')}
               </p>
             ) : (
               <ul className="mt-2 divide-y divide-line">
@@ -155,7 +155,7 @@ export default function DetailBand({
                         {leader.ticker}
                       </span>
                       <span className="ml-auto text-micro text-ink-400">
-                        {t('强度')}
+                        {t('评分')}
                       </span>
                       <span className="w-12 text-right text-data-m font-medium text-ink-800 tnum">
                         {leader.score?.toFixed(1) ?? '—'}
@@ -174,14 +174,14 @@ export default function DetailBand({
 
           <div>
             <div className="flex items-center justify-between gap-3">
-              <p className="eyebrow">{t('板块目录成分')}</p>
+              <p className="eyebrow">{t('目录股票')}</p>
               <span className="text-micro text-ink-400 tnum">
                 {sector.memberCount} {t('只')}
               </span>
             </div>
             {sector.tickers.length === 0 ? (
               <p className="mt-3 text-body-s text-ink-400">
-                {t('暂未取得该板块的成分股。')}
+                {t('暂未取得该行业的成分股。')}
               </p>
             ) : (
               <>
@@ -200,7 +200,7 @@ export default function DetailBand({
               </div>
               {sector.tickers.length > 12 && (
                 <p className="mt-2 text-micro text-ink-400">
-                  {t('仅展示前 12 个 · 共 {n} 只成分', { n: sector.tickers.length })}
+                  {t('仅显示前 12 只 · 共 {n} 只股票', { n: sector.tickers.length })}
                 </p>
               )}
               </>

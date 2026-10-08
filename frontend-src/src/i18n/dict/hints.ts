@@ -57,6 +57,9 @@ export const HINTS: Dict = {
   "表示评分所需数据的完整程度，按配置权重计算。指标或历史数据缺失时会降低。": ["Data completeness, measured against the configured scoring weights. Missing indicators or history lower this value.", "設定された採点の重みに対するデータの充足度です。指標や過去データが欠けると低下します。"],
 
   '市场环境分（0–100）': ['Market environment score (0–100)', '市場環境スコア（0–100）'],
+  '选股页的市场环境分是另一种算法：六项按权重合成并扣风险罚分。': ["The screener's market regime score is calculated differently: the six items are weighted and risk penalties are deducted.", "スクリーナーの地合いスコアは別の計算です：6項目を加重合成し、リスク減点を差し引きます。"],
+  '六项走势评分的算术平均，每项各占六分之一，不加权、不扣罚分。趋势偏向按它判断：≥60 偏多、≤40 偏空，中间为中性。': ["The simple average of the six trend scores, each weighted one sixth, with no weighting or penalties. The trend bias uses it: ≥60 bullish, ≤40 bearish, neutral in between.", "6つの地合いスコアの単純平均で、各項目は6分の1ずつ、加重も減点もしません。トレンドの傾きはこの値で判定します：60以上は強気、40以下は弱気、その間は中立。"],
+  '六项均分（0–100）': ["Six-item average (0–100)", "6項目の平均（0–100）"],
   '六维加权：指数趋势 30% + 动量 20% + 宽度 20% + 量能 10% + 攻防价差 10% + 风险偏好 10%，再减去风险罚分×0.35。≥75 强风险偏好、≥60 温和偏强、≥40 中性震荡、<40 弱势高风险；核心数据缺失时不出正式分。': [
     'Six weighted dimensions: index trend 30% + momentum 20% + breadth 20% + volume 10% + offense/defense spread 10% + risk appetite 10%, minus the risk penalty × 0.35. 75 or above is strongly risk-on, 60 or above mildly positive, 40 or above neutral and choppy, and below 40 weak with high risk. No official score is published while core data is missing.',
     '6つの軸を加重します：指数トレンド 30% + モメンタム 20% + 市場の広がり 20% + 出来高 10% + 攻守スプレッド 10% + リスク選好 10%。そこからリスク・ペナルティ×0.35 を差し引きます。75以上は強いリスクオン、60以上はやや強気、40以上は中立のもみ合い、40未満は弱くリスクの高い状態です。中核データが欠けている間は正式なスコアを出しません。',
@@ -79,7 +82,7 @@ export const HINTS: Dict = {
   ],
 
   '市场宽度（0–100）': ['Market breadth (0–100)', '市場の広がり（0–100）'],
-  '11 个板块 ETF 中站上 50 日线的比例 40%、站上 200 日线的比例 25%，加 RSP−SPY 20%、IWM−SPY 15% 的 20 日相对差。衡量上涨是否由少数权重股撑起。': [
+  '11 个行业 ETF 中站上 50 日线的比例 40%、站上 200 日线的比例 25%，加 RSP−SPY 20%、IWM−SPY 15% 的 20 日相对差。衡量上涨是否由少数权重股撑起。': [
     'The share of the 11 sector ETFs above their 50-day MA 40% and above their 200-day MA 25%, plus the 20-day relative spreads RSP−SPY 20% and IWM−SPY 15%. It gauges whether a rally is being carried by only a handful of heavyweights.',
     '11本のセクター ETF のうち50日線を上回る比率 40%、200日線を上回る比率 25%、さらに RSP−SPY 20%、IWM−SPY 15% の20日相対差を加えます。上昇が少数の大型株だけで支えられていないかを測ります。',
   ],
@@ -198,8 +201,8 @@ export const HINTS: Dict = {
 
   '平均强度（0–100）': ['Average strength (0–100)', '平均強度（0–100）'],
 
-  '板块内 IV 分位（0–100）': ['IV percentile within the sector (0–100)', 'セクター内 IV パーセンタイル（0–100）'],
-  '该股平值期权隐含波动率（ATM IV）在本板块成分股中的百分位：100 = 板块内 IV 最高。它比较的是同板块内的相对贵贱，不是该股自己的历史高低位。': [
+  '行业内 IV 分位（0–100）': ['IV percentile within the sector (0–100)', 'セクター内 IV パーセンタイル（0–100）'],
+  '该股平值期权隐含波动率（ATM IV）在本行业成分股中的百分位：100 = 行业内 IV 最高。它比较的是同行业内的相对贵贱，不是该股自己的历史高低位。': [
     "Where the stock's at-the-money implied volatility (ATM IV) sits among the sector's constituents: 100 is the highest IV in the sector. This compares how expensive it is against its sector peers, not against its own history.",
     'その銘柄の ATM インプライド・ボラティリティ（ATM IV）が、セクター構成銘柄の中で何パーセンタイルに位置するかを示します。100 はセクター内で最も IV が高い状態です。比較しているのは同一セクター内の相対的な割高・割安であり、その銘柄自身の過去水準ではありません。',
   ],
@@ -257,8 +260,8 @@ export const HINTS: Dict = {
     'Growth outperforming the broad market (a positive value) counts as top-crowding evidence at ×8; the reverse counts as bottom evidence.',
     'グロースが市場全体より強い（プラス値）場合は×8で天井の過密証拠、逆の場合は底証拠として計上します。',
   ],
-  '板块宽度': ['Sector breadth', 'セクターの広がり'],
-  '站上 50 日线的板块比例。低于 45% 计顶部风险，高于 85% 计过热；低于 55% 同时累积底部证据。': [
+  '行业宽度': ['Sector breadth', 'セクターの広がり'],
+  '站上 50 日线的行业比例。低于 45% 计顶部风险，高于 85% 计过热；低于 55% 同时累积底部证据。': [
     'The share of sectors above their 50-day MA. Below 45% counts as topping risk and above 85% as overheating; below 55% also accumulates bottom evidence.',
     '50日線を上回るセクターの比率です。45%未満は天井リスク、85%超は過熱として計上し、55%未満では同時に底証拠も積み上げます。',
   ],
@@ -393,13 +396,13 @@ export const HINTS: Dict = {
     'SOFR minus the ON RRP award rate, in percentage points. Scored on its absolute value, measuring deviation from the floor of the corridor. The interface also shows the signed raw value.',
     'SOFR から ON RRP 落札金利を差し引いたもので、単位はパーセンテージポイントです。絶対値でスコア化し、コリドー下限からの乖離を測ります。画面には符号付きの原数値も表示します。',
   ],
-  'EFFR−IORB 价差（0–100 分）': ['EFFR−IORB spread (0–100)', 'EFFR−IORBスプレッド（0–100点）'],
+  'EFFR−IORB 利差（0–100 分）': ['EFFR−IORB spread (0–100)', 'EFFR−IORBスプレッド（0–100点）'],
   '联邦基金有效利率减准备金余额利率，单位百分点。评分用绝对值，衡量政策利率传导是否顺畅。界面同时显示带符号原值。': [
     'The effective federal funds rate minus the interest rate on reserve balances, in percentage points. Scored on its absolute value, measuring how smoothly the policy rate is transmitting. The interface also shows the signed raw value.',
     'フェデラルファンド実効金利（EFFR）から準備預金付利（IORB）を差し引いたもので、単位はパーセンテージポイントです。絶対値でスコア化し、政策金利の伝達が円滑かを測ります。画面には符号付きの原数値も表示します。',
   ],
-  '商业票据−国库券价差（0–100 分）': ['CP−T-bill spread (0–100)', 'CP−Tビル・スプレッド（0–100点）'],
-  '3 个月金融商业票据利率减 3 个月国库券贴现率，单位百分点。评分只取正值部分：正价差扩大代表短期信用融资变贵。界面同时显示带符号原值。': [
+  '商业票据−国库券利差（0–100 分）': ['CP−T-bill spread (0–100)', 'CP−Tビル・スプレッド（0–100点）'],
+  '3 个月金融商业票据利率减 3 个月国库券贴现率，单位百分点。评分只取正值部分：正利差扩大代表短期信用融资变贵。界面同时显示带符号原值。': [
     'The 3-month financial commercial paper rate minus the 3-month T-bill discount rate, in percentage points. Only the positive part is scored: a widening positive spread means short-term credit funding is getting more expensive. The interface also shows the signed raw value.',
     '3ヶ月物金融 CP レートから3ヶ月物Tビル（米財務省短期証券）の割引率を差し引いたもので、単位はパーセンテージポイントです。プラスの部分のみをスコア化し、正のスプレッド拡大は短期信用の調達コスト上昇を示します。画面には符号付きの原数値も表示します。',
   ],

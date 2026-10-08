@@ -105,7 +105,7 @@ export default function IvPanel({
       {/* 头：标题 + 徽标 + 排序 */}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-          <h2 className="text-h3 text-ink-800">{t('板块隐含波动率（IV）排名')}</h2>
+          <h2 className="text-h3 text-ink-800">{t('行业隐含波动率（IV）排名')}</h2>
           {meta.status !== 'active' && <SourceStatusBadge status={meta.status} />}
         </div>
         <div className="flex items-center gap-3">
@@ -113,7 +113,7 @@ export default function IvPanel({
             type="button"
             onClick={() => setDesc((v) => !v)}
             className="flex h-7 items-center gap-1 rounded-md border border-line bg-card px-2 text-caption text-ink-500 shadow-btn transition-colors duration-fast hover:border-line-strong hover:text-ink-800"
-            aria-label={t('切换排序，当前板块排位{order}', { order: desc ? t('降序') : t('升序') })}
+            aria-label={t('切换排序，当前行业排位{order}', { order: desc ? t('降序') : t('升序') })}
           >
             <Icon name={desc ? 'arrow-down' : 'arrow-up'} size={12} />
             {t('排位')}{desc ? t('降序') : t('升序')}
@@ -144,7 +144,7 @@ export default function IvPanel({
       {/* 数据未刷新横幅 */}
       {meta.stale && !loading && !error && (
         <StatusNotice className="mt-3">
-          {t('数据暂未刷新，以下为最近一次结果')}
+          {t('数据暂未更新，以下为最近一次结果')}
         </StatusNotice>
       )}
       {error && data.length > 0 && !loading && (
@@ -192,21 +192,21 @@ export default function IvPanel({
         ) : rows.length === 0 ? (
           <EmptyState
             image="/empty-chart.svg"
-            title={t("该板块暂无 IV 排名数据")}
+            title={t("该行业暂无隐含波动率排名数据")}
             description={
               refresh.status === 'queued' || refresh.status === 'running'
-                ? t('正在准备该板块的 IV 数据，完成后会自动显示')
-                : t('该板块成分暂无可用的期权样本，可切换板块或更新数据')
+                ? t('正在准备该行业的 IV 数据，完成后会自动显示')
+                : t('该行业成分暂无可用的期权样本，可切换行业或更新数据')
             }
           />
         ) : (
-          <table className="min-w-[420px] w-full border-collapse" aria-label={t("板块隐含波动率排名表")}>
+          <table className="min-w-[420px] w-full border-collapse" aria-label={t("行业隐含波动率排名表")}>
             <thead>
               <tr className="border-b border-line text-left text-eyebrow font-sans text-ink-400">
-                <th className="py-2.5 pr-2 font-sans">{t('代码')}</th>
-                <th className="px-2 py-2.5 text-right font-sans">{t('价')}</th>
+                <th className="py-2.5 pr-2 font-sans">{t('股票代码')}</th>
+                <th className="px-2 py-2.5 text-right font-sans">{t('股价')}</th>
                 <th className="px-2 py-2.5 font-sans">
-                  {t('板块排位')}
+                  {t('行业排位')}
                   <InfoHint hint={SCORE_HINTS.sectorIvRank} side="bottom" size={11} className="ml-1" />
                 </th>
                 <th className="px-2 py-2.5 text-right font-sans">
