@@ -153,3 +153,29 @@ def test_b3_words_outside_the_payload_vocabulary_are_still_rejected(text, change
 def test_bracketed_text_that_is_not_a_retrieved_site_is_not_deleted(text):
     assert _news_field(text) == text
     assert _focus_field(text, field="summary_zh") == text
+
+
+# --- S2. IT means information technology only in its own phrases -------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "高德纳（IT）暴跌20%。",
+        "IT大涨后回落。",
+        "股票代码IT服务。",
+        "Apple暴跌拖累科技股。",
+        "股票600519大涨。",
+    ],
+)
+def test_s2_price_moves_and_it_outside_its_phrases_need_binding(text):
+    with pytest.raises(ValueError):
+        _news_field(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["属于企业IT服务订单，金额未知。", "企业IT支出放缓。", "IT行业整体承压。", "IT系统升级完成。"],
+)
+def test_s2_it_phrases_still_pass(text):
+    assert _news_field(text) == text

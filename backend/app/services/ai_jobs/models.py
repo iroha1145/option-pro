@@ -486,9 +486,6 @@ _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
         "IDM 2.0",
         "IPO",
         "ISM",
-        # 2026-10-10：通用技术缩写（「企业IT服务」「输入URL」）。证券语境仍走
-        # _approved_span_requires_ticker_binding 后检（IT 也是股票代码）。
-        "IT",
         "Instagram",
         "IonQ",
         "JOLTS",
@@ -550,6 +547,8 @@ _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
         "Temu",
         "TeraWulf",
         "TikTok",
+        # 2026-10-10：通用技术缩写（「输入URL」）。证券语境仍走
+        # _approved_span_requires_ticker_binding 后检。
         "URL",
         "Varonis",
         "VIX",
@@ -649,7 +648,23 @@ _SECURITY_PRICE_MOVEMENTS = (
     "走弱",
     "收涨",
     "收跌",
+    "大涨",
+    "大跌",
+    "暴涨",
+    "暴跌",
+    "飙升",
+    "重挫",
+    "跳水",
+    "拉升",
+    "走高",
+    "走低",
+    "下挫",
+    "反弹",
+    "急跌",
+    "急涨",
 )
+# IT 也是股票代码（高德纳），只有这些搭配才是信息技术的意思（「企业IT服务」）。
+_IT_CONTEXT_SUFFIXES = ("服务", "支出", "行业", "系统", "板块", "部门")
 _STOCK_PRICE_SUFFIX = re.compile(
     r"^(?:的)?(?:当前|最新|今日|昨日|本周|盘前|盘后)?股价"
 )
@@ -1576,6 +1591,14 @@ def _foreign_span_context(
 ) -> bool:
     if _is_copied_source_headline_fragment(span, source_texts):
         return False
+    if (
+        span == "IT"
+        and sentence[end:].lstrip(" \t").startswith(_IT_CONTEXT_SUFFIXES)
+        and not _approved_span_requires_ticker_binding(
+            span, sentence=sentence, start=start, end=end,
+        )
+    ):
+        return True
     if len(span) == 1 and span.isascii() and span.isupper():
         if _is_sec_form_designation(sentence, end=end):
             return True
