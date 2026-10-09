@@ -464,41 +464,8 @@ class AIJobRepository:
             connection.execute(_SCHEMA_REGISTRY_SQL)
             connection.commit()
             connection.execute("BEGIN IMMEDIATE")
-            existing_table = connection.execute(
-                "SELECT sql FROM sqlite_master WHERE type='table' AND name='ai_jobs'"
-            ).fetchone()
-            if existing_table is None:
-                connection.execute(_AI_JOBS_TABLE_SQL)
-                self._ensure_indexes(connection)
-            else:
-                table_sql = str(existing_table["sql"] or "")
-                if (
-                    "'news_impact'" not in table_sql
-                    or "execution_number" not in table_sql
-                ):
-                    self._migrate_v2(connection)
-                else:
-                    columns = {
-                        str(row["name"])
-                        for row in connection.execute(
-                            "PRAGMA table_info(ai_jobs)"
-                        ).fetchall()
-                    }
-                    if "budget_charge_microusd" not in columns:
-                        connection.execute(
-                            """ALTER TABLE ai_jobs
-                               ADD COLUMN budget_charge_microusd INTEGER
-                               NOT NULL DEFAULT 0
-                               CHECK(budget_charge_microusd >= 0)"""
-                        )
-                    if "error_detail" not in columns:
-                        # 2026-08-08：schema_validation_failed 只留裸错误码，
-                        # 具体命中哪条内容规则随容器日志销毁无从追查。失败
-                        # 诊断细节（pydantic 校验消息等）落库随任务保存。
-                        connection.execute(
-                            "ALTER TABLE ai_jobs ADD COLUMN error_detail TEXT"
-                        )
-                    self._ensure_indexes(connection)
+            connection.execute(_AI_JOBS_TABLE_SQL)
+            self._ensure_indexes(connection)
             columns = {
                 row["name"]
                 for row in connection.execute("PRAGMA table_info(ai_jobs)")
@@ -569,27 +536,18 @@ class AIJobRepository:
                     _iso(),
                 ),
             )
-            identity_migration = connection.execute(
-                "SELECT checksum FROM ai_job_schema WHERE version=?",
-                (_IDENTITY_MIGRATION_VERSION,),
-            ).fetchone()
-            if (
-                identity_migration is not None
-                and identity_migration["checksum"]
-                != _IDENTITY_MIGRATION_CHECKSUM
-            ):
-                raise RuntimeError("ai_job_identity_migration_checksum_mismatch")
-            if identity_migration is None:
-                self._migrate_cross_source_identities(connection)
-                connection.execute(
-                    """INSERT INTO ai_job_schema(version,checksum,applied_at)
-                       VALUES(?,?,?)""",
-                    (
-                        _IDENTITY_MIGRATION_VERSION,
-                        _IDENTITY_MIGRATION_CHECKSUM,
-                        _iso(),
-                    ),
-                )
+            # Marks a retired one-shot identity rewrite. New stores record it
+            # too, so their registry matches production and an older release
+            # never replays the rewrite.
+            connection.execute(
+                """INSERT OR IGNORE INTO ai_job_schema(version,checksum,applied_at)
+                   VALUES(?,?,?)""",
+                (
+                    _IDENTITY_MIGRATION_VERSION,
+                    _IDENTITY_MIGRATION_CHECKSUM,
+                    _iso(),
+                ),
+            )
             # Rows from before source-aware identities cannot be classified.
             # Keep those conservative: only the manual switch may release them.
             connection.execute(
@@ -688,65 +646,6 @@ class AIJobRepository:
             connection.execute(statement)
 
     @staticmethod
-    def _migrate_v2(connection: sqlite3.Connection) -> None:
-        """Add the two local task types and append-only retry lineage."""
-
-        connection.execute("DROP INDEX IF EXISTS idx_ai_jobs_due")
-        connection.execute("DROP INDEX IF EXISTS idx_ai_jobs_ticker")
-        connection.execute("ALTER TABLE ai_jobs RENAME TO ai_jobs_v1")
-        connection.execute(_AI_JOBS_TABLE_SQL)
-        connection.execute(
-            """
-            INSERT INTO ai_jobs(
-                job_id,job_type,request_hash,payload_json,status,priority,
-                model,reasoning,execution_mode,legacy_execution_mode,
-                prompt_version,schema_version,
-                schema_sha256,openai_response_id,submission_started_at,
-                submitted_at,last_polled_at,completed_at,attempt_count,
-                poll_count,next_attempt_at,error_code,result_json,
-                usage_input_tokens,usage_cached_input_tokens,
-                usage_output_tokens,usage_reasoning_tokens,usage_total_tokens,
-                cancel_requested_at,lease_owner,lease_expires_at,
-                retry_of_job_id,execution_number,created_at,updated_at
-            )
-            SELECT
-                job_id,job_type,request_hash,payload_json,
-                CASE
-                    WHEN execution_mode='background'
-                      OR status NOT IN ('pending','queued','in_progress')
-                    THEN status ELSE 'failed'
-                END,
-                priority,model,reasoning,'background',
-                CASE WHEN execution_mode='background' THEN NULL ELSE execution_mode END,
-                prompt_version,schema_version,
-                schema_sha256,openai_response_id,submission_started_at,
-                submitted_at,last_polled_at,
-                CASE
-                    WHEN execution_mode<>'background'
-                      AND status IN ('pending','queued','in_progress')
-                    THEN COALESCE(completed_at,updated_at) ELSE completed_at
-                END,
-                attempt_count,poll_count,
-                CASE WHEN execution_mode='background' THEN next_attempt_at ELSE NULL END,
-                CASE
-                    WHEN execution_mode<>'background'
-                      AND status IN ('pending','queued','in_progress')
-                    THEN 'legacy_execution_mode_disabled' ELSE error_code
-                END,
-                result_json,
-                usage_input_tokens,usage_cached_input_tokens,
-                usage_output_tokens,usage_reasoning_tokens,usage_total_tokens,
-                cancel_requested_at,
-                CASE WHEN execution_mode='background' THEN lease_owner ELSE NULL END,
-                CASE WHEN execution_mode='background' THEN lease_expires_at ELSE NULL END,
-                NULL,1,created_at,updated_at
-            FROM ai_jobs_v1
-            """
-        )
-        connection.execute("DROP TABLE ai_jobs_v1")
-        AIJobRepository._ensure_indexes(connection)
-
-    @staticmethod
     def _canonical_json(
         payload: dict[str, Any],
         *,
@@ -815,187 +714,6 @@ class AIJobRepository:
             ]
         )
         return hashlib.sha256(envelope.encode("utf-8")).hexdigest()
-
-    @classmethod
-    def _identity_hashes_for_row(
-        cls,
-        row: dict[str, Any],
-    ) -> tuple[str, str, str, str, str]:
-        job_type = str(row["job_type"])
-        payload_json = str(row["payload_json"])
-        model = str(row["model"])
-        reasoning = str(row["reasoning"])
-        execution_mode = str(row["execution_mode"])
-        prompt_version = str(row["prompt_version"])
-        schema_version = str(row["schema_version"])
-        schema_sha256 = str(row["schema_sha256"])
-        current = cls._request_hash(
-            job_type,
-            payload_json,
-            model,
-            reasoning,
-            execution_mode,
-            prompt_version,
-            schema_version,
-            schema_sha256,
-        )
-        manual = cls._request_hash_source_legacy(
-            job_type,
-            payload_json,
-            "manual",
-            model,
-            reasoning,
-            execution_mode,
-            prompt_version,
-            schema_version,
-            schema_sha256,
-        )
-        scheduled = cls._request_hash_source_legacy(
-            job_type,
-            payload_json,
-            "scheduled",
-            model,
-            reasoning,
-            execution_mode,
-            prompt_version,
-            schema_version,
-            schema_sha256,
-        )
-        execution_legacy = cls._request_hash_execution_legacy(
-            job_type,
-            payload_json,
-            model,
-            reasoning,
-            execution_mode,
-            prompt_version,
-            schema_version,
-        )
-        legacy = cls._request_hash_legacy(
-            job_type,
-            payload_json,
-            model,
-            reasoning,
-            prompt_version,
-            schema_version,
-        )
-        return current, manual, scheduled, execution_legacy, legacy
-
-    @classmethod
-    def _migrate_cross_source_identities(
-        cls,
-        connection: sqlite3.Connection,
-    ) -> None:
-        """Restore exact old sources and seal only unpaid duplicate queue rows."""
-
-        rows = [
-            dict(row)
-            for row in connection.execute(
-                """SELECT j.*,s.submission_source
-                   FROM ai_jobs AS j
-                   LEFT JOIN ai_job_sources AS s ON s.job_id=j.job_id"""
-            ).fetchall()
-        ]
-        groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
-        for row in rows:
-            current, manual, scheduled, execution_legacy, legacy = (
-                cls._identity_hashes_for_row(row)
-            )
-            stored_hash = str(row["request_hash"])
-            existing_source = row.get("submission_source")
-            source = (
-                "scheduled"
-                if stored_hash == scheduled
-                else "manual"
-                if stored_hash == manual
-                else existing_source
-                if existing_source in {"manual", "scheduled"}
-                else "manual"
-            )
-            connection.execute(
-                """INSERT INTO ai_job_sources(
-                       job_id,submission_source,created_at
-                   ) VALUES(?,?,?)
-                   ON CONFLICT(job_id) DO UPDATE SET
-                       submission_source=excluded.submission_source""",
-                (row["job_id"], source, row["created_at"]),
-            )
-            if stored_hash not in {
-                current,
-                manual,
-                scheduled,
-                execution_legacy,
-                legacy,
-            }:
-                continue
-            key = (
-                str(row["job_type"]),
-                current,
-                str(row["model"]),
-                str(row["reasoning"]),
-                str(row["execution_mode"]),
-                str(row["prompt_version"]),
-                str(row["schema_version"]),
-                str(row["schema_sha256"]),
-            )
-            groups.setdefault(key, []).append(row)
-
-        now = _iso()
-        active_statuses = {"pending", "queued", "in_progress"}
-        for identity_rows in groups.values():
-            if len(identity_rows) < 2:
-                continue
-            max_execution = max(int(row["execution_number"]) for row in identity_rows)
-            group_has_paid_or_settled_work = any(
-                row.get("submission_started_at") is not None
-                or row.get("openai_response_id") is not None
-                or row.get("error_code") == "submission_outcome_unknown"
-                or row["status"] in {"completed", "insufficient_context"}
-                for row in identity_rows
-            )
-            by_execution: dict[int, list[dict[str, Any]]] = {}
-            for row in identity_rows:
-                by_execution.setdefault(int(row["execution_number"]), []).append(row)
-            for execution_number, execution_rows in by_execution.items():
-                unpaid_active = [
-                    row
-                    for row in execution_rows
-                    if row["status"] in active_statuses
-                    and row.get("submission_started_at") is None
-                    and row.get("openai_response_id") is None
-                ]
-                if not unpaid_active:
-                    continue
-                keep_job_id: str | None = None
-                if (
-                    not group_has_paid_or_settled_work
-                    and execution_number == max_execution
-                ):
-                    keep_job_id = str(
-                        min(
-                            unpaid_active,
-                            key=lambda row: (str(row["created_at"]), str(row["job_id"])),
-                        )["job_id"]
-                    )
-                for duplicate in unpaid_active:
-                    if str(duplicate["job_id"]) == keep_job_id:
-                        continue
-                    connection.execute(
-                        """UPDATE ai_jobs
-                           SET status='cancelled',
-                               error_code=?,completed_at=COALESCE(completed_at,?),
-                               next_attempt_at=NULL,lease_owner=NULL,
-                               lease_expires_at=NULL,updated_at=?
-                           WHERE job_id=?
-                             AND status IN ('pending','queued','in_progress')
-                             AND submission_started_at IS NULL
-                             AND openai_response_id IS NULL""",
-                        (
-                            _DUPLICATE_MIGRATION_ERROR,
-                            now,
-                            now,
-                            duplicate["job_id"],
-                        ),
-                    )
 
     @staticmethod
     def _select_identity_row(
