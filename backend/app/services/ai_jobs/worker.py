@@ -42,6 +42,9 @@ async def _finish_claude_receipt(
     """Publish a previously persisted response without another paid request."""
     usage = receipt["usage"]
     terminal_error = receipt.get("terminal_error")
+    if terminal_error == "provider_cancelled" and receipt["provider"] == "openai":
+        await _with_storage_retry(repository.mark_cancelled, job["job_id"], owner, usage=usage)
+        return
     if terminal_error:
         await _with_storage_retry(
             repository.fail, job["job_id"], owner, str(terminal_error), usage=usage,
@@ -51,7 +54,7 @@ async def _finish_claude_receipt(
         from app.services.ai_jobs.models import validate_result, validate_market_focus_evidence
 
         payload = json.loads(job["payload_json"])
-        result = validate_result(job["job_type"], receipt["output_text"], payload)
+        result = runtime.receipt_result(receipt, job["job_type"], payload)
         if job["job_type"] == "market_focus" and payload.get("verification_version") == "web-evidence-v1":
             validate_market_focus_evidence(result, payload, receipt.get("tool_evidence") or [])
     except (TypeError, ValueError) as exc:
@@ -480,6 +483,17 @@ async def _finish_response(
         return
     usage = runtime.response_usage(response)
     terminal_error = runtime.response_terminal_error(response)
+    if (job.get("model") == runtime.LUNA_MODEL and job["job_type"] == "news_impact"
+            and ((job.get("schema_version"), job.get("schema_sha256")) != runtime.LEGACY_LUNA_NEWS_IDENTITY
+                 or any(runtime._provider_field(tool, "type") == "web_search"
+                        for tool in getattr(response, "tools", None) or [])
+                 or any(runtime._provider_field(item, "type") == "web_search_call"
+                        for item in getattr(response, "output", None) or []))
+            and getattr(response, "model", None) == runtime.LUNA_MODEL):
+        receipt = runtime.openai_receipt(response)
+        await _with_storage_retry(repository.record_openai_result, job["job_id"], owner, receipt)
+        await _finish_claude_receipt(repository, job, owner, receipt)
+        return
     # 供应商侧错误信息落盘（第三个缺口）：余额耗尽等终态失败的 message
     # 此前不可见，只能重取响应现场复现（2026-08-14 预算误锁事故）。
     provider_detail = runtime.response_error_detail(response)
@@ -671,7 +685,7 @@ async def process_job(
         if heartbeat.done():
             await heartbeat
         require_live_lease()
-        if claude_job:
+        if claude_job or job.get("provider_result_json"):
             receipt = repository.get_provider_result(job["job_id"])
             if receipt is not None:
                 await _finish_claude_receipt(repository, job, owner, receipt)

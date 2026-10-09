@@ -2722,8 +2722,98 @@ class FocusEventVerification(StrictModel):
     affected_sectors: list[ZhShortText] = Field(max_length=10)
 
 
+_VERIFIED_FOCUS_METADATA = re.compile(
+    r"(?<![A-Za-z0-9_])(?:as_of|catalyst_bias)(?![A-Za-z0-9_])"
+)
+_VERIFIED_FOCUS_BANDWIDTH = re.compile(
+    r"(?<![A-Za-z0-9_.])(?P<quantity>[0-9]+(?:\.[0-9]+)?)[ \t]*Gbps(?![A-Za-z0-9_])"
+)
+_VERIFIED_FOCUS_COMPANY_HEADING = re.compile(
+    r"(?P<boundary>^|[。！？!?；;\n])(?P<space>[ \t]*)\((?P<ordinal>[1-9])\)(?=公司类事件[：:])"
+)
+_VERIFIED_FOCUS_URL = re.compile(r"https?://\S+", re.IGNORECASE)
+
+
+def _translate_verified_focus_prose(value: str) -> str:
+    """Localize known prose labels, never security references or source URLs."""
+    def in_url(text: str, start: int) -> bool:
+        return any(match.start() <= start < match.end() for match in _VERIFIED_FOCUS_URL.finditer(text))
+
+    def protected(text: str, start: int, end: int) -> bool:
+        if in_url(text, start) or _approved_span_requires_ticker_binding(
+            text[start:end], sentence=text, start=start, end=end,
+        ):
+            return True
+        prefix = _normalize_security_reference_phrase(text[:start])
+        suffix = _normalize_security_reference_phrase(text[end:])
+        # Bare code/company labels are not all security phrases recognized by
+        # the general language gate. Do not turn their foreign names Chinese.
+        return bool(
+            re.search(r"(?:代码|编号|公司|集团|企业|股价)(?:为|是)?$", prefix)
+            or suffix.startswith(("代码", "编号", "公司", "集团", "企业"))
+        )
+
+    translations = {"as_of": "分析截止时点", "catalyst_bias": "催化因素倾向评分"}
+    original = value
+    value = _VERIFIED_FOCUS_METADATA.sub(
+        lambda match: match.group(0) if protected(original, match.start(), match.end()) else translations[match.group(0)],
+        value,
+    )
+    original = value
+    value = _VERIFIED_FOCUS_BANDWIDTH.sub(
+        lambda match: match.group(0) if protected(original, match.start(), match.end()) else match.group("quantity") + "吉比特每秒",
+        value,
+    )
+    original = value
+    # Only the observed company-event heading grammar, not parenthesized
+    # numeric company names or security codes such as (700)公司.
+    value = _VERIFIED_FOCUS_COMPANY_HEADING.sub(
+        lambda match: match.group(0) if in_url(original, match.start()) else (
+            match.group("boundary") + match.group("space")
+            + "（" + "一二三四五六七八九"[int(match.group("ordinal")) - 1] + "）"
+        ),
+        value,
+    )
+    return value
+
+
 class VerifiedMarketFocusResult(MarketFocusResult):
     event_verifications: list[FocusEventVerification] = Field(max_length=200)
+
+    @model_validator(mode="before")
+    @classmethod
+    def translate_known_prose(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+
+        def translate_fields(item: dict, text_fields: tuple[str, ...], list_fields: tuple[str, ...]) -> dict:
+            translated = dict(item)
+            for name in text_fields:
+                if isinstance(translated.get(name), str):
+                    translated[name] = _translate_verified_focus_prose(translated[name])
+            for name in list_fields:
+                if isinstance(translated.get(name), list):
+                    translated[name] = [
+                        _translate_verified_focus_prose(text) if isinstance(text, str) else text
+                        for text in translated[name]
+                    ]
+            return translated
+
+        result = translate_fields(
+            value, ("title_zh", "summary_zh", "headline_summary", "market_summary"),
+            ("market_uncertainties", "affected_sectors"),
+        )
+        for name, text_fields, list_fields in (
+            ("dominant_events", ("summary",), ("affected_sectors",)),
+            ("focus_ticker_assessments", ("summary",), ("risks",)),
+            ("event_verifications", ("title_zh", "summary_zh"), ("affected_sectors",)),
+        ):
+            if isinstance(result.get(name), list):
+                result[name] = [
+                    translate_fields(item, text_fields, list_fields) if isinstance(item, dict) else item
+                    for item in result[name]
+                ]
+        return result
 
 
 def validate_market_focus_evidence(
