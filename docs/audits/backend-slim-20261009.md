@@ -1,6 +1,6 @@
 # 后端按生产实际使用精简（2026-10-09）
 
-分支 `claude/backend-slim-2026-10-09`，基线 origin/main `72f426f0`，也就是生产正在运行的版本。本轮只改后端、测试、脚本、文档和配置示例，没有改 `frontend-src/` 和 `frontend/`。本轮没有部署。
+分支 `claude/backend-slim-2026-10-09`，基线 origin/main `72f426f0`，也就是生产正在运行的版本。本轮改的是后端、测试、脚本、文档和配置示例；`frontend-src/` 只改了两份测试（见「测试的变化」），界面代码和 `frontend/` 没动。本轮没有部署。
 
 本 PR 取代 #211 的后端部分。#211 与当前 main 冲突二十多处，这里没有合并或整批挑拣它的提交，而是逐项在当前 main 上重新核实后重做；#211 的前端部分由前端分支处理。#211 没有关闭，由站长决定。
 
@@ -49,17 +49,17 @@
 | 提交 | 删除 | 生产事实 |
 | --- | --- | --- |
 | `6bffb6ed` | 旧催化剂表导入：`_import_legacy_from_database`、`import_verified_legacy_rows` 与结果计数 | 10-05：审计表 2007 行全部是 rejected，从未导入成功；此前每次同步都要整表重读两张旧表 |
-| `843e7eb2` | 催化剂时间戳统一 `_normalize_local_news_timestamps` 及其登记行判断 | 10-05：timestamps-v1 登记行已在 |
+| `843e7eb2` | 催化剂时间戳统一 `_normalize_local_news_timestamps` | 10-05：timestamps-v1 登记行已在 |
 | `ad9b6395` | ai_jobs 的 v1→v2 重建、`budget_charge_microusd`/`error_detail` 补列、跨来源身份改写 | 10-05：登记到 ai-jobs-v4，三列都在；之后 main 升到 v5（推断：生产跑 main，启动时已登记） |
 | `bba35555` | 宏观 ETF 表 v1→v2 重建，以及每次 `active_etf` 读取都做的表结构探测 | 10-05：v2 已登记，表已有 `value_hash` |
-| `281cba01` | 运行设置 V1 模型、V1→V2 迁移、`.pre-v2` 快照的保存与恢复，以及每次读取都做的旧字段剥离 | 10-05：当前文件与唯一备份都是第 2 版，不含旧字段 |
+| `281cba01` | 运行设置 V1 模型、V1→V2 迁移、`.pre-v2` 快照的保存与恢复，以及每次读取都做的旧字段剥离 | 10-09 只读核实：`runtime-settings.json`、`.runtime-settings.json.backups/`（只有 v10 一份）与 `runtime-settings.json.pre-v2` 都不含 `manual_force_reanalysis`、`manual_refresh_enabled` |
 | `f80f30ad` | `legacy_env_adapter.py`、两个旧 `.env` 迁移工具、`setup.sh` 的迁移分支 | 生产已有 `machine.env`、`secrets.env`、`personal.toml` |
 | `46e50586` | `deploy.sh` 停旧后台服务 | 10-05：四个旧服务都没有容器 |
 
 守住的边界：
 
 - 催化剂库 `_SCHEMA` 里审计表的建表语句一字不动，它参与校验和。三个库的建表文本、版本名和校验和都与 main 逐字节相同；新增的「新建库」测试把催化剂三条、ai_jobs 七条、宏观一条登记的校验和钉成生产值。
-- 被删迁移对应的登记行照旧用 `INSERT OR IGNORE` 写入，新库与生产库的登记表一致。
+- 被删迁移对应的登记行（`ai-job-identities-v2`、`optix-local-catalyst-timestamps-v1`）：已有时照旧核对校验和，不一致就拒绝启动；没有时写入，新库与生产库的登记表一致（`122d2aa9`，两条测试钉住）。
 - 10-05 之后才加的迁移没有生产证据，保留：ai_jobs 的 Claude 列补列循环、`ai-job-provider-progress-v1`、催化剂的 `optix-verified-focus-publication-v1`。
 - 催化剂的补列函数 `_add_missing_columns` 和它的三组旧列保留。旧列早已在生产里，但性能分支正在用同一个函数给修订表补新的质量列。
 
@@ -74,7 +74,7 @@
 
 | 提交 | 合并 | 依据 |
 | --- | --- | --- |
-| `252053b2` | 10 处参数完全相同的规范化 JSON 序列化（`ensure_ascii=False, sort_keys=True, separators=(",",":"), allow_nan=False`）改用 `json_validation.canonical_json_text` | 用固定样本（中文、浮点、空值、嵌套）在 main 与本分支上比对，各写入方输出逐字节相同；新测试钉住样本的完整字节、sha256 和非数（NaN）拒绝，`earnings_input_hash` 对照 main 算出的值 |
+| `252053b2` | 11 处参数完全相同的规范化 JSON 序列化调用（`ensure_ascii=False, sort_keys=True, separators=(",",":"), allow_nan=False`）改用 `json_validation.canonical_json_text` | 用固定样本（中文、浮点、空值、嵌套）在 main 与本分支上比对，各写入方输出逐字节相同；新测试钉住样本的完整字节、sha256 和非数（NaN）拒绝，`earnings_input_hash` 对照 main 算出的值 |
 | `866f9ce1` | 板块与个股快照的三份逐字节相同的原子写改用 `file_identity.replace_file_atomically` | 临时文件名、落盘同步（fsync）、失败清理全部照旧；断言「失败后无 `.{name}.*.tmp` 残留」的测试照常通过 |
 | `28c1ea07` | 三份按列表计算的平均真实波幅（ATR）改用 `technical/indicators.mean_true_range` | 随机比对 24 万次（长度 0～40、窗口 -3～50、含 NaN 与零价），与 main 的三份实现完全相同 |
 
@@ -86,34 +86,24 @@
 - 突破缓冲：公式已经只有一份（`breakouts/config.break_buffer`），10 处调用用 6 种基准是有意的，统一会改变阈值。
 - 按 pandas 滚动计算的 ATR、Wilder 平滑的 ATR、雷达要求满窗口的 `feature_engine.compute_atr`：算法不同；后者还被本地研究分支改过。
 
-## 放松的围栏
+## 围栏：读取校验改为缓存结论，语义不变（`3b8d1cea`）
 
-### 批量读取不再整条重跑 AI 结果的完整校验（`e748396a`）
+**问题**：公开新闻流、按代码查询和批量查询，每读一次都对每条已发布分析重跑 `validate_result`（pydantic 模型校验加简体中文校验器）；Owner 读新闻流时还会经 `AIJobRepository.public` 对每条再跑一次。本机按 1.2 万字正文测，112 条约 195 毫秒；2026-07-26 的生产剖析记为每次读取约 0.8 秒。
 
-**之前**：公开新闻流、按代码查询和批量查询，每读一次都对每条已发布分析重跑 `validate_result`（pydantic 模型校验加简体中文校验器）；Owner 读新闻流时还会经 `AIJobRepository.public` 对每条再跑一次。本机按 1.2 万字正文测：112 条走完整校验约 195 毫秒，走轻量检查约 0.4 毫秒；2026-07-26 的生产剖析记为每次读取约 0.8 秒。
+**做法**：读取时照旧跑完整校验，只把结论记下来。`validate_result` 不读时钟、不读可变状态，结论只由校验函数、任务类型、结果字节和载荷决定。`models.validate_result_cached` 以这四样为键（结果字节和规范化载荷各取 sha256），每个进程保留最近 2048 条结论：
 
-**现在**：
+- 通过的结果每次交出一份深拷贝，调用方改动自己的副本不会影响缓存；
+- 拒绝也记下来，下次照样抛出同一个错误；
+- 载荷无法规范化时不进缓存，每次都完整校验；
+- 部署会重启进程，规则改了总是从空缓存开始。
 
-- 完整校验留在写入处和所有决策路径上：后台在 `complete()` 之前校验模型输出；催化剂对账挑选要发布的结果时，`public()` 默认就是完整校验，同一事务里的审计再完整校验一次并记下结论；付费重试判定和调度也照旧完整校验。
-- 三个批量读取改用轻量检查 `models.check_stored_result`：
-  1. `PersonalCatalystService._project_news_analysis`：只在本地层把分析标为 `_analysis_current` 时，也就是完整校验通过、或这段字节在当前契约下有 accepted 审计；
-  2. Owner 新闻流逐条的任务投影（只在 Owner 请求里运行）：`public(row, trust_current_identity=True)`；
-  3. `news_result_audit_states`（`/api/catalysts/analysis-progress`）：结论仍以「这段字节有 accepted 审计」为准。
-- 轻量检查只用于结构标识（schema identity）是当前值的行。这个标识包含 `RESULT_VALIDATION_CONTRACT_VERSION`；更旧的行照旧完整校验，不合格就隐藏。
-- 轻量检查保留：顶层字段集合必须与当前模型完全一致、`output_language` 必须是 zh-CN，以及输出与载荷的全部绑定（新闻编号与代码白名单、焦点周期与输入哈希与事件编号、财报与信号的代码）。字段集合对不上时退回完整校验。
+接入三处读取：`AIJobRepository.public`（Owner 新闻流逐条的任务投影，以及任务、财报的读取）、`PersonalCatalystService._project_news_analysis`（公开新闻流、按代码与批量查询）、`news_result_audit_states`（`/api/catalysts/analysis-progress`）。各处把本模块里的 `validate_result` 传进去，测试替换它时缓存键随之不同，不会拿到旧结论。
 
-**放松了什么**：一条在当前结构标识下落库、却过不了当前文风规则的结果，上面三处读取不再隐藏它。只有两种来源：直接改库，或改了校验规则却没有升 `RESULT_VALIDATION_CONTRACT_VERSION`。
+**效果**：同一组 112 条，第一次读约 195 毫秒，之后约 5.5 毫秒（算键加深拷贝）。2048 条结论按本机样本约占 8～30 MB 内存（单条结果的 JSON 为 1～11 KB）。
 
-**为什么没有风险**：
+**放松了什么**：没有。显示与隐藏的结果、错误类型和错误信息都与 main 相同。
 
-- 生产写入路径都先校验再落库；新闻在公开前还要过催化剂审计。
-- 新增 `tests/test_result_contract_fingerprint.py`：把 `validate_result` 对一组固定样本的输出指纹钉在契约版本上，样本覆盖 Rule 10b5-1 改写、全角归一、代码大写、宏观状态翻译、财报剔除自身、期权方向回退、核验焦点的固定译法与兼容字符拒绝。规则一变测试就失败，提示升版本。同一文件还检查轻量检查对这些样本返回的结果与完整校验完全相同。
-- 单条读取（财报卡片、`/api/ai/jobs/{id}`、分析任务查询）、焦点周期投影和热点核验发布都没有改，照旧完整校验。
-
-**可见的副作用**：
-
-- 新闻分析对象的键顺序从模型字段顺序变成字母顺序（读的是落库的规范化 JSON），响应字节和实体标签（ETag）会变一次，语义不变。
-- `/analysis-progress` 里「当前标识、尚未审计、文风不合格」的任务，在下一轮对账（最多约 120 秒）之前显示为待校验，而不是已拒绝。
+**撤回的做法**：`e748396a` 曾让「结构标识为当前值」的行只做轻量检查。审查指出它的前提不成立：公开新闻流认的 `_analysis_current` 来自审计契约号下的 accepted 记录，这个契约号自 08-27 没变；`RESULT_VALIDATION_CONTRACT_VERSION` 自 08-09 没升过，其间多次改过校验行为；指纹测试也抓不到这类改动。`3b8d1cea` 撤回了这套做法，`check_stored_result`、`trust_current_identity` 和指纹测试都已删除，`validate_result` 恢复为 main 的原文。
 
 ### 逐个读过、不动的六个模块
 
@@ -152,14 +142,14 @@
 - FMP（Financial Modeling Prep）第二财报日历：生产没有配置密钥，整条路径永远短路，但删除属于功能取舍，列入「需要站长决定」。
 - 2026-09-25 审查点名的 `ai_jobs/worker.py:775-876` 独立入口，已在 2026-10-04 删除（`deslop-remediation-20261004.md`），当前 main 那几行是 `process_job` 的中段，本轮无事可做；同类的突破雷达独立入口本轮删除。
 - `local_intelligence.py` 的拆分：这个文件正被性能分支改动，拆分会让两边几乎整文件冲突，本轮不做。
-- 简体中文校验器仍留在读取路径上的地方：完整校验的退回路径、焦点周期投影、热点核验发布，以及新闻条目的源标题与源摘要清洗（每条 0.01～0.08 毫秒，校验的是上游原文而不是落库的 AI 输出）。
+- 简体中文校验器仍在读取路径上运行：上面三处缓存未命中时、焦点周期投影、热点核验发布、本地情报层的新闻流与单条和批量读取遇到没有当前审计记录的分析时（`_analysis_state_for_revision`；有审计记录的只核对身份，与 main 相同，本轮没有接缓存），以及新闻条目的源标题与源摘要清洗（每条 0.01～0.08 毫秒，校验的是上游原文而不是落库的 AI 输出）。
 - 已过时的历史审计记录（如 `full-review-remediation-20260925.md` 里「AI 任务独立入口未删」「板块缓存为测试保留」两句）不改，以本文为准。
 
 ## 测试的变化
 
-被删的测试定义 70 条，其中 8 条以改写后的新名字保留（ai_jobs 登记表两条、宏观未知模块一条、首页快照四条、`setup.sh` 补模板一条）；另新增 15 条，分别钉住登记表校验和、规范化 JSON 字节、原子写、轻量检查与契约指纹。被删的 62 条都只测已删代码，按提交列出：
+后端被删的测试定义 70 条：62 条只测已删代码，8 条以改写后的新名字保留（ai_jobs 登记表两条、宏观未知模块一条、首页快照四条、`setup.sh` 补模板一条）。另新增 17 条，钉住登记表的校验和与核对、规范化 JSON 字节、原子写、首页快照旧资源暂留和读取校验的结论缓存。测试项从 main 的 6214 个变为 6165 个。前端只改了两份测试：`macro-fit-presentation.test.mjs` 不再读已删的 `STRENGTH_SHADOW_CAP`（`90bd00c0`），`customer-chart-periods.spec.mjs` 改用 PATCH 准备自选（`7f389e73`）。被删的 70 条按提交列出：
 
-- `0ab65fd6`：`test_ai_jobs.py` 的 `test_job_post_is_fast_local_and_idempotent`、`test_paid_job_route_has_no_extra_action_capability`；`test_ai_safety.py::test_legacy_paid_route_validates_body_but_never_runs_model`；`test_analytics_audit_2026_09_25.py::test_m12_heatmap_endpoint_sanitizes_non_finite_values`；`test_catalyst_local_intelligence.py::test_focus_cancel_follows_a_concurrent_retry_to_its_new_job`；`test_macro_conditions_api.py` 的 `test_factor_history_returns_only_that_factor`、`test_every_registered_factor_is_addressable`；`test_personal_secrets.py::test_browser_settings_expose_only_option_pro_configuration_booleans`。
+- `0ab65fd6`：`test_ai_jobs.py` 的 `test_job_post_is_fast_local_and_idempotent`、`test_paid_job_route_has_no_extra_action_capability`；`test_ai_safety.py::test_legacy_paid_route_validates_body_but_never_runs_model`；`test_analytics_audit_2026_09_25.py::test_m12_heatmap_endpoint_sanitizes_non_finite_values`；`test_catalyst_local_intelligence.py::test_focus_cancel_follows_a_concurrent_retry_to_its_new_job`；`test_macro_conditions_api.py` 的 `test_factor_history_returns_only_that_factor`、`test_every_registered_factor_is_addressable`，以及改写为只测未知模块的 `test_unknown_module_and_factor_return_not_found`；`test_personal_secrets.py::test_browser_settings_expose_only_option_pro_configuration_booleans`。
 - `c6e2db27`：`test_api_data_states.py` 的端点缓存、异动期权三条与旧个股信号四条；`test_chart_contract.py::test_stock_technical_signals_use_massive_daily_history_first`；`test_options_financial_semantics.py` 的异动期权五条；`test_public_home_snapshot.py` 的重资源轮流、异动盘后、旧信号构建等八条（其中四条改写保留）；`test_remediation_access_errors_unusual.py` 的四条。
 - `c82de9b1`：`test_macro_linkage.py::test_the_gap_separates_price_running_ahead_from_macro_leading`。
 - `6bffb6ed`：`test_catalyst_local_intelligence.py` 的旧导入三条。
@@ -172,69 +162,29 @@
 
 ## 与其他分支的合并冲突
 
-- 性能分支 `claude/backend-perf-2026-10-09`：
-  - `ai_jobs/repository.py` 的 `_initialize_database` 两处。两边都改了初始化：本分支删掉三段迁移，性能分支重排了结构并在迁移分支里加了 `migrated = True`。合并时以性能分支的结构为准，删掉 `_migrate_v2`、两列补列、身份改写三段（`migrated` 只在新建表时为真）。
+按 2026-10-10 01:50（日本时间）的分支头用 `git merge-tree` 逐个试合并。性能分支和新闻拉取分支还在提交，合并前要再试一次：
+
+- 性能分支 `claude/backend-perf-2026-10-09`（`1cbf7915`）：
+  - `ai_jobs/repository.py` 的 `_initialize_database` 两处。两边都改了初始化：本分支删掉三段迁移，性能分支重排了结构并在迁移分支里加了 `migrated = True`。合并时以性能分支的结构为准，删掉 `_migrate_v2`、两列补列和身份改写调用（`migrated` 只在新建表时为真）；身份登记行的校验和核对两边相同，保留。
   - `catalysts/local_intelligence.py` 的 `reconcile` 一处：性能分支把 `self._import_legacy_from_database()` 移到了事务外，本分支删了这个方法。合并时删掉这一行即可，结果计数里的两个旧导入键本分支已经删了。
+- 新闻拉取分支 `claude/news-ingest-2026-10-09`（`855297ae`）：它合并过性能分支的较早版本，所以有上面同样的三处；另有 `README.md` 一处，两边都改了旧变量名那一段，合并时保留它新加的新闻来源说明和本分支改写的旧变量名说明。
 - 开放修复分支 #160：`api/ai.py` 一处。它在本分支删掉的 `create_earnings_impact_job` 正下方插入 `_public_ai_job`；合并时保留它新增的函数即可。
-- 前端分支、新闻拉取分支、其余开放分支：与本分支没有新增冲突。
+- 前端分支 `claude/perf-frontend-2026-10-09`（`3718d903`）、其余 17 个开放分支和两个本地研究分支：没有新增冲突。
 
 ## 部署后
 
 1. **首页快照第二步**：部署后第一次发布会把 `unusual`、`focus_signals` 从 `public-home-snapshot-v1.json` 里清掉。确认文件里已没有这两项后，再删资源规格、校验器、参数分支和 `unusual_seconds`（同时改仓库与生产机的 `personal.toml`，配置模型禁止未知键）。
-2. **轻量检查的只读核对**：在生产上数一下「当前结构标识下，轻量检查通过、完整校验不通过」的已完成任务。结果里没有 `light=True,full=False` 的行，就说明这次放松在生产上没有可见变化：
-
-   ```bash
-   docker exec -i option-pro-backend-1 python - < stored_result_probe.py
-   ```
-
-   ```python
-   import collections
-   import json
-   import sqlite3
-
-   from app.data_paths import get_data_paths
-   from app.services.ai_jobs.models import check_stored_result, has_current_result_shape, validate_result
-   from app.services.ai_jobs.repository import stored_schema_identity_current
-
-   path = get_data_paths().ai_jobs_db
-   connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-   connection.row_factory = sqlite3.Row
-   counts = collections.Counter()
-   for raw in connection.execute(
-       "SELECT * FROM ai_jobs WHERE status='completed' AND result_json IS NOT NULL"
-   ):
-       row = dict(raw)
-       if not stored_schema_identity_current(row):
-           counts[(row["job_type"], "older_identity")] += 1
-           continue
-       payload = json.loads(row["payload_json"])
-       result = json.loads(row["result_json"])
-       try:
-           light = has_current_result_shape(row["job_type"], result, payload) and bool(
-               check_stored_result(row["job_type"], result, payload)
-           )
-       except ValueError:
-           light = False
-       try:
-           validate_result(row["job_type"], row["result_json"], payload)
-           full = True
-       except ValueError:
-           full = False
-       counts[(row["job_type"], f"light={light},full={full}")] += 1
-   for key, value in sorted(counts.items()):
-       print(*key, value)
-   ```
-
+2. 读取校验的结论缓存不改变任何结果，不需要核对数据。想看效果，可以对同一个 `/api/catalysts/feed` 连续请求两次并比较耗时；生产只有一个后端进程，第二次的结果校验走缓存。
 3. 后台状态里 public_home 任务不再有 `deferred` 字段，没有任何读取方。
 4. 突破雷达不再能用 `python -m app.services.breakouts.worker` 单独启动；生产本来就不用。
 
 ## 需要前端配合
 
 - `frontend-src/src/api/modules/stocks.ts:375`：拉取后清缓存的列表里还有 `/stocks/{t}/signals`，接口已删，这一项可以去掉（留着无害）。
-- `frontend-src/src/api/modules/macro.ts:6`：头注释提到已删的因子历史接口。
-- `frontend-src/visual-tests/password-mode.spec.mjs:80`：`/api/options/unusual` 的模拟返回。
-- `frontend-src/AUDIT-live.md` 里 `options/unusual`、`ai/jobs/earnings-impact` 两行。
-- #211 的前端部分（选股页宏观适配视图、`macroTechnicalGap` 字段）：后端从不下发这些字段。
+- 注释里提到已删接口：`frontend-src/src/components/detail/SignalList.tsx:2`（`stocks/{t}/signals`，组件实际读 `/api/signals/stock/{t}`）、`frontend-src/src/api/modules/macro.ts:6`（因子历史接口）。
+- `frontend-src/visual-tests/password-mode.spec.mjs` 里已删接口的模拟返回：第 80 行 `/api/options/unusual`、第 86 行 `/api/stocks/NVDA/signals`、第 204 行 `/api/worker/actions` 列表。
+- `frontend-src/AUDIT-live.md` 第 23、26、38 行的 `options/unusual`、`ai/jobs/earnings-impact`。
+- #211 的前端部分（选股页宏观适配视图、`macroTechnicalGap` 字段，以及 `frontend-src/src/lib/macroFit.ts:114` 说后端已算出差值的注释）：后端从不下发这些字段。
 
 ## 需要站长决定的生产数据
 
@@ -246,8 +196,11 @@
 
 ## 检查记录
 
-- 后端测试：6156 通过、7 跳过（基线 main 为 6207 通过、7 跳过）。差额来自上面列出的只测已删代码的测试，新增测试已计入。一次整套运行里 `test_personal_secrets.py::test_concurrent_set_and_remove_preserve_every_independent_update` 因本机同时跑着其他测试、子进程 5 秒内没就绪而失败，单独重跑 5 次、整个文件重跑和随后的整套运行都通过。
-- `python -m compileall -q backend/app`、各 shell 脚本 `bash -n`、`git diff --check origin/main...HEAD -- . ':(top,exclude)frontend'` 都通过。
-- 前端：`frontend-src/src` 里所有接口调用都还能对上后端路由。本 PR 没有改前端文件，没有重新构建产物。
-- 没有在本机跑镜像构建和容器冒烟（本机没有 Docker），以 PR 的 CI 为准。容器冒烟脚本只用 `BreakoutWorker.run_once()`，不涉及删掉的入口。
-- 数字：路由 108 → 94；`backend/app` 的 Python 行数 118,312 → 115,012；`Settings` 字段 63 → 51；删除 4 个源文件，新增 3 个测试文件。
+在代码提交 `122d2aa9` 上检查（本文所在的提交只改文档）：
+
+- 后端全量 `pytest tests/`：6158 通过、7 跳过。main 是 6207 通过、7 跳过；测试项 6214 → 6165。
+- 前端：`VITE_API_MODE=live npm run build --prefix frontend-src` 的产物与已提交的 `frontend/` 逐字节相同，产物没有提交；`node --experimental-strip-types --test frontend-src/tests/*.test.mjs` 1293 条全部通过；`static_assertions.mjs` 通过；`npm run lint` 没有错误，两条警告在本轮没碰的 `Breakouts.tsx`。
+- 浏览器（本机 Chrome）：`test:customer-charts` 5 条、`test:screener` 两段共 20 条，全部通过。只有这两组会启动真实的 Python 后端；其余浏览器测试的配置不启动后端，本轮没有跑。
+- `python -m compileall -q backend/app scripts`、对 `setup.sh`、`personal.sh`、`scripts/*.sh`、`scripts/lib/*.sh` 逐个 `bash -n`、`git diff --check origin/main...HEAD -- . ':(top,exclude)frontend'`：都没有报错。
+- 规模：OpenAPI 里 `/api` 下的接口（方法加路径）106 → 92；`Settings` 字段 63 → 51；`backend/` 50 个文件，增 245 行、删 3548 行；`tests/` 41 个文件，增 688 行、删 2526 行。
+- 没有做：没有在本机起 Docker 编排跑部署脚本，也没有连生产机。
