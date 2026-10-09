@@ -694,6 +694,13 @@ _LETTER_GRADE = re.compile(
 # 可能是股票代码（「F>12美元」的 F 是福特汽车）。
 _STATISTIC_LETTERS = frozenset("dknprt")
 _STATISTIC_COMPARISON = re.compile(r"^[ \t]*(?:<=|>=|[<>=≤≥＜＞＝])[ \t]*[0-9]")
+# 大写的 P、N 也常这样写（「P<0.001」「N=712例」），只在比较号后接数字、
+# 数字后不接币种时算统计写法：「P<10美元」里的 P 仍可能是股票代码。
+_UPPERCASE_STATISTIC_LETTERS = frozenset("NP")
+_STATISTIC_COMPARISON_VALUE = re.compile(
+    r"^[ \t]*(?:<=|>=|[<>=≤≥＜＞＝])[ \t]*(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)"
+)
+_CURRENCY_AMOUNT_TAIL = re.compile(rf"^[ \t]*[万亿千百]*[ \t]*(?:{_CURRENCY_UNITS})")
 _NUMERIC_SUFFIX_HARD_BOUNDARIES = frozenset("；;。.!！?？%％")
 _SECURITY_REFERENCE_MARKERS = (
     "股价",
@@ -1604,6 +1611,10 @@ def _foreign_span_context(
             return True
         if _LETTER_GRADE.match(sentence[end:]) is not None:
             return True
+        if span in _UPPERCASE_STATISTIC_LETTERS:
+            value = _STATISTIC_COMPARISON_VALUE.match(sentence[end:])
+            if value is not None and _CURRENCY_AMOUNT_TAIL.match(sentence[end + value.end():]) is None:
+                return True
         if suffix.startswith(_FOREIGN_PROPER_NAME_CONTEXT_SUFFIXES) and any(
             re.search(
                 rf"(?<![A-Za-z0-9]){re.escape(span)}(?![A-Za-z0-9])",

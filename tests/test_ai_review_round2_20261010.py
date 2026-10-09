@@ -208,3 +208,24 @@ def test_s7_benchmark_rates_take_the_original_movement_words(job_type, text):
 def test_s7_security_context_still_needs_binding(text):
     with pytest.raises(ValueError):
         _news_field(text)
+
+
+# --- Suggestion 1. Upper-case P and N statistics ------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["主要终点达到统计学显著（P<0.001）。", "共纳入N=712例患者。", "组间差异显著（P = 0.03）。", "试验结果P<.05。"],
+)
+def test_s1r2_upper_case_p_and_n_statistics_publish(text):
+    assert _news_field(text) == text
+    assert _focus_field(text, field="summary_zh") == text
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["P<10美元后买盘涌入。", "N>5万美元时触发止损。", "F>12美元后福特汽车加速上涨。"],
+)
+def test_s1r2_a_letter_compared_with_a_price_still_needs_binding(text):
+    with pytest.raises(ValueError):
+        _news_field(text)
