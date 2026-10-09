@@ -576,6 +576,12 @@ _logo_http: httpx.AsyncClient | None = None
 _logo_slots: asyncio.Semaphore | None = None
 _LOGO_NOT_FOUND = {"not_found": True}
 _LOGO_UNAVAILABLE = {"unavailable": True}
+# Error answers get short private lifetimes instead of the API default
+# no-store: pages request one logo per row, and a browser that may not cache
+# a miss repeats it on every view. The owner's next visit can fill the cache.
+_LOGO_NOT_FOUND_HEADERS = {"Cache-Control": f"private, max-age={_LOGO_NOT_FOUND_TTL}"}
+_LOGO_UNAVAILABLE_HEADERS = {"Retry-After": "60", "Cache-Control": "private, max-age=60"}
+_LOGO_VISITOR_MISS_HEADERS = {"Cache-Control": "private, max-age=300"}
 _LOGO_ALLOWED_HOSTS = frozenset(
     {
         "financialmodelingprep.com",
@@ -735,8 +741,8 @@ async def _fetch_company_logo(symbol: str) -> dict[str, Any]:
         if owned:
             await client.aclose()
     if transient:
-        raise HTTPException(status_code=503, detail="Company logo temporarily unavailable", headers={"Retry-After": "60"})
-    raise HTTPException(status_code=404, detail="Company logo not found")
+        raise HTTPException(status_code=503, detail="Company logo temporarily unavailable", headers=dict(_LOGO_UNAVAILABLE_HEADERS))
+    raise HTTPException(status_code=404, detail="Company logo not found", headers=dict(_LOGO_NOT_FOUND_HEADERS))
 
 
 def _safe_logo_url(value: str) -> bool:
@@ -788,9 +794,9 @@ def _remember_company_logo(key: str, entry: _EndpointCacheEntry) -> None:
 
 def _logo_value(entry: _EndpointCacheEntry) -> dict[str, Any]:
     if entry.value == _LOGO_UNAVAILABLE:
-        raise HTTPException(status_code=503, detail="Company logo temporarily unavailable", headers={"Retry-After": "60"})
+        raise HTTPException(status_code=503, detail="Company logo temporarily unavailable", headers=dict(_LOGO_UNAVAILABLE_HEADERS))
     if entry.value == _LOGO_NOT_FOUND:
-        raise HTTPException(status_code=404, detail="Company logo not found")
+        raise HTTPException(status_code=404, detail="Company logo not found", headers=dict(_LOGO_NOT_FOUND_HEADERS))
     # Keep the original acquisition time so a disk hit cannot reset the age.
     return {**entry.value, "fetched_at": entry.fetched_at}
 
@@ -850,7 +856,7 @@ def _refresh_company_logo(symbol: str, key: str) -> None:
 async def _cached_company_logo(symbol: str, *, allow_refresh: bool = True) -> dict[str, Any]:
     variants = _logo_symbol_variants(symbol)
     if not variants:
-        raise HTTPException(status_code=404, detail="Invalid ticker")
+        raise HTTPException(status_code=404, detail="Invalid ticker", headers=dict(_LOGO_NOT_FOUND_HEADERS))
     symbol = variants[0]
     key = f"logo:{symbol}"
     now = time.time()
@@ -868,7 +874,9 @@ async def _cached_company_logo(symbol: str, *, allow_refresh: bool = True) -> di
             _refresh_company_logo(symbol, key)
         return _logo_value(hit)
     if not allow_refresh:
-        raise public_snapshot_unavailable(key)
+        error = public_snapshot_unavailable(key)
+        error.headers = dict(_LOGO_VISITOR_MISS_HEADERS)
+        raise error
     return await _load_company_logo(symbol, key)
 
 
@@ -2629,7 +2637,7 @@ async def stock_logo(ticker: str, request: Request = None):
     symbol = quote_symbol(ticker)
     variants = _logo_symbol_variants(symbol)
     if not variants:
-        raise HTTPException(status_code=404, detail="Invalid ticker")
+        raise HTTPException(status_code=404, detail="Invalid ticker", headers=dict(_LOGO_NOT_FOUND_HEADERS))
     logo = await _cached_company_logo(
         variants[0],
         allow_refresh=current_request_is_owner(),
