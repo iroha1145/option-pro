@@ -1689,6 +1689,15 @@ def _market_focus_payload_has_waiting_placeholder(
     return False
 
 
+# Full rows of the window's news and focus jobs, in index order (no sort).
+_FULL_JOB_SNAPSHOT_SQL = """SELECT j.*,COALESCE(s.submission_source,'manual')
+          AS submission_source
+   FROM ai_jobs j
+   LEFT JOIN ai_job_sources s ON s.job_id=j.job_id
+   WHERE j.job_type IN ('news_impact','market_focus')
+     {created_filter}"""
+
+
 def queued_manual_operations_signature(
     db_path: str | Path,
 ) -> tuple[int, str | None] | None:
@@ -2372,23 +2381,18 @@ class LocalCatalystIntelligence:
             connection = sqlite3.connect(uri, uri=True, timeout=2.0)
             connection.row_factory = sqlite3.Row
             connection.execute("PRAGMA query_only=ON")
-            # The window snapshot sorts tens of MB of job rows; keep the sort
-            # in memory instead of spilling temp files onto the data volume.
-            connection.execute("PRAGMA temp_store=MEMORY")
             if requested_ids is None and requested_news_ids is None:
                 created_filter = (
                     "" if created_since is None else "AND j.created_at>=?"
                 )
                 rows = connection.execute(
-                    f"""SELECT j.*,COALESCE(s.submission_source,'manual')
-                              AS submission_source
-                       FROM ai_jobs j
-                       LEFT JOIN ai_job_sources s ON s.job_id=j.job_id
-                       WHERE j.job_type IN ('news_impact','market_focus')
-                         {created_filter}
-                       ORDER BY j.created_at DESC""",
+                    _FULL_JOB_SNAPSHOT_SQL.format(created_filter=created_filter),
                     () if created_since is None else (_iso(created_since),),
                 ).fetchall()
+                # Newest first, sorted here: in SQL the ORDER BY built a temp
+                # B-tree of every full row (production: 100MB+ per reconcile)
+                # that spilled to SQLITE_TMPDIR on the data volume.
+                rows.sort(key=lambda row: row["created_at"] or "", reverse=True)
             elif requested_ids is not None:
                 # Fixed private projection: coverage reads never load provider
                 # receipts or result bodies for the whole recent-cycle window.

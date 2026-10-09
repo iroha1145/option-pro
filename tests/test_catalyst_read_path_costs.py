@@ -5,6 +5,7 @@ Assertions count SQLite virtual-machine steps, calls or rows, never wall time.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -740,3 +741,26 @@ def _create_news_job(repository: AIJobRepository, news_id: int) -> None:
         submission_source="scheduled",
         priority=50,
     )
+
+
+def test_window_job_snapshot_is_newest_first_without_a_temp_btree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.ai_jobs import repository as ai_repository_module
+
+    intelligence = _stack(tmp_path)
+    for minutes, news_id in ((30, 401), (20, 402), (10, 403)):
+        monkeypatch.setattr(
+            ai_repository_module, "_utcnow", lambda minutes=minutes: NOW - timedelta(minutes=minutes),
+        )
+        _create_news_job(intelligence.ai_repository, news_id)
+    monkeypatch.setattr(ai_repository_module, "_utcnow", lambda: NOW)
+
+    query = local_module._FULL_JOB_SNAPSHOT_SQL.format(created_filter="AND j.created_at>=?")
+    with sqlite3.connect(tmp_path / "ai-jobs.db") as connection:
+        plan = [row[3] for row in connection.execute("EXPLAIN QUERY PLAN " + query, ("2026-01-01",))]
+    snapshot = intelligence._ai_job_snapshot(created_since=NOW - timedelta(days=1))
+
+    # The ORDER BY used to sort every full row in a temp B-tree on disk.
+    assert not any("TEMP B-TREE" in detail for detail in plan)
+    assert [json.loads(job["payload_json"])["news_id"] for job in snapshot.values()] == [403, 402, 401]
