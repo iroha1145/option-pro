@@ -10,7 +10,7 @@
 - worker 空闲时每秒约 54 次读状态库、每 2 秒一轮 ai_jobs 与 catalyst_sync（各自开写事务），改为一个共享观察者每 0.5 秒读一次，加只读唤醒探针。按实测单次成本算，这部分空闲开销从约 1.5% 个核降到约 0.2%。**生产采样里 25–35% 的空闲底噪不是它造成的**（见第四节），要部署后复测才能定位剩下的来源。
 - 锁：找到并去掉了三个长时间持有写锁的来源（每个后端请求在写锁里全表扫 ai-jobs.db 两遍；reconcile 每 120 秒在写锁里重算全部已结算任务；突破库修剪的探测按历史平方增长），另有一个只在首次清理时才会暴露的：删 AI 任务时外键逐行全表扫。
 - 写盘：采样里 worker「每 20 秒 31MB 写完即作废」，量级与 reconcile 每 120 秒为排序整行任务建的约 100MB 临时文件相符，已改为不建临时表；催化剂连接的排序留在内存；公开个股数据与调度提示去掉 fsync。写入字节要部署后复测确认。
-- 保留：新闻与焦点的 AI 历史从未清理过（手动 retention 从没运行），现在每轮备份成功后自动清理 30 天以前的；突破库其实每次扫描都在按 90 天修剪，只是代价随历史平方增长，已修。首次运行与 VACUUM 见第七、十一节。
+- 保留：新闻与焦点的 AI 历史从未清理过（手动 retention 从没运行），现在每轮备份成功后自动清理 30 天以前的，带付费回执的失败任务永不删除；突破库其实每次扫描都在按 90 天修剪，只是代价随历史平方增长，已修。首次运行与 VACUUM 见第七、十一节。
 - 没有改成多进程 uvicorn，也没有上进程池，理由见第九节。
 
 ## 二、慢接口
@@ -112,6 +112,7 @@
 
 - 改前：只有手动 retention 会调 `prune_scheduled_history`，它从没运行过。
 - 改后（14a79f12）：maintenance 一轮里所有库都备份成功后清理一次，删除创建与完成都早于 max(`catalyst.journal_retention_days`, 30) 天的终态新闻与焦点任务；有备份失败要等重试成功。候选在写锁外只读选出，每 500 条一个短事务，批内按同一条件复核（期间被重排的不删）。
+- 带付费回执（`provider_result_json IS NOT NULL`）的失败任务永不删除：被本地校验误判失败的结果只能靠这份回执用 `recover_ai_schema_results` 离线找回，生产 `backup_keep=1`，删了就无从恢复。生产失败任务共 4,108 行且仍在增加，其中带回执的行数要按第十一节的只读查询确认；它们会一直留在库里，量级是每行几 KB。
 - 不会重排付费任务、不会让已发布的分析消失（f4d3beed）：已发布结果与审计存在 catalyst-cache.db 的分析链接里。实验室把时钟拨到新闻 60 天后，清理 9,758 行，两轮带定时排队的 reconcile 排队 0；链接、审计、修订三张表的内容摘要与不清理的对照组相同；以过去的 as_of 看 owner 与访客 feed，摘要相同。
 - 首轮清理的锁（6551a2b5）：`retry_of_job_id` 是指向 ai_jobs 自身的外键，没有索引时每删一行就整表扫一遍。已加部分索引（独立版本 `ai-job-retry-lineage-index-v1`），部署后第一次初始化时建索引（要扫一遍 280MB 的表，生产预计几秒以内，只此一次）。
 - 2,540 条 `budget_blocked`：是终态行，不占队列、不影响认领，到 30 天后按同一规则清掉。代码不批量改它们的状态。
@@ -125,7 +126,7 @@
 
 | 对象 | 规则 | 首次删除 | 释放的空闲页 |
 |---|---|---|---|
-| ai_jobs 新闻/焦点历史 | 30 天 | 约 3.8 万行（news_impact 共 60,475 行） | 约 150MB |
+| ai_jobs 新闻/焦点历史 | 30 天，带回执的失败任务除外 | 约 3.8 万行减去其中带回执的失败任务（news_impact 共 60,475 行；失败共 4,108 行，不全在 30 天以前，也不全带回执） | 约 130–150MB |
 | 突破库扫描附件 | 90 天（现值） | 生产数据从 7 月中旬开始，10 月中旬起才陆续有可删行 | 约 0，上限约 0.3GB |
 | 同上 | 若改为 30 天 | 约 12.7–13.5 万行快照（约 15.3KB/行）及其附件 | 2.3–2.5GB |
 | 同上 | 若改为 14 天 / 7 天 | — | 2.9–3.1GB / 3.2–3.4GB |
@@ -176,8 +177,11 @@ WHERE job_type IN ('news_impact','market_focus')
   AND status IN ('completed','failed','cancelled','insufficient_context','budget_blocked')
   AND created_at < strftime('%Y-%m-%dT%H:%M:%SZ','now','-30 days')
   AND COALESCE(completed_at,updated_at,created_at) < strftime('%Y-%m-%dT%H:%M:%SZ','now','-30 days')
+  AND NOT (status='failed' AND provider_result_json IS NOT NULL)
 GROUP BY 1,2'''
-print(c.execute(sql).fetchall())
+print('will_delete', c.execute(sql).fetchall())
+print('kept_failed_with_receipt', c.execute(
+    '''SELECT COUNT(*) FROM ai_jobs WHERE status='failed' AND provider_result_json IS NOT NULL''').fetchone())
 print(c.execute('SELECT COUNT(*) FROM ai_jobs WHERE retry_of_job_id IS NOT NULL').fetchone())" \
   | ./scripts/compose.sh exec -T backend python -
 ```

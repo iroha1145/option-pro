@@ -1696,6 +1696,9 @@ class AIJobRepository:
         完成时间都要早于截止点，当天才结算的积压任务仍留在当日 token 账里。
         候选在写锁外只读选出；每批一个短写事务，批内按同一条件复核后再删，
         首次清理上万行时其它写入方（认领、入队、取消）仍能在批间拿到写锁。
+        带付费回执（provider_result_json）的失败任务永不删除：被本地校验误判
+        失败的结果只能靠这份回执离线找回（recover_ai_schema_results），备份只留
+        一份时删了就无从恢复。
         """
 
         if (
@@ -1715,7 +1718,8 @@ class AIJobRepository:
             f"""job_type IN ({",".join("?" for _ in job_types)})
                 AND status IN ({",".join("?" for _ in statuses)})
                 AND created_at<?
-                AND COALESCE(completed_at,updated_at,created_at)<?"""
+                AND COALESCE(completed_at,updated_at,created_at)<?
+                AND NOT (status='failed' AND provider_result_json IS NOT NULL)"""
         )
         settled_parameters = (*job_types, *statuses, cutoff, cutoff)
         with self._connect() as connection:

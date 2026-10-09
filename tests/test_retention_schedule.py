@@ -273,3 +273,36 @@ def test_history_prune_batches_do_not_scan_the_table_per_deleted_row(
             "EXPLAIN QUERY PLAN SELECT rowid FROM ai_jobs WHERE retry_of_job_id=?", ("x",),
         ).fetchall()
     assert any("idx_ai_jobs_retry_of" in row[3] for row in plan)
+
+
+def test_failed_jobs_with_a_paid_receipt_are_never_pruned(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(repo_mod, "_utcnow", lambda: NOW - timedelta(days=400))
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    with_receipt, without_receipt, completed = (
+        _news_job(repository, news_id) for news_id in (1, 2, 3)
+    )
+    old = repo_mod._iso(NOW - timedelta(days=399))
+    with repository._connect() as connection:
+        connection.execute(
+            """UPDATE ai_jobs SET status='failed',error_code='schema_validation_failed',
+                      completed_at=?,provider_result_json=?
+               WHERE job_id=?""",
+            (old, '{"content":[{"type":"text","text":"{}"}]}', with_receipt),
+        )
+        connection.execute(
+            "UPDATE ai_jobs SET status='failed',error_code='provider_failed',completed_at=? WHERE job_id=?",
+            (old, without_receipt),
+        )
+        connection.execute(
+            "UPDATE ai_jobs SET status='completed',completed_at=? WHERE job_id=?",
+            (old, completed),
+        )
+        connection.commit()
+    monkeypatch.setattr(repo_mod, "_utcnow", lambda: NOW)
+
+    # The receipt is the only way to recover a result the local validator
+    # rejected (recover_ai_schema_results); with one backup it must stay.
+    assert repository.prune_scheduled_history(retain_days=30, now=NOW) == 2
+    with repository._connect() as connection:
+        remaining = [row[0] for row in connection.execute("SELECT job_id FROM ai_jobs")]
+    assert remaining == [with_receipt]
