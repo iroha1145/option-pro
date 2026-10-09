@@ -2403,9 +2403,26 @@ class AIJobRepository:
     def _provider_receipt_json(receipt: dict[str, Any]) -> str:
         fields = {"provider", "model", "id", "output_text", "stop_reason", "terminal_error", "usage"}
         if (not isinstance(receipt, dict) or not fields <= set(receipt)
-                or set(receipt) - fields - {"evidence_sources", "tool_evidence", "tool_evidence_version", "request_ids", "rounds"}):
+                or set(receipt) - fields - {"evidence_sources", "tool_evidence", "tool_evidence_version", "request_ids", "rounds", "openai_web_calls"}):
             raise ValueError("ai_job_provider_receipt_invalid")
-        if receipt["provider"] != "anthropic" or not _uses_claude(receipt["model"]):
+        if not ((receipt["provider"] == "anthropic" and _uses_claude(receipt["model"]))
+                or (receipt["provider"] == "openai" and receipt["model"] == "gpt-5.6-luna")):
+            raise ValueError("ai_job_provider_receipt_invalid")
+        if receipt["provider"] == "openai":
+            calls = receipt.get("openai_web_calls")
+            if not isinstance(calls, list) or len(calls) > 100:
+                raise ValueError("ai_job_provider_web_calls_invalid")
+            for call in calls:
+                if (not isinstance(call, dict) or set(call) != {"id", "action", "status", "sources"}
+                        or not isinstance(call["id"], str) or len(call["id"]) > 256
+                        or not isinstance(call["sources"], list) or len(call["sources"]) > 50):
+                    raise ValueError("ai_job_provider_web_calls_invalid")
+            verified = [source for call in calls if call["status"] == "completed"
+                        and call["action"] in {"search", "open_page", "find_in_page"}
+                        for source in call["sources"]]
+            if any(source not in verified for source in receipt.get("evidence_sources", [])):
+                raise ValueError("ai_job_provider_sources_invalid")
+        elif "openai_web_calls" in receipt:
             raise ValueError("ai_job_provider_receipt_invalid")
         if not isinstance(receipt["id"], str) or not 1 <= len(receipt["id"]) <= 256:
             raise ValueError("ai_job_provider_receipt_invalid")
@@ -2627,6 +2644,35 @@ class AIJobRepository:
                 raise RuntimeError("ai_job_response_link_rejected")
             connection.commit()
 
+    def record_openai_result(self, job_id: str, owner: str, receipt: dict[str, Any]) -> None:
+        """Persist Responses evidence before publication; keep its paid identity."""
+        receipt_json = self._provider_receipt_json(receipt)
+        if receipt["provider"] != "openai":
+            raise ValueError("ai_job_provider_receipt_invalid")
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                """SELECT * FROM ai_jobs WHERE job_id=? AND lease_owner=?
+                   AND lease_expires_at>? AND status IN ('queued','in_progress')
+                   AND openai_response_id=? AND model=?""",
+                (job_id, owner, _iso(), receipt["id"], receipt["model"]),
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("ai_job_lease_lost")
+            if row["provider_result_json"] is not None:
+                if self._provider_receipt_json(json.loads(row["provider_result_json"])) != receipt_json:
+                    raise RuntimeError("ai_job_provider_result_conflict")
+                return
+            charge = _settled_budget_charge_microusd(
+                str(row["job_type"]), receipt["usage"], model=str(row["model"]),
+                fallback_microusd=int(row["budget_charge_microusd"] or 0),
+            )
+            connection.execute(
+                "UPDATE ai_jobs SET provider_result_json=?,budget_charge_microusd=?,updated_at=? WHERE job_id=?",
+                (receipt_json, charge, _iso(), job_id),
+            )
+            connection.commit()
+
     def record_provider_result(self, job_id: str, owner: str, receipt: dict[str, Any]) -> None:
         """Save the terminal paid result and its accounting before local publication."""
         receipt_json = self._provider_receipt_json(receipt)
@@ -2680,13 +2726,13 @@ class AIJobRepository:
         self.ensure_initialized()
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT model,anthropic_message_id,provider_result_json FROM ai_jobs WHERE job_id=?", (job_id,),
+                "SELECT model,anthropic_message_id,openai_response_id,provider_result_json FROM ai_jobs WHERE job_id=?", (job_id,),
             ).fetchone()
         if not row or not row["provider_result_json"]:
             return None
         receipt = json.loads(row["provider_result_json"])
         self._provider_receipt_json(receipt)
-        if receipt["model"] != row["model"] or receipt["id"] != row["anthropic_message_id"]:
+        if receipt["model"] != row["model"] or receipt["id"] != row["anthropic_message_id" if receipt["provider"] == "anthropic" else "openai_response_id"]:
             raise ValueError("ai_job_provider_result_identity_mismatch")
         receipt.setdefault("evidence_sources", [])
         return receipt
@@ -2925,13 +2971,12 @@ class AIJobRepository:
             ),
             payload,
         )
-        if claude_result:
+        if claude_result or current.get("provider_result_json"):
             receipt = self.get_provider_result(job_id)
             if receipt is None or receipt.get("terminal_error"):
                 raise RuntimeError("ai_job_recovery_rejected")
-            original_result = validate_result(
-                str(current["job_type"]), receipt["output_text"], payload,
-            )
+            from app.services.ai_jobs.runtime import receipt_result
+            original_result = receipt_result(receipt, str(current["job_type"]), payload)
             if validated != original_result:
                 raise RuntimeError("ai_job_recovery_result_mismatch")
             if current["job_type"] == "market_focus" and payload.get("verification_version") == "web-evidence-v1":
@@ -3420,7 +3465,7 @@ class AIJobRepository:
                 receipt = json.loads(row["provider_result_json"])
                 AIJobRepository._provider_receipt_json(receipt)
                 if (receipt["model"] != row.get("model")
-                        or receipt["id"] != row.get("anthropic_message_id")):
+                        or receipt["id"] != row.get("anthropic_message_id" if receipt["provider"] == "anthropic" else "openai_response_id")):
                     raise ValueError("ai_job_provider_result_identity_mismatch")
                 validated_receipt = receipt
                 payload["evidence_sources"] = receipt.get("evidence_sources", [])

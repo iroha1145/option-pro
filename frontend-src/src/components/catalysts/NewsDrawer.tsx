@@ -601,6 +601,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
   /* 已结束的任务只在仍是这条新闻的当前任务时参与展示；详情已指向别的任务就以详情为准。 */
   const settledJob = job && !running && (!item?.analysisJobId || item.analysisJobId === job.jobId) ? job : null;
   const analysis = item?.analysis ?? null;
+  const hasWebSources = Boolean(analysis?.evidenceSources?.length);
   const showCompleted = item?.analysisStatus === 'completed' && analysis && !running;
   const showInsufficient = (item?.analysisStatus === 'insufficient_context' || settledJob?.status === 'insufficient_context') && !running;
   const showFailed = (item?.analysisStatus === 'failed' || settledJob?.status === 'failed') && !running;
@@ -766,9 +767,9 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
                 <p className="mb-3 text-micro leading-relaxed text-ink-500">
                   {item.analysisInput?.basis === 'article_body'
                     ? item.analysisInput.truncated
-                      ? __t('仅基于正文节选分析')
-                      : __t('基于新闻正文分析')
-                    : __t('仅基于标题和摘要分析')}
+                      ? hasWebSources ? __t('基于正文节选及联网来源分析') : __t('仅基于正文节选分析')
+                      : hasWebSources ? __t('基于新闻正文及联网来源分析') : __t('基于新闻正文分析')
+                    : hasWebSources ? __t('基于标题、摘要及联网来源分析') : __t('仅基于标题和摘要分析')}
                   {item.analysisInput?.basis === 'title_summary' && item.analysisInput.articleStatus === 'unavailable'
                     ? <span className="ml-1">{__t('未能取得正文')}</span>
                     : null}

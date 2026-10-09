@@ -62,8 +62,8 @@ async def recover(job_ids: Sequence[str], *, apply: bool) -> list[dict[str, Any]
             output.append({"job_id": job_id, "status": "not_recoverable"})
             continue
         try:
-            receipt = repository.get_provider_result(job_id) if claude_result else None
-            response = None if claude_result else await runtime.retrieve(settings, response_id)
+            receipt = repository.get_provider_result(job_id) if claude_result or row.get("provider_result_json") else None
+            response = None if receipt or claude_result else await runtime.retrieve(settings, response_id)
         except Exception as error:
             output.append(
                 {
@@ -74,7 +74,7 @@ async def recover(job_ids: Sequence[str], *, apply: bool) -> list[dict[str, Any]
             )
             continue
         if (claude_result and receipt is None) or (
-            not claude_result and str(getattr(response, "status", "") or "") != "completed"
+            not claude_result and not receipt and str(getattr(response, "status", "") or "") != "completed"
         ):
             output.append({"job_id": job_id, "status": "provider_not_completed"})
             continue
@@ -91,7 +91,7 @@ async def recover(job_ids: Sequence[str], *, apply: bool) -> list[dict[str, Any]
         try:
             payload = json.loads(str(row["payload_json"]))
             result = (
-                validate_result(str(row["job_type"]), receipt["output_text"], payload)
+                runtime.receipt_result(receipt, str(row["job_type"]), payload)
                 if receipt else runtime.response_result(response, str(row["job_type"]), payload)
             )
         except (json.JSONDecodeError, TypeError, ValueError) as error:
