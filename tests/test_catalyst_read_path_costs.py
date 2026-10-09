@@ -408,3 +408,96 @@ def test_anonymous_callers_cannot_mutate_the_cached_window(
         assert all(stock.get("ticker") != "HACK" for stock in item["analysis"]["affected_stocks"])
     nvda_items = batch["results"]["NVDA"]["items"]
     assert nvda_items and all(item["title"] != "tampered" for item in nvda_items)
+
+
+_JOURNAL_ACTIVE_REVISIONS_SQL = """
+    SELECT r.* FROM catalyst_local_news_revisions r
+    WHERE COALESCE(r.published_at,r.fetched_at)>=?
+      AND r.change_sequence=(
+          SELECT MAX(c.change_sequence)
+          FROM macrolens_etl_news_changes c
+          WHERE c.news_id=r.news_id
+            AND c.available_at<=?
+      )
+      AND EXISTS(
+          SELECT 1 FROM macrolens_etl_news_changes c2
+          WHERE c2.news_id=r.news_id
+            AND c2.change_sequence=r.change_sequence
+            AND c2.operation='upsert'
+            AND c2.available_at<=?
+      )
+"""
+
+
+def _visible_revisions(connection, body: str, params: tuple) -> list[tuple]:
+    return [
+        tuple(row)
+        for row in connection.execute(
+            f"WITH active_revisions AS ({body}) "
+            "SELECT news_id,change_sequence,content_hash FROM active_revisions "
+            "ORDER BY news_id,change_sequence",
+            params,
+        ).fetchall()
+    ]
+
+
+def test_mirror_window_predicate_matches_the_journal_at_every_as_of(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from test_catalyst_local_intelligence import (
+        _apply_news,
+        _delete_change,
+        _news_change,
+    )
+
+    monkeypatch.setattr(local_module, "_utc_now", lambda: NOW)
+    intelligence = _stack(tmp_path)
+    etl = CatalystEtlRepository(intelligence.db_path)
+    base = NOW - timedelta(hours=6)
+    changes = [
+        _news_change(1, 401, available_at=base),
+        _news_change(2, 402, available_at=base),
+        # 402 is updated twice; the newest version is visible later.
+        _news_change(3, 402, available_at=base + timedelta(hours=1), content_hash="hash-402-3"),
+        _news_change(4, 402, available_at=base + timedelta(hours=3), content_hash="hash-402-4"),
+        _news_change(5, 403, available_at=base),
+        _delete_change(6, 403, available_at=base + timedelta(hours=2)),
+        # A future-dated change: its mirror row is newer than near-now reads.
+        _news_change(7, 404, available_at=base),
+        _news_change(8, 404, available_at=NOW + timedelta(hours=2), content_hash="hash-404-8"),
+        _news_change(9, 405, available_at=base + timedelta(hours=4)),
+    ]
+    _apply_news(etl, changes, as_of=NOW + timedelta(hours=3))
+    intelligence.reconcile()
+    with intelligence._connect() as connection:
+        # A revision whose mirror row is missing still follows the journal.
+        connection.execute("DELETE FROM macrolens_etl_news WHERE news_id=405")
+        connection.commit()
+    moments = [
+        base - timedelta(minutes=1),
+        base,
+        base + timedelta(minutes=90),
+        base + timedelta(hours=2, minutes=30),
+        NOW,
+        NOW + timedelta(hours=3),
+    ]
+    window_start = local_module._iso(NOW - timedelta(days=3))
+    observed = set()
+    with intelligence._connect() as connection:
+        for moment in moments:
+            cutoff = local_module._iso(moment)
+            journal = _visible_revisions(
+                connection, _JOURNAL_ACTIVE_REVISIONS_SQL, (window_start, cutoff, cutoff),
+            )
+            mirror = _visible_revisions(
+                connection,
+                local_module._WINDOW_ACTIVE_REVISIONS_SQL,
+                (window_start, cutoff, cutoff, cutoff),
+            )
+            assert mirror == journal, moment
+            observed.update(journal)
+    # Every branch was exercised: superseded, deleted, future-dated, unmirrored.
+    assert (402, 3, "hash-402-3") in observed and (402, 4, "hash-402-4") in observed
+    assert (403, 5, "hash-403-5") in observed
+    assert (404, 7, "hash-404-7") in observed and (404, 8, "hash-404-8") in observed
+    assert (405, 9, "hash-405-9") in observed

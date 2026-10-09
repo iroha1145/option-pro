@@ -503,6 +503,37 @@ _FEED_QUERY_HASH_KEYS = (
 )
 
 
+# Revisions of the window visible at as_of (parameters: window start, as_of
+# three times). The ETL mirror row of a news item is its newest change, written
+# in the same transaction as the journal row, so when that change is visible
+# at as_of it is the "latest change at as_of" the journal subqueries find; a
+# newer mirror row (a future-dated change, an anchored cursor page) or a
+# missing one falls back to the journal for that row only.
+_WINDOW_ACTIVE_REVISIONS_SQL = """
+    SELECT r.* FROM catalyst_local_news_revisions r
+    LEFT JOIN macrolens_etl_news m ON m.news_id=r.news_id
+    WHERE COALESCE(r.published_at,r.fetched_at)>=?
+      AND CASE
+          WHEN m.available_at<=? THEN
+              m.deleted=0 AND r.change_sequence=m.change_sequence
+          ELSE
+              r.change_sequence=(
+                  SELECT MAX(c.change_sequence)
+                  FROM macrolens_etl_news_changes c
+                  WHERE c.news_id=r.news_id
+                    AND c.available_at<=?
+              )
+              AND EXISTS(
+                  SELECT 1 FROM macrolens_etl_news_changes c2
+                  WHERE c2.news_id=r.news_id
+                    AND c2.change_sequence=r.change_sequence
+                    AND c2.operation='upsert'
+                    AND c2.available_at<=?
+              )
+          END
+"""
+
+
 def _reset_revision_cache() -> None:
     with _REVISION_CACHE_LOCK:
         _REVISION_CACHE.clear()
@@ -4209,25 +4240,14 @@ class LocalCatalystIntelligence:
             # window instead of with full history. Timestamps in this store
             # are normalized ISO-8601 UTC "Z" strings (timestamps-v1), so
             # lexicographic comparison is chronological.
-            head = """WITH active_revisions AS (
-                         SELECT r.* FROM catalyst_local_news_revisions r
-                         WHERE COALESCE(r.published_at,r.fetched_at)>=?
-                           AND r.change_sequence=(
-                               SELECT MAX(c.change_sequence)
-                               FROM macrolens_etl_news_changes c
-                               WHERE c.news_id=r.news_id
-                                 AND c.available_at<=?
-                           )
-                           AND EXISTS(
-                               SELECT 1 FROM macrolens_etl_news_changes c2
-                               WHERE c2.news_id=r.news_id
-                                 AND c2.change_sequence=r.change_sequence
-                                 AND c2.operation='upsert'
-                                 AND c2.available_at<=?
-                           )
-                     ), latest_link AS ("""
+            head = (
+                "WITH active_revisions AS ("
+                + _WINDOW_ACTIVE_REVISIONS_SQL
+                + "), latest_link AS ("
+            )
             params: list[Any] = [
                 _iso(as_of - timedelta(hours=window_hours)),
+                cutoff,
                 cutoff,
                 cutoff,
                 cutoff,
