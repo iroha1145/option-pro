@@ -556,7 +556,9 @@ def write_stock_pull_resources(
     *,
     path: Path | None = None,
     now: float | None = None,
+    durable: bool = True,
 ) -> set[str]:
+    """``durable=False`` skips both fsyncs, for bundles the worker regenerates."""
     symbol = ticker.upper().strip()
     if not _TICKER_PATTERN.fullmatch(symbol):
         raise ValueError("stock pull ticker is invalid")
@@ -641,23 +643,25 @@ def write_stock_pull_resources(
         try:
             with os.fdopen(descriptor, "wb") as handle:
                 handle.write(encoded)
-                handle.flush()
-                os.fsync(handle.fileno())
+                if durable:
+                    handle.flush()
+                    os.fsync(handle.fileno())
             if _path_has_symlink_boundary(target):
                 raise ValueError(
                     "stock pull snapshot path must not cross a symlink"
                 )
             os.replace(temporary_name, target)
-            directory_flags = os.O_RDONLY
-            if hasattr(os, "O_DIRECTORY"):
-                directory_flags |= os.O_DIRECTORY
-            if hasattr(os, "O_CLOEXEC"):
-                directory_flags |= os.O_CLOEXEC
-            directory_descriptor = os.open(target.parent, directory_flags)
-            try:
-                os.fsync(directory_descriptor)
-            finally:
-                os.close(directory_descriptor)
+            if durable:
+                directory_flags = os.O_RDONLY
+                if hasattr(os, "O_DIRECTORY"):
+                    directory_flags |= os.O_DIRECTORY
+                if hasattr(os, "O_CLOEXEC"):
+                    directory_flags |= os.O_CLOEXEC
+                directory_descriptor = os.open(target.parent, directory_flags)
+                try:
+                    os.fsync(directory_descriptor)
+                finally:
+                    os.close(directory_descriptor)
             identity = _path_file_identity(target)
             if identity is None:
                 raise ValueError("stock pull snapshot is not a regular file")

@@ -187,12 +187,12 @@ def _write_metadata(path: Path, value: Mapping[str, Any]) -> None:
     encoded = json.dumps(dict(value), allow_nan=False, separators=(",", ":")).encode()
     if len(encoded) > _METADATA_MAX_BYTES:
         raise ValueError("public stock metadata is too large")
+    # No fsync: these are scheduling hints rewritten every round; a version
+    # lost in a crash is simply written again. The rename stays atomic.
     fd, temporary = tempfile.mkstemp(prefix=".pending-", dir=path.parent)
     try:
         with os.fdopen(fd, "wb") as handle:
             handle.write(encoded)
-            handle.flush()
-            os.fsync(handle.fileno())
         os.replace(temporary, path)
     finally:
         if os.path.exists(temporary):
@@ -497,7 +497,8 @@ class PublicStockDataRefresh:
         for symbol, priority in targets.items():
             if symbol in self._due:
                 continue
-            resources = [read_public_stock_resource(symbol, resource, root=self.root, now=now) for resource in _RESOURCES]
+            summary = read_public_stock_summary(symbol, root=self.root, now=now)
+            resources = [summary.get(resource) for resource in _RESOURCES]
             saved = min(float(entry["saved_at"]) for entry in resources if entry) if all(resources) else None
             metadata = _read_metadata(_base(self.root) / "status" / f"{symbol}.json") or {}
             retry = _finite_time(metadata.get("retry_after")) if metadata.get("ticker") == symbol else None
@@ -581,8 +582,9 @@ class PublicStockDataRefresh:
                 if puller is None:
                     from app.api.stocks import _pull_stock_data_once
 
-                    # The worker has no HTTP readers for the API process cache.
-                    puller = partial(_pull_stock_data_once, publish_to_cache=False)
+                    # The worker has no HTTP readers for the API process cache,
+                    # and these bundles are regenerated on the next round.
+                    puller = partial(_pull_stock_data_once, publish_to_cache=False, durable_snapshot=False)
                 async with self._start_lock:
                     loop = asyncio.get_running_loop()
                     delay = max(0.0, self._next_start - loop.time())
@@ -597,10 +599,10 @@ class PublicStockDataRefresh:
                     or any(not isinstance(pulled.get(name), Mapping) or pulled[name].get("status") != "available" or pulled[name].get("persisted") is not True for name in _RESOURCES)
                 ):
                     raise RuntimeError("public_stock_pull_incomplete")
-                resources = await asyncio.to_thread(lambda: [
-                    read_public_stock_resource(symbol, resource, root=self.root, now=float(self._clock()))
-                    for resource in _RESOURCES
-                ])
+                summary = await asyncio.to_thread(
+                    read_public_stock_summary, symbol, root=self.root, now=float(self._clock()),
+                )
+                resources = [summary.get(resource) for resource in _RESOURCES]
                 if not all(resources):
                     raise RuntimeError("public_stock_resources_incomplete")
                 saved = min(float(entry["saved_at"]) for entry in resources if entry)

@@ -3886,9 +3886,11 @@ async def _pull_stock_data_once(
     snapshot_path: Path | None = None,
     include_options: bool = True,
     publish_to_cache: bool = True,
+    durable_snapshot: bool = True,
 ) -> dict[str, Any]:
     """``publish_to_cache=False`` is for the worker process: nothing there reads
-    ``_endpoint_cache``, and each retained daily chart costs about 400 KiB."""
+    ``_endpoint_cache``, and each retained daily chart costs about 400 KiB.
+    ``durable_snapshot=False`` skips the fsyncs for regenerated public bundles."""
     overview_key = f"stock:{symbol}"
     chart_key = f"chart:{symbol}:1d:raw"
 
@@ -4167,10 +4169,15 @@ async def _pull_stock_data_once(
 
     persistence_status = "completed"
     try:
+        writer_options: dict[str, Any] = {}
+        if snapshot_path is not None:
+            writer_options["path"] = snapshot_path
+        if not durable_snapshot:
+            writer_options["durable"] = False
         writer = (
-            write_stock_pull_resources
-            if snapshot_path is None
-            else partial(write_stock_pull_resources, path=snapshot_path)
+            partial(write_stock_pull_resources, **writer_options)
+            if writer_options
+            else write_stock_pull_resources
         )
         persisted = await _run_stock_pull_blocking(
             writer,
