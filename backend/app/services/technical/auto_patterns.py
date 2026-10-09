@@ -14,6 +14,8 @@ import hashlib
 import math
 from typing import Any, Mapping, Sequence
 
+import numpy as np
+
 from app.services.strength.price_action import _find_swings
 
 ALGORITHM_VERSION = "optix-auto-patterns-v2"
@@ -269,6 +271,59 @@ def _multi_span_swings(
     return pack(h3, extra_highs, highs, "high"), pack(l3, extra_lows, lows, "low")
 
 
+class _LineScanWindow:
+    """Per-bar arrays shared by every candidate line of one detection run.
+
+    Penetrations are counted from element-wise float64 arithmetic, which gives
+    exactly the per-bar Python result; only the count leaves numpy.
+    """
+
+    __slots__ = ("index", "closes", "body_lo", "body_hi", "penetration", "volume_median")
+
+    def __init__(
+        self,
+        opens: Sequence[float],
+        closes: Sequence[float],
+        volumes: Sequence[float | None],
+        local_atr: Sequence[float],
+    ) -> None:
+        count = len(closes)
+        close_values = np.asarray(closes, dtype=np.float64)
+        open_values = np.asarray(
+            [opens[i] if i < len(opens) else closes[i] for i in range(count)],
+            dtype=np.float64,
+        )
+        atr_values = np.asarray(
+            [local_atr[i] if i < len(local_atr) else 1.0 for i in range(count)],
+            dtype=np.float64,
+        )
+        self.index = np.arange(count, dtype=np.float64)
+        self.closes = close_values
+        # Same tie and NaN behaviour as min()/max() on (open, close).
+        self.body_lo = np.where(close_values < open_values, close_values, open_values)
+        self.body_hi = np.where(close_values > open_values, close_values, open_values)
+        self.penetration = _PENETRATE_ATR * atr_values
+        complete = bool(volumes) and all(
+            v is not None and math.isfinite(v) and v >= 0 for v in volumes
+        )
+        self.volume_median = _median(volumes) if complete else None
+
+    def penetrations(self, slope: float, intercept: float, side: str, start: int, stop: int) -> int:
+        if stop <= start:
+            return 0
+        expected = slope * self.index[start:stop] + intercept
+        penetration = self.penetration[start:stop]
+        if side == "support":
+            limit = expected - penetration
+            hits = (self.closes[start:stop] < limit) | (self.body_hi[start:stop] < limit)
+        elif side == "resistance":
+            limit = expected + penetration
+            hits = (self.closes[start:stop] > limit) | (self.body_lo[start:stop] > limit)
+        else:
+            return 0
+        return int(np.count_nonzero(hits))
+
+
 def _evaluate_line(
     *,
     slope: float,
@@ -281,6 +336,7 @@ def _evaluate_line(
     side: str,
     start: int,
     end: int,
+    window: _LineScanWindow | None = None,
 ) -> dict[str, Any] | None:
     span = end - start
     if span < _MIN_SPAN:
@@ -305,7 +361,8 @@ def _evaluate_line(
         return None
     residual = residual_sum / residual_n
     if len(touch_indexes) >= 2:
-        touch_points = [(i, p) for i, p in points if i in set(touch_indexes)]
+        touched = set(touch_indexes)
+        touch_points = [(i, p) for i, p in points if i in touched]
         refit = _robust_fit(touch_points)
         if refit is not None:
             slope, intercept = refit
@@ -328,19 +385,9 @@ def _evaluate_line(
             residual = residual_sum / residual_n if residual_n else residual
 
     touches = len(touch_indexes)
-    body_hits = 0
-    for i in range(start, min(end + 1, len(closes))):
-        atr = local_atr[i] if i < len(local_atr) else 1.0
-        expected = _y(slope, intercept, i)
-        close = closes[i]
-        open_ = opens[i] if i < len(opens) else close
-        body_lo = min(open_, close)
-        body_hi = max(open_, close)
-        if side == "support" and (close < expected - _PENETRATE_ATR * atr or body_hi < expected - _PENETRATE_ATR * atr):
-            body_hits += 1
-        elif side == "resistance" and (close > expected + _PENETRATE_ATR * atr or body_lo > expected + _PENETRATE_ATR * atr):
-            body_hits += 1
-    penetrations = body_hits
+    if window is None:
+        window = _LineScanWindow(opens, closes, volumes, local_atr)
+    penetrations = window.penetrations(slope, intercept, side, start, min(end + 1, len(closes)))
     if touches < 2:
         return None
     if touches == 2 and (span < 40 or residual > 0.18):
@@ -398,8 +445,8 @@ def _evaluate_line(
     # Volume confirmation compares the complete fit window with its touch
     # bars. An incomplete baseline must not become a synthetic low-volume
     # signal; geometry and price evidence remain independently usable.
-    if volumes and all(v is not None and math.isfinite(v) and v >= 0 for v in volumes):
-        median_vol = _median(volumes)
+    if window.volume_median is not None:
+        median_vol = window.volume_median
         touch_vol = _median([volumes[i] for i in touch_indexes if i < len(volumes)]) if touch_indexes else median_vol
         if median_vol > 0:
             volume_confirmation = _clamp01(0.35 + 0.4 * min(2.0, touch_vol / median_vol))
@@ -737,6 +784,7 @@ def detect_auto_patterns(
         return []
     data_through = window_dates[-1]
     candidates: list[dict[str, Any]] = []
+    scan_window = _LineScanWindow(window_opens, window_closes, window_volumes, local_atr)
 
     def fit_all(points: list[tuple[int, float]], side: str) -> list[dict[str, Any]]:
         found: list[dict[str, Any]] = []
@@ -758,6 +806,7 @@ def detect_auto_patterns(
                     side=side,
                     start=start_i,
                     end=end_i,
+                    window=scan_window,
                 )
                 if evaluated is None:
                     continue

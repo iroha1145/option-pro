@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections import deque
+from collections import OrderedDict, deque
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -3328,6 +3328,67 @@ async def _load_stock_technical(symbol: str, owner: bool) -> dict[str, Any]:
     return payload
 
 
+# About 0.3MB each (tracemalloc, a two-year daily chart with SPY).
+_TECHNICAL_VISITOR_RESULT_LIMIT = 32
+_technical_visitor_results: OrderedDict[tuple[Any, ...], dict[str, Any]] = OrderedDict()
+_technical_visitor_lock = threading.Lock()
+
+
+def _visitor_technical_result(
+    symbol: str,
+    bars: list[dict[str, Any]],
+    spy_closes: dict[str, float] | None,
+) -> dict[str, Any] | None:
+    """Sanitized structure for exactly these inputs, computed once per input set.
+
+    The key holds everything the computation reads: the bars, the SPY closes,
+    whether the last bar's session has closed (its only clock input) and the
+    algorithm versions. Only real results are kept; callers must not mutate them.
+    """
+
+    from app.services.technical import auto_patterns, chart_analysis, structure
+
+    series = structure.clean_series(bars)
+    if series is None:
+        return None
+    series, _series_break_at = structure._truncate_after_series_break(series)
+    if len(series["closes"]) < structure._MIN_BARS:
+        return None
+    last_bar_closed = structure._last_bar_closed(series["times"][-1], datetime.now(timezone.utc))
+    key = (
+        symbol,
+        "1d",
+        last_bar_closed,
+        hashlib.sha256(json.dumps(bars, separators=(",", ":")).encode("utf-8")).hexdigest(),
+        hashlib.sha256(json.dumps(spy_closes, separators=(",", ":")).encode("utf-8")).hexdigest(),
+        structure.STRUCTURE_VERSION,
+        auto_patterns.ALGORITHM_VERSION,
+        chart_analysis.BUNDLE_VERSION,
+        chart_analysis.LAYER_REGISTRY_VERSION,
+        chart_analysis.FINGERPRINT_ALGORITHM,
+    )
+    with _technical_visitor_lock:
+        cached = _technical_visitor_results.get(key)
+        if cached is not None:
+            _technical_visitor_results.move_to_end(key)
+            return cached
+    result = structure.compute_technical_structure(
+        bars,
+        last_bar_closed=last_bar_closed,
+        ticker=symbol,
+        spy_closes=spy_closes,
+    )
+    if result is None:
+        return None
+    result = _sanitize(result)
+    with _technical_visitor_lock:
+        _technical_visitor_results[key] = result
+        _technical_visitor_results.move_to_end(key)
+        while len(_technical_visitor_results) > _TECHNICAL_VISITOR_RESULT_LIMIT:
+            _technical_visitor_results.popitem(last=False)
+    return result
+
+
 @router.get("/{ticker}/technical")
 async def stock_technical(ticker: str):
     """K-line structure + indicators computed from the same daily bars the
@@ -3348,9 +3409,8 @@ async def stock_technical(ticker: str):
         if owner or not _is_public_snapshot_unavailable(exc):
             raise
         # 访客冷缓存：先吃手动拉取的日线快照（与 chart 路由同一 hydrate 通路——
-        # 访客拉取完，K 线和结构必须同源同现），再退公开快照；现算不回源、不写缓存。
-        from app.services.technical.structure import compute_technical_structure
-
+        # 访客拉取完，K 线和结构必须同源同现），再退公开快照；现算不回源、
+        # 不写 technical 缓存键，结果按输入记忆（_visitor_technical_result）。
         chart_key = f"chart:{symbol}:1d:raw"
         await _hydrate_stock_pull_resource(symbol, "daily_chart", chart_key)
         pulled = _usable_hit(chart_key, time.time())
@@ -3361,25 +3421,24 @@ async def stock_technical(ticker: str):
         if not bars:
             raise exc
         spy_closes = await _guest_spy_closes()
-        result = await asyncio.to_thread(
-            compute_technical_structure,
-            bars,
-            ticker=symbol,
-            spy_closes=spy_closes,
-        )
+        result = await asyncio.to_thread(_visitor_technical_result, symbol, bars, spy_closes)
         if result is None:
             raise exc
-        payload = _sanitize({
+        payload = {
             "ticker": symbol,
             "as_of": chart.get("as_of") if isinstance(chart, dict) else None,
             "basis": "raw_daily",
             **result,
-        })
+        }
         analysis = payload.get("chart_analysis")
         if isinstance(analysis, dict):
-            analysis["ticker"] = symbol
-            analysis["range"] = "1d"
-            analysis["adjustment"] = "raw"
+            # The remembered result is shared between requests: decorate a copy.
+            payload["chart_analysis"] = {
+                **analysis,
+                "ticker": symbol,
+                "range": "1d",
+                "adjustment": "raw",
+            }
         return payload
 
 

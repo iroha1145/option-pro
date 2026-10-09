@@ -107,6 +107,7 @@ def _reset_read_caches(_isolated_runtime_data):
         sectors_api._sector_iv_documents.invalidate()
         http_read_cache.reset_serialized_response_cache()
         stocks_api._watchlist_owner_snapshot_observed = None
+        stocks_api._technical_visitor_results.clear()
 
     _clear()
     yield
