@@ -224,6 +224,14 @@ class BackgroundDiagnosticsStore:
     async def previous(self, task: str) -> str | None:
         if self.store is None:
             return None
+        try:
+            key = (str(self.store.path()), task)
+        except Exception:
+            return None
+        def memory_parent() -> str | None:
+            with _memory_guard:
+                memory = _memory.get(key)
+            return memory[1] if memory is not None else None
         result: list[Any] = []
         done = threading.Event()
         def read() -> None:
@@ -232,17 +240,16 @@ class BackgroundDiagnosticsStore:
             finally:
                 done.set()
         if not _submit(read):
-            return None
+            return memory_parent()
         deadline = time.monotonic() + READ_WAIT_SECONDS
         while not done.is_set():
             if time.monotonic() >= deadline:
-                return None
+                # Background I/O may lag behind record(), which already retained
+                # this process's latest message. Keep that comparison without
+                # making the paid request wait for persistence.
+                return memory_parent()
             await asyncio.sleep(0.001)
         rows = [row for row in result[0]["records"] if row["task"] == task] if result else []
-        try:
-            key = (str(self.store.path()), task)
-        except Exception:
-            return None
         with _memory_guard:
             memory = _memory.get(key)
         candidates = [(row["timestamp"], row["message_id"]) for row in rows]
