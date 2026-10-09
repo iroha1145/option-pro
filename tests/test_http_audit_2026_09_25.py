@@ -417,21 +417,23 @@ def test_public_home_read_checks_only_the_requested_entry_clock(tmp_path, monkey
     path = tmp_path / "public-home.json"
     phs.write_public_home_snapshot(path, _public_home_entries(now), now=now)
     checked: list[str] = []
-    real_check = phs._payload_timestamps_fit_entry
+    real_bounds = phs._payload_timestamp_bounds
 
-    def counting_check(resource, payload, *, not_after):
+    def counting_bounds(resource, payload):
         checked.append(resource)
-        return real_check(resource, payload, not_after=not_after)
+        return real_bounds(resource, payload)
 
-    monkeypatch.setattr(phs, "_payload_timestamps_fit_entry", counting_check)
+    monkeypatch.setattr(phs, "_payload_timestamp_bounds", counting_bounds)
 
-    indices = phs.read_public_home_resource(
-        "indices",
-        parameters=phs.public_home_resource_parameters("indices", now=now),
-        path=path,
-        now=now,
-    )
-    assert indices is not None
+    for _ in range(2):
+        indices = phs.read_public_home_resource(
+            "indices",
+            parameters=phs.public_home_resource_parameters("indices", now=now),
+            path=path,
+            now=now,
+        )
+        assert indices is not None
+    # Clocks of one file version are read once; later reads only compare.
     assert checked == ["indices"]
 
     checked.clear()
