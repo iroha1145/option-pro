@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 import app.main as main
 from app.access import owner_password_hash_is_valid
 from app.tools import personal_secrets
-from app import legacy_env_adapter, runtime_environment
+from app import runtime_environment
 
 
 def _set_stdin(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
@@ -79,7 +79,6 @@ def test_option_pro_secret_allowlist_is_exact() -> None:
         "FRED_API_KEY",
     }
     assert set(personal_secrets.SECRET_KEYS) == expected
-    assert legacy_env_adapter.SECRET_KEYS == expected
     assert runtime_environment.SECRET_ENV_KEYS == expected
 
 
