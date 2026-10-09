@@ -977,7 +977,8 @@
 @media (pointer: coarse) {
   .theme-switcher-control { min-height: 44px; min-width: 44px; }
 }
-.change-badge { font-family: inherit; font-weight: 500; white-space: nowrap; letter-spacing: -.015em; }
+/* 2026-10-09 Arc 改版：涨跌数字改常规字重，方向只靠颜色与箭头（Arc 的涨跌读数也是常规字重）。 */
+.change-badge { font-family: inherit; font-weight: 400; white-space: nowrap; letter-spacing: -.015em; }
 .strength-track { background: var(--control-track); }
 .strength-fill { opacity: .78; }
 .insight-frame {

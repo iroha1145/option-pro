@@ -150,7 +150,7 @@ function ExpectedMoveCell({
   return (
     <span className={cn('flex flex-col items-start', align === 'end' && 'items-end text-right')}>
       <span className="inline-flex items-center gap-1">
-        <span className="text-data-m font-medium text-ink-800 tnum">±{pct.toFixed(1)}%</span>
+        <span className="text-data-m text-ink-900 tnum">±{pct.toFixed(1)}%</span>
         {unverified && (
           <InfoHint hint={{ title: t('预期波动'), body: t('按期权报价估算，部分合约未提供报价时间。') }} size={11} />
         )}

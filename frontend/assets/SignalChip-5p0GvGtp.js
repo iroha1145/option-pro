@@ -1,1 +1,0 @@
-import{j as e}from"./prefetchRouteChunk-DZXyHU1_.js";import{S as n}from"./app-shell-B019auqj.js";const i={breakout:"violet",volume:"amber",gap:"orange",pullback:"sky","ma-touch":"brand","iv-spike":"pink"};function m({type:o,label:a,className:t}){const r=i[o]??"neutral";return e.jsx(n,{tone:r,className:t,children:a})}export{i as S,m as a};

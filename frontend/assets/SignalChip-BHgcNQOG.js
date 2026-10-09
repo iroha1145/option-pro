@@ -1,0 +1,1 @@
+import{j as i}from"./prefetchRouteChunk-DplHPjVK.js";import{S as s}from"./signalTone-CYkCr9lA.js";import{S as a}from"./app-shell-Ago3NSNT.js";function S({type:o,label:r,className:t}){const n=s[o]??"neutral";return i.jsx(a,{tone:n,className:t,children:r})}export{S};

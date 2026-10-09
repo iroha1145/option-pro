@@ -157,7 +157,7 @@ export default function DetailBand({
                       <span className="ml-auto text-micro text-ink-400">
                         {t('评分')}
                       </span>
-                      <span className="w-12 text-right text-data-m font-medium text-ink-800 tnum">
+                      <span className="w-12 text-right text-data-m text-ink-900 tnum">
                         {leader.score?.toFixed(1) ?? '—'}
                       </span>
                       <Icon

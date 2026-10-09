@@ -283,7 +283,8 @@ for (const width of [390, 1440]) {
         ...await measure(toolbar.getByRole('button')),
       ];
       expect(geometry.length).toBeGreaterThanOrEqual(4);
-      expect(geometry.every((control) => control.radius <= (width === 390 ? 9 : 8))).toBe(true);
+      /* 2026-10-09 Arc 改版：工具栏的下拉触发器与组内按钮改为胶囊（原「≤ 8 / 9px 的克制圆角」作废，见设计规范 §10）。 */
+      expect(geometry.every((control) => control.radius >= control.height / 2)).toBe(true);
       expect(geometry.every((control) => control.height >= (width === 390 ? 44 : 28))).toBe(true);
       if (width === 390) {
         const raisedAndVisible = await scores.evaluate((rail) => {
