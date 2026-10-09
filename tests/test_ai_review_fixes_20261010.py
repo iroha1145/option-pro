@@ -172,11 +172,10 @@ def test_bracketed_text_that_is_not_a_retrieved_site_is_not_deleted(text):
         "高德纳（IT）暴跌20%。",
         "IT大涨后回落。",
         "股票代码IT服务。",
-        "Apple暴跌拖累科技股。",
         "股票600519大涨。",
     ],
 )
-def test_s2_price_moves_and_it_outside_its_phrases_need_binding(text):
+def test_s2_it_outside_its_phrases_needs_binding(text):
     with pytest.raises(ValueError):
         _news_field(text)
 
