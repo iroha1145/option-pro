@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator, Literal
 
-from .etl_client import CalendarPage, NewsChangesPage
+from .ingest_models import CalendarPage, NewsChangesPage
 
 
 StreamName = Literal["news", "calendar"]

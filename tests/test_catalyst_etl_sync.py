@@ -8,12 +8,10 @@ import httpx
 import pytest
 
 from app.services.catalysts.etl_client import (
-    CalendarPage,
     EtlClientConfig,
     EtlCursorResetRequired,
     EtlResponseTooLarge,
     MacroLensEtlClient,
-    NewsChangesPage,
 )
 from app.services.catalysts.etl_repository import (
     CatalystEtlRepository,
@@ -23,6 +21,7 @@ from app.services.catalysts.etl_repository import (
     EtlWatermarkConflict,
 )
 from app.services.catalysts.etl_sync import MacroLensIncrementalSync
+from app.services.catalysts.ingest_models import CalendarPage, NewsChangesPage
 
 
 AS_OF = "2026-07-15T12:00:00.123456Z"

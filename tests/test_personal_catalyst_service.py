@@ -22,7 +22,7 @@ from app.personal_config import AccessConfig, FeatureConfig, PersonalConfig
 from app.services.ai_jobs import runtime as ai_runtime
 from app.services.ai_jobs.repository import AIJobRepository
 from app.services.catalysts.errors import CatalystError
-from app.services.catalysts.etl_client import NewsChangesPage
+from app.services.catalysts.ingest_models import NewsChangesPage
 from app.services.catalysts.etl_repository import CatalystEtlRepository
 from app.services.catalysts.personal_service import PersonalCatalystService
 from app.services.catalysts.config import CatalystSettings

@@ -17,7 +17,7 @@ from app.services.ai_jobs import repository as ai_jobs_repository_module
 from app.services.ai_jobs.repository import AIJobRepository
 from app.services.catalysts import local_intelligence as local_module
 from app.services.catalysts.errors import CatalystError
-from app.services.catalysts.etl_client import CalendarPage, NewsChangesPage
+from app.services.catalysts.ingest_models import CalendarPage, NewsChangesPage
 from app.services.catalysts.etl_repository import CatalystEtlRepository
 from app.services.catalysts.local_intelligence import (
     HOTSPOT_WAITING,

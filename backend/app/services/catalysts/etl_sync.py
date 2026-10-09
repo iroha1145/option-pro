@@ -5,8 +5,6 @@ from dataclasses import dataclass
 from typing import Any, Callable, Literal, TypeVar
 
 from .etl_client import (
-    CALENDAR_PAGE_LIMIT,
-    NEWS_PAGE_LIMIT,
     EtlClientError,
     EtlCursorResetRequired,
     EtlResponseTooLarge,
@@ -19,6 +17,7 @@ from .etl_repository import (
     EtlWatermarkConflict,
     StreamName,
 )
+from .ingest_models import CALENDAR_PAGE_LIMIT, NEWS_PAGE_LIMIT
 
 
 MIN_NEWS_PAGE_LIMIT = 50
