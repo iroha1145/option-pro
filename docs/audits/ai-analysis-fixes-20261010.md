@@ -145,7 +145,7 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
 `python -m app.tools.recover_ai_schema_results` 新增 `--failed-since`（可配 `--job-type`、`--limit`）：选出该时刻之后失败、错误码属于可恢复类（`schema_validation_failed`、`provider_unavailable`、`local_storage_error`）、结果为空且本地存有供应商回执的任务，用本地回执按现行校验重验。不加 `--apply` 只试运行，逐条列出将要发布的叙述字段（`narrative`：结果里每个含汉字的字符串，按字段路径列出，例如 `summary_zh`、`key_factors[0]`、`affected_stocks[1].reason`）。加上 `--apply` 后写回为 completed，计费、用量与回执原样保留，不发任何供应商请求。标准输出是逐条结果；标准错误先给出按任务类型的可找回条数，超出 `--limit` 时说明还有多少条没选上，最后是按状态的计数。`--limit` 只接受 1 至 100,000 的整数，越界是用法错误（退出码 2）。不加 `--job-type` 时选中所有任务类型。
 
 - `--apply` 只能在包含审查修正的版本上执行（至少到 B3 的 `98ee088a`）。审查实测，修正前的校验会把含「盘前TSLA +3.5%，港股09888百度集团盘中走高。」的回执原样发布。
-- Luna（除最早的不联网旧版）、Haiku、Sonnet 的失败行都有本地回执。
+- Luna（除最早的不联网旧版）、Haiku、Sonnet 的失败行都有本地回执。其中引用了本次没取回的站点、或带路径网址的 Luna 回执，复核 N2 之后重验仍会失败，试运行里会显示为 `validation_failed`。
 - Terra 与最早的 Luna 旧版没有本地回执，只能逐个 `--job-id`，工具会向 OpenAI 取回已存的响应（不重新生成，不计费）；本次不建议批量做。
 - 测试：用 3 条生产 Luna 回执构造失败行，试运行全部 validated，`--apply` 后 completed，结果通过新校验；没有回执的行不会被批量选中。
 - 与历史清理一致：新闻与热点的清理（`prune_scheduled_history`）永不删除带回执的失败任务，找回工具能选中的行都在保留范围内。财报另有 30 天保留（`prune_earnings_retention`），旧回执会被删除，财报不在本次范围。
