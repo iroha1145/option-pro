@@ -4035,8 +4035,17 @@ class LocalCatalystIntelligence:
         *,
         as_of: datetime,
         window_hours: int | None = None,
+        shared: bool = False,
     ) -> tuple[list[dict[str, Any]], tuple[Any, ...] | None]:
-        """Rows plus their cacheable cursor; None forbids shared item backfill."""
+        """Rows plus their cacheable cursor; None forbids shared item backfill.
+
+        ``shared`` returns the cached row objects themselves; such a caller
+        only reads them.
+        """
+
+        def handed_out(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            return rows if shared else [_copy_revision_row(row) for row in rows]
+
         key = self._revision_cache_key(as_of=as_of, window_hours=window_hours)
         if key is not None:
             with _REVISION_CACHE_LOCK:
@@ -4059,10 +4068,7 @@ class LocalCatalystIntelligence:
             if cached is not None and _revision_cache_fresh(
                 cached, store_cursor, as_of=as_of
             ):
-                return (
-                    [_copy_revision_row(row) for row in cached["rows"]],
-                    cached["cursor"],
-                )
+                return handed_out(cached["rows"]), cached["cursor"]
         if later_snapshot:
             return self._active_revisions_query(
                 connection, as_of=as_of, window_hours=window_hours
@@ -4080,8 +4086,8 @@ class LocalCatalystIntelligence:
             # as_of (near-now keys omit as_of). Adopting those rows lets
             # visible pagination consume a slot that is hidden at this as_of,
             # then skip the last original item on the historical cursor page.
-            return [_copy_revision_row(row) for row in built_rows], None
-        return [_copy_revision_row(row) for row in built_rows], store_cursor
+            return handed_out(built_rows), None
+        return handed_out(built_rows), store_cursor
 
     def _active_revision_bundle(
         self,
@@ -4097,8 +4103,10 @@ class LocalCatalystIntelligence:
         the same cache entry. Owner reads always get items=None and rebuild
         with live job state; so do historical (non-cacheable) reads.
 
-        A complete anonymous hot hit fingerprints once, then copies rows and
-        items from the same locked entry so they cannot come from different
+        Rows and items are shared with the cache entry: callers only read
+        them and copy the items they return (one page instead of the window).
+        A complete anonymous hot hit fingerprints once and returns rows and
+        items of the same locked entry, so they cannot come from different
         store versions. Incomplete or missing entries fall through to the
         original slow path (which fingerprints again after the query).
         """
@@ -4130,15 +4138,9 @@ class LocalCatalystIntelligence:
                             cached.get("rows") or (),
                         )
                     ):
-                        return (
-                            [_copy_revision_row(row) for row in cached["rows"]],
-                            [
-                                _copy_feed_item(item)
-                                for item in cached["anon_items"]
-                            ],
-                        )
+                        return cached["rows"], cached["anon_items"]
         rows, source_cursor = self._active_revisions_tracked(
-            connection, as_of=as_of, window_hours=window_hours
+            connection, as_of=as_of, window_hours=window_hours, shared=True
         )
         if not want_items:
             return rows, None
@@ -4160,9 +4162,7 @@ class LocalCatalystIntelligence:
                 and cached["rows"] == rows
                 and _anon_items_match_rows(cached.get("anon_items"), cached.get("rows") or ())
             ):
-                return rows, [
-                    _copy_feed_item(item) for item in cached["anon_items"]
-                ]
+                return rows, cached["anon_items"]
         built_items = [
             self._item(connection, row, as_of=as_of, jobs=None)
             for row in rows
@@ -4179,9 +4179,7 @@ class LocalCatalystIntelligence:
                     and cached["rows"] == rows
                     and _anon_items_match_rows(built_items, cached.get("rows") or ())
                 ):
-                    cached["anon_items"] = [
-                        _copy_feed_item(item) for item in built_items
-                    ]
+                    cached["anon_items"] = built_items
         return rows, built_items
 
     def _data_through(self, connection: sqlite3.Connection) -> str | None:
@@ -5296,7 +5294,10 @@ class LocalCatalystIntelligence:
                 continue
             filtered.append(item)
         scan_limit = VISIBLE_FEED_SCAN_BUDGET if page_mode == "visible" else limit
-        page = filtered[offset : offset + scan_limit]
+        page = [
+            _copy_feed_item(item)
+            for item in filtered[offset : offset + scan_limit]
+        ]
         consumed = len(page)
         has_more = offset + consumed < len(filtered)
         analyzed = [item for item in filtered if _published_analysis(item)]
@@ -5493,7 +5494,7 @@ class LocalCatalystIntelligence:
                     if row is None or int(row.get("source_count") or 0) < 2:
                         continue
                 filtered.append(item)
-            page = filtered[:limit]
+            page = [_copy_feed_item(item) for item in filtered[:limit]]
             analyzed = [item for item in filtered if _published_analysis(item)]
             directional_scores = [
                 score

@@ -319,3 +319,92 @@ def test_quality_rules_version_is_pinned_to_the_rule_source() -> None:
         "news-quality-v1",
         "53ddf2ec55d941884b4b7327df76744a8ec7554de1cadc67448196a51333cced",
     )
+
+
+def _analyzed_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from test_catalyst_local_intelligence import (
+        _apply_news,
+        _finish_job,
+        _news_change,
+        _news_result,
+    )
+
+    from app.services.ai_jobs import repository as ai_repository_module
+
+    monkeypatch.setattr(local_module, "_utc_now", lambda: NOW)
+    monkeypatch.setattr(ai_repository_module, "_utcnow", lambda: NOW - timedelta(minutes=2))
+    intelligence = _stack(tmp_path)
+    etl = CatalystEtlRepository(intelligence.db_path)
+    _apply_news(
+        etl,
+        [
+            _news_change(index, 300 + index, available_at=NOW - timedelta(minutes=10 + index))
+            for index in range(1, 13)
+        ],
+        as_of=NOW - timedelta(minutes=5),
+    )
+    intelligence.reconcile()
+    for news_id in (301, 302, 303):
+        job = intelligence.request_analysis(news_id, force=False)
+        _finish_job(
+            intelligence.ai_repository,
+            job["job_id"],
+            _news_result(
+                news_id=news_id,
+                change_sequence=news_id - 300,
+                content_hash=f"hash-{news_id}-{news_id - 300}",
+            ),
+        )
+    intelligence.reconcile()
+    local_module._reset_revision_cache()
+    return intelligence
+
+
+def test_anonymous_hot_feed_copies_only_the_returned_page(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    intelligence = _analyzed_store(tmp_path, monkeypatch)
+    copies = 0
+    original = local_module._copy_feed_item
+
+    def counted(item):
+        nonlocal copies
+        copies += 1
+        return original(item)
+
+    monkeypatch.setattr(local_module, "_copy_feed_item", counted)
+    with request_owner_access_context(False):
+        cold = intelligence.feed(as_of=NOW, window_hours=24, limit=4)
+        assert cold["summary"]["count"] == 12
+        assert len(cold["items"]) == 4
+        copies = 0
+        hot = intelligence.feed(as_of=NOW, window_hours=24, limit=4)
+    assert copies == 4
+    assert [item["news_id"] for item in hot["items"]] == [item["news_id"] for item in cold["items"]]
+
+
+def test_anonymous_callers_cannot_mutate_the_cached_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    intelligence = _analyzed_store(tmp_path, monkeypatch)
+    with request_owner_access_context(False):
+        first = intelligence.feed(as_of=NOW, window_hours=24, limit=20)
+        pristine = [dict(item) for item in first["items"]]
+        for item in first["items"]:
+            item["title"] = "tampered"
+            item["source_tickers"].append("HACK")
+            if isinstance(item.get("analysis"), dict):
+                item["analysis"]["classification"] = "tampered"
+                item["analysis"]["affected_stocks"].append({"ticker": "HACK"})
+        second = intelligence.feed(as_of=NOW, window_hours=24, limit=20)
+        batch = intelligence.batch(["NVDA", "AMD"], as_of=NOW, window_hours=24, limit=20)
+    analyzed = [item for item in second["items"] if isinstance(item.get("analysis"), dict)]
+    assert len(analyzed) == 3
+    for fresh, before in zip(second["items"], pristine):
+        assert fresh["title"] == before["title"] != "tampered"
+        assert "HACK" not in fresh["source_tickers"]
+    for item in analyzed:
+        assert item["analysis"]["classification"] != "tampered"
+        assert all(stock.get("ticker") != "HACK" for stock in item["analysis"]["affected_stocks"])
+    nvda_items = batch["results"]["NVDA"]["items"]
+    assert nvda_items and all(item["title"] != "tampered" for item in nvda_items)
