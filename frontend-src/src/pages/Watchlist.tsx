@@ -367,7 +367,8 @@ function WatchCard({
         <LiveChange symbol={item.ticker} fallback={item.changePct} fallbackAt={item.updatedAt} size="sm" />
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="metric-value text-data-l text-ink-900 tnum"><LivePrice symbol={item.ticker} fallback={item.price} fallbackAt={item.updatedAt} /></p>
+        {/* 多列卡片里报价说明固定排在价格下面：参考价换成实时报价时说明变长，跟价格挤一行会把行业标签挤到下一行，整排卡片一起变高。 */}
+        <p className="metric-value text-data-l text-ink-900 tnum"><LivePrice symbol={item.ticker} fallback={item.price} fallbackAt={item.updatedAt} className="sm:flex-col sm:items-start sm:gap-y-0.5" /></p>
         {item.sector && <SoftBadge className="max-w-[60%]" title={t(item.sector)}><span className="truncate">{t(item.sector)}</span></SoftBadge>}
       </div>
       {!Number.isFinite(item.price) && <p className="mt-2 text-caption text-ink-400">{t('暂无行情')}</p>}
