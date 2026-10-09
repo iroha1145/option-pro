@@ -501,3 +501,114 @@ def test_mirror_window_predicate_matches_the_journal_at_every_as_of(
     assert (403, 5, "hash-403-5") in observed
     assert (404, 7, "hash-404-7") in observed and (404, 8, "hash-404-8") in observed
     assert (405, 9, "hash-405-9") in observed
+
+
+def _ingest_steps(intelligence: LocalCatalystIntelligence) -> tuple[int, int]:
+    steps = 0
+
+    def tick() -> int:
+        nonlocal steps
+        steps += 1
+        return 0
+
+    with intelligence._connect() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        connection.set_progress_handler(tick, 1)
+        inserted, _watermark = intelligence._ingest_revisions(connection)
+        connection.set_progress_handler(None, 0)
+        connection.rollback()
+    return inserted, steps
+
+
+def _journal_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, count: int):
+    from test_catalyst_local_intelligence import _apply_news, _news_change
+
+    monkeypatch.setattr(local_module, "_utc_now", lambda: NOW)
+    intelligence = _stack(tmp_path)
+    etl = CatalystEtlRepository(intelligence.db_path)
+    for start in range(1, count + 1, 250):
+        _apply_news(
+            etl,
+            [
+                _news_change(sequence, 1000 + sequence, available_at=NOW - timedelta(minutes=30))
+                for sequence in range(start, min(count, start + 249) + 1)
+            ],
+            as_of=NOW - timedelta(minutes=20),
+        )
+    intelligence.reconcile()
+    return intelligence, etl
+
+
+def test_ingest_after_the_first_pass_reads_only_new_journal_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    small, _ = _journal_store(tmp_path / "small", monkeypatch, 40)
+    large, _ = _journal_store(tmp_path / "large", monkeypatch, 800)
+    small_inserted, small_steps = _ingest_steps(small)
+    large_inserted, large_steps = _ingest_steps(large)
+    assert small_inserted == large_inserted == 0
+    # Twenty times the history, same work: the anti-join starts above the
+    # watermark instead of walking the whole journal inside the write lock.
+    assert large_steps == small_steps
+
+
+def test_ingest_picks_up_new_changes_and_rescans_after_a_cursor_reset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from test_catalyst_local_intelligence import _apply_news, _news_change
+
+    intelligence, etl = _journal_store(tmp_path, monkeypatch, 5)
+    _apply_news(
+        etl,
+        [_news_change(6, 1006, available_at=NOW - timedelta(minutes=10))],
+        as_of=NOW - timedelta(minutes=9),
+    )
+    intelligence.reconcile()
+    with intelligence._connect() as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM catalyst_local_news_revisions"
+        ).fetchone()[0] == 6
+        # A revision missing below the watermark (the replay case after a
+        # cursor reset) is not seen until the reset changes the stream state.
+        connection.execute("DELETE FROM catalyst_local_news_revisions WHERE news_id=1002")
+        connection.commit()
+    intelligence.reconcile()
+    with intelligence._connect() as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM catalyst_local_news_revisions WHERE news_id=1002"
+        ).fetchone()[0] == 0
+    etl.reset_cursor("news", error_code="test_reset")
+    intelligence.reconcile()
+    with intelligence._connect() as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM catalyst_local_news_revisions WHERE news_id=1002"
+        ).fetchone()[0] == 1
+
+
+def test_failed_reconcile_does_not_advance_the_ingest_watermark(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from test_catalyst_local_intelligence import _apply_news, _news_change
+
+    intelligence, etl = _journal_store(tmp_path, monkeypatch, 3)
+    before = intelligence._ingest_watermark
+    _apply_news(
+        etl,
+        [_news_change(4, 1004, available_at=NOW - timedelta(minutes=10))],
+        as_of=NOW - timedelta(minutes=9),
+    )
+
+    def broken(*_args, **_kwargs):
+        raise RuntimeError("publish failed")
+
+    monkeypatch.setattr(intelligence, "_publish_completed_news", broken)
+    with pytest.raises(RuntimeError, match="publish failed"):
+        intelligence.reconcile()
+    assert intelligence._ingest_watermark == before
+    monkeypatch.undo()
+    monkeypatch.setattr(local_module, "_utc_now", lambda: NOW)
+    intelligence.reconcile()
+    with intelligence._connect() as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM catalyst_local_news_revisions WHERE news_id=1004"
+        ).fetchone()[0] == 1

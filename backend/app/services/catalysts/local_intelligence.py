@@ -1767,6 +1767,9 @@ class LocalCatalystIntelligence:
         self._local_schema_ready = False
         self._news_retention_days = _DEFAULT_NEWS_RETENTION_DAYS
         self._quality_backfill_complete = False
+        # (news stream reset_count, journal MAX(change_sequence)) as of the last
+        # committed ingest; a cursor reset replays history and rescans it.
+        self._ingest_watermark: tuple[int | None, int] | None = None
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -2078,22 +2081,49 @@ class LocalCatalystIntelligence:
         news = raw.get("news")
         return news if isinstance(news, dict) else None
 
-    def _ingest_revisions(self, connection: sqlite3.Connection) -> int:
+    def _ingest_revisions(
+        self,
+        connection: sqlite3.Connection,
+    ) -> tuple[int, tuple[int | None, int] | None]:
+        """Insert revisions for journal upserts; returns (count, new watermark).
+
+        Journal sequences only grow between cursor resets, so after the first
+        full pass each reconcile reads only changes above the watermark. The
+        caller adopts the watermark once its transaction commits.
+        """
+
         try:
+            state = connection.execute(
+                "SELECT reset_count FROM macrolens_etl_state WHERE stream='news'"
+            ).fetchone()
+            reset_count = int(state["reset_count"]) if state is not None else None
+            floor = (
+                self._ingest_watermark[1]
+                if self._ingest_watermark is not None
+                and self._ingest_watermark[0] == reset_count
+                else 0
+            )
+            high = int(
+                connection.execute(
+                    "SELECT COALESCE(MAX(change_sequence),0) FROM macrolens_etl_news_changes"
+                ).fetchone()[0]
+            )
             rows = connection.execute(
                 """SELECT c.change_sequence,c.news_id,c.available_at,c.raw_json
                    FROM macrolens_etl_news_changes c
-                   WHERE c.operation='upsert'
+                   WHERE c.change_sequence>?
+                     AND c.operation='upsert'
                      AND NOT EXISTS (
                          SELECT 1 FROM catalyst_local_news_revisions r
                          WHERE r.news_id=c.news_id
                            AND r.change_sequence=c.change_sequence
                      )
-                   ORDER BY c.change_sequence"""
+                   ORDER BY c.change_sequence""",
+                (floor,),
             ).fetchall()
         except sqlite3.OperationalError as error:
             if is_sqlite_lock_contention(error):
-                return 0
+                return 0, None
             raise
         inserted = 0
         observed = _iso()
@@ -2163,7 +2193,7 @@ class LocalCatalystIntelligence:
                 ),
             ).rowcount
             inserted += int(changed)
-        return inserted
+        return inserted, (reset_count, high)
 
     @staticmethod
     def _job_payload(row: dict[str, Any]) -> dict[str, Any] | None:
@@ -4790,7 +4820,7 @@ class LocalCatalystIntelligence:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
-                ingested = self._ingest_revisions(connection)
+                ingested, ingest_watermark = self._ingest_revisions(connection)
                 if analysis_store_available:
                     # Expiry lets a fresh intent replace this one; only decide
                     # that while an owned paid job could still be seen.
@@ -4812,6 +4842,8 @@ class LocalCatalystIntelligence:
             except Exception:
                 connection.rollback()
                 raise
+        if ingest_watermark is not None:
+            self._ingest_watermark = ingest_watermark
         for _plan_attempt in range(3):
             plan_now = max(now, _utc_now())
             with self._connect() as connection:
