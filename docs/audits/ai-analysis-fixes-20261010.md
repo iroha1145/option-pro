@@ -10,7 +10,7 @@
 | `86a05b61` | 找回工具按时间批量重验本地回执 |
 | `3f4507ca` | 热点周期失败时保留原因 |
 
-分支开了 PR #237。独立审查之后又追加了 10 个修正提交，见「审查后的修正」一节；下文各节写的都是修正后的行为。
+分支开了 PR #237。独立审查之后追加了 10 个修正提交，复核之后又追加了 10 个，见「审查后的修正」与「复核后的修正」两节；下文各节写的都是修正后的行为。
 
 ## 结论
 
@@ -45,13 +45,13 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
 ### 1. 括号里的来源域名（Luna 主因）
 
 - 根因：见结论第二条。归一化在 `runtime._normalize_luna_news_citations`。
-- 修法：标签按点号边界比对主机名（`sec.gov` 能匹配 `www.sec.gov`，`ec.gov` 不能），对得上的链接整段去掉；括号里受信的裸网址同样去掉；不在联网记录里的网址照旧以 `ai_news_unbound_or_unhandled_url` 拒绝，不为了过中文校验抹掉未核实的来源。括号里只写域名的来源标注（含「来源：」前缀、多个域名用顿号分隔），只有每个域名都与本次联网工具实际取回的来源主机按点号边界一致时才去掉。中文校验器本身不删除任何括号内容。
-- 测试：10 条生产回执重放；标签与链接不符时标签留在原文，交给中文校验按既有规则判断；可信与不可信裸网址；不属于本次联网来源的括号域名，以及「（node.js）」「（sec.gov/news.html）」这类括号内容原样保留，由中文校验决定。
+- 修法：标签按点号边界比对主机名（`sec.gov` 能匹配 `www.sec.gov`，`ec.gov` 不能），对得上的链接整段去掉；括号里受信的裸网址同样去掉；不在联网记录里的网址照旧以 `ai_news_unbound_or_unhandled_url` 拒绝，不为了过中文校验抹掉未核实的来源。括号里只写域名的来源标注（含「来源：」前缀、多个域名用顿号分隔），只有每个域名都与本次联网工具实际取回的来源主机按点号边界一致时才去掉。中文校验器本身不删除任何括号内容，但括号里的主机名或网址路径（点号后接两个以上字母，或带斜杠）不算「中文术语（外文标注）」，会被拒绝，例如「（reuters.com）」「（www.nvidia.com/zh-cn）」。
+- 测试：10 条生产回执重放；标签与链接不符时留下的「（ec.gov）」被拒；可信与不可信裸网址；不属于本次联网来源的括号主机名被拒而不是被删。
 
 ### 2. 字段名回显（article、source、http、unsupported）
 
 - 根因：模型复述输入字段名与状态值，例如「输入article标记为……」「article_reason为http_403」「unsupported_encoding」。原有翻译只覆盖少数几个名字，且 `article` 只在正文不可用时翻译。
-- 修法：新闻任务里，与本条载荷字段名、正文字段名、结果字段名或本条状态值逐字相同、而且在固定对照表里的词，译成中文后再做完整的中文校验。article、article_status、article_reason、text 译成新闻正文、正文状态、正文缺失原因、正文；source、url、title、summary 译成来源、网址、标题、摘要；confidence、classification、insufficient_context 译成置信度、判断类别、证据不足；状态值 available、unavailable、truncated、unsupported_encoding 等译成可用、不可用、已截断、编码不支持，`http_403` 译成「状态码403」。译不掉的英文照旧拒绝。`my_article_status` 这类近似写法、「股票代码allowed_tickers」、对不上本条输入的 `http_404` 也照旧拒绝；其他任务类型不做这项翻译。Luna 提示词同时要求不照抄字段名。
+- 修法：新闻任务里，与本条载荷字段名、正文字段名、结果字段名或本条状态值逐字相同、而且在固定对照表里的词，译成中文后再做完整的中文校验。article、article_status、article_reason、text 译成新闻正文、正文状态、正文缺失原因、正文；source、url、title、summary 译成来源、网址、标题、摘要；confidence、classification、insufficient_context 译成置信度、判断类别、证据不足；状态值 available、unavailable、truncated、unsupported_encoding 等译成可用、不可用、已截断、编码不支持，`fetch_failed` 译成「抓取失败」，`http_403` 译成「状态码403」。译不掉的英文照旧拒绝；一个汉字都没有的文本不翻译，直接交给中文校验拒绝（「title summary source url」不会变成中文词串发布）。`my_article_status` 这类近似写法、「股票代码allowed_tickers」、对不上本条输入的 `http_404` 也照旧拒绝；其他任务类型不做这项翻译。Luna 提示词同时要求不照抄字段名。
 - 测试：发布文本逐字断言为正确的中文；带正文时「article text truncated, source title available…」这类英文句子、不是本条状态值的 `available`、单独的 `status` 照旧被拒。
 
 ### 3. 状态码 HTTP 401
@@ -75,14 +75,14 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
 ### 6. 字母评级、利率基准与通用缩写
 
 - 「A+每股收益修正量化评级」：单个字母后接 +/- 与评级词视为等级；「A股价」「A公司」照旧拒绝。
-- 「复合SOFR加1.730%」：只有 SOFR、LIBOR、EURIBOR、SONIA、ESTR、TONA、HIBOR、SHIBOR 这 8 个基准利率名后接加点（%、基点、bp）才豁免；「盘前TSLA +3.5%」这类股票代码加涨跌幅、「股票代码SOFR」照旧要求绑定。
-- 「p<0.001」「n=712」「p值」：只有小写的 p、n、r、t、k、d 接比较号、等号或「值」等才算统计量写法；大写字母接比较号（「F>12美元」，F 是福特汽车的代码）照旧要求绑定。
-- URL（「输入URL」）并入通用技术缩写。IT 不进通用名单，只有后接服务、支出、行业、系统、板块、部门且不在证券语境时放行（IT 也是高德纳的股票代码）。
-- 涨跌词表原有上涨、下跌、涨停、跌停、走强、走弱、收涨、收跌，补上大涨、大跌、暴涨、暴跌、飙升、重挫、跳水、拉升、走高、走低、下挫、反弹、急跌、急涨：外文名或代码后紧跟这些词视为股价表述，要求代码绑定。
+- 「复合SOFR加1.730%」「SOFR上涨5个基点」：SOFR、LIBOR、EURIBOR、SONIA、ESTR、TONA、HIBOR、SHIBOR 这 8 个基准利率名与 CPI 等宏观指标代码走同一条例外，后接加点或涨跌说的是利率本身。证券语境（「股票代码SOFR」「SOFR股价」）仍要求绑定；代码后接公司、集团、企业时指的是公司，也要求绑定（「CPI公司股价下跌」原先能通过）。「盘前TSLA +3.5%」这类股票代码加涨跌幅照旧要求绑定。
+- 「p<0.001」「n=712」「p值」：小写的 p、n、r、t、k、d 接比较号、等号或「值」等算统计量写法；大写的 P、N 接比较号再接数字、数字后不接币种时也算（「P<0.001」「N=712例」）。其他大写字母接比较号（「F>12美元」，F 是福特汽车的代码）、「P<10美元」照旧要求绑定。
+- URL（「输入URL」）并入通用技术缩写。IT 不进通用名单，只有后接服务、支出、行业、系统、板块、部门、基础设施、预算、投入、架构、运维、人员、资产、解决方案且不在证券语境时放行（IT 也是高德纳的股票代码）。
+- 涨跌词表保持原来的上涨、下跌、涨停、跌停、走强、走弱、收涨、收跌。第一轮审查后一度补了 14 个词，复核发现会误伤「IV飙升」「RSI反弹」这类市场术语，已撤回（见「复核后的修正」N1）。
 
 ### 7. 热点周期（market_focus，Sonnet）
 
-- `unbound_numeric_security_code`：错误信息只显示字段开头「（一）电信与消费……」，真正被拒的是同一字段里的「发现矿业股份5000万美元」，另一处是「普通股5000万美元」。数字前是「股份」「普通股」，被当成证券代码。修法：数字后是「量级加币种或股」（5000万美元、300万股），或直接接币种、百分号时才算数量；「股」后接东、本、权、份、票、价不算单位。0 开头的五位数先按港股代码判定；数字前是股票、港股、个股、代码、编号时不豁免。「股票600519上涨」「港股09888百度集团」「腾讯00700股东大会」「证券代码700股价」照旧拒绝。中文序号「（一）」本来就不触发。
+- `unbound_numeric_security_code`：错误信息只显示字段开头「（一）电信与消费……」，真正被拒的是同一字段里的「发现矿业股份5000万美元」，另一处是「普通股5000万美元」。数字前是「股份」「普通股」，被当成证券代码。修法：数字后是「量级加币种或股」（5000万美元、300万股），或直接接币种、百分号时才算数量；「股」后接东、本、权、份、票、价不算单位。0 开头的五位数先按港股代码判定；数字前是股票、港股、个股、代码、编号时不豁免，但「股票」后接「量级加股或币种」、数字又不是六位数时仍算数量（「回购股票1000万股」）。「港股」后的四五位数按港股代码判定（「港股9888百度集团」）。「股票600519上涨」「港股09888百度集团」「腾讯00700股东大会」「证券代码700股价」照旧拒绝。中文序号「（一）」本来就不触发。
 - `english_prose_not_allowed: 'as'`、`catalyst`、`(6)`：来自字段名 `as_of`、`catalyst_bias` 与「(6)公司类事件」。这一条失败在 06:03Z，早于 `ca7c174e`（翻译这些写法）上线；用现行代码重放该样本，这几处都已通过，只剩「IT服务」，见第 6 条。
 - 同一周期还有一处 `english_prose_not_allowed: 'p'`，原文在取证里被截断，看不到；按统计量写法处理了，部署后的找回试运行会给出确认。
 
@@ -130,7 +130,7 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
 | 付费分析最长等待 `openai_background_poll_timeout_seconds` | 1,800 秒 | 3,600 秒 | 到点会取消 OpenAI 后台响应、把 Claude 流（含 Sonnet 热点）记成结果未知，已付费的工作作废。最坏情况是一个卡住的响应多占一个并发槽半小时。 |
 | 仓库默认预算 `[model_budget]` | 0（退回日词元额度 1000 万） | 10 美元、不强制 | 与生产一致：日词元只作统计、不拦截，费用照常记录。服务器部署时保留自己的 personal.toml，本来就是这组值。 |
 
-`daily_token_limit` 的 0 不是「不限」：配置要求 102,400 至 100,000,000，0 会被校验直接拒绝；日额度只在 `model_budget.daily_budget_usd = 0` 时拦截。`budget_blocked` 是终态，不占队列；新闻调度在下一个 UTC 日重试前一天被拦的任务，财报同日内视为已存在、次日重试，10-08 的旧行不会再被当作活跃任务。
+`daily_token_limit` 的 0 不是「不限」：配置要求 102,400 至 100,000,000，0 会被校验直接拒绝；日额度只在 `model_budget.daily_budget_usd = 0` 时拦截，这时额度还不能低于单条任务的最大预留 1,050,000，否则配置校验报错（复核建议 8）。`budget_blocked` 是终态，不占队列；新闻调度在下一个 UTC 日重试前一天被拦的任务，财报同日内视为已存在、次日重试，10-08 的旧行不会再被当作活跃任务。
 
 查过、维持不变的时限：
 
@@ -160,7 +160,7 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
 
 独立审查看的是变基前的 `9572206a`，给出 3 个阻塞项、4 个应修项和 5 条建议。修正都追加在 `b21cf87c` 之后，没有改写历史。下面每项列提交、改动和反例测试。
 
-反例测试除注明的以外都在 `tests/test_ai_review_fixes_20261010.py`。每一条都在审查前的代码 `b21cf87c` 上跑过，确认会失败。同一文件里还有正向用例和红线用例，修正前后都通过，用来确认没有改过头。整份文件 66 项，在 `b21cf87c` 上 46 项失败、20 项通过，在现在的代码上全部通过。
+反例测试除注明的以外都在 `tests/test_ai_review_fixes_20261010.py`。每一条都在审查前的代码 `b21cf87c` 上跑过，确认会失败。同一文件里还有正向用例和红线用例，修正前后都通过，用来确认没有改过头。第一轮修完时整份文件 66 项，在 `b21cf87c` 上 46 项失败、20 项通过。复核后其中三处预期有改动，见「复核后的修正」。
 
 ### 阻塞项
 
@@ -175,15 +175,15 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
 | 项 | 提交 | 改动 | 反例测试 |
 | --- | --- | --- | --- |
 | S1 付费等待被任务超时压住 | `d05f4564` | ai_jobs 任务超时 2,000 秒改为 3,900 秒；Claude 流截止取付费等待时限与「任务超时减 300 秒」的较小者。任务超时没有其他文档或测试镜像。 | `test_s1_ai_jobs_pass_outlasts_the_default_paid_wait`；`test_s1_paid_stream_deadline_stays_inside_the_pass`（3 种等待时限） |
-| S2 IT 与涨跌词表的缺口 | `f6169672` | IT 移出通用缩写名单，只在信息技术搭配里放行；涨跌词表补上 14 个词。 | `test_s2_price_moves_and_it_outside_its_phrases_need_binding`（5 句，3 句在旧代码上失败，「股票代码IT服务」「股票600519大涨」是红线用例）。正向：`test_s2_it_phrases_still_pass` |
-| S3 大写字母接比较号一律放行 | `b7b6e517` | 比较号豁免只给小写的 p、n、r、t、k、d。 | `test_s3_upper_case_letters_and_other_symbols_take_no_comparison_exemption`（4 句）。正向：`test_s3_statistic_notation_still_passes` |
+| S2 IT 与涨跌词表的缺口 | `f6169672` | IT 移出通用缩写名单，只在信息技术搭配里放行；涨跌词表补上 14 个词（复核后撤回，见 N1）。 | 现名 `test_s2_it_outside_its_phrases_needs_binding`（复核后去掉「Apple暴跌拖累科技股」，余 4 句，「股票代码IT服务」「股票600519大涨」是红线用例）。正向：`test_s2_it_phrases_still_pass` |
+| S3 大写字母接比较号一律放行 | `b7b6e517` | 比较号豁免只给小写的 p、n、r、t、k、d（复核后大写 P、N 在接数字时也放行，见建议 1）。 | 现名 `test_s3_ticker_letters_and_other_symbols_take_no_comparison_exemption`（复核后「试验结果P<0.001」移到通过一侧，余 3 句）。正向：`test_s3_statistic_notation_still_passes` |
 | S4 找回工具看不到要发布的内容 | `c9e40ba1` | 试运行逐条列出 `narrative`；标准错误给出按任务类型的条数和超出 `--limit` 的剩余条数；`--limit` 在参数解析时校验 1 至 100,000。 | `test_s4_dry_run_shows_the_text_apply_then_publishes`；`test_s4_rows_beyond_the_limit_are_reported`；`test_s4_limit_outside_its_range_is_a_usage_error`（0、100001、-1 在旧代码上抛回溯；非数字修正前后都是用法错误）。`tests/test_ai_jobs.py` 里试运行的断言随之改为检查 `narrative` |
 
 ### 建议
 
 | 项 | 提交 | 改动 | 反例测试 |
 | --- | --- | --- | --- |
-| 括号域名会删掉不是域名的内容 | `f9251db5` | 中文校验器不再删除括号内容；只有 Luna 回执里与本次联网来源主机一致的括号域名才去掉。 | `test_bracketed_text_that_is_not_a_retrieved_site_is_not_deleted`（2 句）；`tests/test_ai_analysis_fixes_20261010.py` 的 `test_bracketed_domains_without_a_retrieved_site_stay_for_the_language_gate`（2 句）与 `test_domain_label_must_name_the_linked_site` |
+| 括号域名会删掉不是域名的内容 | `f9251db5` | 中文校验器不再删除括号内容；只有 Luna 回执里与本次联网来源主机一致的括号域名才去掉。 | 现名 `test_bracketed_hosts_that_are_not_retrieved_sites_are_rejected_not_deleted`（2 句，复核后改为断言拒绝，见 N2）；`tests/test_ai_analysis_fixes_20261010.py` 的 `test_bracketed_domains_without_a_retrieved_site_stay_for_the_language_gate`（2 句）与 `test_domain_label_must_name_the_linked_site` |
 | 「有没有正文」两处口径不同 | `79f31734` | 发布时的两处判断与 Claude 工具判断都改用 `news_article_available`。 | `test_a_blank_article_body_counts_as_missing_when_publishing` |
 | Luna 上下文窗口 | `5bfbd921` | 核对官方模型页后，联网输入上界按 1,050,000 计；缺正文身份随之变为 `cda8f76d…`。依据与数字见「Luna 联网门控」。 | `test_luna_search_reservation_uses_the_published_context_window` |
 | 当日词元账的方向写反 | 本次文档提交 | 审查时是每条在途的有正文任务少记 11,264（提交预留 139,264，账按 128,000）。上下文窗口修正后，同一口径变为每条多记 910,736。按审查意见只改文档。 | 无（未改代码） |
@@ -195,7 +195,41 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
 - B2：审查列的数量写法是「量级加币种或股」和「直接接币种」。这里另外保留了百分号（「股份5%」），因为百分比不会是证券代码。证券前缀与 0 开头五位数的检查排在它前面，「股票600519%」「港股09888%」仍按代码判定。
 - S4：审查没有要求改「不加 `--job-type` 时选中所有任务类型」，这里保留这个行为，只在标准错误里按任务类型列出条数。
 
+## 复核后的修正
+
+复核在 `414be099` 上跑了 134 条样本，并用 183 个白名单名称逐个接 14 个新增涨跌词扫描，给出 1 个阻塞项、1 个应修项和 9 条建议。修正追加在 `414be099` 之后，没有改写历史。反例测试除注明的以外都在 `tests/test_ai_review_round2_20261010.py`，都在 `414be099` 的导出树上确认过会失败；正向和红线用例修正前后都通过。整份文件 133 项，在 `414be099` 上 101 项失败、32 项通过，在现在的代码上全部通过。
+
+| 项 | 提交 | 改动 | 反例测试 |
+| --- | --- | --- | --- |
+| N1 涨跌词表扩充误伤市场术语（阻塞） | `e15f4277` | 撤回 `f6169672` 补的 14 个涨跌词，恢复原来的 8 个；IT 的后缀限定保留，「高德纳（IT）暴跌20%」照旧被拒。 | `test_n1_review_sentences_publish_in_every_task`（复核给的 17 句，期权、信号、新闻各验一次）；`test_n1_market_vocabulary_takes_movement_words_in_every_task`（市场术语、宏观指标代码、基准利率名、技术术语接大涨、暴跌、飙升、反弹、走高、走低）；`test_n1_no_whitelisted_name_is_rejected_for_a_common_movement_word`（白名单逐个名称接 10 个常见涨跌词）。红线：`test_n1_unbound_codes_stay_rejected` |
+| N2 紧跟中文的括号主机名照常发布（应修） | `b9b04f04` | 「中文术语（外文标注）」通道拒绝主机名形状的片段：点号后接两个以上字母，或含斜杠。Luna 的引用归一化不变。 | `test_n2_bracketed_host_names_are_not_published`（6 句，新闻与热点各验一次）；`test_n2_luna_hosts_other_than_a_retrieved_bare_domain_are_rejected`（2 句）。正向：`test_n2_a_retrieved_bare_domain_is_still_removed`、`test_n2_term_glosses_still_publish` |
+| 建议 1 大写 P、N 统计写法 | `203da258` | P、N 接比较号再接数字、数字后不接币种时放行。 | `test_s1r2_upper_case_p_and_n_statistics_publish`（4 句）。红线：`test_s1r2_a_letter_compared_with_a_price_still_needs_binding` |
+| 建议 2 「股票」后的股数 | `deca6ddd` | 「股票」后接量级加股或币种、数字不是六位数时算数量。 | `test_s2r2_share_counts_after_the_word_stock_publish`（4 句）。红线：`test_s2r2_code_shaped_numbers_after_the_word_stock_still_need_binding` |
+| 建议 3 IT 搭配 | `004264fa` | 补基础设施、预算、投入、架构、运维、人员、资产、解决方案。 | `test_s3r2_more_it_phrases_publish`（8 句）。红线：`test_s3r2_it_in_security_context_still_needs_binding` |
+| 建议 4 fetch_failed | `b4947b62` | 译成「抓取失败」，只在它是本条载荷自己的原因时翻译。 | `test_s4r2_fetch_failed_is_published_in_chinese`。红线：`test_s4r2_fetch_failed_is_translated_only_when_it_is_this_payloads_reason` |
+| 建议 5 四位港股代码 | `2c27b78a` | 「港股」「港股代码」后的四五位数、后面不是数量写法时要求绑定。 | `test_s5r2_four_digit_hong_kong_codes_need_binding`（2 句，新闻与热点各验一次）。正向：`test_s5r2_months_counts_and_years_after_hong_kong_stocks_publish` |
+| 建议 6 没有汉字的文本不翻译 | `db1c5773` | `_translate_news_metadata` 遇到一个汉字都没有的文本原样返回，交给中文校验拒绝。 | `test_s6r2_text_without_chinese_is_rejected_not_translated`（3 条）。正向：`test_s6r2_field_names_inside_chinese_text_are_still_translated` |
+| 建议 7 基准利率名接涨跌 | `013b925e` | 8 个基准利率名同时列入白名单与宏观指标代码，走同一条例外；B1 加的利差分支不再会被走到，删除；代码后接公司、集团、企业时不算指标。 | `test_s7_benchmark_rates_take_the_original_movement_words`（4 句，期权、信号、新闻各验一次）；`test_s7_security_context_still_needs_binding` 里的「CPI公司股价下跌」，其余 4 句是红线用例 |
+| 建议 8 只用日词元额度时的门槛 | `e23f0fdf` | 共享预算为 0 时，`ai.daily_token_limit` 低于 1,050,000 是配置错误，报错写明两个数和两种改法。 | `test_s8r2_token_only_budget_below_one_task_is_a_config_error`（102,400 与 1,049,999）；`test_s8r2_the_config_mirror_is_the_largest_task_reservation`。正向：`test_s8r2_limits_that_admit_one_task_or_a_shared_budget_are_accepted` |
+| 建议 9 停机时的等待 | 本次文档提交 | 写进「部署后操作」。 | 无（未改代码） |
+
+第一轮测试随之改了三处预期：
+
+- S2 去掉「Apple暴跌拖累科技股」：词表恢复后它与基线一样通过。测试改名为 `test_s2_it_outside_its_phrases_needs_binding`。
+- S3 的「试验结果P<0.001」从拒绝一侧移到通过一侧。拒绝一侧改名为 `test_s3_ticker_letters_and_other_symbols_take_no_comparison_exemption`。
+- 括号里的「（node.js）」「（sec.gov/news.html）」从「原样保留」改为断言拒绝，测试改名为 `test_bracketed_hosts_that_are_not_retrieved_sites_are_rejected_not_deleted`。`test_domain_label_must_name_the_linked_site` 里标签对不上链接时留下的「（ec.gov）」也改为断言拒绝。
+
+### 与复核原文不同的地方
+
+- 建议 5：没有把「港股」整个加进最后一步的前缀表，只对四五位数这样判定。数字规则检查 1 至 12 位的所有数字，整个加进去会误伤「港股10月以来累计上涨」「港股3只科技股走强」。
+- 建议 7：按「走宏观指标代码那套例外」做，8 个名称列进了白名单，白名单从 183 个名称变为 191 个。这与「不加实体白名单」的原则不一致，是按复核的决定做的。
+- 建议 8：配置层按既有约定不引用服务层，门槛写成字面量 1,050,000（所有任务类型与模型里的最大预留），由测试核对它与 `runtime.token_reservation` 一致。只配 Claude 模型时实际最大预留是 1,000,000，这时 1,000,000 至 1,049,999 之间的额度也会被拒。
+- 建议 6：只改了新闻的翻译。热点的 as_of、catalyst_bias 等翻译是基线代码，没有加这项检查。
+- N2 的代价：带点号或斜杠的外文标注也会被拒，例如「（node.js）」「（ASP.NET）」「（TCP/IP）」。Luna 回执里引用了本次没取回的站点、或带路径的网址时，结果判 `schema_validation_failed`，找回工具也救不回来，这是复核要的结果。10 条生产 Luna 回执的重放不受影响。
+
 ## 部署后操作
+
+部署或重启时，worker 会等正在跑的付费分析做完再退出。ai_jobs 一整轮的任务超时是 3,900 秒，碰上长的 Claude 流最长要等约 65 分钟；compose 给 worker 的 `stop_grace_period` 是 7,500 秒，不会中途被强制结束。
 
 1. 部署后核对服务器 `config/personal.toml` 仍是 `[model_budget] daily_budget_usd = 10.0`、`enforce_limit = false`。
 2. 找回试运行（只读），在挂载 `/data`、能导入 `app` 的后端容器里执行（容器内若找不到 `app` 模块，按服务进程的工作目录补 `-w` 或 `PYTHONPATH`）：
@@ -210,8 +244,7 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
    看标准错误输出里的计数，逐条看 `narrative` 里将要发布的文字，以及 `validation_failed` 各条的 `error`。按取证的 72 小时数字估算，有本地回执的约为 Luna 新闻 171 条、Haiku 新闻 458 条、Sonnet 热点 2 条（7 天窗口会更多；默认最多选 2,000 条，超过时标准错误会给出剩余条数，再调大 `--limit`）；Terra 新闻 110 条没有回执，不会被选中。
    确认后加 `--apply`，在任务少的时段执行；要分批就按 `--job-type` 分开跑（重验不通过的行会留在失败状态，下次仍会被选中，所以不要靠 `--limit` 反复跑来分批）。每条恢复各占一次很短的 ai-jobs.db 写事务，worker 的 `claim_due` 近期有过 `database is locked`，执行时留意 worker 日志。
    退出码只有在选中的每一条都 validated 或 recovered 时才是 0：有任何一条 `validation_failed` 是 1，选不出任何行（输出 `[]`，例如已经处理完）也是 1。
-3. 涨跌词表补全只会让判定更严。已发布的旧结果里如果有「外文名＋大涨、暴跌等」，而这个名字不在该条的允许代码里，新闻列表仍照常展示这条分析，也不会因此新建付费任务：之前通过过校验的付费结果跨规则变化保留，热点周期走同样的保留逻辑（`_audit_published_focus_results`）。只有按任务读取的接口会隐藏这条结果，回退记录里记为 `ai_job_result_hidden`。部署后看这类记录有多少。新闻这一点用本地实验确认过：旧规则下发布含「Apple暴跌」的结果，换成新规则重建服务后，列表仍有分析，`request_analysis` 返回原任务，`ai_jobs` 仍只有 1 行。
-4. 观察（只读 SQL，`:deployed` 填部署时刻）：
+3. 观察（只读 SQL，`:deployed` 填部署时刻）：
 
    ```sql
    -- 新闻按模型、状态、错误码
@@ -244,6 +277,7 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
 - 新增回归测试 76 项；更新了 9 个已有测试文件里写死旧策略的断言（32,768 上限、Luna 一律联网、Terra 旧身份哈希、默认无共享预算、预留函数的测试替身签名）。
 - `python -m compileall -q backend/app` 通过。
 - 审查修正后（代码到 `5bfbd921`）：完整后端测试 6,526 通过、7 跳过（7 个子测试通过），比变基后多 68 项；`compileall backend/app scripts` 通过，`git diff --check 82e2312d...HEAD` 干净。审查反例文件 66 项，在 `b21cf87c` 上 46 项失败、20 项通过（正向与红线用例），在现在的代码上全部通过。三个库的建表文本、版本名与校验和没有变动。
+- 复核修正后（代码到 `e23f0fdf`）：完整后端测试 6,658 通过、7 跳过（7 个子测试通过），比第一轮修正后多 132 项；`compileall backend/app scripts` 通过，`git diff --check 82e2312d...HEAD` 干净；建表文本、版本名与校验和仍没有变动。
 
 ## 未覆盖
 
@@ -252,4 +286,4 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
 - `news_identity_mismatch` 未诊断。
 - 当日词元账对在途的 Luna 有正文任务按缺正文口径计入，每条多记 910,736 词元；只在只用日词元额度拦截时有影响，共享预算启用后该账只作统计（见「Luna 联网门控」）。
 - 缺正文身份 `e46819f9…` 没有列进上一版名单，依据是它不在 origin/main 上。如果 PR 分支在合并前曾单独部署过，需要把它加进 `_IDENTITY_PREDECESSORS`，否则那段时间建的待处理任务会判 `runtime_configuration_changed`。
-- 涨跌词表补全后，生产里有多少已发布结果会在按任务读取的接口里被隐藏，本地无法统计，只能部署后看 `ai_job_result_hidden`。新闻列表与热点周期不受影响，也不会因此重做。
+- 热点（market_focus）的翻译没有「无汉字不翻译」的检查，见「复核后的修正」。
