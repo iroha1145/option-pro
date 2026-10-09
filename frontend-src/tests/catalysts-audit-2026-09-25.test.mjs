@@ -1034,6 +1034,9 @@ function pageHarness({ search: initialSearch = '', owner = false, accessLoading 
   const runner = createReactStub();
   runner.React.useOptimistic = (value) => [value, () => {}];
   runner.React.startTransition = (fn) => fn();
+  /* 次要栏目、管理面板与详情抽屉按需加载：lazy 直接换成以模块名命名的元素类型。 */
+  runner.React.lazy = (load) => String(load).match(/catalysts\/(\w+)/)[1];
+  runner.React.Suspense = 'Suspense';
   const counts = { clears: 0 };
   const urlWrites = [];
   const components = Object.fromEntries([
@@ -1050,6 +1053,7 @@ function pageHarness({ search: initialSearch = '', owner = false, accessLoading 
     'react-router': { useSearchParams: () => [new URLSearchParams(search), (next) => { urlWrites.push(String(next)); }] },
     '@/hooks/useAccess': { useAccess: () => ({ isOwner: owner, loading: accessLoading }) },
     ...components,
+    '@/components/shared/Skeleton': { SkeletonRows: 'SkeletonRows' },
     '@/lib/aiModelLabel': aiModelLabels,
     '@/lib/format': { fmtTimeHHMMSS: () => 't' },
     '@/components/catalysts/filters': filters,
@@ -1073,6 +1077,8 @@ test('2-E 页面刷新：写操作已清缓存时不再清第二次；页头刷�
   findNode(read(), (node) => node.type === 'button' && /刷新/.test(textOf(node))).props.onClick({ type: 'click' });
   assert.equal(counts.clears, 2);
 
+  assert.equal(findNode(read(), (node) => node.type === 'NewsDrawer'), null, '抽屉第一次打开前不挂载');
+  findNode(read(), (node) => node.type === 'FeedPanel').props.onOpenNews('1');
   const drawer = findNode(read(), (node) => node.type === 'NewsDrawer');
   drawer.props.onUpdate({ newsId: '1', analysisStatus: 'queued' });
   const patches = findNode(read(), (node) => node.type === 'FeedPanel').props.patches;

@@ -3,7 +3,7 @@
  * 状态 hero · 热点带 · 热点追踪卡 · 栏目（feed/stocks/calendar 三项分段 + 「更多」菜单里的 sources/manage，URL 同步）
  * 过滤器条（URL query）· 消息详情抽屉（分析任务状态机）· 空态/骨架/503/移动端
  */
-import { startTransition, useCallback, useEffect, useMemo, useOptimistic, useState } from 'react';
+import { lazy, startTransition, Suspense, useCallback, useEffect, useMemo, useOptimistic, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useAccess } from '@/hooks/useAccess';
 import PageHeader from '@/components/shared/PageHeader';
@@ -14,19 +14,22 @@ import StatusHero from '@/components/catalysts/StatusHero';
 import AnalysisProgressCard from '@/components/catalysts/AnalysisProgressCard';
 import HotspotsStrip from '@/components/catalysts/HotspotsStrip';
 import FocusCycleCard from '@/components/catalysts/FocusCycleCard';
-import ManagePanel from '@/components/catalysts/ManagePanel';
 import MoreMenu from '@/components/catalysts/MoreMenu';
 import FilterBar from '@/components/catalysts/FilterBar';
 import { DEFAULT_FILTERS, sanitizeThemeId, type CatalystFilters } from '@/components/catalysts/filters';
 import FeedPanel from '@/components/catalysts/FeedPanel';
-import StocksPanel from '@/components/catalysts/StocksPanel';
-import CalendarPanel from '@/components/catalysts/CalendarPanel';
-import SourcesPanel from '@/components/catalysts/SourcesPanel';
-import NewsDrawer from '@/components/catalysts/NewsDrawer';
+import { SkeletonRows } from '@/components/shared/Skeleton';
 import { clearCatalystReadCache } from '@/components/catalysts/api';
 import type { CatalystNewsItem, NewsAnalysisStatus, NewsClassification } from '@/components/catalysts/api';
 import { addNewsPatch, type NewsPatches } from '@/components/catalysts/feedPatches';
 import { t as __t } from '../i18n/core.ts';
+
+/* 首屏只要新闻列表：其余栏目、管理面板与详情抽屉在用到时再下载（采纳 #204）。 */
+const StocksPanel = lazy(() => import('@/components/catalysts/StocksPanel'));
+const CalendarPanel = lazy(() => import('@/components/catalysts/CalendarPanel'));
+const SourcesPanel = lazy(() => import('@/components/catalysts/SourcesPanel'));
+const ManagePanel = lazy(() => import('@/components/catalysts/ManagePanel'));
+const NewsDrawer = lazy(() => import('@/components/catalysts/NewsDrawer'));
 
 type TabId = 'feed' | 'stocks' | 'calendar' | 'sources' | 'manage';
 
@@ -165,7 +168,9 @@ export default function Catalysts() {
   /* 新闻详情抽屉 */
   const [selectedNewsId, setSelectedNewsId] = useState<string | null>(null);
   const [selectedSeed, setSelectedSeed] = useState<CatalystNewsItem | null>(null);
+  const [drawerMounted, setDrawerMounted] = useState(false);
   const openNews = useCallback((id: string, seed?: CatalystNewsItem) => {
+    setDrawerMounted(true);
     setSelectedNewsId(id);
     setSelectedSeed(seed?.newsId === id ? seed : null);
   }, []);
@@ -247,21 +252,27 @@ export default function Catalysts() {
             onClearFilters={clearFilters}
           />
         )}
-        {tab === 'stocks' && <StocksPanel filters={filters} refreshToken={refreshToken} />}
-        {tab === 'calendar' && <CalendarPanel refreshToken={refreshToken} />}
-        {tab === 'sources' && <SourcesPanel refreshToken={refreshToken} />}
-        {urlTab === 'manage' && tab === 'manage' && !isOwner && accessLoading && (
-          <p className="rounded-md border border-line bg-card-warm px-3 py-4 text-caption text-ink-500">{__t('正在确认登录身份…')}</p>
-        )}
-        {(tab === 'manage' || manageMounted) && isOwner && (
-          <div hidden={tab !== 'manage'}>
-            <ManagePanel onDataRefreshed={onRefresh} />
-          </div>
-        )}
+        <Suspense fallback={<SkeletonRows rows={6} />}>
+          {tab === 'stocks' && <StocksPanel filters={filters} refreshToken={refreshToken} />}
+          {tab === 'calendar' && <CalendarPanel refreshToken={refreshToken} />}
+          {tab === 'sources' && <SourcesPanel refreshToken={refreshToken} />}
+          {urlTab === 'manage' && tab === 'manage' && !isOwner && accessLoading && (
+            <p className="rounded-md border border-line bg-card-warm px-3 py-4 text-caption text-ink-500">{__t('正在确认登录身份…')}</p>
+          )}
+          {(tab === 'manage' || manageMounted) && isOwner && (
+            <div hidden={tab !== 'manage'}>
+              <ManagePanel onDataRefreshed={onRefresh} />
+            </div>
+          )}
+        </Suspense>
       </div>
 
-      {/* 新闻详情抽屉 */}
-      <NewsDrawer newsId={selectedNewsId} seed={selectedSeed} onClose={closeNews} onUpdate={onNewsUpdate} />
+      {/* 新闻详情抽屉：第一次打开时才下载，之后常驻以保留关闭动画与焦点恢复。 */}
+      {drawerMounted && (
+        <Suspense fallback={<div role="status" className="fixed bottom-24 right-4 z-[70] rounded-md border border-line bg-card px-4 py-3 shadow-overlay">{__t('加载中…')}</div>}>
+          <NewsDrawer newsId={selectedNewsId} seed={selectedSeed} onClose={closeNews} onUpdate={onNewsUpdate} />
+        </Suspense>
+      )}
     </div>
   );
 }

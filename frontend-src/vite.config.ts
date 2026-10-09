@@ -119,35 +119,88 @@ function chartManualChunk(id: string): string | undefined {
   }
 }
 
+const ROUTE_PAGES = [
+  'Home', 'Watchlist', 'Login', 'Screener', 'Breakouts', 'Sectors',
+  'Earnings', 'Catalysts', 'StockDetail', 'Market', 'CtaTrend',
+].map((name) => fromRoot(`src/pages/${name}.tsx`));
+const MENU_SELECT_MODULE = fromRoot('src/components/shared/MenuSelect.tsx');
+const STYLE_MODULE = /\.(?:css|scss|sass|less|styl)(?:\?|$)/;
+
+type ModuleGraph = (moduleId: string) => { importedIds: readonly string[]; dynamicallyImportedIds: readonly string[] } | null;
+
 /**
- * Load the application shell in one request after prepareI18n(), rather than
- * spreading its always-needed code over dozens of small shared chunks. Keep
- * the entry's static dependencies separate: evaluating module-level t() before
- * the selected dictionary is installed would freeze navigation in Chinese.
+ * 首屏请求按「入口 + 应用壳 + 页面 + 页面共用件」四块走，不再散成三四十个一两 KB 的小块：
+ * - index：入口的全部静态依赖（React、路由、词典内核、主题偏好、路由预取）合成入口块本身，
+ *   这些代码本来就在入口执行前加载，合并不改变执行顺序。
+ * - app-shell：App 的静态依赖减去入口部分，在 prepareI18n() 之后加载；入口不能静态引用它，
+ *   否则模块级 t() 会在词典装入前求值，导航冻结成中文。
+ * - menu-select：Radix 下拉及其依赖只有五个页面用，单独成块，首页、财报、大盘首屏不必下载。
+ * - page-shared：被两个及以上路由页（或页面里按需加载的面板）静态引用的其余模块。凡是会静态带上
+ *   图表模块的不进来，否则首页、选股也会连带 ECharts；它们留给 Rollup 按依赖自动分块。
+ * 只被一个页面用的模块留在该页面块里；eps-chart 维持单独的可重试地址。
  */
+function planApplicationChunks(getModuleInfo: ModuleGraph): Map<string, string> {
+  const imports = new Map<string, readonly string[]>();
+  const closure = (start: string) => {
+    const seen = new Set<string>();
+    const visit = (moduleId: string) => {
+      if (seen.has(moduleId)) return;
+      seen.add(moduleId);
+      const deps = getModuleInfo(moduleId)?.importedIds ?? [];
+      imports.set(moduleId, deps);
+      deps.forEach(visit);
+    };
+    visit(start);
+    return seen;
+  };
+  const plan = new Map<string, string>();
+  const assign = (ids: Iterable<string>, name: string, styles = false) => {
+    for (const id of ids) {
+      if (!plan.has(id) && (styles || !STYLE_MODULE.test(id)) && chartManualChunk(id) === undefined) plan.set(id, name);
+    }
+  };
+  // 从 HTML 入口算起（含 Vite 的 modulepreload 兼容脚本），入口块只有一个文件；全局样式随它走，产物仍是 index-*.css。
+  assign(closure(fromRoot('index.html')), 'index', true);
+  assign(closure(fromRoot('src/App.tsx')), 'app-shell');
+  assign(closure(MENU_SELECT_MODULE), 'menu-select');
+
+  // 页面与页面里按需加载的面板（如新闻页的抽屉、栏目）都算一个使用方。
+  const roots = new Set(ROUTE_PAGES);
+  const pagesUsing = new Map<string, number>();
+  for (const root of roots) {
+    for (const id of closure(root)) {
+      pagesUsing.set(id, (pagesUsing.get(id) ?? 0) + 1);
+      getModuleInfo(id)?.dynamicallyImportedIds.forEach((lazy) => {
+        if (!plan.has(lazy) && chartManualChunk(lazy) === undefined) roots.add(lazy);
+      });
+    }
+  }
+  // 反向从图表模块出发，标出所有会静态带上图表的模块（依赖环里也不会漏）。
+  const importers = new Map<string, string[]>();
+  for (const [id, deps] of imports) {
+    for (const dep of deps) importers.set(dep, [...(importers.get(dep) ?? []), id]);
+  }
+  const reachesChart = new Set<string>();
+  const pending = [...imports.keys()].filter((id) => chartManualChunk(id) !== undefined);
+  while (pending.length) {
+    for (const importer of importers.get(pending.pop()!) ?? []) {
+      if (!reachesChart.has(importer)) {
+        reachesChart.add(importer);
+        pending.push(importer);
+      }
+    }
+  }
+  assign([...pagesUsing].filter(([id, count]) => count >= 2 && !roots.has(id) && !reachesChart.has(id)).map(([id]) => id), 'page-shared');
+  return plan;
+}
+
 function applicationManualChunks() {
-  let shell: Set<string> | undefined;
-  return (id: string, { getModuleInfo }: {
-    getModuleInfo: (moduleId: string) => { importedIds: readonly string[] } | null;
-  }): string | undefined => {
+  let plan: Map<string, string> | undefined;
+  return (id: string, { getModuleInfo }: { getModuleInfo: ModuleGraph }): string | undefined => {
     const chart = chartManualChunk(id);
     if (chart) return chart;
-    if (!shell) {
-      const closure = (start: string) => {
-        const seen = new Set<string>();
-        const visit = (moduleId: string) => {
-          if (seen.has(moduleId)) return;
-          seen.add(moduleId);
-          getModuleInfo(moduleId)?.importedIds.forEach(visit);
-        };
-        visit(start);
-        return seen;
-      };
-      const entry = closure(fromRoot('src/main.tsx'));
-      shell = new Set([...closure(fromRoot('src/App.tsx'))]
-        .filter((moduleId) => !entry.has(moduleId)));
-    }
-    if (shell.has(id) && !/\.(?:css|scss|sass|less|styl)(?:\?|$)/.test(id)) return 'app-shell';
+    plan ??= planApplicationChunks(getModuleInfo);
+    return plan.get(id);
   };
 }
 
