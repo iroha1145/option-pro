@@ -899,7 +899,22 @@ class CatalystSyncTask:
         if self._collector is not None:
             plan = await _call_local(self._collector.plan, stream, force=force)
             fetched = await self._collector.fetch(plan)
-            return await _call_local(self._collector.commit, plan, fetched)
+            try:
+                return await _call_local(self._collector.commit, plan, fetched)
+            except Exception as exc:
+                # The round is rolled back; name the sources it had fetched.
+                record_fallback_failure(f"catalyst_{stream}_store", exc)
+                code = self._error_code(exc)
+                return StreamOutcome(
+                    {"sources_due": len(plan.due)},
+                    {
+                        f"source:{outcome.key}": (
+                            outcome.error.code if outcome.error is not None else code
+                        )
+                        for outcome in fetched
+                    },
+                    error_code=code,
+                )
         result = await (
             self._service.sync_news() if stream == "news" else self._service.sync_calendar()
         )
@@ -1029,6 +1044,7 @@ class CatalystSyncTask:
             try:
                 outcome = await self._sync_stream(stream, force=stream in requested)
             except Exception as exc:
+                record_fallback_failure(f"catalyst_{stream}_sync", exc)
                 errors[stream] = self._error_code(exc)
                 continue
             metrics[stream] = outcome.metrics

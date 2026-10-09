@@ -292,6 +292,37 @@ def test_manual_news_refresh_forces_news_sources_and_leaves_the_calendar(tmp_pat
     assert completed == [("manual-1", None)]
 
 
+def test_a_failed_store_names_its_sources_and_logs_the_cause(tmp_path, monkeypatch, caplog):
+    from app.services.catalysts.news_collector import NewsCollector
+
+    real_commit = NewsCollector.commit
+
+    def broken_commit(self, plan, outcomes):
+        if plan.stream == "news":
+            raise RuntimeError("disk full")
+        return real_commit(self, plan, outcomes)
+
+    monkeypatch.setattr(NewsCollector, "commit", broken_commit)
+    feeds = Feeds(
+        massive=NewsBatch(_items("massive", 1, source="massive/Benzinga")),
+        globenewswire=SourceError("http_403"),
+        forexfactory=CalendarBatch(normalize_events(_raw_events())),
+    )
+    task = _task(tmp_path, feeds.mapping("massive", "globenewswire", "forexfactory"))
+
+    with caplog.at_level("WARNING", logger="app.failure_diagnostics"):
+        [result] = asyncio.run(_run(task))
+
+    assert result.status == "degraded"
+    assert result.details["errors"] == {
+        "news": "sync_failed",
+        "source:massive": "sync_failed",
+        "source:globenewswire": "http_403",
+    }
+    assert "stage=catalyst_news_store" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+
+
 def test_rollback_to_macrolens_is_refused_after_local_writes(tmp_path, monkeypatch):
     feeds = Feeds(massive=NewsBatch(_items("massive", 1, source="massive/Benzinga")))
     asyncio.run(_run(_task(tmp_path, feeds.mapping("massive"))))
