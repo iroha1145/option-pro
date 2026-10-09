@@ -431,3 +431,54 @@ def test_schema_transaction_still_backfills_a_missing_source_row(tmp_path: Path)
             (job["job_id"],),
         ).fetchone()
     assert source is not None and source["submission_source"] == "manual"
+
+
+def test_a_failing_probe_skips_its_reading_without_stopping_the_worker(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from app.worker import runtime as worker_runtime
+
+    repository = _CountingStateRepository(tmp_path / "state.db")
+    recorded: list[str] = []
+    monkeypatch.setattr(
+        worker_runtime,
+        "record_fallback_failure",
+        lambda stage, error, **_kwargs: recorded.append(f"{stage}:{type(error).__name__}"),
+    )
+    probe_calls = 0
+    runs: list[list[str]] = []
+
+    def broken_probe():
+        nonlocal probe_calls
+        probe_calls += 1
+        raise RuntimeError("probe bug")
+
+    class Runner:
+        async def __call__(self) -> TaskResult:
+            runs.append([])
+            return TaskResult(status="idle")
+
+        async def run_for_actions(self, actions):
+            runs.append([str(item["action_type"]) for item in actions])
+            return TaskResult(status="idle")
+
+    async def scenario() -> None:
+        supervisor = _supervisor(
+            tmp_path,
+            repository,
+            (TaskSpec("probed", Runner(), 86_400, wake_probe=broken_probe),),
+        )
+        running = asyncio.create_task(supervisor.run_forever())
+        await _until(lambda: len(runs) == 1 and probe_calls >= 5)
+        assert not running.done()
+        await asyncio.to_thread(
+            repository.request_action, "calendar_refresh", "probed", "probed:1",
+        )
+        await _until(lambda: len(runs) == 2)
+        supervisor.request_stop()
+        await asyncio.wait_for(running, timeout=5)
+
+    asyncio.run(scenario())
+
+    assert runs == [[], ["calendar_refresh"]]
+    assert recorded and set(recorded) == {"worker_wake_probe:RuntimeError"}

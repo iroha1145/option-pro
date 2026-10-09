@@ -986,7 +986,10 @@ class WorkerSupervisor:
         for name, probe in probes.items():
             try:
                 values[name] = probe()
-            except (sqlite3.Error, OSError) as error:
+            except Exception as error:
+                # A probe only shortens an idle wait; whatever breaks it must
+                # not end the watcher (and with it the worker). The loop still
+                # wakes on its own schedule and on queued actions.
                 record_fallback_failure("worker_wake_probe", error)
         return delays, values
 
