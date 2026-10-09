@@ -93,7 +93,8 @@ export function InsightValue({
           {fmtPrice(Math.abs(change))}
         </span>
       )}
-      {basis && <span className="text-micro text-ink-400">{basis}</span>}
+      {/* 大号读数在手机上把比较基准放到下一行：价格、涨跌额读到后变宽，基准留在同一行会被推走或折行 */}
+      {basis && <span className={cn('text-micro text-ink-400', size === 'xl' && 'max-sm:basis-full')}>{basis}</span>}
     </div>
   );
 }

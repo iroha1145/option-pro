@@ -70,7 +70,7 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
         {/* Insight Cards 的数值块口径：大读数 + 涨跌 + 绝对变动 + **比较基准**。
             基准不是装饰——只给「+2.57%」而不说跟谁比，读者只能猜；tick-flash
             仍要贴在价格本体上，所以外面再包一层承接闪动类名。 */}
-        {/* 手机上价格独占一行：读取中只有「—」，读到后价格、涨跌与基准占满一行，两种情况下面的指标组都另起一行。 */}
+        {/* 手机上价格独占一行、比较基准再起一行：读取中只有「—」，读到后价格与涨跌变宽，两种情况下面的指标组都另起一行。 */}
         <div
           className={cn(
             'tick-flash min-w-0 max-w-full basis-full rounded-sm px-1 sm:basis-auto',

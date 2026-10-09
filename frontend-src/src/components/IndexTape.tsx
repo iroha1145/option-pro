@@ -2,13 +2,14 @@
  * Index Tape（design.md §7.1）
  * 36px 指数跑马灯 marquee · hover 与键盘焦点暂停 · 涨跌 tick-flash · 右侧固定「延迟行情」毛玻璃标签
  */
-import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { marketApi } from '@/api/modules/market';
 import { usePolling } from '@/hooks/usePolling';
 import { useLiveQuote, useQuoteStatus, useQuoteSymbols } from '@/hooks/useLiveQuote';
 import { MARKET_FUNDS } from '@/lib/liveQuotes';
 import { LivePrice, LiveChange } from '@/components/shared/LiveQuote';
+import SameWidth from '@/components/shared/SameWidth';
 import { useTickFlash } from '@/hooks/useTickFlash';
 import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 import { fmtPct, fmtPrice } from '@/lib/format';
@@ -69,14 +70,8 @@ const FUND_CHANGE_CLASS = '[@media(pointer:coarse)]:text-caption';
 
 /* 报价到达前后芯片等宽：隐形样例用等宽数字排出比常见读数略宽的一格（四位整数的价格、两位整数的涨跌），
    实际读数叠在同一格里，「—」换成价格时后面的芯片和副本都不动。样例是纯文字，不带滚动数字的十行字形。 */
-function SameWidth({ sample, children }: { sample: ReactNode; children: ReactNode }) {
-  return (
-    <span className="inline-grid items-center justify-items-start">
-      <span aria-hidden="true" className="invisible col-start-1 row-start-1">{sample}</span>
-      <span className="col-start-1 row-start-1">{children}</span>
-    </span>
-  );
-}
+const FUND_PRICE_SAMPLE = <span className={FUND_PRICE_CLASS}>$0000.00</span>;
+const FUND_CHANGE_SAMPLE = <span className={cn('change-badge inline-flex items-center gap-0.5 text-[12px] leading-[16px] tnum', FUND_CHANGE_CLASS)}><span className="size-3" />−10.01%</span>;
 
 function FundTapeItem({ symbol, onOpen }: { symbol: string; onOpen: () => void }) {
   const quote = useLiveQuote(symbol);
@@ -84,10 +79,10 @@ function FundTapeItem({ symbol, onOpen }: { symbol: string; onOpen: () => void }
     <span className="text-caption font-medium text-ink-800">{FUND_LABELS[symbol]}</span>
     <span className="tnum text-micro text-ink-400 [@media(pointer:coarse)]:text-caption">{symbol}</span>
     {/* 触屏用同一字阶；价格的行内盒会给滚动数字留下下降空间，改成弹性盒后按可见数字居中。 */}
-    <SameWidth sample={<span className={FUND_PRICE_CLASS}>$0000.00</span>}>
+    <SameWidth samples={[FUND_PRICE_SAMPLE]}>
       <LivePrice symbol={symbol} prefix="$" indicator={false} className={FUND_PRICE_CLASS} />
     </SameWidth>
-    <SameWidth sample={<span className={cn('change-badge inline-flex items-center gap-0.5 text-[12px] leading-[16px] tnum', FUND_CHANGE_CLASS)}><span className="size-3" />−10.01%</span>}>
+    <SameWidth samples={[FUND_CHANGE_SAMPLE]}>
       <LiveChange symbol={symbol} fallback={quote?.change_pct} size="sm" className={FUND_CHANGE_CLASS} />
     </SameWidth>
   </button>;
