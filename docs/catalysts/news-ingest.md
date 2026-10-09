@@ -113,5 +113,5 @@ worker 第一次以 `local` 启动时，在一个事务里完成：
 2. 本版本修改了 `config/personal.toml`（新增 `news_source` 与 `[catalyst.sources]`）。服务器上的这个文件带着生产修改，更新代码时先保存本地修改，切到新提交后再恢复，不要用 `git checkout --force`。服务器文件里不加新行也可以，默认就是本地采集。
 3. 部署后看 `catalyst_sync` 第一轮的状态：至少一个新闻源成功才是 `idle`；如果全部失败，部署脚本的 worker 检查会失败，先查各来源的错误码（多半是出口网络）。
 4. 确认本地采集稳定一周后再停 macrolens-etl 容器（127.0.0.1:8000）。在删除远端代码的下一个版本上线之前，不要删 `MACROLENS_URL` 和 `INTERNAL_API_TOKEN`：旧代码要求两者成对出现，`./personal.sh secrets validate` 在配置了令牌时还会检查远端健康，容器停了会报失败。
-5. 日历旧快照删完之后（上线约半天），择机停机做一次 `VACUUM`：先停 backend 和 worker，再用裸容器执行 `docker run --rm -v option-pro_optix-data:/data --entrypoint python option-pro:local -c "import sqlite3; c = sqlite3.connect('/data/catalyst-cache.db'); c.execute('VACUUM'); c.close()"`，最后用 `./scripts/deploy.sh` 恢复。不要用 `compose run` 做这类维护。
+5. 日历旧快照删完之后（上线约半天），择机停机做一次 `VACUUM`：先停 backend 和 worker，再用当前部署的镜像起一个裸容器执行 `docker run --rm -v option-pro_optix-data:/data --entrypoint python option-pro:<当前部署的提交号> -c "import sqlite3; c = sqlite3.connect('/data/catalyst-cache.db'); c.execute('VACUUM'); c.close()"`（镜像标签是 `option-pro:` 加完整提交号，用 `docker ps` 看正在运行的那个），最后用 `./scripts/deploy.sh` 恢复。不要用 `compose run` 做这类维护。
 6. nginx 里 MacroLens 的 426 守卫与 focus-context 的 location（宝塔下的 `optix.conf`）在删除远端代码之后清理。
