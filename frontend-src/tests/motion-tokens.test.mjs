@@ -89,7 +89,8 @@ const SURFACES = [
   ['pages/Watchlist.tsx', /<MenuSelect/, 'MenuSelect (watchlist sort)'],
   ['components/catalysts/FilterBar.tsx', /<MenuSelect/, 'MenuSelect (catalyst status)'],
   ['components/shared/Segmented.tsx', /t-tabs/, 't-tabs'],
-  ['components/shared/Segmented.tsx', /\{active && <GlidePill layoutId=\{layoutId\} \/>\}/, 'GlidePill (segmented)'],
+  /* 2026-10-09：dependency 让滑块只在选中值变化时做布局动画（打开新页面不再从附近滑入）。 */
+  ['components/shared/Segmented.tsx', /\{active && <GlidePill layoutId=\{layoutId\} dependency=\{value\} \/>\}/, 'GlidePill (segmented)'],
   ['components/shared/Segmented.tsx', /layoutRoot=\{!scrollable\}/, 'layoutRoot 投影（内联 / fixed 容器）'],
   ['components/shared/Segmented.tsx', /layoutScroll=\{scrollable\}/, 'layoutScroll 投影（可横向滚动的条）'],
   ['components/shared/Skeleton.tsx', /t-skel/, 't-skel'],

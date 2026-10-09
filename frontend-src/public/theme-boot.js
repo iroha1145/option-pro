@@ -9,7 +9,7 @@
   root.dataset.theme = dark ? "dark" : "light";
   root.style.colorScheme = dark ? "dark" : "light";
   var themeColor = document.querySelector('meta[name="theme-color"]');
-  if (themeColor) themeColor.setAttribute("content", dark ? "#191B20" : "#F6F7F9");
+  if (themeColor) themeColor.setAttribute("content", dark ? "#0F0F10" : "#FAFAFA");
 
   /* 在主包下载/解析期间发出同源 GET，身份与默认新闻首屏不再串在 React 挂载之后。
      不用可选链，保持与旧浏览器解析约定一致。响应只给同页 requestRaw 消费一次。 */

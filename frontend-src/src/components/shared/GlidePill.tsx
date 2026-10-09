@@ -12,23 +12,15 @@ import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
  * data-glide-pill 是取证测试的稳定句柄：别用「无子元素的 aria-hidden span」
  * 这类结构指纹去找它（加一个装饰子元素就会静默失配）。
  */
-import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { SPRING_INDICATOR } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 
 /* 2026-10-09：打开新页面时滑块先出现在附近、再滑到正确位置（用户反馈）。两个来源：
-   1. 调用点用 useId 当 layoutId，它只由组件在树里的位置决定——换页后新页面同位置的控件拿到
-      同一个标识，动画库把它当成同一个滑块，从旧页面的位置滑过来。调用点改用 useGlideLayoutId，
-      每个实例一个新标识。
+   1. 调用点用 useId 当 layoutId——换页后新页面同位置的控件拿到同一个标识，从旧页面的位置滑过来。
+      调用点改用 hooks/useGlideLayoutId，每个实例一个新标识。
    2. 页面入场的位移动画期间，任何一次重绘都会被量成「位置变了」而补一段动画。传 dependency
       （选中值）后，只有选中项真的变了才做布局动画（Arc：动效只解释因果）。 */
-let glideSerial = 0;
-export function useGlideLayoutId(prefix = 'glide'): string {
-  const [id] = useState(() => `${prefix}-${++glideSerial}`);
-  return id;
-}
-
 export default function GlidePill({ layoutId, className, dependency }: { layoutId: string; className?: string; dependency?: unknown }) {
   const reduce = usePrefersReducedMotion();
   return (

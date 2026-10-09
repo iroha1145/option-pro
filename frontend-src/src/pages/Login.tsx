@@ -22,7 +22,7 @@ import Icon from '@/components/icons';
 import Spinner from '@/components/shared/Spinner';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
 import SelectionViewport from '@/components/shared/SelectionViewport';
-import { useGlideLayoutId } from '@/components/shared/GlidePill';
+import { useGlideLayoutId } from '@/hooks/useGlideLayoutId';
 import type { IconName } from '@/components/icons';
 import { pageRegionProps } from '@/lib/pageRegion';
 import { t } from '../i18n/core.ts';

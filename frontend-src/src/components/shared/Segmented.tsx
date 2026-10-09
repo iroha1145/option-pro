@@ -7,7 +7,8 @@
 import { type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import GlidePill, { useGlideLayoutId } from '@/components/shared/GlidePill';
+import GlidePill from '@/components/shared/GlidePill';
+import { useGlideLayoutId } from '@/hooks/useGlideLayoutId';
 import SelectionViewport from '@/components/shared/SelectionViewport';
 
 interface SegmentedOption<T extends string> {

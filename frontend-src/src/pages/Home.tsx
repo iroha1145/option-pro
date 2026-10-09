@@ -42,7 +42,7 @@ import StaleStrip from '@/components/shared/StaleStrip';
 import StockDataCoverage from '@/components/shared/StockDataCoverage';
 import SessionLED from '@/components/shared/SessionLED';
 import SoftBadge from '@/components/shared/SoftBadge';
-import { SIGNAL_TONE } from '@/components/shared/SignalChip';
+import { SIGNAL_TONE } from '@/lib/signalTone';
 import { strengthBarClass } from '@/lib/strengthColor';
 import { exNum, isFeaturedRow, type EarningsRow } from '@/components/earnings/types';
 import ChangeBadge from '@/components/shared/ChangeBadge';

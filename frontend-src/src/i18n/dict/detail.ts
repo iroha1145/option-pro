@@ -29,13 +29,13 @@ export const DETAIL: Dict = {
   '今日分析额度已用完，额度重置后再试': ['Today\'s analysis quota is used up. Try again after it resets.', '本日の分析枠を使い切りました。リセット後に再試行してください。'],
   /* src/components/StockDrawerBody.tsx */
   '成交量': ['Volume', '出来高'],
+  /* 2026-10-09 个股页头小指标组：标签在上、数值在下 */
+  '报价时间': ['Quote time', '価格時刻'],
   '较昨收': ['vs prev close', '前日終値比'],
   '登录已过期': ['Session expired', 'セッションの有効期限切れ'],
   '正在重试': ['Retrying', '再試行中'],
   '信号': ['Signals', 'シグナル'],
   '期权报价': ['Options chain', 'オプションチェーン'],
-  '· 市值': ['· Market cap', '· 時価総額'],
-  '报价更新于': ['Quote updated at', '相場更新'],
   ' · 延迟行情': [' · Delayed quotes', ' · 遅延データ'],
   '未找到该股票': ['Ticker not found', '銘柄が見つかりません'],
   '该股票暂无完整数据': ['No complete data for this ticker', 'この銘柄の完全なデータはありません'],
