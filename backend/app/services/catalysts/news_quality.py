@@ -9,6 +9,11 @@ from __future__ import annotations
 import re
 
 
+# Stored verdicts carry this version; rows computed under another version are
+# re-evaluated on read and refreshed by the worker. Bump it with any rule change
+# (tests pin the rule source to this value).
+NEWS_QUALITY_RULES_VERSION = "news-quality-v1"
+
 # English function words that never identify a news headline; shared by the
 # event clustering and article-title matching tokenizers.
 TITLE_STOP_WORDS = frozenset({"the", "and", "for", "with", "from", "that", "this"})

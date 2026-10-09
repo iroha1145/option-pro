@@ -40,7 +40,7 @@ from app.services.ai_jobs.focus_verification import (
 from app.services.sqlite_errors import is_sqlite_lock_contention
 
 from .errors import CatalystError, InvalidCursorError
-from .news_quality import TITLE_STOP_WORDS, news_quality
+from .news_quality import NEWS_QUALITY_RULES_VERSION, TITLE_STOP_WORDS, news_quality
 
 
 def macro_conditions_context() -> dict[str, Any] | None:
@@ -166,6 +166,15 @@ NEWS_ARTICLE_MAX_BYTES = 28_000
 NEWS_SUMMARY_WITH_ARTICLE_MAX_BYTES = 10_000
 ARTICLE_RETRY_SECONDS = 30 * 60
 SCHEDULED_ARTICLE_PROBE_LIMIT = 12
+# 质量判定在入库和抓正文时算好存列（ALTER 补列，不动 _SCHEMA 校验和）；规则版本不符
+# 或尚未回填的行读取时现算，worker 每轮 reconcile 回填一批。
+_REVISION_QUALITY_COLUMNS = (
+    ("quality_reason", "TEXT"),
+    ("quality_reason_article", "TEXT"),
+    ("quality_article_visible_at", "TEXT"),
+    ("quality_rules_version", "TEXT"),
+)
+_QUALITY_BACKFILL_BATCH = 5_000
 # 旧库升级时给热点条目补上计划级分数列（v6）。定义与 _SCHEMA 里的建表语句一致。
 _HOTSPOT_ITEM_SCORE_COLUMNS = (
     (
@@ -827,12 +836,43 @@ def _available_article(
 def _news_quality_reason(
     revision: Mapping[str, Any] | sqlite3.Row, *, as_of: datetime,
 ) -> str | None:
-    item = dict(revision)
+    item = revision if isinstance(revision, Mapping) else dict(revision)
+    if item.get("quality_rules_version") == NEWS_QUALITY_RULES_VERSION:
+        visible_at = _parse_time(item.get("quality_article_visible_at"))
+        if visible_at is not None and visible_at <= as_of:
+            return item.get("quality_reason_article")
+        return item.get("quality_reason")
     article = _available_article(item, as_of=as_of)
     return news_quality(
         str(item.get("raw_title") or ""),
         item.get("raw_summary"),
         article.get("text") if article is not None else None,
+    )
+
+
+def _quality_columns(
+    revision: Mapping[str, Any] | sqlite3.Row,
+) -> tuple[str | None, str | None, str | None, str]:
+    """Stored verdicts for _news_quality_reason, valid for every as_of.
+
+    The article only counts once both its fetch and its check precede as_of,
+    so the row keeps the verdict without it, the verdict with it, and the
+    moment it becomes visible.
+    """
+
+    item = revision if isinstance(revision, Mapping) else dict(revision)
+    title = str(item.get("raw_title") or "")
+    summary = item.get("raw_summary")
+    article = _available_article(item)
+    fetched_at = _parse_time(article.get("fetched_at")) if article is not None else None
+    checked_at = _parse_time(item.get("article_checked_at"))
+    if article is None or fetched_at is None or checked_at is None:
+        return news_quality(title, summary, None), None, None, NEWS_QUALITY_RULES_VERSION
+    return (
+        news_quality(title, summary, None),
+        news_quality(title, summary, article.get("text")),
+        _iso(max(fetched_at, checked_at)),
+        NEWS_QUALITY_RULES_VERSION,
     )
 
 
@@ -1695,6 +1735,7 @@ class LocalCatalystIntelligence:
         self.canonical_tickers = frozenset(normalized - AMBIGUOUS_TICKERS)
         self._local_schema_ready = False
         self._news_retention_days = _DEFAULT_NEWS_RETENTION_DAYS
+        self._quality_backfill_complete = False
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -1766,7 +1807,11 @@ class LocalCatalystIntelligence:
             self._add_missing_columns(
                 connection,
                 "catalyst_local_news_revisions",
-                (("article_json", "TEXT"), ("article_checked_at", "TEXT")),
+                (
+                    ("article_json", "TEXT"),
+                    ("article_checked_at", "TEXT"),
+                    *_REVISION_QUALITY_COLUMNS,
+                ),
             )
             self._add_missing_columns(
                 connection, "catalyst_local_analysis_links", (("input_context_json", "TEXT"),),
@@ -2054,14 +2099,18 @@ class LocalCatalystIntelligence:
             url = str(news.get("url") or "").strip()
             if not content_hash or not title or not fetched_at or not url:
                 continue
+            quality = _quality_columns(
+                {"raw_title": title, "raw_summary": news.get("summary")}
+            )
             changed = connection.execute(
                 """INSERT OR IGNORE INTO catalyst_local_news_revisions(
                        news_id,change_sequence,content_hash,source,raw_title,
                        raw_summary,url,image_url,published_at,fetched_at,
                        source_available_at,source_tickers_json,
                        canonical_tickers_json,source_names_json,source_count,
-                       ingested_at
-                   ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       ingested_at,quality_reason,quality_reason_article,
+                       quality_article_visible_at,quality_rules_version
+                   ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     int(row["news_id"]),
                     int(row["change_sequence"]),
@@ -2079,6 +2128,7 @@ class LocalCatalystIntelligence:
                     _json(sources),
                     len(sources),
                     observed,
+                    *quality,
                 ),
             ).rowcount
             inserted += int(changed)
@@ -4779,11 +4829,13 @@ class LocalCatalystIntelligence:
                 break
         else:
             raise RuntimeError("hotspot_plan_contention")
+        quality_backfilled = self._backfill_revision_quality()
         queued = 0
         if allow_scheduled_jobs and self.mode == "scheduled":
             queued = int(self.run_scheduled()["queued"])
         return {
             "ingested": ingested,
+            "quality_backfilled": quality_backfilled,
             "analysis_links_recovered": recovered_links,
             "focus_links_recovered": recovered_focus_links,
             "analyses_published": analyses,
@@ -4793,6 +4845,50 @@ class LocalCatalystIntelligence:
             "queued": queued,
             "analysis_store_available": analysis_store_available,
         }
+
+    def _backfill_revision_quality(self) -> int:
+        """Store verdicts for rows written before the columns or under older rules.
+
+        Computed outside any write lock; the short update skips a row whose
+        article changed meanwhile (that update stores its own verdicts).
+        """
+
+        if self._quality_backfill_complete:
+            return 0
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT news_id,change_sequence,content_hash,raw_title,
+                          raw_summary,article_json,article_checked_at
+                   FROM catalyst_local_news_revisions
+                   WHERE quality_rules_version IS NOT ?
+                   LIMIT ?""",
+                (NEWS_QUALITY_RULES_VERSION, _QUALITY_BACKFILL_BATCH),
+            ).fetchall()
+        if not rows:
+            self._quality_backfill_complete = True
+            return 0
+        updates = [
+            (
+                *_quality_columns(row),
+                row["news_id"],
+                row["change_sequence"],
+                row["content_hash"],
+                row["article_checked_at"],
+            )
+            for row in rows
+        ]
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            changed = connection.executemany(
+                """UPDATE catalyst_local_news_revisions SET
+                       quality_reason=?,quality_reason_article=?,
+                       quality_article_visible_at=?,quality_rules_version=?
+                   WHERE news_id=? AND change_sequence=? AND content_hash=?
+                     AND article_checked_at IS ?""",
+                updates,
+            ).rowcount
+            connection.commit()
+        return int(changed)
 
     def _item(
         self,
@@ -6457,12 +6553,31 @@ class LocalCatalystIntelligence:
             else:
                 checked_at = _iso()
                 article_json = _json(article)
-                connection.execute(
-                    """UPDATE catalyst_local_news_revisions SET article_json=?,article_checked_at=?
-                       WHERE news_id=? AND change_sequence=? AND content_hash=?""",
-                    (article_json, checked_at, *identity),
+                quality = _quality_columns(
+                    {
+                        **row,
+                        "article_json": article_json,
+                        "article_checked_at": checked_at,
+                    }
                 )
-                row = {**row, "article_json": article_json, "article_checked_at": checked_at}
+                connection.execute(
+                    """UPDATE catalyst_local_news_revisions SET article_json=?,article_checked_at=?,
+                              quality_reason=?,quality_reason_article=?,
+                              quality_article_visible_at=?,quality_rules_version=?
+                       WHERE news_id=? AND change_sequence=? AND content_hash=?""",
+                    (article_json, checked_at, *quality, *identity),
+                )
+                row = {
+                    **row,
+                    "article_json": article_json,
+                    "article_checked_at": checked_at,
+                    **dict(
+                        zip(
+                            (name for name, _definition in _REVISION_QUALITY_COLUMNS),
+                            quality,
+                        )
+                    ),
+                }
             connection.commit()
         _reset_revision_cache()
         return row
