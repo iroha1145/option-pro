@@ -16,6 +16,7 @@ from __future__ import annotations
 from app.services.numeric import (
     rounded_number as _safe_float,
 )
+from app.services.technical.indicators import mean_true_range
 
 from typing import Any
 
@@ -185,18 +186,6 @@ def _detect_patterns(
     return [(name, latest[name]) for name in order]
 
 
-def _atr(high: list[float], low: list[float], close: list[float], window: int = 14) -> float | None:
-    n = len(close)
-    if n < 2:
-        return None
-    window = min(window, n - 1)
-    trs = [
-        max(high[i] - low[i], abs(high[i] - close[i - 1]), abs(low[i] - close[i - 1]))
-        for i in range(n - window, n)
-    ]
-    return sum(trs) / len(trs) if trs else None
-
-
 def _detect_traps(
     high: list[float], low: list[float], close: list[float],
     swing_highs: list[tuple[int, float]], swing_lows: list[tuple[int, float]],
@@ -284,7 +273,7 @@ def compute_price_action(
     pattern_adjust = max(-10.0, min(10.0, pattern_adjust))
 
     n = len(close)
-    atr = _atr(high, low, close)
+    atr = mean_true_range(high, low, close)
     traps = _detect_traps(high, low, close, swing_highs, swing_lows, atr)
     spring = bool(traps["spring"])
     upthrust = bool(traps["upthrust"])

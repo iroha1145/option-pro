@@ -51,6 +51,7 @@ from app.services.cta.config import (
     VOL_SCALAR_FLOOR,
     VOL_WARMUP_DAYS,
 )
+from app.services.technical.indicators import mean_true_range
 
 
 _NEW_YORK_TZ = ZoneInfo("America/New_York")
@@ -207,15 +208,7 @@ def _component_params(comp: ComponentSpec) -> str:
 
 
 def _atr_through(highs: Sequence[float], lows: Sequence[float], closes: Sequence[float]) -> float:
-    n = len(closes)
-    window = min(ATR_WINDOW, n - 1)
-    if window < 1:
-        return 0.0
-    trs = [
-        max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
-        for i in range(n - window, n)
-    ]
-    return sum(trs) / len(trs)
+    return mean_true_range(highs, lows, closes, ATR_WINDOW) or 0.0
 
 
 # ── 情景评估（hist = 截至前一收盘的序列 + 运行状态） ──────────
