@@ -13,7 +13,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Awaitable, Callable, Mapping, Sequence
 
 from app.access import bind_trusted_system_task
 from app.failure_diagnostics import record_fallback_failure
@@ -3573,10 +3573,15 @@ class MaintenanceTask:
         failure_backoff_seconds: float = MAINTENANCE_FAILURE_BACKOFF_SECONDS,
         max_backoff_seconds: float = MAINTENANCE_MAX_BACKOFF_SECONDS,
         full_cycle_per_call: bool = False,
+        after_cycle: Callable[[], Awaitable[tuple[dict[str, Any], str | None]]] | None = None,
         now: Callable[[], datetime] | None = None,
     ) -> None:
         self.databases = dict(databases)
         self.files = dict(files or {})
+        # Runs once per cycle after every label is backed up: pruning only
+        # removes rows older than days, which that backup already holds.
+        self._after_cycle = after_cycle
+        self._after_cycle_done_for: datetime | None = None
         # Retention backs up every label right before it prunes, whatever the
         # schedule says; the scheduled task keeps the per-label cycle.
         self.full_cycle_per_call = full_cycle_per_call
@@ -3726,6 +3731,15 @@ class MaintenanceTask:
             details["retrying"] = {
                 label: retry.error_code for label, retry in self._retries.items()
             }
+        if (
+            self._after_cycle is not None
+            and self._cycle_started_at is not None
+            and not self._unattempted
+            and not self._retries
+            and self._after_cycle_done_for != self._cycle_started_at
+        ):
+            details["ai_history"], _error_code = await self._after_cycle()
+            self._after_cycle_done_for = self._cycle_started_at
         next_delay = self._next_delay(self._now())
         if self._retries:
             codes = {retry.error_code for retry in self._retries.values()}
@@ -3740,6 +3754,38 @@ class MaintenanceTask:
 
 # The local news retention default; scheduled AI history never goes below it.
 AI_HISTORY_MIN_RETAIN_DAYS = 30
+
+
+async def prune_ai_history(
+    repository_factory: Callable[[], Any],
+    *,
+    retain_days: int,
+    now: datetime,
+) -> tuple[dict[str, Any], str | None]:
+    """Delete settled scheduled news and focus jobs past the news window.
+
+    They otherwise accumulate without bound, and every reconcile re-reads
+    them. Their window matches the news journal they analyse.
+    """
+
+    try:
+        repository = await _call_local(repository_factory)
+        deleted = await _call_local(
+            repository.prune_scheduled_history,
+            retain_days=retain_days,
+            now=now,
+        )
+    except (RuntimeError, sqlite3.Error, OSError) as exc:
+        record_fallback_failure("ai_history_retention", exc)
+        return (
+            {"status": "failed", "retain_days": retain_days},
+            "ai_history_retention_failed",
+        )
+    return {
+        "status": "completed",
+        "retain_days": retain_days,
+        "deleted": int(deleted),
+    }, None
 
 
 class RetentionTask:
@@ -3858,28 +3904,11 @@ class RetentionTask:
         }, None
 
     async def _prune_ai_history(self) -> tuple[dict[str, Any], str | None]:
-        # Scheduled news and focus jobs otherwise accumulate without bound, and
-        # every reconcile re-reads and re-validates all of them. Their window
-        # matches the news journal they analyse.
-        retain_days = self._ai_history_retain_days
-        try:
-            repository = await _call_local(self._ai_repository_factory)
-            deleted = await _call_local(
-                repository.prune_scheduled_history,
-                retain_days=retain_days,
-                now=self._now(),
-            )
-        except (RuntimeError, sqlite3.Error, OSError) as exc:
-            record_fallback_failure("ai_history_retention", exc)
-            return (
-                {"status": "failed", "retain_days": retain_days},
-                "ai_history_retention_failed",
-            )
-        return {
-            "status": "completed",
-            "retain_days": retain_days,
-            "deleted": int(deleted),
-        }, None
+        return await prune_ai_history(
+            self._ai_repository_factory,
+            retain_days=self._ai_history_retain_days,
+            now=self._now(),
+        )
 
 
 SECTOR_IV_BUSY_SECONDS = 5.0
@@ -3938,6 +3967,14 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
     breakout = BreakoutTask(owner_id)
     manual_breakout = BreakoutTask(f"{owner_id}:manual")
     data_paths = get_data_paths()
+
+    def ai_history_repository() -> Any:
+        return AIJobRepository(settings.openai_job_db_path)
+
+    ai_history_retain_days = max(
+        int(config.catalyst.journal_retention_days),
+        AI_HISTORY_MIN_RETAIN_DAYS,
+    )
     maintenance = MaintenanceTask(
         {
             "optix": settings.breakout_db_path,
@@ -3952,6 +3989,11 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         files={"runtime-settings": data_paths.runtime_settings},
         destination=settings.optix_backup_dir,
         keep=config.storage.backup_keep,
+        after_cycle=lambda: prune_ai_history(
+            ai_history_repository,
+            retain_days=ai_history_retain_days,
+            now=datetime.now(timezone.utc),
+        ),
     )
     retention_backup = MaintenanceTask(
         dict(maintenance.databases),
@@ -3961,16 +4003,11 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         full_cycle_per_call=True,
     )
 
-    def ai_history_repository() -> Any:
-        from app.services.ai_jobs.repository import AIJobRepository
-
-        return AIJobRepository(settings.openai_job_db_path)
-
     retention = RetentionTask(
         owner_id,
         retention_backup,
         ai_repository_factory=ai_history_repository,
-        ai_history_retain_days=config.catalyst.journal_retention_days,
+        ai_history_retain_days=ai_history_retain_days,
     )
     from app.public_stock_data import PublicStockDataRefresh
     from app.public_option_data import PublicOptionDataRefresh

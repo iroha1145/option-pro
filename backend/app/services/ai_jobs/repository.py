@@ -1660,12 +1660,15 @@ class AIJobRepository:
         *,
         retain_days: int,
         now: datetime | None = None,
+        batch_size: int = 500,
     ) -> int:
         """Delete settled news and focus jobs older than ``retain_days``.
 
         新闻与焦点任务此前从不清理，reconcile 每轮把它们全量读进内存并重校验，
         开销随历史线性增长且全程持写锁（2026-09-25 审计）。只删终态行；创建与
         完成时间都要早于截止点，当天才结算的积压任务仍留在当日 token 账里。
+        候选在写锁外只读选出；每批一个短写事务，批内按同一条件复核后再删，
+        首次清理上万行时其它写入方（认领、入队、取消）仍能在批间拿到写锁。
         """
 
         if (
@@ -1674,39 +1677,56 @@ class AIJobRepository:
             or retain_days < 1
         ):
             raise ValueError("invalid_scheduled_history_retain_days")
+        if isinstance(batch_size, bool) or not 1 <= int(batch_size) <= 900:
+            raise ValueError("invalid_scheduled_history_batch_size")
         self.ensure_initialized()
         observed = (now or _utcnow()).astimezone(timezone.utc)
         cutoff = _iso(observed - timedelta(days=retain_days))
         job_types = list(_SCHEDULED_HISTORY_JOB_TYPES)
         statuses = sorted(_TERMINAL)
+        settled = (
+            f"""job_type IN ({",".join("?" for _ in job_types)})
+                AND status IN ({",".join("?" for _ in statuses)})
+                AND created_at<?
+                AND COALESCE(completed_at,updated_at,created_at)<?"""
+        )
+        settled_parameters = (*job_types, *statuses, cutoff, cutoff)
         with self._connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
             expired_ids = [
                 str(row["job_id"])
                 for row in connection.execute(
-                    f"""SELECT job_id FROM ai_jobs
-                        WHERE job_type IN ({",".join("?" for _ in job_types)})
-                          AND status IN ({",".join("?" for _ in statuses)})
-                          AND created_at<?
-                          AND COALESCE(completed_at,updated_at,created_at)<?""",
-                    (*job_types, *statuses, cutoff, cutoff),
+                    f"SELECT job_id FROM ai_jobs WHERE {settled}",
+                    settled_parameters,
                 ).fetchall()
             ]
-            # 首次清理可能是上万行，分批绑定参数，避开 SQLite 的变量个数上限。
-            for offset in range(0, len(expired_ids), 500):
-                chunk = expired_ids[offset : offset + 500]
-                placeholders = ",".join("?" for _ in chunk)
-                for table in (
-                    "ai_job_sources",
-                    "ai_job_batch_members",
-                    "ai_jobs",
-                ):
-                    connection.execute(
-                        f"DELETE FROM {table} WHERE job_id IN ({placeholders})",
-                        chunk,
-                    )
-            connection.commit()
-            return len(expired_ids)
+        deleted = 0
+        for offset in range(0, len(expired_ids), int(batch_size)):
+            chunk = expired_ids[offset : offset + int(batch_size)]
+            placeholders = ",".join("?" for _ in chunk)
+            with self._connect() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                still_settled = [
+                    str(row["job_id"])
+                    for row in connection.execute(
+                        f"""SELECT job_id FROM ai_jobs
+                            WHERE job_id IN ({placeholders}) AND {settled}""",
+                        (*chunk, *settled_parameters),
+                    ).fetchall()
+                ]
+                if still_settled:
+                    marks = ",".join("?" for _ in still_settled)
+                    for table in (
+                        "ai_job_sources",
+                        "ai_job_batch_members",
+                        "ai_jobs",
+                    ):
+                        connection.execute(
+                            f"DELETE FROM {table} WHERE job_id IN ({marks})",
+                            still_settled,
+                        )
+                connection.commit()
+            deleted += len(still_settled)
+        return deleted
 
     @staticmethod
     def _lane_occupants(
