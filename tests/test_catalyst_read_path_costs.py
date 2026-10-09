@@ -813,3 +813,37 @@ def test_ingest_does_not_skip_a_lower_sequence_from_a_later_page_of_the_same_run
     assert ingested == {1080, 1090}
     # The run has completed: the next pass starts above everything it holds.
     assert intelligence._ingest_watermark[1] == 90
+
+
+def test_the_store_version_script_applies_all_or_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache_path = tmp_path / "catalyst-cache.db"
+    local_module._reset_revision_cache()
+    CatalystEtlRepository(cache_path).initialize()
+    ai = AIJobRepository(tmp_path / "ai-jobs.db")
+    ai.initialize()
+    intelligence = LocalCatalystIntelligence(cache_path, ai, mode="manual", canonical_tickers=("NVDA",))
+    # The last statement fails after the table and every trigger before it ran.
+    monkeypatch.setattr(
+        local_module,
+        "_STORE_VERSION_SCHEMA",
+        local_module._STORE_VERSION_SCHEMA
+        + "CREATE TRIGGER broken AFTER INSERT ON no_such_table BEGIN SELECT 1; END;\n",
+    )
+    with pytest.raises(sqlite3.OperationalError):
+        intelligence.initialize()
+    with sqlite3.connect(cache_path) as connection:
+        leftovers = connection.execute(
+            """SELECT name FROM sqlite_master
+               WHERE name='catalyst_local_store_version'
+                  OR name LIKE 'catalyst_local_store_version_%'"""
+        ).fetchall()
+    assert leftovers == []
+    monkeypatch.undo()
+    intelligence.initialize()
+    with sqlite3.connect(cache_path) as connection:
+        triggers = connection.execute(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'catalyst_local_store_version_%'"
+        ).fetchone()[0]
+    assert triggers == 9

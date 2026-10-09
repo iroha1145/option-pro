@@ -1822,7 +1822,11 @@ class LocalCatalystIntelligence:
             connection.execute("PRAGMA synchronous=FULL")
             connection.executescript(_SCHEMA)
             connection.executescript(_VERIFIED_FOCUS_SCHEMA)
-            connection.executescript(_STORE_VERSION_SCHEMA)
+            # One transaction: a version row without all nine triggers would
+            # let readers trust a version that some writes never bump.
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n" + _STORE_VERSION_SCHEMA + "COMMIT;\n"
+            )
             row = connection.execute(
                 "SELECT checksum FROM catalyst_local_schema WHERE version=?",
                 (SCHEMA_VERSION,),
