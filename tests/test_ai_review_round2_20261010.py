@@ -89,9 +89,11 @@ def test_n1_review_sentences_publish_in_every_task(job_type, text):
 
 _MOVEMENTS = ("大涨", "暴跌", "飙升", "反弹", "走高", "走低")
 _VOCABULARY = (
-    # Market term abbreviations, macro indicator codes and technical terms.
+    # Market term abbreviations, macro indicator codes, benchmark rate names
+    # and technical terms.
     "IV", "OI", "Gamma", "Delta", "PCR", "RSI", "MACD", "VWAP",
     "CPI", "PMI", "VIX", "SPX", "NDX",
+    "SOFR", "LIBOR", "SHIBOR",
     "DRAM", "HBM", "GPU", "NAND",
 )
 
@@ -179,3 +181,30 @@ def test_n2_a_retrieved_bare_domain_is_still_removed():
 def test_n2_term_glosses_still_publish(text):
     assert _news_field(text) == text
     assert _focus_field(text, field="summary_zh") == text
+
+
+# --- Suggestion 7. Benchmark rate names describe the rate itself --------------
+
+
+@pytest.mark.parametrize("job_type", sorted(_PUBLISHERS))
+@pytest.mark.parametrize(
+    "text",
+    ["SOFR上涨5个基点。", "LIBOR下跌10个基点。", "隔夜SONIA走强。", "三个月SHIBOR收跌。"],
+)
+def test_s7_benchmark_rates_take_the_original_movement_words(job_type, text):
+    assert _PUBLISHERS[job_type](text) == text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "股票代码SOFR上涨。",
+        "SOFR股价上涨。",
+        "SOFR公司股价下跌。",
+        "CPI公司股价下跌。",
+        "盘前TSLA +3.5%，市场情绪回暖。",
+    ],
+)
+def test_s7_security_context_still_needs_binding(text):
+    with pytest.raises(ValueError):
+        _news_field(text)

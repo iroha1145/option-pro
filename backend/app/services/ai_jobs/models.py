@@ -403,9 +403,14 @@ _MARKET_TERM_ABBREVIATIONS = frozenset(
 # 指数代码与宏观统计缩写后接涨跌，描述的是指数或指标本身（「标普500指数
 # （SPX）下跌」「美国9月CPI上涨0.6%」），不是个股行情；只有「股价」「股票」
 # 这类证券名词仍要求代码绑定。WTI、ADP、LNG 同时是股票代码，不在其中。
+# 基准利率名同理：「复合SOFR加1.730%」「SOFR上涨5个基点」说的是利率本身。
+# 其他缩写后接「+3.5%」「减2%」是涨跌（「盘前TSLA +3.5%」），照旧要求代码绑定。
+_RATE_BENCHMARK_NAMES = frozenset(
+    {"ESTR", "EURIBOR", "HIBOR", "LIBOR", "SHIBOR", "SOFR", "SONIA", "TONA"}
+)
 _SELF_DESCRIBING_CODES = frozenset(
     {"CPI", "DXY", "GDP", "ISM", "JOLTS", "NDX", "NFP", "PCE", "PMI", "PPI", "SPX", "VIX"}
-)
+) | _RATE_BENCHMARK_NAMES
 # SEC 文件编号。_FOREIGN_SPAN 从字母起算，「10-K」只切出单个字母「K」。
 _SEC_FORM_DESIGNATIONS = ("10-K", "10-Q", "8-K")
 _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
@@ -573,7 +578,7 @@ _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
         "macOS",
         "scikit-learn",
     }
-) | _MARKET_TERM_ABBREVIATIONS
+) | _MARKET_TERM_ABBREVIATIONS | _RATE_BENCHMARK_NAMES
 _CROSS_SENTENCE_SECURITY_ISSUERS = frozenset(
     {
         "Adobe",
@@ -681,15 +686,6 @@ _NUMERIC_CODE_ONLY_PREFIX = re.compile(r"(?:代码|编号|股票|港股|个股)(
 # 分号隔开的是另一个分句：「流通股份；Hexa Creation聚焦……」里的「股份」不指向
 # 分号后的名称。逗号仍连着同一分句，照旧计入证券语境。
 _CLAUSE_BREAKS = frozenset("；;")
-# 浮动利率写法「复合SOFR加1.730%」「LIBOR加150个基点」。只认下列基准利率名；
-# 其他缩写后接「+3.5%」「减2%」是涨跌（「盘前TSLA +3.5%」），照旧要求代码绑定。
-_RATE_BENCHMARK_NAMES = frozenset(
-    {"ESTR", "EURIBOR", "HIBOR", "LIBOR", "SHIBOR", "SOFR", "SONIA", "TONA"}
-)
-_RATE_BENCHMARK_SPREAD = re.compile(
-    r"^[ \t]*(?:加|减|[+＋\-－])[ \t]*[0-9]+(?:\.[0-9]+)?[ \t]*"
-    r"(?:%|％|个?基点|bps?(?![A-Za-z]))"
-)
 # 信用或量化评级的字母等级：「A+评级」「获A+每股收益修正量化评级」。
 _LETTER_GRADE = re.compile(
     r"^(?:(?:[+＋]{1,2}|[\-－])[\u4e00-\u9fff]{0,12}?|)(?:评级|等级|评分)"
@@ -1194,11 +1190,7 @@ def _is_contextual_initialism(
         for token in prose_tokens
     ):
         return False
-    rate_spread = (
-        span in _RATE_BENCHMARK_NAMES
-        and _RATE_BENCHMARK_SPREAD.match(sentence[end:]) is not None
-    )
-    if span.isalpha() and len(span) > 4 and not rate_spread:
+    if span.isalpha() and len(span) > 4:
         return False
     if not any(_is_cjk(char) for char in sentence):
         return False
@@ -1214,7 +1206,7 @@ def _is_contextual_initialism(
         end=end,
     ):
         return span in allowed_codes
-    if any(char.isdigit() or char in "&./+-" for char in span) or rate_spread:
+    if any(char.isdigit() or char in "&./+-" for char in span):
         return True
     prefix = _normalize_security_reference_phrase(sentence[:start])
     return suffix.startswith(_INITIALISM_CONTEXT_SUFFIXES) or prefix.endswith(
@@ -1518,6 +1510,9 @@ def _code_names_the_statistic(
     suffix = _normalize_security_reference_phrase(sentence[end:]).removeprefix(
         "的"
     )
+    # 「CPI公司」「SOFR集团」指的是公司，不是指标。
+    if suffix.startswith(_SECURITY_COMPANY_BRIDGES):
+        return False
     return (
         _STOCK_PRICE_SUFFIX.match(suffix) is None
         and _SECURITY_NOUN_SUFFIX.match(suffix) is None
