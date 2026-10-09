@@ -191,7 +191,7 @@ for (const viewport of TABLET_VIEWPORTS) {
       test.setTimeout(90_000);
       await openEarnings(page, viewport.width);
 
-      const subject = page.locator('[aria-label="财报主体"]');
+      const subject = page.locator('[aria-label="财报内容"]');
       await expect(subject).toBeVisible();
       await expect
         .poll(() =>
@@ -242,7 +242,7 @@ for (const viewport of EARNINGS_DESKTOP_VIEWPORTS) {
       );
       await openEarnings(page, viewport.width);
 
-      const subject = page.locator('[aria-label="财报主体"]');
+      const subject = page.locator('[aria-label="财报内容"]');
       const list = page.locator('[aria-label="即将公布"]');
       const analysis = page.locator('[aria-label="财报影响分析"]');
       await expect(subject).toBeVisible();

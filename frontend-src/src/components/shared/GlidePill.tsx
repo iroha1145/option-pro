@@ -16,11 +16,17 @@ import { motion } from 'framer-motion';
 import { SPRING_INDICATOR } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 
-export default function GlidePill({ layoutId, className }: { layoutId: string; className?: string }) {
+/* 2026-10-09：打开新页面时滑块先出现在附近、再滑到正确位置（用户反馈）。两个来源：
+   1. 调用点用 useId 当 layoutId——换页后新页面同位置的控件拿到同一个标识，从旧页面的位置滑过来。
+      调用点改用 hooks/useGlideLayoutId，每个实例一个新标识。
+   2. 页面入场的位移动画期间，任何一次重绘都会被量成「位置变了」而补一段动画。传 dependency
+      （选中值）后，只有选中项真的变了才做布局动画（Arc：动效只解释因果）。 */
+export default function GlidePill({ layoutId, className, dependency }: { layoutId: string; className?: string; dependency?: unknown }) {
   const reduce = usePrefersReducedMotion();
   return (
     <motion.span
       layoutId={layoutId}
+      layoutDependency={dependency}
       aria-hidden="true"
       data-glide-pill=""
       transition={reduce ? { duration: 0 } : SPRING_INDICATOR}

@@ -73,7 +73,7 @@ test('source links render safe external links and allow narrow-screen wrapping',
   assert.match(links[0].props.className, /min-w-0/);
   assert.match(links[0].props.className, /overflow-wrap:anywhere/);
   assert.equal(links[0].props.children.length, 240);
-  assert.equal(nodes(tree, 'p')[0].props.children, '核对来源');
+  assert.equal(nodes(tree, 'p')[0].props.children, '信息来源');
 });
 
 test('missing or rejected sources do not draw an empty frame', () => {
@@ -87,6 +87,6 @@ test('unknown submission explains the hold and blocks retry, and tool failures a
   assert.match(message, /停止重复提交/);
   assert.doesNotMatch(message, /可以重试|请重试/);
   for (const code of ['provider_tool_result_invalid', 'provider_invalid_final_tool', 'provider_unknown_client_tool', 'provider_invalid_tool_response', 'provider_incomplete_tool_result', 'provider_unknown_server_tool']) {
-    assert.equal(aiJobKnownErrorMessage(code), '模型工具处理未通过检查，分析已停止');
+    assert.equal(aiJobKnownErrorMessage(code), '模型返回的内容未通过检查，分析已停止');
   }
 });

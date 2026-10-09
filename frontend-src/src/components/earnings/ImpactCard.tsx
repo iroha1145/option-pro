@@ -52,9 +52,9 @@ const isActive = (s: string) => ACTIVE_STATUSES.has(s);
  * 一句通用说明，绝不把原始码打到页面上。
  */
 const ANALYSIS_ERROR_TEXT: Record<string, string> = {
-  scheduled_analysis_disabled: __t('本次未执行：开始时自动分析未开启'),
+  scheduled_analysis_disabled: __t('本次未执行：开始时自动分析已关闭'),
   manual_analysis_disabled: __t('AI 分析已关闭'),
-  daily_token_limit_reached: __t('今天的 AI 用量已用完，明天会自动重试'),
+  daily_token_limit_reached: __t('今天的 AI 分析额度已用完，明天会自动重试'),
   daily_budget_reached: __t('共享模型日预算不足，东京 09:00 重置后再试'),
   daily_budget_usd_reached: __t('共享模型日预算不足，东京 09:00 重置后再试'),
   daily_job_limit_reached: __t('今天的 AI 分析次数已用完，明天会自动重试'),
@@ -149,7 +149,7 @@ const RELATION_LABELS: Record<EarningsImpactRelation, string> = {
   competitor: __t('竞争对手'),
   supplier: __t('供应链'),
   customer: __t('客户'),
-  etf: __t('交易所交易基金'),
+  etf: __t('ETF'),
   opposing: __t('反向关联'),
 };
 
@@ -298,7 +298,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
   const loadImpact = useCallback(
     async (t: string, options?: { background?: boolean }): Promise<EarningsReportAnalysis | null> => {
       if (!reportDate) {
-        setErrorMsg(__t('当前日历行缺少财报日期，无法绑定精确报告'));
+        setErrorMsg(__t('这条财报缺少财报日期，无法生成对应分析'));
         setPhase('unavailable');
         return null;
       }
@@ -328,7 +328,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
         } else if (err && (err.code === 409 || err.bizCode === 'analysis_required')) {
           setPhase(isOwner && !aiAvailable ? 'locked-ai' : 'needs-analysis');
         } else if (err && err.code === 401) {
-          setErrorMsg(__t('公开分析入口暂不可用'));
+          setErrorMsg(__t('访客暂时无法生成分析'));
           setPhase('public-unavailable');
         } else if (err && err.code === 503) {
           setErrorMsg(__t('服务暂时不可用，请稍后重试'));
@@ -442,7 +442,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
       <button
         type="button"
         onClick={resumePolling}
-        className="mt-2 flex h-8 items-center gap-1.5 rounded-md border border-line bg-card px-3 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:text-ink-800"
+        className="mt-2 flex h-8 items-center gap-1.5 rounded-pill border border-line bg-card px-3 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:text-ink-800"
       >
         <Icon name="refresh" size={13} />
         {__t('查询进度')}
@@ -488,7 +488,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
         // 429 有三个来源：任务队列满、访客触发限频、全站请求限流，文案按业务码区分（审计 4-F）。
         const wait = __t('约 {n}s 后重试', { n: err.retryAfter ?? 60 });
         if (err.bizCode === 'ai_job_queue_full') toast.error(__t('AI 任务队列已满'), wait);
-        else if (err.bizCode === 'earnings_analysis_rate_limited') toast.error(__t('财报分析触发过于频繁'), wait);
+        else if (err.bizCode === 'earnings_analysis_rate_limited') toast.error(__t('财报分析提交过于频繁'), wait);
         else toast.error(__t('请求过于频繁'), wait);
       } else if (err?.code === 401) {
         // 访客提交默认关闭（access.visitor_ai_actions）：如实说明需要
@@ -496,7 +496,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
         setErrorMsg(
           err.bizCode === 'owner_login_required'
             ? __t('请管理员登录后生成分析，已有分析可继续查看')
-            : __t('公开分析入口暂不可用'),
+            : __t('访客暂时无法生成分析'),
         );
         setPhase('public-unavailable');
       } else if (err?.bizCode === 'manual_analysis_disabled') {
@@ -554,7 +554,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
           {phase === 'locked-ai' && (
             <LockedPanel
               iconClass="text-ink-400"
-              title={aiEnabled ? __t('AI 分析暂不可用') : __t('AI 分析未启用')}
+              title={aiEnabled ? __t('AI 分析暂不可用') : __t('AI 分析已关闭')}
               description={
                 aiEnabled
                   ? __t('暂时无法生成新分析，已有分析仍可查看。')
@@ -567,7 +567,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
           {phase === 'public-unavailable' && (
             <LockedPanel
               iconClass="text-ink-400"
-              title={__t("公开分析入口暂不可用")}
+              title={__t("访客暂时无法生成分析")}
               description={errorMsg || __t('暂时无法为 {name} 生成分析，请稍后重试。', { name: ticker ?? __t('该标的') })}
             />
           )}
@@ -592,7 +592,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               <button
                 type="button"
                 disabled
-                className="mt-4 h-8 cursor-not-allowed rounded-md bg-paper-2 px-3 text-caption font-medium text-ink-400"
+                className="mt-4 h-8 cursor-not-allowed rounded-md bg-paper-2 px-3 text-caption text-ink-400"
               >
                 {__t('分析更新中')}
               </button>
@@ -616,7 +616,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               <button
                 type="button"
                 disabled
-                className="mt-4 h-8 cursor-not-allowed rounded-md bg-paper-2 px-3 text-caption font-medium text-ink-400"
+                className="mt-4 h-8 cursor-not-allowed rounded-md bg-paper-2 px-3 text-caption text-ink-400"
               >
                 {__t('已完成最终分析')}
               </button>
@@ -701,7 +701,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
             <div>
               {jobCancelled ? (
                 <div className="rounded-md border border-line bg-paper-2 p-3">
-                  <p className="text-caption font-medium text-ink-700">{__t('分析任务已取消')}</p>
+                  <p className="text-caption text-ink-700">{__t('分析任务已取消')}</p>
                   <p className="mt-0.5 text-micro text-ink-500">{__t('可以重新生成分析')}</p>
                 </div>
               ) : (

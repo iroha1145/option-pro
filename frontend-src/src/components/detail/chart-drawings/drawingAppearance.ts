@@ -17,5 +17,5 @@ export function drawingPaint(color: string): string {
 }
 
 export function drawingSurface(opacity: number): string {
-  return `rgba(${getAppearance() === 'dark' ? '36,38,45' : '255,255,255'},${opacity})`;
+  return `rgba(${getAppearance() === 'dark' ? '22,22,23' : '255,255,255'},${opacity})`;
 }

@@ -84,7 +84,7 @@ export default function DrawingToolbar({
             : t('已同步');
   return (
     <div className={cn('flex flex-wrap items-center gap-1.5', compact && 'gap-1')}>
-      <span className="mr-1 text-micro font-medium text-ink-500">{t('绘图')}</span>
+      <span className="mr-1 text-micro text-ink-500">{t('绘图')}</span>
       <SelectionViewport>
       <div className="mobile-selection-rail contents">
       {TOOLS.map((item) => (

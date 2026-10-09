@@ -100,7 +100,7 @@ export default function ConfirmDialog({
             <button
               ref={cancelRef}
               onClick={onCancel}
-              className="rounded-md border border-line bg-card px-3.5 py-2 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:bg-paper-2"
+              className="rounded-pill border border-line bg-card px-3.5 py-2 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:bg-paper-2"
             >
               {cancelLabel}
             </button>

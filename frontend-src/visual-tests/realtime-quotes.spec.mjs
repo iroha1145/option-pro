@@ -238,7 +238,7 @@ test('a real radar lead replacement resets price motion while same-symbol moves 
   await emitEvent(page, 'radar', { events: [state.radar], resync_required: true });
 
   const msftPrice = lead.locator('[data-quote-symbol="MSFT"]').first();
-  await expect(lead.getByRole('button', { name: '打开 MSFT 个股详情抽屉', exact: true })).toBeVisible();
+  await expect(lead.getByRole('button', { name: '打开 MSFT 详情', exact: true })).toBeVisible();
   await expect(msftPrice.locator('.sr-only').first()).toHaveText('5,000.00');
   expect(await msftPrice.evaluate(node => ({
     reused: window.previousRadarLeadPrice === node,

@@ -836,11 +836,12 @@
 }
 
 /* 18-texts-reveal 的入场半边（关键帧版）：空态这类「挂载即出现」的块不需要
-   is-shown 切换，逐行按 --line 序号叠加 --stagger-stagger 延迟，数值全照 catalog。
+   is-shown 切换，逐行按 --reveal-index 序号叠加 --stagger-stagger 延迟，数值全照 catalog。
+   （序号变量原名 --line，与发丝线颜色令牌同名，空态里的边框会整条失效，2026-10-09 改名。）
    关键帧只写 from：结束后回到元素自身的值，不残留 filter（不劫持 fixed 后代）。 */
 .t-reveal-line {
   animation: t-reveal-line var(--stagger-dur) var(--stagger-ease) both;
-  animation-delay: calc(var(--stagger-stagger) * var(--line, 0));
+  animation-delay: calc(var(--stagger-stagger) * var(--reveal-index, 0));
 }
 @keyframes t-reveal-line {
   from {

@@ -364,6 +364,40 @@ def test_slow_background_read_is_bounded_and_does_not_delay_shutdown(monkeypatch
     drain()
 
 
+def test_queued_read_timeout_keeps_latest_in_memory_parent(tmp_path):
+    background = diagnostics_module.BackgroundDiagnosticsStore(tmp_path)
+    gate = threading.Event()
+    entered = threading.Event()
+    def block():
+        entered.set()
+        gate.wait(2)
+    assert diagnostics_module._submit(block)
+    assert entered.wait(1)
+    try:
+        background.record(task="market_brief", model="claude-opus-5-5", previous=None,
+            current="msg_known", diagnostics=None, usage={}, complete=True)
+        started = time.monotonic()
+        assert asyncio.run(background.previous("market_brief")) == "msg_known"
+        assert time.monotonic() - started < 0.1
+        assert not DiagnosticsStore(tmp_path).path().exists()
+    finally:
+        gate.set()
+    drain()
+
+
+def test_rejected_read_keeps_parent_scoped_to_directory_and_task(monkeypatch, tmp_path):
+    background = diagnostics_module.BackgroundDiagnosticsStore(tmp_path)
+    with monkeypatch.context() as patch:
+        patch.setattr(diagnostics_module, "_submit", lambda operation: False)
+        background.record(task="market_brief", model="claude-opus-5-5", previous=None,
+            current="msg_known", diagnostics=None, usage={}, complete=True)
+        assert asyncio.run(background.previous("market_brief")) == "msg_known"
+        assert asyncio.run(background.previous("ai_jobs:news_impact")) is None
+        other = diagnostics_module.BackgroundDiagnosticsStore(tmp_path / "other")
+        assert asyncio.run(other.previous("market_brief")) is None
+    assert not DiagnosticsStore(tmp_path).path().exists()
+
+
 def test_queued_io_keeps_original_data_dir(monkeypatch, tmp_path):
     original_root = tmp_path / "original"
     other_root = tmp_path / "other"

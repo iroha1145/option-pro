@@ -10,7 +10,8 @@ import { useCalendarResource } from './useCalendarResource';
 import CatalystCacheStatus from './CatalystCacheStatus';
 import { cacheStatusProps } from './cacheStatusProps';
 
-const BARS = { high: 'bg-ink-800', medium: 'bg-ink-500', low: 'bg-ink-300', holiday: 'bg-line-strong' };
+/* 重要度色条（2026-10-09 用户要求着色）：高橙、中琥珀、低浅灰，节假日只留细线色。 */
+const BARS = { high: 'bg-cat-orange-600', medium: 'bg-cat-amber-600', low: 'bg-ink-300', holiday: 'bg-line-strong' };
 export default function EconomicCalendarCard() {
   const q = useCalendarResource();
   const copy = calendarCopy(localeTag());
@@ -38,7 +39,7 @@ export default function EconomicCalendarCard() {
         {events.slice(0, 4).map((event) => <article key={event.eventId} className="flex min-w-0 gap-3 border-b border-line px-4 py-4 sm:px-5">
           <span aria-hidden="true" className={cn('w-[3px] shrink-0 rounded-full', BARS[event.impact])} />
           <div className="w-20 shrink-0">
-            <time dateTime={event.scheduledAt} className="block text-caption font-medium text-ink-700 tnum">{fmtLocaleTime(event.scheduledAt)}</time>
+            <time dateTime={event.scheduledAt} className="block text-caption text-ink-700 tnum">{fmtLocaleTime(event.scheduledAt)}</time>
             {view === 'next' && <span className="block tnum text-micro text-ink-400">{fmtLocaleDate(event.scheduledAt, { month: '2-digit', day: '2-digit' })}</span>}
             <span className="mt-1 inline-block max-w-full break-words rounded border border-line bg-paper-2 px-1.5 py-0.5 text-micro leading-4 text-ink-500">{flatCountry(event.country)}</span>
           </div>

@@ -57,8 +57,8 @@ function searchErrorText(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code === 429) {
       return error.retryAfter
-        ? t('搜索请求较多，请 {n} 秒后重试', { n: Math.ceil(error.retryAfter) })
-        : __t('搜索请求较多，请稍后重试');
+        ? t('搜索太频繁，请 {n} 秒后重试', { n: Math.ceil(error.retryAfter) })
+        : __t('搜索太频繁，请稍后重试');
     }
     if (error.code === 401) return __t('登录已过期，请重新登录');
     if (error.code === 503) return __t('股票搜索暂不可用，请稍后重试');
@@ -428,7 +428,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                 /* 取证测试的稳定句柄：别拿「listbox 下第一个 aria-hidden span」
                    这种结构指纹找它（它自己就带装饰子元素）。 */
                 data-glide-list=""
-                className="pointer-events-none absolute inset-x-1.5 top-0 z-0 rounded-md bg-brand-50"
+                className="pointer-events-none absolute inset-x-1.5 top-0 z-0 rounded-md bg-paper-2"
                 style={{
                   height: 0,
                   opacity: 0,
@@ -452,7 +452,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                   <span className="flex size-9 items-center justify-center rounded-full bg-danger-50 text-danger-700">
                     <Icon name="x" size={15} />
                   </span>
-                  <p className="mt-3 text-body-s font-medium text-ink-700">{__t('搜索失败')}</p>
+                  <p className="mt-3 text-body-s text-ink-700">{__t('搜索失败')}</p>
                   <p className="mt-1 max-w-sm text-micro leading-5 text-ink-400">{searchError}</p>
                 </div>
               )}
@@ -462,7 +462,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                   <span className="flex size-9 items-center justify-center rounded-lg border border-line bg-card-warm text-ink-400 shadow-[inset_0_1px_2px_rgba(16,24,40,.05)]">
                     <Icon name="search" size={16} />
                   </span>
-                  <p className="mt-3 text-body-s font-medium text-ink-700">{__t('没有找到')}</p>
+                  <p className="mt-3 text-body-s text-ink-700">{__t('没有找到')}</p>
                   <p className="mt-1 text-micro text-ink-400">
                     {__t('试试代码')} <span className="tnum">NVDA</span> {__t('或中文名（英伟达）')}
                   </p>

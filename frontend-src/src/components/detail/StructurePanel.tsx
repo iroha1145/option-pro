@@ -70,7 +70,7 @@ const BASE_STATE_META: Record<TechBaseState['status'], { label: string; cls: str
   in_base: { label: t('价格在结构区间内'), cls: 'bg-paper-2 text-ink-600' },
   at_resistance: { label: t('正测试区间上沿'), cls: 'bg-warn-50 text-warn-700' },
   breakout: { label: t('已突破区间上沿'), cls: 'bg-up-50 text-up-700' },
-  below_support: { label: t('跌破支撑下沿'), cls: 'bg-down-50 text-down-700' },
+  below_support: { label: t('已跌破支撑下沿'), cls: 'bg-down-50 text-down-700' },
   failed: { label: t('已跌破失效位'), cls: 'bg-down-50 text-down-700' },
 };
 
@@ -162,7 +162,7 @@ export default function StructurePanel({ technical }: { technical: TechnicalStru
             </span>
             {coverage && coverage.observed < coverage.total && (
               <span className="rounded-pill border border-line bg-card px-2 py-0.5 text-micro text-ink-400">
-                {t('{a}/{b} 维实测', { a: coverage.observed, b: coverage.total })}
+                {t('{a}/{b} 项实测', { a: coverage.observed, b: coverage.total })}
               </span>
             )}
             {typeof base.window_agreement === 'number' && typeof base.windows_scanned === 'number' && (
@@ -194,7 +194,7 @@ export default function StructurePanel({ technical }: { technical: TechnicalStru
             <InfoHint hint={STRUCTURE_HINTS.vol_price} />
           </span>
           {/* 量价形态是规则算出的类别，用中性底；青瓷色只留给模型分析结果 */}
-          <span className="rounded-pill bg-paper-2 px-2 py-0.5 text-micro font-medium text-ink-600">
+          <span className="rounded-pill bg-paper-2 px-2 py-0.5 text-micro text-ink-600">
             {vpm.setup_label ? t(vpm.setup_label) : '—'}
           </span>
         </div>

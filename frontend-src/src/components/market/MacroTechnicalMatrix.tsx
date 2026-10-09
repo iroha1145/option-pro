@@ -105,7 +105,7 @@ export default function MacroTechnicalMatrix({
               {gap > 20
                 ? t(' · 价格明显跑在环境前面')
                 : gap < -20
-                  ? t(' · 宏观环境领先价格改善')
+                  ? t(' · 宏观先行改善，价格未跟上')
                   : t(' · 两者大致同步')}
             </p>
           )}

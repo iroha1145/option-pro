@@ -455,7 +455,7 @@ export default function Breakouts() {
     try {
       await runtimeApi.workerAction('breakout_refresh');
       if (!scanMounted.current) return;
-      toast.success(__t('扫描请求已受理'), __t('完成后自动更新'));
+      toast.success(__t('扫描已提交'), __t('完成后自动刷新'));
       statusQ.refresh();
       later(() => {
         statusQ.refresh();
@@ -463,7 +463,7 @@ export default function Breakouts() {
         eventsQ.refresh();
       }, 10_000);
     } catch {
-      if (scanMounted.current) toast.error(__t('触发失败'), __t('扫描请求未被受理，请稍后重试'));
+      if (scanMounted.current) toast.error(__t('扫描未能启动'), __t('扫描未能提交，请稍后重试'));
     } finally {
       if (scanMounted.current) later(() => setScanning(false), 700);
     }
@@ -506,7 +506,6 @@ export default function Breakouts() {
 
   return (
     <div className="radar-page">
-      <SectionNav section="screen" />
       {/* 页头带：§03 眉题 + 衬线大标 + 副标 · 右侧紧凑状态条 */}
       <motion.header
         initial={{ opacity: 0, y: 14 }}
@@ -570,6 +569,7 @@ export default function Breakouts() {
           </div>
         </div>
       </motion.header>
+      <SectionNav section="screen" />
       <StockDataCoverage state={readiness} className="mt-4" />
 
       {/* 状态收成一个下拉；最低评分与排序收进「更多筛选」，折叠时一行摘要仍写明范围、状态、评分与排序。 */}
@@ -605,7 +605,7 @@ export default function Breakouts() {
             <button
               onClick={onRefreshSnapshot}
               disabled={scanning}
-              title={__t("立即触发一次突破扫描")}
+              title={__t("立即进行一次突破扫描")}
               className="control-button"
             >
               <BusyIcon busy={scanning} size={14} tone="brand" />
@@ -615,7 +615,7 @@ export default function Breakouts() {
         </span>
         <details className="group/more basis-full border-t border-line/70 pt-3" data-testid="breakout-more-filters">
           <summary className="disclosure-trigger flex cursor-pointer list-none flex-wrap items-center gap-x-4 gap-y-2 rounded-lg py-1 text-caption text-ink-500 outline-none transition-colors duration-fast hover:text-ink-800 focus-visible:ring-2 focus-visible:ring-brand-400/40 [&::-webkit-details-marker]:hidden">
-            <span className="inline-flex shrink-0 items-center gap-2 font-medium text-ink-700">
+            <span className="inline-flex shrink-0 items-center gap-2 text-ink-700">
               {__t('更多筛选')}
               <Icon name="chevron-down" size={13} className="text-ink-400 transition-transform group-open/more:rotate-180" />
             </span>
@@ -694,7 +694,7 @@ export default function Breakouts() {
         <div className="radar-section-heading mb-4 flex items-end justify-between pb-1">
           <h2 className="text-h2 text-ink-900">{__t('当日信号')}</h2>
           <p className="text-caption text-ink-400 tnum">
-            {current.length} {__t('个活跃')}{onlyWatch ? __t(' · 只看关注') : ''}
+            {current.length} {__t('条活跃')}{onlyWatch ? __t(' · 只看关注') : ''}
           </p>
         </div>
         {currentQ.loading ? (

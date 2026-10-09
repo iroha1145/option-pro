@@ -107,7 +107,7 @@ export function CatalystBadge({ summary, tipSide = 'top' }: { summary: CatalystS
   if (summary.failed) {
     // 批量接口失败：如实「—」（区别于真实 0），不编造计数
     return (
-      <SoftBadge title={t("消息数据暂不可用")} aria-label={t("消息数据不可用")}>
+      <SoftBadge title={t("消息数据暂不可用")} aria-label={t("消息数据暂不可用")}>
         —
       </SoftBadge>
     );

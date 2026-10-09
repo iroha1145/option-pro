@@ -1,7 +1,7 @@
 /**
  * 外观偏好（跟随系统 / 浅色 / 深色）。
  * CSS 变量、html.dark、ECharts 调色与顶栏开关共用这一份状态。
- * 夜间画布色取自 Cloud Monitor（#191B20 / #24262D），群青品牌仍走 Optix 令牌。
+ * 夜间画布色 2026-10-09 起改为纯灰（#0F0F10 / #161617，Arc 改版），群青品牌仍走 Optix 令牌。
  */
 export type ThemePreference = 'system' | 'light' | 'dark';
 export type Appearance = 'light' | 'dark';
@@ -64,7 +64,7 @@ function paintDocument(appearance: Appearance): void {
   root.classList.toggle('dark', appearance === 'dark');
   root.dataset.theme = appearance;
   root.style.colorScheme = appearance;
-  const themeColor = appearance === 'dark' ? '#191B20' : '#F6F7F9';
+  const themeColor = appearance === 'dark' ? '#0F0F10' : '#FAFAFA';
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor);
 }
 

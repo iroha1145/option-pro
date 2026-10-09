@@ -64,7 +64,7 @@ export function snapshotFromDocument(doc, path) {
     hasIndexCards: !!doc.querySelector('[data-optix-region="home-indices"] a, [data-optix-region="market-indices"] button'),
     hasNewsArticle: !!doc.querySelector('article h3'),
     hasQuote: !!doc.querySelector('[data-quote-symbol], [aria-label*="K 线"], [aria-label*="candlestick"], [aria-label*="K-line"]'),
-    hasNotFound: /页面不存在|无此页面|Page not found|ページが存在しません/i.test(bodyText),
+    hasNotFound: /页面不存在|无此页面|Page not found|ページが存在しません|ページが見つかりません/i.test(bodyText),
   };
 }
 
@@ -103,7 +103,7 @@ export function classifyPageReady(snapshot) {
   }
   if (path.startsWith('/stock/')) {
     if (snapshot.ariaBusy) return 'pending';
-    if (/行情服务暂不可用|请求较频繁|请求过于频繁|登录状态已失效|登录失效|Quote service unavailable|Too many requests|Session expired/i.test(body)) return 'error';
+    if (/行情服务暂不可用|请求较频繁|请求过于频繁|登录状态已失效|登录失效|登录已过期|Quote service unavailable|Too many requests|Session expired/i.test(body)) return 'error';
     if (/该标的暂无完整数据|该股票暂无完整数据|该股票暂无数据|代码不存在|未找到该股票|No complete data|No data for this stock|Unknown ticker/i.test(body)) return 'empty';
     const symbol = path.slice('/stock/'.length);
     if (symbol && body.includes(symbol) && snapshot.hasQuote) return 'content';
@@ -134,14 +134,14 @@ export function classifyPageReady(snapshot) {
     if (!headingReady()) return 'pending';
     if (/信号加载失败|信号读取失败|扫描数据暂不可用|Failed to load signals/i.test(body)) return 'error';
     if (/本轮暂无突破信号|没有符合筛选的信号|没有符合筛选条件的信号|No breakout signals/i.test(body)) return 'empty';
-    if (/个活跃|active signals/i.test(body) && /当日信号|Today/.test(body)) return 'content';
+    if (/个活跃|条活跃|active signals/i.test(body) && /当日信号|Today/.test(body)) return 'content';
     return 'shell';
   }
   if (path === '/earnings') {
     if (!headingReady()) return 'pending';
     if (/财报列表不可用|日历数据不可用|Earnings (list )?unavailable/i.test(body)) return 'error';
     if (/近一个月暂无财报|未来 30 天暂无财报|No upcoming earnings/i.test(body)) return 'empty';
-    if (snapshot.hasScanTableRow || /重点公司|Featured/i.test(body)) return 'content';
+    if (snapshot.hasScanTableRow || /重点公司|Featured|Key companies/i.test(body)) return 'content';
     return 'shell';
   }
   if (path === '/sectors') {

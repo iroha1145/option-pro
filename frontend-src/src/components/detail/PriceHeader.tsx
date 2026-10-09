@@ -42,11 +42,11 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
       transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
     >
       <div className="flex flex-wrap items-center gap-3">
-        <TickerLogo ticker={symbol} size={40} />
+        <TickerLogo ticker={symbol} size={44} />
         <div className="min-w-0">
           <h1 className="flex flex-wrap items-baseline gap-x-2.5">
-            <span className="font-display text-[22px] leading-[28px] font-semibold text-ink-900">{symbol}</span>
-            <span className="text-body-s text-ink-500">{detail?.name ?? symbol}</span>
+            <span className="font-display text-[26px] leading-[32px] font-semibold tracking-[-0.02em] text-ink-900">{symbol}</span>
+            <span className="text-body text-ink-500">{detail?.name ?? symbol}</span>
           </h1>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <SoftBadge>
@@ -64,7 +64,9 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+      {/* 2026-10-09 Arc 改版（行情终端式页头）：左边大号价格 + 涨跌 + 比较基准，右边一组小指标
+          （标签在上、数值在下），原先散在三行的成交量、市值、报价时间收进同一组。 */}
+      <div className="mt-5 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
         {/* Insight Cards 的数值块口径：大读数 + 涨跌 + 绝对变动 + **比较基准**。
             基准不是装饰——只给「+2.57%」而不说跟谁比，读者只能猜；tick-flash
             仍要贴在价格本体上，所以外面再包一层承接闪动类名。 */}
@@ -81,15 +83,24 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
             basis={__t('较昨收')}
           />
         </div>
-        <p className="pb-1.5 text-right text-micro text-ink-500 tnum">
-          {__t('成交量')} {compactOr(detail?.volume)} {__t('· 市值')} {isNum(detail?.marketCap) ? `$${fmtCompact(detail?.marketCap)}` : '—'}
-        </p>
+        <dl className="flex flex-wrap items-end gap-x-7 gap-y-3 pb-1.5" data-price-header-stats="">
+          <div className="min-w-0">
+            <dt className="text-micro text-ink-400">{__t('成交量')}</dt>
+            <dd className="mt-0.5 text-body-s text-ink-900 tnum">{compactOr(detail?.volume)}</dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-micro text-ink-400">{__t('市值')}</dt>
+            <dd className="mt-0.5 text-body-s text-ink-900 tnum">{isNum(detail?.marketCap) ? `$${fmtCompact(detail?.marketCap)}` : '—'}</dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-micro text-ink-400">{__t('报价时间')}</dt>
+            <dd className="mt-0.5 text-body-s text-ink-900">
+              <span className="tnum">{updatedAt ? fmtTimeHHMMSS(new Date(updatedAt)) : '—'}</span>
+              <span className="text-ink-500">{priceLabel ? ` · ${priceLabel}` : __t(' · 延迟行情')}</span>
+            </dd>
+          </div>
+        </dl>
       </div>
-
-      <p className="mt-2 text-micro text-ink-400">
-        {__t('报价更新于')} <span className="tnum">{updatedAt ? fmtTimeHHMMSS(new Date(updatedAt)) : '—'}</span>
-        {priceLabel ? ` · ${priceLabel}` : __t(' · 延迟行情')}
-      </p>
     </motion.header>
   );
 }

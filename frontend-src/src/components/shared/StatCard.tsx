@@ -31,7 +31,7 @@ export default function StatCard({ label, value, digits = 0, suffix, icon, sub, 
       )}
     >
       <div className="flex items-start justify-between">
-        <p className="text-caption font-medium text-ink-500">{label}</p>
+        <p className="text-caption text-ink-500">{label}</p>
         {icon && <Icon name={icon} size={18} className="text-ink-400" />}
       </div>
       <p className="metric-value mt-3 text-data-xl text-ink-900">

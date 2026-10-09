@@ -101,7 +101,7 @@ export default function ChainBrowser({ chain }: { chain: OptionChain }) {
           </button>
         </li>)}
       </ul> : <p className="px-4 py-4 text-caption text-ink-500">{t('当前到期日暂无异动合约。')}</p>}
-      <p className="border-t border-line px-4 py-2.5 text-micro leading-relaxed text-ink-500">{t('按成交量、持仓量和估算金额筛选。看涨、看跌表示合约类型。')}</p>
+      <p className="border-t border-line px-4 py-2.5 text-micro leading-relaxed text-ink-500">{t('按成交量、持仓量和估算金额筛选。')}</p>
     </section>
 
     {selected && <div ref={detailRef} tabIndex={-1} className="scroll-mt-24" onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); closeDetail(); } }}><ContractDetail contract={selected} onClose={closeDetail} /></div>}
@@ -149,7 +149,7 @@ export default function ChainBrowser({ chain }: { chain: OptionChain }) {
         </ul>
       </>}
       <details className="group/howto mt-3 rounded-md border border-line px-3 py-2 text-caption text-ink-500">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 font-medium text-ink-600 [&::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-ink-600 [&::-webkit-details-marker]:hidden">
           <span>{t('报价说明')}</span>
           <Icon name="chevron-down" size={14} className="shrink-0 transition-transform duration-fast group-open/howto:rotate-180 motion-reduce:transition-none" />
         </summary>

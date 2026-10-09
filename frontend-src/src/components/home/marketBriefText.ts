@@ -130,14 +130,14 @@ export const PRICED_IN_TONE: Record<BriefPricedIn, BadgeTone> = {
  */
 export const ATTEMPT_ERROR_TEXT: Record<string, string> = {
   provider_auth_failed: t('密钥无效'),
-  provider_rate_limited: t('供应商限流'),
-  provider_request_rejected: t('请求被供应商拒绝'),
-  provider_server_error: t('供应商故障'),
+  provider_rate_limited: t('模型服务繁忙'),
+  provider_request_rejected: t('模型服务拒绝了请求'),
+  provider_server_error: t('模型服务故障'),
   provider_unavailable: t('无法连接'),
   provider_usage_incomplete: t('模型用量未完整确认，请勿重复提交'),
   submission_outcome_unknown: t('提交结果和费用尚未确认，请勿重复提交'),
   provider_stream_incomplete: t('模型回复未完整结束，未生成研判'),
-  provider_invalid_tool_response: t('工具返回结果不完整或格式有误，未生成研判'),
+  provider_invalid_tool_response: t('模型返回的内容不完整或格式有误，未生成研判'),
   provider_refusal: t('模型拒绝了本次请求'),
   output_truncated: t('输出被截断'),
   output_not_json: t('输出格式错误'),

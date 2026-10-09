@@ -53,7 +53,7 @@ function IndicatorReadouts({ chart, bars, range, panes, layout }: {
         className="absolute left-2 right-2 min-w-0 border-t border-line-chart pt-1.5 text-micro text-ink-400"
         style={{ top: header.top, height: header.height }}>
         <div className="flex min-w-0 items-center justify-between gap-3 leading-5">
-          <span className="truncate font-medium text-ink-600" title={row.label}>{row.label}</span>
+          <span className="truncate text-ink-600" title={row.label}>{row.label}</span>
           <span className="shrink-0 tnum text-micro" title={stamp}>
             {selected === null ? t('末根读数') : t('光标读数')} · {stamp}
           </span>

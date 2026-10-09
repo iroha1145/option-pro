@@ -56,14 +56,14 @@ export function pathStatus(status: unknown): string {
 export function diagnosticDataStatus(status: unknown): string {
   if (status === 'scored') return t('已生成路径诊断');
   if (status === 'data_insufficient') return t('数据不足，无法生成完整路径');
-  if (status === 'out_of_scope') return t('本批次范围外');
+  if (status === 'out_of_scope') return t('本轮扫描范围外');
   if (status === 'unknown_symbol') return t('证券目录中未找到该代码');
-  if (status === 'diagnostics_unavailable' || status === 'variant_diagnostics_unavailable') return t('该批次诊断暂不可用');
+  if (status === 'diagnostics_unavailable' || status === 'variant_diagnostics_unavailable') return t('本轮诊断暂不可用');
   return t('诊断状态未提供');
 }
 
 const reasonLabels: Record<string, string> = {
-  DOLLAR_LIQUIDITY_UNVERIFIED: t('成交额资格未核实，不能视为已通过流动性门'),
+  DOLLAR_LIQUIDITY_UNVERIFIED: t('成交额资格未核实，不能视为已通过流动性门槛'),
   VOLUME_SESSION_UNVERIFIED: t('成交量所属交易时段未核实'),
   ATR_REFERENCE_UNAVAILABLE: t('缺少波动幅度参照，无法判断波动门槛'),
   ADV_TOO_LOW: t('成交额低于要求'),
@@ -79,32 +79,32 @@ const reasonLabels: Record<string, string> = {
   HALTED_SESSION: t('该交易日停牌'),
   SETUP_NOT_MET: t('形态条件未满足'),
   INCOMPLETE_COMMON_INPUTS: t('通用条件所需数据不完整'),
-  MISSING_T_BAR: t('缺少截止日价格数据'),
-  LATE_SOURCE: t('数据源晚于截止时间'),
+  MISSING_T_BAR: t('缺少截至交易日的价格数据'),
+  LATE_SOURCE: t('数据晚于截至时间'),
   SOURCE_UNAVAILABLE: t('数据源暂不可用'),
-  BELOW_SMA50: t('尚未确认价格高于五十日均线'),
+  BELOW_SMA50: t('尚未确认价格高于 50 日均线'),
   BREAKOUT_TRACK_EXPIRED: t('突破确认的观察期已经结束'),
   BREAKOUT_UNCONFIRMED: t('突破后的连续收盘确认不足，或未守住阻力位'),
-  DEPTH_OUT_OF_RANGE: t('回撤深度缺失，或超出半倍至主题上限的波动范围'),
+  DEPTH_OUT_OF_RANGE: t('回撤深度缺失，或超出 0.5 倍至主题上限的波动范围'),
   INCOMPLETE_DAILY_DATA: t('日线数据不完整'),
   LH_LL: t('更低高点与更低低点结构尚未修复'),
-  LOW_ADV: t('二十日平均成交额低于所需门槛'),
+  LOW_ADV: t('20 日平均成交额低于所需门槛'),
   LOW_CLV: t('收盘位置指标低于当前形态要求'),
   LOW_EVENT_RVOL: t('突破首日相对成交量低于门槛'),
   LOW_PRICE: t('原始价格低于最低价格门槛'),
-  LOW_RVOL: t('相对成交量缺失或低于零点八'),
+  LOW_RVOL: t('相对成交量缺失或低于 0.8'),
   MISSING_FIRST_DAY_CLV: t('缺少突破首日收盘位置指标'),
   MISSING_FIRST_DAY_RVOL: t('缺少突破首日相对成交量'),
   MISSING_RESIDUAL: t('缺少残差动量数据'),
-  MISSING_SESSION_BAR: t('缺少本次截止交易日的完整行情'),
+  MISSING_SESSION_BAR: t('缺少本次截至交易日的完整行情'),
   NONPOSITIVE_MOMENTUM: t('所选周期动量缺失或不高于零'),
   NONPOSITIVE_RESIDUAL: t('残差动量不高于零'),
   NOT_THROUGH_RESISTANCE: t('价格尚未越过阻力位'),
   NO_FROZEN_BASE: t('缺少已确认的底部形态'),
   NO_REBOUND: t('回撤后尚未出现反弹'),
-  SMA50_SLOPE: t('五十日均线未确认较二十日前上行'),
+  SMA50_SLOPE: t('50 日均线未确认较 20 日前上行'),
   SUPPORT_BROKEN: t('支撑结构已经失效'),
-  TOO_FAR_FROM_BASE: t('价格距底部平台超过两倍波动幅度'),
+  TOO_FAR_FROM_BASE: t('价格距底部平台超过 2 倍波动幅度'),
   TOO_FAR_FROM_MA: t('价格距均线超过主题上限'),
   TREND_DIRECTION: t('趋势方向条件未满足'),
   UNRESOLVED_UPTHRUST: t('冲高回落信号尚未解除'),
@@ -119,11 +119,11 @@ export function diagnosticReason(code: unknown): string {
 
 export function diagnosticCoverageStatus(code: unknown): string {
   if (code === 'ok') return t('当日日线完整');
-  if (code === 'no_history') return t('未取得日线历史');
+  if (code === 'no_history') return t('未获取日线历史');
   if (code === 'invalid') return t('日线数据无效');
   if (code === 'missing_target_session' || code === 'missing_session') return t('缺少当日日线');
   if (code === 'NOT_IN_DIRECTORY') return t('不在当前证券目录');
-  if (code === 'NOT_EVALUATED_IN_BATCH' || code === 'FULL_THEME_STATISTICS_UNAVAILABLE') return t('本批次尚无全成员统计');
+  if (code === 'NOT_EVALUATED_IN_BATCH' || code === 'FULL_THEME_STATISTICS_UNAVAILABLE') return t('本轮扫描尚无全成员统计');
   if (code === 'SCORE_UNAVAILABLE') return t('缺少技术分数');
   if (typeof code === 'string' && code.startsWith('excluded:')) return `${t('不属于当前扫描范围')} (${code.slice(9)})`;
   return diagnosticReason(code);
@@ -159,12 +159,12 @@ export function diagnosticTrack(code: unknown): string {
   if (code === 'PRICE_ONLY_DIAGNOSTIC') return t('仅价格诊断');
   if (code === 'D_MARKET_RESIDUAL_DIAGNOSTIC') return t('市场相对动量诊断');
   if (code === 'FULL_EIGHT_FACTOR') return t('完整八因子');
-  return t('轨道未提供');
+  return t('评分模式未提供');
 }
 
 export function diagnosticAtrReference(source: unknown): string {
   if (source === 'unavailable' || source == null) return t('参照样本不足');
-  if (source === 'legacy_all_tracks_industry') return t('旧版全轨道行业参照');
+  if (source === 'legacy_all_tracks_industry') return t('旧版全模式行业参照');
   if (source === 'legacy_all_tracks_missing_industry') return t('未分类证券合并参照（含股票与基金）');
   if (typeof source === 'string') {
     const [, kind] = source.split(':');
@@ -182,7 +182,7 @@ export function diagnosticAtrPolicy(policy: unknown): string {
 }
 
 export function diagnosticDisplayReason(code: unknown): string {
-  if (code === 'composite') return t('进入合格综合');
+  if (code === 'composite') return t('进入合格候选');
   if (code === 'observation_only') return t('进入技术观察');
   if (code === 'scored_but_rejected') return t('有技术分数，但未进入结果');
   return t('数据不足，未进入结果');

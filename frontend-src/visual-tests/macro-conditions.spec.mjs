@@ -415,7 +415,7 @@ test.describe("macro conditions degraded states", () => {
     // 图表未被清空，模块行仍在，缺分模块如实说明门槛
     await expect(page.getByRole("region", { name: "宏观环境历史", exact: true })).toBeVisible();
     await expect(page.getByLabel("风险 类别")).toBeVisible();
-    await expect(page.getByText(/有效指标不足.*门槛，本类别不出分（不按 50 补齐）/)).toBeVisible();
+    await expect(page.getByText(/有效指标不足.*个，本类别不出分（不按 50 补齐）/)).toBeVisible();
     await shot(page, "macro-degraded-1440");
   });
 
@@ -448,7 +448,7 @@ test.describe("macro conditions degraded states", () => {
       history: { status: "disabled", points: [] },
     });
     await openMarket(page);
-    await expect(page.getByText("宏观数据源尚未配置")).toBeVisible();
+    await expect(page.getByText("宏观数据来源尚未配置")).toBeVisible();
     await expect(page.getByText(/管理员配置经济数据平台（FRED）的访问密钥后/)).toBeVisible();
     // 页面不得出现任何密钥输入或密钥值
     await expect(page.locator('input[type="password"]')).toHaveCount(0);

@@ -108,7 +108,7 @@ export default function MoreMenu({ current, showManage, onSelect, className }: M
         aria-haspopup="menu"
         aria-expanded={open}
         className={cn(
-          'touch-target inline-flex min-h-9 items-center gap-1.5 rounded-md border px-3 py-1.5 text-caption font-medium shadow-btn transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600',
+          'touch-target inline-flex min-h-9 items-center gap-1.5 rounded-pill border px-3 py-1.5 text-caption font-medium shadow-btn transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600',
           current ? 'border-brand-400 bg-brand-50 text-brand-700' : open ? 'border-brand-400 bg-card text-brand-700' : 'border-line bg-card text-ink-600 hover:text-ink-800',
         )}
       >

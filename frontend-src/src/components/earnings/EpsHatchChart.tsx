@@ -45,7 +45,7 @@ export default function EpsHatchChart({ items, title = t('EPS 预期 vs 实际')
       yAxis: valueAxis(),
       series: [
         {
-          name: t('预估 EPS'),
+          name: t('预期 EPS'),
           type: 'bar',
           data: ests,
           barWidth: 13,
@@ -96,7 +96,7 @@ export default function EpsHatchChart({ items, title = t('EPS 预期 vs 实际')
       <div className="mt-3 h-[240px]">
         <ReactECharts
           option={option}
-          ariaLabel={t('EPS 预期与实际对照柱状图，共 {n} 只标的，斜纹为预估值，实心为实际值', { n: rows.length })}
+          ariaLabel={t('EPS 预期与实际对照柱状图，共 {n} 只标的，斜纹为预期值，实心为实际值', { n: rows.length })}
         />
       </div>
       {!hasActual && (

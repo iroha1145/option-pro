@@ -150,7 +150,7 @@ test('candle tooltip compares open to close and previous close, and footer names
 
 test('a technical anchor far behind the displayed daily bars hides its levels', async ({ page }) => {
   const errors = await open(page, 'old-technical');
-  await expect(page.getByText('结构分析与当前 K 线数据版本不一致，技术点位已暂隐，刷新后恢复')).toBeVisible();
+  await expect(page.getByText('结构分析与当前 K 线数据版本不一致，技术点位已暂时隐藏，刷新后恢复')).toBeVisible();
   await expect(page.getByText('阻力带（整理区上沿）')).toHaveCount(0);
   expect(errors).toEqual([]);
 });

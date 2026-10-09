@@ -696,7 +696,7 @@ function MarketStatusPanel({
       {/* 辅助指标直接展示；缺失读数仍遵守原有数据纪律，不补零。 */}
       {(signalMetrics && signalMetrics.length > 0) && (
         <div className="mt-auto border-t border-line/70 pt-3" data-testid="home-supporting-metrics">
-          <p className="text-caption font-medium text-ink-600">{t('辅助指标')}</p>
+          <p className="text-caption text-ink-600">{t('辅助指标')}</p>
           <div className="mt-2 rounded-lg bg-paper-2/60 p-3">
             {signalMetrics && signalMetrics.length > 0 && (
               <div className="grid grid-cols-2 gap-x-4 gap-y-2">
@@ -756,7 +756,7 @@ function GrowStrength({ score, delay = 0, className }: { score: number | null | 
           />
         )}
       </motion.span>
-      <span className="w-8 text-right text-caption font-medium text-ink-600 tnum">{valid ? score.toFixed(1) : '—'}</span>
+      <span className="w-8 text-right text-caption text-ink-600 tnum">{valid ? score.toFixed(1) : '—'}</span>
     </span>
   );
 }
@@ -860,7 +860,7 @@ function moverTrendLabel(ticker: string, trend: { date: string }[], periodChange
 
 /** 还没有日线时区分「读取失败 / 已获取待重绘 / 获取失败 / 正在获取」。 */
 function moverPendingText(preparation: StockDataStatus | undefined, statusReadFailed: boolean): string {
-  if (statusReadFailed) return t('暂无每日走势，准备状态读取失败');
+  if (statusReadFailed) return t('暂无每日走势，数据状态读取失败');
   if (preparation?.resources.dailyChart.available) return t('日线已获取，正在更新图表');
   if (preparation?.status === 'failed' || preparation?.refreshStatus === 'failed') return t('日线获取失败，稍后自动重试');
   return t('正在获取日线，完成后自动显示');

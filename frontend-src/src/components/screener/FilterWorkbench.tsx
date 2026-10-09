@@ -1,13 +1,14 @@
 /**
  * B1 筛选条件（screener.md）
  * 常驻：分档 / 周期 / 偏好 / 扫描
- * 更多筛选：预设、行业、价格、成交额与显示数量；折叠时仍展示当前约束（含显示数量上限）
+ * 更多筛选：行业、价格、成交额与显示数量；折叠时仍展示当前约束（含显示数量上限）
+ * 原来的「预设策略」一行与常驻的「风险偏好」是同一组三个选项，2026-10-09 按用户确认删除
  * 行 stagger 60ms；过滤器变更主按钮脉冲（box-shadow 呼吸 1.2s ×2）
  */
 import SoftBadge from '@/components/shared/SoftBadge';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import type { SectorOption, StrengthProfile } from '@/api/types';
+import type { SectorOption } from '@/api/types';
 import { cn } from '@/lib/utils';
 import { DUR_FAST, DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import Icon from '@/components/icons';
@@ -31,13 +32,16 @@ import { t as __t } from '../../i18n/core.ts';
 
 
 /* ---------------- 分档 Segmented（共享件 + Mono 11 数量徽标） ---------------- */
-const TIER_OPTIONS: { value: TierFilter; label: string }[] = [
+/* 选中时按分数档着色，与结果里的评分条同色：S 绿、A/B 群青、C 琥珀（2026-10-09）。 */
+const TIER_OPTIONS: { value: TierFilter; label: string; tone?: 'ok' | 'warn' }[] = [
   { value: 'all', label: __t('全部') },
-  { value: 'S', label: 'S' },
+  { value: 'S', label: 'S', tone: 'ok' },
   { value: 'A', label: 'A' },
   { value: 'B', label: 'B' },
-  { value: 'C', label: 'C' },
+  { value: 'C', label: 'C', tone: 'warn' },
 ];
+/* 风险偏好由冷到暖：稳健天蓝、均衡群青、进取橙。 */
+const PROFILE_TONE = { conservative: 'sky', balanced: undefined, aggressive: 'orange' } as const;
 
 function TierSegmented({
   value,
@@ -77,7 +81,7 @@ function TierSegmented({
 
 /* ---------------- 小件：字段标签 ---------------- */
 function FieldLabel({ children }: { children: string }) {
-  return <p className="mb-2 text-caption font-medium text-ink-500">{children}</p>;
+  return <p className="mb-2 text-caption text-ink-500">{children}</p>;
 }
 
 /* ---------------- 价格区间输入（Mono，$ 前缀） ---------------- */
@@ -199,8 +203,6 @@ interface FilterWorkbenchProps {
   };
   /** 板块选项：live 来自 /strength/profiles sectors（id+中文名，下发 id）；mock 回退扫描行 sector 名（id=name） */
   sectorOptions: SectorOption[];
-  presets: StrengthProfile[] | null;
-  presetsFailed: boolean;
   scanning: boolean;
   dirty: boolean;
   dollarVolumeFilterSupported: boolean;
@@ -214,8 +216,6 @@ export default function FilterWorkbench({
   onChange,
   universe,
   sectorOptions,
-  presets,
-  presetsFailed,
   scanning,
   dirty,
   dollarVolumeFilterSupported,
@@ -232,28 +232,11 @@ export default function FilterWorkbench({
     patch({ sectors: has ? draft.sectors.filter((x) => x !== id) : [...draft.sectors, id] });
   };
 
-  const applyPreset = (id: string) => {
-    if (draft.presetId === id) {
-      patch({ presetId: null, minScore: null });
-      return;
-    }
-    // 契约 /strength/profiles 枚举（conservative/balanced/aggressive）→ 直接落偏好
-    if (id === 'conservative' || id === 'balanced' || id === 'aggressive') {
-      patch({ presetId: id, profile: id, minScore: null });
-      return;
-    }
-    // mock 预设策略 → 偏好映射 + 强度下限
-    if (id === 'breakout') patch({ presetId: id, profile: 'aggressive', minScore: 70 });
-    else if (id === 'lowvol') patch({ presetId: id, profile: 'conservative', minScore: null });
-    else patch({ presetId: id, profile: 'balanced', minScore: null });
-  };
-
   const row = {
     hidden: { opacity: 0, y: 14 },
     show: { opacity: 1, y: 0, transition: { duration: DUR_SECTION, ease: EASE_PAPER } },
   };
 
-  const selectedPreset = presets?.find((preset) => preset.id === draft.presetId);
   const selectedSectors = draft.sectors.map((id) => sectorOptions.find((sector) => sector.id === id)?.name ?? id);
   const priceSummary = draft.priceMin !== null && draft.priceMax !== null
     ? `${__t('价格范围')} $${draft.priceMin} – $${draft.priceMax}`
@@ -266,7 +249,6 @@ export default function FilterWorkbench({
   // 显示数量收进「更多筛选」后，折叠状态下仍要看得到返回上限。
   const topNSummary = `${__t('显示数量')} ${TOPN_OPTIONS.find((option) => option.value === draft.topN)?.label ?? `Top ${draft.topN}`}`;
   const advancedSummary = [
-    selectedPreset?.name,
     selectedSectors.length > 0 ? `${selectedSectors.slice(0, 2).join(' / ')}${selectedSectors.length > 2 ? ` +${selectedSectors.length - 2}` : ''}` : null,
     priceSummary,
     volumeSummary,
@@ -304,7 +286,7 @@ export default function FilterWorkbench({
         <div className="min-w-0">
           <FieldLabel>{__t('风险偏好')}</FieldLabel>
           <Segmented<ProfilePref>
-            options={(['conservative', 'balanced', 'aggressive'] as const).map((v) => ({ value: v, label: PROFILE_CN[v] }))}
+            options={(['conservative', 'balanced', 'aggressive'] as const).map((v) => ({ value: v, label: PROFILE_CN[v], tone: PROFILE_TONE[v] }))}
             value={draft.profile}
             onChange={(profile) => patch({ profile, presetId: null })}
             ariaLabel={__t('风险偏好')}
@@ -316,7 +298,7 @@ export default function FilterWorkbench({
       {/* 次要条件收纳；已选择的范围常驻，避免折叠后忘记当前扫描门槛。 */}
       <details className="group/filters mt-5 border-t border-line/70 pt-3" data-testid="screener-advanced-filters">
         <summary className="disclosure-trigger flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-2 rounded-lg py-1 text-caption text-ink-500 outline-none transition-colors duration-fast hover:text-ink-800 focus-visible:ring-2 focus-visible:ring-brand-400/40 [&::-webkit-details-marker]:hidden">
-          <span className="inline-flex shrink-0 items-center gap-2 font-medium text-ink-700">
+          <span className="inline-flex shrink-0 items-center gap-2 text-ink-700">
             <Icon name="filter-funnel" size={14} className="text-ink-400" />
             {__t('更多筛选')}
             <Icon name="chevron-down" size={13} className="text-ink-400 transition-transform group-open/filters:rotate-180" />
@@ -329,71 +311,47 @@ export default function FilterWorkbench({
         </summary>
 
         <div className="space-y-4 pt-4">
-          <div className="min-w-0">
-            <FieldLabel>{__t('预设策略')}</FieldLabel>
-            {presetsFailed ? (
-              <p className="flex h-8 items-center text-caption text-ink-400">{__t('预设暂不可用 · 使用默认分档')}</p>
-            ) : presets === null ? (
-              <div className="flex gap-2" aria-hidden="true">
-                {Array.from({ length: 3 }, (_, i) => (
-                  <span key={i} className="skeleton-shimmer h-8 w-20 rounded-md" />
-                ))}
-              </div>
-            ) : (
-              <SelectionViewport>
-              <div className="mobile-selection-rail flex flex-wrap gap-2">
-                {presets.map((preset) => {
-                  const active = draft.presetId === preset.id;
-                  return (
-                    <FilterButton
-                      key={preset.id}
-                      onClick={() => applyPreset(preset.id)}
-                      active={active}
-                    >
-                      <Icon name="spark-ai" size={13} className={active ? 'text-brand-600' : 'text-ink-400'} />
-                      {preset.name}
-                    </FilterButton>
-                  );
-                })}
-              </div>
-              </SelectionViewport>
-            )}
-          </div>
           <div data-screener-field="sectors" className="min-w-0">
             <FieldLabel>{__t('行业（多选）')}</FieldLabel>
             {sectorOptions.length === 0 ? (
               <div className="flex flex-wrap gap-2" aria-hidden="true">
                 {Array.from({ length: 5 }, (_, i) => (
-                  <span key={i} className="skeleton-shimmer h-7 w-16 rounded-md" />
+                  <span key={i} className="skeleton-shimmer h-8 w-16 rounded-pill" />
                 ))}
               </div>
             ) : (
               <SelectionViewport>
-              <div className="mobile-selection-rail flex flex-wrap items-center gap-1.5">
+              <div className="mobile-selection-rail flex flex-wrap items-center gap-2">
                 {visibleSectors.map((sector) => (
-                  <FilterButton key={sector.id} onClick={() => toggleSector(sector.id)} active={draft.sectors.includes(sector.id)} className="shrink-0">
+                  <FilterButton key={sector.id} onClick={() => toggleSector(sector.id)} active={draft.sectors.includes(sector.id)} className="choice-chip shrink-0">
+                    {/* 多选：选中时对勾从 0 宽长出（index.css .choice-chip-check），无障碍名称仍只是板块名 */}
+                    <span className="choice-chip-check" aria-hidden="true"><Icon name="check" size={13} /></span>
                     {sector.name}
                   </FilterButton>
                 ))}
+                {/* 展开与收起和芯片同形同色（灰底胶囊），字色浅一档，箭头指明是展开不是筛选项 */}
                 {hiddenCount > 0 && (
                   <button
                     type="button"
                     onClick={() => setShowAllSectors(true)}
-                    className="flex h-8 shrink-0 items-center whitespace-nowrap rounded-lg bg-paper-2 px-2.5 text-caption text-ink-500 tnum transition-colors duration-fast hover:bg-paper hover:text-ink-800"
+                    className="control-button choice-chip choice-chip-more shrink-0 tnum"
                   >
                     +{hiddenCount}
+                    <Icon name="chevron-down" size={13} />
                   </button>
                 )}
                 {showAllSectors && sectorOptions.length > SECTOR_COLLAPSE_AT && (
-                  <button type="button" onClick={() => setShowAllSectors(false)} className="flex h-8 shrink-0 items-center whitespace-nowrap rounded-lg px-2 text-caption text-ink-400 transition-colors duration-fast hover:text-ink-600">
+                  <button type="button" onClick={() => setShowAllSectors(false)} className="control-button choice-chip choice-chip-more shrink-0">
                     {__t('收起')}
+                    <Icon name="chevron-down" size={13} className="rotate-180" />
                   </button>
                 )}
               </div>
               </SelectionViewport>
             )}
           </div>
-          <div className="flex flex-wrap items-end gap-x-6 gap-y-4 border-t border-line/60 pt-4">
+          {/* 顶对齐：成交额下限下面可能挂一行说明，底对齐会把三个字段标签顶成三种高度 */}
+          <div className="flex flex-wrap items-start gap-x-6 gap-y-4 border-t border-line/60 pt-4">
             <div data-screener-field="price">
               <FieldLabel>{__t('价格范围')}</FieldLabel>
               <div className="flex items-center gap-1.5">

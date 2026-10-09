@@ -110,9 +110,9 @@ const LATEST_TRACK_MS = 15_000;
 const LATEST_MAX_AGE_MS = 10_000;
 
 function attemptNotice(status: string): string {
-  if (status === 'cancelled' || status === 'canceled') return t('最近一次更新已取消，当前展示上次成功结果');
-  if (status === 'budget_blocked') return t('最近一次更新没有执行，当前展示上次成功结果');
-  return t('最近一次更新失败，当前展示上次成功结果');
+  if (status === 'cancelled' || status === 'canceled') return t('更新已取消，显示上次成功的结果');
+  if (status === 'budget_blocked') return t('更新没有执行，显示上次成功的结果');
+  return t('更新失败，显示上次成功的结果');
 }
 
 function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; compact?: boolean }) {
@@ -182,7 +182,7 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
           aria-label={t('逐股评估')}
           className={cn('min-w-0 border-t border-line pt-4', !compact && 'lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0')}
         >
-          <h4 className="mb-3 text-caption font-medium text-ink-700">{t('逐股评估')}</h4>
+          <h4 className="mb-3 text-caption font-medium text-ink-900">{t('逐股评估')}</h4>
           <div className="divide-y divide-line">
             {cycle.assessments.map((a, i) => {
               const d = DIR_ARROW[a.direction];
@@ -483,7 +483,7 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
           <>
             {latestState === 'stale' && (
               <StatusNotice className="mb-4" action={retryLatest}>
-                <p>{t('最新状态读取失败，显示上次结果')}</p>
+                <p>{t('最新状态读取失败，显示上次成功的结果')}</p>
               </StatusNotice>
             )}
             <CycleSummary cycle={latestQ.data} />

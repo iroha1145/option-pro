@@ -140,14 +140,15 @@ test('抽屉只给已完成分析标注输入依据，保留原始公司名，�
     basis: 'title_summary', article_status: 'unavailable', reason: 'http_403', body_characters: 0, truncated: false,
   } });
   const unavailableText = texts(renderDrawer(unavailable));
-  assert.match(unavailableText, /仅基于标题和摘要分析.*未能取得正文/);
+  assert.match(unavailableText, /仅基于标题和摘要分析.*未能获取正文/);
   assert.doesNotMatch(unavailableText, /http_403/);
 
   const webAnalysis = { ...unavailable.analysis, evidenceSources: [
     { title: '公司公告', url: 'https://www.nvidia.com/', type: 'web_search' },
   ] };
   const webText = texts(renderDrawer({ ...unavailable, analysis: webAnalysis }));
-  assert.match(webText, /基于标题、摘要及联网来源分析.*未能取得正文/);
+  // 文案复查把「取得」统一为「获取」（main 的 #230 新增这条断言时还是旧写法）。
+  assert.match(webText, /基于标题、摘要及联网来源分析.*未能获取正文/);
   assert.doesNotMatch(webText, /仅基于标题和摘要分析|未调用模型/);
   assert.match(texts(renderDrawer({ ...article, analysis: webAnalysis })), /基于正文节选及联网来源分析/);
   assert.match(texts(renderDrawer({ ...article, analysis: webAnalysis,

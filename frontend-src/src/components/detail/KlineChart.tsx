@@ -1016,7 +1016,7 @@ export default function KlineChart({
           }}
         >
           <label className="flex-1 text-micro">
-            <span className="sr-only">{t('文字注释')}</span>
+            <span className="sr-only">{t('文字批注')}</span>
             <input
               autoFocus
               maxLength={240}
@@ -1188,8 +1188,8 @@ export default function KlineChart({
       {analysisDrift && (
         <p className="mt-1 text-micro text-warn-700" role="status">
           {analysisDrift.sameWindow && analysisDrift.expected != null && analysisDrift.bars === analysisDrift.expected
-            ? t('分析图层与当前 K 线数值对不上（同窗口 {n} 根），已暂隐', { n: analysisDrift.bars })
-            : t('分析图层与当前 K 线不同版本（图上 {n} 根 / 分析 {m} 根），已暂隐，刷新后恢复', {
+            ? t('分析图层与当前 K 线数值不一致（同窗口 {n} 根），已暂时隐藏', { n: analysisDrift.bars })
+            : t('分析图层与当前 K 线版本不一致（图上 {n} 根 / 分析 {m} 根），已暂时隐藏，刷新后恢复', {
                 n: analysisDrift.bars,
                 m: analysisDrift.expected ?? analysisDrift.bars,
               })}
@@ -1208,8 +1208,8 @@ export default function KlineChart({
             const touches = overlayRow.evidence.touches;
             const collapsed = overlayRow.evidence.collapsedCandidates;
             return (
-              <span key={overlayRow.id} title={t('几何质量衡量形状的吻合程度')}>
-                {t('形态 · {name} · 几何质量 {n}', { name, n: Math.round(overlayRow.shapeQuality * 100) })}
+              <span key={overlayRow.id} title={t('吻合度衡量形状与标准形态的接近程度')}>
+                {t('形态 · {name} · 吻合度 {n}', { name, n: Math.round(overlayRow.shapeQuality * 100) })}
                 {typeof touches === 'number' && touches > 0 ? ` · ${t('触碰 {n} 次', { n: touches })}` : ''}
                 {typeof collapsed === 'number' && collapsed > 0 ? ` · ${t('合并 {n} 个相近候选', { n: collapsed })}` : ''}
               </span>
@@ -1303,7 +1303,7 @@ function OverlayLegend({
   if (inconsistent) {
     return (
       <p className="mt-2 text-micro text-warn-700">
-        {t('结构分析与当前 K 线数据版本不一致，技术点位已暂隐，刷新后恢复')}
+        {t('结构分析与当前 K 线数据版本不一致，技术点位已暂时隐藏，刷新后恢复')}
       </p>
     );
   }

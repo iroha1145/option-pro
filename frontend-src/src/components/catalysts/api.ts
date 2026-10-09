@@ -410,8 +410,8 @@ function nCycle(raw: unknown): MarketFocusCycle {
 }
 
 const STREAM_CN: Record<string, string> = {
-  news: __t('新闻获取流'),
-  calendar: __t('经济日历流'),
+  news: __t('新闻获取'),
+  calendar: __t('经济日历获取'),
 };
 
 function nStream(key: string, raw: unknown): CatalystStreamHealth | null {
@@ -925,8 +925,8 @@ export const catalystsContract = {
         if (fromStatus.length) return fromStatus;
         const streams = asRec(asRec(statusBody).streams);
         const streamNames: Record<string, string> = {
-          news: __t('新闻获取流'),
-          calendar: __t('经济日历流'),
+          news: __t('新闻获取'),
+          calendar: __t('经济日历获取'),
         };
         const realStreams = Object.entries(streams).map(([key, raw]) => {
           const r = asRec(raw);
@@ -940,8 +940,8 @@ export const catalystsContract = {
             lastFetchedAt: pickS(r, 'last_success_at', 'data_through') ?? '',
             itemsToday: pickN(r, 'items_last_24h', 'itemsLast24h'),
             note: active
-              ? __t('后台获取流最近一次执行成功')
-              : pickS(r, 'last_error_code') ?? __t('后台获取流状态异常'),
+              ? __t('后台获取最近一次执行成功')
+              : pickS(r, 'last_error_code') ?? __t('后台获取状态异常'),
           };
         });
         if (realStreams.length) return realStreams;
@@ -1080,7 +1080,7 @@ export const catalystsContract = {
         postCreate(`/catalysts/news/${encodeURIComponent(newsId)}/analysis`, { force }).then(({ data, location }) => {
           clearCatalystReadCache({ userInitiated: true });
           const job = nAnalysisJob(data, idFromLocation(location));
-          if (!job.jobId) throw new ApiError(502, __t('任务创建响应缺少 job_id'), { payload: data });
+          if (!job.jobId) throw new ApiError(502, __t('任务创建失败：服务器没有返回任务编号，请重试'), { payload: data });
           if (!job.newsId) job.newsId = newsId;
           return job;
         }),

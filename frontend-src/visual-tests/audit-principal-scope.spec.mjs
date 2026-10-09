@@ -411,7 +411,7 @@ test('retained catalyst feed suspends pagination while identity is unavailable',
   const state = await fixture(page, { username: 'alice', feedAvailable: true });
   await page.goto('/catalysts');
   await expect(page.getByText('ALICE 催化快照', { exact: true })).toBeVisible();
-  const more = page.getByRole('button', { name: '查看更多', exact: true });
+  const more = page.getByRole('button', { name: '加载更多', exact: true });
   await expect(more).toBeEnabled();
   state.holdFeedNext = true;
   await more.click();

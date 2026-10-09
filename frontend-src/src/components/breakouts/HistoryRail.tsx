@@ -168,13 +168,13 @@ export default function HistoryRail({
           <EmptyState
             image="/empty-radar.svg"
             title={t("没有符合条件的历史事件")}
-            description={t("可放宽筛选条件，或等待下一轮扫描。")}
+            description={t("放宽筛选条件，或等待下一轮扫描")}
             action={
               <button
                 onClick={onRetry}
                 className="btn-primary"
               >
-                {t('重新读取')}
+                {t('重试')}
               </button>
             }
           />
@@ -184,7 +184,7 @@ export default function HistoryRail({
               <div key={day}>
                 {/* 日期分组小头（Serif 13px + 计数） */}
                 <div className="radar-history-date flex items-baseline justify-between px-4 py-2">
-                  <p className="text-[13px] font-medium leading-[18px] text-ink-500">{dayLabel(day)}</p>
+                  <p className="text-[13px] leading-[18px] text-ink-500">{dayLabel(day)}</p>
                   <span className="text-micro text-ink-400 tnum">{items.length} {t('条')}</span>
                 </div>
                 <ul className="radar-history-list divide-y divide-line">

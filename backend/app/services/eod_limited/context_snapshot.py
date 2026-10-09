@@ -29,7 +29,9 @@ def _descriptive_market_regime(regime: Mapping[str, Any]) -> dict[str, Any]:
     """Keep market observations without claiming old ranking adjustments ran."""
 
     descriptions = {
-        "市场宽度偏弱，突破型信号已降权": "市场宽度偏弱",
+        "市场广度偏弱，突破型信号已降权": "市场广度偏弱",
+        # 改名前写入的市场环境里仍是旧写法，读出时一并换成新写法。
+        "市场宽度偏弱，突破型信号已降权": "市场广度偏弱",
         "波动或信用压力偏高，期权热度已降权": "波动或信用压力偏高",
         "风险偏好价差偏弱，突破与期权信号已降权": "风险偏好价差偏弱",
     }

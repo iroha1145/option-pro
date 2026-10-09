@@ -213,7 +213,7 @@ export default function MacroHistoryChart({
                 className={cn(
                   'rounded-xs px-2 py-1 text-micro tnum outline-none transition-colors duration-fast',
                   range === item.key
-                    ? 'bg-brand-50 text-brand-700 shadow-chip'
+                    ? 'bg-card text-brand-700 shadow-chip'
                     : 'text-ink-400 hover:text-ink-600 focus-visible:text-ink-600',
                 )}
               >

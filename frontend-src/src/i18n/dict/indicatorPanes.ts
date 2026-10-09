@@ -5,6 +5,6 @@ export const INDICATOR_PANES: Dict = {
   '全部展开': ['Expand all', 'すべて展開'],
   '选择副图指标': ['Select indicator', '指標を選択'],
   '未启用指标副图，可在图表设置中开启': ['No indicator panes enabled. Turn them on in Chart settings.', '有効な指標パネルはありません。チャート設定でオンにできます。'],
-  '末根读数': ['Latest bar', '最新足'],
-  '光标读数': ['At cursor', 'カーソル位置'],
+  '末根读数': ['Latest bar', '最新足の値'],
+  '光标读数': ['At cursor', 'カーソル位置の値'],
 };

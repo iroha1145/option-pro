@@ -22,7 +22,7 @@ async function capture(page, name, focus) {
 
 async function activeSignalCount(page) {
   const text = await page.getByRole('region', { name: '当日信号', exact: true })
-    .getByText(/^\d+\s*个活跃(?:\s|$)/).innerText();
+    .getByText(/^\d+\s*条活跃(?:\s|$)/).innerText();
   return Number(text.match(/^\d+/)?.[0]);
 }
 
@@ -83,7 +83,7 @@ for (const width of [390, 1440]) {
       await noPageOverflow(page);
       await history.click();
 
-      const hotspot = page.getByRole('region', { name: '热点主题带', exact: true })
+      const hotspot = page.getByRole('region', { name: '市场热点', exact: true })
         .getByRole('button', { name: /查看代表新闻/ }).first();
       await hotspot.focus();
       await page.keyboard.press('Enter');
@@ -283,7 +283,8 @@ for (const width of [390, 1440]) {
         ...await measure(toolbar.getByRole('button')),
       ];
       expect(geometry.length).toBeGreaterThanOrEqual(4);
-      expect(geometry.every((control) => control.radius <= (width === 390 ? 9 : 8))).toBe(true);
+      /* 2026-10-09 Arc 改版：工具栏的下拉触发器与组内按钮改为胶囊（原「≤ 8 / 9px 的克制圆角」作废，见设计规范 §10）。 */
+      expect(geometry.every((control) => control.radius >= control.height / 2)).toBe(true);
       expect(geometry.every((control) => control.height >= (width === 390 ? 44 : 28))).toBe(true);
       if (width === 390) {
         const raisedAndVisible = await scores.evaluate((rail) => {

@@ -89,7 +89,8 @@ const SURFACES = [
   ['pages/Watchlist.tsx', /<MenuSelect/, 'MenuSelect (watchlist sort)'],
   ['components/catalysts/FilterBar.tsx', /<MenuSelect/, 'MenuSelect (catalyst status)'],
   ['components/shared/Segmented.tsx', /t-tabs/, 't-tabs'],
-  ['components/shared/Segmented.tsx', /\{active && <GlidePill layoutId=\{layoutId\} \/>\}/, 'GlidePill (segmented)'],
+  /* 2026-10-09：dependency 让滑块只在选中值变化时做布局动画（打开新页面不再从附近滑入）。 */
+  ['components/shared/Segmented.tsx', /\{active && <GlidePill layoutId=\{layoutId\} dependency=\{value\} \/>\}/, 'GlidePill (segmented)'],
   ['components/shared/Segmented.tsx', /layoutRoot=\{!scrollable\}/, 'layoutRoot 投影（内联 / fixed 容器）'],
   ['components/shared/Segmented.tsx', /layoutScroll=\{scrollable\}/, 'layoutScroll 投影（可横向滚动的条）'],
   ['components/shared/Skeleton.tsx', /t-skel/, 't-skel'],
@@ -151,6 +152,14 @@ test('index.css does not duplicate the transitions-root :root block', async () =
   const index = await source('index.css');
   assert.doesNotMatch(index, /--duration-stagger:/);
   assert.doesNotMatch(index, /--dropdown-open-dur:/);
+});
+
+test('reduced motion does not animate the Radix popper positioning wrapper', async () => {
+  // 全局 reduced-motion 规则把所有元素的 transition-duration 改成 160ms；浮层定位容器必须排除，
+  // 否则下拉菜单从测量位置 translate(0, -200%) 滑下来，经过静止鼠标时会抢走键盘焦点。
+  const css = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
+  const block = css.slice(css.indexOf('transition-duration: 160ms !important;'));
+  assert.match(block.slice(0, 1200), /\[data-radix-popper-content-wrapper\]\s*\{\s*transition:\s*none !important;/);
 });
 
 test('each catalog snippet keeps prefers-reduced-motion', async () => {

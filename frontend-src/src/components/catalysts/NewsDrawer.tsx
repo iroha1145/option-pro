@@ -51,7 +51,7 @@ function StockImpactCard({ imp, index }: { imp: TrustedStockImpact; index: numbe
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: Math.min(0.08 + index * 0.05, 0.3) }}
-      className="rounded-md border border-line bg-card-warm/60 p-3"
+      className="rounded-md border border-line bg-card p-3"
     >
       <div className="flex flex-wrap items-center gap-2">
         <TickerChip ticker={imp.ticker} onClick={() => openTicker(imp.ticker)} />
@@ -60,7 +60,7 @@ function StockImpactCard({ imp, index }: { imp: TrustedStockImpact; index: numbe
         <span className="ml-auto tnum text-micro text-ink-400">{imp.horizon}</span>
       </div>
       <p className="mt-2 text-micro text-ink-500">
-        <span className="font-medium text-ink-600">{__t('影响机制 ·')} {imp.mechanism}</span>
+        <span className="text-ink-600">{__t('影响机制 ·')} {imp.mechanism}</span>
       </p>
       <p className="mt-1 text-body-s leading-relaxed text-ink-600">{imp.reason}</p>
     </motion.div>
@@ -70,13 +70,13 @@ function StockImpactCard({ imp, index }: { imp: TrustedStockImpact; index: numbe
 /* ---------------- 服务端任务进度 ---------------- */
 function JobStepper({ job }: { job: NewsAnalysisJob }) {
   const label = job.cancelRequested
-    ? __t('已请求取消，等待服务端确认')
+    ? __t('已请求取消，等待确认')
     : job.status === 'queued' ? __t('任务排队中') : __t('模型分析中');
   return (
     <div className="rounded-sm border border-line bg-card px-3 py-2.5">
       <div className="flex min-w-0 items-center gap-2">
         <Led tone="brand" pulse={job.status === 'in_progress'} />
-        <p className="truncate text-body-s font-medium text-ink-700">
+        <p className="truncate text-body-s text-ink-700">
           <ThinkingLabel live={!job.cancelRequested && job.status === 'in_progress'}>{label}</ThinkingLabel>
         </p>
         {/* 任务查询接口不提供进度，只有明确给出百分比时才显示，没有就不占位。 */}
@@ -297,7 +297,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
       } catch (error) {
         if (error instanceof ReadAttemptAborted || !request.isAlive()) return;
         if (keepSeed) setDetailNotice(__t('详情更新失败'));
-        else setLoadError(__t('暂时打不开这条新闻的详情'));
+        else setLoadError(__t('暂时读不到这条新闻的详情'));
       } finally {
         request.cancel();
       }
@@ -527,7 +527,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
         };
         // 列表按新闻编号回写；抽屉只在仍停在这条新闻时才接收结果（审计 1-B）。
         onUpdate(nextItem);
-        if (settled) toast.info(__t('这条新闻已有任务结果'), __t('需要重新分析，请点击分析区的按钮'));
+        if (settled) toast.info(__t('这条新闻已有任务结果'), __t('需要重新分析，请点击「重新分析」'));
         else toast.info(__t('分析任务已提交'), force ? __t('重新分析') : __t('可在本页查看进度'));
         if (openNewsRef.current !== forNews) return;
         invalidateDetailRead();
@@ -590,7 +590,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
           onUpdate(cancelledItem);
         }
       } else if (next.cancelRequested) {
-        toast.info(__t('已请求取消'), __t('模型已在处理，等服务端确认后停止'));
+        toast.info(__t('已请求取消'), __t('模型已在处理，确认后停止'));
       }
     } catch (e) {
       toast.error(__t('取消失败'), e instanceof Error ? e.message : undefined);
@@ -632,7 +632,9 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
       onClose={() => {
         if (!confirm) onClose(); // 确认弹窗开启时 ESC/背板仅关弹窗
       }}
-      width={640}
+      /* 2026-10-09 用户要求把侧边抽屉改成弹窗：桌面居中，左栏正文、右栏分析；手机仍是底部全屏面板。 */
+      variant="modal"
+      width={1040}
       label={__t('新闻详情')}
       title={
         <span className="flex items-center gap-2">
@@ -660,10 +662,11 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
         </div>
       )}
       {item && (
-        <div className="px-6 py-5">
+        <div className="grid grid-cols-1 gap-6 px-6 py-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,1fr)] lg:gap-8 lg:py-6">
+          <div className="min-w-0">
           {/* 头：来源 + 时间 + 状态 */}
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-micro text-ink-400">
-            <span className="font-medium text-ink-500">{item.source}</span>
+            <span className="text-ink-500">{item.source}</span>
             <span aria-hidden="true">·</span>
             <span className="tnum">
               {fmtLocaleDateTime(item.publishedAt)}
@@ -682,7 +685,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
           </div>
 
           {/* 标题 */}
-          <h2 className="mt-3 font-display text-[22px] leading-[30px] font-medium text-ink-900">{item.titleZh}</h2>
+          <h2 className="mt-3 font-display text-[24px] leading-[32px] font-medium tracking-[-0.01em] text-ink-900">{item.titleZh}</h2>
           {(item.sourceTitle ?? item.title).trim() && (item.sourceTitle ?? item.title).trim() !== item.titleZh.trim() && (
             <p className="mt-2 break-words text-micro leading-relaxed text-ink-500">
               <span className="font-medium">{__t('原文标题：')}</span>{item.sourceTitle ?? item.title}
@@ -707,9 +710,10 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
               <TickerChip key={t} ticker={t} />
             ))}
           </div>}
+          </div>
 
-          {/* ============ 模型分析区 ============ */}
-          <section className="mt-6 rounded-lg border border-line bg-card-warm/50 p-4" aria-label={__t("新闻分析区")}>
+          {/* ============ 模型分析区（弹窗右栏；窄屏排在正文下方） ============ */}
+          <section className="min-w-0 self-start rounded-lg border border-line bg-paper-2/70 p-5" aria-label={__t("新闻分析区")}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="flex items-center gap-1.5 text-h3 text-ink-800">
                 <AnalysisIcon size={15} className="text-ai-600" />
@@ -747,7 +751,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
                     {isOwner && job.cancellable && (
                       <button
                         onClick={() => setConfirm('cancel')}
-                        className="mt-3 rounded-md border border-line bg-card px-3 py-1.5 text-caption text-ink-500 shadow-btn transition-colors duration-fast hover:border-down-600/40 hover:text-down-700"
+                        className="mt-3 rounded-pill border border-line bg-card px-3 py-1.5 text-caption text-ink-500 shadow-btn transition-colors duration-fast hover:border-down-600/40 hover:text-down-700"
                       >
                         {__t('取消分析')}
                       </button>
@@ -772,7 +776,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
                       : hasWebSources ? __t('基于新闻正文及联网来源分析') : __t('基于新闻正文分析')
                     : hasWebSources ? __t('基于标题、摘要及联网来源分析') : __t('仅基于标题和摘要分析')}
                   {item.analysisInput?.basis === 'title_summary' && item.analysisInput.articleStatus === 'unavailable'
-                    ? <span className="ml-1">{__t('未能取得正文')}</span>
+                    ? <span className="ml-1">{__t('未能获取正文')}</span>
                     : null}
                 </p>
                 {analysis.insufficientContext ? (
@@ -805,7 +809,6 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
               <div className="mt-4 rounded-md bg-warn-50 p-4 text-center">
                 <Icon name="doc-quote" size={22} className="mx-auto text-warn-700" />
                 <p className="mt-2 text-body-s font-medium text-ink-800">{__t('信息不足 · 未调用模型')}</p>
-                <p className="mt-1 text-micro text-ink-400">{__t('这条新闻信息量不足，未做 AI 分析')}</p>
               </div>
             )}
 

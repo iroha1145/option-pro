@@ -96,7 +96,7 @@ function IvHeatCard({
           )}
         </p>
       ) : (
-        <p className="mt-3 text-micro text-ink-500">{t('当前没有可用的 IV 样本。')}</p>
+        <p className="mt-3 text-micro text-ink-500">{t('暂无可用的 IV 样本。')}</p>
       )}
       <button
         type="button"

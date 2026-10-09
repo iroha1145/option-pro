@@ -8,7 +8,7 @@
 import { AI_JOB_DEFERRAL_CODES, aiJobKnownErrorMessage } from '../../api/aiJobNormalize.ts';
 import { t } from '../../i18n/core.ts';
 
-const QUOTA_USED = t('今天的 AI 用量已用完，这次没有执行分析');
+const QUOTA_USED = t('今天的 AI 分析额度已用完，这次没有执行分析');
 const PROVIDER_DOWN = t('模型服务暂时不可用，请稍后重试');
 const PROVIDER_TIMEOUT = t('模型服务长时间没有返回结果，请重试');
 const INCOMPLETE = t('分析内容未生成完整，请重试');
@@ -45,7 +45,7 @@ const REASONS: Record<string, string> = {
   ai_job_result_too_large: t('分析结果过大，无法保存'),
   news_identity_mismatch: NEWS_CHANGED,
   news_ticker_binding_mismatch: NEWS_CHANGED,
-  focus_prepare_expired: t('热点准备已过期，请重新分析'),
+  focus_prepare_expired: t('热点已过期，请重新分析'),
   market_focus_payload_mismatch: HOTSPOTS_CHANGED,
   market_focus_input_hash_mismatch: HOTSPOTS_CHANGED,
   market_focus_event_binding_mismatch: HOTSPOTS_CHANGED,

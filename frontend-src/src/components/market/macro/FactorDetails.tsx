@@ -233,7 +233,7 @@ export default function FactorDetails({
             </h3>
             {!hasScore(module) && (
               <p className={cn('-mt-1 pb-3 pr-4 text-micro leading-relaxed text-ink-500', DETAIL_INSET)}>
-                {t('有效指标不足')} {module.minimumValidFactors ?? ''} {t('个门槛，本类别不出分（不按 50 补齐）。')}
+                {t('有效指标不足')} {module.minimumValidFactors ?? ''} {t('个，本类别不出分（不按 50 补齐）。')}
               </p>
             )}
             <div

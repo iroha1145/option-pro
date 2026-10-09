@@ -93,7 +93,7 @@ export function NewsRow({
       >
         {/* 顶行：来源 · 相对时间 · 多源 · 过期 */}
         <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-micro text-ink-400">
-          <span className="font-medium text-ink-500">{item.source}</span>
+          <span className="text-ink-500">{item.source}</span>
           <span aria-hidden="true">·</span>
           <span className="tnum">{fmtRelative(item.publishedAt)}</span>
           {item.sourceCount > 1 && (
@@ -343,7 +343,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
                 className="control-button"
               >
                 {loadingMore && <Spinner size={14} tone="muted" />}
-                {__t('查看更多')}
+                {__t('加载更多')}
               </button>
             ) : (
               <p className="text-micro text-ink-400">{__t('已加载全部')} {items.length} {__t('条')}</p>

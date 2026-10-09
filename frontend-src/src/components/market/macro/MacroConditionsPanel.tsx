@@ -31,7 +31,7 @@ const REFRESH_FOLLOW_INTERVAL_MS = 5_000;
 const REFRESH_FOLLOW_TIMEOUT_MS = 3 * 60_000;
 
 export const MACRO_SOURCE_NOTE =
-  t('宏观数据来自 FRED、纽约联储、联储理事会、芝加哥联储和 Cboe；跨资产代理使用 Option Pro 当前股票日线数据源。');
+  t('宏观数据来自 FRED、纽约联储、联储理事会、芝加哥联储和 Cboe；跨资产代理使用 Optix Pro 当前股票日线数据源。');
 
 const STATUS_CHIP: Record<
   MacroConditionsResponse['status'],
@@ -61,11 +61,11 @@ function DisabledNotice({ reason }: { reason: string | null }) {
   return (
     <EmptyState
       icon="doc-quote"
-      title={missingKey ? t('宏观数据源尚未配置') : t('宏观环境未启用')}
+      title={missingKey ? t('宏观数据来源尚未配置') : t('宏观环境未启用')}
       description={
         missingKey
           ? t('管理员配置经济数据平台（FRED）的访问密钥后，即可开始更新宏观数据。')
-          : t('本功能在配置中处于关闭状态。')
+          : t('本功能已在配置中关闭。')
       }
     />
   );
@@ -154,19 +154,19 @@ export default function MacroConditionsPanel({
         setRefreshNote(t('宏观数据正在更新，请等待完成。'));
       } else {
         setRefreshPhase('queued');
-        setRefreshNote(t('更新请求已提交，完成后自动显示最新数据。'));
+        setRefreshNote(t('更新已提交，完成后自动显示最新数据。'));
       }
     } catch (error) {
       setRefreshPhase('failed');
       const code = error instanceof ApiError ? error.bizCode : undefined;
       setRefreshNote(
         code === 'fred_api_key_missing'
-          ? t('服务器尚未配置宏观数据源密钥。')
+          ? t('服务器尚未配置宏观数据来源的密钥。')
           : code === 'worker_unavailable'
             ? t('后台服务暂不可用，请稍后重试。')
             : error instanceof ApiError
               ? error.message
-              : t('更新请求未成功。'),
+              : t('更新未成功。'),
       );
     }
   }, [snapshotStamp]);
@@ -246,7 +246,7 @@ export default function MacroConditionsPanel({
               onClick={() => void onRefresh()}
               disabled={refreshPhase === 'sending'}
               className={cn(
-                'flex items-center gap-1.5 rounded-md border border-line bg-card px-3 py-1.5 text-caption text-ink-700 shadow-btn outline-none transition-colors duration-fast',
+                'flex items-center gap-1.5 rounded-pill border border-line bg-card px-3 py-1.5 text-caption text-ink-700 shadow-btn outline-none transition-colors duration-fast',
                 'hover:border-line-strong hover:text-ink-900 focus-visible:border-brand-400 disabled:opacity-60',
               )}
             >

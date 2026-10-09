@@ -131,7 +131,7 @@ export default function ResultTable({
                 style={h.width ? { width: h.width } : undefined}
                 className={cn(
                   // 列头多为中文：大写和 0.14em 字距只会把「催化剂 · 72H」撑成两行。
-                  'whitespace-nowrap border-b border-line px-2.5 py-2.5 text-caption font-medium text-ink-400',
+                  'whitespace-nowrap border-b border-line px-2.5 py-2.5 text-caption text-ink-400',
                   h.align === 'right' ? 'text-right' : h.align === 'center' ? 'text-center' : 'text-left',
                 )}
               >
@@ -236,7 +236,7 @@ export default function ResultTable({
                       aria-controls={isOpen ? panelId : undefined}
                       aria-label={t('展开或收起 {ticker} 详情', { ticker: r.ticker })}
                       className={cn(
-                        'inline-flex size-8 items-center justify-center rounded-sm border border-line text-ink-400 transition-[color,border-color,transform] duration-fast active:scale-[.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11',
+                        'inline-flex size-8 items-center justify-center rounded-pill border border-line text-ink-400 transition-[color,border-color,transform] duration-fast active:scale-[.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11',
                         isOpen && 'border-brand-400 text-brand-600',
                       )}
                     >
@@ -268,7 +268,7 @@ export default function ResultTable({
             onClick={() => onPageChange(page - 1)}
             disabled={page <= 1}
             aria-label={t("上一页")}
-            className="flex size-7 items-center justify-center rounded-sm border border-line text-ink-500 shadow-btn transition-colors hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex size-7 items-center justify-center rounded-pill border border-line text-ink-500 shadow-btn transition-colors hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Icon name="chevron-right" size={13} className="rotate-180" />
           </button>
@@ -278,8 +278,8 @@ export default function ResultTable({
               onClick={() => onPageChange(p)}
               aria-current={p === page ? 'page' : undefined}
               className={cn(
-                'flex size-7 items-center justify-center rounded-sm border text-caption tnum transition-colors duration-fast',
-                p === page ? 'border-brand-600 bg-brand-600 text-on-accent shadow-chip' : 'border-line text-ink-500 hover:border-brand-400 hover:text-brand-600',
+                'flex size-7 items-center justify-center rounded-pill border text-caption tnum transition-colors duration-fast',
+                p === page ? 'border-brand-600 bg-brand-600 text-on-accent' : 'border-line text-ink-500 hover:border-brand-400 hover:text-brand-600',
               )}
             >
               {p}
@@ -289,7 +289,7 @@ export default function ResultTable({
             onClick={() => onPageChange(page + 1)}
             disabled={page >= totalPages}
             aria-label={t("下一页")}
-            className="flex size-7 items-center justify-center rounded-sm border border-line text-ink-500 shadow-btn transition-colors hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex size-7 items-center justify-center rounded-pill border border-line text-ink-500 shadow-btn transition-colors hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Icon name="chevron-right" size={13} />
           </button>

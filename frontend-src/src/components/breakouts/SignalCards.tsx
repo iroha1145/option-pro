@@ -113,7 +113,7 @@ function SignalCard({ ev: initialEvent, index, flash, locate, onOpen, showT1 = f
               e.stopPropagation();
               openTicker(ev.ticker);
             }}
-            aria-label={t('打开 {ticker} 个股详情抽屉', { ticker: ev.ticker })}
+            aria-label={t('打开 {ticker} 详情', { ticker: ev.ticker })}
             className="tnum text-body-s font-medium text-ink-800 underline-offset-2 transition-colors duration-fast hover:text-brand-600 hover:underline"
           >
             {ev.ticker}

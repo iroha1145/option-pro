@@ -212,7 +212,7 @@ export default function TriggerLadder({ row }: { row: CtaInstrumentEstimate }) {
         <InfoHint hint={CTA_HINTS.triggers} size={10} />
       </p>
 
-      <div className="mt-2 border-b border-line" role="group" aria-label={t('触发阶梯')}>
+      <div className="mt-2 border-b border-line" role="group" aria-label={t('模型断点区')}>
         {above.map((zone) => renderZone(zone, true))}
 
         {/* 现价行：虚线发丝分隔，品牌色读数 */}

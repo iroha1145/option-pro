@@ -53,10 +53,10 @@ test('jobs blocked before reaching the model explain why instead of a bare failu
     error_code: 'daily_token_limit_reached',
   });
   assert.equal(blocked.status, 'failed');
-  assert.match(aiJobBlockedMessage(blocked), /Token 额度已用完/);
+  assert.match(aiJobBlockedMessage(blocked), /今日分析额度已用完/);
 
   const disabled = normalizeAiJob({ job_id: 'job_off', status: 'failed', error_code: 'manual_analysis_disabled' });
-  assert.match(aiJobBlockedMessage(disabled), /手动分析功能当前未启用/);
+  assert.match(aiJobBlockedMessage(disabled), /手动分析已关闭/);
 
   const failed = normalizeAiJob({ job_id: 'job_bad', status: 'failed', error_code: 'schema_validation_failed' });
   assert.equal(aiJobBlockedMessage(failed), null);

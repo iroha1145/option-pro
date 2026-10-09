@@ -71,7 +71,7 @@ export default function DetailBand({
             to={`/screener?sector=${encodeURIComponent(sector.id)}`}
             className="flex items-center gap-1 text-caption text-brand-600 transition-colors duration-fast hover:text-brand-500"
           >
-            {t('查看选股')}
+            {t('查看条件选股')}
             <Icon name="arrow-up-right" size={12} />
           </Link>
         </div>
@@ -157,7 +157,7 @@ export default function DetailBand({
                       <span className="ml-auto text-micro text-ink-400">
                         {t('评分')}
                       </span>
-                      <span className="w-12 text-right text-data-m font-medium text-ink-800 tnum">
+                      <span className="w-12 text-right text-data-m text-ink-900 tnum">
                         {leader.score?.toFixed(1) ?? '—'}
                       </span>
                       <Icon
@@ -181,7 +181,7 @@ export default function DetailBand({
             </div>
             {sector.tickers.length === 0 ? (
               <p className="mt-3 text-body-s text-ink-400">
-                {t('暂未取得该行业的成分股。')}
+                {t('暂未获取到该行业的成分股。')}
               </p>
             ) : (
               <>
@@ -192,7 +192,7 @@ export default function DetailBand({
                     key={ticker}
                     type="button"
                     onClick={() => onOpenTicker(ticker)}
-                    className="min-w-0 rounded-md border border-line bg-card-warm px-2 py-2 text-center tnum text-caption font-medium text-ink-700 transition-colors duration-fast hover:border-brand-400 hover:text-brand-700"
+                    className="min-w-0 rounded-md border border-line bg-card-warm px-2 py-2 text-center tnum text-caption text-ink-700 transition-colors duration-fast hover:border-brand-400 hover:text-brand-700"
                   >
                     <span className="block truncate">{ticker}</span>
                   </button>

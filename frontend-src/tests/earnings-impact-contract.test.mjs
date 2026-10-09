@@ -334,11 +334,11 @@ test('财报影响在线契约拒绝缺字段、非简体中文或非法枚举',
     }],
   };
 
-  assert.throws(() => normalize({ ...base, expectation: '' }), /字段不完整/);
-  assert.throws(() => normalize({ ...base, output_language: 'en-US' }), /字段不完整/);
+  assert.throws(() => normalize({ ...base, expectation: '' }), /数据不完整/);
+  assert.throws(() => normalize({ ...base, output_language: 'en-US' }), /数据不完整/);
   assert.throws(
     () => normalize({ ...base, impacted: [{ ...base.impacted[0], direction: 'neutral' }] }),
-    /关联标的字段不完整/,
+    /关联标的数据不完整/,
   );
 });
 
@@ -604,8 +604,8 @@ test('预期波动列始终保留并如实显示数值或缺失原因', async ()
   ]);
   const english = loadEarningsListComponent(msgid => EN[msgid] ?? msgid);
   const japanese = loadEarningsListComponent(msgid => JA[msgid] ?? msgid);
-  assert.match(renderLoaded(english, [earningsRow('EXP', { expected_move_status: 'unavailable:no_expiration' })]), /No suitable expiry/);
-  assert.match(renderLoaded(japanese, [earningsRow('EXP', { expected_move_status: 'unavailable:no_expiration' })]), /適切な満期なし/);
+  assert.match(renderLoaded(english, [earningsRow('EXP', { expected_move_status: 'unavailable:no_expiration' })]), /No suitable expiration/);
+  assert.match(renderLoaded(japanese, [earningsRow('EXP', { expected_move_status: 'unavailable:no_expiration' })]), /適切な満期日なし/);
   assert.match(renderLoaded(english, [earningsRow('UNK', { expected_move_status: 'unavailable:new_state' })]), /Data temporarily unavailable/);
   assert.match(renderLoaded(japanese, [earningsRow('UNK', { expected_move_status: 'unavailable:new_state' })]), /データは一時的に利用できません/);
 });

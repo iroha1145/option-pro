@@ -22,6 +22,7 @@ import Icon from '@/components/icons';
 import Spinner from '@/components/shared/Spinner';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
 import SelectionViewport from '@/components/shared/SelectionViewport';
+import { useGlideLayoutId } from '@/hooks/useGlideLayoutId';
 import type { IconName } from '@/components/icons';
 import { pageRegionProps } from '@/lib/pageRegion';
 import { t } from '../i18n/core.ts';
@@ -154,6 +155,8 @@ export default function Login() {
   const reduced = usePrefersReducedMotion();
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
+  /* 每次进入登录页一个新标识：常量 layoutId 会让滑块从上一次离开时的位置滑进来。 */
+  const modePillId = useGlideLayoutId('login-mode');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -304,7 +307,7 @@ export default function Login() {
             </button>
             <button
               onClick={() => void logout()}
-              className="h-10 rounded-md border border-line bg-card text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
+              className="h-10 rounded-pill border border-line bg-card text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
             >
               {t('切换账号')}
             </button>
@@ -398,14 +401,15 @@ export default function Login() {
                     }}
                     aria-pressed={mode === value}
                     className={cn(
-                      'relative h-8 rounded-[calc(var(--r-group)-3px)] text-caption font-medium transition-colors duration-fast',
-                      mode === value ? 'text-brand-700' : 'text-ink-500 hover:text-ink-800',
+                      'relative h-8 rounded-pill text-caption transition-colors duration-fast',
+                      mode === value ? 'font-medium text-brand-700' : 'text-ink-500 hover:text-ink-800',
                     )}
                   >
                     {mode === value && (
                       <motion.span
                         data-selection-decoration=""
-                        layoutId="login-mode-pill"
+                        layoutId={modePillId}
+                        layoutDependency={mode}
                         className="selection-indicator absolute inset-0"
                         transition={SPRING_INDICATOR}
                       />
@@ -428,7 +432,7 @@ export default function Login() {
             <form onSubmit={onSubmit} className="mt-5" noValidate {...pageRegionProps('login', 'content')}>
               <div className={cn('t-input-wrap mb-4', userShake.classes.wrap)}>
               <label className="block">
-                <span className="mb-1.5 block text-caption font-medium text-ink-500">{t('用户名')}</span>
+                <span className="mb-1.5 block text-caption text-ink-500">{t('用户名')}</span>
                 <div
                   ref={userInputRef}
                   className={cn(
@@ -467,7 +471,7 @@ export default function Login() {
               </div>
               <div className={cn('t-input-wrap', pwShake.classes.wrap)}>
               <label className="block">
-                <span className="mb-1.5 block text-caption font-medium text-ink-500">{t('密码')}</span>
+                <span className="mb-1.5 block text-caption text-ink-500">{t('密码')}</span>
                 <div
                   ref={passwordInputRef}
                   className={cn(

@@ -92,7 +92,7 @@ export default function CtaTrend() {
                 type="button"
                 onClick={() => ctaQ.refresh()}
                 disabled={ctaQ.refreshing}
-                className="inline-flex items-center gap-1 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 hover:bg-paper-2 disabled:opacity-60"
+                className="inline-flex items-center gap-1 rounded-pill border border-line px-3 py-1.5 text-caption text-ink-600 hover:bg-paper-2 disabled:opacity-60"
               >
                 <BusyIcon busy={ctaQ.refreshing} size={12} tone="brand" />
                 {t('重试')}

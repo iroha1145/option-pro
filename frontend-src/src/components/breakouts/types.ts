@@ -88,7 +88,7 @@ export const SCORE_DEFS = [
   { key: 'sector_fit_score', label: t('行业契合') },
   { key: 'market_fit_score', label: t('市场契合') },
   { key: 'alert_priority_score', label: t('信号优先级') },
-  { key: 'data_confidence_score', label: t('数据置信') },
+  { key: 'data_confidence_score', label: t('数据可信度') },
 ] as const;
 
 /* ---------------- range_persistence 五维 ---------------- */

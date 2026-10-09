@@ -63,7 +63,7 @@ export default function IvRefreshControl({
         type="button"
         onClick={onRefresh}
         disabled={disabled}
-        className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md border border-line bg-card px-3 text-caption font-medium text-ink-600 shadow-btn transition-[border-color,color,opacity] hover:border-brand-400 hover:text-brand-600 disabled:cursor-wait disabled:opacity-60"
+        className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-pill border border-line bg-card px-3 text-caption text-ink-600 shadow-btn transition-[border-color,color,opacity] hover:border-brand-400 hover:text-brand-600 disabled:cursor-wait disabled:opacity-60"
       >
         <BusyIcon busy={submitting || running} size={13} tone="brand" />
         {label}

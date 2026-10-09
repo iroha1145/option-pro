@@ -84,7 +84,7 @@ export default function WatchlistManager({ tickers, maxTickers, busy, onSave, on
             <button className="inline-flex size-11 shrink-0 items-center justify-center rounded-md text-ink-400 hover:bg-paper-2 disabled:opacity-50" aria-label={t('关闭')} onClick={onClose} disabled={busy}><Icon name="x" size={18} /></button>
           </header>
           <div className="min-h-0 overflow-y-auto overscroll-contain p-4 sm:px-6">
-            <label className="text-caption font-medium text-ink-700" htmlFor={`${id}-input`}>{t('添加股票代码')}</label>
+            <label className="text-caption text-ink-700" htmlFor={`${id}-input`}>{t('添加股票代码')}</label>
             <textarea ref={inputRef} id={`${id}-input`} value={input} onChange={(event) => { setInput(event.target.value); setError(''); }} disabled={busy}
               rows={2} maxLength={2000} placeholder="AAPL, MSFT, NVDA, SPY" aria-describedby={`${id}-hint`}
               className="mt-2 w-full resize-y rounded-md border border-line-strong bg-paper px-3 py-2 tnum text-body-s uppercase text-ink-800 outline-none focus:border-brand-600 focus:shadow-focus-ring disabled:opacity-50" />

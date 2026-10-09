@@ -101,7 +101,7 @@ export default function HorizontalScroller({
         className={cn(
           // 触屏直接划就行，按钮只给指针设备。
           'absolute top-1/2 z-20 hidden size-8 -translate-y-1/2 items-center justify-center',
-          'rounded-md border border-line-strong bg-card text-ink-500 shadow-sh-1',
+          'rounded-pill border border-line-strong bg-card text-ink-500 shadow-sh-1',
           'transition-colors duration-fast hover:text-ink-800 focus-visible:outline-none',
           'focus-visible:ring-2 focus-visible:ring-brand-600 md:inline-flex',
           side === 'left' ? 'left-1 md:left-2' : 'right-1 md:right-2',

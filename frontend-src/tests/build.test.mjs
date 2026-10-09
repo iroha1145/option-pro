@@ -184,7 +184,7 @@ test('failed focus attempt keeps the latest successful result visible and retrya
   assert.match(apiSource, /useSuccessfulFallback/);
   assert.match(apiSource, /latest_successful_cycle/);
   assert.match(apiSource, /normalized\.latestAttempt/);
-  assert.match(cardSource, /最近一次更新失败，当前展示上次成功结果/);
+  assert.match(cardSource, /更新失败，显示上次成功的结果/);
   assert.match(cardSource, /triggerFocusCycle\(failedCycleId\)/);
   assert.match(cardSource, /重试分析/);
 });
@@ -213,8 +213,10 @@ test('screener waiting state does not invent a percentage', async () => {
 test('screener keeps sector chips unshrunk in the full-row advanced filter section', async () => {
   const source = await readFile(filterWorkbenchSource, 'utf8');
   assert.match(source, /data-screener-field="sectors" className="min-w-0"/);
-  assert.match(source, /<FilterButton key=\{sector.id\}[^\n]*className="shrink-0"/);
-  assert.match(source, /h-8 shrink-0 items-center whitespace-nowrap/);
+  // 2026-10-09 芯片第二版：行业芯片与「+N」「收起」统一成 .choice-chip 灰底胶囊（高度、不换行由 .control-button 给），
+  // 仍然必须 shrink-0，窄屏横向滚动时不被压扁。
+  assert.match(source, /<FilterButton key=\{sector.id\}[^\n]*className="choice-chip shrink-0"/);
+  assert.match(source, /className="control-button choice-chip choice-chip-more shrink-0 tnum"/);
 });
 
 test('screener result strength colors use stable score bands on mobile and desktop', async () => {

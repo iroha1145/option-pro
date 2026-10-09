@@ -39,7 +39,7 @@ function StatusNote({ factor }: { factor: MacroFactor }) {
 
 function ScoreText({ value }: { value: number | null }) {
   return (
-    <span className="text-data-m font-medium text-ink-800 tnum">
+    <span className="text-data-m text-ink-900 tnum">
       {typeof value === 'number' && Number.isFinite(value) ? value.toFixed(1) : '—'}
     </span>
   );

@@ -151,7 +151,7 @@ export function normalizeLiveEarningsImpact(body: unknown): EarningsImpactResult
   const reportDate = pickS(row, 'reportDate', 'report_date', '_report_date');
 
   if (outputLanguage !== 'zh-CN' || !ticker || !summary || !expectation || !rawImpacted) {
-    throw new Error(t('财报影响分析返回字段不完整'));
+    throw new Error(t('财报影响分析数据不完整'));
   }
 
   const impacted = rawImpacted.map((value) => {
@@ -170,7 +170,7 @@ export function normalizeLiveEarningsImpact(body: unknown): EarningsImpactResult
       || !DIRECTIONS.has(direction as EarningsImpactDirection)
       || !reason
     ) {
-      throw new Error(t('财报影响分析的关联标的字段不完整'));
+      throw new Error(t('财报影响分析的关联标的数据不完整'));
     }
     return {
       ticker: itemTicker.toUpperCase(),

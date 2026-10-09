@@ -336,7 +336,7 @@ def test_descriptive_regime_keeps_dimensions_without_old_ranking_claims() -> Non
         "market_context": {"status": "degraded", "breadth_score": 39.0},
         "rules": {"breakout_weight_multiplier": .75, "option_heat_weight_multiplier": .8},
         "warnings": [
-            "市场宽度偏弱，突破型信号已降权",
+            "市场广度偏弱，突破型信号已降权",
             "波动或信用压力偏高，期权热度已降权",
             "风险偏好价差偏弱，突破与期权信号已降权",
             "可选市场数据不完整：credit",
@@ -348,7 +348,7 @@ def test_descriptive_regime_keeps_dimensions_without_old_ranking_claims() -> Non
     assert "rules" not in descriptive
     assert descriptive["ranking_adjustments_applied"] is False
     assert descriptive["warnings"] == [
-        "市场宽度偏弱", "波动或信用压力偏高", "风险偏好价差偏弱", "可选市场数据不完整：credit",
+        "市场广度偏弱", "波动或信用压力偏高", "风险偏好价差偏弱", "可选市场数据不完整：credit",
     ]
     for key in set(original) - {"rules", "warnings"}:
         assert descriptive[key] == original[key]
@@ -358,12 +358,12 @@ def test_reading_old_seed_removes_ranking_claims_without_rewriting_file(tmp_path
     payload = _context_payload()
     payload["market_regime"].update({
         "rules": {"momentum_weight_multiplier": .9},
-        "warnings": ["市场宽度偏弱，突破型信号已降权"],
+        "warnings": ["市场广度偏弱，突破型信号已降权"],
     })
     context._atomic_write(context.context_path(tmp_path), {"version": 1, "published_at": NOW.timestamp(), "payload": payload})
     before = context.context_path(tmp_path).read_bytes()
     result = context.read_context_snapshot(root=tmp_path, now=NOW)
-    assert result["market_regime"]["warnings"] == ["市场宽度偏弱"]
+    assert result["market_regime"]["warnings"] == ["市场广度偏弱"]
     assert result["market_regime"]["ranking_adjustments_applied"] is False
     assert "rules" not in result["market_regime"]
     assert result["market_regime"]["score"] == 61

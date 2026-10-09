@@ -108,7 +108,7 @@ function expectedMoveMissingCopy(status: string | null | undefined): { label: st
     case 'not_permitted':
       return {
         label: t('暂无数据'),
-        title: t('当前没有可用的期权数据来源。'),
+        title: t('暂无可用的期权数据来源。'),
       };
     case 'provider_error':
       return {
@@ -118,7 +118,7 @@ function expectedMoveMissingCopy(status: string | null | undefined): { label: st
     default:
       return {
         label: t('数据暂不可用'),
-        title: t('暂时无法取得预期波动数据。'),
+        title: t('暂时无法获取预期波动数据。'),
       };
   }
 }
@@ -138,7 +138,7 @@ function ExpectedMoveCell({
     const missing = expectedMoveMissingCopy(status);
     return (
       <span
-        className={cn('block min-w-0 text-[13px] font-medium leading-4 text-ink-400', align === 'end' && 'text-right')}
+        className={cn('block min-w-0 text-[13px] leading-4 text-ink-400', align === 'end' && 'text-right')}
         title={missing.title}
         data-expected-move-state={status || 'unknown'}
       >
@@ -150,7 +150,7 @@ function ExpectedMoveCell({
   return (
     <span className={cn('flex flex-col items-start', align === 'end' && 'items-end text-right')}>
       <span className="inline-flex items-center gap-1">
-        <span className="text-data-m font-medium text-ink-800 tnum">±{pct.toFixed(1)}%</span>
+        <span className="text-data-m text-ink-900 tnum">±{pct.toFixed(1)}%</span>
         {unverified && (
           <InfoHint hint={{ title: t('预期波动'), body: t('按期权报价估算，部分合约未提供报价时间。') }} size={11} />
         )}
@@ -301,7 +301,6 @@ export default function EarningsList({
           /* 默认列表覆盖的是「近 3 天到未来 30 天」滚动窗口（审计 2.3.4）：
              写「本周清淡 · 跳到下周看看」会让用户以为还有下周数据没查。 */
           title={filteredByDay ? t('当日无财报') : t('未来 30 天暂无财报')}
-          description={filteredByDay ? t('当日没有财报安排，可查看其他日期。') : t('未来 30 天没有已安排的财报，稍后再来看看。')}
           action={
             onNextWeek ? (
               <button
@@ -496,7 +495,7 @@ export default function EarningsList({
                         </span>
                       </span>
                       <span className="ml-auto min-w-[96px] max-w-full text-right">
-                        <span className="mb-0.5 block text-micro font-medium leading-4 text-ink-400">
+                        <span className="mb-0.5 block text-micro leading-4 text-ink-400">
                           {t('预期波动')}
                         </span>
                         <ExpectedMoveCell pct={move} index={i} status={moveStatus} align="end" />

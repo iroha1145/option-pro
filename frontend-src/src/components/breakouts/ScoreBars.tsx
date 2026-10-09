@@ -139,7 +139,7 @@ export function RangePersistenceBars({ event, className }: { event: BreakoutEven
     );
   }
   return (
-    <div className={cn('grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-2', className)} aria-label={t("区间持续五维")}>
+    <div className={cn('grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-2', className)} aria-label={t("区间持续五项")}>
       {RANGE_PERSISTENCE_DEFS.map((d, i) => {
         const v = legacy[d.key];
         return (

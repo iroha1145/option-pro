@@ -16,11 +16,11 @@ import Icon from '@/components/icons';
 import { t } from '../../i18n/core.ts';
 
 const PHASE_LABEL: Record<string, string> = {
-  regular: t('常规交易时段 · 9:30–16:00 ET'),
-  'pre-market': t('盘前交易 · 4:00–9:30 ET'),
-  premarket: t('盘前交易 · 4:00–9:30 ET'),
-  'after-hours': t('盘后交易 · 16:00–20:00 ET'),
-  postmarket: t('盘后交易 · 16:00–20:00 ET'),
+  regular: t('常规交易时段 · 纽约时间 9:30–16:00'),
+  'pre-market': t('盘前交易 · 纽约时间 4:00–9:30'),
+  premarket: t('盘前交易 · 纽约时间 4:00–9:30'),
+  'after-hours': t('盘后交易 · 纽约时间 16:00–20:00'),
+  postmarket: t('盘后交易 · 纽约时间 16:00–20:00'),
   overnight: t('隔夜休市 · 等待下一交易时段'),
   weekend: t('周末休市 · 等待下一个交易日'),
   holiday: t('节假日休市'),

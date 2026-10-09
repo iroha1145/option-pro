@@ -12,9 +12,10 @@ import { cn } from '@/lib/utils';
 import { fmtLocaleDate, fmtLocaleTime } from '@/lib/format';
 import { t as __t } from '../../i18n/core.ts';
 
+/* 重要度（2026-10-09 用户要求着色）：高橙、中琥珀、低与节假日中性；色条与标签同一种颜色。 */
 const IMPACT_STYLE: Record<EconomicEvent['impact'], { bar: string; tone: BadgeTone; dots: number }> = {
-  high: { bar: 'bg-ink-800', tone: 'neutral', dots: 3 },
-  medium: { bar: 'bg-ink-500', tone: 'neutral', dots: 2 },
+  high: { bar: 'bg-cat-orange-600', tone: 'orange', dots: 3 },
+  medium: { bar: 'bg-cat-amber-600', tone: 'amber', dots: 2 },
   low: { bar: 'bg-ink-300', tone: 'neutral', dots: 1 },
   holiday: { bar: 'bg-line-strong', tone: 'neutral', dots: 0 },
 };
@@ -151,7 +152,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
                           {ev.actual !== null ? (
                             <SoftBadge tone="brand">{ev.actual}</SoftBadge>
                           ) : (ev.releaseStatus === 'awaiting_source' || Date.parse(ev.scheduledAt) <= q.now.getTime()) ? (
-                            <SoftBadge tone="warn">{__t('尚未取得公布值')}</SoftBadge>
+                            <SoftBadge tone="warn">{__t('尚未获取公布值')}</SoftBadge>
                           ) : (
                             <span className="text-ink-400">{__t('等待公布')}</span>
                           )}

@@ -740,7 +740,7 @@ export default function Screener() {
       universeQ.refresh();
       marketQ.refresh();
     } catch (e) {
-      toast.error(__t('触发失败'), e instanceof ApiError ? e.message : __t('扫描服务暂不可用'));
+      toast.error(__t('扫描未能启动'), e instanceof ApiError ? e.message : __t('扫描服务暂不可用'));
     } finally {
       strengthRefreshInFlight.current = false;
       setRefreshingStrength(false);
@@ -885,8 +885,6 @@ export default function Screener() {
           onChange={updateDraft}
           universe={universe}
           sectorOptions={sectorOptions}
-          presets={profiles}
-          presetsFailed={!!profilesQ.error}
           scanning={scanTriggerLocked}
           dirty={dirty}
           dollarVolumeFilterSupported={draftDollarVolumeFilterSupported}
@@ -1106,7 +1104,6 @@ export default function Screener() {
                               onClick={() => onPresetQuick(p.id)}
                               className="control-button"
                             >
-                              <Icon name="spark-ai" size={13} className="text-ink-400" />
                               {p.name}
                             </button>
                           ))}

@@ -143,7 +143,7 @@ export default function StockDetail() {
             is404
               ? __t('未找到该股票')
               : loginExpired
-                ? __t('登录失效')
+                ? __t('登录已过期')
                 : rateLimited
                   ? __t('请求过于频繁')
                   : manualRecovery
@@ -157,7 +157,7 @@ export default function StockDetail() {
                 ? __t('请重新登录后读取个股详情')
               : publicSnapshotMissing
                 ? __t('该股票暂无数据，可手动获取最新行情、日线与技术指标')
-                : `${error?.message || __t('暂时取不到该股票的行情数据')}${
+                : `${error?.message || __t('暂时读不到该股票的行情数据')}${
                     error?.retryAfter ? t(' · {n} 秒后可重试', { n: Math.ceil(error.retryAfter) }) : ''
                   }`
           }
@@ -188,7 +188,7 @@ export default function StockDetail() {
                 className="btn-primary"
               >
                 <BusyIcon busy={refreshing} size={14} tone="on-accent" />
-                {refreshing ? __t('正在读取') : __t('重新读取')}
+                {refreshing ? __t('正在读取') : __t('重试')}
               </button>
             )
           }
@@ -303,7 +303,7 @@ export default function StockDetail() {
             ) : techSnapshotMissing ? (
               <div className="mt-3 flex flex-col items-center rounded-md border border-line bg-card-warm px-4 py-8 text-center">
                 <Icon name="doc-quote" size={26} className="text-ink-300" />
-                <p className="mt-3 text-body-s font-medium text-ink-600">{__t('该股尚未获取数据，获取后自动分析')}</p>
+                <p className="mt-3 text-body-s text-ink-600">{__t('该股尚未获取数据，获取后自动分析')}</p>
                 <ManualStockPull ticker={detail.ticker} minimal className="mt-3" onPulled={handlePulled} />
               </div>
             ) : techError ? (
@@ -345,7 +345,7 @@ export default function StockDetail() {
 
       {/* 行5: 相关新闻 */}
       <div className="card-surface mt-6 p-5">
-        <h3 className="mb-4 text-h3 text-ink-900">{__t('相关新闻')}</h3>
+        <h3 className="mb-4 text-h3 text-ink-900">{__t('相关消息')}</h3>
         <NewsPanel ticker={detail.ticker} />
       </div>
 

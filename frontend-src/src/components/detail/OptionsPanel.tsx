@@ -64,7 +64,7 @@ const DIRECTION_META: Record<
 > = {
   bullish: { label: t('偏多'), className: 'bg-up-50 text-up-700' },
   bearish: { label: t('偏空'), className: 'bg-down-50 text-down-700' },
-  mixed: { label: t('多空混合'), className: 'bg-warn-50 text-warn-700' },
+  mixed: { label: t('多空交织'), className: 'bg-warn-50 text-warn-700' },
   unknown: { label: t('方向未知'), className: 'bg-paper-2 text-ink-500' },
 };
 
@@ -125,7 +125,7 @@ function AiOptionInsight({
       <div className="flex items-center justify-between gap-3">
         <p className="flex items-center gap-1.5 text-body-s font-medium text-ink-800">
           <Icon name="spark-ai" size={15} className="text-ai-600" />
-          {t('AI 期权解读')}
+          {t('AI 期权分析')}
         </p>
         {!job && !starting && !confirming && (
           <button
@@ -150,12 +150,12 @@ function AiOptionInsight({
       )}
 
       {!job && starting && (
-        <p className="mt-2.5 text-caption text-ink-500">{t('正在准备解读…')}</p>
+        <p className="mt-2.5 text-caption text-ink-500">{t('正在准备分析…')}</p>
       )}
       {!job && confirming && (
         <div className="mt-2.5">
           <p className="text-caption text-ink-600">
-            {t('分析 {ticker} 当前到期日的 {n} 条异动，消耗 1 次分析额度。', { ticker, n: evidence.length })}
+            {t('分析 {ticker} 当前到期日的 {n} 条异动，使用 1 次分析额度。', { ticker, n: evidence.length })}
           </p>
           <div className="mt-2 flex gap-2">
             <button
@@ -201,7 +201,7 @@ function AiOptionInsight({
                     ? t('排队中…')
                     : job.progress === null
                       ? t('模型分析中…')
-                      : t('解读中 {pct}%', { pct: Math.round(job.progress) })}
+                      : t('分析中 {pct}%', { pct: Math.round(job.progress) })}
               </ThinkingLabel>
             </span>
             <button
@@ -410,7 +410,7 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
         icon="doc-quote"
         title={
           loginExpired
-            ? t('登录失效')
+            ? t('登录已过期')
             : rateLimited
               ? t('期权报价请求过于频繁')
               : preparing ? t('期权数据准备中') : t('期权数据暂不可用')
@@ -418,7 +418,7 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
         description={
           loginExpired
             ? t('请重新登录后查看期权数据')
-            : `${preparing ? t('期权数据正在更新，请稍后重试') : t('期权数据暂时获取不到')}${
+            : `${preparing ? t('期权数据正在更新，请稍后重试') : t('期权数据暂时读不到')}${
                 retrySeconds > 0 ? t(' · {n} 秒后可重试', { n: retrySeconds }) : ''
               }`
         }
@@ -457,7 +457,6 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
       <EmptyState
         icon="doc-quote"
         title={t("暂无到期日数据")}
-        description={t("暂未获取到该标的的期权到期日")}
         action={
           canRetry ? (
             <button
@@ -520,7 +519,7 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
       )}
       {chainError && !shownChain ? (
           <div className="flex flex-col items-center gap-2.5 px-4 py-10 text-center">
-            <p className="text-body-s font-medium text-ink-700">{chainError.bizCode === 'public_option_snapshot_pending' ? t('期权数据准备中') : t('该到期日的期权链暂不可用')}</p>
+            <p className="text-body-s text-ink-700">{chainError.bizCode === 'public_option_snapshot_pending' ? t('期权数据准备中') : t('该到期日的期权链暂不可用')}</p>
             <p className="text-caption text-ink-400">
               {chainError.bizCode === 'public_option_snapshot_pending' ? t('期权数据正在更新，请稍后重试') : t('可切换到其他到期日查看')}
               {retrySeconds > 0 ? t(' · {n} 秒后可重试', { n: retrySeconds }) : ''}

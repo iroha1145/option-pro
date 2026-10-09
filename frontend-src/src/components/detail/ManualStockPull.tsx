@@ -97,7 +97,7 @@ export default function ManualStockPull({
         result: null,
         error: cause instanceof ApiError
           ? cause.bizCode === 'account_login_required' || cause.bizCode === 'owner_login_required'
-            ? t('登录后可更新行情；当前可查看已有数据')
+            ? t('登录后可更新行情，已有数据仍可查看')
             : cause.bizCode === 'stock_pull_rate_limited'
               ? `${t('行情获取过于频繁，请稍后再试')}${cause.retryAfter ? t(' · {n} 秒后可重试', { n: cause.retryAfter }) : ''}`
               : cause.bizCode === 'stock_pull_cooldown'

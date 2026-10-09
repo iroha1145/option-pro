@@ -88,7 +88,7 @@ test('public breakout research pages and drawers expose the same manual recovery
   assert.match(drawer, /<ManualStockPull ticker=\{symbol\} onPulled=\{handlePulled\} \/>/);
   assert.equal(drawer.includes('isOwner'), false);
   assert.match(lead, /to=\{`\/stock\/\$\{encodeURIComponent\(e\.ticker\)\}`\}/);
-  assert.match(lead, /打开研究页/);
+  assert.match(lead, /股票详情/);
 });
 
 test('breakout event rows survive a null event price without inventing one', async () => {

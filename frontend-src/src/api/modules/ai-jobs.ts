@@ -36,7 +36,7 @@ export async function postAiJob(path: string, body?: unknown): Promise<AiJob> {
   const locId = idFromLocation(location);
   const job = normalizeAiJob(data, locId);
   if (!job.id) {
-    throw new ApiError(502, t('任务创建响应缺少 job_id（body 与 Location 头均未提供）'), { payload: data });
+    throw new ApiError(502, t('任务创建失败：服务器没有返回任务编号，请重试'), { payload: data });
   }
   return { ...job, retryAfter };
 }

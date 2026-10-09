@@ -123,7 +123,7 @@ export default function Sectors() {
       />
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-y border-line py-3">
-        <p className="text-caption font-medium text-ink-700">{t('收益周期')}</p>
+        <p className="text-caption text-ink-700">{t('收益周期')}</p>
         <Segmented
           options={[
             { value: '1mo', label: t('1 个月') },
@@ -142,7 +142,7 @@ export default function Sectors() {
             <button
               type="button"
               onClick={() => strengthQ.refresh()}
-              className="min-h-9 rounded-md px-2 text-caption font-medium text-brand-600 hover:bg-brand-50"
+              className="min-h-9 rounded-md px-2 text-caption font-medium text-brand-600 hover:bg-paper-2"
             >
               {t('重试')}
             </button>

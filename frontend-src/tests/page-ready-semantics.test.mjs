@@ -220,7 +220,7 @@ test('2026-10-08 第二版文案：新标题与新空态、错误态仍能判出
   assert.equal(classifyPageReady({ ...base, path: '/cta', heading: 'CTA 趋势资金', bodyText: 'CTA 趋势资金 首次估算完成后自动显示' }), 'empty');
   /* hasNotFound 必须由文档文本算出来：直接传 hasNotFound: true 会绕过 snapshotFromDocument 里的「无此页面」匹配。 */
   const notFoundDoc = makeDocument({
-    heading: '无此页面',
+    heading: '页面不存在',
     extra: [node('p', {}, [], '没有找到 /nowhere 对应的页面。链接可能已失效或地址输入有误。')],
   });
   const notFound = snapshotFromDocument(notFoundDoc, '/this-page-is-not-a-route');

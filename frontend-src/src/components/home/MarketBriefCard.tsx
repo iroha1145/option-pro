@@ -136,7 +136,7 @@ export default function MarketBriefCard({ className }: { className?: string }) {
     const timer = window.setInterval(() => {
       if (Date.now() - follow.since >= FOLLOW_TIMEOUT_MS) {
         setFollow(null);
-        toast.info(t('研判仍在生成'), t('完成后会随卡片的定时刷新显示'));
+        toast.info(t('研判仍在生成'), t('完成后自动显示'));
         return;
       }
       if (document.visibilityState !== 'visible') return;

@@ -16,6 +16,12 @@ module.exports = {
     extend: {
       colors: {
         'on-accent': token('--on-accent'),
+        /* 2026-10-09 Arc 改版：主操作色（主按钮、当前页码）与其上的文字，见 index.css --action。 */
+        action: {
+          DEFAULT: token('--action'),
+          hover: token('--action-hover'),
+        },
+        'on-action': token('--on-action'),
         /* ---- Optix 纸面终端 tokens：从 CSS 变量生成，html.dark 换盘后工具类一起换 ---- */
         paper: {
           DEFAULT: token('--paper'),
@@ -86,6 +92,10 @@ module.exports = {
           600: token('--ai-600'),
           50: token('--ai-50'),
         },
+        /* 2026-10-09 分类色：类别用（经济事件重要度、风险偏好），不表示好坏与涨跌。见 index.css。 */
+        'cat-sky': { 50: token('--cat-sky-50'), 600: token('--cat-sky-600'), 700: token('--cat-sky-700') },
+        'cat-amber': { 50: token('--cat-amber-50'), 600: token('--cat-amber-600'), 700: token('--cat-amber-700') },
+        'cat-orange': { 50: token('--cat-orange-50'), 600: token('--cat-orange-600'), 700: token('--cat-orange-700') },
         /* ---- shadcn/ui 兼容令牌（ui/ 基座仍可用）---- */
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -118,13 +128,14 @@ module.exports = {
         },
       },
       borderRadius: {
-        /* 2026-10-06 第二轮（参照 uiarc.dev 的 8/16 两档）：chip/badge 6 · 按钮/输入 8 · 卡片/容器 16 · 抽屉/模态 20 */
+        /* 2026-10-09 Arc 改版：小件 6 · 控件 8 · 卡片 18（原 16）· 抽屉/模态 22 · 胶囊 999。
+           按钮、分段、徽章改用胶囊；输入与下拉触发 10 走 --r-control。 */
         xs: '4px',
         sm: '6px',
         md: '8px',
-        lg: '16px',
-        xl: '20px',
-        '2xl': '24px',
+        lg: '18px',
+        xl: '22px',
+        '2xl': '26px',
         pill: '999px',
       },
       boxShadow: {
@@ -167,20 +178,25 @@ module.exports = {
            2026-10-06 第二轮（参照 uiarc.dev）：小字整体上调一档——micro 12、caption 13、
            body-s 14、body 15，行高放到 1.4–1.6；原 11–12px、行高 1.1 的密排读起来挤。
            eyebrow 不再全大写加字距，只是一行中等字重的灰色小标签。 */
-        'display-xl': ['56px', { lineHeight: '64px', fontWeight: '500', letterSpacing: '-0.02em' }],
-        'display-l': ['40px', { lineHeight: '46px', fontWeight: '500', letterSpacing: '-0.02em' }],
-        'display-m': ['28px', { lineHeight: '32px', fontWeight: '500', letterSpacing: '-0.02em' }],
+        /* 2026-10-09 Arc 改版：大标题字距收紧到 -0.03em（Arc 40px 标题 -1.2px），行高 1.1。 */
+        'display-xl': ['56px', { lineHeight: '60px', fontWeight: '500', letterSpacing: '-0.03em' }],
+        'display-l': ['40px', { lineHeight: '44px', fontWeight: '500', letterSpacing: '-0.03em' }],
+        'display-m': ['28px', { lineHeight: '32px', fontWeight: '500', letterSpacing: '-0.03em' }],
         h2: ['20px', { lineHeight: '26px', fontWeight: '500' }],
         h3: ['16px', { lineHeight: '24px', fontWeight: '500' }],
         body: ['15px', { lineHeight: '24px', fontWeight: '400' }],
         'body-s': ['14px', { lineHeight: '21px', fontWeight: '400' }],
         caption: ['13px', { lineHeight: '19px', fontWeight: '400' }],
-        eyebrow: ['12px', { lineHeight: '17px', fontWeight: '500' }],
-        'data-xxl': ['44px', { lineHeight: '48px', fontWeight: '500', letterSpacing: '-0.02em' }],
-        'data-xl': ['30px', { lineHeight: '36px', fontWeight: '500' }],
-        'data-l': ['20px', { lineHeight: '26px', fontWeight: '500' }],
+        /* 2026-10-09 Arc 改版：区块小标签改常规字重、13px（Arc 的标签就是一行灰色小字）。 */
+        eyebrow: ['13px', { lineHeight: '18px', fontWeight: '400' }],
+        'data-xxl': ['40px', { lineHeight: '44px', fontWeight: '500', letterSpacing: '-0.03em' }],
+        'data-xl': ['30px', { lineHeight: '36px', fontWeight: '500', letterSpacing: '-0.02em' }],
+        'data-l': ['22px', { lineHeight: '28px', fontWeight: '500', letterSpacing: '-0.01em' }],
         'data-m': ['15px', { lineHeight: '22px', fontWeight: '400' }],
-        micro: ['12px', { lineHeight: '17px', fontWeight: '400' }],
+        /* 2026-10-09 Arc 改版：micro 12→13（原先 12px 占全站文字三成多，Arc 只占一成）；
+           真要紧凑的地方（徽章、手机底栏、坐标轴、角标）改用 tag 12px。 */
+        micro: ['13px', { lineHeight: '18px', fontWeight: '400' }],
+        tag: ['12px', { lineHeight: '16px', fontWeight: '400' }],
       },
       maxWidth: {
         shell: '1440px',

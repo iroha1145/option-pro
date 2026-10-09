@@ -105,7 +105,7 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
   const listStale = !!listQ.error && listQ.data !== null;
 
   return (
-    <section className="mt-6" aria-label={__t("热点主题带")}>
+    <section className="mt-6" aria-label={__t("市场热点")}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h2 className="flex min-w-0 items-center gap-1.5 text-h2 text-ink-900">
           {__t('市场热点')}
@@ -114,7 +114,7 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {listStale && (
             <SoftBadge tone="warn" className="whitespace-normal">
-              {__t('已过期 · 刷新失败，展示上次结果')}
+              {__t('已过期 · 刷新失败，显示上次成功的结果')}
             </SoftBadge>
           )}
           {statusQ.data && (
@@ -132,7 +132,7 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
       <HorizontalScroller
         className="-mx-4 mt-4 md:-mx-8"
         scrollerClassName="px-4 pb-2 md:px-8"
-        label={__t("热点主题带，可横向滚动")}
+        label={__t("市场热点，可横向滚动")}
       >
         <div className="flex snap-x snap-mandatory gap-3">
           {listQ.loading && items.length === 0 ? (

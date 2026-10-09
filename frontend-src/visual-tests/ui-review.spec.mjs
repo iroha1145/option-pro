@@ -15,14 +15,14 @@ test('expanded screener cards keep trend values and actions inside the card at p
 
   for (const width of [320, 390, 768, 1024, 1279]) {
     await page.setViewportSize({ width, height: 1000 });
-    const card = page.locator('.card-surface:visible').filter({ has: page.getByRole('button', { name: '打开详情', exact: true }) });
+    const card = page.locator('.card-surface:visible').filter({ has: page.getByRole('button', { name: '股票详情', exact: true }) });
     await expect(card).toHaveCount(1);
     const action = card.getByRole('link', { name: '相关突破', exact: true });
     await expect(action).toBeVisible();
     // Check the rendered text and controls, not the CSS class chosen to fix the layout.
     const bounds = await card.evaluate((element) => {
       const box = element.getBoundingClientRect();
-      const actions = [...element.querySelectorAll('button, a')].filter((node) => /^(打开详情|相关突破)$/.test(node.textContent.trim()));
+      const actions = [...element.querySelectorAll('button, a')].filter((node) => /^(股票详情|相关突破)$/.test(node.textContent.trim()));
       const labels = [...element.querySelectorAll('span')].filter((node) => /^(低|高)\s|^区间/.test(node.textContent.trim()));
       return {
         actionCount: actions.length,
@@ -42,8 +42,8 @@ test('expanded screener cards keep trend values and actions inside the card at p
   }
 
   await page.setViewportSize({ width: 1440, height: 1000 });
-  const table = page.getByRole('table').filter({ has: page.getByRole('button', { name: '打开详情', exact: true }) });
-  await expect(table.getByRole('button', { name: '打开详情', exact: true })).toBeVisible();
+  const table = page.getByRole('table').filter({ has: page.getByRole('button', { name: '股票详情', exact: true }) });
+  await expect(table.getByRole('button', { name: '股票详情', exact: true })).toBeVisible();
   const positions = await table.locator('p.eyebrow').filter({ hasText: /^(分项评分|近 .+ 日走势|操作与信号)$/ }).evaluateAll((nodes) => nodes.map((node) => ({ text: node.textContent, y: node.getBoundingClientRect().top })));
   expect(positions).toHaveLength(3);
   expect(Math.max(...positions.map((p) => p.y)) - Math.min(...positions.map((p) => p.y))).toBeLessThanOrEqual(1);

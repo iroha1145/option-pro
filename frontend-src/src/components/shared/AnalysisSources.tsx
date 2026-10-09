@@ -8,7 +8,7 @@ export default function AnalysisSources({ sources }: { sources?: readonly Eviden
   if (!links.length) return null;
   return (
     <div className="mt-3 min-w-0 border-t border-line pt-2.5">
-      <p className="text-micro font-medium text-ink-500">{t('核对来源')}</p>
+      <p className="text-micro text-ink-500">{t('信息来源')}</p>
       <ul className="mt-1.5 grid min-w-0 gap-1.5">
         {links.map((source) => (
           <li key={source.url} className="min-w-0">

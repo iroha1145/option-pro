@@ -14,7 +14,7 @@
 //   2. chartFilled() only counts painted alpha in a 200x200 corner of the
 //      price canvas — candles alone satisfy it. It proves the chart rendered,
 //      never that a drawing exists. Object-level facts are asserted against
-//      the Inspector's 「绘图对象 …」 rows, which carry stable a11y names.
+//      the Inspector's 「图形 …」 rows, which carry stable a11y names.
 import { expect, test } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -69,9 +69,9 @@ function chartTab(page, name) {
   return page.getByRole("tab", { name, exact: true });
 }
 
-/** Inspector 的对象行：aria-label 是「绘图对象 {kind}」，只认展开工作区里的那一份。 */
+/** Inspector 的对象行：aria-label 是「图形 {kind}」，只认展开工作区里的那一份。 */
 function drawingRows(page) {
-  return page.getByRole("dialog", { name: "绘图工作区" }).getByRole("button", { name: /^绘图对象 / });
+  return page.getByRole("dialog", { name: "绘图工作区" }).getByRole("button", { name: /^图形 / });
 }
 
 /** Recover the stock-level error card before a chart region can be mounted. */
@@ -81,7 +81,7 @@ async function waitDrawingToolbar(page) {
     const rateLimit = stockRateLimits.get(page);
     if (rateLimit?.retryAt != null && Date.now() >= rateLimit.retryAt) {
       const retry = page.getByRole("heading", { name: "请求过于频繁", exact: true })
-        .locator("..").getByRole("button", { name: "重新读取", exact: true });
+        .locator("..").getByRole("button", { name: "重试", exact: true });
       if (await retry.isVisible().catch(() => false)) {
         rateLimit.retryAt = Date.now() + 5_000;
         await retry.click({ timeout: 1_000 }).catch(() => {});
@@ -179,7 +179,7 @@ async function clearTouchedDrawings(page) {
 async function expectDrawingCount(page, n) {
   await expandChart(page);
   if (n === 0) {
-    await expect(page.getByText("当前没有手绘图形").first()).toBeVisible();
+    await expect(page.getByText("暂无手绘图形").first()).toBeVisible();
   }
   await expect(drawingRows(page)).toHaveCount(n);
 }
@@ -564,7 +564,7 @@ test("failed save then retry keeps the local edit", async ({ page }) => {
   await expect(retry).toBeVisible({ timeout: 15_000 });
   await retry.click();
   await expect(drawingRows(page)).toHaveCount(1);
-  await expect(page.getByText("当前没有手绘图形").first()).toBeHidden();
+  await expect(page.getByText("暂无手绘图形").first()).toBeHidden();
 });
 
 test("rapid same-id revision stays serial from the inspector", async ({ page }) => {
@@ -750,7 +750,7 @@ test("clear all removes every drawing in the scope", async ({ page }) => {
   await toolButton(page, "清空手绘").first().click();
   await toolButton(page, "确认清空").first().click();
   await expect(drawingRows(page)).toHaveCount(0);
-  await expect(page.getByText("当前没有手绘图形").first()).toBeVisible();
+  await expect(page.getByText("暂无手绘图形").first()).toBeVisible();
 });
 
 test("auto patterns render from a real technical payload", async ({ page }) => {

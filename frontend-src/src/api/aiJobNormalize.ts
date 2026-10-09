@@ -119,42 +119,42 @@ export function aiJobResultSummary(result: unknown): string | null {
  * legacy_output_hidden 例外：它出现在已完成但结果被隐藏的任务上。
  */
 const AI_JOB_ERROR_TEXT = new Map<string, () => string>([
-  ['manual_analysis_disabled', () => t('手动分析功能当前未启用')],
+  ['manual_analysis_disabled', () => t('手动分析已关闭')],
   ['scheduled_analysis_disabled', () => t('自动分析未开启，这次没有执行')],
   ['runtime_configuration_changed', () => t('分析设置已更改，请重新发起分析')],
   ['submission_outcome_unknown', () => t('无法确认模型服务是否收到分析请求，已停止重复提交，请先核对原任务状态')],
   ['provider_incomplete_max_output_tokens', () => t('分析内容过长，没有生成完整，请重试')],
-  ['provider_credit_exhausted', () => t('AI 供应商余额耗尽，需充值')],
-  ['provider_credit_exhausted_hold', () => t('AI 供应商余额耗尽，需充值')],
-  ['provider_incomplete', () => t('AI 供应商没有返回完整结果，请重试')],
-  ['provider_failed', () => t('AI 供应商处理失败，请稍后重试')],
+  ['provider_credit_exhausted', () => t('模型服务余额不足，需充值')],
+  ['provider_credit_exhausted_hold', () => t('模型服务余额不足，需充值')],
+  ['provider_incomplete', () => t('模型服务没有返回完整结果，请重试')],
+  ['provider_failed', () => t('模型服务暂时不可用，请稍后重试')],
   ['provider_refusal', () => t('模型拒绝了这次分析')],
-  ['provider_poll_timeout', () => t('等待 AI 结果超时，未能确认供应商已停止处理')],
+  ['provider_poll_timeout', () => t('等待 AI 结果超时，未能确认模型服务已停止处理')],
   ['provider_poll_timeout_cancelled', () => t('等待 AI 结果超时，已取消，可以重试')],
   ['provider_response_expired', () => t('AI 结果已过期，请重新分析')],
-  ['provider_auth_failed', () => t('AI 服务认证失败，请检查密钥设置')],
-  ['provider_rate_limited', () => t('AI 服务请求过于频繁，请稍后重试')],
-  ['provider_server_error', () => t('AI 服务暂时出错，请稍后重试')],
+  ['provider_auth_failed', () => t('模型服务密钥无效，请检查设置')],
+  ['provider_rate_limited', () => t('模型服务繁忙，请稍后重试')],
+  ['provider_server_error', () => t('模型服务暂时不可用，请稍后重试')],
   ['provider_request_rejected', () => t('AI 服务拒绝了这次请求')],
-  ['provider_unavailable', () => t('AI 服务暂时不可用，请稍后重试')],
+  ['provider_unavailable', () => t('模型服务暂时不可用，请稍后重试')],
   ['local_storage_error', () => t('服务器保存数据时出错，请稍后重试')],
   ['schema_validation_failed', () => t('分析结果未通过格式检查，请重试')],
   ['invalid_job_payload', () => t('任务数据无效，无法分析')],
-  ...['provider_tool_result_invalid', 'provider_invalid_final_tool', 'provider_unknown_client_tool', 'provider_invalid_tool_response', 'provider_incomplete_tool_result', 'provider_unknown_server_tool', 'provider_tool_limit_exceeded'].map((code): [string, () => string] => [code, () => t('模型工具处理未通过检查，分析已停止')]),
+  ...['provider_tool_result_invalid', 'provider_invalid_final_tool', 'provider_unknown_client_tool', 'provider_invalid_tool_response', 'provider_incomplete_tool_result', 'provider_unknown_server_tool', 'provider_tool_limit_exceeded'].map((code): [string, () => string] => [code, () => t('模型返回的内容未通过检查，分析已停止')]),
   ['provider_model_mismatch', () => t('模型服务返回的模型与分析设置不符，请检查服务配置')],
   ['provider_empty_response', () => t('模型没有返回内容，请重试')],
   ['ai_empty_response', () => t('模型没有返回内容，请重试')],
   ['ai_input_too_large', () => t('输入数据过多，超出了分析上限')],
   ['daily_budget_usd_reached', () => t('共享模型日预算不足，东京 09:00 重置后再试')],
-  ['daily_token_limit_reached', () => t('今日 Token 额度已用完，额度重置后再试')],
-  ['budget_blocked', () => t('今日分析预算已用完，额度重置后再试')],
+  ['daily_token_limit_reached', () => t('今日分析额度已用完，额度重置后再试')],
+  ['budget_blocked', () => t('今日分析预算已用完，重置后再试')],
   ['global_concurrency_limit', () => t('同时进行的分析太多，请稍后重试')],
   ['analysis_cooldown_active', () => t('分析冷却中，请稍后重试')],
-  ['legacy_output_hidden', () => t('这份旧结果不符合当前的校验规则，已隐藏，可以重新分析')],
+  ['legacy_output_hidden', () => t('旧版分析结果已不再展示，请重新分析')],
   ['duplicate_request_migrated', () => t('重复的分析请求已合并到另一个任务')],
-  ['provider_cancelled', () => t('AI 供应商取消了这次分析，可以重试')],
-  ['provider_response_id_missing', () => t('AI 供应商的响应不完整，请重试')],
-  ['provider_status_unsupported', () => t('AI 供应商返回了无法识别的状态，请重试')],
+  ['provider_cancelled', () => t('模型服务取消了这次分析，可以重试')],
+  ['provider_response_id_missing', () => t('模型服务的响应不完整，请重试')],
+  ['provider_status_unsupported', () => t('模型服务返回了无法识别的状态，请重试')],
   ['ai_job_result_too_large', () => t('分析结果过大，无法保存')],
   ['ai_job_lease_lost', () => t('后台处理意外中断，请重试')],
   ['signal_ticker_mismatch', () => t('分析结果与股票代码不符，已作废，请重试')],
@@ -219,7 +219,7 @@ export function aiJobDeferralMessage(job: Pick<AiJob, 'status' | 'error'> | null
     case 'analysis_cooldown_active':
       return t('上一次分析刚结束，冷却后自动开始');
     case 'provider_credit_exhausted_hold':
-      return t('AI 供应商余额耗尽，充值后自动继续');
+      return t('模型服务余额不足，充值后自动继续');
     default:
       return null;
   }

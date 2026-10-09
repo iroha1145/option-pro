@@ -8,6 +8,37 @@ async function harness(page) { await page.goto('/visual-tests/support/overlay-ha
 async function openDrawer(page) { await page.locator('#drawer-trigger').click(); await expect(drawer(page)).toBeVisible(); }
 async function settled(page) { await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))); }
 
+for (const [start, resized] of [[1440, 390], [390, 1440]]) {
+  test(`news-style modal keeps keyboard and close controls across ${start} → ${resized} → ${start}px`, async ({ page }) => {
+    await page.setViewportSize({ width: start, height: 900 });
+    await page.goto('/visual-tests/support/overlay-harness.html?variant=modal');
+    await openDrawer(page);
+
+    await page.setViewportSize({ width: resized, height: 900 });
+    await settled(page);
+    await page.keyboard.press('Tab');
+    await expect.poll(() => drawer(page).evaluate((element) =>
+      !element.closest('[inert]') && element.contains(document.activeElement))).toBe(true);
+    await expect.poll(() => overflow(page)).toEqual({ value: 'hidden', priority: 'important' });
+    await drawer(page).getByRole('button', { name: '关闭面板' }).click();
+    await expect(drawer(page)).toBeHidden();
+    await expect(page.locator('#drawer-trigger')).toBeFocused();
+
+    await openDrawer(page);
+    await page.setViewportSize({ width: start, height: 900 });
+    await settled(page);
+    await page.keyboard.press('Tab');
+    await expect.poll(() => drawer(page).evaluate((element) =>
+      !element.closest('[inert]') && element.contains(document.activeElement))).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(drawer(page)).toBeHidden();
+    await expect(page.locator('#drawer-trigger')).toBeFocused();
+    await expect.poll(() => overflow(page)).toEqual({ value: '', priority: '' });
+    await expect(page.locator('#background')).not.toHaveAttribute('inert');
+    await expect(page.locator('#already-inert')).toHaveAttribute('inert', '');
+  });
+}
+
 test('stacked real dialogs preserve the original overflow and only Escape the top layer', async ({ page }) => {
   await harness(page);
   await page.evaluate(() => document.body.style.setProperty('overflow', 'scroll', 'important'));
@@ -50,7 +81,7 @@ test('modal isolation blocks background focus and Tab includes fixed controls bu
   expect(visited.has('background-button')).toBe(false);
   await page.locator('#fixed-focusable').focus();
   await page.keyboard.press('Tab');
-  await expect(drawer(page).getByRole('button', { name: '关闭抽屉' })).toBeFocused();
+  await expect(drawer(page).getByRole('button', { name: '关闭面板' })).toBeFocused();
 });
 
 test('Radix portal selection, Escape and notification dismissal remain usable inside Drawer', async ({ page }) => {
@@ -129,7 +160,7 @@ test('drawing inspector shows styles only for a selected drawing and keeps file 
   const fileActions = ['导出绘图', '导入绘图文件', '导入本机绘图', '清空手绘'];
 
   // 没有任何手绘图形：只有列表空态，没有样式区；文件操作收在「绘图文件」里。
-  await expect(workspace.getByText('当前没有手绘图形', { exact: true })).toBeVisible();
+  await expect(workspace.getByText('暂无手绘图形', { exact: true })).toBeVisible();
   await expect(workspace.getByText('图形样式', { exact: true })).toHaveCount(0);
   await expect(colors).toHaveCount(0);
   await expect(files).toHaveAttribute('aria-expanded', 'false');
@@ -247,7 +278,7 @@ for (const [start, resized] of [[390, 1440], [1440, 320]]) {
 for (const width of [390,1440]) {
   test(`Drawer naming, close target and long palette text fit ${width}px`, async ({ page }) => {
     await page.setViewportSize({width,height:900}); await harness(page); await openDrawer(page);
-    const close = await drawer(page).getByRole('button',{name:'关闭抽屉'}).boundingBox();
+    const close = await drawer(page).getByRole('button',{name:'关闭面板'}).boundingBox();
     expect(close.width).toBeGreaterThanOrEqual(44); expect(close.height).toBeGreaterThanOrEqual(44);
     await page.locator('#open-command').click();
     const input = palette(page).getByRole('combobox');

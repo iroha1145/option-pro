@@ -165,7 +165,7 @@ const WARNING_LABELS: Record<string, string> = {
   market_confirmation_tightened: t('大盘偏弱，确认要求提高'),
   no_complete_intraday_bars: t('暂无完整盘中 K 线'),
   no_complete_current_session_bars: t('本时段暂无完整 K 线'),
-  provider_relative_volume_missing: t('数据源缺相对量能'),
+  provider_relative_volume_missing: t('缺少相对量能数据'),
   range_persistence_fading_near_high: t('高位附近动能减弱'),
   range_persistence_calculation_failed: t('区间持续性计算失败'),
 };
@@ -225,7 +225,7 @@ function LifecycleStepper({ state }: { state: string }) {
           tone === 'current' && 'font-medium text-brand-700',
           (tone === 'past' || tone === 'future') && 'text-ink-400',
           tone === 'down' && 'font-medium text-danger-700',
-          tone === 'ink-end' && 'font-medium text-ink-500',
+          tone === 'ink-end' && 'text-ink-500',
         )}
       >
         {label}
@@ -254,7 +254,7 @@ function LifecycleStepper({ state }: { state: string }) {
   return (
     /* overflow-x-auto 会把 overflow-y 一并钳成 auto：当前态圆点贴容器顶，
        ring-4 软晕上沿会被裁平。pt-1.5 给光晕让出裁剪盒内空间，-mt-1.5 抵消外部布局。 */
-    <ol className="no-scrollbar -mt-1.5 flex items-start overflow-x-auto pt-1.5" aria-label={t('生命周期：{state}', { state: LIFECYCLE_CN[state] ?? state })}>
+    <ol className="no-scrollbar -mt-1.5 flex items-start overflow-x-auto pt-1.5" aria-label={t('状态：{state}', { state: LIFECYCLE_CN[state] ?? state })}>
       {items.map((it, i) => (
         <li key={i} className="flex flex-1 items-start last:flex-none">
           {it.el}
@@ -429,7 +429,7 @@ function MiniKline({ ticker, dailyVersion, preparation, statusReadFailed, pivot,
       setPullError(
         cause instanceof ApiError
           ? cause.bizCode === 'account_login_required' || cause.bizCode === 'owner_login_required'
-            ? t('登录后可更新行情；当前仍可查看已有数据')
+            ? t('登录后可更新行情，已有数据仍可查看')
             : `${cause.message}${cause.retryAfter ? t(' · {n} 秒后可重试', { n: cause.retryAfter }) : ''}`
           : t('行情获取失败，请稍后重试'),
       );
@@ -447,11 +447,11 @@ function MiniKline({ ticker, dailyVersion, preparation, statusReadFailed, pivot,
       ) : error || !option ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-4 text-center">
           <img src="/empty-chart.svg" alt="" className="h-12 w-auto opacity-90 dark:brightness-0 dark:invert dark:opacity-60" loading="lazy" />
-          <p className="text-caption font-medium text-ink-600">
+          <p className="text-caption text-ink-600">
             {error && !snapshotMissing ? t('K 线读取失败') : t('暂无日线走势')}
           </p>
           <p className="text-micro text-ink-400">
-            {statusReadFailed ? t('暂无日线走势，准备状态读取失败')
+            {statusReadFailed ? t('暂无日线走势，数据状态读取失败')
               : preparation?.resources.dailyChart.available ? t('日线读取失败，请稍后重试')
                 : preparation?.status === 'failed' || preparation?.refreshStatus === 'failed' ? t('日线获取失败，稍后自动重试')
                   : t('正在获取日线，完成后自动显示')}
@@ -542,7 +542,7 @@ const CONTRIB_DEFS = [
   { key: 'intrinsic_strength', label: t('个股评分'), cls: 'bg-brand-400' },
   { key: 'market_fit', label: t('市场契合'), cls: 'bg-ai-600' },
   { key: 'sector_fit', label: t('行业契合'), cls: 'bg-ink-500' },
-  { key: 'data_confidence', label: t('数据置信'), cls: 'bg-ink-300' },
+  { key: 'data_confidence', label: t('数据可信度'), cls: 'bg-ink-300' },
   { key: 'event_freshness', label: t('事件时效'), cls: 'bg-warn-600' },
 ] as const;
 
@@ -679,7 +679,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
-      aria-label={t('{ticker} {setup} 重点信号大卡', { ticker: e.ticker, setup: SETUP_CN[e.setup_type] ?? e.setup_type ?? '' })}
+      aria-label={t('{ticker} {setup} 重点信号', { ticker: e.ticker, setup: SETUP_CN[e.setup_type] ?? e.setup_type ?? '' })}
       className={cn('radar-lead-card card-surface p-5', locate && 'bk-locate')}
     >
       {detailFailed && (
@@ -735,7 +735,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
           {e.name}{' '}
           <button
             onClick={() => openTicker(e.ticker)}
-            aria-label={t('打开 {ticker} 个股详情抽屉', { ticker: e.ticker })}
+            aria-label={t('打开 {ticker} 详情', { ticker: e.ticker })}
             className="text-brand-600 underline-offset-4 transition-colors duration-fast hover:text-brand-700 hover:underline"
           >
             {e.ticker}
@@ -760,7 +760,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
       <div className="mt-3 flex flex-col gap-2.5 sm:flex-row sm:items-stretch">
         <div className="grid flex-1 grid-cols-1 gap-2.5 sm:grid-cols-3">
           <div className="radar-value-cell px-3 py-2.5">
-            <p className="text-micro text-ink-400">{t('当前价')}</p>
+            <p className="text-micro text-ink-400">{t('现价')}</p>
             {/* 1024 一档三格各约 130px：放不下时涨跌徽标折到价格下一行，不压到相邻格。 */}
             <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
               <span
@@ -854,7 +854,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
             to={`/stock/${encodeURIComponent(e.ticker)}`}
             className="btn-primary btn-sm"
           >
-            {t('打开研究页')}
+            {t('股票详情')}
             <Icon name="arrow-up-right" size={13} />
           </Link>
         </div>

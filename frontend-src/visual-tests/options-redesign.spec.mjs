@@ -108,7 +108,7 @@ test('摘要指出同侧部分合约缺成交量，异动计数包含3倍边界'
   await openHarness(page);
   const summary = page.getByRole('region', { name: '期权成交摘要', exact: true });
   await expect(summary.getByText('看涨期权成交', { exact: true })).toBeVisible();
-  await expect(summary.getByText('已取得 3/4 份合约的成交量', { exact: true })).toBeVisible();
+  await expect(summary.getByText('已获取 3/4 份合约的成交量', { exact: true })).toBeVisible();
   await expect(summary.getByText('合计 2 份合约', { exact: true })).toBeVisible();
   await expect(summary.getByText('6.4K', { exact: false })).toBeVisible();
   await expect(summary.getByText('需关注合约', { exact: true })).toBeVisible();
@@ -122,7 +122,7 @@ test('390px下展示单合约卡片，筛选和报价明细不造成整页横向
   await expect(list.getByRole('listitem')).toHaveCount(6);
   await expect(table(page)).toBeHidden();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
-  await expect(page.getByText('已取得 3/4 份合约的成交量', { exact: true })).toBeVisible();
+  await expect(page.getByText('已获取 3/4 份合约的成交量', { exact: true })).toBeVisible();
 
   await range(page).getByRole('button', { name: '只看异动', exact: true }).click();
   await side(page).getByRole('button', { name: '看涨（Call）', exact: true }).click();

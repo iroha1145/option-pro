@@ -60,8 +60,9 @@ test('画线与标签随主题切换，深色没有白色底板或白色光晕',
   assert.equal(light.label.backgroundColor, 'rgba(255,255,255,0.97)');
   setThemePreference('dark');
   const dark = render();
-  assert.equal(dark.label.backgroundColor, 'rgba(36,38,45,0.97)');
-  assert.equal(dark.lineStyle.shadowColor, 'rgba(36,38,45,0.95)');
+  /* 2026-10-09 Arc 改版：深色卡片改为纯灰 #161617，画线标签底与光晕跟着换。 */
+  assert.equal(dark.label.backgroundColor, 'rgba(22,22,23,0.97)');
+  assert.equal(dark.lineStyle.shadowColor, 'rgba(22,22,23,0.95)');
   assert.notEqual(dark.lineStyle.color, light.lineStyle.color);
   setThemePreference('light');
   assert.deepEqual(render(), light);
@@ -111,7 +112,7 @@ test('applyAppearance 在深色时给 html 加上 dark class 与 theme-color', (
   const attrs = new Map();
   const classList = new Set();
   const meta = {
-    content: '#F6F7F9',
+    content: '#FAFAFA',
     setAttribute(name, value) {
       if (name === 'content') this.content = value;
     },
@@ -141,10 +142,10 @@ test('applyAppearance 在深色时给 html 加上 dark class 与 theme-color', (
     assert.equal(classList.has('dark'), true);
     assert.equal(globalThis.document.documentElement.dataset.theme, 'dark');
     assert.equal(globalThis.document.documentElement.style.colorScheme, 'dark');
-    assert.equal(meta.content, '#191B20');
+    assert.equal(meta.content, '#0F0F10');
     applyAppearance('light');
     assert.equal(classList.has('dark'), false);
-    assert.equal(meta.content, '#F6F7F9');
+    assert.equal(meta.content, '#FAFAFA');
   } finally {
     if (previousDocument) globalThis.document = previousDocument;
     else delete globalThis.document;
@@ -162,21 +163,22 @@ test('夜间涨跌色切到 Cloud Monitor 的 ok/crit，亚洲习惯仍然对调
   assert.equal(CH.down600, PRICE_COLORS_DARK.asian.down600);
 });
 
-test('CSS 暗色画布与 Cloud Monitor 令牌一致', async () => {
+/* 2026-10-09 Arc 改版：深色画布由 Cloud Monitor 的蓝灰改为单独调过的纯灰（页面最深、卡片抬一档）。 */
+test('CSS 暗色画布用 Arc 改版的纯灰令牌', async () => {
   const css = await source('index.css');
   const block = css.match(/html\.dark\s*\{([\s\S]*?)\n  \}/);
   assert.ok(block, '缺少 html.dark 规则');
   const body = block[1];
   for (const [token, value] of [
-    ['--paper', '#191B20'],
-    ['--card', '#24262D'],
-    ['--paper-2', '#1D1F24'],
-    ['--ink-900', '#F1F3F5'],
-    ['--line', '#323640'],
-    ['--line-strong', '#454B58'],
-    ['--card-warm', '#21242B'],
+    ['--paper', '#0F0F10'],
+    ['--card', '#161617'],
+    ['--paper-2', '#1A1A1C'],
+    ['--ink-900', '#F2F2F2'],
+    ['--line', '#262628'],
+    ['--line-strong', '#38383B'],
+    ['--card-warm', '#141415'],
   ]) {
-    assert.match(body, new RegExp(`${token}:\\s*${value}`, 'i'), `${token} 应对上 Cloud Monitor`);
+    assert.match(body, new RegExp(`${token}:\\s*${value}`, 'i'), `${token} 应对上深色纯灰令牌`);
   }
 });
 
@@ -206,7 +208,7 @@ test('theme-boot 与运行时共用 optix_theme 键，并按系统色决定默�
   assert.match(boot, new RegExp(THEME_KEY));
   assert.match(boot, /prefers-color-scheme:\s*dark/);
   assert.match(boot, /classList\.toggle\("dark"/);
-  assert.match(boot, /#191B20/);
+  assert.match(boot, /#0F0F10/);
   assert.doesNotMatch(boot, /\?\./);
   assert.match(boot, /if \(themeColor\)/);
   const html = await readFile(path.resolve(here, '..', 'index.html'), 'utf8');

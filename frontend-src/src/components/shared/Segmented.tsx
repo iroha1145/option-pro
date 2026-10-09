@@ -4,15 +4,18 @@
  * 也走这里，靠 renderLabel + scrollable 定制，不再各抄一份 onKeyDown。
  * 弹簧与 reduced-motion 归零由 GlidePill 自持，这里不包 MotionConfig。
  */
-import { useId, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import GlidePill from '@/components/shared/GlidePill';
+import { useGlideLayoutId } from '@/hooks/useGlideLayoutId';
 import SelectionViewport from '@/components/shared/SelectionViewport';
 
 interface SegmentedOption<T extends string> {
   value: T;
   label: string;
+  /** 选中时的文字颜色（有含义的选项按含义着色）；缺省为品牌群青。 */
+  tone?: 'ok' | 'warn' | 'sky' | 'orange' | 'neutral';
 }
 
 interface SegmentedProps<T extends string> {
@@ -41,7 +44,8 @@ export default function Segmented<T extends string>({
   title,
   onOptionIntent,
 }: SegmentedProps<T>) {
-  const layoutId = useId();
+  /* 每个实例一个新标识（不用 useId，见 GlidePill 的说明）。 */
+  const layoutId = useGlideLayoutId('segmented');
   /* 当前值不在选项里时（如新闻页停在「更多」菜单里的消息来源），没有哪一项是选中的；
      仍让第一项可以用 Tab 进入，否则键盘用户回不到这组切换。 */
   const hasSelection = options.some((option) => option.value === value);
@@ -65,15 +69,16 @@ export default function Segmented<T extends string>({
           /* 指示器与按钮同级（审查 #113 阻断 4）：滑块 z-auto 永远垫在
              z-10 的透明按钮之下，滑行经过邻居不遮文字。 */
           <div key={o.value} className={cn('relative', scrollable && 'shrink-0')}>
-            {active && <GlidePill layoutId={layoutId} />}
+            {active && <GlidePill layoutId={layoutId} dependency={value} />}
             <button
               type="button"
               role="tab"
               className={cn(
-                't-tab relative z-10 text-caption font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600',
+                't-tab relative z-10 text-caption focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600',
                 scrollable && 'shrink-0 whitespace-nowrap',
               )}
               aria-selected={active}
+              data-tone={o.tone}
               /* tablist 的标准键盘行为（审计 P3-5）：roving tabindex + 左右方向键 +
                  Home/End。旧实现只有 role，Tab 会逐个停在每一项，方向键完全无效。 */
               tabIndex={active || (!hasSelection && index === 0) ? 0 : -1}
