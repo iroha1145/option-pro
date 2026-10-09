@@ -319,8 +319,11 @@ _ALLOWED_CURRENCY_CODES = frozenset(
         "XAU",
     }
 )
+# 已认可产品线加版本号，可带型号档位：「iPhone 18 Pro」「iPhone 18 Pro Max」
+# （2026-10-09 Luna 被拒 2 次；机型名不在输入文本里时源绑定帮不上）。
 _VERSIONED_PRODUCT = re.compile(
     r"(?P<base>[A-Za-z]+)[ -]?(?P<version>\d+(?:\.\d+)*)"
+    r"(?:[ -](?:Pro|Max|Plus|Ultra|Mini|Air|SE|Ti))*"
 )
 _ALLOWED_VERSIONED_PRODUCT_BASES = frozenset(
     {
@@ -397,9 +400,12 @@ _MARKET_TERM_ABBREVIATIONS = frozenset(
         "YTD",
     }
 )
-# 指数代码后接涨跌描述的是指数本身（「标普500指数（SPX）下跌」），不是个股
-# 行情；只有「股价」「股票」这类证券名词仍要求代码绑定。
-_MARKET_INDEX_CODES = frozenset({"DXY", "NDX", "SPX", "VIX"})
+# 指数代码与宏观统计缩写后接涨跌，描述的是指数或指标本身（「标普500指数
+# （SPX）下跌」「美国9月CPI上涨0.6%」），不是个股行情；只有「股价」「股票」
+# 这类证券名词仍要求代码绑定。WTI、ADP、LNG 同时是股票代码，不在其中。
+_SELF_DESCRIBING_CODES = frozenset(
+    {"CPI", "DXY", "GDP", "ISM", "JOLTS", "NDX", "NFP", "PCE", "PMI", "PPI", "SPX", "VIX"}
+)
 # SEC 文件编号。_FOREIGN_SPAN 从字母起算，「10-K」只切出单个字母「K」。
 _SEC_FORM_DESIGNATIONS = ("10-K", "10-Q", "8-K")
 _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
@@ -480,6 +486,9 @@ _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
         "IDM 2.0",
         "IPO",
         "ISM",
+        # 2026-10-10：通用技术缩写（「企业IT服务」「输入URL」）。证券语境仍走
+        # _approved_span_requires_ticker_binding 后检（IT 也是股票代码）。
+        "IT",
         "Instagram",
         "IonQ",
         "JOLTS",
@@ -541,6 +550,7 @@ _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
         "Temu",
         "TeraWulf",
         "TikTok",
+        "URL",
         "Varonis",
         "VIX",
         # signal_analysis 契约的 key_levels.vwap_levels 字段就要求模型讨论
@@ -652,6 +662,39 @@ _SECURITY_REFERENCE_PREFIX = re.compile(
     r"股票|普通股|股份|个股|证券)(?:为|是)?$"
 )
 _NUMERIC_CONTEXT_BOUNDARIES = frozenset("，,；;。.!！?？%％、")
+# 数字后紧跟数量级、币种、百分号或倍数时是数量，不是证券代码：「发现矿业股份
+# 5000万美元」（2026-10-09 热点周期被拒）。「股」只在不接价、票、份时算单位。
+_NUMERIC_QUANTITY_SUFFIX = re.compile(
+    r"^[ \t]*(?:[万亿千百]|美元|美分|港元|港币|欧元|日元|英镑|元|%|％|‰|倍|股(?![价票份]))"
+)
+# 分号隔开的是另一个分句：「流通股份；Hexa Creation聚焦……」里的「股份」不指向
+# 分号后的名称。逗号仍连着同一分句，照旧计入证券语境。
+_CLAUSE_BREAKS = frozenset("；;")
+# 浮动利率写法「复合SOFR加1.730%」：缩写后接利差，是基准利率名。
+_RATE_BENCHMARK_SPREAD = re.compile(
+    r"^[ \t]*(?:加|减|[+＋\-－])[ \t]*[0-9]+(?:\.[0-9]+)?[ \t]*"
+    r"(?:%|％|个?基点|bps?(?![A-Za-z]))"
+)
+# 信用或量化评级的字母等级：「A+评级」「获A+每股收益修正量化评级」。
+_LETTER_GRADE = re.compile(
+    r"^(?:(?:[+＋]{1,2}|[\-－])[\u4e00-\u9fff]{0,12}?|)(?:评级|等级|评分)"
+)
+# 统计量写法「p<0.001」「n=712例」。
+_STATISTIC_COMPARISON = re.compile(r"^[ \t]*(?:<=|>=|[<>=≤≥＜＞＝])[ \t]*[0-9]")
+# 括号里只有网站域名的来源标注（「。(globenewswire.com)」「（sec.gov、cnbc.com）」）。
+# 来源由联网工具记录另行保存，域名不是叙述，也不留在发布文本里。
+_HOSTNAME = r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}"
+_SOURCE_DOMAIN_CITATION = re.compile(
+    r"[ \t]*[（(][ \t]*(?:来源[：:][ \t]*)?"
+    + _HOSTNAME
+    + r"(?:[ \t]*[、,，;；/][ \t]*"
+    + _HOSTNAME
+    + r")*[ \t]*[）)][ \t]*"
+)
+# 新闻载荷由程序生成的字段名与状态码（article、source、http_403……）。
+_PAYLOAD_IDENTIFIER = re.compile(
+    r"(?<![A-Za-z0-9_])[a-z][a-z0-9]*(?:_[a-z0-9]+)*(?![A-Za-z0-9_])"
+)
 _NUMERIC_SUFFIX_HARD_BOUNDARIES = frozenset("；;。.!！?？%％")
 _SECURITY_REFERENCE_MARKERS = (
     "股价",
@@ -1148,7 +1191,8 @@ def _is_contextual_initialism(
         for token in prose_tokens
     ):
         return False
-    if span.isalpha() and len(span) > 4:
+    rate_spread = _RATE_BENCHMARK_SPREAD.match(sentence[end:]) is not None
+    if span.isalpha() and len(span) > 4 and not rate_spread:
         return False
     if not any(_is_cjk(char) for char in sentence):
         return False
@@ -1164,7 +1208,7 @@ def _is_contextual_initialism(
         end=end,
     ):
         return span in allowed_codes
-    if any(char.isdigit() or char in "&./+-" for char in span):
+    if any(char.isdigit() or char in "&./+-" for char in span) or rate_spread:
         return True
     prefix = _normalize_security_reference_phrase(sentence[:start])
     return suffix.startswith(_INITIALISM_CONTEXT_SUFFIXES) or prefix.endswith(
@@ -1184,6 +1228,9 @@ def _approved_span_requires_ticker_binding(
         before_index >= 0
         and _is_security_reference_separator(sentence[before_index])
     ):
+        if sentence[before_index] in _CLAUSE_BREAKS:
+            before_index = -1
+            break
         before_index -= 1
     prefix = sentence[: before_index + 1]
 
@@ -1450,14 +1497,14 @@ def _is_sec_form_designation(sentence: str, *, end: int) -> bool:
     return False
 
 
-def _index_code_names_the_index(
+def _code_names_the_statistic(
     span: str,
     *,
     sentence: str,
     start: int,
     end: int,
 ) -> bool:
-    if span not in _MARKET_INDEX_CODES:
+    if span not in _SELF_DESCRIBING_CODES:
         return False
     prefix = _normalize_security_reference_phrase(sentence[:start])
     if _SECURITY_REFERENCE_PREFIX.search(prefix) is not None:
@@ -1543,6 +1590,11 @@ def _foreign_span_context(
             return span in {"B", "T"}
         if suffix.startswith(("分数", "值", "统计量")):
             return True
+        if (
+            _LETTER_GRADE.match(sentence[end:]) is not None
+            or _STATISTIC_COMPARISON.match(sentence[end:]) is not None
+        ):
+            return True
         if suffix.startswith(_FOREIGN_PROPER_NAME_CONTEXT_SUFFIXES) and any(
             re.search(
                 rf"(?<![A-Za-z0-9]){re.escape(span)}(?![A-Za-z0-9])",
@@ -1553,6 +1605,11 @@ def _foreign_span_context(
             for source in source_texts
         ):
             return True
+    if len(span) == 1 and span.isascii() and span.islower() and (
+        sentence[end:].startswith(("值", "分数", "统计量"))
+        or _STATISTIC_COMPARISON.match(sentence[end:]) is not None
+    ):
+        return True
     if _COMPACT_DIGIT_LETTER_IDENTIFIER.fullmatch(span) is not None:
         if _approved_span_requires_ticker_binding(
             span,
@@ -1582,6 +1639,11 @@ def _foreign_span_context(
             sentence=sentence,
             start=start,
             end=end,
+        ) and not _code_names_the_statistic(
+            span,
+            sentence=sentence,
+            start=start,
+            end=end,
         ):
             suffix = _strip_security_reference_separators(sentence[end:])
             return (
@@ -1606,7 +1668,7 @@ def _foreign_span_context(
             sentence=sentence,
             start=start,
             end=end,
-        ) and not _index_code_names_the_index(
+        ) and not _code_names_the_statistic(
             span,
             sentence=sentence,
             start=start,
@@ -1785,6 +1847,8 @@ def _numeric_code_is_in_security_context(
         return False
     if _FORMATTED_NUMBER_CONTINUATION.match(sentence[end:]) is not None:
         return False
+    if _NUMERIC_QUANTITY_SUFFIX.match(sentence[end:]) is not None:
+        return False
     if len(span) == 5 and span.startswith("0"):
         return True
     before_index = start - 1
@@ -1896,6 +1960,53 @@ def _news_source_bound_name(
     return any(pattern.search(source) for source in sources)
 
 
+def _news_payload_identifiers(payload: Any) -> frozenset[str]:
+    """Program-defined names of one news task: its payload fields and status
+    codes, the article fields the instructions describe even when absent, and
+    the result fields."""
+
+    if not isinstance(payload, dict):
+        return frozenset()
+    names: set[Any] = {*payload, "article", "article_status", "article_reason"}
+    names.update(NewsImpactResult.model_fields)
+    article = payload.get("article")
+    if isinstance(article, dict):
+        names.update(article)
+    names.update(payload.get(field) for field in ("article_status", "article_reason"))
+    truncated = payload.get("truncated_fields")
+    if isinstance(truncated, list):
+        names.update(truncated)
+    return frozenset(
+        name
+        for name in names
+        if isinstance(name, str) and _PAYLOAD_IDENTIFIER.fullmatch(name)
+    )
+
+
+def _mask_payload_identifiers(text: str, payload: Any) -> str:
+    """Hide exact payload field names from the prose scan, outside security context.
+
+    Models echo the input's own labels (「输入article标记为不可用」「source为……」).
+    Only an exact, lower-case name or status code of this payload qualifies; a
+    near miss such as my_article_status, or a label used as a security
+    reference (「股票代码allowed_tickers」), is still scanned as foreign text.
+    """
+
+    identifiers = _news_payload_identifiers(payload)
+    if not identifiers:
+        return text
+
+    def mask(match: re.Match[str]) -> str:
+        token = match.group(0)
+        if token not in identifiers or _approved_span_requires_ticker_binding(
+            token, sentence=text, start=match.start(), end=match.end(),
+        ):
+            return token
+        return "_" * len(token)
+
+    return _PAYLOAD_IDENTIFIER.sub(mask, text)
+
+
 def validate_simplified_chinese_text(
     value: str,
     info: ValidationInfo | None,
@@ -1908,7 +2019,11 @@ def validate_simplified_chinese_text(
     text = _REGULATORY_RULE_PREFIX.sub("规则", value.strip())
     if not text:
         raise ValueError("simplified_chinese_text_required")
-    scan_text = _normalize_compatibility_alphanumerics(text)
+    scan_text = _SOURCE_DOMAIN_CITATION.sub(
+        "", _normalize_compatibility_alphanumerics(text)
+    ).strip()
+    if not scan_text:
+        raise ValueError("simplified_chinese_text_required")
     compatibility_text = unicodedata.normalize("NFKC", scan_text)
     if any(
         marker in scan_text or marker in compatibility_text
@@ -1933,10 +2048,13 @@ def validate_simplified_chinese_text(
     cjk_count = sum(1 for char in scan_text if _is_cjk(char))
     if cjk_count == 0:
         raise ValueError("simplified_chinese_text_required")
-    context_codes = (
-        info.context.get("allowed_codes", ())
+    context = (
+        info.context
         if info is not None and isinstance(info.context, dict)
-        else allowed_codes
+        else None
+    )
+    context_codes = (
+        context.get("allowed_codes", ()) if context is not None else allowed_codes
     )
     normalized_codes = frozenset(
         str(code).strip().upper()
@@ -1944,28 +2062,28 @@ def validate_simplified_chinese_text(
         if isinstance(code, str) and str(code).strip()
     )
     context_source_texts = (
-        info.context.get("source_texts", ())
-        if info is not None and isinstance(info.context, dict)
-        else source_texts
+        context.get("source_texts", ()) if context is not None else source_texts
     )
     source_texts = tuple(
         source
         for source in context_source_texts
         if isinstance(source, str) and source
     )
+    news_payload = context.get("news_payload") if context is not None else None
+    check_text = _mask_payload_identifiers(scan_text, news_payload)
     latin_count = sum(
-        1 for char in scan_text if char.isascii() and char.isalpha()
+        1 for char in check_text if char.isascii() and char.isalpha()
     )
     source_bound_latin = sum(
         sum(char.isascii() and char.isalpha() for char in match.group(0))
-        for match in _FOREIGN_SPAN.finditer(scan_text)
+        for match in _FOREIGN_SPAN.finditer(check_text)
         if _is_source_bound_foreign_entity(match.group(0), source_texts)
     )
     if latin_count - source_bound_latin > max(32, cjk_count * 4):
         raise _english_prose_error(
-            _longest_unbound_foreign_span(scan_text, source_texts)
+            _longest_unbound_foreign_span(check_text, source_texts)
         )
-    for sentence in _SENTENCE_SPLIT.split(scan_text):
+    for sentence in _SENTENCE_SPLIT.split(check_text):
         sentence_latin = sum(
             1 for char in sentence if char.isascii() and char.isalpha()
         )
@@ -2001,10 +2119,6 @@ def validate_simplified_chinese_text(
                 source_texts=source_texts,
             ):
                 continue
-            news_payload = (
-                info.context.get("news_payload")
-                if info is not None and isinstance(info.context, dict) else None
-            )
             if isinstance(news_payload, dict) and _news_source_bound_name(
                 match.group(0), sentence, match.start(), match.end(), news_payload,
             ):
@@ -2013,19 +2127,19 @@ def validate_simplified_chinese_text(
         if sentence_latin >= 16 and sentence_cjk == 0:
             raise _english_prose_error(sentence)
 
-    for match in _FOREIGN_SPAN.finditer(scan_text):
+    for match in _FOREIGN_SPAN.finditer(check_text):
         span = match.group(0)
         if span not in _CROSS_SENTENCE_SECURITY_ISSUERS:
             continue
         if not _foreign_span_stands_alone_before_sentence_break(
-            scan_text,
+            check_text,
             start=match.start(),
             end=match.end(),
         ):
             continue
         if not _approved_span_requires_ticker_binding(
             span,
-            sentence=scan_text,
+            sentence=check_text,
             start=match.start(),
             end=match.end(),
         ):
@@ -2501,6 +2615,21 @@ class NewsCommodityImpact(StrictModel):
     reason: ZhBoundedText
 
 
+_HTTP_STATUS_LABELS = {
+    "401": "未获授权",
+    "403": "访问被拒绝",
+    "404": "页面不存在",
+    "410": "页面已移除",
+    "429": "请求过于频繁",
+}
+
+
+def _http_status_label(code: str) -> str:
+    return _HTTP_STATUS_LABELS.get(code) or (
+        "服务器错误" if code.startswith("5") else "访问失败"
+    )
+
+
 def _translate_news_metadata(value: str, payload: dict) -> str:
     """Translate only known input labels; never rewrite facts or output keys."""
     translations = {"allowed_tickers": "允许股票代码名单", "affected_stocks": "受影响个股"}
@@ -2520,6 +2649,17 @@ def _translate_news_metadata(value: str, payload: dict) -> str:
         return translations[match.group(0)]
     value = pattern.sub(replace, value)
     value = re.sub(r"((?:商业|业务)发展公司)[（(]BDC[）)]", r"\1", value)
+    # 只翻译与本条输入抓取失败一致的状态码：正文因 http_401 不可用时「HTTP 401」
+    # 是事实复述，状态码对不上（或输入没有失败记录）时原样留给校验器拒绝。
+    status = re.fullmatch(r"http_([1-5][0-9]{2})", str(payload.get("article_reason") or ""))
+    if payload.get("article_status") == "unavailable" and status is not None:
+        code = status.group(1)
+        value = re.sub(
+            rf"(?<![A-Za-z0-9_])HTTP[ \t]*(?:状态码)?[ \t]*{code}(?![0-9])",
+            f"{_http_status_label(code)}（状态码{code}）",
+            value,
+            flags=re.IGNORECASE,
+        )
     sources = _validation_source_texts("news_impact", payload)
     if any(re.search(r"\bSarbanes[-– ]Oxley\b", source, re.I) for source in sources):
         def translate_regulation(match: re.Match[str]) -> str:
@@ -2567,6 +2707,14 @@ class NewsImpactResult(SimplifiedChineseResult):
                 result[name] = [
                     _translate_news_metadata(item, payload)
                     if isinstance(item, str) else item
+                    for item in result[name]
+                ]
+        for name in ("affected_stocks", "affected_commodities"):
+            if isinstance(result.get(name), list):
+                result[name] = [
+                    {**item, "reason": _translate_news_metadata(item["reason"], payload)}
+                    if isinstance(item, dict) and isinstance(item.get("reason"), str)
+                    else item
                     for item in result[name]
                 ]
         return result

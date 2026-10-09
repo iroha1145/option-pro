@@ -1257,7 +1257,10 @@ _MARKDOWN_SOURCE_LINK = re.compile(
     r"\[(?P<label>[^\[\]\r\n]+)\]\((?P<url>https?://[^\s()<>\[\]]+)\)"
 )
 _PAREN_SOURCE_LINK = re.compile(
-    r"(?P<open>[（(])" + _MARKDOWN_SOURCE_LINK.pattern + r"(?P<close>[）)])"
+    r"[ \t]*(?P<open>[（(])" + _MARKDOWN_SOURCE_LINK.pattern + r"(?P<close>[）)])[ \t]*"
+)
+_PAREN_BARE_URL = re.compile(
+    r"[ \t]*(?P<open>[（(])(?P<url>https?://[^\s()（）<>\[\]]+)(?P<close>[）)])[ \t]*"
 )
 _NEWS_NARRATIVE_FIELDS = (
     "title_zh",
@@ -1357,18 +1360,25 @@ def _normalize_luna_news_citations(
         if not isinstance(value, str):
             return value
 
-        def standalone(match: re.Match[str]) -> str:
-            url = match.group("url")
-            bound = _citation_url_key(url) in trusted_keys
-            paired = (match.group("open"), match.group("close")) in {
+        def paired(match: re.Match[str]) -> bool:
+            return (match.group("open"), match.group("close")) in {
                 ("(", ")"),
                 ("（", "）"),
             }
-            domain_label = (
-                match.group("label").strip().casefold()
-                == (urlsplit(url).hostname or "").casefold()
-            )
-            return "" if bound and paired and domain_label else match.group(0)
+
+        def standalone(match: re.Match[str]) -> str:
+            url = match.group("url")
+            bound = _citation_url_key(url) in trusted_keys
+            # Luna 的标签是可注册域名：「[sec.gov](https://www.sec.gov/…)」。
+            # 按点号边界比对主机名，标签与链接指向同一网站才算来源标注。
+            host = (urlsplit(url).hostname or "").casefold()
+            label = match.group("label").strip().casefold()
+            domain_label = "." in label and (host == label or host.endswith("." + label))
+            return "" if bound and paired(match) and domain_label else match.group(0)
+
+        def bare(match: re.Match[str]) -> str:
+            bound = _citation_url_key(match.group("url")) in trusted_keys
+            return "" if bound and paired(match) else match.group(0)
 
         def link(match: re.Match[str]) -> str:
             return (
@@ -1377,22 +1387,14 @@ def _normalize_luna_news_citations(
                 else match.group(0)
             )
 
-        normalized = _MARKDOWN_SOURCE_LINK.sub(
-            link, _PAREN_SOURCE_LINK.sub(standalone, value)
+        normalized = _PAREN_BARE_URL.sub(
+            bare,
+            _MARKDOWN_SOURCE_LINK.sub(link, _PAREN_SOURCE_LINK.sub(standalone, value)),
         )
         if re.search(r"https?://", normalized, re.IGNORECASE):
             # Leave unknown and unsupported URLs in the original receipt and
             # reject this result; never erase unverified evidence to pass Chinese.
             raise ValueError("ai_news_unbound_or_unhandled_url")
-        if (
-            payload.get("article_status") == "unavailable"
-            and payload.get("article_reason") == "http_403"
-        ):
-            normalized = re.sub(
-                r"(?<![A-Za-z0-9_])HTTP 403(?![A-Za-z0-9_])",
-                "访问被拒绝（状态码403）",
-                normalized,
-            )
         return normalized
 
     for name in _NEWS_NARRATIVE_FIELDS:
