@@ -19,7 +19,6 @@ import { marketGet } from '@/api/marketRead';
 import { asRec, pickLabel, pickN, pickS, unwrap, type Rec } from '@/api/live';
 import { ma20Of, mapBar } from '@/api/modules/stocks';
 import { stocksApi } from '@/api/modules/stocks';
-import { mapMacroFitDrivers } from '@/api/macroFields';
 import { postAiJob } from '@/api/modules/ai-jobs';
 import * as fx from '@/mocks/fixtures';
 import * as fx2 from '@/mocks/fixtures2';
@@ -109,15 +108,6 @@ function strengthRowToDetail(env: Rec): StockDetail | null {
     priceProvider: pickS(row, 'price_provider'),
     profileProvider: null,
     snapshotScope: 'strength-row',
-    // 宏观适配影子字段：与选股表同源（同一份扫描行），缺失保持 null。
-    macroFit: pickN(row, 'macro_fit_shadow'),
-    macroTailwind: pickS(row, 'macro_tailwind'),
-    macroFitConfidence: pickN(row, 'macro_fit_confidence'),
-    macroSupporting: mapMacroFitDrivers(row.macro_supporting_factors),
-    macroOpposing: mapMacroFitDrivers(row.macro_opposing_factors),
-    macroTechnicalGap: pickN(row, 'macro_technical_gap'),
-    // 这一行的影子字段是对着哪一期宏观快照算的（信封顶层 macro_linkage）。
-    macroSnapshotDate: pickS(asRec(env.macro_linkage), 'macro_snapshot_date'),
   };
 }
 
@@ -144,7 +134,6 @@ type MacroFields = Pick<
   | 'macroFitConfidence'
   | 'macroSupporting'
   | 'macroOpposing'
-  | 'macroTechnicalGap'
   | 'macroShadowStatus'
   | 'macroSnapshotDate'
 >;
@@ -152,19 +141,14 @@ type MacroFields = Pick<
 /**
  * 合并概览与扫描行的宏观影子字段。
  *
- * 两条规则，都是「不要把两份读数拼成一份」：
- *
- * 1. **概览一旦回答了，它就是权威**，不再逐字段回填扫描行。逐字段 `??` 会犯两个
- *    方向相反的错：概览说「本次没有读数」（macro_snapshot_unavailable /
- *    exposure_coverage_low）时，上一次扫描的旧分被复活；概览说「本期没有负面
- *    因子」时，空数组长度为 0，旧的负面因子被补回来。两者都是拿一份已经不成立的
- *    解释冒充当前读数 —— 后端专门为此返回 null 而不是 50，前端不能在这里抵消掉。
- *    概览必然带 macro_shadow_status（四种取值都写），所以它非空就等于「答过了」；
- *    只有对接不带这个字段的旧后端时才整组回退扫描行。
- *
- * 2. **差值只在同期时才显示。** macroFit 来自实时概览，macroTechnicalGap 只有落库的
- *    扫描行算得出（它要该股的 market_fit_score）。扫描可能比最新一期宏观旧几个
- *    小时；两个数字各自都对，凑在一起却不是同一个测量时点。
+ * 规则是「不要把两份读数拼成一份」：**概览一旦回答了，它就是权威**，不再逐字段
+ * 回填扫描行。逐字段 `??` 会犯两个方向相反的错：概览说「本次没有读数」
+ * （macro_snapshot_unavailable / exposure_coverage_low）时，上一次扫描的旧分被
+ * 复活；概览说「本期没有负面因子」时，空数组长度为 0，旧的负面因子被补回来。两者
+ * 都是拿一份已经不成立的解释冒充当前读数 —— 后端专门为此返回 null 而不是 50，前端
+ * 不能在这里抵消掉。概览必然带 macro_shadow_status（四种取值都写），所以它非空就
+ * 等于「答过了」；只有对接不带这个字段的旧后端时才整组回退扫描行（当前选股引擎的
+ * 扫描行不带宏观字段，回退结果整组为空）。
  *
  * 导出是为了能真的跑它 —— 这条规则值得用行为断言钉住，而不是用正则看一眼源码。
  */
@@ -175,11 +159,6 @@ export function mergeMacroFields(
   const overviewAnswered =
     detail.macroShadowStatus !== null && detail.macroShadowStatus !== undefined;
   const source = overviewAnswered ? detail : strength;
-  const gapIsSameSnapshot =
-    // 概览没答 → 分数和差值都出自同一行，同期是构造保证的。
-    !overviewAnswered
-    || (strength?.macroSnapshotDate != null
-      && detail.macroSnapshotDate === strength.macroSnapshotDate);
   return {
     macroFit: source?.macroFit ?? null,
     macroTailwind: source?.macroTailwind ?? null,
@@ -187,7 +166,6 @@ export function mergeMacroFields(
     macroSupporting: source?.macroSupporting ?? [],
     macroOpposing: source?.macroOpposing ?? [],
     macroSnapshotDate: source?.macroSnapshotDate ?? null,
-    macroTechnicalGap: gapIsSameSnapshot ? strength?.macroTechnicalGap ?? null : null,
     macroShadowStatus: detail.macroShadowStatus ?? strength?.macroShadowStatus ?? null,
   };
 }

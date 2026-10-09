@@ -19,14 +19,6 @@ export const MACRO: Dict = {
   '流动性': ['Liquidity', '流動性'],
   '技术 × 结构性宏观': ['Technical × structural macro', 'テクニカル × 構造的マクロ'],
   '技术侧为走势评分的六项均分；宏观侧为结构性宏观（流动性、融资、国债、利率）的加权均值。': ["The technical side is the six-item average of the trend scores; the macro side is the weighted average of structural macro (liquidity, funding, treasury, rates).", "テクニカル側は地合いスコアの6項目平均、マクロ側は構造的マクロ（流動性・ファンディング・国債・金利）の加重平均です。"],
-  '信用与风险不计入结构性宏观：它们与技术形态读的是同一批工具（HYG/LQD/KRE/VIX/': [
-    'Credit and risk are excluded from structural macro: they read the same instruments as the technical side (HYG/LQD/KRE/VIX/',
-    '信用とリスクは構造的マクロに含みません。テクニカル側と同じ銘柄群（HYG/LQD/KRE/VIX/',
-  ],
-  'SPY-TLT/IWM-SPY），再算一次等于同一个信号计两次权。此卡仅展示，不改变任何评分，': [
-    "SPY-TLT/IWM-SPY), so counting them again would weight the same signal twice. This card is display-only and doesn't change any score,",
-    'SPY-TLT/IWM-SPY）を参照しているため、もう一度加えると同じシグナルを二重にウェイト付けすることになります。このカードは表示専用でスコアを一切変更せず、',
-  ],
   '融资': ['Funding', 'ファンディング'],
   '国债': ['Treasury', '国債'],
   '利率': ['Rates', '金利'],
@@ -204,10 +196,8 @@ export const MACRO: Dict = {
   '：': [': ', '：'],
   '负面': ['Negative', 'ネガティブ'],
   '该行业各宏观指标方向不明显': ["No clear directional signal from this sector's macro indicators", "このセクターのマクロ指標に明確な方向性はありません"],
-  '技术 − 结构性宏观 =': ['Technical − structural macro =', 'テクニカル − 構造的マクロ ='],
   ' · 价格明显跑在环境前面': [' · Price is clearly running ahead of the backdrop', ' · 価格が環境に明らかに先行'],
   ' · 宏观先行改善，价格未跟上': [" · Macro improving first, price hasn't caught up", ' · マクロが先に改善、価格が追いついていない'],
-  '· 不按中性计': ['· not treated as neutral', '· 中立扱いにはしません'],
   '宏观评分单独展示': ['Macro score shown separately', 'マクロスコアを別途表示'],
 
   /* ============ MacroConditionsPanel.tsx：刷新状态提示（不在原 msgid 清单里，人工补录） ============ */

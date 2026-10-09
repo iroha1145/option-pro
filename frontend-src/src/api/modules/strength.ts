@@ -3,7 +3,6 @@ import { get, mockOr, toQuery } from '../client';
 import { sharedGlobalGet } from '../sharedRead';
 import { marketGet } from '../marketRead';
 import { asRec, pickB, pickN, pickS, pickLabel, unwrap, type Rec } from '../live';
-import { mapMacroFitDrivers } from '../macroFields';
 import * as fx from '@/mocks/fixtures';
 import type {
   MarketRegimeInfo,
@@ -178,14 +177,6 @@ function mapScanRow(r: Record<string, unknown>): ScreenerRow | null {
     band,
     subscoreDims: dims,
     sparkline: [], // 契约 StrengthRow 无 sparkline（行展开按需拉日 K，见 RowExpansion）
-    // 影子字段：缺失一律保持 null / 空数组，绝不兜成 50 或「中性」。后端在覆盖度
-    // 不足时返回 null 正是为了区分「说不出来」和「中性」，前端补一手就白做了。
-    macroFit: pickN(r, 'macro_fit_shadow'),
-    macroTailwind: pickS(r, 'macro_tailwind'),
-    macroFitConfidence: pickN(r, 'macro_fit_confidence'),
-    macroSupporting: mapMacroFitDrivers(r.macro_supporting_factors),
-    macroOpposing: mapMacroFitDrivers(r.macro_opposing_factors),
-    macroTechnicalGap: pickN(r, 'macro_technical_gap'),
     dollarVolumeUnknown: pickB(r, 'dollar_volume_unknown', 'dollarVolumeUnknown') ?? false,
     dollarVolumeProxyAvailable: pickB(r, 'dollar_volume_proxy_available') ?? false,
     dollarLiquidityVerified: pickB(r, 'dollar_liquidity_verified') ?? false,

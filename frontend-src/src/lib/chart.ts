@@ -25,7 +25,7 @@ import type {
   MarkPointComponentOption,
   TooltipComponentOption,
 } from 'echarts/components';
-import { CHART_MONO_FONT, CHART_TEXT_FONT } from './chartFonts.ts';
+import { CHART_TEXT_FONT } from './chartFonts.ts';
 import { directionColors, getColorMode } from './colorPreference.ts';
 import { getAppearance, type Appearance } from './themePreference.ts';
 
@@ -133,7 +133,7 @@ export function baseGrid(overrides: Partial<GridComponentOption> = {}): GridComp
   return { left: 8, right: 8, top: 12, bottom: 8, containLabel: true, ...overrides };
 }
 
-export { CHART_MONO_FONT, CHART_TEXT_FONT };
+export { CHART_TEXT_FONT };
 
 export function categoryAxis(labels: string[]) {
   return {

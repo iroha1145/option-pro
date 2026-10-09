@@ -84,7 +84,8 @@ test('桌面表格与移动卡片流用同一批次', async () => {
 test('自选卡片不再使用 layout 投影，首屏之外不做入场动画', async () => {
   const page = codeOf(await source('pages/Watchlist.tsx'));
   assert.doesNotMatch(page, /layout="position"/, 'layout 投影会为每张卡建节点并反复测量');
-  assert.match(page, /initial=\{animateIn \? \{ opacity: 0, y: 14 \} : false\}/);
+  // 入场只淡入、不位移：卡片里的按钮从出现起就在最终位置。
+  assert.match(page, /initial=\{animateIn \? \{ opacity: 0 \} : false\}/);
   assert.match(page, /animateIn=\{i < FIRST_BATCH\}/);
   // 悬停反馈由 framer whileHover 收敛为 gated CSS card-lift
   //（触屏不粘滞；2026-10-06 起悬停只加深描边，不再上浮投影）

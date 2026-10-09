@@ -11,6 +11,7 @@ import { isUsIndexSymbol, quoteSymbol } from '@/lib/quoteSymbol';
 import { useTickFlash } from '@/hooks/useTickFlash';
 import EmptyState from '@/components/shared/EmptyState';
 import IndexCard, { IndexCardSkeleton } from '@/components/shared/IndexCard';
+import { SkeletonLine } from '@/components/shared/Skeleton';
 import { BusyIcon } from '@/components/shared/IconSwap';
 import { t } from '../../i18n/core.ts';
 
@@ -64,16 +65,21 @@ export default function IndexCards({
   /* 加载、出错、空态时还不知道有哪些市场，标题沿用「指数概览」 */
   const overview = <Eyebrow>{t('市场指数')} · {t('延迟行情')}</Eyebrow>;
 
+  /* 读取中按读到后的两组排（美股指数三张、其他市场两张），手机上上下两组、宽屏并排，骨架与读数同高。 */
   if (loading) {
     return (
-      <>
-        {overview}
-        <div className={INDEX_GRID}>
-          {Array.from({ length: 6 }, (_, i) => (
-            <IndexCardSkeleton key={i} />
-          ))}
-        </div>
-      </>
+      <div className="space-y-6 xl:flex xl:gap-4 xl:space-y-0">
+        {[3, 2].map((count) => (
+          <div key={count} className="min-w-0 xl:basis-0" style={{ flexGrow: count }}>
+            <SkeletonLine className="eyebrow mb-3" bar="h-2.5 w-24" />
+            <div className={INDEX_GRID}>
+              {Array.from({ length: count }, (_, i) => (
+                <IndexCardSkeleton key={i} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     );
   }
   const retry = (

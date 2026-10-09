@@ -15,16 +15,19 @@ interface PageHeaderProps {
   meta?: ReactNode;     // 右侧元信息
   className?: string;
   section?: NavSection;
+  /** 元信息在手机上是固定宽度的内容（例如只有一个按钮）时，仍跟标题同排。 */
+  inlineMeta?: boolean;
 }
 
-export default function PageHeader({ title, meta, className, section }: PageHeaderProps) {
+export default function PageHeader({ title, meta, className, section, inlineMeta = false }: PageHeaderProps) {
   return (
     <>
       <header
         className={cn('flex flex-wrap items-end justify-between gap-x-6 gap-y-3 pb-1', className)}
       >
         <h1 className="min-w-0 flex-1 basis-72 font-display text-display-m text-ink-900 md:text-display-l">{title}</h1>
-        {meta && <div className="flex max-w-full flex-wrap items-center gap-x-4 gap-y-2 pb-1">{meta}</div>}
+        {/* 手机上元信息固定单独一行：读取中的长文案与读取后的短标签宽度不同，跟标题挤一行时会在一行与两行之间来回，下面整页跟着跳。 */}
+        {meta && <div className={cn('flex max-w-full flex-wrap items-center gap-x-4 gap-y-2 pb-1', !inlineMeta && 'basis-full sm:basis-auto')}>{meta}</div>}
       </header>
       {/* 2026-10-09 Arc 改版：二级页面标签放在标题下方（先告诉你在哪一页，再给同组的其他页）。 */}
       {section && <SectionNav section={section} />}

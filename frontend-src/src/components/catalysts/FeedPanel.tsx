@@ -64,8 +64,8 @@ export function NewsRow({
   return (
     <motion.article
       /* 繁忙 feed 列表：stagger ≤30ms，仅第一页播放；y 写法以便 hover 上浮可组合（内联 transform 字符串会挡住 whileHover） */
-      initial={animate ? { opacity: 0, y: 14 } : false}
-      animate={{ opacity: 1, y: 0 }}
+      initial={animate ? { opacity: 0 } : false}
+      animate={{ opacity: 1 }}
       transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: animate ? Math.min(index * 0.03, 0.3) : 0 }}
       /* v8.1：行级去位移。上浮属于「卡片脱离纸面」的 elevation 隐喻——列表行无阴影无边界，
          浮起没有语义；60 行高频扫视区满屏跳也违反动效克制。背景色 + 标题下划线两重反馈已够。 */

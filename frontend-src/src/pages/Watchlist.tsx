@@ -43,7 +43,7 @@ import EmptyState from '@/components/shared/EmptyState';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import SessionLED, { SessionDot } from '@/components/shared/SessionLED';
-import { SkeletonCard, SkeletonReveal, SkeletonRows } from '@/components/shared/Skeleton';
+import { SkeletonLine, SkeletonReveal, SkeletonRows } from '@/components/shared/Skeleton';
 import Sparkline from '@/components/charts/Sparkline';
 import ChangeBadge from '@/components/shared/ChangeBadge';
 import Icon from '@/components/icons';
@@ -86,6 +86,35 @@ function AdvanceDeclineBar({
 /* 概览统计条：手机两列（不再横向滑动、把第二张卡截在屏外），张数为奇数时最后一张占满一行；
    sm 两列、xl 四列 */
 const STAT_GRID = 'grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2';
+
+/* 概览卡骨架按真实卡片的行盒排：标签行、读数行、说明行用同样的字阶，张数与真实一致（两张评分卡 + 涨跌卡），
+   读数到达前后整排高度不变。 */
+function StatCardSkeleton() {
+  return (
+    <div className="card-surface metric-card p-5" data-state="loading" aria-hidden="true">
+      <div className="flex items-start justify-between">
+        <SkeletonLine className="text-caption" bar="h-3 w-20" />
+        <span className="size-[18px]" />
+      </div>
+      <SkeletonLine className="metric-value mt-3 text-data-xl" bar="h-7 w-14" />
+      <SkeletonLine className="mt-1.5 text-caption" bar="h-3 w-24" />
+    </div>
+  );
+}
+function AdvanceDeclineSkeleton() {
+  return (
+    <div className="card-surface h-full p-4 sm:p-5" data-state="loading" aria-hidden="true">
+      <div className="flex items-start justify-between">
+        <SkeletonLine className="eyebrow" bar="h-3 w-16" />
+        <span className="size-[18px]" />
+      </div>
+      <div className="mt-2">
+        <SkeletonLine className="h-9 leading-9" bar="h-7 w-24" />
+        <div className="mt-2 h-[3px] w-full rounded-pill bg-line" />
+      </div>
+    </div>
+  );
+}
 
 const watchKey = (item: WatchlistItem) => item.ticker;
 const watchPrice = (item: WatchlistItem) => item.price;
@@ -135,6 +164,24 @@ function SignalDistribution({ data }: { data: MarketSignalsSnapshot }) {
   );
 }
 
+/** 市场分析卡的同尺寸骨架：同样的八行读数与一行说明，读到前后下面的市场时钟卡不动。 */
+function SignalDistributionSkeleton() {
+  return (
+    <div className="card-surface p-5" data-state="loading" aria-hidden="true">
+      <SkeletonLine className="eyebrow" bar="h-2.5 w-16" />
+      <div className="mt-4 space-y-3">
+        {Array.from({ length: 8 }, (_, i) => (
+          <div key={i} className="grid grid-cols-[minmax(0,1fr)_56px] items-center gap-2">
+            <SkeletonLine className="text-caption" bar="h-3 w-28" />
+            <SkeletonLine className="text-right text-caption" bar="h-3 w-8" />
+          </div>
+        ))}
+      </div>
+      <SkeletonLine className="mt-4 h-5 leading-5" bar="h-2.5 w-48 max-w-full" />
+    </div>
+  );
+}
+
 function MarketClockCard() {
   const { data: status, loading } = usePolling(() => marketApi.status(), 60_000);
   const now = useNow(1000);
@@ -164,6 +211,16 @@ function MarketClockCard() {
   );
 }
 
+
+/** 页头秒针单独成组件：每秒只重绘这一处，不带动整张关注表。 */
+function HeaderClock() {
+  const now = useNow(1000);
+  return (
+    <span className="hidden text-data-m text-ink-600 tnum sm:inline" suppressHydrationWarning>
+      {fmtNyTime(new Date(now))}
+    </span>
+  );
+}
 
 /* ---------------- 排序下拉 ---------------- */
 const SORT_OPTIONS: { id: string; label: string; sort: SortState | null }[] = [
@@ -283,8 +340,8 @@ function WatchCard({
       /* layout="position" 曾挂在每张卡上。它会为每个元素建一个 framer 投影节点并在
          每次布局变化时重新测量 —— 214 张卡时 Style & Layout 达 1,285ms，且把
          ~103K 的投影/拖拽代码拉进首屏包。入场淡入不需要它，hover 位移也不需要。 */
-      initial={animateIn ? { opacity: 0, y: 14 } : false}
-      animate={animateIn ? { opacity: 1, y: 0 } : undefined}
+      initial={animateIn ? { opacity: 0 } : false}
+      animate={animateIn ? { opacity: 1 } : undefined}
       transition={
         animateIn
           ? { duration: DUR_SECTION, ease: EASE_PAPER, delay: Math.min(index * 0.045, 0.5) }
@@ -310,7 +367,8 @@ function WatchCard({
         <LiveChange symbol={item.ticker} fallback={item.changePct} fallbackAt={item.updatedAt} size="sm" />
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="metric-value text-data-l text-ink-900 tnum"><LivePrice symbol={item.ticker} fallback={item.price} fallbackAt={item.updatedAt} /></p>
+        {/* 多列卡片里报价说明固定排在价格下面：参考价换成实时报价时说明变长，跟价格挤一行会把行业标签挤到下一行，整排卡片一起变高。 */}
+        <p className="metric-value text-data-l text-ink-900 tnum"><LivePrice symbol={item.ticker} fallback={item.price} fallbackAt={item.updatedAt} className="sm:flex-col sm:items-start sm:gap-y-0.5" /></p>
         {item.sector && <SoftBadge className="max-w-[60%]" title={t(item.sector)}><span className="truncate">{t(item.sector)}</span></SoftBadge>}
       </div>
       {!Number.isFinite(item.price) && <p className="mt-2 text-caption text-ink-400">{t('暂无行情')}</p>}
@@ -410,7 +468,6 @@ export default function Watchlist() {
   }, [editPersonal, refreshWatchlist, toast]);
   const signalsQ = usePolling(() => signalsApi.market(), 60_000, [], { enabled: !identityLoading && !identityUnavailable });
   const statusQ = usePolling(() => marketApi.status(), 60_000);
-  const now = useNow(1000);
 
   const onForceRefresh = useCallback(async () => {
     if (!isOwner || forceRefreshing || identityUnavailable) {
@@ -672,9 +729,7 @@ export default function Watchlist() {
               label={statusQ.data?.label}
               loading={statusQ.loading}
             />
-            <span className="hidden text-data-m text-ink-600 tnum sm:inline" suppressHydrationWarning>
-              {fmtNyTime(new Date(now))}
-            </span>
+            <HeaderClock />
             <ForceRefreshButton
               onRefresh={() => void onForceRefresh()}
               spinning={forceRefreshing || wl.refreshing}
@@ -689,9 +744,9 @@ export default function Watchlist() {
           /* 占位必须和真实内容占同样的空间（骨架与真实内容高度差曾造成 CLS 0.200），
              所以用与下方 motion.div 完全相同的栅格类。 */
           <div className={STAT_GRID}>
-            {Array.from({ length: 4 }, (_, i) => (
-              <SkeletonCard key={i} />
-            ))}
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <AdvanceDeclineSkeleton />
           </div>
         ) : (
           <motion.div
@@ -701,12 +756,9 @@ export default function Watchlist() {
             className={STAT_GRID}
           >
             {[
-              ...(signalsQ.data?.topScore !== null && signalsQ.data?.topScore !== undefined
-                ? [<StatCard key="top-risk" label={t("顶部风险分")} icon="flag" value={signalsQ.data.topScore} sub={signalsQ.data.topLabel ?? t('市场信号模型')} className="card-lift" />]
-                : []),
-              ...(signalsQ.data?.bottomScore !== null && signalsQ.data?.bottomScore !== undefined
-                ? [<StatCard key="bottom-repair" label={t("底部修复分")} icon="target" value={signalsQ.data.bottomScore} sub={signalsQ.data.bottomLabel ?? t('市场信号模型')} className="card-lift" />]
-                : []),
+              /* 评分缺失时卡片照常占位、读数显示「—」：整张卡消失会让整排变矮，下面的列表跟着上移 */
+              <StatCard key="top-risk" label={t("顶部风险分")} icon="flag" value={signalsQ.data?.topScore ?? Number.NaN} sub={signalsQ.data?.topLabel ?? t('市场信号模型')} className="card-lift" />,
+              <StatCard key="bottom-repair" label={t("底部修复分")} icon="target" value={signalsQ.data?.bottomScore ?? Number.NaN} sub={signalsQ.data?.bottomLabel ?? t('市场信号模型')} className="card-lift" />,
               <div key="ad" className="card-surface h-full p-4 sm:p-5">
                 <div className="flex items-start justify-between">
                   <p className="eyebrow">{t('上涨 / 下跌')}</p>
@@ -958,7 +1010,7 @@ export default function Watchlist() {
         {/* B3 右侧栏（4 列吸顶）。偏移 = Navbar 64px + 16px：IndexTape 不吸顶，
             按 116px 计会恒留 52px 空隙；与 Breakouts 的 top-20 同口径（审计 2.4.10） */}
         <aside className="grid grid-cols-1 gap-4 self-start md:grid-cols-2 lg:sticky lg:top-20 lg:col-span-4 lg:grid-cols-1" aria-label={t("侧栏")}>
-          <SkeletonReveal loading={!signalsQ.data && signalsQ.loading} skeleton={<SkeletonCard />}>
+          <SkeletonReveal loading={!signalsQ.data && signalsQ.loading} skeleton={<SignalDistributionSkeleton />}>
           {signalsQ.data ? (
             <SignalDistribution data={signalsQ.data} />
           ) : (

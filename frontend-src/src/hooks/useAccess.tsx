@@ -342,3 +342,9 @@ export function useAccess(): AccessContextValue {
   if (!ctx) throw new Error(t('useAccess 必须在 <AccessProvider> 内使用'));
   return ctx;
 }
+
+/** 只读是否已登录。在 AccessProvider 之外（单独渲染组件的测试页）按访客处理，不抛错。 */
+// eslint-disable-next-line react-refresh/only-export-components
+export function useSignedIn(): boolean {
+  return useContext(AccessContext)?.isSignedIn ?? false;
+}

@@ -14,14 +14,19 @@ import { fmtRelative } from '@/lib/format';
 import { aiModelLabel } from '@/lib/aiModelLabel';
 import { afterLoadIdle } from '@/lib/afterLoadIdle';
 import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
+import { cn } from '@/lib/utils';
 import { t } from '../../i18n/core.ts';
 
-/** 列数由状态栏自身宽度决定；手机上标签与内容成行，特别窄时再上下排列。 */
-function HeroCell({ label, children }: { label: string; children: React.ReactNode }) {
+/**
+ * 列数由状态栏自身宽度决定；手机上标签与内容成行，特别窄时再上下排列。
+ * contentClass 给内容区留出读到后的常见高度（徽标一行 + 说明一到两行），
+ * 读取中的骨架与读到后的内容占同样的高度，下面的热点带不会被推动。
+ */
+function HeroCell({ label, contentClass, children }: { label: string; contentClass: string; children: React.ReactNode }) {
   return (
     <div className="news-status-cell min-w-0 px-4 py-4 sm:px-5">
       <p className="news-status-label eyebrow">{label}</p>
-      <div className="news-status-content min-w-0">{children}</div>
+      <div className={cn('news-status-content min-w-0', contentClass)}>{children}</div>
     </div>
   );
 }
@@ -98,7 +103,7 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
       className="card-surface news-status mt-5 sm:mt-6"
     >
       <div className="news-status-grid">
-        <HeroCell label={t("来源状态")}>
+        <HeroCell label={t("来源状态")} contentClass="min-h-[68px]">
           {loading ? (
             <SkeletonBlock className="h-5 w-32 max-w-full" />
           ) : statusUnread ? (
@@ -130,7 +135,7 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
           )}
         </HeroCell>
 
-        <HeroCell label={t("热点整理")}>
+        <HeroCell label={t("热点整理")} contentClass="min-h-[46px]">
           {hotState === 'loading' ? (
             <SkeletonBlock className="h-5 w-28 max-w-full" />
           ) : hotUnread ? (
@@ -157,7 +162,7 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
           {hs && <p className="mt-1 text-micro text-ink-400 tnum">{t('更新')} {fmtRelative(hs.updatedAt)}</p>}
         </HeroCell>
 
-        <HeroCell label={t("分析服务")}>
+        <HeroCell label={t("分析服务")} contentClass="min-h-[48px]">
           {loading ? (
             <SkeletonBlock className="h-5 w-28 max-w-full" />
           ) : statusUnread ? (
@@ -193,7 +198,7 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
           </div>}
         </HeroCell>
 
-        <HeroCell label={t("近 24 小时新闻")}>
+        <HeroCell label={t("近 24 小时新闻")} contentClass="min-h-[50px]">
           {newsQ.loading && !newsQ.data ? (
             <SkeletonBlock className="h-7 w-16" />
           ) : (

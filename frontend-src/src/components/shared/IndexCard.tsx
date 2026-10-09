@@ -78,7 +78,10 @@ export default function IndexCard(props: IndexCardProps) {
       <span className="mt-auto flex items-center justify-between gap-2">
         <ChangeBadge value={quote.changePct} size="sm" />
         {spark && spark.length > 1 && quote.changePct !== null && (
-          <Sparkline data={spark} width={72} height={22} change={quote.changePct} className="hidden min-w-0 sm:block" />
+          /* 小图比涨跌徽标高，放进零高度的行内容器、上下溢出到内边距里：有没有小图，卡片都一样高 */
+          <span className="hidden h-0 min-w-0 items-center sm:flex">
+            <Sparkline data={spark} width={72} height={22} change={quote.changePct} className="min-w-0" />
+          </span>
         )}
       </span>
     </>
@@ -87,8 +90,8 @@ export default function IndexCard(props: IndexCardProps) {
   return (
     <motion.div
       className="h-full min-w-0"
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
       transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: Math.min(index * 0.045, 0.4) }}
     >
       {/* 联合类型保证 to 与 ref 的元素类型成对出现；解构后 TS 不再收窄，这里按分支断言 */}

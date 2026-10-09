@@ -3,8 +3,6 @@ import { ApiError, del, get, post, put, toQuery } from '@/api/client';
 import type { ChartAdjustment, ChartDrawing, ChartRange } from './types.ts';
 import { parseList, parseMutation, parseSaved } from './contract.ts';
 
-export { DrawingContractError, parseList, parseMutation, parseSaved, type DrawingListResponse } from './contract.ts';
-
 function drawingBody(drawing: ChartDrawing) {
   return {
     schemaVersion: 1 as const,

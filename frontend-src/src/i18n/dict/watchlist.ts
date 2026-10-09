@@ -72,7 +72,6 @@ export const WATCHLIST: Dict = {
   '跌幅优先': ['Losers first', '下落率順'],
   '评分优先': ['Score first', 'スコア順'],
   '代码顺序': ['Ticker A–Z', 'コード順 A–Z'],
-  '添加': ['Add', '追加'],
   '只标的': ['ticker||tickers', '銘柄'],
   '/ 上限': ['/ max', '/ 上限'],
 
@@ -106,7 +105,6 @@ export const WATCHLIST: Dict = {
     "Sign in to save your watchlist to your account. It will follow you across devices.",
     'ログインすると、ウォッチリストの銘柄をアカウントに保存でき、端末を変えても確認できます。',
   ],
-  '搜索代码': ['Search tickers', '銘柄コードを検索'],
   '还有 {n} 只': ['{n} more', 'あと {n} 銘柄'],
 
   /* ---------------- 表格列标题 ---------------- */

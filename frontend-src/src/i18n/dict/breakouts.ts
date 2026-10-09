@@ -151,24 +151,17 @@ export const BREAKOUTS: Dict = {
 
   /* ---- types.ts：板块长/短标签（长名用于事件卡内联展示，短名用于雷达外环刻度） ---- */
   '信息技术': ['Information Technology', '情報技術'],
-  '科技': ['Tech', 'テック'],
   '半导体': ['Semiconductors', '半導体'],
   '通信服务': ['Communication Services', '通信サービス'],
-  '通信': ['Comm. services', '通信'],
   '可选消费': ['Consumer Discretionary', '一般消費財'],
   '可选': ['Discretionary', '消費財'],
   '必需消费': ['Consumer Staples', '生活必需品'],
-  '必需': ['Staples', '必需品'],
   '医疗保健': ['Healthcare', 'ヘルスケア'],
-  '医疗': ['Health', '医療'],
   '金融': ['Financials', '金融'],
   '能源': ['Energy', 'エネルギー'],
   '工业': ['Industrials', '資本財'],
   '原材料': ['Materials', '素材'],
-  '材料': ['Materials', '素材'],
   '公用事业': ['Utilities', '公益事業'],
-  '公用': ['Utilities', '公益'],
-  '其他': ['Other', 'その他'],
 
   /* ---- pages/Breakouts.tsx ---- */
   '加载更多失败': ['Failed to load more', '追加読み込みに失敗しました'],

@@ -189,8 +189,8 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
               return (
                 <motion.div
                   key={a.ticker}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
                   transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: 0.2 + Math.min(i * 0.05, 0.3) }}
                   className="flex min-w-0 flex-col gap-2 py-3 first:pt-0 last:pb-0"
                 >
@@ -469,7 +469,8 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
           <p className="mb-3 text-caption text-ink-500" role="status">{pollNotice}</p>
         )}
         {latestState === 'loading' ? (
-          <div>
+          /* 分析正文通常远长于一屏：骨架撑到首屏以下，下面的栏目与筛选行读到前后都不在视口里挪动。 */
+          <div className="min-h-[calc(100dvh-20rem)]">
             <SkeletonBlock className="h-6 w-56" />
             <SkeletonText lines={3} className="mt-3" />
           </div>

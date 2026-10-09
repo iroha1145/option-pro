@@ -134,7 +134,8 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
         scrollerClassName="px-4 pb-2 md:px-8"
         label={__t("市场热点，可横向滚动")}
       >
-        <div className="flex snap-x snap-mandatory gap-3">
+        {/* 一行的高度固定为热点卡的高度：骨架、空态、读取失败与真实卡片都撑满这一行，读到前后下面的热点追踪不动。 */}
+        <div className="flex min-h-[211px] snap-x snap-mandatory gap-3 sm:min-h-[219px]">
           {listQ.loading && items.length === 0 ? (
             [0, 1, 2].map((i) => <HotspotSkeleton key={i} i={i} />)
           ) : computing ? (

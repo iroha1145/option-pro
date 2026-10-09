@@ -14,8 +14,6 @@ import { fmtCompact } from '@/lib/format';
 import Icon from '@/components/icons';
 import TickerLogo from '@/components/shared/TickerLogo';
 import InfoHint from '@/components/shared/InfoHint';
-import MacroFitBadge from '@/components/shared/MacroFitBadge';
-import { macroShadowHint } from '@/lib/scoreHints';
 import { SCORE_HINTS, type ScoreHint } from '@/lib/scoreHints';
 import { rowPrimarySortScore } from '@/lib/screenerSort';
 import RowExpansion from './RowExpansion';
@@ -41,8 +39,6 @@ export interface ResultTableProps {
   /** 变化时重跑 stagger（扫描完成 / 翻页） */
   animKey: string;
   stale?: boolean;
-  /** 可选列：宏观适配（影子字段，不参与排序） */
-  showMacro?: boolean;
 }
 
 const HEADS: { label: string; align?: 'right' | 'center'; width?: string; hint?: ScoreHint }[] = [
@@ -57,19 +53,6 @@ const HEADS: { label: string; align?: 'right' | 'center'; width?: string; hint?:
   { label: t('20日均成交额'), align: 'right' },
   { label: '', width: '40px' },
 ];
-
-/** 宏观列插在强度分之后：它读起来是强度分的背景，不是又一个价格字段。 */
-const MACRO_HEAD_INDEX = 3;
-
-function headsFor(showMacro: boolean) {
-  if (!showMacro) return HEADS;
-  return [
-    ...HEADS.slice(0, MACRO_HEAD_INDEX),
-    // 带上口径说明：一个 0–100 的分数放在强度分旁边，默认会被当成评分的一部分。
-    { label: t('宏观适配'), hint: macroShadowHint() },
-    ...HEADS.slice(MACRO_HEAD_INDEX),
-  ];
-}
 
 /** 行展开的外壳：收起动画播完才卸载整行，关闭态不留空 tr（否则每行下面多一道分隔线）。 */
 function ExpansionRow({
@@ -113,9 +96,7 @@ export default function ResultTable({
   onOpenDetail,
   animKey,
   stale = false,
-  showMacro = false,
 }: ResultTableProps) {
-  const heads = headsFor(showMacro);
   const tableId = useId();
   return (
     // overflow-x-auto 与 shared/DataTable 同口径（审计 2.4.1）：8–9 个数据列在
@@ -125,7 +106,7 @@ export default function ResultTable({
       <table className="w-full border-collapse">
         <thead>
           <tr className="bg-card-warm">
-            {heads.map((h, i) => (
+            {HEADS.map((h, i) => (
               <th
                 key={i}
                 style={h.width ? { width: h.width } : undefined}
@@ -151,8 +132,8 @@ export default function ResultTable({
               <Fragment key={r.ticker}>
                 <motion.tr
                   layout="position"
-                  initial={page === 1 ? { opacity: 0, y: 14 } : false}
-                  animate={{ opacity: 1, y: 0 }}
+                  initial={page === 1 ? { opacity: 0 } : false}
+                  animate={{ opacity: 1 }}
                   transition={{ duration: DUR_UI, ease: EASE_PAPER, delay: page === 1 ? Math.min(i * 0.03, 0.3) : 0, layout: { duration: DUR_UI, ease: EASE_PAPER } }}
                   onClick={(event) => {
                     // Tooltip/link controls keep their own pointer and keyboard actions.
@@ -189,12 +170,6 @@ export default function ResultTable({
                       caption={null}
                     />
                   </td>
-                  {/* 宏观适配（可选列） */}
-                  {showMacro && (
-                    <td className="px-2.5 py-2">
-                      <MacroFitBadge score={r.macroFit} tailwind={r.macroTailwind} compact />
-                    </td>
-                  )}
                   {/* 分项微条 */}
                   <td className="px-2.5 py-2">
                     <SubscoreTicks row={r} tipSide={i < 3 ? 'bottom' : 'top'} />
@@ -245,7 +220,7 @@ export default function ResultTable({
                   </td>
                 </motion.tr>
                 {/* 行展开 accordion（transitions.dev 21：grid 行 0fr↔1fr，收起播完再卸载） */}
-                <ExpansionRow open={isOpen} colSpan={heads.length} panelId={panelId}>
+                <ExpansionRow open={isOpen} colSpan={HEADS.length} panelId={panelId}>
                   <RowExpansion
                     row={r}
                     dollarVolume={dv ?? null}

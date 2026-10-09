@@ -1,8 +1,8 @@
 /**
  * 宏观适配详情块：分数 + 顺/逆风 + 正负驱动因素 + 口径说明。
  *
- * 用在选股行展开和个股抽屉里。两处显示的是同一个板块级读数（暴露画像是板块的，
- * 不是个股的），所以措辞刻意说「该板块」，不让人以为这是对这一只票单独算的。
+ * 用在个股详情页。显示的是板块级读数（暴露画像是板块的，不是个股的），所以措辞
+ * 刻意说「该板块」，不让人以为这是对这一只票单独算的。
  *
  * 没读到就说没读到：不显示 50，不显示「中性」，也不显示空白。
  */
@@ -21,8 +21,6 @@ interface Props {
   confidence?: number | null;
   supporting?: MacroFitDriver[];
   opposing?: MacroFitDriver[];
-  /** 技术市场适配 − 结构性宏观；正数＝价格跑在环境前面。 */
-  technicalGap?: number | null;
   status?: string | null;
   /** 省略标题行，用在已经有自己标题的容器里。 */
   bare?: boolean;
@@ -34,7 +32,6 @@ export default function MacroFitPanel({
   confidence,
   supporting,
   opposing,
-  technicalGap,
   status,
   bare = false,
 }: Props) {
@@ -73,19 +70,6 @@ export default function MacroFitPanel({
             )}
             {!positive && !negative && (
               <p className="text-caption text-ink-400">{t('该行业各宏观指标方向不明显')}</p>
-            )}
-            {typeof technicalGap === 'number' && Number.isFinite(technicalGap) && (
-              <p className="text-micro text-ink-400">
-                {t('技术 − 结构性宏观 =')}{' '}
-                <span className="tnum">
-                  {technicalGap > 0 ? '+' : ''}{technicalGap.toFixed(1)}
-                </span>
-                {technicalGap > 20
-                  ? t(' · 价格明显跑在环境前面')
-                  : technicalGap < -20
-                    ? t(' · 宏观先行改善，价格未跟上')
-                    : ''}
-              </p>
             )}
           </>
         )}

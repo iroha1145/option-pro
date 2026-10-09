@@ -132,7 +132,6 @@ export const WIRED: Dict = {
   '评分 {score}，{band} {label}': ['Score {score}, {band} {label}', 'スコア {score}、{band} {label}'],
   '评分分档 · 计数基于{scope}': ['Score tier · count based on {scope}', 'スコア区分 · カウント基準：{scope}'],
   '分档计数基于{scope}': ['Tier counts based on {scope}', '区分別カウント基準：{scope}'],
-  '进攻型与防守型资产之间的强弱差。': ['The spread between offensive and defensive assets.', '攻めと守りの資産間の強弱差。'],
   '{tierA}–{tierB}（{range}）': ['{tierA}–{tierB} ({range})', '{tierA}–{tierB}（{range}）'],
   '近 {count} 日走势': ['Last {count} days', '直近 {count} 日の推移'],
 
@@ -141,7 +140,6 @@ export const WIRED: Dict = {
   '{ticker} 不在当前股票目录中': ['{ticker} is not in the current stock directory', '{ticker} は現在の銘柄一覧にありません'],
   '评分{label}': ['Score {label}', 'スコア {label}'],
   '清除代码筛选 {ticker}': ['Clear ticker filter {ticker}', '銘柄コードの絞り込み {ticker} を解除'],
-  '{title}：{body}{note}': ['{title}: {body}{note}', '{title}：{body}{note}'],
 
   // ── 后端下发：市场信号指标名（services/signals.py 的 add() 清单）──────────
   'SPY距20日线偏离%': ['SPY vs 20-day MA %', 'SPY 20日線乖離%'],

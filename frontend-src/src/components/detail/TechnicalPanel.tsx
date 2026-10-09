@@ -3,6 +3,7 @@
  * 数据源 /stocks/{t}/technical 的 technicals 段；缺失如实显「—」。
  */
 import InfoHint from '@/components/shared/InfoHint';
+import { SkeletonLine } from '@/components/shared/Skeleton';
 import { TECHNICAL_HINTS } from '@/lib/structureHints';
 import type { ScoreHint } from '@/lib/scoreHints';
 import type { TechnicalStructure } from '@/api/types';
@@ -22,6 +23,20 @@ function MiniStat({ label, value, hint }: { label: string; value: string; hint?:
 
 const signedPct = (v: number | null, digits: number): string =>
   v === null ? '—' : `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(digits)}%`;
+
+/** 读取中的同尺寸骨架：同样的栅格与六个小格，每格两行字阶与真实读数一致。 */
+export function TechnicalPanelSkeleton() {
+  return (
+    <div className="mt-3 grid grid-cols-2 gap-1.5 md:grid-cols-3 xl:grid-cols-2" aria-hidden="true">
+      {Array.from({ length: 6 }, (_, i) => (
+        <div key={i} className="rounded-md bg-paper-2 px-1.5 py-1.5 text-center">
+          <SkeletonLine className="text-body-s" bar="h-3 w-10" />
+          <SkeletonLine className="text-micro" bar="h-2.5 w-14" />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function TechnicalPanel({ technical }: { technical: TechnicalStructure | null }) {
   if (!technical) return <p className="mt-3 text-caption text-ink-400">{t('暂无数据')}</p>;

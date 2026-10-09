@@ -12,7 +12,7 @@ import { strengthBarClass } from '@/lib/strengthColor';
 import EmptyState from '@/components/shared/EmptyState';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS, type ScoreHint } from '@/lib/scoreHints';
-import { SkeletonCard } from '@/components/shared/Skeleton';
+import { SkeletonLine } from '@/components/shared/Skeleton';
 import { BusyIcon } from '@/components/shared/IconSwap';
 import { t } from '../../i18n/core.ts';
 
@@ -27,6 +27,32 @@ const DIMS: { key: keyof MarketRegime; label: string; hint: ScoreHint }[] = [
 
 import { regimeMean } from '@/lib/regime';
 
+/** 与读到后的面板同高：标题行（右侧均分两行）与六项走势条按同样的栅格排。 */
+function RegimePanelSkeleton() {
+  return (
+    <div className="card-surface flex h-full flex-col p-5" data-state="loading" aria-hidden="true">
+      <div className="flex items-start justify-between">
+        <SkeletonLine className="text-h3" bar="h-4 w-20" />
+        <span className="text-right">
+          <SkeletonLine className="text-data-l" bar="h-5 w-12" />
+          <SkeletonLine className="text-micro" bar="h-3 w-14" />
+        </span>
+      </div>
+      <div className="mt-5 grid flex-1 grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+        {DIMS.map((d) => (
+          <div key={d.key}>
+            <div className="flex items-center justify-between">
+              <SkeletonLine className="text-caption" bar="h-3 w-16" />
+              <SkeletonLine className="text-data-m" bar="h-3.5 w-8" />
+            </div>
+            <div className="mt-1.5 h-1 rounded-pill bg-line" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function RegimePanel({
   data,
   loading,
@@ -40,7 +66,7 @@ export default function RegimePanel({
   onRetry: () => void;
   refreshing: boolean;
 }) {
-  if (loading) return <SkeletonCard className="h-full" />;
+  if (loading) return <RegimePanelSkeleton />;
   if (error || !data) {
     return (
       <div className="card-surface h-full">

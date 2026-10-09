@@ -194,9 +194,9 @@ export default function HistoryRail({
                     return (
                       <motion.li
                         key={e.event_id}
-                        /* 繁忙长列表：transform 字符串写法；stagger ≤30ms 且仅第一页入场，加载更多直接呈现 */
-                        initial={i < PAGE ? { opacity: 0, transform: 'translateY(8px)' } : false}
-                        animate={{ opacity: 1, transform: 'translateY(0px)' }}
+                        /* 繁忙长列表：只淡入、不位移，stagger ≤30ms 且仅第一页入场，加载更多直接呈现 */
+                        initial={i < PAGE ? { opacity: 0 } : false}
+                        animate={{ opacity: 1 }}
                         transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: i < PAGE ? Math.min(i * 0.03, 0.36) : 0 }}
                       >
                         <div

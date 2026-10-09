@@ -11,7 +11,6 @@ import { useQuoteSymbols, useRadarVersion, useRadarUpdates } from '@/hooks/useLi
  * 事件详情模态保留 · status/current 30s 轮询 · 空态/骨架/503/移动端单列
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
 import { ApiError } from '@/api/client';
 import { breakoutsApi } from '@/api/modules/breakouts';
 import { runtimeApi } from '@/api/modules/runtime';
@@ -20,6 +19,7 @@ import { useStockDataStatus } from '@/hooks/useStockDataStatus';
 import { dailyDataVersion } from '@/lib/stockDataStatus';
 import { quoteSymbol } from '@/lib/quoteSymbol';
 import StockDataCoverage from '@/components/shared/StockDataCoverage';
+import SameWidth from '@/components/shared/SameWidth';
 import { useTickFlash } from '@/hooks/useTickFlash';
 import { useNow } from '@/hooks/useNow';
 import { useAccess } from '@/hooks/useAccess';
@@ -28,7 +28,6 @@ import { DEFAULT_WATCHLIST_TICKERS } from '@/lib/personalWatchlist';
 import { useToast } from '@/hooks/useToast';
 import { useShell } from '@/hooks/useShell';
 import { cn } from '@/lib/utils';
-import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import Segmented from '@/components/shared/Segmented';
 import FilterButton from '@/components/shared/FilterButton';
 import MenuSelect from '@/components/shared/MenuSelect';
@@ -123,15 +122,24 @@ function SessionChip({ session }: { session: BreakoutSession }) {
   );
 }
 
-function NextScanCountdown({ nextSessionAt }: { nextSessionAt: string }) {
-  const now = useNow(1000);
-  const ms = Math.max(0, new Date(nextSessionAt).getTime() - now);
-  const m = Math.floor(ms / 60_000);
-  const s = Math.floor((ms % 60_000) / 1000);
-  const countdown = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+/* 状态条各项的宽度样例：读取中与读到后可能出现的文案都在里面，格子取最宽的一种 */
+const LED_LABEL_SAMPLES = [__t('扫描已启用'), __t('扫描已暂停'), __t('正在读取扫描状态…')].map((label) => (
+  <span key={label} className="inline-flex items-center gap-1.5"><span className="size-2" />{label}</span>
+));
+const SESSION_CHIP_SAMPLES = (Object.keys(SESSION_TEXT) as BreakoutSession[]).map((session) => (
+  <span key={session} className="radar-chip radar-chip-neutral"><span className="size-1.5" />{SESSION_TEXT[session]}</span>
+));
+const WORKER_STATE_SAMPLES = ['—', __t('正常'), __t('异常'), __t('状态未知')];
+
+function NextScanCountdown({ nextSessionAt }: { nextSessionAt: string | null }) {
+  const now = useNow(nextSessionAt ? 1000 : 0);
+  const ms = nextSessionAt ? Math.max(0, new Date(nextSessionAt).getTime() - now) : Number.NaN;
+  const countdown = Number.isFinite(ms)
+    ? `${String(Math.floor(ms / 60_000)).padStart(2, '0')}:${String(Math.floor((ms % 60_000) / 1000)).padStart(2, '0')}`
+    : '—';
   return (
     <span className="tnum">
-      {__t('下次扫描')} <span className="text-brand-600">{countdown}</span>
+      {__t('下次扫描')} <span className="inline-block min-w-[5ch] text-brand-600">{countdown}</span>
     </span>
   );
 }
@@ -506,28 +514,33 @@ export default function Breakouts() {
 
   return (
     <div className="radar-page">
-      {/* 页头带：§03 眉题 + 衬线大标 + 副标 · 右侧紧凑状态条 */}
-      <motion.header
-        initial={{ opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
-        className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 pb-1"
-      >
+      {/* 页头带：衬线大标 · 右侧紧凑状态条。不做入场位移：状态条随数据到达换行时，
+          位移动画会和换行叠在一起，按钮先出现再挪位。 */}
+      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 pb-1">
         {/* 与 PageHeader 一致：只留标题，不再有「§03 + 英文」装饰行 */}
         <h1 className="font-display text-display-m text-ink-900 md:text-display-l">{__t('突破雷达')}</h1>
-        {/* 紧凑状态条：启用 LED · 快照与活跃条数（副标合并至此去重）· 最近扫描 · 时段 chip · 扫描服务 · 下次扫描倒计时 · 查看范围 */}
-        <div className="radar-status flex flex-wrap items-center justify-end gap-x-4 gap-y-2 pb-1 text-caption text-ink-500">
-          <span className="inline-flex items-center gap-1.5">
-            <span className={cn('size-2 rounded-full', status?.enabled ? 'bg-ok-600 animate-led-pulse' : 'bg-ink-300')} aria-hidden="true" />
-            {status ? (status.enabled ? __t('扫描已启用') : __t('扫描已暂停')) : __t('正在读取扫描状态…')}
+        {/* 紧凑状态条：启用 LED · 快照与活跃条数（副标合并至此去重）· 最近扫描 · 时段 chip · 扫描服务 · 下次扫描倒计时 · 查看范围。
+            每一项从首帧起就占位：手机按固定两列网格排，桌面把范围切换单独放第二行；
+            每一项的宽度取读取中与读到后各种文案里最宽的一种，英文、日文文案更长时，读到前后在同一处换行。 */}
+        <div className="radar-status grid w-full grid-cols-2 items-center gap-x-4 gap-y-2 pb-1 text-caption text-ink-500 md:flex md:w-auto md:flex-wrap md:justify-end">
+          {/* 最左一项靠右对齐：多出的空白落在行首，桌面整行右对齐时看不出来 */}
+          <SameWidth samples={LED_LABEL_SAMPLES} className="md:justify-items-end">
+            <span className="inline-flex items-center gap-1.5">
+              <span className={cn('size-2 rounded-full', status?.enabled ? 'bg-ok-600 animate-led-pulse' : 'bg-ink-300')} aria-hidden="true" />
+              {status ? (status.enabled ? __t('扫描已启用') : __t('扫描已暂停')) : __t('正在读取扫描状态…')}
+            </span>
+          </SameWidth>
+          <span className="col-span-2 min-h-[2lh] tnum md:min-h-0">
+            <SameWidth samples={[<>{__t('数据截至')} 00:00:00 {__t('· 读取')} 00:00:00 · 00 {__t('条活跃')}</>]}>
+              {__t('数据截至')} {snapshotAt} {__t('· 读取')} {readAt} · <span className="text-ink-700">{currentQ.data ? currentAll.length : '—'}</span> {__t('条活跃')}
+            </SameWidth>
           </span>
           <span className="tnum">
-            {__t('数据截至')} {snapshotAt} {__t('· 读取')} {readAt} · <span className="text-ink-700">{currentAll.length}</span> {__t('条活跃')}
+            {__t('最近扫描')} <SameWidth samples={['00:00:00']}>{status?.lastScanAt ? fmtTimeHHMMSS(new Date(status.lastScanAt)) : '—'}</SameWidth>
           </span>
-          <span className="tnum">
-            {__t('最近扫描')} {status?.lastScanAt ? fmtTimeHHMMSS(new Date(status.lastScanAt)) : '—'}
+          <span className="inline-flex min-h-6 items-center">
+            <SameWidth samples={SESSION_CHIP_SAMPLES}>{status?.market_session ? <SessionChip session={status.market_session} /> : '—'}</SameWidth>
           </span>
-          {status?.market_session && <SessionChip session={status.market_session} />}
           {/* 扫描服务三态：正常 / 异常 / 状态未知。healthy === null 表示后端没有报告
               worker（库不可用或 schema 不符），不能显示成正常，也不等于确认异常。 */}
           <span className="inline-flex items-center gap-1.5">
@@ -543,16 +556,18 @@ export default function Breakouts() {
               }
             />
             {__t('扫描服务')}{' '}
-            {!status
-              ? '—'
-              : status.worker?.healthy === true
-                ? __t('正常')
-                : status.worker?.healthy === false
-                  ? __t('异常')
-                  : __t('状态未知')}
+            <SameWidth samples={WORKER_STATE_SAMPLES}>
+              {!status
+                ? '—'
+                : status.worker?.healthy === true
+                  ? __t('正常')
+                  : status.worker?.healthy === false
+                    ? __t('异常')
+                    : __t('状态未知')}
+            </SameWidth>
           </span>
-          {status?.next_session_at && <NextScanCountdown nextSessionAt={status.next_session_at} />}
-          <div className="flex max-w-full flex-wrap items-center gap-1.5">
+          <NextScanCountdown nextSessionAt={status?.next_session_at ?? null} />
+          <div className="col-span-2 flex max-w-full flex-wrap items-center gap-1.5 md:basis-full md:justify-end">
             <Segmented
               options={WATCH_SCOPE_OPTIONS}
               value={onlyWatch ? 'watchlist' : 'all'}
@@ -568,9 +583,9 @@ export default function Breakouts() {
             )}
           </div>
         </div>
-      </motion.header>
+      </header>
       <SectionNav section="screen" />
-      <StockDataCoverage state={readiness} className="mt-4" />
+      <StockDataCoverage state={readiness} reserve={currentQ.loading} className="mt-4" />
 
       {/* 状态收成一个下拉；最低评分与排序收进「更多筛选」，折叠时一行摘要仍写明范围、状态、评分与排序。 */}
       <div className="radar-filterbar mt-4 flex flex-wrap items-center gap-x-5 gap-y-3 pb-4" data-breakout-filters="">
@@ -658,22 +673,34 @@ export default function Breakouts() {
           </div>
         </details>
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-caption text-ink-500">
-        {/* 只在「跟随默认」时说明实际生效的是哪种排序；手动选了的，分段控件上已经写着 */}
-        {radarSort === 'follow_default' && (
-          <span data-testid="radar-effective-algorithm">
-            {__t('默认排序：{name}', { name: showT1 ? __t('日线量价优先（试用）') : __t('原雷达排序') })}
-          </span>
+      {/* 手机上说明会折成两行，首帧就留出两行，快照到达后下面的信号区不被推下。
+          跟随默认时快照未到，按试用排序的完整说明叠一份隐形样例留出行数（2026-10-09 生产默认是它）：
+          英文、日文的说明在桌面上也会折行。 */}
+      <div className="mt-2 grid min-h-[2lh] text-caption text-ink-500 md:min-h-0">
+        {radarSort === 'follow_default' && !currentQ.data && (
+          <div aria-hidden="true" className="invisible col-start-1 row-start-1 flex flex-wrap content-start items-center gap-x-2">
+            <span>{__t('默认排序：{name}', { name: __t('日线量价优先（试用）') })}</span>
+            <span>{__t('满足固定日线量价条件的事件会在同一交易日组内优先。其余事件不删除。待收盘或数据不足时保持原顺序。')}</span>
+          </div>
         )}
-        {showT1 && (
-          <span>{__t('满足固定日线量价条件的事件会在同一交易日组内优先。其余事件不删除。待收盘或数据不足时保持原顺序。')}</span>
-        )}
-        {showT1 && t1PendingCount > 0 && (
-          <span className="text-warn-700">{__t('{n} 条待收盘确认', { n: t1PendingCount })}</span>
-        )}
-        {showT1 && t1UnavailableCount > 0 && (
-          <span>{__t('{n} 条日线数据不足', { n: t1UnavailableCount })}</span>
-        )}
+        <div className="col-start-1 row-start-1 flex flex-wrap content-start items-center gap-x-2">
+          {/* 只在「跟随默认」时说明实际生效的是哪种排序；手动选了的，分段控件上已经写着。
+              快照未到时还不知道服务端默认的是哪种，先不猜。 */}
+          {radarSort === 'follow_default' && (
+            <span data-testid="radar-effective-algorithm">
+              {__t('默认排序：{name}', { name: !currentQ.data ? '…' : showT1 ? __t('日线量价优先（试用）') : __t('原雷达排序') })}
+            </span>
+          )}
+          {showT1 && (
+            <span>{__t('满足固定日线量价条件的事件会在同一交易日组内优先。其余事件不删除。待收盘或数据不足时保持原顺序。')}</span>
+          )}
+          {showT1 && t1PendingCount > 0 && (
+            <span className="text-warn-700">{__t('{n} 条待收盘确认', { n: t1PendingCount })}</span>
+          )}
+          {showT1 && t1UnavailableCount > 0 && (
+            <span>{__t('{n} 条日线数据不足', { n: t1UnavailableCount })}</span>
+          )}
+        </div>
       </div>
 
       {/* 当日信号：左大面板（lead 压缩大卡）+ 右吸顶栏（事件队列 + 生命周期分布） */}

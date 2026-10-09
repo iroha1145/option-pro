@@ -63,8 +63,8 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
           <motion.div
             key={s.source}
             variants={{
-              hidden: { opacity: 0, y: 14 },
-              show: { opacity: 1, y: 0, transition: { duration: DUR_SECTION, ease: EASE_PAPER } },
+              hidden: { opacity: 0 },
+              show: { opacity: 1, transition: { duration: DUR_SECTION, ease: EASE_PAPER } },
             }}
             className="card-surface p-5"
           >

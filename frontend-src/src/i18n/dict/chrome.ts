@@ -35,8 +35,6 @@ export const CHROME: Dict = {
   '浅色': ['Light', 'ライト'],
   '深色': ['Dark', 'ダーク'],
   '当前外观：{mode}': ['Current appearance: {mode}', '現在の外観：{mode}'],
-  '绿涨': ['Green ↑', '上昇が緑'],
-  '红涨': ['Red ↑', '上昇が赤'],
 
   /* 登录状态 */
   '登录': ['Sign in', 'ログイン'],
@@ -48,11 +46,8 @@ export const CHROME: Dict = {
   '当前为访客只读模式': ['Now browsing as a read-only guest', '現在はゲストの閲覧専用モードです'],
 
   /* AI 状态胶囊 */
-  '分析服务可用': ['Analysis service available', '分析サービスは利用可能'],
   '分析任务处理中': ['Analysis task in progress', '分析タスクを実行中'],
   "分析服务暂不可用": ["Analysis service unavailable", "分析は一時的に利用できません"],
-  '分析服务未开启': ['Analysis service is off', '分析サービスは無効です'],
-  '分析服务确认中': ['Checking analysis service', '分析サービスを確認中'],
 
   /* 命令面板 */
   '快捷查找': ['Quick find', 'クイック検索'],
@@ -210,6 +205,5 @@ export const CHROME: Dict = {
   'IV 异动': ['IV move', 'IV急変'],
 
   /* 语言切换器 */
-  '语言': ['Language', '言語'],
   '界面语言': ['Interface language', '表示言語'],
 };

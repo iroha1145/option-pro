@@ -5,6 +5,7 @@
  */
 import { fmtCompact, fmtPrice } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { SkeletonLine } from '@/components/shared/Skeleton';
 import type { StockDetail } from '@/api/types';
 import { t } from '../../i18n/core.ts';
 
@@ -12,21 +13,22 @@ const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFin
 const priceOr = (v: number | null | undefined): string => (isNum(v) ? fmtPrice(v) : '—');
 const compactOr = (v: number | null | undefined): string => (isNum(v) ? fmtCompact(v) : '—');
 
-export default function KeyStats({ detail, className }: { detail: StockDetail; className?: string }) {
-  const rows: [string, string][] = [
-    [t('今开'), priceOr(detail.open)],
-    [t('昨收'), priceOr(detail.prevClose)],
-    [t('最高价'), priceOr(detail.high)],
-    [t('最低价'), priceOr(detail.low)],
-    [t('成交量'), compactOr(detail.volume)],
-    [t('均量'), compactOr(detail.avgVolume)],
-    [t('市值'), isNum(detail.marketCap) ? `$${fmtCompact(detail.marketCap)}` : '—'],
-    [t('市盈率'), isNum(detail.pe) ? detail.pe.toFixed(1) : '—'],
-    [t('IV 百分位'), isNum(detail.ivPercentile) ? `${detail.ivPercentile}%` : '—'],
+/** detail 为 null 时是读取中的骨架：同样九行与 52 周区间，读到后卡片不变高。 */
+export default function KeyStats({ detail, className }: { detail: StockDetail | null; className?: string }) {
+  const rows: [string, string | null][] = [
+    [t('今开'), detail && priceOr(detail.open)],
+    [t('昨收'), detail && priceOr(detail.prevClose)],
+    [t('最高价'), detail && priceOr(detail.high)],
+    [t('最低价'), detail && priceOr(detail.low)],
+    [t('成交量'), detail && compactOr(detail.volume)],
+    [t('均量'), detail && compactOr(detail.avgVolume)],
+    [t('市值'), detail && (isNum(detail.marketCap) ? `$${fmtCompact(detail.marketCap)}` : '—')],
+    [t('市盈率'), detail && (isNum(detail.pe) ? detail.pe.toFixed(1) : '—')],
+    [t('IV 百分位'), detail && (isNum(detail.ivPercentile) ? `${detail.ivPercentile}%` : '—')],
   ];
-  const r52 = detail.range52w;
+  const r52 = detail?.range52w;
   const has52 = Array.isArray(r52) && isNum(r52[0]) && isNum(r52[1]);
-  const pos = has52 ? Math.min(100, Math.max(2, ((detail.price - r52[0]) / Math.max(1e-9, r52[1] - r52[0])) * 100)) : 0;
+  const pos = detail && has52 ? Math.min(100, Math.max(2, ((detail.price - r52[0]) / Math.max(1e-9, r52[1] - r52[0])) * 100)) : 0;
 
   return (
     /* 右栏随 K 线卡拉伸时由本卡吸收高度差：52 周区间贴底，与图卡底边对齐 */
@@ -36,15 +38,18 @@ export default function KeyStats({ detail, className }: { detail: StockDetail; c
         {rows.map(([k, v]) => (
           <div key={k} className="flex items-center justify-between py-2">
             <dt className="text-body-s text-ink-400">{k}</dt>
-            <dd className="text-body-s text-ink-800 tnum">{v}</dd>
+            {v === null
+              ? <dd><SkeletonLine className="text-body-s" bar="h-3 w-14" /></dd>
+              : <dd className="text-body-s text-ink-800 tnum">{v}</dd>}
           </div>
         ))}
       </dl>
       <div className="mt-auto border-t border-line pt-3">
         <div className="flex items-center justify-between text-micro text-ink-400">
           <span>{t('52 周区间')}</span>
-          <span className="tnum">{has52 ? `${fmtPrice(r52[0])} — ${fmtPrice(r52[1])}` : '—'}</span>
+          {detail ? <span className="tnum">{has52 ? `${fmtPrice(r52[0])} — ${fmtPrice(r52[1])}` : '—'}</span> : <SkeletonLine bar="h-2.5 w-20" />}
         </div>
+        {!detail && <div className="mt-2 h-1 rounded-pill bg-line" aria-hidden="true" />}
         {has52 && (
           <div className="relative mt-2 h-1 rounded-pill bg-line" role="presentation">
             <div className="h-full rounded-pill bg-brand-100" style={{ width: '100%' }} />
