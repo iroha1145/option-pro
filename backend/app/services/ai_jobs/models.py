@@ -702,10 +702,6 @@ _SOURCE_DOMAIN_CITATION = re.compile(
     + _HOSTNAME
     + r")*[ \t]*[）)][ \t]*"
 )
-# 新闻载荷由程序生成的字段名与状态码（article、source、http_403……）。
-_PAYLOAD_IDENTIFIER = re.compile(
-    r"(?<![A-Za-z0-9_])[a-z][a-z0-9]*(?:_[a-z0-9]+)*(?![A-Za-z0-9_])"
-)
 _NUMERIC_SUFFIX_HARD_BOUNDARIES = frozenset("；;。.!！?？%％")
 _SECURITY_REFERENCE_MARKERS = (
     "股价",
@@ -1977,53 +1973,6 @@ def _news_source_bound_name(
     return any(pattern.search(source) for source in sources)
 
 
-def _news_payload_identifiers(payload: Any) -> frozenset[str]:
-    """Program-defined names of one news task: its payload fields and status
-    codes, the article fields the instructions describe even when absent, and
-    the result fields."""
-
-    if not isinstance(payload, dict):
-        return frozenset()
-    names: set[Any] = {*payload, "article", "article_status", "article_reason"}
-    names.update(NewsImpactResult.model_fields)
-    article = payload.get("article")
-    if isinstance(article, dict):
-        names.update(article)
-    names.update(payload.get(field) for field in ("article_status", "article_reason"))
-    truncated = payload.get("truncated_fields")
-    if isinstance(truncated, list):
-        names.update(truncated)
-    return frozenset(
-        name
-        for name in names
-        if isinstance(name, str) and _PAYLOAD_IDENTIFIER.fullmatch(name)
-    )
-
-
-def _mask_payload_identifiers(text: str, payload: Any) -> str:
-    """Hide exact payload field names from the prose scan, outside security context.
-
-    Models echo the input's own labels (「输入article标记为不可用」「source为……」).
-    Only an exact, lower-case name or status code of this payload qualifies; a
-    near miss such as my_article_status, or a label used as a security
-    reference (「股票代码allowed_tickers」), is still scanned as foreign text.
-    """
-
-    identifiers = _news_payload_identifiers(payload)
-    if not identifiers:
-        return text
-
-    def mask(match: re.Match[str]) -> str:
-        token = match.group(0)
-        if token not in identifiers or _approved_span_requires_ticker_binding(
-            token, sentence=text, start=match.start(), end=match.end(),
-        ):
-            return token
-        return "_" * len(token)
-
-    return _PAYLOAD_IDENTIFIER.sub(mask, text)
-
-
 def validate_simplified_chinese_text(
     value: str,
     info: ValidationInfo | None,
@@ -2087,20 +2036,19 @@ def validate_simplified_chinese_text(
         if isinstance(source, str) and source
     )
     news_payload = context.get("news_payload") if context is not None else None
-    check_text = _mask_payload_identifiers(scan_text, news_payload)
     latin_count = sum(
-        1 for char in check_text if char.isascii() and char.isalpha()
+        1 for char in scan_text if char.isascii() and char.isalpha()
     )
     source_bound_latin = sum(
         sum(char.isascii() and char.isalpha() for char in match.group(0))
-        for match in _FOREIGN_SPAN.finditer(check_text)
+        for match in _FOREIGN_SPAN.finditer(scan_text)
         if _is_source_bound_foreign_entity(match.group(0), source_texts)
     )
     if latin_count - source_bound_latin > max(32, cjk_count * 4):
         raise _english_prose_error(
-            _longest_unbound_foreign_span(check_text, source_texts)
+            _longest_unbound_foreign_span(scan_text, source_texts)
         )
-    for sentence in _SENTENCE_SPLIT.split(check_text):
+    for sentence in _SENTENCE_SPLIT.split(scan_text):
         sentence_latin = sum(
             1 for char in sentence if char.isascii() and char.isalpha()
         )
@@ -2144,19 +2092,19 @@ def validate_simplified_chinese_text(
         if sentence_latin >= 16 and sentence_cjk == 0:
             raise _english_prose_error(sentence)
 
-    for match in _FOREIGN_SPAN.finditer(check_text):
+    for match in _FOREIGN_SPAN.finditer(scan_text):
         span = match.group(0)
         if span not in _CROSS_SENTENCE_SECURITY_ISSUERS:
             continue
         if not _foreign_span_stands_alone_before_sentence_break(
-            check_text,
+            scan_text,
             start=match.start(),
             end=match.end(),
         ):
             continue
         if not _approved_span_requires_ticker_binding(
             span,
-            sentence=check_text,
+            sentence=scan_text,
             start=match.start(),
             end=match.end(),
         ):
@@ -2647,13 +2595,74 @@ def _http_status_label(code: str) -> str:
     )
 
 
+# 新闻任务自己的字段名与状态值在发布文本里的中文说法。只替换与本条载荷字段名、
+# 正文字段名、结果字段名或抓取状态值逐字相同的词；其他英文照旧交给中文校验。
+_NEWS_FIELD_LABELS = {
+    "article": "新闻正文",
+    "article_status": "正文状态",
+    "article_reason": "正文缺失原因",
+    "text": "正文",
+    "source": "来源",
+    "sources": "来源",
+    "source_url": "来源网址",
+    "url": "网址",
+    "title": "标题",
+    "summary": "摘要",
+    "allowed_tickers": "允许股票代码名单",
+    "affected_stocks": "受影响个股",
+    "confidence": "置信度",
+    "classification": "判断类别",
+    "insufficient_context": "证据不足",
+}
+_NEWS_STATUS_LABELS = {
+    "available": "可用",
+    "unavailable": "不可用",
+    "not_requested": "未请求",
+    "truncated": "已截断",
+    "timeout": "超时",
+    "paywall": "付费墙",
+    "challenge_page": "访问验证页",
+    "dns_error": "域名解析失败",
+    "unsafe_url": "网址不安全",
+    "unsafe_address": "地址不安全",
+    "unsafe_request": "请求不安全",
+    "unsupported_encoding": "编码不支持",
+    "unsupported_content_type": "内容类型不支持",
+    "response_too_large": "响应过大",
+    "incomplete_response": "响应不完整",
+    "no_matching_article_body": "未找到匹配正文",
+    "publisher_url_unavailable": "发布方网址不可用",
+    "redirect_limit": "重定向次数超限",
+}
+
+
+def _news_identifier_translations(payload: dict) -> dict[str, str]:
+    article = payload.get("article")
+    article = article if isinstance(article, dict) else {}
+    fields = {
+        *payload, *article, "article", "article_status", "article_reason",
+        *NewsImpactResult.model_fields,
+    }
+    translations = {
+        name: label for name, label in _NEWS_FIELD_LABELS.items() if name in fields
+    }
+    statuses = {
+        payload.get("article_status"), payload.get("article_reason"), article.get("status"),
+    }
+    if article or payload.get("truncated_fields"):
+        statuses.add("truncated")
+    translations.update(
+        {value: label for value, label in _NEWS_STATUS_LABELS.items() if value in statuses}
+    )
+    reason = re.fullmatch(r"http_([1-5][0-9]{2})", str(payload.get("article_reason") or ""))
+    if reason is not None:
+        translations[reason.group(0)] = f"状态码{reason.group(1)}"
+    return translations
+
+
 def _translate_news_metadata(value: str, payload: dict) -> str:
     """Translate only known input labels; never rewrite facts or output keys."""
-    translations = {"allowed_tickers": "允许股票代码名单", "affected_stocks": "受影响个股"}
-    if payload.get("article_status") == "unavailable":
-        translations.update({"article_status": "正文状态", "unavailable": "不可用", "article": "新闻正文"})
-        if payload.get("article_reason") == "no_matching_article_body":
-            translations.update({"article_reason": "正文缺失原因", "no_matching_article_body": "未找到匹配正文"})
+    translations = _news_identifier_translations(payload)
     # Names are exact ASCII tokens, not substrings of an unknown program label.
     tokens = "|".join(sorted(map(re.escape, translations), key=len, reverse=True))
     pattern = re.compile(r"(?<![A-Za-z0-9_])(" + tokens + r")(?![A-Za-z0-9_])")

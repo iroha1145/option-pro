@@ -90,3 +90,54 @@ def test_b2_unbound_numeric_codes_are_not_quantities(text):
 )
 def test_b2_amounts_after_share_nouns_still_pass(text):
     assert _focus_field(text, field="summary_zh") == text
+
+
+# --- B3. Field names are translated, never let through as English ------------
+
+_ARTICLE = {
+    "status": "available",
+    "text": "英伟达公布新芯片。",
+    "source_url": "https://www.reuters.com/x",
+    "fetched_at": "2026-10-09T00:00:00Z",
+    "truncated": False,
+}
+
+
+@pytest.mark.parametrize(
+    ("text", "changes", "published"),
+    [
+        ("输入article标记为可用，已按正文分析。", {"article_status": "available", "article": _ARTICLE},
+         "输入新闻正文标记为可用，已按正文分析。"),
+        ("article_reason为http_403，正文不可用。", {"article_status": "unavailable", "article_reason": "http_403"},
+         "正文缺失原因为状态码403，正文不可用。"),
+        ("正文因unsupported_encoding无法解析", {"article_status": "unavailable", "article_reason": "unsupported_encoding"},
+         "正文因编码不支持无法解析"),
+        ("insufficient_context设为真", {}, "证据不足设为真"),
+        ("模型confidence较低，classification为看多。", {}, "模型置信度较低，判断类别为看多。"),
+        ("输入summary仅含代码标记", {}, "输入摘要仅含代码标记"),
+        ("原文title与url均来自输入。", {}, "原文标题与网址均来自输入。"),
+        ("正文text已截断，article_status为available。", {"article_status": "available", "article": _ARTICLE},
+         "正文正文已截断，正文状态为可用。"),
+    ],
+)
+def test_b3_field_names_are_published_in_chinese(text, changes, published):
+    assert _news_field(text, **changes) == published
+
+
+@pytest.mark.parametrize(
+    ("text", "changes"),
+    [
+        # Ordinary English left after translation is still rejected.
+        ("英伟达发布新品。article text truncated, source title available, summary status truncated.",
+         {"article_status": "available", "article": _ARTICLE}),
+        # Without an article there is no text field to translate.
+        ("原文text缺失。", {}),
+        # A status value counts only when it is this payload's own value.
+        ("正文状态为available。", {"article_status": "unavailable"}),
+        ("正文因http_404无法读取。", {"article_status": "unavailable", "article_reason": "http_403"}),
+        ("输入status为可用。", {"article_status": "available", "article": _ARTICLE}),
+    ],
+)
+def test_b3_words_outside_the_payload_vocabulary_are_still_rejected(text, changes):
+    with pytest.raises(ValueError, match="english_prose_not_allowed"):
+        _news_field(text, **changes)

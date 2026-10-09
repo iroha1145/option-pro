@@ -203,19 +203,22 @@ def test_domains_outside_a_bracketed_citation_are_still_prose(text):
 
 
 @pytest.mark.parametrize(
-    ("text", "changes"),
+    ("text", "changes", "published"),
     [
-        ("输入article标记为可用，已按正文分析。", {"article_status": "available", "article": _ARTICLE}),
-        ("输入article字段缺失，只能依据标题判断。", {}),
-        ("输入的source为美国财经资讯网站。", {}),
-        ("summary只有代码标记，未提供实质信息。", {}),
-        ("article_reason为http_403，正文不可用。", {"article_status": "unavailable", "article_reason": "http_403"}),
-        ("正文因unsupported_encoding无法解析。", {"article_status": "unavailable", "article_reason": "unsupported_encoding"}),
-        ("insufficient_context设为真，affected_stocks留空。", {}),
+        ("输入article标记为可用，已按正文分析。", {"article_status": "available", "article": _ARTICLE},
+         "输入新闻正文标记为可用，已按正文分析。"),
+        ("输入article字段缺失，只能依据标题判断。", {}, "输入新闻正文字段缺失，只能依据标题判断。"),
+        ("输入的source为美国财经资讯网站。", {}, "输入的来源为美国财经资讯网站。"),
+        ("summary只有代码标记，未提供实质信息。", {}, "摘要只有代码标记，未提供实质信息。"),
+        ("article_reason为http_403，正文不可用。", {"article_status": "unavailable", "article_reason": "http_403"},
+         "正文缺失原因为状态码403，正文不可用。"),
+        ("正文因unsupported_encoding无法解析。", {"article_status": "unavailable", "article_reason": "unsupported_encoding"},
+         "正文因编码不支持无法解析。"),
+        ("insufficient_context设为真，affected_stocks留空。", {}, "证据不足设为真，受影响个股留空。"),
     ],
 )
-def test_exact_payload_field_names_are_not_english_prose(text, changes):
-    assert _news_field(text, field="uncertainty_notes", **changes)
+def test_exact_payload_field_names_are_published_in_chinese(text, changes, published):
+    assert _news_field(text, field="uncertainty_notes", **changes) == published
 
 
 @pytest.mark.parametrize(
