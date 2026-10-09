@@ -194,13 +194,13 @@ def test_a_failing_calendar_without_any_snapshot_degrades_the_task(tmp_path):
 
     assert result.status == "degraded"
     assert result.details["errors"] == {
-        "calendar": "timeout",
+        "calendar": "calendar_stale",
         "source:forexfactory": "timeout",
     }
     assert result.details["processed"][:2] == ["news", "local_intelligence"]
 
 
-def test_every_due_news_source_failing_degrades_and_backs_off(tmp_path):
+def test_a_news_outage_stays_degraded_on_every_slot_until_a_source_recovers(tmp_path):
     feeds = Feeds(
         massive=SourceError("http_503"),
         globenewswire=SourceError("http_403"),
@@ -208,18 +208,37 @@ def test_every_due_news_source_failing_degrades_and_backs_off(tmp_path):
     )
     task = _task(tmp_path, feeds.mapping("massive", "globenewswire", "forexfactory"))
 
-    [result] = asyncio.run(_run(task))
+    async def slot(offset: timedelta):
+        task._last_personal_sync_monotonic = None
+        task._collector._clock = lambda: datetime.now(timezone.utc) + offset
+        return await task()
 
-    assert result.status == "degraded"
-    assert result.error_code == "catalyst_sync_degraded"
-    assert result.next_delay_seconds is None
-    assert result.details["errors"] == {
-        "news": "http_503",
+    async def scenario():
+        results = [await task()]
+        # Every failed source is backing off; nothing is due on the next slot.
+        results.append(await slot(timedelta(minutes=2)))
+        feeds.results["massive"] = NewsBatch(_items("massive", 1, source="massive/Benzinga"))
+        results.append(await slot(timedelta(hours=2)))
+        await task.aclose()
+        return results
+
+    first, second, recovered = asyncio.run(scenario())
+
+    for result in (first, second):
+        assert result.status == "degraded"
+        assert result.error_code == "catalyst_sync_degraded"
+        assert result.details["errors"]["news"] == "news_sources_stale"
+        assert "news" not in result.details["processed"]
+        assert "calendar" in result.details["processed"]
+        # The collector waits for its next slot instead of the supervisor's backoff.
+        assert 100 < result.next_delay_seconds <= 120
+    assert first.details["errors"] == {
+        "news": "news_sources_stale",
         "source:massive": "http_503",
         "source:globenewswire": "http_403",
     }
-    assert "news" not in result.details["processed"]
-    assert "calendar" in result.details["processed"]
+    assert second.details["streams"]["news"]["sources_due"] == 0
+    assert recovered.status == "idle"
 
 
 def test_manual_news_refresh_forces_news_sources_and_leaves_the_calendar(tmp_path):
@@ -265,7 +284,9 @@ def test_manual_news_refresh_forces_news_sources_and_leaves_the_calendar(tmp_pat
 
     assert first.details["processed"][:2] == ["news", "calendar"]
     assert feeds.calls == ["massive", "forexfactory", "massive"]
-    assert second.details["processed"] == ["news", "local_intelligence"]
+    # The calendar stream still runs to report its health; nothing of it is due.
+    assert second.details["processed"] == ["news", "calendar", "local_intelligence"]
+    assert second.details["streams"]["calendar"]["sources_due"] == 0
     assert second.details["refresh_operation_type"] == "news"
     assert second.details["streams"]["news"]["sources_due"] == 1
     assert completed == [("manual-1", None)]

@@ -469,7 +469,7 @@ def test_more_changes_than_one_page_are_stored_in_one_transaction(tmp_path):
     assert len(_changes(collector.repository)) == 1200
 
 
-def test_only_a_round_where_every_due_source_failed_fails_the_stream(tmp_path):
+def test_the_news_stream_is_stale_only_while_no_source_succeeded_recently(tmp_path):
     feeds = Feeds()
     clock = Clock(T0)
     collector = _collector(tmp_path, feeds, clock, "massive", "globenewswire")
@@ -482,11 +482,12 @@ def test_only_a_round_where_every_due_source_failed_fails_the_stream(tmp_path):
     assert partial.source_errors == {"source:massive": "http_503"}
     assert collector.repository.state("news").last_error_code is None
 
+    # Every due source fails, but GlobeNewswire succeeded ten minutes ago.
     clock.advance(minutes=10)
     feeds.batches["globenewswire"] = SourceError("http_403")
     failed = _round(collector, force=True)
 
-    assert failed.error_code == "http_503"
+    assert failed.error_code is None
     assert failed.source_errors == {
         "source:massive": "http_503",
         "source:globenewswire": "http_403",
@@ -497,6 +498,21 @@ def test_only_a_round_where_every_due_source_failed_fails_the_stream(tmp_path):
         """SELECT source_key,consecutive_failures FROM catalyst_ingest_sources
            WHERE source_key IN ('massive','globenewswire') ORDER BY source_key""",
     ) == [("globenewswire", 1), ("massive", 2)]
+
+    # Half an hour after the last success the stream is stale, and it stays so
+    # on rounds where every failed source is still backing off.
+    clock.advance(minutes=21)
+    stale = _round(collector)
+    assert stale.error_code == "news_sources_stale"
+    clock.advance(minutes=2)
+    waiting = _round(collector)
+    assert waiting.metrics["sources_due"] == 0
+    assert waiting.error_code == "news_sources_stale"
+
+    feeds.batches["massive"] = NewsBatch((_item("m1", "Fresh headline after the outage"),))
+    clock.advance(hours=1)
+    recovered = _round(collector)
+    assert recovered.error_code is None
 
 
 def test_failures_back_off_exponentially_and_honor_retry_after(tmp_path):
@@ -563,8 +579,12 @@ def test_budget_deferred_and_unconfigured_sources_change_no_checkpoint(tmp_path)
     outcome = _round(collector)
 
     assert outcome.metrics["sources_deferred"] == 1
-    assert outcome.error_code is None
+    assert outcome.metrics["sources_failed"] == 0
+    # The only configured news source never succeeded, so the stream is stale;
+    # waiting for the shared budget is still no failure.
+    assert outcome.error_code == "news_sources_stale"
     assert collector.repository.state("news").last_success_at is None
+    assert collector.repository.state("news").last_error_code is None
     rows = dict(
         _query(collector.repository, "SELECT source_key,last_error_code FROM catalyst_ingest_sources")
     )
@@ -808,5 +828,11 @@ def test_calendar_rounds_write_confirm_and_degrade_only_when_a_day_old(tmp_path)
 
     clock.advance(hours=25)
     stale = _round(collector, "calendar", force=True)
-    assert stale.error_code == "http_429"
+    assert stale.error_code == "calendar_stale"
+    assert stale.source_errors == {"source:forexfactory": "http_429"}
     assert collector.repository.state("calendar").last_error_code == "http_429"
+
+    clock.advance(minutes=1)
+    waiting = _round(collector, "calendar")
+    assert waiting.metrics["sources_due"] == 0
+    assert waiting.error_code == "calendar_stale"

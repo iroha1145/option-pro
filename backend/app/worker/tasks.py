@@ -1008,19 +1008,26 @@ class CatalystSyncTask:
                 },
                 next_delay_seconds=self._until_next_sync(sync_seconds),
             )
-        selected_streams = (
-            [requested_type]
+        local = self._collector is not None
+        requested = (
+            {requested_type}
             if requested_type in ("news", "calendar")
-            else ["news", "calendar"]
+            else {"news", "calendar"}
+            if requested_type is not None
+            else set()
+        )
+        # The collector runs both streams on every pass so the health of each
+        # is judged every time; a request only forces its own stream's sources.
+        selected_streams = (
+            ["news", "calendar"]
+            if local or requested_type not in ("news", "calendar")
+            else [requested_type]
         )
         # A single failing source is reported here without degrading the task.
         source_errors: dict[str, str] = {}
         for stream in selected_streams:
             try:
-                outcome = await self._sync_stream(
-                    stream,
-                    force=requested_type is not None,
-                )
+                outcome = await self._sync_stream(stream, force=stream in requested)
             except Exception as exc:
                 errors[stream] = self._error_code(exc)
                 continue
@@ -1044,7 +1051,10 @@ class CatalystSyncTask:
                 errors["local_intelligence"] = self._error_code(exc)
             else:
                 processed.append("local_intelligence")
-        if scheduled_due and "news" not in errors and "calendar" not in errors:
+        # The collector retries each source on its own schedule, so a stale
+        # stream waits for the next slot like a healthy one; the remote sync
+        # retries the slot through the supervisor's backoff instead.
+        if scheduled_due and (local or ("news" not in errors and "calendar" not in errors)):
             self._last_personal_sync_monotonic = clock
 
         # 变更日志保留：同步成功的整点周期里按节流间隔修剪。hasattr 守卫让
@@ -1052,7 +1062,7 @@ class CatalystSyncTask:
         journal_prune_metrics: dict[str, int] | None = None
         if (
             scheduled_due
-            and "news" not in errors
+            and (local or "news" not in errors)
             and hasattr(intelligence, "prune_journal")
             and (
                 self._last_journal_prune_monotonic is None
@@ -1148,7 +1158,7 @@ class CatalystSyncTask:
                 # failing local analysis store keeps the sync cadence instead,
                 # since its next attempt already waits for the next sync slot.
                 next_delay_seconds=(
-                    delay if set(errors) == {"local_intelligence"} else None
+                    delay if local or set(errors) == {"local_intelligence"} else None
                 ),
             )
         return TaskResult(

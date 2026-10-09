@@ -130,6 +130,10 @@ CREATE INDEX IF NOT EXISTS idx_catalyst_ingest_observations_recent
 INGEST_SCHEMA_CHECKSUM = hashlib.sha256(_INGEST_SCHEMA.encode("utf-8")).hexdigest()
 
 HOST_SPACING = timedelta(seconds=60)
+# A news source counts as fresh for three polling intervals, at least 30
+# minutes, after its last success; the news stream is degraded once none is.
+FRESH_INTERVALS = 3
+FRESH_AT_LEAST = timedelta(minutes=30)
 ROUND_BUDGET_SECONDS = 60.0
 SOURCE_TIMEOUT_SECONDS = 45.0
 CORROBORATION_WINDOW = timedelta(hours=6)
@@ -565,11 +569,7 @@ class NewsCollector:
         }
         source_errors = {f"source:{key}": "invalid_items" for key in invalid}
         source_errors.update({f"source:{outcome.key}": outcome.error.code for outcome in failed})
-        return StreamOutcome(
-            metrics,
-            source_errors,
-            error_code=failed[0].error.code if failed and not succeeded else None,
-        )
+        return StreamOutcome(metrics, source_errors, error_code=self._news_health(plan.now))
 
     def _commit_calendar(
         self,
@@ -578,7 +578,6 @@ class NewsCollector:
     ) -> StreamOutcome:
         outcome = outcomes[0] if outcomes else None
         stored = None
-        stale = False
         if outcome is not None or plan.unconfigured:
             with self.repository.transaction() as connection:
                 self._mark_unconfigured(connection, plan)
@@ -587,8 +586,6 @@ class NewsCollector:
                     self.repository.record_error(
                         "calendar", outcome.error.code, connection=connection
                     )
-                    state = self.repository.state("calendar", connection=connection)
-                    stale = calendar_stale(state.completed_as_of, now=plan.now)
                 elif outcome is not None:
                     batch = outcome.batch
                     assert isinstance(batch, CalendarBatch)
@@ -629,13 +626,49 @@ class NewsCollector:
             "watermark_sequence": stored.sequence if stored is not None else 0,
             "pruned_snapshots": pruned,
         }
-        if outcome is not None and outcome.error is not None:
-            return StreamOutcome(
-                metrics,
-                {f"source:{outcome.key}": outcome.error.code},
-                error_code=outcome.error.code if stale else None,
-            )
-        return StreamOutcome(metrics)
+        return StreamOutcome(
+            metrics,
+            (
+                {f"source:{outcome.key}": outcome.error.code}
+                if outcome is not None and outcome.error is not None
+                else {}
+            ),
+            error_code=self._calendar_health(plan.now),
+        )
+
+    def _news_health(self, now: datetime) -> str | None:
+        """``news_sources_stale`` once no configured news source is fresh.
+
+        Judged on every round from the source table, so the task stays
+        degraded for as long as the outage lasts: a failed source backs off
+        and is not retried in the next rounds, and a source waiting for the
+        shared Finnhub budget neither fails nor succeeds.
+        """
+
+        specs = [spec for spec in NEWS_SOURCES if self._enabled(spec) and spec.key in self._fetchers]
+        if not specs:
+            return None
+        with closing(_read_only(self.repository.path)) as connection:
+            successes = {
+                str(row[0]): parse_utc(row[1])
+                for row in connection.execute(
+                    "SELECT source_key,last_success_at FROM catalyst_ingest_sources"
+                )
+            }
+        for spec in specs:
+            succeeded = successes.get(spec.key)
+            fresh_for = max(self._interval(spec) * FRESH_INTERVALS, FRESH_AT_LEAST)
+            if succeeded is not None and now - succeeded <= fresh_for:
+                return None
+        return "news_sources_stale"
+
+    def _calendar_health(self, now: datetime) -> str | None:
+        """``calendar_stale`` while the newest confirmation is more than a day old."""
+
+        if not self._enabled(CALENDAR_SOURCE) or CALENDAR_SOURCE.key not in self._fetchers:
+            return None
+        state = self.repository.state("calendar")
+        return "calendar_stale" if calendar_stale(state.completed_as_of, now=now) else None
 
     def _store_news(
         self,
