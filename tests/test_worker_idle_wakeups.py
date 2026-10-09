@@ -384,14 +384,14 @@ def test_fresh_repositories_do_not_repeat_the_schema_transaction(
     # A schema change made out of band brings the full checks back once,
     # and they repair it.
     with seeded._connect() as connection:
-        connection.execute("DROP INDEX idx_ai_jobs_due")
+        connection.execute("DROP INDEX idx_ai_jobs_retry_of")
         connection.commit()
     for _ in range(3):
         AIJobRepository(path).get_job("missing")
     assert calls == 1
     with seeded._connect() as connection:
         assert connection.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_ai_jobs_due'"
+            "SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_ai_jobs_retry_of'"
         ).fetchone() is not None
 
 

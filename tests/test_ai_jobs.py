@@ -1867,6 +1867,7 @@ def test_fresh_database_has_every_column_and_registry_row_production_has(
         "ai-job-identities-v2": "fd4566c3f6b801ea5accfdec1995885a10a9d11ba9cae9b9e1ec2562cd0cb408",
         "ai-job-provider-progress-v1": "b88558c7a39767b1f90a396a4f0f2be6f1cb104959d8c786441e8fe776bdad4e",
         "shared-model-budget-v1": "021fbead0d453783492065ba6018da75b1931ec34e25b48027c016ce219f6795",
+        "ai-job-retry-lineage-index-v1": "4746773a1352dd1dacb3193a95aa276ea6abff4e8afafb118728e70db04ea8c2",
     }
 
 

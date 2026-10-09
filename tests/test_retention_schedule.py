@@ -212,3 +212,64 @@ def test_pruned_history_keeps_published_analyses_and_queues_nothing(
     assert sum(isinstance(item.get("analysis"), dict) for item in before["items"]) == 3
     assert after["items"] == before["items"]
     assert after["summary"] == before["summary"]
+
+
+class _DeleteStepRepository(AIJobRepository):
+    """Counts SQLite VM steps spent inside DELETE FROM ai_jobs statements."""
+
+    def __init__(self, path: Path) -> None:
+        super().__init__(path)
+        self.delete_steps = 0
+
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        with super()._connect() as connection:
+            current = {"sql": ""}
+
+            def trace(statement: str) -> None:
+                current["sql"] = statement
+
+            def progress() -> int:
+                if current["sql"].lstrip().startswith("DELETE FROM ai_jobs "):
+                    self.delete_steps += 1
+                return 0
+
+            connection.set_trace_callback(trace)
+            connection.set_progress_handler(progress, 1)
+            yield connection
+
+
+def _delete_steps_with_kept_rows(tmp_path: Path, monkeypatch, kept: int) -> int:
+    path = tmp_path / f"kept-{kept}" / "ai-jobs.db"
+    path.parent.mkdir()
+    monkeypatch.setattr(repo_mod, "_utcnow", lambda: NOW - timedelta(days=60))
+    repository = _DeleteStepRepository(path)
+    expired = [_news_job(repository, news_id) for news_id in range(1, 21)]
+    with repository._connect() as connection:
+        connection.execute(
+            f"UPDATE ai_jobs SET status='completed',completed_at=? "
+            f"WHERE job_id IN ({','.join('?' for _ in expired)})",
+            (repo_mod._iso(NOW - timedelta(days=59)), *expired),
+        )
+        connection.commit()
+    monkeypatch.setattr(repo_mod, "_utcnow", lambda: NOW)
+    for news_id in range(1000, 1000 + kept):
+        _news_job(repository, news_id)
+    repository.delete_steps = 0
+    assert repository.prune_scheduled_history(retain_days=30, now=NOW, batch_size=20) == 20
+    return repository.delete_steps
+
+
+def test_history_prune_batches_do_not_scan_the_table_per_deleted_row(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    small = _delete_steps_with_kept_rows(tmp_path, monkeypatch, 40)
+    large = _delete_steps_with_kept_rows(tmp_path, monkeypatch, 320)
+    # retry_of_job_id is a foreign key into ai_jobs itself; without its index
+    # every deleted job scanned all rows, so 8x the table cost about 6x here.
+    assert large < small * 1.5
+    with sqlite3.connect(tmp_path / "kept-40" / "ai-jobs.db") as connection:
+        plan = connection.execute(
+            "EXPLAIN QUERY PLAN SELECT rowid FROM ai_jobs WHERE retry_of_job_id=?", ("x",),
+        ).fetchall()
+    assert any("idx_ai_jobs_retry_of" in row[3] for row in plan)

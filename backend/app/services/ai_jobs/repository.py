@@ -246,6 +246,19 @@ _PROVIDER_PROGRESS_SCHEMA_CHECKSUM = hashlib.sha256(
     _PROVIDER_PROGRESS_SCHEMA_SQL.encode("utf-8")
 ).hexdigest()
 
+# retry_of_job_id references ai_jobs(job_id) and foreign keys are enforced, so
+# deleting a job looks up its retry children. Unindexed, every deleted row
+# scanned the whole table: one 500-row history prune batch held the write lock
+# for seconds (minutes on the production table).
+_RETRY_LINEAGE_INDEX_VERSION = "ai-job-retry-lineage-index-v1"
+_RETRY_LINEAGE_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_ai_jobs_retry_of
+ON ai_jobs(retry_of_job_id) WHERE retry_of_job_id IS NOT NULL
+"""
+_RETRY_LINEAGE_INDEX_CHECKSUM = hashlib.sha256(
+    _RETRY_LINEAGE_INDEX_SQL.encode("utf-8")
+).hexdigest()
+
 
 def _public_evidence_url(value: Any) -> bool:
     if (not isinstance(value, str) or not 1 <= len(value) <= 2048
@@ -691,6 +704,20 @@ class AIJobRepository:
                         _iso(),
                     ),
                 )
+            retry_index = connection.execute(
+                "SELECT checksum FROM ai_job_schema WHERE version=?",
+                (_RETRY_LINEAGE_INDEX_VERSION,),
+            ).fetchone()
+            if (
+                retry_index is not None
+                and retry_index["checksum"] != _RETRY_LINEAGE_INDEX_CHECKSUM
+            ):
+                raise RuntimeError("ai_job_retry_lineage_index_checksum_mismatch")
+            connection.execute(_RETRY_LINEAGE_INDEX_SQL)
+            connection.execute(
+                "INSERT OR IGNORE INTO ai_job_schema(version,checksum,applied_at) VALUES(?,?,?)",
+                (_RETRY_LINEAGE_INDEX_VERSION, _RETRY_LINEAGE_INDEX_CHECKSUM, _iso()),
+            )
             # Rows from before source-aware identities cannot be classified.
             # Keep those conservative: only the manual switch may release them.
             if backfill is None or backfill.missing_sources:

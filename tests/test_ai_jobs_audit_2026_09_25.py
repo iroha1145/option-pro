@@ -1718,6 +1718,9 @@ def test_schema_checksums_are_pinned_to_their_versions():
         repo_mod._EARNINGS_LOCK_SCHEMA_VERSION: digest(
             repo_mod._EARNINGS_FINAL_LOCKS_TABLE_SQL
         ),
+        repo_mod._RETRY_LINEAGE_INDEX_VERSION: digest(
+            repo_mod._RETRY_LINEAGE_INDEX_SQL
+        ),
     }
     assert observed == {
         "ai-jobs-v5": "2f06c215736fe635b8d29792bbb4eacd0c875a80a2357434bd4372893fb9ef74",
@@ -1729,6 +1732,9 @@ def test_schema_checksums_are_pinned_to_their_versions():
         ),
         "ai-earnings-final-locks-v1": (
             "adbaf0f8bfe306da3445d55aa5f94f6b67693fe7510e9eb6f419c6294ada87e3"
+        ),
+        "ai-job-retry-lineage-index-v1": (
+            "4746773a1352dd1dacb3193a95aa276ea6abff4e8afafb118728e70db04ea8c2"
         ),
     }, (
         "改了建表文本必须升版本：registry 按版本保存建表文本的校验和，版本不变"
