@@ -701,6 +701,11 @@ _NUMERIC_CODE_ONLY_PREFIX = re.compile(r"(?:代码|编号|股票|港股|个股)(
 # 「港股9888百度集团」：港股代码多为四五位。只对四五位数这样判定，「港股10月
 # 以来」「港股3只科技股」里的月份、只数不受影响。
 _HONG_KONG_CODE_PREFIX = re.compile(r"港股(?:代码|编号)?(?:为|是)?$")
+# 数字后接量词、点位、量级或币种时说的是市场概况（「港股2600家上市公司」
+# 「港股1500只个股下跌」「港股26000点附近震荡」「港股5000亿成交」），不是代码。
+_HONG_KONG_COUNT_SUFFIX = re.compile(
+    r"^[ \t]*(?:只|家|个|名|点|余|多|亿|万|年|月|日|%|％|港元|美元)"
+)
 # 分号隔开的是另一个分句：「流通股份；Hexa Creation聚焦……」里的「股份」不指向
 # 分号后的名称。逗号仍连着同一分句，照旧计入证券语境。
 _CLAUSE_BREAKS = frozenset("；;")
@@ -1934,6 +1939,7 @@ def _numeric_code_is_in_security_context(
         len(span) in (4, 5)
         and _HONG_KONG_CODE_PREFIX.search(prefix) is not None
         and _NUMERIC_QUANTITY_SUFFIX.match(sentence[end:]) is None
+        and _HONG_KONG_COUNT_SUFFIX.match(sentence[end:]) is None
     ):
         return True
     return (
