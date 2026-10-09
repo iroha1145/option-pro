@@ -90,7 +90,7 @@ def _reset_read_caches(_isolated_runtime_data):
     next when tmp paths or frozen clocks repeat.
     """
 
-    from app import public_home_snapshot
+    from app import public_home_snapshot, public_stock_data
     from app.api import sectors as sectors_api
     from app.api import stocks as stocks_api
     from app.api import strength as strength_api
@@ -108,6 +108,7 @@ def _reset_read_caches(_isolated_runtime_data):
         http_read_cache.reset_serialized_response_cache()
         stocks_api._watchlist_owner_snapshot_observed = None
         stocks_api._technical_visitor_results.clear()
+        public_stock_data._metadata_cache.clear()
 
     _clear()
     yield
