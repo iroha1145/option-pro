@@ -229,3 +229,24 @@ def test_s1r2_upper_case_p_and_n_statistics_publish(text):
 def test_s1r2_a_letter_compared_with_a_price_still_needs_binding(text):
     with pytest.raises(ValueError):
         _news_field(text)
+
+
+# --- Suggestion 2. Share counts after 股票 ------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["公司计划回购股票1000万股。", "大股东减持股票500万股。", "公司拟发行股票2亿股。", "公司拟发行股票20亿美元。"],
+)
+def test_s2r2_share_counts_after_the_word_stock_publish(text):
+    assert _news_field(text) == text
+    assert _focus_field(text, field="summary_zh") == text
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["股票600519万股成交。", "关注股票000002万科的走势。", "股票300014亿纬锂能大涨。", "股票600519上涨。"],
+)
+def test_s2r2_code_shaped_numbers_after_the_word_stock_still_need_binding(text):
+    with pytest.raises(ValueError, match="unbound_numeric_security_code"):
+        _news_field(text)

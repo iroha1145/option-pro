@@ -676,12 +676,14 @@ _NUMERIC_CONTEXT_BOUNDARIES = frozenset("，,；;。.!！?？%％、")
 # 证券代码。量级后面不是计量单位就不算（「600309 万华化学」「300014亿纬锂能」），
 # 「股」后接东、本、权、份、票、价时也不是单位。
 _CURRENCY_UNITS = r"美元|美分|港元|港币|欧元|日元|英镑|人民币|元"
+_MAGNITUDE_UNIT = rf"[万亿千百]+[ \t]*(?:{_CURRENCY_UNITS}|股(?![东本权份票价]))"
 _NUMERIC_QUANTITY_SUFFIX = re.compile(
-    rf"^[ \t]*(?:[万亿千百]+[ \t]*(?:{_CURRENCY_UNITS}|股(?![东本权份票价]))"
-    rf"|(?:{_CURRENCY_UNITS})|[%％])"
+    rf"^[ \t]*(?:{_MAGNITUDE_UNIT}|(?:{_CURRENCY_UNITS})|[%％])"
 )
-# 这些词后面的数字只会是证券代码，数量写法不豁免（「股票600519万股」）；
-# 0 开头的五位数（港股代码）在更前面就已判定。
+_MAGNITUDE_QUANTITY_SUFFIX = re.compile(rf"^[ \t]*{_MAGNITUDE_UNIT}")
+# 这些词后面的数字一般是证券代码，数量写法不豁免（「股票600519万股」）；
+# 0 开头的五位数（港股代码）在更前面就已判定。例外：「股票」后接「量级加股或
+# 币种」、数字又不是六位数时是数量（「回购股票1000万股」「发行股票2亿股」）。
 _NUMERIC_CODE_ONLY_PREFIX = re.compile(r"(?:代码|编号|股票|港股|个股)(?:为|是)?$")
 # 分号隔开的是另一个分句：「流通股份；Hexa Creation聚焦……」里的「股份」不指向
 # 分号后的名称。逗号仍连着同一分句，照旧计入证券语境。
@@ -1904,6 +1906,12 @@ def _numeric_code_is_in_security_context(
     if (
         _NUMERIC_QUANTITY_SUFFIX.match(sentence[end:]) is not None
         and _NUMERIC_CODE_ONLY_PREFIX.search(prefix) is None
+    ):
+        return False
+    if (
+        len(span) != 6
+        and prefix.endswith("股票")
+        and _MAGNITUDE_QUANTITY_SUFFIX.match(sentence[end:]) is not None
     ):
         return False
     return (
