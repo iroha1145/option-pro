@@ -41,16 +41,10 @@ import { notifyCatalystReadsInvalidated, type CatalystInvalidateOptions } from '
 
 export type {
   CatalystFeedQuery,
-  CatalystsStatusDetail,
-  CatalystStreamHealth,
   EconomicEvent,
-  FocusCycleStockAssessment,
   HotspotGroup,
-  HotspotsStatusDetail,
   NewsClassification,
   NewsAnalysisStatus,
-  NewsImpactResult,
-  SourceHealth,
   TickerImpactSummary,
   TrustedStockImpact,
 } from '@/mocks/fixtures2';

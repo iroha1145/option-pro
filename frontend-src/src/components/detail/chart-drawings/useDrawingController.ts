@@ -1414,4 +1414,3 @@ export function useDrawingController(args: {
 }
 
 export type DrawingController = ReturnType<typeof useDrawingController>;
-export { parseDrawing } from './schema.ts';

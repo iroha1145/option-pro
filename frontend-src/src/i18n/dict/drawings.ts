@@ -97,7 +97,6 @@ export const DRAWINGS: Dict = {
   '上升楔形': ['Rising wedge', '上昇ウェッジ'],
   '下降楔形': ['Falling wedge', '下降ウェッジ'],
   '水平箱体': ['Horizontal box', '水平ボックス'],
-  "向上突破": ["Upside breakout", "上抜け"],
   "已失效": ["Failed", "無効化済み"],
   '触碰 {n} 次': ['{n} touch||{n} touches', '{n} 回タッチ'],
   '分析图层与当前 K 线版本不一致（图上 {n} 根 / 分析 {m} 根），已暂时隐藏，刷新后恢复': [
@@ -117,7 +116,6 @@ export const DRAWINGS: Dict = {
   '确认清空': ['Clear all', '消去する'],
   '线宽 {n}': ['Width {n}', '線幅 {n}'],
   '图表设置': ['Chart settings', 'チャート設定'],
-  '预设': ['Presets', 'プリセット'],
   '极简': ['Minimal', 'ミニマル'],
   '结构分析': ['Structure', '構造分析'],
   '突破观察': ['Breakout', 'ブレイクアウト観察'],
@@ -144,7 +142,6 @@ export const DRAWINGS: Dict = {
   '假跌破与假突破': ['Spring/Upthrust', 'スプリング/アップスラスト'],
   '突破进展': ['Breakout progress', 'ブレイクの進行'],
   '导出未保存的导入文件': ['Export last unsaved import', '未保存の取り込みを書き出す'],
-  'Range Persistence': ['Range persistence', 'レンジ持続'],
   'MA20': ['MA20', 'MA20'],
   'MA50': ['MA50', 'MA50'],
   'MA200': ['MA200', 'MA200'],

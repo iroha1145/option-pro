@@ -490,7 +490,6 @@ test('行展开：换行后，旧行手动拉取的晚到结果不能写进新�
     '@/components/shared/Skeleton': { SkeletonBlock: 'SkeletonBlock' },
     '@/lib/strengthColor': { strengthBarClass: () => '' },
     '@/components/shared/InfoHint': { default: 'InfoHint' },
-    '@/components/shared/MacroFitPanel': { default: 'MacroFitPanel' },
     '@/lib/scoreHints': { SCORE_HINTS: {} },
     './types': { subscoreDimsOf: () => [] },
     '@/components/detail/ManualStockPull': { default: 'ManualStockPull' },

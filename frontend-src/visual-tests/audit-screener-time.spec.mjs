@@ -28,8 +28,8 @@ async function fixture(page, options = {}) {
       }
       const now = new Date().toISOString();
       const rows = state.rows ?? [
-        { ticker: 'AAA', name: url.searchParams.get('profile') === 'aggressive' ? '进取甲公司' : '甲公司', price: 100, final_score: 95, change_pct: 1, avg_dollar_volume_20d: 25_000_000, macro_fit_shadow: 80, score_short: 95, score_mid: 90 },
-        { ticker: 'BBB', name: '乙公司', price: 110, final_score: 85, change_pct: 2, avg_dollar_volume_20d: 25_000_000, macro_fit_shadow: 20, score_short: 85, score_mid: 80 },
+        { ticker: 'AAA', name: url.searchParams.get('profile') === 'aggressive' ? '进取甲公司' : '甲公司', price: 100, final_score: 95, change_pct: 1, avg_dollar_volume_20d: 25_000_000, score_short: 95, score_mid: 90 },
+        { ticker: 'BBB', name: '乙公司', price: 110, final_score: 85, change_pct: 2, avg_dollar_volume_20d: 25_000_000, score_short: 85, score_mid: 80 },
       ];
       return route.fulfill({ json: { rows, universe_count: rows.length, screened_count: rows.length, source_status: 'active', snapshot_saved_at: now, scan_completed_at: now,
       cache_expires_at: new Date(Date.now() + 3_600_000).toISOString(), score_version: 'audit', _stale: false } });
@@ -60,7 +60,7 @@ async function fixture(page, options = {}) {
 const manyRows = (count) => Array.from({ length: count }, (_, index) => ({
   ticker: `T${String(index).padStart(2, '0')}`, name: `公司${index}`, price: 100,
   final_score: 99 - index / 10, change_pct: 1, avg_dollar_volume_20d: 25_000_000,
-  macro_fit_shadow: 80, score_short: 90, score_mid: 90,
+  score_short: 90, score_mid: 90,
 }));
 
 const catalystResults = (tickers) => ({ results: Object.fromEntries(tickers.map(ticker => [ticker, {
@@ -71,7 +71,7 @@ const catalystResults = (tickers) => ({ results: Object.fromEntries(tickers.map(
 const scanBody = (ticker = 'AAA', overrides = {}) => {
   const now = new Date().toISOString();
   return { rows: [{ ticker, name: `${ticker} 公司`, price: 100, final_score: 95, change_pct: 1,
-    avg_dollar_volume_20d: 25_000_000, macro_fit_shadow: 80, score_short: 95, score_mid: 90 }],
+    avg_dollar_volume_20d: 25_000_000, score_short: 95, score_mid: 90 }],
   universe_count: 1, screened_count: 1, source_status: 'active', snapshot_saved_at: now,
   scan_completed_at: now, cache_expires_at: new Date(Date.now() + 3_600_000).toISOString(),
   score_version: 'audit', _stale: false, ...overrides };
@@ -692,32 +692,15 @@ test('native table row expands through a real keyboard button without activating
   expect(state.errors).toEqual([]);
 });
 
-test('reset all clears the macro filter that caused an empty result', async ({ page }) => {
-  const state = await fixture(page);
-  await scan(page);
-  await page.getByRole('button', { name: '宏观适配', exact: true }).click();
-  await page.getByRole('tab', { name: '中性', exact: true }).click();
-  await expect(page.getByText('没有符合条件的股票', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '重置条件', exact: true }).click();
-  await expect(page.getByText('没有符合条件的股票', { exact: true })).toHaveCount(0);
-  await expect(page.getByRole('table').getByText('AAA', { exact: true })).toBeVisible();
-  await expect(page.getByRole('table').getByText('BBB', { exact: true })).toBeVisible();
-  await expect(page.getByRole('tab', { name: '中性', exact: true })).toHaveAttribute('aria-selected', 'false');
-  expect(state.errors).toEqual([]);
-});
-
 test('removed comparison card leaves tier filtering and scoring explanation available', async ({ page }) => {
   const rows = [
-    { ticker: 'S', final_score: 95, macro_fit_shadow: 80 },
-    { ticker: 'A', final_score: 85, macro_fit_shadow: 80 },
-    { ticker: 'B', final_score: 75, macro_fit_shadow: 20 },
-    { ticker: 'UNKNOWN', final_score: 96, macro_fit_shadow: null },
+    { ticker: 'S', final_score: 95 },
+    { ticker: 'A', final_score: 85 },
+    { ticker: 'B', final_score: 75 },
   ].map(row => ({ name: row.ticker, price: 100, change_pct: 1, avg_dollar_volume_20d: 25_000_000,
     score_short: 90, score_mid: 90, ...row }));
   const state = await fixture(page, { rows });
   await scan(page, 'S');
-  await page.getByRole('button', { name: '宏观适配', exact: true }).click();
-  await page.getByRole('tab', { name: '顺风', exact: true }).click();
   await expect(page.getByText('强度分布 · 候选比较', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '只看 S 档', exact: true })).toHaveCount(0);
   const tiers = page.getByRole('tablist', { name: /评分分档/ });
@@ -774,17 +757,20 @@ test('reset from aggressive actually scans balanced and preserves old profile th
   await scan(page);
   const method = page.getByRole('button', { name: /评分方法/ });
   await expect(method).toContainText('进取');
-  await page.getByRole('button', { name: '宏观适配', exact: true }).click();
-  await page.getByRole('tab', { name: '中性', exact: true }).click();
+  await page.getByTestId('screener-advanced-filters').locator('summary').click();
+  await page.getByRole('textbox', { name: '最低价格', exact: true }).fill('1000');
+  await page.locator('button.scan-trigger').click();
   await expect(page.getByText('没有符合条件的股票', { exact: true })).toBeVisible();
   state.holdBalanced = true;
   await page.getByRole('button', { name: '重置条件', exact: true }).click();
   await expect.poll(() => typeof state.releaseBalanced).toBe('function');
   expect(state.scans.at(-1).profile).toBe('balanced');
   expect(state.scans.at(-1).timeframe).toBe('mid');
+  expect(state.scans.at(-1).min_price).not.toBe('1000');
   await expect(profile.getByRole('tab', { name: '均衡', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect(method).toContainText('进取');
-  await expect(page.getByRole('table').getByText('进取甲公司', { exact: true })).toBeVisible();
+  // The old (filtered, empty) result stays until the default scan lands.
+  await expect(page.getByText('没有符合条件的股票', { exact: true })).toBeVisible();
   state.failBalanced = true;
   state.releaseBalanced();
   await expect(page.getByText('扫描数据不可用', { exact: true })).toBeVisible();
@@ -810,7 +796,6 @@ for (const width of [320, 390]) {
       final_score: 95 - index * 0.5,
       change_pct: index / 10,
       avg_dollar_volume_20d: 25_000_000,
-      macro_fit_shadow: 80,
       score_short: 95 - index * 0.5,
       score_mid: 90 - index * 0.5,
     }));

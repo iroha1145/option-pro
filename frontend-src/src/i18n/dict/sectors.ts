@@ -23,13 +23,11 @@ export const SECTORS: Dict = {
 
   /* HeatMatrix.tsx —— 板块平均收益热力矩阵 */
   '暂无': ['N/A', 'データなし'],
-  '未覆盖': ['No coverage', 'カバレッジなし'],
   '评分最高': ["Top score", "最高スコア"],
   '行业平均收益排名': ["Sector average return ranking", "セクター平均リターン順位"],
 
   /* IvPanel.tsx —— 板块 IV 横截面排名面板 */
   '行业隐含波动率（IV）排名': ['Sector implied volatility (IV) ranking', 'セクターのインプライド・ボラティリティ（IV）ランキング'],
-  '更新于': ['Updated', '更新時刻'],
   '降序': ['Descending', '降順'],
   '升序': ['Ascending', '昇順'],
   '排位': ['Rank', '順位'],

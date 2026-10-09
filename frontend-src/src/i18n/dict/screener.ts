@@ -55,9 +55,7 @@ export const SCREENER: Dict = {
     'This ranking does not verify dollar-volume data, so this filter is not applied.',
     'この順位では売買代金の算出基準を確認できないため、この条件は適用されません。',
   ],
-  '排序算法': ['Ranking algorithm', '並び順アルゴリズム'],
   '跟随默认': ['Follow default', 'デフォルトに従う'],
-  '收盘技术（受限）': ['EOD technical (limited)', '終値テクニカル（制限）'],
   '收盘技术（受限）快照正在后台生成，请稍候。': [
     'The limited EOD snapshot is being prepared in the background. Please wait.',
     '制限付き終値スナップショットをバックグラウンドで生成しています。しばらくお待ちください。',
@@ -93,11 +91,6 @@ export const SCREENER: Dict = {
 
   /* ---------------- MarketRegimeCard.tsx ---------------- */
   '暂无数据': ['No data', 'データなし'],
-  '指数整体的趋势健康程度。': ["How healthy the index's overall trend is.", '指数全体のトレンドがどれだけ健全かを示します。'],
-  '资金推动价格的力度强弱。': ['How strongly money flow is pushing prices.', '資金が価格を押し上げる勢いの強さを示します。'],
-  '上涨在多少标的中扩散开来。': ['How broadly the rally is spreading across stocks.', '上昇がどれだけ多くの銘柄に広がっているかを示します。'],
-  '成交量对当前趋势的确认程度。': ['How much volume confirms the current trend.', '出来高が現在のトレンドをどれだけ裏付けているかを示します。'],
-  '资金愿意承担风险的程度。': ['How much risk investors are willing to take.', '投資家がどれだけリスクを取る意欲があるかを示します。'],
   '攻防价差': ['Offense/defense spread', '攻守スプレッド'],
   '走势评分': ["Trend scores", "地合いスコア"],
   '六项': ['6 items', '6項目'],
@@ -111,7 +104,6 @@ export const SCREENER: Dict = {
   '分项': ['Subscores', 'サブスコア'],
   '价格／涨跌': ['Price / Chg %', '価格 / 騰落率'],
   '消息 · 近 72 小时': ["News · last 72h", "ニュース · 直近72時間"],
-  '成交额': ['Dollar volume', '売買代金'],
   '宏观适配': ['Macro fit', 'マクロ適合度'],
   '每页 20 · 分档': ['20/page · tier', '1ページ20件 · 区分'],
   '分页': ['Pagination', 'ページネーション'],
@@ -201,7 +193,6 @@ export const SCREENER: Dict = {
   '数据时间待核验': ['Data timestamp unverified', 'データ時刻は未検証'],
   '历史结果': ['Historical result', '履歴結果'],
   '排队中': ['Queued', 'キュー待ち'],
-  '{n} 只股票仅因缺少宏观数据，已从当前筛选结果中排除': ['{n} stock was left out of these results only because macro data is missing||{n} stocks were left out of these results only because macro data is missing', 'マクロデータがないという理由のみで、{n} 銘柄を今回の結果から除外しています'],
   '设置条件，开始扫描': ['Set your filters and run a scan', '条件を設定してスキャンを開始'],
   '也可选择预设策略开始扫描': ['Or start from a preset strategy', 'またはプリセット戦略を選んで開始'],
   '扫描数据不可用': ['Scan data unavailable', 'スキャンデータが利用できません'],
