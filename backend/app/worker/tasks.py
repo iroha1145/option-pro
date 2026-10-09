@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import inspect
 import logging
 import math
@@ -12,7 +13,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Awaitable, Callable, Mapping, Sequence
 
 from app.access import bind_trusted_system_task
 from app.failure_diagnostics import record_fallback_failure
@@ -266,6 +267,10 @@ async def _build_local_intelligence(
     return intelligence
 
 
+AI_JOBS_IDLE_SECONDS = 30.0
+AI_JOBS_HELD_RECHECK_SECONDS = 5.0
+
+
 class AIJobsTask:
     def __init__(
         self,
@@ -334,8 +339,20 @@ class AIJobsTask:
         return TaskResult(
             status="idle",
             details={"processed": int(processed)},
-            next_delay_seconds=0.5 if processed else 2.0,
+            next_delay_seconds=0.5 if processed else await self._idle_delay(),
         )
+
+    async def _idle_delay(self) -> float:
+        # New, retried or cancelled jobs end this wait through the supervisor's
+        # wake probe; the delay only has to cover jobs that become due later.
+        due = await asyncio.to_thread(self._repository.next_due_delay)
+        if due is None:
+            return AI_JOBS_IDLE_SECONDS
+        if due <= 0:
+            # The claim skipped due work: a lane hold (cooldown, unknown
+            # submission, credit) whose end is not stored on the job.
+            return AI_JOBS_HELD_RECHECK_SECONDS
+        return min(due, AI_JOBS_IDLE_SECONDS)
 
 
 class EarningsAnalysisTask:
@@ -746,6 +763,7 @@ class EarningsAnalysisTask:
 # 变更日志修剪的节流间隔：修剪是 cutoff 幂等操作，6 小时一次足以压住增长；
 # 稳态一轮只有一个索引探测查询，代价可忽略。
 _JOURNAL_PRUNE_INTERVAL_SECONDS = 6 * 3600.0
+_CATALYST_MIN_DELAY_SECONDS = 2.0
 
 
 class CatalystSyncTask:
@@ -913,11 +931,10 @@ class CatalystSyncTask:
                             "local_intelligence": "local_intelligence_unavailable"
                         },
                     },
-                    next_delay_seconds=max(
-                        2.0,
-                        sync_seconds - (clock - self._last_personal_sync_monotonic),
-                    ),
+                    next_delay_seconds=self._until_next_sync(sync_seconds),
                 )
+            # Owner refresh requests end this wait through the supervisor's
+            # wake probe, so an idle loop sleeps until the next sync slot.
             return TaskResult(
                 status="idle",
                 details={
@@ -925,7 +942,7 @@ class CatalystSyncTask:
                     "streams": {},
                     "refresh_requested": False,
                 },
-                next_delay_seconds=2.0,
+                next_delay_seconds=self._until_next_sync(sync_seconds),
             )
         stream_operations = {
             "news": ("news", self._service.sync_news),
@@ -1021,7 +1038,7 @@ class CatalystSyncTask:
             except Exception as exc:
                 errors["refresh_completion"] = self._error_code(exc)
 
-        delay = 2.0
+        delay = self._until_next_sync(sync_seconds)
         details: dict[str, Any] = {
             "processed": processed,
             "streams": metrics,
@@ -1064,6 +1081,12 @@ class CatalystSyncTask:
             details=details,
             next_delay_seconds=delay,
         )
+
+    def _until_next_sync(self, sync_seconds: float) -> float:
+        if self._last_personal_sync_monotonic is None:
+            return _CATALYST_MIN_DELAY_SECONDS
+        elapsed = time.monotonic() - self._last_personal_sync_monotonic
+        return max(_CATALYST_MIN_DELAY_SECONDS, sync_seconds - elapsed)
 
     async def _run_once(self) -> TaskResult:
         mode = await self._prepare()
@@ -3550,10 +3573,15 @@ class MaintenanceTask:
         failure_backoff_seconds: float = MAINTENANCE_FAILURE_BACKOFF_SECONDS,
         max_backoff_seconds: float = MAINTENANCE_MAX_BACKOFF_SECONDS,
         full_cycle_per_call: bool = False,
+        after_cycle: Callable[[], Awaitable[tuple[dict[str, Any], str | None]]] | None = None,
         now: Callable[[], datetime] | None = None,
     ) -> None:
         self.databases = dict(databases)
         self.files = dict(files or {})
+        # Runs once per cycle after every label is backed up: pruning only
+        # removes rows older than days, which that backup already holds.
+        self._after_cycle = after_cycle
+        self._after_cycle_done_for: datetime | None = None
         # Retention backs up every label right before it prunes, whatever the
         # schedule says; the scheduled task keeps the per-label cycle.
         self.full_cycle_per_call = full_cycle_per_call
@@ -3703,6 +3731,15 @@ class MaintenanceTask:
             details["retrying"] = {
                 label: retry.error_code for label, retry in self._retries.items()
             }
+        if (
+            self._after_cycle is not None
+            and self._cycle_started_at is not None
+            and not self._unattempted
+            and not self._retries
+            and self._after_cycle_done_for != self._cycle_started_at
+        ):
+            details["ai_history"], _error_code = await self._after_cycle()
+            self._after_cycle_done_for = self._cycle_started_at
         next_delay = self._next_delay(self._now())
         if self._retries:
             codes = {retry.error_code for retry in self._retries.values()}
@@ -3717,6 +3754,38 @@ class MaintenanceTask:
 
 # The local news retention default; scheduled AI history never goes below it.
 AI_HISTORY_MIN_RETAIN_DAYS = 30
+
+
+async def prune_ai_history(
+    repository_factory: Callable[[], Any],
+    *,
+    retain_days: int,
+    now: datetime,
+) -> tuple[dict[str, Any], str | None]:
+    """Delete settled scheduled news and focus jobs past the news window.
+
+    They otherwise accumulate without bound, and every reconcile re-reads
+    them. Their window matches the news journal they analyse.
+    """
+
+    try:
+        repository = await _call_local(repository_factory)
+        deleted = await _call_local(
+            repository.prune_scheduled_history,
+            retain_days=retain_days,
+            now=now,
+        )
+    except (RuntimeError, sqlite3.Error, OSError) as exc:
+        record_fallback_failure("ai_history_retention", exc)
+        return (
+            {"status": "failed", "retain_days": retain_days},
+            "ai_history_retention_failed",
+        )
+    return {
+        "status": "completed",
+        "retain_days": retain_days,
+        "deleted": int(deleted),
+    }, None
 
 
 class RetentionTask:
@@ -3835,28 +3904,23 @@ class RetentionTask:
         }, None
 
     async def _prune_ai_history(self) -> tuple[dict[str, Any], str | None]:
-        # Scheduled news and focus jobs otherwise accumulate without bound, and
-        # every reconcile re-reads and re-validates all of them. Their window
-        # matches the news journal they analyse.
-        retain_days = self._ai_history_retain_days
-        try:
-            repository = await _call_local(self._ai_repository_factory)
-            deleted = await _call_local(
-                repository.prune_scheduled_history,
-                retain_days=retain_days,
-                now=self._now(),
-            )
-        except (RuntimeError, sqlite3.Error, OSError) as exc:
-            record_fallback_failure("ai_history_retention", exc)
-            return (
-                {"status": "failed", "retain_days": retain_days},
-                "ai_history_retention_failed",
-            )
-        return {
-            "status": "completed",
-            "retain_days": retain_days,
-            "deleted": int(deleted),
-        }, None
+        return await prune_ai_history(
+            self._ai_repository_factory,
+            retain_days=self._ai_history_retain_days,
+            now=self._now(),
+        )
+
+
+SECTOR_IV_BUSY_SECONDS = 5.0
+# Scheduled sector refreshes are 15 minutes apart in the regular session and
+# six hours outside it; visitor requests wake the loop through its probe.
+SECTOR_IV_IDLE_SECONDS = 60.0
+
+
+def _sector_iv_queue_signature() -> Any:
+    from app.services.sector_iv_refresh import default_store
+
+    return default_store().queued_signature()
 
 
 class SectorIVTask:
@@ -3867,15 +3931,23 @@ class SectorIVTask:
         from app.services.sector_iv_refresh import run_refresh_batch
 
         outcome = await run_refresh_batch()
+        worked = bool(outcome["completed"] or outcome["failed"])
         return TaskResult(
             status="degraded" if outcome["failed"] else "idle",
             error_code="sector_iv_refresh_failed" if outcome["failed"] else None,
             details=outcome,
-            next_delay_seconds=5.0,
+            next_delay_seconds=(
+                SECTOR_IV_BUSY_SECONDS if worked else SECTOR_IV_IDLE_SECONDS
+            ),
         )
 
 
 def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]:
+    from app.services.ai_jobs.repository import AIJobRepository
+    from app.services.catalysts.local_intelligence import (
+        queued_manual_operations_signature,
+    )
+
     config = get_personal_config()
     ai = AIJobsTask(owner_id, settings=settings, personal_config=config)
     initial_sync_complete = asyncio.Event()
@@ -3895,6 +3967,14 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
     breakout = BreakoutTask(owner_id)
     manual_breakout = BreakoutTask(f"{owner_id}:manual")
     data_paths = get_data_paths()
+
+    def ai_history_repository() -> Any:
+        return AIJobRepository(settings.openai_job_db_path)
+
+    ai_history_retain_days = max(
+        int(config.catalyst.journal_retention_days),
+        AI_HISTORY_MIN_RETAIN_DAYS,
+    )
     maintenance = MaintenanceTask(
         {
             "optix": settings.breakout_db_path,
@@ -3909,6 +3989,11 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         files={"runtime-settings": data_paths.runtime_settings},
         destination=settings.optix_backup_dir,
         keep=config.storage.backup_keep,
+        after_cycle=lambda: prune_ai_history(
+            ai_history_repository,
+            retain_days=ai_history_retain_days,
+            now=datetime.now(timezone.utc),
+        ),
     )
     retention_backup = MaintenanceTask(
         dict(maintenance.databases),
@@ -3918,16 +4003,11 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         full_cycle_per_call=True,
     )
 
-    def ai_history_repository() -> Any:
-        from app.services.ai_jobs.repository import AIJobRepository
-
-        return AIJobRepository(settings.openai_job_db_path)
-
     retention = RetentionTask(
         owner_id,
         retention_backup,
         ai_repository_factory=ai_history_repository,
-        ai_history_retain_days=config.catalyst.journal_retention_days,
+        ai_history_retain_days=ai_history_retain_days,
     )
     from app.public_stock_data import PublicStockDataRefresh
     from app.public_option_data import PublicOptionDataRefresh
@@ -3957,10 +4037,11 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         TaskSpec(
             "sector_iv_refresh",
             SectorIVTask(),
-            interval_seconds=5.0,
+            interval_seconds=SECTOR_IV_IDLE_SECONDS,
             timeout_seconds=900.0,
             failure_backoff_seconds=30.0,
             max_backoff_seconds=300.0,
+            wake_probe=_sector_iv_queue_signature,
         ),
         TaskSpec(
             "breakout",
@@ -3980,6 +4061,10 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
             # cannot finish inside 120s; incremental rounds stay far below.
             timeout_seconds=600.0,
             close=catalyst.aclose,
+            wake_probe=functools.partial(
+                queued_manual_operations_signature,
+                settings.macrolens_cache_db_path,
+            ),
         ),
         TaskSpec(
             "focus",
@@ -3992,9 +4077,12 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         TaskSpec(
             "ai_jobs",
             ai,
-            interval_seconds=2.0,
+            interval_seconds=AI_JOBS_IDLE_SECONDS,
             timeout_seconds=2000.0,
             drain_on_shutdown=True,
+            wake_probe=AIJobRepository(
+                settings.openai_job_db_path
+            ).active_queue_signature,
         ),
         TaskSpec(
             "maintenance",

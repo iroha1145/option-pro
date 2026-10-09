@@ -40,7 +40,7 @@ from app.services.ai_jobs.focus_verification import (
 from app.services.sqlite_errors import is_sqlite_lock_contention
 
 from .errors import CatalystError, InvalidCursorError
-from .news_quality import TITLE_STOP_WORDS, news_quality
+from .news_quality import NEWS_QUALITY_RULES_VERSION, TITLE_STOP_WORDS, news_quality
 
 
 def macro_conditions_context() -> dict[str, Any] | None:
@@ -166,6 +166,20 @@ NEWS_ARTICLE_MAX_BYTES = 28_000
 NEWS_SUMMARY_WITH_ARTICLE_MAX_BYTES = 10_000
 ARTICLE_RETRY_SECONDS = 30 * 60
 SCHEDULED_ARTICLE_PROBE_LIMIT = 12
+# 质量判定在入库和抓正文时算好存列（ALTER 补列，不动 _SCHEMA 校验和）；规则版本不符
+# 或尚未回填的行读取时现算，worker 每轮 reconcile 回填一批。
+_REVISION_QUALITY_COLUMNS = (
+    ("quality_reason", "TEXT"),
+    ("quality_reason_article", "TEXT"),
+    ("quality_article_visible_at", "TEXT"),
+    ("quality_rules_version", "TEXT"),
+    ("quality_article_checked_at", "TEXT"),
+)
+_QUALITY_BACKFILL_BATCH = 5_000
+# reconcile re-projects the same settled jobs and re-audits the same published
+# results every sync slot; both are pure functions of their stored inputs.
+_PUBLIC_JOB_MEMO_ENTRIES = 20_000
+_NEWS_AUDIT_MEMO_ENTRIES = 50_000
 # 旧库升级时给热点条目补上计划级分数列（v6）。定义与 _SCHEMA 里的建表语句一致。
 _HOTSPOT_ITEM_SCORE_COLUMNS = (
     (
@@ -393,6 +407,67 @@ CREATE INDEX IF NOT EXISTS idx_verified_focus_revision
 _VERIFIED_FOCUS_SCHEMA_VERSION = "optix-verified-focus-publication-v1"
 _VERIFIED_FOCUS_SCHEMA_CHECKSUM = hashlib.sha256(_VERIFIED_FOCUS_SCHEMA.encode("utf-8")).hexdigest()
 
+# Writers bump one version row, so the revision cache validates with an
+# O(1) read instead of summing result lengths over the link and audit
+# tables on every request. A separate versioned script: the main local
+# schema checksum stays unchanged.
+_STORE_VERSION_SCHEMA = """
+CREATE TABLE IF NOT EXISTS catalyst_local_store_version (
+    id INTEGER PRIMARY KEY CHECK(id=1),
+    version INTEGER NOT NULL CHECK(version >= 0)
+);
+INSERT OR IGNORE INTO catalyst_local_store_version(id,version) VALUES(1,0);
+CREATE TRIGGER IF NOT EXISTS catalyst_local_store_version_revisions_insert
+AFTER INSERT ON catalyst_local_news_revisions
+BEGIN
+    UPDATE catalyst_local_store_version SET version=version+1 WHERE id=1;
+END;
+CREATE TRIGGER IF NOT EXISTS catalyst_local_store_version_revisions_update
+AFTER UPDATE ON catalyst_local_news_revisions
+BEGIN
+    UPDATE catalyst_local_store_version SET version=version+1 WHERE id=1;
+END;
+CREATE TRIGGER IF NOT EXISTS catalyst_local_store_version_revisions_delete
+AFTER DELETE ON catalyst_local_news_revisions
+BEGIN
+    UPDATE catalyst_local_store_version SET version=version+1 WHERE id=1;
+END;
+CREATE TRIGGER IF NOT EXISTS catalyst_local_store_version_links_insert
+AFTER INSERT ON catalyst_local_analysis_links
+BEGIN
+    UPDATE catalyst_local_store_version SET version=version+1 WHERE id=1;
+END;
+CREATE TRIGGER IF NOT EXISTS catalyst_local_store_version_links_update
+AFTER UPDATE ON catalyst_local_analysis_links
+BEGIN
+    UPDATE catalyst_local_store_version SET version=version+1 WHERE id=1;
+END;
+CREATE TRIGGER IF NOT EXISTS catalyst_local_store_version_links_delete
+AFTER DELETE ON catalyst_local_analysis_links
+BEGIN
+    UPDATE catalyst_local_store_version SET version=version+1 WHERE id=1;
+END;
+CREATE TRIGGER IF NOT EXISTS catalyst_local_store_version_audit_insert
+AFTER INSERT ON catalyst_local_analysis_result_audit
+BEGIN
+    UPDATE catalyst_local_store_version SET version=version+1 WHERE id=1;
+END;
+CREATE TRIGGER IF NOT EXISTS catalyst_local_store_version_audit_update
+AFTER UPDATE ON catalyst_local_analysis_result_audit
+BEGIN
+    UPDATE catalyst_local_store_version SET version=version+1 WHERE id=1;
+END;
+CREATE TRIGGER IF NOT EXISTS catalyst_local_store_version_audit_delete
+AFTER DELETE ON catalyst_local_analysis_result_audit
+BEGIN
+    UPDATE catalyst_local_store_version SET version=version+1 WHERE id=1;
+END;
+"""
+_STORE_VERSION_SCHEMA_VERSION = "optix-local-catalyst-store-version-v1"
+_STORE_VERSION_SCHEMA_CHECKSUM = hashlib.sha256(
+    _STORE_VERSION_SCHEMA.encode("utf-8")
+).hexdigest()
+
 TIMESTAMP_NORMALIZATION_VERSION = "optix-local-catalyst-timestamps-v1"
 TIMESTAMP_NORMALIZATION_CHECKSUM = hashlib.sha256(
     b"normalize local catalyst timestamps to UTC Z v1"
@@ -431,6 +506,37 @@ _FEED_QUERY_HASH_KEYS = (
     "mechanism",
     "multi_source_only",
 )
+
+
+# Revisions of the window visible at as_of (parameters: window start, as_of
+# three times). The ETL mirror row of a news item is its newest change, written
+# in the same transaction as the journal row, so when that change is visible
+# at as_of it is the "latest change at as_of" the journal subqueries find; a
+# newer mirror row (a future-dated change, an anchored cursor page) or a
+# missing one falls back to the journal for that row only.
+_WINDOW_ACTIVE_REVISIONS_SQL = """
+    SELECT r.* FROM catalyst_local_news_revisions r
+    LEFT JOIN macrolens_etl_news m ON m.news_id=r.news_id
+    WHERE COALESCE(r.published_at,r.fetched_at)>=?
+      AND CASE
+          WHEN m.available_at<=? THEN
+              m.deleted=0 AND r.change_sequence=m.change_sequence
+          ELSE
+              r.change_sequence=(
+                  SELECT MAX(c.change_sequence)
+                  FROM macrolens_etl_news_changes c
+                  WHERE c.news_id=r.news_id
+                    AND c.available_at<=?
+              )
+              AND EXISTS(
+                  SELECT 1 FROM macrolens_etl_news_changes c2
+                  WHERE c2.news_id=r.news_id
+                    AND c2.change_sequence=r.change_sequence
+                    AND c2.operation='upsert'
+                    AND c2.available_at<=?
+              )
+          END
+"""
 
 
 def _reset_revision_cache() -> None:
@@ -552,34 +658,23 @@ def _revision_cache_fresh(
 def _revision_store_cursor(connection: sqlite3.Connection) -> tuple[Any, ...]:
     """Cheap fingerprint of every table the revision view depends on.
 
-    The change/revision journals are append-only (O(1) MAX(rowid)); the
-    analysis link/audit tables stay small but see in-place result updates,
-    so their fingerprint also sums payload lengths — an in-place edit of a
-    published result (the fail-closed corruption scenarios exercised by the
-    test suite) must invalidate immediately, not after the age cap.
+    The change journal is append-only (O(1) MAX(rowid)). Triggers bump the
+    local store version on every insert, update or delete of revisions,
+    analysis links and result audits, so an in-place edit of a published
+    result (the fail-closed corruption scenarios exercised by the test suite)
+    invalidates immediately. A store created before the version table has no
+    shared cursor: every read rebuilds until the owner side initializes it.
     """
+    migrated = connection.execute(
+        """SELECT 1 FROM sqlite_master
+           WHERE type='table' AND name='catalyst_local_store_version'"""
+    ).fetchone()
+    if migrated is None:
+        return ("unversioned", uuid.uuid4().hex)
     row = connection.execute(
         """SELECT
                (SELECT MAX(rowid) FROM macrolens_etl_news_changes),
-               (SELECT MAX(rowid) FROM catalyst_local_news_revisions),
-               (SELECT MAX(article_checked_at) FROM catalyst_local_news_revisions),
-               (SELECT COUNT(*) FROM catalyst_local_analysis_links),
-               (SELECT MAX(rowid) FROM catalyst_local_analysis_links),
-               (SELECT MAX(COALESCE(result_available_at,''))
-                  FROM catalyst_local_analysis_links),
-               (SELECT MAX(COALESCE(created_at,''))
-                  FROM catalyst_local_analysis_links),
-               (SELECT TOTAL(
-                    LENGTH(COALESCE(result_json,''))
-                    + LENGTH(COALESCE(verified_at,''))
-                ) FROM catalyst_local_analysis_links),
-               (SELECT COUNT(*) FROM catalyst_local_analysis_result_audit),
-               (SELECT MAX(rowid) FROM catalyst_local_analysis_result_audit),
-               (SELECT TOTAL(
-                    LENGTH(COALESCE(result_json,''))
-                    + LENGTH(COALESCE(outcome,''))
-                    + LENGTH(COALESCE(reason,''))
-                ) FROM catalyst_local_analysis_result_audit)"""
+               (SELECT version FROM catalyst_local_store_version WHERE id=1)"""
     ).fetchone()
     return tuple(row)
 
@@ -777,12 +872,52 @@ def _available_article(
 def _news_quality_reason(
     revision: Mapping[str, Any] | sqlite3.Row, *, as_of: datetime,
 ) -> str | None:
-    item = dict(revision)
+    item = revision if isinstance(revision, Mapping) else dict(revision)
+    if (
+        item.get("quality_rules_version") == NEWS_QUALITY_RULES_VERSION
+        and item.get("quality_article_checked_at") == item.get("article_checked_at")
+    ):
+        visible_at = _parse_time(item.get("quality_article_visible_at"))
+        if visible_at is not None and visible_at <= as_of:
+            return item.get("quality_reason_article")
+        return item.get("quality_reason")
     article = _available_article(item, as_of=as_of)
     return news_quality(
         str(item.get("raw_title") or ""),
         item.get("raw_summary"),
         article.get("text") if article is not None else None,
+    )
+
+
+def _quality_columns(
+    revision: Mapping[str, Any] | sqlite3.Row,
+) -> tuple[str | None, str | None, str | None, str, str | None]:
+    """Stored verdicts for _news_quality_reason, valid for every as_of.
+
+    The article only counts once both its fetch and its check precede as_of,
+    so the row keeps the verdict without it, the verdict with it, and the
+    moment it becomes visible. The article check they were computed from is
+    kept too: a build that writes articles without these columns (one rolled
+    back to) leaves them stale, and readers then recompute.
+    """
+
+    item = revision if isinstance(revision, Mapping) else dict(revision)
+    title = str(item.get("raw_title") or "")
+    summary = item.get("raw_summary")
+    article = _available_article(item)
+    fetched_at = _parse_time(article.get("fetched_at")) if article is not None else None
+    checked_at = _parse_time(item.get("article_checked_at"))
+    checked_text = item.get("article_checked_at")
+    if article is None or fetched_at is None or checked_at is None:
+        return (
+            news_quality(title, summary, None), None, None, NEWS_QUALITY_RULES_VERSION, checked_text,
+        )
+    return (
+        news_quality(title, summary, None),
+        news_quality(title, summary, article.get("text")),
+        _iso(max(fetched_at, checked_at)),
+        NEWS_QUALITY_RULES_VERSION,
+        checked_text,
     )
 
 
@@ -1564,6 +1699,37 @@ def _market_focus_payload_has_waiting_placeholder(
     return False
 
 
+# Full rows of the window's news and focus jobs, in index order (no sort).
+_FULL_JOB_SNAPSHOT_SQL = """SELECT j.*,COALESCE(s.submission_source,'manual')
+          AS submission_source
+   FROM ai_jobs j
+   LEFT JOIN ai_job_sources s ON s.job_id=j.job_id
+   WHERE j.job_type IN ('news_impact','market_focus')
+     {created_filter}"""
+
+
+def queued_manual_operations_signature(
+    db_path: str | Path,
+) -> tuple[int, str | None] | None:
+    """Read-only view of queued owner refreshes for the worker's wake probe."""
+
+    path = Path(db_path)
+    if not path.is_file():
+        return None
+    uri = f"file:{quote(path.resolve().as_posix(), safe='/')}?mode=ro"
+    connection = sqlite3.connect(uri, uri=True, timeout=5.0)
+    try:
+        connection.execute("PRAGMA busy_timeout=5000")
+        row = connection.execute(
+            """SELECT COUNT(*),MAX(requested_at)
+               FROM catalyst_local_manual_operations
+               WHERE status='queued'"""
+        ).fetchone()
+    finally:
+        connection.close()
+    return int(row[0]), row[1]
+
+
 class LocalCatalystIntelligence:
     """Local-only news intelligence and Chinese presentation store.
 
@@ -1623,6 +1789,13 @@ class LocalCatalystIntelligence:
         self.canonical_tickers = frozenset(normalized - AMBIGUOUS_TICKERS)
         self._local_schema_ready = False
         self._news_retention_days = _DEFAULT_NEWS_RETENTION_DAYS
+        self._quality_backfill_complete = False
+        self._public_job_memo: dict[str, dict[str, Any]] = {}
+        self._accepted_news_audits: dict[str, str] = {}
+        self._rejected_news_audits: set[str] = set()
+        # (news stream reset_count, journal MAX(change_sequence)) as of the last
+        # committed ingest; a cursor reset replays history and rescans it.
+        self._ingest_watermark: tuple[int | None, int] | None = None
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -1636,6 +1809,9 @@ class LocalCatalystIntelligence:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute("PRAGMA busy_timeout=5000")
+        # Window views sort revision rows with their article bodies; spilling
+        # those sorts to SQLITE_TMPDIR rewrote and deleted megabytes per read.
+        connection.execute("PRAGMA temp_store=MEMORY")
         if not owner_access:
             connection.execute("PRAGMA query_only=ON")
         try:
@@ -1656,6 +1832,11 @@ class LocalCatalystIntelligence:
             connection.execute("PRAGMA synchronous=FULL")
             connection.executescript(_SCHEMA)
             connection.executescript(_VERIFIED_FOCUS_SCHEMA)
+            # One transaction: a version row without all nine triggers would
+            # let readers trust a version that some writes never bump.
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n" + _STORE_VERSION_SCHEMA + "COMMIT;\n"
+            )
             row = connection.execute(
                 "SELECT checksum FROM catalyst_local_schema WHERE version=?",
                 (SCHEMA_VERSION,),
@@ -1674,13 +1855,30 @@ class LocalCatalystIntelligence:
                 "INSERT OR IGNORE INTO catalyst_local_schema(version,checksum,applied_at) VALUES(?,?,?)",
                 (_VERIFIED_FOCUS_SCHEMA_VERSION, _VERIFIED_FOCUS_SCHEMA_CHECKSUM, _iso()),
             )
+            store_version_schema = connection.execute(
+                "SELECT checksum FROM catalyst_local_schema WHERE version=?",
+                (_STORE_VERSION_SCHEMA_VERSION,),
+            ).fetchone()
+            if (
+                store_version_schema is not None
+                and store_version_schema["checksum"] != _STORE_VERSION_SCHEMA_CHECKSUM
+            ):
+                raise RuntimeError("local_catalyst_schema_checksum_mismatch")
+            connection.execute(
+                "INSERT OR IGNORE INTO catalyst_local_schema(version,checksum,applied_at) VALUES(?,?,?)",
+                (_STORE_VERSION_SCHEMA_VERSION, _STORE_VERSION_SCHEMA_CHECKSUM, _iso()),
+            )
             self._add_missing_columns(
                 connection, "catalyst_local_hotspot_items", _HOTSPOT_ITEM_SCORE_COLUMNS,
             )
             self._add_missing_columns(
                 connection,
                 "catalyst_local_news_revisions",
-                (("article_json", "TEXT"), ("article_checked_at", "TEXT")),
+                (
+                    ("article_json", "TEXT"),
+                    ("article_checked_at", "TEXT"),
+                    *_REVISION_QUALITY_COLUMNS,
+                ),
             )
             self._add_missing_columns(
                 connection, "catalyst_local_analysis_links", (("input_context_json", "TEXT"),),
@@ -1916,22 +2114,58 @@ class LocalCatalystIntelligence:
         news = raw.get("news")
         return news if isinstance(news, dict) else None
 
-    def _ingest_revisions(self, connection: sqlite3.Connection) -> int:
+    def _ingest_revisions(
+        self,
+        connection: sqlite3.Connection,
+    ) -> tuple[int, tuple[int | None, int] | None]:
+        """Insert revisions for journal upserts; returns (count, new watermark).
+
+        Every change at or below the stream's completed watermark is in the
+        journal: a sync run commits that watermark only with its last page.
+        Above it, pages of a run still in progress need not arrive in sequence
+        order, so the watermark never passes the completed one; each reconcile
+        reads only changes above it and the anti-join skips those already
+        ingested. A cursor reset starts over from zero. The caller adopts the
+        watermark once its transaction commits.
+        """
+
         try:
+            state = connection.execute(
+                """SELECT reset_count,completed_watermark_sequence
+                   FROM macrolens_etl_state WHERE stream='news'"""
+            ).fetchone()
+            reset_count = int(state["reset_count"]) if state is not None else None
+            completed = int(state["completed_watermark_sequence"]) if state is not None else 0
+            floor = (
+                self._ingest_watermark[1]
+                if self._ingest_watermark is not None
+                and self._ingest_watermark[0] == reset_count
+                else 0
+            )
+            high = min(
+                completed,
+                int(
+                    connection.execute(
+                        "SELECT COALESCE(MAX(change_sequence),0) FROM macrolens_etl_news_changes"
+                    ).fetchone()[0]
+                ),
+            )
             rows = connection.execute(
                 """SELECT c.change_sequence,c.news_id,c.available_at,c.raw_json
                    FROM macrolens_etl_news_changes c
-                   WHERE c.operation='upsert'
+                   WHERE c.change_sequence>?
+                     AND c.operation='upsert'
                      AND NOT EXISTS (
                          SELECT 1 FROM catalyst_local_news_revisions r
                          WHERE r.news_id=c.news_id
                            AND r.change_sequence=c.change_sequence
                      )
-                   ORDER BY c.change_sequence"""
+                   ORDER BY c.change_sequence""",
+                (floor,),
             ).fetchall()
         except sqlite3.OperationalError as error:
             if is_sqlite_lock_contention(error):
-                return 0
+                return 0, None
             raise
         inserted = 0
         observed = _iso()
@@ -1968,14 +2202,19 @@ class LocalCatalystIntelligence:
             url = str(news.get("url") or "").strip()
             if not content_hash or not title or not fetched_at or not url:
                 continue
+            quality = _quality_columns(
+                {"raw_title": title, "raw_summary": news.get("summary")}
+            )
             changed = connection.execute(
                 """INSERT OR IGNORE INTO catalyst_local_news_revisions(
                        news_id,change_sequence,content_hash,source,raw_title,
                        raw_summary,url,image_url,published_at,fetched_at,
                        source_available_at,source_tickers_json,
                        canonical_tickers_json,source_names_json,source_count,
-                       ingested_at
-                   ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       ingested_at,quality_reason,quality_reason_article,
+                       quality_article_visible_at,quality_rules_version,
+                       quality_article_checked_at
+                   ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     int(row["news_id"]),
                     int(row["change_sequence"]),
@@ -1993,10 +2232,11 @@ class LocalCatalystIntelligence:
                     _json(sources),
                     len(sources),
                     observed,
+                    *quality,
                 ),
             ).rowcount
             inserted += int(changed)
-        return inserted
+        return inserted, (reset_count, high)
 
     @staticmethod
     def _job_payload(row: dict[str, Any]) -> dict[str, Any] | None:
@@ -2170,15 +2410,13 @@ class LocalCatalystIntelligence:
                     "" if created_since is None else "AND j.created_at>=?"
                 )
                 rows = connection.execute(
-                    f"""SELECT j.*,COALESCE(s.submission_source,'manual')
-                              AS submission_source
-                       FROM ai_jobs j
-                       LEFT JOIN ai_job_sources s ON s.job_id=j.job_id
-                       WHERE j.job_type IN ('news_impact','market_focus')
-                         {created_filter}
-                       ORDER BY j.created_at DESC""",
+                    _FULL_JOB_SNAPSHOT_SQL.format(created_filter=created_filter),
                     () if created_since is None else (_iso(created_since),),
                 ).fetchall()
+                # Newest first, sorted here: in SQL the ORDER BY built a temp
+                # B-tree of every full row (production: 100MB+ per reconcile)
+                # that spilled to SQLITE_TMPDIR on the data volume.
+                rows.sort(key=lambda row: row["created_at"] or "", reverse=True)
             elif requested_ids is not None:
                 # Fixed private projection: coverage reads never load provider
                 # receipts or result bodies for the whole recent-cycle window.
@@ -2196,7 +2434,7 @@ class LocalCatalystIntelligence:
                                 LEFT JOIN ai_job_sources s
                                   ON s.job_id=j.job_id
                                 WHERE j.job_id IN ({placeholders})
-                                  AND j.job_type IN (
+                                  AND +j.job_type IN (
                                       'news_impact','market_focus'
                                   )""",
                             tuple(chunk),
@@ -2275,16 +2513,33 @@ class LocalCatalystIntelligence:
         *,
         expected_type: Literal["news_impact", "market_focus"],
         expected_schema: tuple[str, str] | None = None,
+        identities: dict[Any, tuple[str, str]] | None = None,
     ) -> bool:
+        """``identities`` memoizes each model's schema identity within one pass."""
+
         if row is None or row.get("job_type") != expected_type:
             return False
+        model = row.get("model")
+        current_identity = (
+            expected_schema
+            if model == (self.model if expected_type == "news_impact" else self.focus_model)
+            else None
+        )
+        if current_identity is None and identities is not None:
+            if model not in identities:
+                identities[model] = (
+                    ai_runtime.schema_identity(expected_type, model=model)
+                    if model is not None
+                    else ai_runtime.schema_identity(expected_type)
+                )
+            current_identity = identities[model]
         schema_matches = ai_runtime.schema_identity_current(
             expected_type,
             row.get("prompt_version"),
             row.get("schema_version"),
             row.get("schema_sha256"),
-            current_identity=(expected_schema if row.get("model") == (self.model if expected_type == "news_impact" else self.focus_model) else None),
-            model=row.get("model"),
+            current_identity=current_identity,
+            model=model,
         )
         prompt = (
             NEWS_PROMPT_VERSION if expected_type == "news_impact" else FOCUS_PROMPT_VERSION
@@ -2296,6 +2551,25 @@ class LocalCatalystIntelligence:
             and row.get("prompt_version") in supported_prompts
             and schema_matches
         )
+
+    def _public_job(self, row: dict[str, Any]) -> dict[str, Any]:
+        """AIJobRepository.public, memoized by the row's complete content.
+
+        The projection re-validates a stored paid result (pydantic plus the
+        Chinese text checks); reconcile used to repeat it for every settled
+        job on every sync slot.
+        """
+
+        digest = hashlib.sha256(
+            json.dumps(row, sort_keys=True, default=str, ensure_ascii=False).encode("utf-8")
+        ).hexdigest()
+        cached = self._public_job_memo.get(digest)
+        if cached is None:
+            cached = AIJobRepository.public(row)
+            if len(self._public_job_memo) >= _PUBLIC_JOB_MEMO_ENTRIES:
+                self._public_job_memo.clear()
+            self._public_job_memo[digest] = cached
+        return copy.deepcopy(cached)
 
     def _identity_public_job(
         self,
@@ -2311,7 +2585,7 @@ class LocalCatalystIntelligence:
         ):
             return None
         assert row is not None
-        return AIJobRepository.public(row)
+        return self._public_job(row)
 
     def _verified_public_job(
         self,
@@ -2351,7 +2625,7 @@ class LocalCatalystIntelligence:
         ):
             return None
         try:
-            return AIJobRepository.public(row)
+            return self._public_job(row)
         except (KeyError, TypeError, ValueError):
             return None
 
@@ -2402,7 +2676,7 @@ class LocalCatalystIntelligence:
         ):
             return None
         try:
-            return AIJobRepository.public(row)
+            return self._public_job(row)
         except (KeyError, TypeError, ValueError):
             return None
 
@@ -2476,12 +2750,17 @@ class LocalCatalystIntelligence:
     ) -> set[tuple[int, int, str]]:
         current_schema = expected_schema or ai_runtime.schema_identity("news_impact", model=self.model)
         keys: set[tuple[int, int, str]] = set()
+        # The identity hash rebuilds the runtime request each time; every job
+        # of a model shares it within this pass (the policy table cannot move
+        # mid-call).
+        identities: dict[Any, tuple[str, str]] = {}
         for job in jobs:
             candidate = dict(job)
             if not self._has_current_job_identity(
                 candidate,
                 expected_type="news_impact",
                 expected_schema=current_schema,
+                identities=identities,
             ):
                 continue
             key = self._news_job_revision_key(candidate)
@@ -2674,6 +2953,7 @@ class LocalCatalystIntelligence:
                      END IS NULL"""
         ).fetchall()
         updated = False
+        identities: dict[Any, tuple[str, str]] = {}
         for link in links:
             job = jobs.get(str(link["job_id"]))
             if job is None or not ai_runtime.analysis_identity_supported(
@@ -2681,7 +2961,9 @@ class LocalCatalystIntelligence:
             ):
                 continue
             if (
-                not self._has_current_job_identity(job, expected_type="news_impact")
+                not self._has_current_job_identity(
+                    job, expected_type="news_impact", identities=identities,
+                )
                 and self._recoverable_completed_legacy_news_public_job(job) is None
             ):
                 continue
@@ -2700,7 +2982,7 @@ class LocalCatalystIntelligence:
                 context = _news_input_context(payload)
             context.update({"analysis_model": job["model"], "analysis_reasoning": job["reasoning"]})
             if job.get("status") == "completed":
-                context["analysis_sources"] = AIJobRepository.public(job).get("evidence_sources", [])
+                context["analysis_sources"] = self._public_job(job).get("evidence_sources", [])
             encoded = _json(context)
             if encoded == link["input_context_json"]:
                 continue
@@ -3113,8 +3395,8 @@ class LocalCatalystIntelligence:
             is None
         )
 
-    @staticmethod
     def _audit_news_result(
+        self,
         connection: sqlite3.Connection,
         *,
         job_id: str,
@@ -3130,6 +3412,7 @@ class LocalCatalystIntelligence:
                WHERE job_id=? AND contract_id=? AND result_sha256=?""",
             (job_id, NEWS_RESULT_CONTRACT_ID, digest),
         ).fetchone()
+        rejection_key: str | None = None
         if audited is not None:
             outcome = str(audited["outcome"])
             if outcome == "accepted":
@@ -3143,7 +3426,15 @@ class LocalCatalystIntelligence:
             # itself is immutable, but its source context can become richer
             # after a deployment. Reusing the old rejection would otherwise
             # clear a result that the current payload can validate without
-            # making another model request.
+            # making another model request. Within one process the code and
+            # this exact context cannot change, so each pair is re-run once.
+            rejection_key = hashlib.sha256(
+                "\x1f".join(
+                    (NEWS_RESULT_CONTRACT_ID, job_id, digest, _json(payload))
+                ).encode("utf-8")
+            ).hexdigest()
+            if rejection_key in self._rejected_news_audits:
+                return "rejected", False
         try:
             validate_result("news_impact", raw_result, payload)
         except (TypeError, ValueError):
@@ -3154,6 +3445,9 @@ class LocalCatalystIntelligence:
             reason = None
         if audited is not None:
             if outcome == "rejected":
+                if len(self._rejected_news_audits) >= _NEWS_AUDIT_MEMO_ENTRIES:
+                    self._rejected_news_audits.clear()
+                self._rejected_news_audits.add(str(rejection_key))
                 return "rejected", False
             updated = connection.execute(
                 """UPDATE catalyst_local_analysis_result_audit SET
@@ -3382,12 +3676,35 @@ class LocalCatalystIntelligence:
         accepted = 0
         rejected = 0
         observed_at = _iso()
+        if len(self._accepted_news_audits) >= _NEWS_AUDIT_MEMO_ENTRIES:
+            self._accepted_news_audits.clear()
         for row in rows:
             raw_result = str(row["result_json"])
+            job_id = str(row["job_id"])
+            # The result and the revision columns the validation payload is
+            # built from; an accepted audit row is never deleted, so an
+            # unchanged pair stays accepted with nothing to write.
+            fingerprint = hashlib.sha256(
+                "\x1f".join(
+                    [
+                        NEWS_RESULT_CONTRACT_ID,
+                        *(
+                            str(row[name])
+                            for name in (
+                                "result_json", "source", "raw_title", "raw_summary",
+                                "source_names_json", "source_tickers_json",
+                                "canonical_tickers_json", "article_json",
+                            )
+                        ),
+                    ]
+                ).encode("utf-8")
+            ).hexdigest()
+            if self._accepted_news_audits.get(job_id) == fingerprint:
+                continue
             payload = self._news_validation_payload(row)
             outcome, inserted = self._audit_news_result(
                 connection,
-                job_id=str(row["job_id"]),
+                job_id=job_id,
                 raw_result=raw_result,
                 payload=payload,
                 result_available_at=row["result_available_at"],
@@ -3396,6 +3713,7 @@ class LocalCatalystIntelligence:
             )
             if outcome == "accepted":
                 accepted += int(inserted)
+                self._accepted_news_audits[job_id] = fingerprint
                 continue
             prior_result = _loads(raw_result, None)
             if (
@@ -3899,8 +4217,17 @@ class LocalCatalystIntelligence:
         *,
         as_of: datetime,
         window_hours: int | None = None,
+        shared: bool = False,
     ) -> tuple[list[dict[str, Any]], tuple[Any, ...] | None]:
-        """Rows plus their cacheable cursor; None forbids shared item backfill."""
+        """Rows plus their cacheable cursor; None forbids shared item backfill.
+
+        ``shared`` returns the cached row objects themselves; such a caller
+        only reads them.
+        """
+
+        def handed_out(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            return rows if shared else [_copy_revision_row(row) for row in rows]
+
         key = self._revision_cache_key(as_of=as_of, window_hours=window_hours)
         if key is not None:
             with _REVISION_CACHE_LOCK:
@@ -3923,10 +4250,7 @@ class LocalCatalystIntelligence:
             if cached is not None and _revision_cache_fresh(
                 cached, store_cursor, as_of=as_of
             ):
-                return (
-                    [_copy_revision_row(row) for row in cached["rows"]],
-                    cached["cursor"],
-                )
+                return handed_out(cached["rows"]), cached["cursor"]
         if later_snapshot:
             return self._active_revisions_query(
                 connection, as_of=as_of, window_hours=window_hours
@@ -3944,8 +4268,8 @@ class LocalCatalystIntelligence:
             # as_of (near-now keys omit as_of). Adopting those rows lets
             # visible pagination consume a slot that is hidden at this as_of,
             # then skip the last original item on the historical cursor page.
-            return [_copy_revision_row(row) for row in built_rows], None
-        return [_copy_revision_row(row) for row in built_rows], store_cursor
+            return handed_out(built_rows), None
+        return handed_out(built_rows), store_cursor
 
     def _active_revision_bundle(
         self,
@@ -3961,8 +4285,10 @@ class LocalCatalystIntelligence:
         the same cache entry. Owner reads always get items=None and rebuild
         with live job state; so do historical (non-cacheable) reads.
 
-        A complete anonymous hot hit fingerprints once, then copies rows and
-        items from the same locked entry so they cannot come from different
+        Rows and items are shared with the cache entry: callers only read
+        them and copy the items they return (one page instead of the window).
+        A complete anonymous hot hit fingerprints once and returns rows and
+        items of the same locked entry, so they cannot come from different
         store versions. Incomplete or missing entries fall through to the
         original slow path (which fingerprints again after the query).
         """
@@ -3994,15 +4320,9 @@ class LocalCatalystIntelligence:
                             cached.get("rows") or (),
                         )
                     ):
-                        return (
-                            [_copy_revision_row(row) for row in cached["rows"]],
-                            [
-                                _copy_feed_item(item)
-                                for item in cached["anon_items"]
-                            ],
-                        )
+                        return cached["rows"], cached["anon_items"]
         rows, source_cursor = self._active_revisions_tracked(
-            connection, as_of=as_of, window_hours=window_hours
+            connection, as_of=as_of, window_hours=window_hours, shared=True
         )
         if not want_items:
             return rows, None
@@ -4024,9 +4344,7 @@ class LocalCatalystIntelligence:
                 and cached["rows"] == rows
                 and _anon_items_match_rows(cached.get("anon_items"), cached.get("rows") or ())
             ):
-                return rows, [
-                    _copy_feed_item(item) for item in cached["anon_items"]
-                ]
+                return rows, cached["anon_items"]
         built_items = [
             self._item(connection, row, as_of=as_of, jobs=None)
             for row in rows
@@ -4043,9 +4361,7 @@ class LocalCatalystIntelligence:
                     and cached["rows"] == rows
                     and _anon_items_match_rows(built_items, cached.get("rows") or ())
                 ):
-                    cached["anon_items"] = [
-                        _copy_feed_item(item) for item in built_items
-                    ]
+                    cached["anon_items"] = built_items
         return rows, built_items
 
     def _data_through(self, connection: sqlite3.Connection) -> str | None:
@@ -4075,25 +4391,14 @@ class LocalCatalystIntelligence:
             # window instead of with full history. Timestamps in this store
             # are normalized ISO-8601 UTC "Z" strings (timestamps-v1), so
             # lexicographic comparison is chronological.
-            head = """WITH active_revisions AS (
-                         SELECT r.* FROM catalyst_local_news_revisions r
-                         WHERE COALESCE(r.published_at,r.fetched_at)>=?
-                           AND r.change_sequence=(
-                               SELECT MAX(c.change_sequence)
-                               FROM macrolens_etl_news_changes c
-                               WHERE c.news_id=r.news_id
-                                 AND c.available_at<=?
-                           )
-                           AND EXISTS(
-                               SELECT 1 FROM macrolens_etl_news_changes c2
-                               WHERE c2.news_id=r.news_id
-                                 AND c2.change_sequence=r.change_sequence
-                                 AND c2.operation='upsert'
-                                 AND c2.available_at<=?
-                           )
-                     ), latest_link AS ("""
+            head = (
+                "WITH active_revisions AS ("
+                + _WINDOW_ACTIVE_REVISIONS_SQL
+                + "), latest_link AS ("
+            )
             params: list[Any] = [
                 _iso(as_of - timedelta(hours=window_hours)),
+                cutoff,
                 cutoff,
                 cutoff,
                 cutoff,
@@ -4636,7 +4941,7 @@ class LocalCatalystIntelligence:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
-                ingested = self._ingest_revisions(connection)
+                ingested, ingest_watermark = self._ingest_revisions(connection)
                 if analysis_store_available:
                     # Expiry lets a fresh intent replace this one; only decide
                     # that while an owned paid job could still be seen.
@@ -4658,6 +4963,8 @@ class LocalCatalystIntelligence:
             except Exception:
                 connection.rollback()
                 raise
+        if ingest_watermark is not None:
+            self._ingest_watermark = ingest_watermark
         for _plan_attempt in range(3):
             plan_now = max(now, _utc_now())
             with self._connect() as connection:
@@ -4693,11 +5000,13 @@ class LocalCatalystIntelligence:
                 break
         else:
             raise RuntimeError("hotspot_plan_contention")
+        quality_backfilled = self._backfill_revision_quality()
         queued = 0
         if allow_scheduled_jobs and self.mode == "scheduled":
             queued = int(self.run_scheduled()["queued"])
         return {
             "ingested": ingested,
+            "quality_backfilled": quality_backfilled,
             "analysis_links_recovered": recovered_links,
             "focus_links_recovered": recovered_focus_links,
             "analyses_published": analyses,
@@ -4707,6 +5016,53 @@ class LocalCatalystIntelligence:
             "queued": queued,
             "analysis_store_available": analysis_store_available,
         }
+
+    def _backfill_revision_quality(self) -> int:
+        """Store verdicts for rows written before the columns, under older
+        rules, or whose article another build changed without them.
+
+        Computed outside any write lock; the short update skips a row whose
+        article changed meanwhile (that update stores its own verdicts).
+        """
+
+        if self._quality_backfill_complete:
+            return 0
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT news_id,change_sequence,content_hash,raw_title,
+                          raw_summary,article_json,article_checked_at
+                   FROM catalyst_local_news_revisions
+                   WHERE quality_rules_version IS NOT ?
+                      OR quality_article_checked_at IS NOT article_checked_at
+                   LIMIT ?""",
+                (NEWS_QUALITY_RULES_VERSION, _QUALITY_BACKFILL_BATCH),
+            ).fetchall()
+        if not rows:
+            self._quality_backfill_complete = True
+            return 0
+        updates = [
+            (
+                *_quality_columns(row),
+                row["news_id"],
+                row["change_sequence"],
+                row["content_hash"],
+                row["article_checked_at"],
+            )
+            for row in rows
+        ]
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            changed = connection.executemany(
+                """UPDATE catalyst_local_news_revisions SET
+                       quality_reason=?,quality_reason_article=?,
+                       quality_article_visible_at=?,quality_rules_version=?,
+                       quality_article_checked_at=?
+                   WHERE news_id=? AND change_sequence=? AND content_hash=?
+                     AND article_checked_at IS ?""",
+                updates,
+            ).rowcount
+            connection.commit()
+        return int(changed)
 
     def _item(
         self,
@@ -5114,7 +5470,10 @@ class LocalCatalystIntelligence:
                 continue
             filtered.append(item)
         scan_limit = VISIBLE_FEED_SCAN_BUDGET if page_mode == "visible" else limit
-        page = filtered[offset : offset + scan_limit]
+        page = [
+            _copy_feed_item(item)
+            for item in filtered[offset : offset + scan_limit]
+        ]
         consumed = len(page)
         has_more = offset + consumed < len(filtered)
         analyzed = [item for item in filtered if _published_analysis(item)]
@@ -5311,7 +5670,7 @@ class LocalCatalystIntelligence:
                     if row is None or int(row.get("source_count") or 0) < 2:
                         continue
                 filtered.append(item)
-            page = filtered[:limit]
+            page = [_copy_feed_item(item) for item in filtered[:limit]]
             analyzed = [item for item in filtered if _published_analysis(item)]
             directional_scores = [
                 score
@@ -6371,12 +6730,32 @@ class LocalCatalystIntelligence:
             else:
                 checked_at = _iso()
                 article_json = _json(article)
-                connection.execute(
-                    """UPDATE catalyst_local_news_revisions SET article_json=?,article_checked_at=?
-                       WHERE news_id=? AND change_sequence=? AND content_hash=?""",
-                    (article_json, checked_at, *identity),
+                quality = _quality_columns(
+                    {
+                        **row,
+                        "article_json": article_json,
+                        "article_checked_at": checked_at,
+                    }
                 )
-                row = {**row, "article_json": article_json, "article_checked_at": checked_at}
+                connection.execute(
+                    """UPDATE catalyst_local_news_revisions SET article_json=?,article_checked_at=?,
+                              quality_reason=?,quality_reason_article=?,
+                              quality_article_visible_at=?,quality_rules_version=?,
+                              quality_article_checked_at=?
+                       WHERE news_id=? AND change_sequence=? AND content_hash=?""",
+                    (article_json, checked_at, *quality, *identity),
+                )
+                row = {
+                    **row,
+                    "article_json": article_json,
+                    "article_checked_at": checked_at,
+                    **dict(
+                        zip(
+                            (name for name, _definition in _REVISION_QUALITY_COLUMNS),
+                            quality,
+                        )
+                    ),
+                }
             connection.commit()
         _reset_revision_cache()
         return row

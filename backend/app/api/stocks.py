@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections import deque
+from collections import OrderedDict, deque
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -66,6 +66,7 @@ from app.stock_data_reads import (
 )
 from app.stock_chart_snapshot import read_stock_chart_resource, write_stock_chart_resource
 from app.stock_pull_snapshot import (
+    STOCK_CHART_RESOURCE_RANGES,
     STOCK_PULL_RESOURCE_FRESH_SECONDS,
     validate_stock_pull_payload,
     write_stock_pull_resources,
@@ -336,6 +337,22 @@ async def _reuse_fresh_public_home_entry(
     return _cache_result(hydrated, stale=not bool(disk_entry["fresh"]))
 
 
+def _durable_entry(
+    resource: str,
+    saved: dict[str, Any],
+    value: Any,
+) -> _EndpointCacheEntry:
+    saved_at = float(saved["saved_at"])
+    return _EndpointCacheEntry(
+        expires_at=saved_at + saved.get(
+            "fresh_seconds", STOCK_PULL_RESOURCE_FRESH_SECONDS[resource],
+        ),
+        stale_until=saved_at + int(saved["max_age"]),
+        fetched_at=saved_at,
+        value=value,
+    )
+
+
 async def _hydrate_stock_pull_resource(
     ticker: str,
     resource: str,
@@ -345,6 +362,19 @@ async def _hydrate_stock_pull_resource(
 
     now = time.time()
     current = _usable_hit(key, now)
+    if current is not None and resource not in STOCK_CHART_RESOURCE_RANGES:
+        # The payload-free summary tells whether a newer version exists; the
+        # full read deep-copies a two-year chart, so it runs only for one.
+        summary = await asyncio.to_thread(read_latest_stock_summary, ticker, now=now)
+        latest = summary.get(resource)
+        if latest is None or float(latest["saved_at"]) < current.fetched_at:
+            return current
+        if float(latest["saved_at"]) == current.fetched_at:
+            # Same durable version: only its freshness window can have moved,
+            # because public bundles follow the market phase.
+            entry = _durable_entry(resource, latest, current.value)
+            _endpoint_cache[key] = entry
+            return entry
     saved = await asyncio.to_thread(
         read_stock_pull_resource,
         ticker,
@@ -353,15 +383,7 @@ async def _hydrate_stock_pull_resource(
     )
     if saved is None:
         return current
-    saved_at = float(saved["saved_at"])
-    entry = _EndpointCacheEntry(
-        expires_at=saved_at + saved.get(
-            "fresh_seconds", STOCK_PULL_RESOURCE_FRESH_SECONDS[resource],
-        ),
-        stale_until=saved_at + int(saved["max_age"]),
-        fetched_at=saved_at,
-        value=saved["payload"],
-    )
+    entry = _durable_entry(resource, saved, saved["payload"])
     if current is None or entry.fetched_at >= current.fetched_at:
         _endpoint_cache[key] = entry
         return entry
@@ -576,6 +598,12 @@ _logo_http: httpx.AsyncClient | None = None
 _logo_slots: asyncio.Semaphore | None = None
 _LOGO_NOT_FOUND = {"not_found": True}
 _LOGO_UNAVAILABLE = {"unavailable": True}
+# Error answers get short private lifetimes instead of the API default
+# no-store: pages request one logo per row, and a browser that may not cache
+# a miss repeats it on every view. The owner's next visit can fill the cache.
+_LOGO_NOT_FOUND_HEADERS = {"Cache-Control": f"private, max-age={_LOGO_NOT_FOUND_TTL}"}
+_LOGO_UNAVAILABLE_HEADERS = {"Retry-After": "60", "Cache-Control": "private, max-age=60"}
+_LOGO_VISITOR_MISS_HEADERS = {"Cache-Control": "private, max-age=300"}
 _LOGO_ALLOWED_HOSTS = frozenset(
     {
         "financialmodelingprep.com",
@@ -735,8 +763,8 @@ async def _fetch_company_logo(symbol: str) -> dict[str, Any]:
         if owned:
             await client.aclose()
     if transient:
-        raise HTTPException(status_code=503, detail="Company logo temporarily unavailable", headers={"Retry-After": "60"})
-    raise HTTPException(status_code=404, detail="Company logo not found")
+        raise HTTPException(status_code=503, detail="Company logo temporarily unavailable", headers=dict(_LOGO_UNAVAILABLE_HEADERS))
+    raise HTTPException(status_code=404, detail="Company logo not found", headers=dict(_LOGO_NOT_FOUND_HEADERS))
 
 
 def _safe_logo_url(value: str) -> bool:
@@ -788,9 +816,9 @@ def _remember_company_logo(key: str, entry: _EndpointCacheEntry) -> None:
 
 def _logo_value(entry: _EndpointCacheEntry) -> dict[str, Any]:
     if entry.value == _LOGO_UNAVAILABLE:
-        raise HTTPException(status_code=503, detail="Company logo temporarily unavailable", headers={"Retry-After": "60"})
+        raise HTTPException(status_code=503, detail="Company logo temporarily unavailable", headers=dict(_LOGO_UNAVAILABLE_HEADERS))
     if entry.value == _LOGO_NOT_FOUND:
-        raise HTTPException(status_code=404, detail="Company logo not found")
+        raise HTTPException(status_code=404, detail="Company logo not found", headers=dict(_LOGO_NOT_FOUND_HEADERS))
     # Keep the original acquisition time so a disk hit cannot reset the age.
     return {**entry.value, "fetched_at": entry.fetched_at}
 
@@ -850,7 +878,7 @@ def _refresh_company_logo(symbol: str, key: str) -> None:
 async def _cached_company_logo(symbol: str, *, allow_refresh: bool = True) -> dict[str, Any]:
     variants = _logo_symbol_variants(symbol)
     if not variants:
-        raise HTTPException(status_code=404, detail="Invalid ticker")
+        raise HTTPException(status_code=404, detail="Invalid ticker", headers=dict(_LOGO_NOT_FOUND_HEADERS))
     symbol = variants[0]
     key = f"logo:{symbol}"
     now = time.time()
@@ -868,7 +896,9 @@ async def _cached_company_logo(symbol: str, *, allow_refresh: bool = True) -> di
             _refresh_company_logo(symbol, key)
         return _logo_value(hit)
     if not allow_refresh:
-        raise public_snapshot_unavailable(key)
+        error = public_snapshot_unavailable(key)
+        error.headers = dict(_LOGO_VISITOR_MISS_HEADERS)
+        raise error
     return await _load_company_logo(symbol, key)
 
 
@@ -2629,7 +2659,7 @@ async def stock_logo(ticker: str, request: Request = None):
     symbol = quote_symbol(ticker)
     variants = _logo_symbol_variants(symbol)
     if not variants:
-        raise HTTPException(status_code=404, detail="Invalid ticker")
+        raise HTTPException(status_code=404, detail="Invalid ticker", headers=dict(_LOGO_NOT_FOUND_HEADERS))
     logo = await _cached_company_logo(
         variants[0],
         allow_refresh=current_request_is_owner(),
@@ -3320,6 +3350,67 @@ async def _load_stock_technical(symbol: str, owner: bool) -> dict[str, Any]:
     return payload
 
 
+# About 0.3MB each (tracemalloc, a two-year daily chart with SPY).
+_TECHNICAL_VISITOR_RESULT_LIMIT = 32
+_technical_visitor_results: OrderedDict[tuple[Any, ...], dict[str, Any]] = OrderedDict()
+_technical_visitor_lock = threading.Lock()
+
+
+def _visitor_technical_result(
+    symbol: str,
+    bars: list[dict[str, Any]],
+    spy_closes: dict[str, float] | None,
+) -> dict[str, Any] | None:
+    """Sanitized structure for exactly these inputs, computed once per input set.
+
+    The key holds everything the computation reads: the bars, the SPY closes,
+    whether the last bar's session has closed (its only clock input) and the
+    algorithm versions. Only real results are kept; callers must not mutate them.
+    """
+
+    from app.services.technical import auto_patterns, chart_analysis, structure
+
+    series = structure.clean_series(bars)
+    if series is None:
+        return None
+    series, _series_break_at = structure._truncate_after_series_break(series)
+    if len(series["closes"]) < structure._MIN_BARS:
+        return None
+    last_bar_closed = structure._last_bar_closed(series["times"][-1], datetime.now(timezone.utc))
+    key = (
+        symbol,
+        "1d",
+        last_bar_closed,
+        hashlib.sha256(json.dumps(bars, separators=(",", ":")).encode("utf-8")).hexdigest(),
+        hashlib.sha256(json.dumps(spy_closes, separators=(",", ":")).encode("utf-8")).hexdigest(),
+        structure.STRUCTURE_VERSION,
+        auto_patterns.ALGORITHM_VERSION,
+        chart_analysis.BUNDLE_VERSION,
+        chart_analysis.LAYER_REGISTRY_VERSION,
+        chart_analysis.FINGERPRINT_ALGORITHM,
+    )
+    with _technical_visitor_lock:
+        cached = _technical_visitor_results.get(key)
+        if cached is not None:
+            _technical_visitor_results.move_to_end(key)
+            return cached
+    result = structure.compute_technical_structure(
+        bars,
+        last_bar_closed=last_bar_closed,
+        ticker=symbol,
+        spy_closes=spy_closes,
+    )
+    if result is None:
+        return None
+    result = _sanitize(result)
+    with _technical_visitor_lock:
+        _technical_visitor_results[key] = result
+        _technical_visitor_results.move_to_end(key)
+        while len(_technical_visitor_results) > _TECHNICAL_VISITOR_RESULT_LIMIT:
+            _technical_visitor_results.popitem(last=False)
+    return result
+
+
 @router.get("/{ticker}/technical")
 async def stock_technical(ticker: str):
     """K-line structure + indicators computed from the same daily bars the
@@ -3340,9 +3431,8 @@ async def stock_technical(ticker: str):
         if owner or not _is_public_snapshot_unavailable(exc):
             raise
         # 访客冷缓存：先吃手动拉取的日线快照（与 chart 路由同一 hydrate 通路——
-        # 访客拉取完，K 线和结构必须同源同现），再退公开快照；现算不回源、不写缓存。
-        from app.services.technical.structure import compute_technical_structure
-
+        # 访客拉取完，K 线和结构必须同源同现），再退公开快照；现算不回源、
+        # 不写 technical 缓存键，结果按输入记忆（_visitor_technical_result）。
         chart_key = f"chart:{symbol}:1d:raw"
         await _hydrate_stock_pull_resource(symbol, "daily_chart", chart_key)
         pulled = _usable_hit(chart_key, time.time())
@@ -3353,25 +3443,24 @@ async def stock_technical(ticker: str):
         if not bars:
             raise exc
         spy_closes = await _guest_spy_closes()
-        result = await asyncio.to_thread(
-            compute_technical_structure,
-            bars,
-            ticker=symbol,
-            spy_closes=spy_closes,
-        )
+        result = await asyncio.to_thread(_visitor_technical_result, symbol, bars, spy_closes)
         if result is None:
             raise exc
-        payload = _sanitize({
+        payload = {
             "ticker": symbol,
             "as_of": chart.get("as_of") if isinstance(chart, dict) else None,
             "basis": "raw_daily",
             **result,
-        })
+        }
         analysis = payload.get("chart_analysis")
         if isinstance(analysis, dict):
-            analysis["ticker"] = symbol
-            analysis["range"] = "1d"
-            analysis["adjustment"] = "raw"
+            # The remembered result is shared between requests: decorate a copy.
+            payload["chart_analysis"] = {
+                **analysis,
+                "ticker": symbol,
+                "range": "1d",
+                "adjustment": "raw",
+            }
         return payload
 
 
@@ -3797,9 +3886,11 @@ async def _pull_stock_data_once(
     snapshot_path: Path | None = None,
     include_options: bool = True,
     publish_to_cache: bool = True,
+    durable_snapshot: bool = True,
 ) -> dict[str, Any]:
     """``publish_to_cache=False`` is for the worker process: nothing there reads
-    ``_endpoint_cache``, and each retained daily chart costs about 400 KiB."""
+    ``_endpoint_cache``, and each retained daily chart costs about 400 KiB.
+    ``durable_snapshot=False`` skips the fsyncs for regenerated public bundles."""
     overview_key = f"stock:{symbol}"
     chart_key = f"chart:{symbol}:1d:raw"
 
@@ -4078,10 +4169,15 @@ async def _pull_stock_data_once(
 
     persistence_status = "completed"
     try:
+        writer_options: dict[str, Any] = {}
+        if snapshot_path is not None:
+            writer_options["path"] = snapshot_path
+        if not durable_snapshot:
+            writer_options["durable"] = False
         writer = (
-            write_stock_pull_resources
-            if snapshot_path is None
-            else partial(write_stock_pull_resources, path=snapshot_path)
+            partial(write_stock_pull_resources, **writer_options)
+            if writer_options
+            else write_stock_pull_resources
         )
         persisted = await _run_stock_pull_blocking(
             writer,

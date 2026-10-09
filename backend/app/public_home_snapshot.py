@@ -396,15 +396,16 @@ def _iso_timestamp_seconds(value: Any) -> float | None:
     return result if math.isfinite(result) else None
 
 
-def _payload_timestamps_fit_entry(
+def _payload_timestamp_bounds(
     resource: str,
     payload: Mapping[str, Any],
-    *,
-    not_after: float,
-) -> bool:
-    """Reject payload clocks later than the caller's trusted time limit."""
+) -> tuple[bool, float | None]:
+    """Whether every payload clock is well formed, and the latest one.
 
-    limit = not_after
+    Content-only: a reader computes it once per file version and compares the
+    latest clock with its moving limit on every request.
+    """
+
     iso_values: list[Any] = []
     integer_values: list[Any] = []
     if resource in {
@@ -451,19 +452,35 @@ def _payload_timestamps_fit_entry(
             if isinstance(row, Mapping)
             and row.get("market_cap_as_of") is not None
         )
-    return bool(
-        all(
-            (timestamp := _iso_timestamp_seconds(value)) is not None
-            and timestamp <= limit
-            for value in iso_values
-        )
-        and all(
-            isinstance(value, int)
-            and not isinstance(value, bool)
-            and value <= limit
-            for value in integer_values
-        )
-    )
+    latest: float | None = None
+    for value in iso_values:
+        timestamp = _iso_timestamp_seconds(value)
+        if timestamp is None:
+            return False, None
+        if latest is None or timestamp > latest:
+            latest = timestamp
+    for value in integer_values:
+        if isinstance(value, bool) or not isinstance(value, int):
+            return False, None
+        if latest is None or value > latest:
+            latest = value
+    return True, latest
+
+
+def _timestamp_bounds_fit(bounds: tuple[bool, float | None], not_after: float) -> bool:
+    well_formed, latest = bounds
+    return well_formed and (latest is None or latest <= not_after)
+
+
+def _payload_timestamps_fit_entry(
+    resource: str,
+    payload: Mapping[str, Any],
+    *,
+    not_after: float,
+) -> bool:
+    """Reject payload clocks later than the caller's trusted time limit."""
+
+    return _timestamp_bounds_fit(_payload_timestamp_bounds(resource, payload), not_after)
 
 
 def _validate_indices(payload: Mapping[str, Any]) -> bool:
@@ -1358,18 +1375,101 @@ def _validate_entry(resource: str, value: Any) -> dict[str, Any] | None:
     }
 
 
-def _entry_timestamps_fit(resource: str, entry: Mapping[str, Any], *, now: float) -> bool:
-    return entry["saved_at"] <= now + PUBLIC_HOME_SAVED_AT_GRACE_SECONDS and (
-        _payload_timestamps_fit_entry(
-            resource, entry["payload"], not_after=now + PUBLIC_HOME_MAX_CLOCK_SKEW_SECONDS,
-        )
+def _entry_timestamps_fit(
+    resource: str,
+    entry: Mapping[str, Any],
+    *,
+    now: float,
+    bounds: tuple[bool, float | None] | None = None,
+) -> bool:
+    return entry["saved_at"] <= now + PUBLIC_HOME_SAVED_AT_GRACE_SECONDS and _timestamp_bounds_fit(
+        bounds if bounds is not None else _payload_timestamp_bounds(resource, entry["payload"]),
+        now + PUBLIC_HOME_MAX_CLOCK_SKEW_SECONDS,
     )
 
 
-# Parsed-and-validated documents keyed by file identity. Publishing swaps the
-# inode (mkstemp + os.replace), so a hit is exactly "the same bytes we already
-# validated" and a fresh publish invalidates on the next stat. Entries are
-# shared read-only structures: every consumer below copies before decorating.
+# What the read path has always turned into "no usable entry" instead of an error.
+_UNUSABLE_DOCUMENT_ERRORS = (
+    OSError,
+    RecursionError,
+    UnicodeError,
+    ValueError,
+    TypeError,
+    json.JSONDecodeError,
+)
+
+
+class _PublicHomeDocument(Mapping[str, dict[str, Any]]):
+    """One file version's resources, each validated the first time it is read.
+
+    Validation depends only on content, so its outcome is fixed for the file
+    version: reading indices no longer pays for validating the earnings
+    calendar. Iterating (the worker and the release gate) validates every entry.
+    """
+
+    def __init__(self, resources: Mapping[str, Any]) -> None:
+        self._raw = resources
+        self._entries: dict[str, dict[str, Any] | None] = {}
+        self._timestamp_bounds: dict[str, tuple[bool, float | None]] = {}
+
+    def _entry(self, resource: str) -> dict[str, Any] | None:
+        if resource in self._entries:
+            return self._entries[resource]
+        if resource not in self._raw:
+            return None
+        try:
+            entry = _validate_entry(resource, self._raw[resource])
+        except _UNUSABLE_DOCUMENT_ERRORS:
+            entry = None
+        return self._entries.setdefault(resource, entry)
+
+    def __getitem__(self, resource: str) -> dict[str, Any]:
+        entry = self._entry(resource)
+        if entry is None:
+            raise KeyError(resource)
+        return entry
+
+    def get(self, resource: str, default: Any = None) -> Any:
+        entry = self._entry(resource)
+        return default if entry is None else entry
+
+    def __iter__(self):
+        return (resource for resource in self._raw if self._entry(resource) is not None)
+
+    def __len__(self) -> int:
+        return sum(1 for _resource in self)
+
+    def stored_identity_matches(self, resource: str, parameters: Mapping[str, Any]) -> bool:
+        """Schema, max_age and parameters of the stored entry, before any validation."""
+
+        spec = PUBLIC_HOME_RESOURCE_SPECS.get(resource)
+        value = self._raw.get(resource)
+        return bool(
+            spec is not None
+            and isinstance(value, dict)
+            and value.get("schema") == spec.schema
+            and value.get("max_age") == spec.max_age
+            and value.get("parameters") == dict(parameters)
+        )
+
+    def clocks_fit(self, resource: str, *, now: float) -> bool:
+        entry = self._entry(resource)
+        if entry is None:
+            return False
+        bounds = self._timestamp_bounds.get(resource)
+        if bounds is None:
+            bounds = self._timestamp_bounds.setdefault(
+                resource, _payload_timestamp_bounds(resource, entry["payload"]),
+            )
+        return _entry_timestamps_fit(resource, entry, now=now, bounds=bounds)
+
+
+_EMPTY_DOCUMENT = _PublicHomeDocument({})
+
+# Parsed documents keyed by file identity. Publishing swaps the inode
+# (mkstemp + os.replace), so a hit is exactly "the same bytes we already
+# parsed" and a fresh publish invalidates on the next stat. Entries are shared
+# read-only structures: every consumer below copies before decorating.
 _parsed_documents = FingerprintedFileCache(
     "public_home",
     max_paths=4,
@@ -1377,7 +1477,7 @@ _parsed_documents = FingerprintedFileCache(
 )
 
 
-def _parse_public_home_document(raw: bytes) -> dict[str, dict[str, Any]] | None:
+def _parse_public_home_document(raw: bytes) -> _PublicHomeDocument | None:
     if not raw:
         return None
     document = json.loads(
@@ -1394,36 +1494,24 @@ def _parse_public_home_document(raw: bytes) -> dict[str, dict[str, Any]] | None:
         or any(name not in PUBLIC_HOME_RESOURCE_SPECS for name in document["resources"])
     ):
         return None
-    result: dict[str, dict[str, Any]] = {}
-    for resource, value in document["resources"].items():
-        entry = _validate_entry(resource, value)
-        if entry is not None:
-            result[resource] = entry
-    return result
+    return _PublicHomeDocument(document["resources"])
 
 
-def _read_validated_document(path: Path | None) -> Mapping[str, dict[str, Any]]:
+def _read_validated_document(path: Path | None) -> _PublicHomeDocument:
     """Return the shared parsed document; callers still check each entry's clock."""
 
     target = path or get_data_paths().public_home_snapshot
     try:
         if not target.is_absolute() or _path_has_symlink_boundary(target):
-            return {}
-        entries = _parsed_documents.read(
+            return _EMPTY_DOCUMENT
+        document = _parsed_documents.read(
             target,
             _parse_public_home_document,
             max_bytes=PUBLIC_HOME_SNAPSHOT_MAX_BYTES,
         )
-    except (
-        OSError,
-        RecursionError,
-        UnicodeError,
-        ValueError,
-        TypeError,
-        json.JSONDecodeError,
-    ):
-        return {}
-    return entries or {}
+    except _UNUSABLE_DOCUMENT_ERRORS:
+        return _EMPTY_DOCUMENT
+    return document if document is not None else _EMPTY_DOCUMENT
 
 
 def read_public_home_entries(
@@ -1432,12 +1520,13 @@ def read_public_home_entries(
     now: float | None = None,
 ) -> dict[str, dict[str, Any]]:
     current = time.time() if now is None else float(now)
+    document = _read_validated_document(path)
     # Top-level copy so callers replacing entries (the worker's publish path)
     # never mutate the shared cached document.
     return {
         resource: entry
-        for resource, entry in _read_validated_document(path).items()
-        if _entry_timestamps_fit(resource, entry, now=current)
+        for resource, entry in document.items()
+        if document.clocks_fit(resource, now=current)
     }
 
 
@@ -1475,16 +1564,20 @@ def _servable_entry(
     path: Path | None,
     now: float,
 ) -> dict[str, Any] | None:
-    # Check the cheap identity fields first, then only this entry's clocks: the
-    # earnings calendar alone holds thousands of timestamps, and most reads
-    # (per-ticker chart fallbacks) do not match the stored parameters at all.
-    entry = _read_validated_document(path).get(resource)
+    # Check the cheap identity fields on the stored entry first, before any
+    # validation, then only this entry's clocks: most reads (per-ticker chart
+    # fallbacks) do not match the stored parameters at all, and the earnings
+    # calendar alone holds thousands of timestamps.
+    document = _read_validated_document(path)
+    if not document.stored_identity_matches(resource, parameters):
+        return None
+    entry = document.get(resource)
     if not public_home_entry_is_servable(
         resource,
         entry,
         parameters=parameters,
         now=now,
-    ) or not _entry_timestamps_fit(resource, entry, now=now):
+    ) or not document.clocks_fit(resource, now=now):
         return None
     return entry
 

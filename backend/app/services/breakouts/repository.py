@@ -4148,6 +4148,11 @@ class BreakoutRepository:
         rows research validation reads. For T1, only superseded evaluation versions
         and retry rows older than the scan window are removed; the current
         evaluation of every event stays readable.
+
+        The "newer completed snapshot" probes walk the event's own snapshots
+        first. Without statistics SQLite drove them from every completed run,
+        so each call cost (events past the window) x (all runs) and grew
+        quadratically with history.
         """
         if raw_payload_hours < 1 or scan_days < 1:
             raise ValueError("retention windows must be positive")
@@ -4224,11 +4229,12 @@ class BreakoutRepository:
                             AND {_research_snapshot_superseded_sql("old_event", "run")}
                             AND EXISTS(
                               SELECT 1
-                              FROM breakout_scan_events newer_event
-                              JOIN breakout_scan_runs newer_run
-                                ON newer_run.scan_run_id=newer_event.scan_run_id
-                               AND newer_run.status='completed'
+                              FROM breakout_scan_events AS newer_event
+                                INDEXED BY idx_breakout_scan_events_event
+                              CROSS JOIN breakout_scan_runs AS newer_run
                               WHERE newer_event.event_id=old_event.event_id
+                                AND newer_run.scan_run_id=newer_event.scan_run_id
+                                AND newer_run.status='completed'
                                 AND (
                                   COALESCE(newer_run.published_at,newer_run.completed_at,
                                            newer_run.updated_at,'')
@@ -4262,11 +4268,12 @@ class BreakoutRepository:
                           AND {_research_snapshot_superseded_sql("old", "old_run")}
                           AND EXISTS(
                             SELECT 1
-                            FROM breakout_scan_events newer
-                            JOIN breakout_scan_runs newer_run
-                              ON newer_run.scan_run_id=newer.scan_run_id
-                             AND newer_run.status='completed'
+                            FROM breakout_scan_events AS newer
+                              INDEXED BY idx_breakout_scan_events_event
+                            CROSS JOIN breakout_scan_runs AS newer_run
                             WHERE newer.event_id=old.event_id
+                              AND newer_run.scan_run_id=newer.scan_run_id
+                              AND newer_run.status='completed'
                               AND (
                                 COALESCE(newer_run.published_at,newer_run.completed_at,
                                          newer_run.updated_at,'')

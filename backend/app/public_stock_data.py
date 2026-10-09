@@ -8,6 +8,7 @@ background coverage cannot evict the owner's manual-pull collection.
 from __future__ import annotations
 
 import asyncio
+from collections import OrderedDict
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import fcntl
@@ -20,11 +21,13 @@ from pathlib import Path
 import re
 import stat
 import tempfile
+import threading
 import time
 from typing import Any, Callable, Iterable, Mapping
 from zoneinfo import ZoneInfo
 
 from app.data_paths import get_data_paths
+from app.file_identity import path_file_identity, regular_file_identity
 from app.stock_pull_snapshot import read_stock_pull_resource, read_stock_pull_summary
 
 
@@ -138,9 +141,25 @@ def _directory(path: Path) -> None:
         raise ValueError("public stock directory is unavailable")
 
 
+# Parsed status and demand files by file identity: a 200-ticker status poll
+# otherwise opens and parses 400 files that rarely change between polls.
+_METADATA_CACHE_MAX_PATHS = 4096
+_metadata_cache: OrderedDict[str, tuple[tuple[int, int, int], dict[str, Any]]] = OrderedDict()
+_metadata_cache_lock = threading.Lock()
+
+
 def _read_metadata(path: Path) -> dict[str, Any] | None:
     if path.parent.is_symlink():
         return None
+    identity = path_file_identity(path)
+    if identity is None or identity[2] > _METADATA_MAX_BYTES:
+        return None
+    key = os.fspath(path)
+    with _metadata_cache_lock:
+        cached = _metadata_cache.get(key)
+        if cached is not None and cached[0] == identity:
+            _metadata_cache.move_to_end(key)
+            return dict(cached[1])
     try:
         fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
         with os.fdopen(fd, "rb") as handle:
@@ -148,9 +167,17 @@ def _read_metadata(path: Path) -> dict[str, Any] | None:
             if not stat.S_ISREG(info.st_mode) or info.st_size > _METADATA_MAX_BYTES:
                 return None
             value = json.loads(handle.read(_METADATA_MAX_BYTES + 1))
-        return value if isinstance(value, dict) else None
     except (OSError, ValueError, UnicodeError):
         return None
+    if not isinstance(value, dict):
+        return None
+    with _metadata_cache_lock:
+        # Keyed by the version actually read, which may be newer than the stat above.
+        _metadata_cache[key] = (regular_file_identity(info), value)
+        _metadata_cache.move_to_end(key)
+        while len(_metadata_cache) > _METADATA_CACHE_MAX_PATHS:
+            _metadata_cache.popitem(last=False)
+    return dict(value)
 
 
 def _write_metadata(path: Path, value: Mapping[str, Any]) -> None:
@@ -160,12 +187,12 @@ def _write_metadata(path: Path, value: Mapping[str, Any]) -> None:
     encoded = json.dumps(dict(value), allow_nan=False, separators=(",", ":")).encode()
     if len(encoded) > _METADATA_MAX_BYTES:
         raise ValueError("public stock metadata is too large")
+    # No fsync: these are scheduling hints rewritten every round; a version
+    # lost in a crash is simply written again. The rename stays atomic.
     fd, temporary = tempfile.mkstemp(prefix=".pending-", dir=path.parent)
     try:
         with os.fdopen(fd, "wb") as handle:
             handle.write(encoded)
-            handle.flush()
-            os.fsync(handle.fileno())
         os.replace(temporary, path)
     finally:
         if os.path.exists(temporary):
@@ -470,7 +497,8 @@ class PublicStockDataRefresh:
         for symbol, priority in targets.items():
             if symbol in self._due:
                 continue
-            resources = [read_public_stock_resource(symbol, resource, root=self.root, now=now) for resource in _RESOURCES]
+            summary = read_public_stock_summary(symbol, root=self.root, now=now)
+            resources = [summary.get(resource) for resource in _RESOURCES]
             saved = min(float(entry["saved_at"]) for entry in resources if entry) if all(resources) else None
             metadata = _read_metadata(_base(self.root) / "status" / f"{symbol}.json") or {}
             retry = _finite_time(metadata.get("retry_after")) if metadata.get("ticker") == symbol else None
@@ -554,8 +582,9 @@ class PublicStockDataRefresh:
                 if puller is None:
                     from app.api.stocks import _pull_stock_data_once
 
-                    # The worker has no HTTP readers for the API process cache.
-                    puller = partial(_pull_stock_data_once, publish_to_cache=False)
+                    # The worker has no HTTP readers for the API process cache,
+                    # and these bundles are regenerated on the next round.
+                    puller = partial(_pull_stock_data_once, publish_to_cache=False, durable_snapshot=False)
                 async with self._start_lock:
                     loop = asyncio.get_running_loop()
                     delay = max(0.0, self._next_start - loop.time())
@@ -570,10 +599,10 @@ class PublicStockDataRefresh:
                     or any(not isinstance(pulled.get(name), Mapping) or pulled[name].get("status") != "available" or pulled[name].get("persisted") is not True for name in _RESOURCES)
                 ):
                     raise RuntimeError("public_stock_pull_incomplete")
-                resources = await asyncio.to_thread(lambda: [
-                    read_public_stock_resource(symbol, resource, root=self.root, now=float(self._clock()))
-                    for resource in _RESOURCES
-                ])
+                summary = await asyncio.to_thread(
+                    read_public_stock_summary, symbol, root=self.root, now=float(self._clock()),
+                )
+                resources = [summary.get(resource) for resource in _RESOURCES]
                 if not all(resources):
                     raise RuntimeError("public_stock_resources_incomplete")
                 saved = min(float(entry["saved_at"]) for entry in resources if entry)

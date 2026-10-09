@@ -7,6 +7,7 @@ import sqlite3
 import threading
 import uuid
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping
@@ -245,6 +246,19 @@ _PROVIDER_PROGRESS_SCHEMA_CHECKSUM = hashlib.sha256(
     _PROVIDER_PROGRESS_SCHEMA_SQL.encode("utf-8")
 ).hexdigest()
 
+# retry_of_job_id references ai_jobs(job_id) and foreign keys are enforced, so
+# deleting a job looks up its retry children. Unindexed, every deleted row
+# scanned the whole table: one 500-row history prune batch held the write lock
+# for seconds (minutes on the production table).
+_RETRY_LINEAGE_INDEX_VERSION = "ai-job-retry-lineage-index-v1"
+_RETRY_LINEAGE_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_ai_jobs_retry_of
+ON ai_jobs(retry_of_job_id) WHERE retry_of_job_id IS NOT NULL
+"""
+_RETRY_LINEAGE_INDEX_CHECKSUM = hashlib.sha256(
+    _RETRY_LINEAGE_INDEX_SQL.encode("utf-8")
+).hexdigest()
+
 
 def _public_evidence_url(value: Any) -> bool:
     if (not isinstance(value, str) or not 1 <= len(value) <= 2048
@@ -421,6 +435,87 @@ def _settled_budget_charge_microusd(
 _QUEUE_LIMIT_EXEMPT_JOB_TYPES = frozenset({"market_focus"})
 
 
+_MISSING_CHARGES_SQL = """SELECT job_id,job_type,model,submission_started_at,status,error_code,openai_response_id,
+          budget_charge_microusd,error_detail,anthropic_message_id,provider_result_json,
+          usage_input_tokens,usage_cached_input_tokens,
+          usage_output_tokens,usage_reasoning_tokens,
+          usage_total_tokens,usage_cache_creation_input_tokens,
+          usage_cache_creation_5m_input_tokens,usage_cache_creation_1h_input_tokens
+   FROM ai_jobs
+   WHERE submission_started_at IS NOT NULL
+     AND budget_charge_microusd=0"""
+
+
+def _backfilled_budget_charge(missing: Mapping[str, Any]) -> int | None:
+    """Charge to backfill for a started job recorded at zero, or None to keep it."""
+
+    reservation = _task_budget_reservation_microusd(
+        str(missing["job_type"]), model=str(missing["model"])
+    )
+    usage = {
+        "input_tokens": missing["usage_input_tokens"],
+        "cached_input_tokens": missing["usage_cached_input_tokens"],
+        "output_tokens": missing["usage_output_tokens"],
+        "reasoning_tokens": missing["usage_reasoning_tokens"],
+        "total_tokens": missing["usage_total_tokens"],
+        **{field: missing["usage_" + field] for field in _CACHE_USAGE_FIELDS},
+    }
+    # The receipt carries tool counters that have no separate SQL
+    # columns. Recalculate from that durable evidence, not an
+    # incomplete token-only projection after process restart.
+    if missing["provider_result_json"]:
+        try:
+            receipt = json.loads(missing["provider_result_json"])
+            receipt_usage = receipt.get("usage") if isinstance(receipt, dict) else None
+            usage = dict(receipt_usage) if isinstance(receipt_usage, dict) else {}
+        except (TypeError, ValueError):
+            usage = {}
+    elif _confirmed_unbilled_claude_row(missing):
+        # The worker persisted a definitive HTTP rejection plus
+        # explicit zero counts before clearing its lease. It has
+        # no message id/receipt and must remain free after restart.
+        return None
+    has_terminal_usage = (
+        usage.get("input_tokens") is not None
+        and usage.get("output_tokens") is not None
+        and missing["error_code"] != "submission_outcome_unknown"
+    )
+    if not has_terminal_usage and _reservation_released(
+        missing["status"],
+        missing["error_code"],
+        missing["openai_response_id"],
+        missing["model"],
+        missing["submission_started_at"],
+    ):
+        # 规则确认零计费的行本来就记 0；每次初始化都会走到这里，
+        # 不能把它们回填成满额预留。
+        return None
+    return (
+        _settled_budget_charge_microusd(
+            str(missing["job_type"]),
+            usage,
+            fallback_microusd=reservation,
+            model=str(missing["model"]),
+        )
+        if has_terminal_usage
+        else reservation
+    )
+
+
+@dataclass(frozen=True)
+class _InitializationBackfill:
+    missing_sources: bool
+    charge_job_ids: list[str]
+
+
+# Schema cookie (``PRAGMA schema_version``) of each path this process has
+# fully initialized. Request handlers build a fresh repository per request;
+# each used to repeat the whole schema transaction. Any schema change made
+# out of band moves the cookie and brings the full checks back.
+_READY_SCHEMAS: dict[str, int | None] = {}
+_READY_SCHEMAS_LOCK = threading.Lock()
+
+
 class AIJobRepository:
     def __init__(self, path: str | Path):
         self.path = Path(path)
@@ -448,18 +543,67 @@ class AIJobRepository:
         """
         with self._initialize_lock:
             self._initialized = False
-            self._initialize_database()
+            with _READY_SCHEMAS_LOCK:
+                self._initialize_database()
+                _READY_SCHEMAS[str(self.path.resolve())] = self._schema_cookie()
             self._initialized = True
 
     def ensure_initialized(self) -> None:
-        """Initialize this repository instance once, including across threads."""
+        """Initialize this database once per process, including across threads."""
         with self._initialize_lock:
             if self._initialized:
                 return
-            self._initialize_database()
+            key = str(self.path.resolve())
+            with _READY_SCHEMAS_LOCK:
+                cookie = self._schema_cookie()
+                if cookie is None or _READY_SCHEMAS.get(key) != cookie:
+                    self._initialize_database()
+                    _READY_SCHEMAS[key] = self._schema_cookie()
             self._initialized = True
 
+    def _schema_cookie(self) -> int | None:
+        if not self.path.is_file():
+            return None
+        try:
+            with self._connect_read_only() as connection:
+                return int(connection.execute("PRAGMA schema_version").fetchone()[0])
+        except sqlite3.Error:
+            return None
+
+    def _plan_initialization_backfill(self) -> _InitializationBackfill | None:
+        """Read which legacy rows still need a backfill, before the write lock.
+
+        Both backfills used to scan the whole job table inside the schema
+        write transaction on every new repository instance, holding the
+        ai-jobs.db write lock for seconds. ``None`` keeps the full in-lock
+        backfill (new or unreadable stores).
+        """
+
+        if not self.path.is_file():
+            return None
+        try:
+            with self._connect_read_only() as connection:
+                missing_sources = connection.execute(
+                    """SELECT 1 FROM ai_jobs AS j
+                       WHERE NOT EXISTS (
+                           SELECT 1 FROM ai_job_sources AS s WHERE s.job_id=j.job_id
+                       )
+                       LIMIT 1"""
+                ).fetchone() is not None
+                charge_job_ids = [
+                    str(row["job_id"])
+                    for row in connection.execute(_MISSING_CHARGES_SQL)
+                    if _backfilled_budget_charge(row) is not None
+                ]
+        except sqlite3.Error:
+            return None
+        return _InitializationBackfill(
+            missing_sources=missing_sources,
+            charge_job_ids=charge_job_ids,
+        )
+
     def _initialize_database(self) -> None:
+        backfill = self._plan_initialization_backfill()
         with self._connect() as connection:
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("PRAGMA synchronous=FULL")
@@ -560,77 +704,48 @@ class AIJobRepository:
                         _iso(),
                     ),
                 )
+            retry_index = connection.execute(
+                "SELECT checksum FROM ai_job_schema WHERE version=?",
+                (_RETRY_LINEAGE_INDEX_VERSION,),
+            ).fetchone()
+            if (
+                retry_index is not None
+                and retry_index["checksum"] != _RETRY_LINEAGE_INDEX_CHECKSUM
+            ):
+                raise RuntimeError("ai_job_retry_lineage_index_checksum_mismatch")
+            connection.execute(_RETRY_LINEAGE_INDEX_SQL)
+            connection.execute(
+                "INSERT OR IGNORE INTO ai_job_schema(version,checksum,applied_at) VALUES(?,?,?)",
+                (_RETRY_LINEAGE_INDEX_VERSION, _RETRY_LINEAGE_INDEX_CHECKSUM, _iso()),
+            )
             # Rows from before source-aware identities cannot be classified.
             # Keep those conservative: only the manual switch may release them.
-            connection.execute(
-                """INSERT OR IGNORE INTO ai_job_sources(
-                       job_id,submission_source,created_at
-                   )
-                   SELECT job_id,'manual',created_at FROM ai_jobs"""
-            )
-            missing_charges = connection.execute(
-                """SELECT job_id,job_type,model,submission_started_at,status,error_code,openai_response_id,
-                          budget_charge_microusd,error_detail,anthropic_message_id,provider_result_json,
-                          usage_input_tokens,usage_cached_input_tokens,
-                          usage_output_tokens,usage_reasoning_tokens,
-                          usage_total_tokens,usage_cache_creation_input_tokens,
-                          usage_cache_creation_5m_input_tokens,usage_cache_creation_1h_input_tokens
-                   FROM ai_jobs
-                   WHERE submission_started_at IS NOT NULL
-                     AND budget_charge_microusd=0"""
-            ).fetchall()
-            for missing in missing_charges:
-                reservation = _task_budget_reservation_microusd(
-                    str(missing["job_type"]), model=str(missing["model"])
+            if backfill is None or backfill.missing_sources:
+                connection.execute(
+                    """INSERT OR IGNORE INTO ai_job_sources(
+                           job_id,submission_source,created_at
+                       )
+                       SELECT job_id,'manual',created_at FROM ai_jobs"""
                 )
-                usage = {
-                    "input_tokens": missing["usage_input_tokens"],
-                    "cached_input_tokens": missing["usage_cached_input_tokens"],
-                    "output_tokens": missing["usage_output_tokens"],
-                    "reasoning_tokens": missing["usage_reasoning_tokens"],
-                    "total_tokens": missing["usage_total_tokens"],
-                    **{field: missing["usage_" + field] for field in _CACHE_USAGE_FIELDS},
-                }
-                # The receipt carries tool counters that have no separate SQL
-                # columns. Recalculate from that durable evidence, not an
-                # incomplete token-only projection after process restart.
-                if missing["provider_result_json"]:
-                    try:
-                        receipt = json.loads(missing["provider_result_json"])
-                        receipt_usage = receipt.get("usage") if isinstance(receipt, dict) else None
-                        usage = dict(receipt_usage) if isinstance(receipt_usage, dict) else {}
-                    except (TypeError, ValueError):
-                        usage = {}
-                elif _confirmed_unbilled_claude_row(missing):
-                    # The worker persisted a definitive HTTP rejection plus
-                    # explicit zero counts before clearing its lease. It has
-                    # no message id/receipt and must remain free after restart.
-                    continue
-                has_terminal_usage = (
-                    usage.get("input_tokens") is not None
-                    and usage.get("output_tokens") is not None
-                    and missing["error_code"] != "submission_outcome_unknown"
-                )
-                if not has_terminal_usage and _reservation_released(
-                    missing["status"],
-                    missing["error_code"],
-                    missing["openai_response_id"],
-                    missing["model"],
-                    missing["submission_started_at"],
-                ):
-                    # 规则确认零计费的行本来就记 0；每次初始化都会走到这里，
-                    # 不能把它们回填成满额预留。
-                    continue
-                charge = (
-                    _settled_budget_charge_microusd(
-                        str(missing["job_type"]),
-                        usage,
-                        fallback_microusd=reservation,
-                        model=str(missing["model"]),
+            if backfill is None:
+                missing_charges = connection.execute(
+                    _MISSING_CHARGES_SQL
+                ).fetchall()
+            else:
+                missing_charges = []
+                for offset in range(0, len(backfill.charge_job_ids), 500):
+                    chunk = backfill.charge_job_ids[offset : offset + 500]
+                    missing_charges.extend(
+                        connection.execute(
+                            _MISSING_CHARGES_SQL
+                            + f" AND job_id IN ({','.join('?' for _ in chunk)})",
+                            chunk,
+                        ).fetchall()
                     )
-                    if has_terminal_usage
-                    else reservation
-                )
+            for missing in missing_charges:
+                charge = _backfilled_budget_charge(missing)
+                if charge is None:
+                    continue
                 connection.execute(
                     """UPDATE ai_jobs SET budget_charge_microusd=?
                        WHERE job_id=? AND budget_charge_microusd=0""",
@@ -1572,12 +1687,18 @@ class AIJobRepository:
         *,
         retain_days: int,
         now: datetime | None = None,
+        batch_size: int = 500,
     ) -> int:
         """Delete settled news and focus jobs older than ``retain_days``.
 
         新闻与焦点任务此前从不清理，reconcile 每轮把它们全量读进内存并重校验，
         开销随历史线性增长且全程持写锁（2026-09-25 审计）。只删终态行；创建与
         完成时间都要早于截止点，当天才结算的积压任务仍留在当日 token 账里。
+        候选在写锁外只读选出；每批一个短写事务，批内按同一条件复核后再删，
+        首次清理上万行时其它写入方（认领、入队、取消）仍能在批间拿到写锁。
+        带付费回执（provider_result_json）的失败任务永不删除：被本地校验误判
+        失败的结果只能靠这份回执离线找回（recover_ai_schema_results），备份只留
+        一份时删了就无从恢复。
         """
 
         if (
@@ -1586,39 +1707,57 @@ class AIJobRepository:
             or retain_days < 1
         ):
             raise ValueError("invalid_scheduled_history_retain_days")
+        if isinstance(batch_size, bool) or not 1 <= int(batch_size) <= 900:
+            raise ValueError("invalid_scheduled_history_batch_size")
         self.ensure_initialized()
         observed = (now or _utcnow()).astimezone(timezone.utc)
         cutoff = _iso(observed - timedelta(days=retain_days))
         job_types = list(_SCHEDULED_HISTORY_JOB_TYPES)
         statuses = sorted(_TERMINAL)
+        settled = (
+            f"""job_type IN ({",".join("?" for _ in job_types)})
+                AND status IN ({",".join("?" for _ in statuses)})
+                AND created_at<?
+                AND COALESCE(completed_at,updated_at,created_at)<?
+                AND NOT (status='failed' AND provider_result_json IS NOT NULL)"""
+        )
+        settled_parameters = (*job_types, *statuses, cutoff, cutoff)
         with self._connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
             expired_ids = [
                 str(row["job_id"])
                 for row in connection.execute(
-                    f"""SELECT job_id FROM ai_jobs
-                        WHERE job_type IN ({",".join("?" for _ in job_types)})
-                          AND status IN ({",".join("?" for _ in statuses)})
-                          AND created_at<?
-                          AND COALESCE(completed_at,updated_at,created_at)<?""",
-                    (*job_types, *statuses, cutoff, cutoff),
+                    f"SELECT job_id FROM ai_jobs WHERE {settled}",
+                    settled_parameters,
                 ).fetchall()
             ]
-            # 首次清理可能是上万行，分批绑定参数，避开 SQLite 的变量个数上限。
-            for offset in range(0, len(expired_ids), 500):
-                chunk = expired_ids[offset : offset + 500]
-                placeholders = ",".join("?" for _ in chunk)
-                for table in (
-                    "ai_job_sources",
-                    "ai_job_batch_members",
-                    "ai_jobs",
-                ):
-                    connection.execute(
-                        f"DELETE FROM {table} WHERE job_id IN ({placeholders})",
-                        chunk,
-                    )
-            connection.commit()
-            return len(expired_ids)
+        deleted = 0
+        for offset in range(0, len(expired_ids), int(batch_size)):
+            chunk = expired_ids[offset : offset + int(batch_size)]
+            placeholders = ",".join("?" for _ in chunk)
+            with self._connect() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                still_settled = [
+                    str(row["job_id"])
+                    for row in connection.execute(
+                        f"""SELECT job_id FROM ai_jobs
+                            WHERE job_id IN ({placeholders}) AND {settled}""",
+                        (*chunk, *settled_parameters),
+                    ).fetchall()
+                ]
+                if still_settled:
+                    marks = ",".join("?" for _ in still_settled)
+                    for table in (
+                        "ai_job_sources",
+                        "ai_job_batch_members",
+                        "ai_jobs",
+                    ):
+                        connection.execute(
+                            f"DELETE FROM {table} WHERE job_id IN ({marks})",
+                            still_settled,
+                        )
+                connection.commit()
+            deleted += len(still_settled)
+        return deleted
 
     @staticmethod
     def _lane_occupants(
@@ -1867,6 +2006,64 @@ class AIJobRepository:
             (now, now, *parameters),
         ).fetchone()
 
+    @contextmanager
+    def _connect_read_only(self) -> Iterator[sqlite3.Connection]:
+        uri = self.path.resolve().as_uri() + "?mode=ro"
+        connection = sqlite3.connect(uri, uri=True, timeout=5.0)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA busy_timeout=5000")
+        try:
+            yield connection
+        finally:
+            connection.close()
+
+    def active_queue_signature(self) -> tuple[int, str | None] | None:
+        """Changes when an active job is added, updated, cancelled or settled.
+
+        The worker polls this to wake its idle AI loop; it is read-only and
+        served by ``idx_ai_jobs_due``.
+        """
+
+        if not self.path.is_file():
+            return None
+        with self._connect_read_only() as connection:
+            row = connection.execute(
+                """SELECT COUNT(*),MAX(updated_at) FROM ai_jobs
+                   WHERE status IN ('pending','queued','in_progress')"""
+            ).fetchone()
+        return int(row[0]), row[1]
+
+    def next_due_delay(self, *, now: datetime | None = None) -> float | None:
+        """Seconds until the earliest active job is due and unleased.
+
+        ``0.0`` means a job is due now; ``None`` means nothing is active.
+        """
+
+        if not self.path.is_file():
+            return None
+        observed = now or _utcnow()
+        with self._connect_read_only() as connection:
+            rows = connection.execute(
+                """SELECT next_attempt_at,lease_expires_at FROM ai_jobs
+                   WHERE status IN ('pending','queued','in_progress')"""
+            ).fetchall()
+        delays: list[float] = []
+        for row in rows:
+            moments = [
+                moment
+                for moment in (
+                    _parse_time(row["next_attempt_at"]),
+                    _parse_time(row["lease_expires_at"]),
+                )
+                if moment is not None
+            ]
+            delays.append(
+                max(0.0, (max(moments) - observed).total_seconds())
+                if moments
+                else 0.0
+            )
+        return min(delays) if delays else None
+
     def claim_due(
         self,
         owner: str,
@@ -1882,6 +2079,15 @@ class AIJobRepository:
         now = _iso(now_dt)
         lease_expires = _iso(now_dt + timedelta(seconds=lease_seconds))
         with self._connect() as connection:
+            # 空队列不拿写锁：先用只读查询看有没有到期且未被租走的任务。worker
+            # 空闲时每轮都会走到这里，原先每次都开一个空的 BEGIN IMMEDIATE，
+            # 与后端入队、取消抢 ai-jobs.db 的写锁。
+            if self._next_due_candidate(
+                connection,
+                now=now,
+                blocked_scopes=set(),
+            ) is None:
+                return None
             connection.execute("BEGIN IMMEDIATE")
             # 不可提交车道上尚未提交的任务直接跳过，不再「认领、构造请求、过
             # 闸门、推迟两秒」地空转：那样每秒两个写事务，还让被挡住的车道

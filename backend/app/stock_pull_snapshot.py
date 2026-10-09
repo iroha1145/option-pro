@@ -290,13 +290,18 @@ def validate_stock_pull_payload(
 
 def _load_validated_document(
     path: Path,
+    *,
+    admit: bool = True,
 ) -> tuple[tuple[int, int, int] | None, dict[str, dict[str, dict[str, Any]]]]:
     """Read and structurally validate one immutable on-disk document version.
 
     The identity names the file version the entries were read from, or is None
-    when no usable version was read.
+    when no usable version was read. ``admit=False`` refreshes a path already
+    in the document cache but never adds one, so a wide summary scan cannot
+    evict the documents that full reads keep reusing.
     """
 
+    was_cached = _snapshot_cache_key(path) in _snapshot_document_cache
     try:
         if _path_has_symlink_boundary(path):
             _drop_cached_document(path)
@@ -349,7 +354,8 @@ def _load_validated_document(
             or not isinstance(document.get("entries"), dict)
             or len(document["entries"]) > STOCK_PULL_SNAPSHOT_MAX_TICKERS
         ):
-            _cache_document(path, identity, {})
+            if admit or was_cached:
+                _cache_document(path, identity, {})
             return identity, {}
 
         cleaned_entries: dict[str, dict[str, dict[str, Any]]] = {}
@@ -388,7 +394,8 @@ def _load_validated_document(
                 }
             if resources:
                 cleaned_entries[ticker] = resources
-        _cache_document(path, identity, cleaned_entries)
+        if admit or was_cached:
+            _cache_document(path, identity, cleaned_entries)
         return identity, cleaned_entries
     except (
         OSError,
@@ -503,7 +510,7 @@ def _read_summary(path: Path) -> dict[str, dict[str, dict[str, Any]]]:
     if cached is not None and cached[0] == identity:
         _snapshot_summary_cache.move_to_end(key)
         return cached[1]
-    loaded_identity, entries = _load_validated_document(path)
+    loaded_identity, entries = _load_validated_document(path, admit=False)
     summary = _summarize_document(entries)
     if loaded_identity is None:
         _snapshot_summary_cache.pop(key, None)
@@ -549,7 +556,9 @@ def write_stock_pull_resources(
     *,
     path: Path | None = None,
     now: float | None = None,
+    durable: bool = True,
 ) -> set[str]:
+    """``durable=False`` skips both fsyncs, for bundles the worker regenerates."""
     symbol = ticker.upper().strip()
     if not _TICKER_PATTERN.fullmatch(symbol):
         raise ValueError("stock pull ticker is invalid")
@@ -634,23 +643,25 @@ def write_stock_pull_resources(
         try:
             with os.fdopen(descriptor, "wb") as handle:
                 handle.write(encoded)
-                handle.flush()
-                os.fsync(handle.fileno())
+                if durable:
+                    handle.flush()
+                    os.fsync(handle.fileno())
             if _path_has_symlink_boundary(target):
                 raise ValueError(
                     "stock pull snapshot path must not cross a symlink"
                 )
             os.replace(temporary_name, target)
-            directory_flags = os.O_RDONLY
-            if hasattr(os, "O_DIRECTORY"):
-                directory_flags |= os.O_DIRECTORY
-            if hasattr(os, "O_CLOEXEC"):
-                directory_flags |= os.O_CLOEXEC
-            directory_descriptor = os.open(target.parent, directory_flags)
-            try:
-                os.fsync(directory_descriptor)
-            finally:
-                os.close(directory_descriptor)
+            if durable:
+                directory_flags = os.O_RDONLY
+                if hasattr(os, "O_DIRECTORY"):
+                    directory_flags |= os.O_DIRECTORY
+                if hasattr(os, "O_CLOEXEC"):
+                    directory_flags |= os.O_CLOEXEC
+                directory_descriptor = os.open(target.parent, directory_flags)
+                try:
+                    os.fsync(directory_descriptor)
+                finally:
+                    os.close(directory_descriptor)
             identity = _path_file_identity(target)
             if identity is None:
                 raise ValueError("stock pull snapshot is not a regular file")

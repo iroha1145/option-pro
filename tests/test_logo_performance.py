@@ -264,3 +264,70 @@ def test_racing_fetch_rejects_oversized_wrong_type_and_private_redirects(monkeyp
             assert e.value.status_code == 404
         assert '127.0.0.1' not in visited
     asyncio.run(scenario())
+
+
+def test_logo_misses_carry_short_private_cache_lifetimes(monkeypatch):
+    """Visitor misses and negative answers must not repeat on every page view."""
+
+    stocks._endpoint_cache.clear()
+
+    async def unexpected(symbol):
+        raise AssertionError("public upstream request")
+
+    monkeypatch.setattr(stocks, "_fetch_company_logo", unexpected)
+    with pytest.raises(HTTPException) as visitor_miss:
+        asyncio.run(stocks._cached_company_logo("COLD", allow_refresh=False))
+    assert visitor_miss.value.status_code == 503
+    assert visitor_miss.value.headers["Cache-Control"] == "private, max-age=300"
+
+    with pytest.raises(HTTPException) as invalid:
+        asyncio.run(stocks._cached_company_logo("AAPL!", allow_refresh=False))
+    assert invalid.value.status_code == 404
+    assert invalid.value.headers["Cache-Control"].startswith("private, max-age=")
+
+    now = stocks.time.time()
+    stocks._endpoint_cache["logo:GONE"] = stocks._EndpointCacheEntry(
+        now + 60, now + 60, now, dict(stocks._LOGO_NOT_FOUND),
+    )
+    stocks._endpoint_cache["logo:DOWN"] = stocks._EndpointCacheEntry(
+        now + 60, now + 60, now, dict(stocks._LOGO_UNAVAILABLE),
+    )
+    with pytest.raises(HTTPException) as missing:
+        asyncio.run(stocks._cached_company_logo("GONE", allow_refresh=False))
+    assert missing.value.status_code == 404
+    assert missing.value.headers["Cache-Control"] == (
+        f"private, max-age={stocks._LOGO_NOT_FOUND_TTL}"
+    )
+    with pytest.raises(HTTPException) as down:
+        asyncio.run(stocks._cached_company_logo("DOWN", allow_refresh=False))
+    assert down.value.status_code == 503
+    assert down.value.headers == {"Retry-After": "60", "Cache-Control": "private, max-age=60"}
+    stocks._endpoint_cache.clear()
+
+
+def test_gateway_keeps_the_logo_miss_lifetime_instead_of_no_store(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app import main
+
+    class Visitor:
+        mode = "password"
+        visitor_ai_actions = False
+        visitor_live_pulls = False
+
+        def request_is_owner(self, _request):
+            return False
+
+    async def unexpected(symbol):
+        raise AssertionError("public upstream request")
+
+    stocks._endpoint_cache.clear()
+    monkeypatch.setattr(stocks, "_fetch_company_logo", unexpected)
+    monkeypatch.setattr(stocks.company_logo_cache, "read", lambda symbol, now: None)
+    app = FastAPI()
+    app.include_router(stocks.router)
+    client = TestClient(main._GatewayMiddleware(app, access_runtime=Visitor()), base_url="https://testserver")
+    response = client.get("/api/stocks/COLD/logo")
+    assert response.status_code == 503
+    assert response.headers["cache-control"] == "private, max-age=300"

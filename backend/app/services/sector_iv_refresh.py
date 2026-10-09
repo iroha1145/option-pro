@@ -67,6 +67,21 @@ class SectorIVRefreshStore:
         finally:
             connection.close()
 
+    def queued_signature(self) -> tuple[int, float | None] | None:
+        """Read-only view of queued sectors for the worker's wake probe."""
+
+        if not self.path.is_file():
+            return None
+        uri = self.path.resolve().as_uri() + "?mode=ro"
+        connection = sqlite3.connect(uri, uri=True, timeout=5)
+        try:
+            row = connection.execute(
+                "SELECT COUNT(*), MAX(requested_at) FROM sector_refresh WHERE status='queued'"
+            ).fetchone()
+        finally:
+            connection.close()
+        return int(row[0]), row[1]
+
     def _row(self, connection, sector_id: str, now: float):
         if sector_id not in SECTORS:
             raise ValueError("Unknown sector")
