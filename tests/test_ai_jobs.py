@@ -1868,6 +1868,18 @@ def test_fresh_database_has_every_column_and_registry_row_production_has(
     }
 
 
+def test_retired_identity_row_with_another_checksum_stops_initialize(tmp_path):
+    database = tmp_path / "ai-jobs.db"
+    AIJobRepository(database).initialize()
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE ai_job_schema SET checksum='other' WHERE version='ai-job-identities-v2'"
+        )
+
+    with pytest.raises(RuntimeError, match="ai_job_identity_migration_checksum_mismatch"):
+        AIJobRepository(database).initialize()
+
+
 def test_paid_schema_failure_recovery_rejects_wrong_response_or_invalid_result(
     tmp_path,
 ):

@@ -538,18 +538,28 @@ class AIJobRepository:
                     _iso(),
                 ),
             )
-            # Marks a retired one-shot identity rewrite. New stores record it
-            # too, so their registry matches production and an older release
-            # never replays the rewrite.
-            connection.execute(
-                """INSERT OR IGNORE INTO ai_job_schema(version,checksum,applied_at)
-                   VALUES(?,?,?)""",
-                (
-                    _IDENTITY_MIGRATION_VERSION,
-                    _IDENTITY_MIGRATION_CHECKSUM,
-                    _iso(),
-                ),
-            )
+            identity_migration = connection.execute(
+                "SELECT checksum FROM ai_job_schema WHERE version=?",
+                (_IDENTITY_MIGRATION_VERSION,),
+            ).fetchone()
+            if (
+                identity_migration is not None
+                and identity_migration["checksum"]
+                != _IDENTITY_MIGRATION_CHECKSUM
+            ):
+                raise RuntimeError("ai_job_identity_migration_checksum_mismatch")
+            if identity_migration is None:
+                # The one-shot rewrite is retired; new stores still record its
+                # row so their registry matches production.
+                connection.execute(
+                    """INSERT INTO ai_job_schema(version,checksum,applied_at)
+                       VALUES(?,?,?)""",
+                    (
+                        _IDENTITY_MIGRATION_VERSION,
+                        _IDENTITY_MIGRATION_CHECKSUM,
+                        _iso(),
+                    ),
+                )
             # Rows from before source-aware identities cannot be classified.
             # Keep those conservative: only the manual switch may release them.
             connection.execute(

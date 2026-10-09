@@ -435,6 +435,26 @@ def test_fresh_store_registry_matches_production(tmp_path):
     }
 
 
+def test_retired_timestamp_row_with_another_checksum_stops_initialize(tmp_path):
+    _etl, _ai, intelligence = _stack(tmp_path)
+    intelligence.initialize()
+    with sqlite3.connect(intelligence.db_path) as connection:
+        connection.execute(
+            "UPDATE catalyst_local_schema SET checksum='other' WHERE version=?",
+            (local_module.TIMESTAMP_NORMALIZATION_VERSION,),
+        )
+
+    with pytest.raises(
+        RuntimeError, match="local_catalyst_timestamp_normalization_checksum_mismatch",
+    ):
+        LocalCatalystIntelligence(
+            intelligence.db_path,
+            intelligence.ai_repository,
+            mode="manual",
+            canonical_tickers=("NVDA",),
+        ).initialize()
+
+
 def test_prune_journal_removes_stale_items_and_keeps_live_history(tmp_path):
     etl, _, intelligence = _stack(tmp_path)
     now = datetime.now(timezone.utc).replace(microsecond=0)

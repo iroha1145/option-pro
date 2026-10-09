@@ -1691,18 +1691,31 @@ class LocalCatalystIntelligence:
                    ) VALUES(?,?,?)""",
                 (SCHEMA_VERSION, SCHEMA_CHECKSUM, _iso()),
             )
-            # The timestamp row marks a retired one-shot normalization; new
-            # stores record it too so their registry matches production.
-            connection.execute(
-                """INSERT OR IGNORE INTO catalyst_local_schema(
-                       version,checksum,applied_at
-                   ) VALUES(?,?,?)""",
-                (
-                    TIMESTAMP_NORMALIZATION_VERSION,
-                    TIMESTAMP_NORMALIZATION_CHECKSUM,
-                    _iso(),
-                ),
-            )
+            timestamp_row = connection.execute(
+                "SELECT checksum FROM catalyst_local_schema WHERE version=?",
+                (TIMESTAMP_NORMALIZATION_VERSION,),
+            ).fetchone()
+            if (
+                timestamp_row is not None
+                and str(timestamp_row["checksum"])
+                != TIMESTAMP_NORMALIZATION_CHECKSUM
+            ):
+                raise RuntimeError(
+                    "local_catalyst_timestamp_normalization_checksum_mismatch"
+                )
+            if timestamp_row is None:
+                # The one-shot normalization is retired; new stores still record
+                # its row so their registry matches production.
+                connection.execute(
+                    """INSERT OR IGNORE INTO catalyst_local_schema(
+                           version,checksum,applied_at
+                       ) VALUES(?,?,?)""",
+                    (
+                        TIMESTAMP_NORMALIZATION_VERSION,
+                        TIMESTAMP_NORMALIZATION_CHECKSUM,
+                        _iso(),
+                    ),
+                )
             connection.commit()
         self._local_schema_ready = True
 
