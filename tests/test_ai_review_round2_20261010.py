@@ -295,3 +295,17 @@ def test_s3r2_more_it_phrases_publish(text):
 def test_s3r2_it_in_security_context_still_needs_binding(text):
     with pytest.raises(ValueError):
         _news_field(text)
+
+
+# --- Suggestion 4. The fetch_failed reason is translated ----------------------
+
+
+def test_s4r2_fetch_failed_is_published_in_chinese():
+    assert _news_field(
+        "正文因fetch_failed不可用。", article_status="unavailable", article_reason="fetch_failed",
+    ) == "正文因抓取失败不可用。"
+
+
+def test_s4r2_fetch_failed_is_translated_only_when_it_is_this_payloads_reason():
+    with pytest.raises(ValueError, match="english_prose_not_allowed"):
+        _news_field("正文因fetch_failed不可用。", article_status="unavailable", article_reason="timeout")

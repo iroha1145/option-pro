@@ -2659,6 +2659,7 @@ _NEWS_STATUS_LABELS = {
     "no_matching_article_body": "未找到匹配正文",
     "publisher_url_unavailable": "发布方网址不可用",
     "redirect_limit": "重定向次数超限",
+    "fetch_failed": "抓取失败",
 }
 
 
