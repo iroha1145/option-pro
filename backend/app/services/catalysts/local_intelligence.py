@@ -1790,6 +1790,9 @@ class LocalCatalystIntelligence:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute("PRAGMA busy_timeout=5000")
+        # Window views sort revision rows with their article bodies; spilling
+        # those sorts to SQLITE_TMPDIR rewrote and deleted megabytes per read.
+        connection.execute("PRAGMA temp_store=MEMORY")
         if not owner_access:
             connection.execute("PRAGMA query_only=ON")
         try:
@@ -2369,6 +2372,9 @@ class LocalCatalystIntelligence:
             connection = sqlite3.connect(uri, uri=True, timeout=2.0)
             connection.row_factory = sqlite3.Row
             connection.execute("PRAGMA query_only=ON")
+            # The window snapshot sorts tens of MB of job rows; keep the sort
+            # in memory instead of spilling temp files onto the data volume.
+            connection.execute("PRAGMA temp_store=MEMORY")
             if requested_ids is None and requested_news_ids is None:
                 created_filter = (
                     "" if created_since is None else "AND j.created_at>=?"
@@ -2400,7 +2406,7 @@ class LocalCatalystIntelligence:
                                 LEFT JOIN ai_job_sources s
                                   ON s.job_id=j.job_id
                                 WHERE j.job_id IN ({placeholders})
-                                  AND j.job_type IN (
+                                  AND +j.job_type IN (
                                       'news_impact','market_focus'
                                   )""",
                             tuple(chunk),

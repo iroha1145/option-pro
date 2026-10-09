@@ -682,3 +682,61 @@ def test_rejected_results_are_revalidated_once_per_process(
             (job["job_id"],),
         ).fetchall()
     assert [row[0] for row in outcome] == ["rejected"]
+
+
+def test_job_snapshot_by_ids_uses_the_job_primary_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    intelligence = _analyzed_store(tmp_path, monkeypatch)
+    for index in range(40):
+        _create_news_job(intelligence.ai_repository, 500 + index)
+    with intelligence.ai_repository._connect() as connection:
+        job_ids = [row[0] for row in connection.execute("SELECT job_id FROM ai_jobs LIMIT 8")]
+    statements: list[str] = []
+    real_connect = local_module.sqlite3.connect
+
+    def traced_connect(*args, **kwargs):
+        connection = real_connect(*args, **kwargs)
+        connection.set_trace_callback(statements.append)
+        return connection
+
+    monkeypatch.setattr(local_module.sqlite3, "connect", traced_connect)
+    snapshot = intelligence._ai_job_snapshot(job_ids=job_ids, input_only=True)
+    monkeypatch.setattr(local_module.sqlite3, "connect", real_connect)
+    assert set(snapshot) == set(job_ids)
+    query = next(statement for statement in statements if "WHERE j.job_id IN" in statement)
+    with intelligence.ai_repository._connect() as connection:
+        plan = " ".join(str(row[3]) for row in connection.execute("EXPLAIN QUERY PLAN " + query))
+    # Without statistics a job_type equality used to pick idx_ai_jobs_ticker and
+    # scan every news and focus job for a handful of ids.
+    assert "idx_ai_jobs_ticker" not in plan
+    assert "job_id=?" in plan
+
+
+def test_catalyst_connections_keep_sorts_in_memory(tmp_path: Path) -> None:
+    intelligence = _stack(tmp_path)
+    with intelligence._connect() as connection:
+        assert connection.execute("PRAGMA temp_store").fetchone()[0] == 2
+    with request_owner_access_context(False):
+        with intelligence._connect() as connection:
+            assert connection.execute("PRAGMA temp_store").fetchone()[0] == 2
+
+
+def _create_news_job(repository: AIJobRepository, news_id: int) -> None:
+    from app.services.ai_jobs import runtime as ai_runtime
+
+    model = "gpt-5.6-terra"
+    version, digest = ai_runtime.schema_identity("news_impact", model=model)
+    repository.create_job(
+        job_type="news_impact",
+        payload={"news_id": news_id, "change_sequence": 1, "content_hash": f"hash-{news_id}"},
+        model=model,
+        reasoning="max",
+        execution_mode="background",
+        prompt_version=ai_runtime.PROMPT_VERSIONS["news_impact"],
+        schema_version=version,
+        schema_sha256=digest,
+        max_queued=500,
+        submission_source="scheduled",
+        priority=50,
+    )
