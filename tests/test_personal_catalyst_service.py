@@ -1827,7 +1827,7 @@ def test_analysis_capacity_errors_keep_their_http_and_retry_semantics(
         assert response.headers["Retry-After"] == str(retry_after)
 
 
-def test_scheduled_work_in_flight_leaves_owner_analysis_available(
+def test_scheduled_openai_work_uses_shared_provider_slot(
     tmp_path, monkeypatch,
 ):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
@@ -1859,10 +1859,19 @@ def test_scheduled_work_in_flight_leaves_owner_analysis_available(
         lambda: runtime_settings,
     )
 
-    availability = _service("manual", repository=repository).analysis_availability()
+    service = _service("manual", repository=repository)
+    assert service.ai_settings.openai_max_concurrency == 1
+    availability = service.analysis_availability()
+    assert availability["reason"] == "analysis_in_progress"
+    assert availability["concurrency_available"] is False
 
-    assert availability["reason"] == "available"
-    assert availability["concurrency_available"] is True
+    repository.fail(job["job_id"], "lane-owner", "provider_failed", usage={
+        "input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0,
+        "reasoning_tokens": 0, "total_tokens": 0,
+    })
+    available_after_release = service.analysis_availability()
+    assert available_after_release["reason"] == "available"
+    assert available_after_release["concurrency_available"] is True
 
 
 @pytest.mark.parametrize(

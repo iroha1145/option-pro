@@ -279,8 +279,11 @@ def _fetch_grouped_session(session: date) -> dict[str, Any]:
         {"adjusted": "false", "include_otc": "false"},
     )
     rows = payload.get("results")
-    if payload.get("status") not in {None, "OK"}:
-        raise massive.MassiveError("grouped daily provider status was not OK", code="protocol")
+    # DELAYED describes the feed's recency, not a failed response. Live callers
+    # select a closed session past the settle buffer; the content checks below
+    # and the worker's coverage/benchmark gates still decide completeness.
+    if payload.get("status") not in {None, "OK", "DELAYED"}:
+        raise massive.MassiveError("grouped daily provider status was not OK or DELAYED", code="protocol")
     declared = payload.get("resultsCount")
     if (rows is None or rows == []) and _integer(declared) in {None, 0}:
         # The calendar expects a session on this day, so no rows means an

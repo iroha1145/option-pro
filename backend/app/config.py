@@ -48,7 +48,7 @@ class Settings(BaseSettings):
         default=False,
         alias="OPENAI_REQUIRE_ZDR",
     )
-    openai_model: Literal["claude-haiku-5-5", "gpt-5.6-terra"] = Field(
+    openai_model: Literal["claude-haiku-5-5", "gpt-5.6-terra", "gpt-5.6-luna", "claude-sonnet-5-5"] = Field(
         default=_PERSONAL_CONFIG.ai.model,
         alias="OPENAI_MODEL",
     )
@@ -56,6 +56,10 @@ class Settings(BaseSettings):
         default=_PERSONAL_CONFIG.ai.reasoning,
         alias="OPENAI_REASONING",
     )
+    openai_news_model: Literal["gpt-5.6-luna", "gpt-5.6-terra", "claude-haiku-5-5"] | None = Field(default=_PERSONAL_CONFIG.ai.news_model, alias="OPENAI_NEWS_MODEL")
+    openai_news_reasoning: Literal["max", "xhigh"] | None = Field(default=_PERSONAL_CONFIG.ai.news_reasoning, alias="OPENAI_NEWS_REASONING")
+    openai_market_focus_model: Literal["claude-sonnet-5-5", "claude-haiku-5-5"] | None = Field(default=_PERSONAL_CONFIG.ai.market_focus_model, alias="OPENAI_MARKET_FOCUS_MODEL")
+    openai_market_focus_reasoning: Literal["xhigh"] | None = Field(default=_PERSONAL_CONFIG.ai.market_focus_reasoning, alias="OPENAI_MARKET_FOCUS_REASONING")
     openai_timeout_seconds: float = Field(
         default=900.0,
         ge=5.0,
@@ -89,6 +93,10 @@ class Settings(BaseSettings):
     model_budget_start_at: datetime | None = Field(
         default=_PERSONAL_CONFIG.model_budget.accounting_start_at,
         alias="MODEL_BUDGET_START_AT",
+    )
+    model_budget_enforce_limit: bool = Field(
+        default=_PERSONAL_CONFIG.model_budget.enforce_limit,
+        alias="MODEL_BUDGET_ENFORCE_LIMIT",
     )
     openai_daily_token_limit: int = Field(
         default=_PERSONAL_CONFIG.ai.daily_token_limit,
@@ -312,6 +320,10 @@ class Settings(BaseSettings):
     ) -> None:
         normalized = dict(values)
         personal_runtime = {
+            "openai_news_model": _PERSONAL_CONFIG.ai.news_model,
+            "openai_news_reasoning": _PERSONAL_CONFIG.ai.news_reasoning,
+            "openai_market_focus_model": _PERSONAL_CONFIG.ai.market_focus_model,
+            "openai_market_focus_reasoning": _PERSONAL_CONFIG.ai.market_focus_reasoning,
             "openai_model": _PERSONAL_CONFIG.ai.model,
             "openai_reasoning": _PERSONAL_CONFIG.ai.reasoning,
             "openai_max_concurrency": _PERSONAL_CONFIG.ai.max_concurrency,
@@ -319,6 +331,7 @@ class Settings(BaseSettings):
             "openai_daily_budget_usd": _PERSONAL_CONFIG.ai.daily_budget_usd,
             "model_daily_budget_usd": _PERSONAL_CONFIG.model_budget.daily_budget_usd,
             "model_budget_start_at": _PERSONAL_CONFIG.model_budget.accounting_start_at,
+            "model_budget_enforce_limit": _PERSONAL_CONFIG.model_budget.enforce_limit,
             "openai_daily_token_limit": _PERSONAL_CONFIG.ai.daily_token_limit,
             "openai_manual_cooldown_seconds": (
                 _PERSONAL_CONFIG.catalyst.manual_refresh_cooldown_seconds
@@ -396,9 +409,17 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_openai_runtime(self) -> "Settings":
-        expected_reasoning = "xhigh" if self.openai_model == "claude-haiku-5-5" else "max"
+        expected_reasoning = "xhigh" if self.openai_model.startswith("claude-") else "max"
         if self.openai_reasoning != expected_reasoning:
             raise ValueError("AI model and reasoning must use a supported pair")
+        selected = self.openai_news_model or self.openai_model
+        effort = self.openai_news_reasoning
+        if effort is not None and effort != ("xhigh" if selected.startswith("claude-") else "max"):
+            raise ValueError("AI task model and reasoning must use a supported pair")
+        selected = self.openai_market_focus_model or self.openai_model
+        effort = self.openai_market_focus_reasoning
+        if effort is not None and effort != ("xhigh" if selected.startswith("claude-") else "max"):
+            raise ValueError("AI task model and reasoning must use a supported pair")
         if self.openai_model == "gpt-5.6-terra" and self.openai_max_concurrency != 1:
             raise ValueError("legacy OpenAI configuration supports concurrency 1 only")
         if self.allow_custom_openai_base_url:

@@ -1865,6 +1865,32 @@ def _longest_unbound_foreign_span(
     return max(spans, key=len, default=text)
 
 
+def _news_source_bound_name(
+    span: str, sentence: str, start: int, end: int, payload: dict,
+) -> bool:
+    """News-only product series and legal names, bound to the supplied source."""
+    sources = _validation_source_texts("news_impact", payload)
+    if re.search(r"(?:股票代码|证券代码|交易代码|代码)[：:、\s]*$", sentence[:start]):
+        return False
+    if re.fullmatch(r"[A-Z]", span) and sentence[end:].startswith("系列"):
+        pattern = re.compile(
+            rf"(?<![A-Za-z0-9]){re.escape(span)} series(?![A-Za-z0-9])"
+        )
+        return any(pattern.search(source) for source in sources)
+    # Only a compact hyphenated legal name, never a code or a headline clause.
+    if not 3 <= len(span) <= 60 or not re.fullmatch(
+        r"[A-Z][A-Za-z]*-[A-Za-z]+(?: [A-Z][A-Za-z]+){0,3}", span,
+    ):
+        return False
+    if not _is_source_bound_foreign_entity(span, sources):
+        return False
+    pattern = re.compile(
+        rf"(?<![A-Za-z0-9]){re.escape(span)},? "
+        r"(?:Inc\.|Ltd\.|Corporation|Limited)(?![A-Za-z0-9])"
+    )
+    return any(pattern.search(source) for source in sources)
+
+
 def validate_simplified_chinese_text(
     value: str,
     info: ValidationInfo | None,
@@ -1968,6 +1994,14 @@ def validate_simplified_chinese_text(
                 end=match.end(),
                 allowed_codes=normalized_codes,
                 source_texts=source_texts,
+            ):
+                continue
+            news_payload = (
+                info.context.get("news_payload")
+                if info is not None and isinstance(info.context, dict) else None
+            )
+            if isinstance(news_payload, dict) and _news_source_bound_name(
+                match.group(0), sentence, match.start(), match.end(), news_payload,
             ):
                 continue
             raise _english_prose_error(match.group(0))
@@ -2469,6 +2503,35 @@ class NewsCommodityImpact(StrictModel):
     reason: ZhBoundedText
 
 
+def _translate_news_metadata(value: str, payload: dict) -> str:
+    """Translate only known input labels; never rewrite facts or output keys."""
+    translations = {"allowed_tickers": "允许股票代码名单", "affected_stocks": "受影响个股"}
+    if payload.get("article_status") == "unavailable":
+        translations.update({"article_status": "正文状态", "unavailable": "不可用", "article": "新闻正文"})
+        if payload.get("article_reason") == "no_matching_article_body":
+            translations.update({"article_reason": "正文缺失原因", "no_matching_article_body": "未找到匹配正文"})
+    # Names are exact ASCII tokens, not substrings of an unknown program label.
+    tokens = "|".join(sorted(map(re.escape, translations), key=len, reverse=True))
+    pattern = re.compile(r"(?<![A-Za-z0-9_])(" + tokens + r")(?![A-Za-z0-9_])")
+
+    def replace(match: re.Match[str]) -> str:
+        if any(url.start() <= match.start() < url.end() for url in re.finditer(r"https?://[^\s，。；）]+", value)):
+            return match.group(0)
+        if _approved_span_requires_ticker_binding(match.group(0), sentence=value, start=match.start(), end=match.end()):
+            return match.group(0)
+        return translations[match.group(0)]
+    value = pattern.sub(replace, value)
+    value = re.sub(r"((?:商业|业务)发展公司)[（(]BDC[）)]", r"\1", value)
+    sources = _validation_source_texts("news_impact", payload)
+    if any(re.search(r"\bSarbanes[-– ]Oxley\b", source, re.I) for source in sources):
+        def translate_regulation(match: re.Match[str]) -> str:
+            if _approved_span_requires_ticker_binding("SOX", sentence=value, start=match.start(), end=match.end()):
+                return match.group(0)
+            return "《萨班斯—奥克斯利法案》"
+        value = re.sub(r"(?<![A-Za-z0-9_])SOX(?=认证)", translate_regulation, value)
+    return value
+
+
 class NewsImpactResult(SimplifiedChineseResult):
     news_id: StrictInt = Field(ge=1)
     change_sequence: StrictInt = Field(ge=1)
@@ -2490,6 +2553,25 @@ class NewsImpactResult(SimplifiedChineseResult):
     key_factors: list[ZhShortText] = Field(max_length=30)
     uncertainty_notes: list[ZhShortText] = Field(max_length=30)
     insufficient_context: StrictBool
+
+    @model_validator(mode="before")
+    @classmethod
+    def translate_news_input_labels(cls, value: Any, info: ValidationInfo) -> Any:
+        payload = info.context.get("news_payload") if isinstance(info.context, dict) else None
+        if not isinstance(value, dict) or not isinstance(payload, dict):
+            return value
+        result = dict(value)
+        for name in ("title_zh", "summary_zh", "headline_summary", "causal_summary"):
+            if isinstance(result.get(name), str):
+                result[name] = _translate_news_metadata(result[name], payload)
+        for name in ("key_factors", "uncertainty_notes", "affected_sectors"):
+            if isinstance(result.get(name), list):
+                result[name] = [
+                    _translate_news_metadata(item, payload)
+                    if isinstance(item, str) else item
+                    for item in result[name]
+                ]
+        return result
 
     @field_validator("affected_stocks")
     @classmethod
@@ -2619,6 +2701,88 @@ class MarketFocusResult(SimplifiedChineseResult):
         return self
 
 
+FOCUS_VERIFICATION_VERSION = "web-evidence-v1"
+
+
+class FocusEvidenceReference(StrictModel):
+    tool_use_id: Optional[Annotated[str, StringConstraints(min_length=1, max_length=256)]]
+    url: Annotated[str, StringConstraints(min_length=1, max_length=2048)]
+    relation: Literal["supports", "contradicts"]
+
+
+class FocusEventVerification(StrictModel):
+    event_group_id: Annotated[str, StringConstraints(min_length=1, max_length=100)]
+    event_group_version: StrictInt = Field(ge=1)
+    verdict: Literal["supported", "contradicted", "unverifiable"]
+    evidence_refs: list[FocusEvidenceReference] = Field(max_length=20)
+    # These independent, event-bound texts are the only news prose published.
+    # Global prose in the paid output stays available in the internal audit.
+    title_zh: ZhShortText
+    summary_zh: ZhBoundedText
+    affected_sectors: list[ZhShortText] = Field(max_length=10)
+
+
+class VerifiedMarketFocusResult(MarketFocusResult):
+    event_verifications: list[FocusEventVerification] = Field(max_length=200)
+
+
+def validate_market_focus_evidence(
+    result: dict, payload: dict, tool_evidence: list[dict] | None,
+) -> None:
+    """Bind verdicts to the immutable input and actual successful web receipts.
+
+    This verifies provenance, not real-world truth: the model still evaluates
+    whether a retrieved source supports the individual claim.
+    """
+    if payload.get("verification_version") != FOCUS_VERIFICATION_VERSION:
+        return
+    from app.services.ai_jobs.claude_provider import _public_source_url
+
+    expected = {
+        event["event_group_id"]: event["event_group_version"]
+        for event in payload.get("events", [])
+        if isinstance(event, dict)
+    }
+    verifications = result.get("event_verifications", [])
+    actual = {entry["event_group_id"]: entry["event_group_version"] for entry in verifications}
+    if len(actual) != len(verifications) or actual != expected:
+        raise ValueError("market_focus_verification_event_mismatch")
+    receipts = {
+        (entry.get("tool_use_id"), entry.get("url"))
+        for entry in tool_evidence or []
+        if isinstance(entry, dict)
+        and isinstance(entry.get("tool_use_id"), str)
+        and bool(entry["tool_use_id"])
+        and entry.get("status") == "success"
+        and entry.get("tool_name") in {"web_search", "web_fetch"}
+        and isinstance(entry.get("content_sha256"), str)
+        and re.fullmatch(r"[0-9a-f]{64}", entry["content_sha256"])
+        and _public_source_url(entry.get("url")) == entry.get("url")
+    }
+    for entry in verifications:
+        refs = entry["evidence_refs"]
+        for ref in refs:
+            normalized_url = _public_source_url(ref["url"])
+            if ref["tool_use_id"] is None:
+                # The model may not see server-generated IDs. Resolve only a
+                # unique successful call in this exact persisted receipt.
+                candidates = {call_id for call_id, url in receipts if url == normalized_url}
+                if len(candidates) != 1:
+                    raise ValueError("market_focus_verification_evidence_ambiguous")
+                ref["tool_use_id"] = candidates.pop()
+            if (ref["tool_use_id"], normalized_url) not in receipts:
+                raise ValueError("market_focus_verification_evidence_unbound")
+            ref["url"] = normalized_url
+        keys = [(ref["tool_use_id"], ref["url"]) for ref in refs]
+        if len(keys) != len(set(keys)):
+            raise ValueError("market_focus_verification_duplicate_evidence")
+        if any(key not in receipts for key in keys):
+            raise ValueError("market_focus_verification_evidence_unbound")
+        required = {"supported": "supports", "contradicted": "contradicts"}.get(entry["verdict"])
+        if required and not any(ref["relation"] == required for ref in refs):
+            raise ValueError("market_focus_verification_evidence_missing")
+
+
 class AIJobPublic(StrictModel):
     job_id: Annotated[str, StringConstraints(min_length=10, max_length=80)]
     job_type: AIJobType
@@ -2652,7 +2816,9 @@ class CancelRequest(StrictModel):
     confirm: StrictBool = True
 
 
-def result_model_for(job_type: str) -> type[BaseModel]:
+def result_model_for(
+    job_type: str, *, payload: dict | None = None, model: str | None = None,
+) -> type[BaseModel]:
     if job_type == "earnings_impact":
         return EarningsImpactResult
     if job_type == "option_alerts":
@@ -2662,6 +2828,10 @@ def result_model_for(job_type: str) -> type[BaseModel]:
     if job_type == "news_impact":
         return NewsImpactResult
     if job_type == "market_focus":
+        if (payload or {}).get("verification_version") == FOCUS_VERIFICATION_VERSION or (
+            payload is None and isinstance(model, str) and "sonnet" in model
+        ):
+            return VerifiedMarketFocusResult
         return MarketFocusResult
     raise ValueError("unsupported_job_type")
 
@@ -2779,6 +2949,21 @@ def _validate_job_payload_identities(job_type: str, payload: dict) -> None:
         )
         if any(_TICKER_PATTERN.fullmatch(ticker) is None for ticker in tickers):
             raise ValueError("allowed_tickers_invalid")
+        marker = payload.get("verification_version")
+        if marker is not None:
+            if marker != FOCUS_VERIFICATION_VERSION:
+                raise ValueError("market_focus_verification_version_invalid")
+            events = payload.get("events")
+            if not isinstance(events, list) or len(events) > 200:
+                raise ValueError("market_focus_verification_events_invalid")
+            event_ids = []
+            for event in events:
+                if not isinstance(event, dict):
+                    raise ValueError("market_focus_verification_events_invalid")
+                event_ids.append(_require_identity_text(event, "event_group_id", max_length=100))
+                _require_identity_integer(event, "event_group_version")
+            if len(set(event_ids)) != len(event_ids) or set(event_ids) != set(payload["allowed_event_group_ids"]):
+                raise ValueError("market_focus_verification_events_invalid")
         return
     if job_type == "signal_analysis":
         # 证据包 v2 的上下文代码表（并入 allowed_codes）。自建载荷始终合规，
@@ -2857,7 +3042,7 @@ _SIGNAL_BENCHMARK_CODES = ("SPY", "QQQ", "IWM", "RSP", "HYG", "TLT")
 
 
 def validate_result(job_type: str, raw_json: str, payload: dict) -> dict:
-    model = result_model_for(job_type)
+    model = result_model_for(job_type, payload=payload)
     if job_type in {"news_impact", "market_focus"}:
         raw_allowed_codes = list(payload.get("allowed_tickers") or [])
     elif job_type == "signal_analysis":
@@ -2884,6 +3069,7 @@ def validate_result(job_type: str, raw_json: str, payload: dict) -> dict:
         raw_json,
         context={
             "allowed_codes": allowed_codes,
+            "news_payload": payload if job_type == "news_impact" else None,
             "source_texts": _validation_source_texts(job_type, payload),
             "macro_conditions_status": (
                 payload["macro_conditions"].get("status")
@@ -2954,6 +3140,12 @@ def validate_result(job_type: str, raw_json: str, payload: dict) -> dict:
             output_event_ids.update(assessment["conflicting_event_ids"])
         if not output_event_ids <= allowed_event_ids:
             raise ValueError("market_focus_event_binding_mismatch")
+        if payload.get("verification_version") == FOCUS_VERIFICATION_VERSION:
+            expected = {event["event_group_id"]: event["event_group_version"] for event in payload["events"]}
+            verifications = data["event_verifications"]
+            actual = {entry["event_group_id"]: entry["event_group_version"] for entry in verifications}
+            if len(actual) != len(verifications) or actual != expected:
+                raise ValueError("market_focus_verification_event_mismatch")
         allowed_tickers = {
             str(ticker).strip().upper() for ticker in payload["allowed_tickers"]
         }

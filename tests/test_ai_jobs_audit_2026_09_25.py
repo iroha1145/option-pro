@@ -105,13 +105,14 @@ def _create(
     source: str = "scheduled",
     priority: int = 70,
     max_queued: int = 500,
+    model: str = "gpt-5.6-terra",
 ):
-    version, digest = runtime.schema_identity(job_type, model="gpt-5.6-terra")
+    version, digest = runtime.schema_identity(job_type, model=model)
     row, created = repository.create_job(
         job_type=job_type,
         payload=payload or {"ticker": "AAPL", "name": "Apple"},
-        model="gpt-5.6-terra",
-        reasoning="max",
+        model=model,
+        reasoning="xhigh" if runtime.uses_claude(model) else "max",
         execution_mode="background",
         prompt_version=runtime.PROMPT_VERSIONS[job_type],
         schema_version=version,
@@ -218,14 +219,14 @@ def _submitted_in_progress(repository, settings, monkeypatch, response_id):
 # --- AI-2: one shared "can this lane submit" check for gate, claim, snapshot
 
 
-def _simulate(repository, clock, owner, manual_id, seconds):
+def _simulate(repository, clock, owner, manual_id, seconds, *, max_concurrency=1):
     """Mimic the production loop: 0.5 s after work, 2 s when idle."""
 
     started = clock.now
     verdicts: Counter[str] = Counter()
     manual_claimed_at = None
     while (clock.now - started).total_seconds() < seconds:
-        job = repository.claim_due(owner, 60)
+        job = repository.claim_due(owner, 60, max_concurrency=max_concurrency)
         if job is None:
             verdicts["idle"] += 1
             clock.advance(2.0)
@@ -246,9 +247,21 @@ def _simulate(repository, clock, owner, manual_id, seconds):
                 job["job_id"],
                 owner,
                 daily_token_limit=100_000_000,
+                max_concurrency=max_concurrency,
             )
             verdicts[verdict] += 1
-            if verdict == "started":
+            if verdict == "started" and runtime.uses_claude(job["model"]):
+                # Simulate the independent Claude stream completing locally;
+                # never attach an OpenAI response id to a Claude task.
+                repository.link_anthropic_message(job["job_id"], owner, "msg_manual")
+                repository.complete(job["job_id"], owner, {"output_language": "zh-CN"}, {
+                    "input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0,
+                    "reasoning_tokens": 0, "total_tokens": 0,
+                    "cache_creation_input_tokens": 0, "cache_creation_5m_input_tokens": 0,
+                    "cache_creation_1h_input_tokens": 0, "web_search_requests": 0,
+                    "web_fetch_requests": 0, "code_execution_requests": 0,
+                })
+            elif verdict == "started":
                 response_id = f"resp_{job['job_id'][-8:]}"
                 repository.link_background_response(
                     job["job_id"],
@@ -273,26 +286,30 @@ def _backlog(repository, count=8):
     ]
 
 
-def _manual_focus(repository):
+def _manual_focus(repository, *, model="gpt-5.6-terra"):
     return _create(
         repository,
         "market_focus",
         {"cycle_id": "cycle-m1", "as_of": "2026-09-25T15:00:00Z"},
         source="manual",
         priority=60,
+        model=model,
     )
 
 
-def test_unknown_hold_does_not_starve_the_manual_lane(tmp_path, clock):
+def test_openai_unknown_hold_protects_its_slot_without_starving_manual_claude(tmp_path, clock):
     repository = AIJobRepository(tmp_path / "ai.db")
     owner = "lane-worker"
     stuck = _create(repository, payload={"ticker": "STUCK", "name": "s"})
     assert repository.claim_due(owner, 60)["job_id"] == stuck["job_id"]
     assert repository.mark_submission_started(stuck["job_id"], owner) == "started"
     repository.fail(stuck["job_id"], owner, "submission_outcome_unknown")
-    _backlog(repository)
+    backlog = _backlog(repository)
     clock.advance(1)
-    manual = _manual_focus(repository)
+    same_provider = _manual_focus(repository)
+    manual = _manual_focus(repository, model="claude-haiku-5-5")
+    # The omitted parameter still means one global slot, not one per lane.
+    assert repository.claim_due(owner, 60) is None
 
     verdicts, manual_claimed_at = _simulate(
         repository,
@@ -300,13 +317,18 @@ def test_unknown_hold_does_not_starve_the_manual_lane(tmp_path, clock):
         owner,
         manual["job_id"],
         seconds=1000,
+        max_concurrency=4,
     )
 
     assert manual_claimed_at == 0.0
     assert verdicts["concurrency_limit"] == 0
-    # The unknown hold still protects the scheduled lane for its 900 s window,
-    # after which exactly one backlog job takes the freed slot.
+    # Unknown billing keeps the OpenAI slot for 900 s across both lanes.
+    # Only then may one higher-priority scheduled OpenAI job start.
     assert verdicts["started"] == 2
+    assert repository.get_job(same_provider["job_id"])["attempt_count"] == 0
+    assert sum(repository.get_job(row["job_id"])["attempt_count"] for row in backlog) == 1
+    assert repository.get_job(stuck["job_id"])["error_code"] == "submission_outcome_unknown"
+    assert repository.get_job(stuck["job_id"])["attempt_count"] == 1
     with repository._connect() as connection:
         churned = connection.execute(
             "SELECT COUNT(*) FROM ai_jobs "
@@ -315,7 +337,7 @@ def test_unknown_hold_does_not_starve_the_manual_lane(tmp_path, clock):
     assert churned == 0
 
 
-def test_backlog_is_not_reclaimed_while_its_lane_is_in_flight(tmp_path, clock):
+def test_openai_backlog_is_not_reclaimed_while_manual_claude_uses_remaining_capacity(tmp_path, clock):
     repository = AIJobRepository(tmp_path / "ai.db")
     owner = "lane-worker"
     running = _create(repository, payload={"ticker": "RUN", "name": "r"})
@@ -329,9 +351,10 @@ def test_backlog_is_not_reclaimed_while_its_lane_is_in_flight(tmp_path, clock):
         "in_progress",
         delay_seconds=15,
     )
-    _backlog(repository)
+    backlog = _backlog(repository)
     clock.advance(1)
-    manual = _manual_focus(repository)
+    manual = _manual_focus(repository, model="claude-haiku-5-5")
+    assert repository.claim_due(owner, 60) is None
 
     verdicts, manual_claimed_at = _simulate(
         repository,
@@ -339,12 +362,18 @@ def test_backlog_is_not_reclaimed_while_its_lane_is_in_flight(tmp_path, clock):
         owner,
         manual["job_id"],
         seconds=600,
+        max_concurrency=4,
     )
 
     assert manual_claimed_at == 0.0
     assert verdicts["concurrency_limit"] == 0
     assert verdicts["started"] == 1
-    assert verdicts["idle"] > verdicts["poll"]
+    assert verdicts["idle"] > verdicts["poll"] > 0
+    for row in backlog:
+        stored = repository.get_job(row["job_id"])
+        assert stored["attempt_count"] == 0 and stored["lease_owner"] is None
+        assert stored["error_code"] is None
+    assert repository.get_job(running["job_id"])["attempt_count"] == 1
 
 
 def test_claim_skips_both_lanes_during_the_credit_hold(tmp_path, clock):
@@ -393,20 +422,21 @@ def test_manual_cooldown_only_follows_the_manual_lane(tmp_path, clock):
     owner = "cooldown-worker"
     usage = {"input_tokens": 10, "output_tokens": 10, "total_tokens": 20}
     batch = _create(repository, payload={"ticker": "BATCH", "name": "b"})
-    assert repository.claim_due(owner, 60)["job_id"] == batch["job_id"]
-    assert repository.mark_submission_started(batch["job_id"], owner) == "started"
+    assert repository.claim_due(owner, 60, max_concurrency=4)["job_id"] == batch["job_id"]
+    assert repository.mark_submission_started(batch["job_id"], owner, max_concurrency=4) == "started"
     repository.link_background_response(batch["job_id"], owner, "resp_batch")
     repository.complete(batch["job_id"], owner, {"output_language": "zh-CN"}, usage)
 
     clock.advance(1)
     manual = _manual_focus(repository)
-    assert repository.claim_due(owner, 60, cooldown_seconds=30)["job_id"] == (
+    assert repository.claim_due(owner, 60, cooldown_seconds=30, max_concurrency=4)["job_id"] == (
         manual["job_id"]
     )
     assert repository.mark_submission_started(
         manual["job_id"],
         owner,
         cooldown_seconds=30,
+        max_concurrency=4,
     ) == "started"
     repository.link_background_response(manual["job_id"], owner, "resp_manual")
     repository.complete(manual["job_id"], owner, {"output_language": "zh-CN"}, usage)
@@ -423,28 +453,35 @@ def test_manual_cooldown_only_follows_the_manual_lane(tmp_path, clock):
         daily_limit=0,
         daily_budget_usd=0,
         cooldown_seconds=30,
+        max_concurrency=4,
         lane="manual",
     )
     scheduled_view = repository.budget_snapshot(
         daily_limit=0,
         daily_budget_usd=0,
         cooldown_seconds=30,
+        max_concurrency=4,
         lane="scheduled",
     )
     assert manual_view["cooldown_complete"] is False
     assert scheduled_view["cooldown_complete"] is True
     # The manual job cools down; the scheduled lane does not wait for it.
-    claimed = repository.claim_due(owner, 60, cooldown_seconds=30)
+    claimed = repository.claim_due(owner, 60, cooldown_seconds=30, max_concurrency=4)
     assert claimed["job_id"] == scheduled["job_id"]
     assert repository.mark_submission_started(
         scheduled["job_id"],
         owner,
         cooldown_seconds=30,
+        max_concurrency=4,
     ) == "started"
-    assert repository.claim_due(owner, 60, cooldown_seconds=30) is None
+    assert repository.claim_due(owner, 60, cooldown_seconds=30, max_concurrency=4) is None
 
     clock.advance(30)
-    assert repository.claim_due(owner, 60, cooldown_seconds=30)["job_id"] == (
+    # Cooldown has elapsed, but the one OpenAI slot is still occupied.
+    assert repository.claim_due(owner, 60, cooldown_seconds=30, max_concurrency=4) is None
+    repository.complete(scheduled["job_id"], owner, {"output_language": "zh-CN"}, usage)
+    # Scheduled completion must not start a new manual cooldown.
+    assert repository.claim_due(owner, 60, cooldown_seconds=30, max_concurrency=4)["job_id"] == (
         second_manual["job_id"]
     )
 

@@ -15,6 +15,7 @@ from urllib.parse import quote, urlsplit
 from app.failure_diagnostics import record_fallback_failure
 from app.services.model_budget import (
     SharedModelBudget,
+    JOB_MODELS,
     can_reserve_in_transaction,
     initialize_schema as initialize_model_budget_schema,
     totals_in_transaction as model_budget_totals,
@@ -133,6 +134,14 @@ CREATE TABLE IF NOT EXISTS ai_jobs (
 );
 """
 _CLAUDE_MODEL = "claude-haiku-5-5"
+
+
+def _uses_claude(model: Any) -> bool:
+    from app.services.ai_jobs.runtime import uses_claude
+
+    return uses_claude(model)
+
+
 _CLAUDE_COLUMNS = {
     "anthropic_message_id": "TEXT",
     "provider_result_json": "TEXT CHECK(provider_result_json IS NULL OR json_valid(provider_result_json))",
@@ -219,6 +228,19 @@ ON ai_earnings_final_locks(ticker, earnings_date DESC);
 _EARNINGS_FINAL_LOCK_STATEMENTS = _statements(_EARNINGS_FINAL_LOCKS_TABLE_SQL)
 _EARNINGS_LOCK_SCHEMA_CHECKSUM = hashlib.sha256(
     _EARNINGS_FINAL_LOCKS_TABLE_SQL.encode("utf-8")
+).hexdigest()
+
+
+_PROVIDER_PROGRESS_SCHEMA_VERSION = "ai-job-provider-progress-v1"
+_PROVIDER_PROGRESS_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS ai_job_provider_progress (
+    job_id TEXT PRIMARY KEY REFERENCES ai_jobs(job_id) ON DELETE CASCADE,
+    progress_json TEXT NOT NULL CHECK(json_valid(progress_json)),
+    updated_at TEXT NOT NULL
+);
+"""
+_PROVIDER_PROGRESS_SCHEMA_CHECKSUM = hashlib.sha256(
+    _PROVIDER_PROGRESS_SCHEMA_SQL.encode("utf-8")
 ).hexdigest()
 
 
@@ -310,7 +332,7 @@ def _reservation_released(
 
     if str(status or "") not in {"failed", "cancelled"}:
         return False
-    if model == _CLAUDE_MODEL and submission_started_at:
+    if _uses_claude(model) and submission_started_at:
         return False
     code = str(error_code or "")
     if code in _RESERVATION_HOLDING_ERRORS:
@@ -325,7 +347,7 @@ def _confirmed_unbilled_claude_row(row: Mapping[str, Any]) -> bool:
     projection, the exact definitive HTTP rejection detail, and no response id.
     """
     return bool(
-        row["model"] == _CLAUDE_MODEL and row["status"] == "failed"
+        _uses_claude(row["model"]) and row["status"] == "failed"
         and row["openai_response_id"] is None and row["anthropic_message_id"] is None
         and row["provider_result_json"] is None
         and row["error_code"] in {
@@ -484,6 +506,17 @@ class AIJobRepository:
             for name, definition in _CLAUDE_COLUMNS.items():
                 if name not in columns:
                     connection.execute(f"ALTER TABLE ai_jobs ADD COLUMN {name} {definition}")
+            progress_schema = connection.execute(
+                "SELECT checksum FROM ai_job_schema WHERE version=?",
+                (_PROVIDER_PROGRESS_SCHEMA_VERSION,),
+            ).fetchone()
+            if progress_schema is not None and progress_schema["checksum"] != _PROVIDER_PROGRESS_SCHEMA_CHECKSUM:
+                raise RuntimeError("ai_job_provider_progress_schema_checksum_mismatch")
+            connection.execute(_PROVIDER_PROGRESS_SCHEMA_SQL)
+            connection.execute(
+                "INSERT OR IGNORE INTO ai_job_schema(version,checksum,applied_at) VALUES(?,?,?)",
+                (_PROVIDER_PROGRESS_SCHEMA_VERSION, _PROVIDER_PROGRESS_SCHEMA_CHECKSUM, _iso()),
+            )
             connection.execute(_AI_JOB_SOURCES_TABLE_SQL)
             source_schema = connection.execute(
                 "SELECT checksum FROM ai_job_schema WHERE version=?",
@@ -1943,7 +1976,7 @@ class AIJobRepository:
     def _concurrency_limit(model: str | None, max_concurrency: int) -> int:
         if type(max_concurrency) is not int or not 1 <= max_concurrency <= 4:
             raise ValueError("max_concurrency is invalid")
-        return max_concurrency if model == _CLAUDE_MODEL else 1
+        return max_concurrency
 
     def _submission_capacity(
         self, connection: sqlite3.Connection, *, model: str | None, lane: str | None,
@@ -1952,11 +1985,19 @@ class AIJobRepository:
     ) -> tuple[list[sqlite3.Row], int]:
         limit = self._concurrency_limit(model, max_concurrency)
         occupants = self._lane_occupants(
-            connection, lane=None if model == _CLAUDE_MODEL else lane,
+            connection, lane=None,
             now_dt=now_dt, unknown_submission_hold_seconds=unknown_submission_hold_seconds,
             exclude_job_id=exclude_job_id,
         )
         return occupants, limit
+
+    @staticmethod
+    def _provider_slot_available(model: str | None, occupants: list[sqlite3.Row]) -> bool:
+        # Both OpenAI models share one provider slot inside the global cap.
+        # Claude jobs may use the remaining slots, including across lanes.
+        return model is None or _uses_claude(model) or not any(
+            not _uses_claude(row["model"]) for row in occupants
+        )
 
     @staticmethod
     def _manual_cooldown_until(
@@ -2044,7 +2085,7 @@ class AIJobRepository:
             now_dt=now_dt, unknown_submission_hold_seconds=unknown_submission_hold_seconds,
             exclude_job_id=exclude_job_id,
         )
-        if len(occupants) >= limit:
+        if len(occupants) >= limit or not self._provider_slot_available(model, occupants):
             return "concurrency_limit", None
         if lane == "manual":
             cooldown_until = self._manual_cooldown_until(
@@ -2166,10 +2207,8 @@ class AIJobRepository:
                     break
                 if block[0] == "cooldown":
                     blocked_scopes.add((None, lane))
-                elif candidate["model"] == _CLAUDE_MODEL:
-                    blocked_scopes.add((_CLAUDE_MODEL, None))
                 else:
-                    blocked_scopes.add((str(candidate["model"]), lane))
+                    blocked_scopes.add((str(candidate["model"]), None))
             if not row:
                 connection.commit()
                 return None
@@ -2203,6 +2242,7 @@ class AIJobRepository:
         daily_budget_usd: float = 2.0,
         shared_daily_budget_usd: float = 0,
         shared_budget_start_at: datetime | None = None,
+        shared_budget_enforce_limit: bool = True,
         daily_token_limit: int = 10_000_000,
         cooldown_seconds: int = 0,
         unknown_submission_hold_seconds: int = 86400,
@@ -2239,6 +2279,7 @@ class AIJobRepository:
             SharedModelBudget(
                 self.path, shared_daily_budget_usd, self.path.parent / "market-brief",
                 accounting_start_at=shared_budget_start_at,
+                enforce_limit=shared_budget_enforce_limit,
             ).bootstrap_brief_history(now_dt)
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -2299,11 +2340,12 @@ class AIJobRepository:
                 )
                 connection.commit()
                 return verdict
-            shared_budget_enabled = shared_limit > 0 and row["model"] == _CLAUDE_MODEL
+            shared_budget_enabled = shared_limit > 0 and row["model"] in JOB_MODELS
             if shared_budget_enabled and not can_reserve_in_transaction(
                 connection, daily_budget_microusd=shared_limit,
                 reservation_microusd=reservation_microusd, now=now_dt,
                 accounting_start_at=shared_budget_start_at,
+                enforce_limit=shared_budget_enforce_limit,
             ):
                 connection.execute(
                     """UPDATE ai_jobs SET status='budget_blocked',
@@ -2361,9 +2403,9 @@ class AIJobRepository:
     def _provider_receipt_json(receipt: dict[str, Any]) -> str:
         fields = {"provider", "model", "id", "output_text", "stop_reason", "terminal_error", "usage"}
         if (not isinstance(receipt, dict) or not fields <= set(receipt)
-                or set(receipt) - fields - {"evidence_sources"}):
+                or set(receipt) - fields - {"evidence_sources", "tool_evidence", "tool_evidence_version", "request_ids", "rounds"}):
             raise ValueError("ai_job_provider_receipt_invalid")
-        if receipt["provider"] != "anthropic" or receipt["model"] != _CLAUDE_MODEL:
+        if receipt["provider"] != "anthropic" or not _uses_claude(receipt["model"]):
             raise ValueError("ai_job_provider_receipt_invalid")
         if not isinstance(receipt["id"], str) or not 1 <= len(receipt["id"]) <= 256:
             raise ValueError("ai_job_provider_receipt_invalid")
@@ -2385,6 +2427,25 @@ class AIJobRepository:
                     or any(ord(char) < 32 for char in source["title"])
                     or not _public_evidence_url(source["url"])):
                 raise ValueError("ai_job_provider_sources_invalid")
+        if "tool_evidence" in receipt or "tool_evidence_version" in receipt:
+            evidence = receipt.get("tool_evidence")
+            if (receipt.get("tool_evidence_version") != "v1"
+                    or not isinstance(evidence, list) or len(evidence) > 512):
+                raise ValueError("ai_job_provider_tool_evidence_invalid")
+            evidence_fields = {"tool_use_id", "tool_name", "status", "url", "title", "content_sha256"}
+            for item in evidence:
+                if (not isinstance(item, dict) or set(item) != evidence_fields
+                        or not isinstance(item["tool_use_id"], str) or not 1 <= len(item["tool_use_id"]) <= 256
+                        or not isinstance(item["tool_name"], str)
+                        or item["tool_name"] not in {"web_search", "web_fetch"}
+                        or item["status"] != "success"
+                        or not _public_evidence_url(item["url"])
+                        or not isinstance(item["title"], str) or len(item["title"]) > 512
+                        or any(ord(char) < 32 for char in item["title"])
+                        or not isinstance(item["content_sha256"], str)
+                        or len(item["content_sha256"]) != 64
+                        or any(char not in "0123456789abcdef" for char in item["content_sha256"])):
+                    raise ValueError("ai_job_provider_tool_evidence_invalid")
         usage = receipt["usage"]
         usage_fields = {"input_tokens", "cached_input_tokens", "output_tokens", "reasoning_tokens", "total_tokens", *_CACHE_USAGE_FIELDS}
         if (not isinstance(usage, dict) or not usage_fields <= set(usage)
@@ -2407,10 +2468,146 @@ class AIJobRepository:
                 or (complete_totals and total_tokens is not None and total_tokens != input_tokens + output_tokens)
                 or (output_tokens is not None and (usage["reasoning_tokens"] or 0) > output_tokens)):
             raise ValueError("ai_job_provider_usage_invalid")
+        if "request_ids" in receipt or "rounds" in receipt:
+            AIJobRepository._validate_provider_rounds(receipt, complete=True)
         value = json.dumps({**receipt, "evidence_sources": sources}, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
         if len(value.encode("utf-8")) > 2 * _MAX_RESULT_JSON_BYTES:
             raise ValueError("ai_job_provider_receipt_too_large")
         return value
+
+    @staticmethod
+    def _validate_provider_rounds(value: dict[str, Any], *, complete: bool) -> None:
+        from app.services.ai_jobs.claude_provider import sum_round_usage
+
+        request_ids, rounds = value.get("request_ids"), value.get("rounds")
+        if (not isinstance(request_ids, list) or not 1 <= len(request_ids) <= 4
+                or any(not isinstance(item, str) or not 1 <= len(item) <= 256 for item in request_ids)
+                or len(set(request_ids)) != len(request_ids) or request_ids[0] != value["id"]
+                or not isinstance(rounds, list) or len(rounds) > len(request_ids)
+                or len(request_ids) - len(rounds) > (0 if complete else 1)):
+            raise ValueError("ai_job_provider_rounds_invalid")
+        for index, item in enumerate(rounds):
+            if (not isinstance(item, dict) or set(item) != {"id", "stop_reason", "usage"}
+                    or item["id"] != request_ids[index]
+                    or (index < len(request_ids) - 1 and item["stop_reason"] != "pause_turn")):
+                raise ValueError("ai_job_provider_rounds_invalid")
+            # Reuse the same usage shape/invariants as a terminal receipt, but
+            # never include nested rounds or untrusted output in this check.
+            AIJobRepository._provider_receipt_json({
+                "provider": "anthropic", "model": value["model"], "id": item["id"],
+                "output_text": "", "stop_reason": item["stop_reason"],
+                "terminal_error": None, "usage": item["usage"],
+            })
+        if value.get("usage" if complete else "confirmed_usage") != sum_round_usage(rounds):
+            raise ValueError("ai_job_provider_round_usage_mismatch")
+        if complete and (not rounds or value["stop_reason"] != rounds[-1]["stop_reason"]):
+            raise ValueError("ai_job_provider_rounds_invalid")
+
+    @staticmethod
+    def _provider_progress_json(progress: dict[str, Any]) -> str:
+        fields = {"provider", "model", "id", "request_ids", "rounds", "confirmed_usage"}
+        if (not isinstance(progress, dict) or set(progress) != fields
+                or progress["provider"] != "anthropic" or not _uses_claude(progress["model"])):
+            raise ValueError("ai_job_provider_progress_invalid")
+        AIJobRepository._validate_provider_rounds(progress, complete=False)
+        value = json.dumps(progress, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        if len(value.encode("utf-8")) > 2 * _MAX_RESULT_JSON_BYTES:
+            raise ValueError("ai_job_provider_progress_too_large")
+        return value
+
+    @staticmethod
+    def _progress_extends(previous: dict[str, Any], current: dict[str, Any]) -> bool:
+        return (all(previous[key] == current[key] for key in ("provider", "model", "id"))
+                and current["request_ids"][:len(previous["request_ids"])] == previous["request_ids"]
+                and current["rounds"][:len(previous["rounds"])] == previous["rounds"])
+
+    def record_provider_progress(
+        self, job_id: str, owner: str, progress: dict[str, Any], *,
+        will_continue: bool = False, shared_daily_budget_usd: float = 0,
+        shared_budget_enforce_limit: bool = True,
+        shared_budget_start_at: datetime | None = None,
+    ) -> None:
+        """Persist known rounds and hold paid usage plus the next paid request.
+
+        Repeated progress writes are idempotent, and holds never shrink until
+        a final receipt settles the complete usage. Progress is not permission
+        to resume after a crash: the job remains durably submitted.
+        """
+        if type(will_continue) is not bool:
+            raise ValueError("will_continue must be boolean")
+        progress_json = self._provider_progress_json(progress)
+        shared_limit = usd_to_microusd(shared_daily_budget_usd)
+        if will_continue and (
+            not progress["rounds"] or progress["rounds"][-1]["stop_reason"] != "pause_turn"
+            or len(progress["rounds"]) != len(progress["request_ids"])
+            or len(progress["rounds"]) >= 4
+            or any(progress["confirmed_usage"].get(key) is None for key in (
+                "input_tokens", "cached_input_tokens", "cache_creation_input_tokens",
+                "output_tokens", "web_search_requests", "web_fetch_requests",
+            ))
+        ):
+            raise ValueError("ai_job_provider_continuation_invalid")
+        self.ensure_initialized()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            now = _iso()
+            row = connection.execute(
+                """SELECT * FROM ai_jobs WHERE job_id=? AND lease_owner=? AND lease_expires_at>?
+                     AND model=? AND anthropic_message_id=? AND openai_response_id IS NULL
+                     AND submission_started_at IS NOT NULL AND status IN ('queued','in_progress')
+                     AND provider_result_json IS NULL""",
+                (job_id, owner, now, progress["model"], progress["id"]),
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("ai_job_provider_progress_rejected")
+            previous = connection.execute(
+                "SELECT progress_json FROM ai_job_provider_progress WHERE job_id=?", (job_id,),
+            ).fetchone()
+            if previous is not None and not self._progress_extends(json.loads(previous[0]), progress):
+                raise RuntimeError("ai_job_provider_progress_conflict")
+            held = int(row["budget_charge_microusd"] or 0)
+            confirmed = _settled_budget_charge_microusd(
+                str(row["job_type"]), progress["confirmed_usage"],
+                fallback_microusd=held, model=str(row["model"]),
+            )
+            needed = confirmed + (
+                _task_budget_reservation_microusd(str(row["job_type"]), model=str(row["model"]))
+                if will_continue else 0
+            )
+            charge = max(held, needed)
+            if will_continue and shared_limit > 0 and not can_reserve_in_transaction(
+                connection, daily_budget_microusd=shared_limit,
+                reservation_microusd=charge - held, now=_parse_time(now),
+                accounting_start_at=shared_budget_start_at,
+                enforce_limit=shared_budget_enforce_limit,
+            ):
+                raise RuntimeError("daily_budget_usd_reached")
+            connection.execute(
+                "UPDATE ai_jobs SET budget_charge_microusd=?,updated_at=? WHERE job_id=?",
+                (charge, now, job_id),
+            )
+            connection.execute(
+                """INSERT INTO ai_job_provider_progress(job_id,progress_json,updated_at) VALUES(?,?,?)
+                   ON CONFLICT(job_id) DO UPDATE SET progress_json=excluded.progress_json,updated_at=excluded.updated_at""",
+                (job_id, progress_json, now),
+            )
+            connection.commit()
+
+    def get_provider_progress(self, job_id: str) -> dict[str, Any] | None:
+        self.ensure_initialized()
+        with self._connect() as connection:
+            row = connection.execute(
+                """SELECT p.progress_json,j.model,j.anthropic_message_id
+                   FROM ai_job_provider_progress p JOIN ai_jobs j ON j.job_id=p.job_id WHERE p.job_id=?""",
+                (job_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        progress = json.loads(row["progress_json"])
+        self._provider_progress_json(progress)
+        if progress["model"] != row["model"] or progress["id"] != row["anthropic_message_id"]:
+            raise ValueError("ai_job_provider_progress_identity_mismatch")
+        return progress
 
     def link_anthropic_message(self, job_id: str, owner: str, message_id: str) -> None:
         if not isinstance(message_id, str) or not 1 <= len(message_id) <= 256:
@@ -2421,10 +2618,10 @@ class AIJobRepository:
             updated = connection.execute(
                 """UPDATE ai_jobs SET anthropic_message_id=?,updated_at=?
                    WHERE job_id=? AND lease_owner=? AND lease_expires_at>?
-                     AND model=? AND submission_started_at IS NOT NULL
+                     AND model IN (?,?) AND submission_started_at IS NOT NULL
                      AND status IN ('queued','in_progress') AND openai_response_id IS NULL
                      AND (anthropic_message_id IS NULL OR anthropic_message_id=?)""",
-                (message_id, now, job_id, owner, now, _CLAUDE_MODEL, message_id),
+                (message_id, now, job_id, owner, now, _CLAUDE_MODEL, "claude-sonnet-5-5", message_id),
             ).rowcount
             if updated != 1:
                 raise RuntimeError("ai_job_response_link_rejected")
@@ -2441,11 +2638,19 @@ class AIJobRepository:
                      AND lease_expires_at>? AND status IN ('queued','in_progress')
                      AND submission_started_at IS NOT NULL AND model=?
                      AND openai_response_id IS NULL""",
-                (job_id, owner, now, _CLAUDE_MODEL),
+                (job_id, owner, now, receipt["model"]),
             ).fetchone()
             if row is None:
                 raise RuntimeError("ai_job_lease_lost")
             if row["anthropic_message_id"] not in (None, receipt["id"]):
+                raise RuntimeError("ai_job_provider_result_conflict")
+            progress = connection.execute(
+                "SELECT progress_json FROM ai_job_provider_progress WHERE job_id=?", (job_id,),
+            ).fetchone()
+            if progress is not None and (
+                "request_ids" not in receipt
+                or not self._progress_extends(json.loads(progress[0]), receipt)
+            ):
                 raise RuntimeError("ai_job_provider_result_conflict")
             if row["provider_result_json"] is not None:
                 if self._provider_receipt_json(json.loads(row["provider_result_json"])) != receipt_json:
@@ -2475,11 +2680,14 @@ class AIJobRepository:
         self.ensure_initialized()
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT provider_result_json FROM ai_jobs WHERE job_id=?", (job_id,),
+                "SELECT model,anthropic_message_id,provider_result_json FROM ai_jobs WHERE job_id=?", (job_id,),
             ).fetchone()
         if not row or not row["provider_result_json"]:
             return None
         receipt = json.loads(row["provider_result_json"])
+        self._provider_receipt_json(receipt)
+        if receipt["model"] != row["model"] or receipt["id"] != row["anthropic_message_id"]:
+            raise ValueError("ai_job_provider_result_identity_mismatch")
         receipt.setdefault("evidence_sources", [])
         return receipt
 
@@ -2692,7 +2900,7 @@ class AIJobRepository:
         current = self.get_job(job_id)
         if current is None:
             raise RuntimeError("ai_job_recovery_not_found")
-        claude_result = current.get("model") == _CLAUDE_MODEL
+        claude_result = _uses_claude(current.get("model"))
         stored_response_id = current.get(
             "anthropic_message_id" if claude_result else "openai_response_id"
         )
@@ -2726,6 +2934,10 @@ class AIJobRepository:
             )
             if validated != original_result:
                 raise RuntimeError("ai_job_recovery_result_mismatch")
+            if current["job_type"] == "market_focus" and payload.get("verification_version") == "web-evidence-v1":
+                from app.services.ai_jobs.models import validate_market_focus_evidence
+
+                validate_market_focus_evidence(validated, payload, receipt.get("tool_evidence", []))
         result_json = self._canonical_result(validated)
         now = _iso()
         recoverable_codes = sorted(RECOVERABLE_FAILURE_CODES)
@@ -2919,7 +3131,7 @@ class AIJobRepository:
                 not has_reported_usage
                 and current["openai_response_id"] is None
                 and safe_code != "submission_outcome_unknown"
-                and not (current["model"] == _CLAUDE_MODEL and current["submission_started_at"])
+                and not (_uses_claude(current["model"]) and current["submission_started_at"])
             )
             if confirmed_without_usage:
                 # A local failure or an explicit provider rejection without a
@@ -3202,6 +3414,7 @@ class AIJobRepository:
         )
         payload["evidence_sources"] = []
         payload["usage"].update({field: None for field in _TOOL_USAGE_FIELDS})
+        validated_receipt = None
         if row.get("provider_result_json"):
             try:
                 receipt = json.loads(row["provider_result_json"])
@@ -3209,12 +3422,33 @@ class AIJobRepository:
                 if (receipt["model"] != row.get("model")
                         or receipt["id"] != row.get("anthropic_message_id")):
                     raise ValueError("ai_job_provider_result_identity_mismatch")
+                validated_receipt = receipt
                 payload["evidence_sources"] = receipt.get("evidence_sources", [])
                 payload["usage"].update({
                     field: receipt["usage"].get(field) for field in _TOOL_USAGE_FIELDS
                 })
             except (TypeError, ValueError) as exc:
                 record_fallback_failure("ai_job_provider_result_hidden", exc)
+        if (row.get("job_type") == "market_focus"
+                and payload_source.get("verification_version") == "web-evidence-v1"):
+            # Never expose mixed-event prose or self-reported verification as a
+            # public result. Durable successful tool receipts must bind first.
+            payload["evidence_sources"] = []
+            if result is not None:
+                try:
+                    from app.services.ai_jobs.models import validate_market_focus_evidence
+                    from app.services.ai_jobs.focus_verification import public_focus_result, public_focus_sources
+
+                    if validated_receipt is None:
+                        raise ValueError("market_focus_tool_receipt_missing")
+                    tool_evidence = validated_receipt.get("tool_evidence", [])
+                    validate_market_focus_evidence(result, payload_source, tool_evidence)
+                    payload["result"] = public_focus_result(result)
+                    payload["evidence_sources"] = public_focus_sources(result, tool_evidence)
+                except (KeyError, TypeError, ValueError) as exc:
+                    record_fallback_failure("ai_job_focus_evidence_hidden", exc)
+                    payload["result"] = None
+                    payload["error_code"] = payload.get("error_code") or "legacy_output_hidden"
         payload["submission_source"] = (
             row.get("submission_source")
             if row.get("submission_source") in {"manual", "scheduled"}
@@ -3257,6 +3491,7 @@ class AIJobRepository:
         daily_budget_usd: float,
         shared_daily_budget_usd: float = 0,
         shared_budget_start_at: datetime | None = None,
+        shared_budget_enforce_limit: bool = True,
         daily_token_limit: int = 10_000_000,
         cooldown_seconds: int = 0,
         unknown_submission_hold_seconds: int = 86400,
@@ -3267,22 +3502,21 @@ class AIJobRepository:
     ) -> dict[str, Any]:
         """Return a secret-free, point-in-time view of paid task capacity.
 
-        The slot and cooldown come from the same helpers the worker's gate
-        uses, so the owner UI and the worker agree about whether a paid slot
-        is available. Claude counts both lanes against ``max_concurrency``;
-        OpenAI checks the requested lane's single slot. None reports any lane
-        for legacy callers. Cooldown only exists on the manual lane.
+        The slot and cooldown use the worker's gate helpers. All models and
+        lanes share ``max_concurrency``; OpenAI additionally shares one slot.
+        Cooldown only exists on the manual lane.
         """
 
         self._concurrency_limit(_CLAUDE_MODEL, max_concurrency)
         self.ensure_initialized()
         shared_limit = usd_to_microusd(shared_daily_budget_usd)
-        shared_budget_enabled = shared_limit > 0 and model in {None, _CLAUDE_MODEL}
+        shared_budget_enabled = shared_limit > 0 and (model is None or model in JOB_MODELS)
         observed = now or _utcnow()
         if shared_budget_enabled:
             SharedModelBudget(
                 self.path, shared_daily_budget_usd, self.path.parent / "market-brief",
                 accounting_start_at=shared_budget_start_at,
+                enforce_limit=shared_budget_enforce_limit,
             ).bootstrap_brief_history(observed)
         day_start_dt = observed.replace(hour=0, minute=0, second=0, microsecond=0)
         day_end_dt = day_start_dt + timedelta(days=1)
@@ -3363,24 +3597,28 @@ class AIJobRepository:
 
             charged_microusd = shared_totals["used_microusd"]
             minimum_reservation = min(
-                _task_budget_reservation_microusd(job_type, model=_CLAUDE_MODEL)
+                _task_budget_reservation_microusd(job_type, model=model or _CLAUDE_MODEL)
                 for job_type in AI_TASK_MAX_OUTPUT_TOKENS
             )
             dollar_budget_available = (
                 (shared_budget_start_at is None or observed >= shared_budget_start_at)
-                and charged_microusd + minimum_reservation <= shared_limit
+                and (not shared_budget_enforce_limit
+                     or charged_microusd + minimum_reservation <= shared_limit)
             )
             token_budget_available = True  # Observability only under the shared dollar gate.
         return {
             "daily_max_jobs": 0,
             "daily_budget_usd": shared_limit / 1_000_000 if shared_budget_enabled else 0.0,
             "budget_basis": "shared_usd" if shared_budget_enabled else "tokens",
+            "budget_enforced": shared_budget_enforce_limit if shared_budget_enabled else True,
+            "budget_mode": ("tracking" if shared_budget_enabled and not shared_budget_enforce_limit else "enforced"),
             "budget_timezone": "UTC",
             "budget_reset_at": _iso(day_end_dt),
             "accounting_start_at": _iso(shared_budget_start_at) if shared_budget_start_at else None,
             "daily_token_limit": token_limit,
             "submitted_jobs": submitted_jobs,
             "budget_used_usd": charged_microusd / 1_000_000,
+            **(shared_totals or {}),
             "budget_remaining_usd": max(0, shared_limit - charged_microusd) / 1_000_000 if shared_budget_enabled else None,
             "usage_total_tokens": int(totals["total_tokens"] if totals else 0),
             "token_budget_used_tokens": token_budget_used,
@@ -3393,7 +3631,7 @@ class AIJobRepository:
             "provider_credit_exhausted": credit_exhausted_recent,
             "job_limit_available": True,
             "dollar_budget_available": dollar_budget_available,
-            "concurrency_available": len(occupants) < concurrency_limit,
+            "concurrency_available": len(occupants) < concurrency_limit and self._provider_slot_available(model, occupants),
             "active_jobs_count": len(occupants),
             "concurrency_limit": concurrency_limit,
             "active_job": active_public,

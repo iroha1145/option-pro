@@ -1,6 +1,6 @@
-"""Shared UTC-day admission accounting for Haiku jobs and Opus brief requests.
+"""Shared UTC-day accounting for supported job models and Opus brief requests.
 
-Haiku's existing job charge is authoritative: it already represents either a
+Each job's existing charge is authoritative: it already represents either a
 reservation or a settled estimate. Only Opus needs a new request ledger. This
 is an application admission budget, not an upper bound on provider invoices.
 """
@@ -18,6 +18,7 @@ from typing import Any, Iterator
 
 HAIKU_MODEL = "claude-haiku-5-5"
 OPUS_MODEL = "claude-opus-5-5"
+JOB_MODELS = (HAIKU_MODEL, "claude-sonnet-5-5", "gpt-5.6-luna", "gpt-5.6-terra")
 _SCHEMA_VERSION = "shared-model-budget-v1"
 _MAX_INTEGER = 2**63 - 1
 _MAX_HISTORY_JSON_BYTES = 8 * 1024 * 1024
@@ -113,7 +114,7 @@ def initialize_schema(connection: sqlite3.Connection) -> None:
 def totals_in_transaction(
     connection: sqlite3.Connection, now: datetime,
     accounting_start_at: datetime | None = None,
-) -> dict[str, int]:
+) -> dict[str, Any]:
     """Indexed sums only; called inside the same transaction as new admission."""
     day, start, end = _day_bounds(_time(now), accounting_start_at)
     # Legacy repository timestamps omit the fractional part when it is zero.
@@ -125,12 +126,16 @@ def totals_in_transaction(
         start_time.replace(microsecond=0).isoformat().replace("+00:00", "Z")
         if start_time.microsecond else ""
     )
-    haiku = connection.execute(
-        """SELECT COALESCE(SUM(budget_charge_microusd),0) FROM ai_jobs
-           WHERE model=? AND submission_started_at>=? AND submission_started_at<?
-             AND submission_started_at<>?""",
-        (HAIKU_MODEL, start, end, excluded_whole_second),
-    ).fetchone()[0]
+    model_charges = {model: 0 for model in JOB_MODELS}
+    rows = connection.execute(
+        f"""SELECT model,COALESCE(SUM(budget_charge_microusd),0) FROM ai_jobs
+           WHERE model IN ({','.join('?' for _ in JOB_MODELS)})
+             AND submission_started_at>=? AND submission_started_at<?
+             AND submission_started_at<>? GROUP BY model""",
+        (*JOB_MODELS, start, end, excluded_whole_second),
+    ).fetchall()
+    model_charges.update({row[0]: int(row[1]) for row in rows})
+    job_charge = sum(model_charges.values())
     brief = connection.execute(
         """SELECT COALESCE(SUM(charge_microusd),0),
                   COALESCE(SUM(CASE WHEN status IN ('reserved','unknown')
@@ -138,10 +143,12 @@ def totals_in_transaction(
            FROM model_budget_brief_requests WHERE budget_day=? AND created_at>=? AND created_at<?""", (day, start, end),
     ).fetchone()
     return {
-        "haiku_charge_microusd": int(haiku),
+        "haiku_charge_microusd": model_charges[HAIKU_MODEL],
+        "job_charge_microusd": job_charge,
+        "job_model_charges_microusd": model_charges,
         "opus_charge_microusd": int(brief[0]),
         "opus_unsettled_microusd": int(brief[1]),
-        "used_microusd": int(haiku) + int(brief[0]),
+        "used_microusd": job_charge + int(brief[0]),
     }
 
 
@@ -149,12 +156,15 @@ def can_reserve_in_transaction(
     connection: sqlite3.Connection, *, daily_budget_microusd: int,
     reservation_microusd: int, now: datetime,
     accounting_start_at: datetime | None = None,
+    enforce_limit: bool = True,
 ) -> bool:
+    if type(enforce_limit) is not bool:
+        raise ValueError("enforce_limit must be boolean")
     limit = _nonnegative_integer(daily_budget_microusd, "daily_budget_microusd")
     reservation = _nonnegative_integer(reservation_microusd, "reservation_microusd")
     if accounting_start_at is not None and _time(now) < _time(accounting_start_at):
         return False
-    return limit == 0 or totals_in_transaction(connection, now, accounting_start_at)["used_microusd"] + reservation <= limit
+    return not enforce_limit or limit == 0 or totals_in_transaction(connection, now, accounting_start_at)["used_microusd"] + reservation <= limit
 
 
 class SharedModelBudget:
@@ -162,7 +172,11 @@ class SharedModelBudget:
         self, path: str | Path, daily_budget_usd: Any,
         brief_store_path: str | Path | None = None,
         accounting_start_at: datetime | None = None,
+        enforce_limit: bool = True,
     ) -> None:
+        if type(enforce_limit) is not bool:
+            raise ValueError("enforce_limit must be boolean")
+        self.enforce_limit = enforce_limit
         self.path = Path(path)
         self.accounting_start_at = _time(accounting_start_at) if accounting_start_at is not None else None
         self.daily_budget_microusd = usd_to_microusd(daily_budget_usd)
@@ -221,9 +235,16 @@ class SharedModelBudget:
         self, run_id: str, round_index: int, reservation_microusd: int,
         now: datetime | None = None,
     ) -> bool:
-        """True only for a new paid request. False must never authorize resending."""
+        """Reserve before a new paid request; False never authorizes resending.
+
+        Enforced Opus requests need positive balance, not a fixed allowance.
+        Hold the smaller of the allowance and remaining balance atomically.
+        Tracking mode holds the full allowance, even above the daily reference.
+        """
         self._key(run_id, round_index)
         reservation = _nonnegative_integer(reservation_microusd, "reservation_microusd")
+        if reservation == 0:
+            raise ValueError("brief reservation must be positive")
         observed = _time(now)
         if self.brief_store_path is not None:
             self.bootstrap_brief_history(observed, exclude_run_id=run_id)
@@ -236,12 +257,15 @@ class SharedModelBudget:
             ).fetchone()
             if existing is not None:
                 return False
-            if not can_reserve_in_transaction(
-                connection, daily_budget_microusd=self.daily_budget_microusd,
-                reservation_microusd=reservation, now=observed,
-                accounting_start_at=self.accounting_start_at,
-            ):
+            if self.accounting_start_at is not None and observed < self.accounting_start_at:
                 raise DailyBudgetExceeded()
+            if self.enforce_limit and self.daily_budget_microusd:
+                remaining = self.daily_budget_microusd - totals_in_transaction(
+                    connection, observed, self.accounting_start_at,
+                )["used_microusd"]
+                if remaining <= 0:
+                    raise DailyBudgetExceeded()
+                reservation = min(reservation, remaining)
             connection.execute(
                 """INSERT INTO model_budget_brief_requests(
                        run_id,round_index,budget_day,model,reservation_microusd,
@@ -303,7 +327,7 @@ class SharedModelBudget:
     def snapshot(
         self, now: datetime | None = None, *, reservation_microusd: int = 0,
     ) -> dict[str, Any]:
-        reservation = _nonnegative_integer(reservation_microusd, "reservation_microusd")
+        _nonnegative_integer(reservation_microusd, "reservation_microusd")
         observed = _time(now)
         if self.brief_store_path is not None:
             self.bootstrap_brief_history(observed)
@@ -318,12 +342,13 @@ class SharedModelBudget:
             "budget_window_start": _day_bounds(observed, self.accounting_start_at)[1],
             "budget_reset_at": _day_bounds(observed)[2],
             "budget_basis": "shared_usd",
+            "budget_enforced": self.enforce_limit,
+            "budget_mode": "enforced" if self.enforce_limit else "tracking",
             "daily_budget_usd": limit / 1_000_000,
             "budget_used_usd": totals["used_microusd"] / 1_000_000,
             "budget_remaining_usd": max(0, limit - totals["used_microusd"]) / 1_000_000 if limit else None,
             "budget_available": (self.accounting_start_at is None or observed >= self.accounting_start_at)
-                and (not limit or (totals["used_microusd"] + reservation <= limit
-                                  and (reservation > 0 or totals["used_microusd"] < limit))),
+                and (not self.enforce_limit or not limit or totals["used_microusd"] < limit),
         }
 
     @staticmethod

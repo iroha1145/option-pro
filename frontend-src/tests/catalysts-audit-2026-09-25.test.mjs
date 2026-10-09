@@ -1658,17 +1658,20 @@ test('focus cycle keeps its historical model even when a newer attempt uses Clau
     cycle: { cycle_id: 'new-attempt', status: 'failed', model: 'claude-haiku-5-5', reasoning_effort: 'xhigh' },
     latest_successful_cycle: {
       cycle_id: 'old-result', status: 'completed', model: 'gpt-5.6-terra', reasoning_effort: 'max',
+      verification_status: 'legacy_unverified',
       result: { title_zh: '历史结果', summary_zh: '历史摘要' },
     },
   }) });
   const result = await api.catalystsContract.latestFocusCycle();
   assert.equal(result.model, 'gpt-5.6-terra');
   assert.equal(result.reasoning, 'max');
+  assert.equal(result.isHistorical, true);
 });
 
 test('focus result displays only its own model and effort', async () => {
   for (const [model, reasoning, expected] of [
     ['claude-haiku-5-5', 'xhigh', 'Claude Haiku 5.5 · xhigh'],
+    ['claude-sonnet-5-5', 'xhigh', 'Claude Sonnet 5.5 · xhigh'],
     ['gpt-5.6-terra', 'max', 'GPT-5.6 Terra · max'],
   ]) {
     const h = focusHarness({ latest: () => cycle({ model, reasoning }), trigger: () => focusJob(), poll: () => focusJob() });
@@ -1677,6 +1680,26 @@ test('focus result displays only its own model and effort', async () => {
     assert.ok(textOf(h.tree()).includes(expected));
     h.unmount();
   }
+});
+
+test('historical focus is labelled only when the server identifies it as history', async () => {
+  for (const isHistorical of [true, false]) {
+    const h = focusHarness({ latest: () => cycle({ isHistorical }), trigger: () => focusJob(), poll: () => focusJob() });
+    h.mount();
+    await settle();
+    assert.equal(textOf(h.tree()).includes('历史分析'), isHistorical);
+    h.unmount();
+  }
+});
+
+test('a previously verified focus is still labelled as history when a newer cycle exists', async () => {
+  const { api } = loadCatalystApi({ get: () => ({
+    cycle: { cycle_id: 'saved-verified', status: 'completed', verification_status: 'verified', is_historical: true,
+      model: 'claude-sonnet-5-5', reasoning_effort: 'xhigh', result: { title_zh: '旧时点分析', summary_zh: '旧时点摘要' } },
+  }) });
+  const result = await api.catalystsContract.latestFocusCycle();
+  assert.equal(result.isHistorical, true);
+  assert.equal(result.model, 'claude-sonnet-5-5');
 });
 
 
