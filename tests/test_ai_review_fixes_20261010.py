@@ -340,3 +340,23 @@ def test_a_blank_article_body_counts_as_missing_when_publishing():
         runtime.openai_receipt(luna_response(calls=[search()])), "news_impact", data,
     )
     assert searched["uncertainty_notes"][-1] == "原始正文未取得；分析采用另行联网检索的来源，请查阅来源链接。"
+
+
+# --- Suggestion: a Luna search request is bounded by Luna's context window ----
+
+
+def test_luna_search_reservation_uses_the_published_context_window():
+    from test_luna_news_web_fallback import payload as luna_payload
+
+    searching = luna_payload()
+    with_article = {**luna_payload(), "article_status": "available", "article": _ARTICLE}
+    model = runtime.LUNA_MODEL
+    # gpt-5.6-luna: 1,050,000-token context window, of which 65,536 is output.
+    assert runtime.max_output_tokens_for("news_impact", model=model) == 65_536
+    assert runtime.max_input_tokens_for("news_impact", model=model, payload=searching) == 984_464
+    assert runtime.token_reservation("news_impact", model=model, payload=searching) == 1_050_000
+    assert runtime.token_reservation("news_impact", model=model, payload=with_article) == 139_264
+    # Over 272K input takes the long-context rates: 984,464 x $0.50/M input,
+    # 65,536 x $1.80/M output, plus three searches at $0.01.
+    assert runtime.budget_reservation_microusd("news_impact", model=model, payload=searching) == 640_197
+    assert runtime.budget_reservation_microusd("news_impact", model=model, payload=with_article) == 97_076

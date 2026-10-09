@@ -28,7 +28,7 @@ LEGACY_LUNA_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "d0e6936d8749cc96ed7fa8b3bf
 # 2026-10-09 至 10-10：Luna 新闻一律带联网工具，输出上限 32,768。
 LUNA_ALWAYS_WEB_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "719aed2113e2b6ab0f08349c2968706147201ab24e9b8642a8b9e3014cc9ca98")
 # 现行 Luna 新闻身份按任务分两种：缺正文时联网，有正文时不联网。
-LUNA_WEB_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "e46819f95cf6c39921d8c2746216c9b0b603df62443eba54f78e401b9fe249ed")
+LUNA_WEB_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "cda8f76d5306ceaeb712f52e3b1b1a85dfa49aae5e640d4ab24009cf22092308")
 LUNA_ARTICLE_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "e64f425270938c5aed9f470d1cb59d34f4d4da99e941d6063f805bc8c61c7ca3")
 TERRA_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "e2f660481a77543a7a020798cea014e6c8b8298b78a0f89d3e7e507046fc6c2e")
 LEGACY_OPENAI_EARNINGS_IDENTITY = ("earnings_impact_zh_cn_v5", "efcf4a6d24e87c8bfcb8620183338d7ddd927a8df9290b1a8ee7f601a05e9265")
@@ -50,6 +50,11 @@ _TOKEN_PRICE_DENOMINATOR = 1_000_000
 # these constants whenever OpenAI changes the model alias or published rates:
 # https://developers.openai.com/api/docs/models/gpt-5.6-terra
 # https://developers.openai.com/api/docs/pricing
+# gpt-5.6-luna, verified 2026-10-10: the same 1,050,000-token context window
+# (128,000 max output), $0.20 input and $1.20 output per million tokens, and
+# prompts over 272K at 2x input and 1.5x output. budget_reservation_microusd
+# prices its uncached input at the 1.25x cache-write rate, as for Terra.
+# https://developers.openai.com/api/docs/models/gpt-5.6-luna
 _SHORT_UNCACHED_INPUT_MICROUSD_PER_MILLION = 2_500_000
 _SHORT_CACHED_INPUT_MICROUSD_PER_MILLION = 250_000
 _SHORT_CACHE_WRITE_MICROUSD_PER_MILLION = (
@@ -815,11 +820,9 @@ def max_input_tokens_for(
 
 def _max_input_tokens(request: RuntimeRequest, job_type: str, *, model: str | None) -> int:
     if request.use_web_search:
-        # Search result content has no published numeric cap. The model context
-        # window is therefore the only provable upper bound if search is ever
-        # re-enabled. The resulting reservation intentionally exceeds the
-        # default daily budget rather than allowing an unbounded paid request.
-        return (128_000 if model == LUNA_MODEL else OFFICIAL_CONTEXT_WINDOW_TOKENS) - max_output_tokens_for(job_type, model=model)
+        # Search result content has no published numeric cap, so the model's
+        # context window is the only provable upper bound on the input.
+        return OFFICIAL_CONTEXT_WINDOW_TOKENS - max_output_tokens_for(job_type, model=model)
     return _semantic_input_upper_bound(
         request,
         payload_bytes=_MAX_UNTRUSTED_JSON_BYTES,
