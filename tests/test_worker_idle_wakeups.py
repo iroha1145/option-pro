@@ -357,3 +357,77 @@ def test_sector_probe_sees_visitor_requests_and_idle_rounds_sleep(
     monkeypatch.setattr(sector_refresh, "run_refresh_batch", idle_batch)
     outcome = asyncio.run(worker_tasks.SectorIVTask()())
     assert outcome.next_delay_seconds == worker_tasks.SECTOR_IV_IDLE_SECONDS
+
+
+def test_fresh_repositories_do_not_repeat_the_schema_transaction(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "ai-jobs.db"
+    seeded = AIJobRepository(path)
+    _create_job(seeded, "AAPL")
+    original = AIJobRepository._initialize_database
+    calls = 0
+
+    def counted(repository: AIJobRepository) -> None:
+        nonlocal calls
+        calls += 1
+        original(repository)
+
+    monkeypatch.setattr(AIJobRepository, "_initialize_database", counted)
+    # The web process builds one repository per request.
+    for _ in range(5):
+        repository = _TracedAIJobRepository(path)
+        assert repository.get_job("missing") is None
+        assert repository.write_transactions() == 0
+    assert calls == 0
+
+    # A schema change made out of band brings the full checks back once,
+    # and they repair it.
+    with seeded._connect() as connection:
+        connection.execute("DROP INDEX idx_ai_jobs_due")
+        connection.commit()
+    for _ in range(3):
+        AIJobRepository(path).get_job("missing")
+    assert calls == 1
+    with seeded._connect() as connection:
+        assert connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_ai_jobs_due'"
+        ).fetchone() is not None
+
+
+def test_schema_transaction_skips_full_scans_when_nothing_needs_backfill(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "ai-jobs.db"
+    seeded = AIJobRepository(path)
+    for index in range(3):
+        _create_job(seeded, f"T{index}")
+    repository = _TracedAIJobRepository(path)
+    repository.initialize()
+    in_lock = []
+    inside = False
+    for statement in repository.statements:
+        if statement == "BEGIN IMMEDIATE":
+            inside = True
+        elif statement in {"COMMIT", "ROLLBACK"}:
+            inside = False
+        elif inside:
+            in_lock.append(" ".join(statement.split()))
+    assert not any("SELECT job_id,'manual',created_at FROM ai_jobs" in item for item in in_lock)
+    assert not any("budget_charge_microusd=0" in item and item.startswith("SELECT") for item in in_lock)
+
+
+def test_schema_transaction_still_backfills_a_missing_source_row(tmp_path: Path) -> None:
+    path = tmp_path / "ai-jobs.db"
+    seeded = AIJobRepository(path)
+    job = _create_job(seeded, "LEGACY")
+    with seeded._connect() as connection:
+        connection.execute("DELETE FROM ai_job_sources WHERE job_id=?", (job["job_id"],))
+        connection.commit()
+    AIJobRepository(path).initialize()
+    with seeded._connect() as connection:
+        source = connection.execute(
+            "SELECT submission_source FROM ai_job_sources WHERE job_id=?",
+            (job["job_id"],),
+        ).fetchone()
+    assert source is not None and source["submission_source"] == "manual"

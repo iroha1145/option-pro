@@ -1806,8 +1806,10 @@ def test_v3_v4_registry_rows_survive_beside_the_current_v5_row(tmp_path):
         )
         connection.commit()
 
+    # Registry rows edited with plain DML leave PRAGMA schema_version alone;
+    # model the older store opened by new code as the fresh process it is.
     reopened = AIJobRepository(database)
-    reopened.ensure_initialized()
+    reopened.initialize()
 
     with reopened._connect() as connection:
         registry = {
@@ -2343,7 +2345,9 @@ def test_job_polling_reuses_initialized_repository(monkeypatch, tmp_path):
     assert second.status_code == 200
     assert first.json()["job_id"] == row["job_id"]
     assert second.json()["job_id"] == row["job_id"]
-    assert calls == 1
+    # The seeding repository already initialized this path in this process,
+    # so neither poll repeats the schema transaction.
+    assert calls == 0
 
 
 def test_legacy_get_never_creates_paid_analysis(monkeypatch, tmp_path):

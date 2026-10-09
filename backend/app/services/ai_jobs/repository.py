@@ -7,6 +7,7 @@ import sqlite3
 import threading
 import uuid
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping
@@ -421,6 +422,87 @@ def _settled_budget_charge_microusd(
 _QUEUE_LIMIT_EXEMPT_JOB_TYPES = frozenset({"market_focus"})
 
 
+_MISSING_CHARGES_SQL = """SELECT job_id,job_type,model,submission_started_at,status,error_code,openai_response_id,
+          budget_charge_microusd,error_detail,anthropic_message_id,provider_result_json,
+          usage_input_tokens,usage_cached_input_tokens,
+          usage_output_tokens,usage_reasoning_tokens,
+          usage_total_tokens,usage_cache_creation_input_tokens,
+          usage_cache_creation_5m_input_tokens,usage_cache_creation_1h_input_tokens
+   FROM ai_jobs
+   WHERE submission_started_at IS NOT NULL
+     AND budget_charge_microusd=0"""
+
+
+def _backfilled_budget_charge(missing: Mapping[str, Any]) -> int | None:
+    """Charge to backfill for a started job recorded at zero, or None to keep it."""
+
+    reservation = _task_budget_reservation_microusd(
+        str(missing["job_type"]), model=str(missing["model"])
+    )
+    usage = {
+        "input_tokens": missing["usage_input_tokens"],
+        "cached_input_tokens": missing["usage_cached_input_tokens"],
+        "output_tokens": missing["usage_output_tokens"],
+        "reasoning_tokens": missing["usage_reasoning_tokens"],
+        "total_tokens": missing["usage_total_tokens"],
+        **{field: missing["usage_" + field] for field in _CACHE_USAGE_FIELDS},
+    }
+    # The receipt carries tool counters that have no separate SQL
+    # columns. Recalculate from that durable evidence, not an
+    # incomplete token-only projection after process restart.
+    if missing["provider_result_json"]:
+        try:
+            receipt = json.loads(missing["provider_result_json"])
+            receipt_usage = receipt.get("usage") if isinstance(receipt, dict) else None
+            usage = dict(receipt_usage) if isinstance(receipt_usage, dict) else {}
+        except (TypeError, ValueError):
+            usage = {}
+    elif _confirmed_unbilled_claude_row(missing):
+        # The worker persisted a definitive HTTP rejection plus
+        # explicit zero counts before clearing its lease. It has
+        # no message id/receipt and must remain free after restart.
+        return None
+    has_terminal_usage = (
+        usage.get("input_tokens") is not None
+        and usage.get("output_tokens") is not None
+        and missing["error_code"] != "submission_outcome_unknown"
+    )
+    if not has_terminal_usage and _reservation_released(
+        missing["status"],
+        missing["error_code"],
+        missing["openai_response_id"],
+        missing["model"],
+        missing["submission_started_at"],
+    ):
+        # 规则确认零计费的行本来就记 0；每次初始化都会走到这里，
+        # 不能把它们回填成满额预留。
+        return None
+    return (
+        _settled_budget_charge_microusd(
+            str(missing["job_type"]),
+            usage,
+            fallback_microusd=reservation,
+            model=str(missing["model"]),
+        )
+        if has_terminal_usage
+        else reservation
+    )
+
+
+@dataclass(frozen=True)
+class _InitializationBackfill:
+    missing_sources: bool
+    charge_job_ids: list[str]
+
+
+# Schema cookie (``PRAGMA schema_version``) of each path this process has
+# fully initialized. Request handlers build a fresh repository per request;
+# each used to repeat the whole schema transaction. Any schema change made
+# out of band moves the cookie and brings the full checks back.
+_READY_SCHEMAS: dict[str, int | None] = {}
+_READY_SCHEMAS_LOCK = threading.Lock()
+
+
 class AIJobRepository:
     def __init__(self, path: str | Path):
         self.path = Path(path)
@@ -448,18 +530,67 @@ class AIJobRepository:
         """
         with self._initialize_lock:
             self._initialized = False
-            self._initialize_database()
+            with _READY_SCHEMAS_LOCK:
+                self._initialize_database()
+                _READY_SCHEMAS[str(self.path.resolve())] = self._schema_cookie()
             self._initialized = True
 
     def ensure_initialized(self) -> None:
-        """Initialize this repository instance once, including across threads."""
+        """Initialize this database once per process, including across threads."""
         with self._initialize_lock:
             if self._initialized:
                 return
-            self._initialize_database()
+            key = str(self.path.resolve())
+            with _READY_SCHEMAS_LOCK:
+                cookie = self._schema_cookie()
+                if cookie is None or _READY_SCHEMAS.get(key) != cookie:
+                    self._initialize_database()
+                    _READY_SCHEMAS[key] = self._schema_cookie()
             self._initialized = True
 
+    def _schema_cookie(self) -> int | None:
+        if not self.path.is_file():
+            return None
+        try:
+            with self._connect_read_only() as connection:
+                return int(connection.execute("PRAGMA schema_version").fetchone()[0])
+        except sqlite3.Error:
+            return None
+
+    def _plan_initialization_backfill(self) -> _InitializationBackfill | None:
+        """Read which legacy rows still need a backfill, before the write lock.
+
+        Both backfills used to scan the whole job table inside the schema
+        write transaction on every new repository instance, holding the
+        ai-jobs.db write lock for seconds. ``None`` keeps the full in-lock
+        backfill (new or unreadable stores).
+        """
+
+        if not self.path.is_file():
+            return None
+        try:
+            with self._connect_read_only() as connection:
+                missing_sources = connection.execute(
+                    """SELECT 1 FROM ai_jobs AS j
+                       WHERE NOT EXISTS (
+                           SELECT 1 FROM ai_job_sources AS s WHERE s.job_id=j.job_id
+                       )
+                       LIMIT 1"""
+                ).fetchone() is not None
+                charge_job_ids = [
+                    str(row["job_id"])
+                    for row in connection.execute(_MISSING_CHARGES_SQL)
+                    if _backfilled_budget_charge(row) is not None
+                ]
+        except sqlite3.Error:
+            return None
+        return _InitializationBackfill(
+            missing_sources=missing_sources,
+            charge_job_ids=charge_job_ids,
+        )
+
     def _initialize_database(self) -> None:
+        backfill = self._plan_initialization_backfill()
         with self._connect() as connection:
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("PRAGMA synchronous=FULL")
@@ -562,75 +693,32 @@ class AIJobRepository:
                 )
             # Rows from before source-aware identities cannot be classified.
             # Keep those conservative: only the manual switch may release them.
-            connection.execute(
-                """INSERT OR IGNORE INTO ai_job_sources(
-                       job_id,submission_source,created_at
-                   )
-                   SELECT job_id,'manual',created_at FROM ai_jobs"""
-            )
-            missing_charges = connection.execute(
-                """SELECT job_id,job_type,model,submission_started_at,status,error_code,openai_response_id,
-                          budget_charge_microusd,error_detail,anthropic_message_id,provider_result_json,
-                          usage_input_tokens,usage_cached_input_tokens,
-                          usage_output_tokens,usage_reasoning_tokens,
-                          usage_total_tokens,usage_cache_creation_input_tokens,
-                          usage_cache_creation_5m_input_tokens,usage_cache_creation_1h_input_tokens
-                   FROM ai_jobs
-                   WHERE submission_started_at IS NOT NULL
-                     AND budget_charge_microusd=0"""
-            ).fetchall()
-            for missing in missing_charges:
-                reservation = _task_budget_reservation_microusd(
-                    str(missing["job_type"]), model=str(missing["model"])
+            if backfill is None or backfill.missing_sources:
+                connection.execute(
+                    """INSERT OR IGNORE INTO ai_job_sources(
+                           job_id,submission_source,created_at
+                       )
+                       SELECT job_id,'manual',created_at FROM ai_jobs"""
                 )
-                usage = {
-                    "input_tokens": missing["usage_input_tokens"],
-                    "cached_input_tokens": missing["usage_cached_input_tokens"],
-                    "output_tokens": missing["usage_output_tokens"],
-                    "reasoning_tokens": missing["usage_reasoning_tokens"],
-                    "total_tokens": missing["usage_total_tokens"],
-                    **{field: missing["usage_" + field] for field in _CACHE_USAGE_FIELDS},
-                }
-                # The receipt carries tool counters that have no separate SQL
-                # columns. Recalculate from that durable evidence, not an
-                # incomplete token-only projection after process restart.
-                if missing["provider_result_json"]:
-                    try:
-                        receipt = json.loads(missing["provider_result_json"])
-                        receipt_usage = receipt.get("usage") if isinstance(receipt, dict) else None
-                        usage = dict(receipt_usage) if isinstance(receipt_usage, dict) else {}
-                    except (TypeError, ValueError):
-                        usage = {}
-                elif _confirmed_unbilled_claude_row(missing):
-                    # The worker persisted a definitive HTTP rejection plus
-                    # explicit zero counts before clearing its lease. It has
-                    # no message id/receipt and must remain free after restart.
-                    continue
-                has_terminal_usage = (
-                    usage.get("input_tokens") is not None
-                    and usage.get("output_tokens") is not None
-                    and missing["error_code"] != "submission_outcome_unknown"
-                )
-                if not has_terminal_usage and _reservation_released(
-                    missing["status"],
-                    missing["error_code"],
-                    missing["openai_response_id"],
-                    missing["model"],
-                    missing["submission_started_at"],
-                ):
-                    # 规则确认零计费的行本来就记 0；每次初始化都会走到这里，
-                    # 不能把它们回填成满额预留。
-                    continue
-                charge = (
-                    _settled_budget_charge_microusd(
-                        str(missing["job_type"]),
-                        usage,
-                        fallback_microusd=reservation,
-                        model=str(missing["model"]),
+            if backfill is None:
+                missing_charges = connection.execute(
+                    _MISSING_CHARGES_SQL
+                ).fetchall()
+            else:
+                missing_charges = []
+                for offset in range(0, len(backfill.charge_job_ids), 500):
+                    chunk = backfill.charge_job_ids[offset : offset + 500]
+                    missing_charges.extend(
+                        connection.execute(
+                            _MISSING_CHARGES_SQL
+                            + f" AND job_id IN ({','.join('?' for _ in chunk)})",
+                            chunk,
+                        ).fetchall()
                     )
-                    if has_terminal_usage
-                    else reservation
-                )
+            for missing in missing_charges:
+                charge = _backfilled_budget_charge(missing)
+                if charge is None:
+                    continue
                 connection.execute(
                     """UPDATE ai_jobs SET budget_charge_microusd=?
                        WHERE job_id=? AND budget_charge_microusd=0""",
