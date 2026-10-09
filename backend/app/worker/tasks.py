@@ -183,11 +183,24 @@ async def _build_local_intelligence(
     factory: Any | None = None,
 ) -> Any:
     from app.services.ai_jobs.repository import AIJobRepository
+    from app.services.ai_jobs.runtime import model_identity_for_job
     from app.services.runtime_settings import (
         RuntimeSettingsStorageError,
         get_effective_runtime_settings,
     )
 
+    # Real Settings carries the global identity. Older injected factory
+    # settings only supplied storage/ETL fields; retain their config fallback
+    # without mutating settings or weakening explicit per-task validation.
+    identity_settings = settings
+    if not hasattr(settings, "openai_model") or not hasattr(settings, "openai_reasoning"):
+        from copy import copy
+
+        identity_settings = copy(settings)
+        identity_settings.openai_model = getattr(settings, "openai_model", config.ai.model)
+        identity_settings.openai_reasoning = getattr(settings, "openai_reasoning", config.ai.reasoning)
+    news_model, news_reasoning = model_identity_for_job(identity_settings, "news_impact")
+    focus_model, focus_reasoning = model_identity_for_job(identity_settings, "market_focus")
     content_options: dict[str, Any] = {}
     if factory is None:
         from app.services.catalysts.article_content import fetch_article
@@ -241,6 +254,10 @@ async def _build_local_intelligence(
         canonical_tickers=_canonical_sector_tickers(),
         model=config.ai.model,
         reasoning=config.ai.reasoning,
+        news_model=news_model,
+        news_reasoning=news_reasoning,
+        focus_model=focus_model,
+        focus_reasoning=focus_reasoning,
         max_queued=settings.openai_job_max_queued,
         manual_refresh_cooldown_seconds=refresh_cooldown,
         **content_options,

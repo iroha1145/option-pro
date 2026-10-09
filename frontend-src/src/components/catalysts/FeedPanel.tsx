@@ -118,8 +118,8 @@ export function NewsRow({
               <TickerChip key={t} ticker={t} onClick={() => openTicker(t)} />
             ))}
           </span>
-          <AnalysisStatusChip status={item.analysisStatus} />
-          {a && (
+          <AnalysisStatusChip status={a?.insufficientContext && item.analysisStatus === 'completed' ? 'insufficient_context' : item.analysisStatus} />
+          {a && !a.insufficientContext && (
             <>
               <ClassificationChip classification={a.classification} />
               {/* 置信与影响共用一条说明（SCORE_HINTS.newsAssessment）。原先两个读数

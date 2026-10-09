@@ -4,6 +4,8 @@ import copy
 import hashlib
 import json
 import os
+import re
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -140,7 +142,7 @@ def test_structured_identity_and_numeric_errors_are_not_fixed_by_prose_normalize
     payload, raw, _ = fixture()
     put(raw, path, value)
     before = copy.deepcopy(raw)
-    assert get(VerifiedMarketFocusResult.translate_known_prose(raw), path) == value
+    assert get(VerifiedMarketFocusResult.translate_known_prose(raw, None), path) == value
     with pytest.raises(ValueError):
         validate_result("market_focus", json.dumps(raw), payload)
     assert raw == before
@@ -150,7 +152,7 @@ def test_unknown_fields_are_not_recursively_normalized_or_allowed():
     payload, raw, _ = fixture()
     raw["unexpected"] = {"summary": "as_of与catalyst_bias以及8Gbps均不得改写。"}
     before = copy.deepcopy(raw)
-    translated = VerifiedMarketFocusResult.translate_known_prose(raw)
+    translated = VerifiedMarketFocusResult.translate_known_prose(raw, None)
     assert translated["unexpected"] == before["unexpected"]
     with pytest.raises(ValueError):
         validate_result("market_focus", json.dumps(raw), payload)
@@ -177,9 +179,10 @@ def test_prompt_clarifications_are_only_for_verified_sonnet_focus():
         assert rule not in luna
 
 
+@pytest.mark.parametrize("receipt_path", os.environ.get("SONNET_SAVED_RECEIPT_PATH", "").split(os.pathsep))
 @pytest.mark.skipif(not os.environ.get("SONNET_SAVED_RECEIPT_PATH"), reason="Optional local saved receipt; no production fixture is checked in")
-def test_local_saved_receipt_replays_structure_without_mutating_receipt_bindings_or_fees():
-    path = Path(os.environ["SONNET_SAVED_RECEIPT_PATH"])
+def test_local_saved_receipt_replays_structure_without_mutating_receipt_bindings_or_fees(receipt_path):
+    path = Path(receipt_path)
     before_bytes = path.read_bytes()
     job = json.loads(before_bytes)
     before_job = digest(job)
@@ -196,6 +199,27 @@ def test_local_saved_receipt_replays_structure_without_mutating_receipt_bindings
 
     normalized = validate_result("market_focus", receipt["output_text"], payload)
     assert digest(protected(normalized)) == digest(protected(raw))
+
+    def leaf_values(value, path=()):
+        if isinstance(value, dict):
+            return {key: leaf for name, item in value.items() for key, leaf in leaf_values(item, (*path, name)).items()}
+        if isinstance(value, list):
+            return {key: leaf for index, item in enumerate(value) for key, leaf in leaf_values(item, (*path, index)).items()}
+        return {path: value}
+
+    old_leaves, new_leaves = leaf_values(raw), leaf_values(normalized)
+    assert old_leaves.keys() == new_leaves.keys()
+    for key, old in old_leaves.items():
+        new = new_leaves[key]
+        if old == new:
+            continue
+        assert isinstance(old, str) and isinstance(new, str)
+        # Existing compatibility changes an event-heading ordinal, never a
+        # quantity. Remove only that exact heading grammar for numeric checks.
+        old_numbers = re.sub(r"(^|[。！？!?；;\n])[ \t]*\([1-9]\)(?=公司类事件[：:])", "", old)
+        assert re.findall(r"[0-9]+(?:\.[0-9]+)?", old_numbers) == re.findall(r"[0-9]+(?:\.[0-9]+)?", new)
+        assert re.findall(r"https?://\S+", old) == re.findall(r"https?://\S+", new)
+
     # The existing evidence validator resolves null server IDs from unique
     # source URLs. That separate projection never changes the stored receipt.
     bound = copy.deepcopy(normalized)
@@ -212,3 +236,131 @@ def test_local_saved_receipt_replays_structure_without_mutating_receipt_bindings
     assert hashlib.sha256(path.read_bytes()).digest() == hashlib.sha256(before_bytes).digest()
     # Passing this test proves format and provenance compatibility, not factual
     # correctness. It deliberately never publishes or changes any verdict.
+
+
+@pytest.mark.parametrize("path", PROSE_PATHS)
+@pytest.mark.parametrize(("unit", "translated"), [("Hz", "赫兹"), ("kHz", "千赫"), ("MHz", "兆赫"), ("GHz", "吉赫"), ("THz", "太赫")])
+def test_numeric_frequency_units_on_verified_prose_paths(path, unit, translated):
+    payload, raw, evidence = fixture()
+    put(raw, path, f"频率为800 {unit}，另有0.25{unit}。")
+    normalized = validate_result("market_focus", json.dumps(raw), payload)
+    validate_market_focus_evidence(normalized, payload, evidence)
+    assert get(normalized, path) == f"频率为800{translated}，另有0.25{translated}。"
+
+
+@pytest.mark.parametrize("text", [
+    "800MHz股票上涨。", "股票代码为800MHz。", "公司800MHz发布公告。",
+    "800MHz公司宣布交易。", "编号800MHz继续有效。", "频率MHz已公布。",
+    "频率800Mhz已公布。", "频率800MHzExtra已公布。", "标识prefix800MHz发布。",
+    "链接https://example.com/800MHz?frequency=0.25GHz 保持不变。",
+])
+def test_frequency_identifiers_and_non_numeric_units_are_not_rewritten(text):
+    assert _translate_verified_focus_prose(text) == text
+
+
+@pytest.mark.parametrize("text", [
+    "800MHz股票上涨。", "股票代码为800MHz。", "公司800MHz发布公告。",
+    "频率MHz已公布。", "频率800MHzExtra已公布。",
+    "频率800MHz，市场 will strongly improve。",
+])
+def test_frequency_translation_does_not_relax_language_or_security_binding(text):
+    payload, raw, _ = fixture()
+    raw["summary_zh"] = text
+    with pytest.raises(ValueError):
+        validate_result("market_focus", json.dumps(raw), payload)
+
+
+@pytest.mark.parametrize("field", ["summary", "risks"])
+def test_tmus_name_requires_both_matching_assessment_and_allowed_input(field):
+    payload, raw, evidence = fixture()
+    payload["allowed_tickers"] = ["TMUS"]
+    item = raw["focus_ticker_assessments"][0]
+    item["ticker"] = "TMUS"
+    text = "T-Mobile US此前下跌约5.4%，仍需观察。"
+    item[field] = [text] if field == "risks" else text
+    before = copy.deepcopy(raw)
+    normalized = validate_result("market_focus", json.dumps(raw), payload)
+    validate_market_focus_evidence(normalized, payload, evidence)
+    expected = text.replace("T-Mobile US", "TMUS")
+    assert normalized["focus_ticker_assessments"][0][field] == ([expected] if field == "risks" else expected)
+    assert raw == before
+
+
+@pytest.mark.parametrize(("ticker", "allowed"), [("TMUS", []), ("NVDA", ["NVDA", "TMUS"]), ("TMUS", ["NVDA"])])
+def test_tmus_name_without_exact_assessment_binding_is_not_rewritten(ticker, allowed):
+    payload, raw, _ = fixture()
+    item = raw["focus_ticker_assessments"][0]
+    item["ticker"] = ticker
+    item["summary"] = "T-Mobile US此前下跌约5.4%。"
+    payload["allowed_tickers"] = allowed
+    normalized = VerifiedMarketFocusResult.translate_known_prose(raw, SimpleNamespace(context={"allowed_codes": allowed}))
+    assert normalized["focus_ticker_assessments"][0]["summary"] == item["summary"]
+    with pytest.raises(ValueError):
+        validate_result("market_focus", json.dumps(raw), payload)
+
+
+@pytest.mark.parametrize("text", [
+    "代码为T-Mobile US。", "T-Mobile US代码变化。",
+    "链接https://example.com/T-Mobile US 保持不变。",
+    "prefixT-Mobile US此前下跌。", "T-Mobile USExtra此前下跌。",
+    "Unknown Wireless此前下跌。",
+])
+def test_tmus_bound_normalization_preserves_identifiers_urls_and_unknown_names(text):
+    _, raw, _ = fixture()
+    raw["focus_ticker_assessments"][0].update(ticker="TMUS", summary=text)
+    normalized = VerifiedMarketFocusResult.translate_known_prose(raw, SimpleNamespace(context={"allowed_codes": ["TMUS"]}))
+    assert normalized["focus_ticker_assessments"][0]["summary"] == text
+
+
+@pytest.mark.parametrize("text", ["Unknown Wireless此前下跌。", "T-Mobile US will strongly improve。"])
+def test_bound_tmus_does_not_accept_other_companies_or_english_prose(text):
+    payload, raw, _ = fixture()
+    payload["allowed_tickers"] = ["TMUS"]
+    raw["focus_ticker_assessments"][0].update(ticker="TMUS", summary=text)
+    with pytest.raises(ValueError):
+        validate_result("market_focus", json.dumps(raw), payload)
+
+
+@pytest.mark.parametrize("binding", ["T-Mobile US（TMUS）", "T-Mobile US (TMUS)"])
+@pytest.mark.parametrize("path", PROSE_PATHS)
+def test_explicit_allowed_tmus_binding_is_equivalent_on_verified_prose_paths(path, binding):
+    payload, raw, evidence = fixture()
+    payload["allowed_tickers"].append("TMUS")
+    put(raw, path, f"{binding}此前下跌约5.4%。")
+    normalized = validate_result("market_focus", json.dumps(raw), payload)
+    validate_market_focus_evidence(normalized, payload, evidence)
+    assert get(normalized, path) == "TMUS此前下跌约5.4%。"
+    assert normalized["focus_ticker_assessments"][0]["ticker"] == "NVDA"
+
+
+@pytest.mark.parametrize("text", [
+    "T-Mobile US此前下跌约5.4%。", "T-Mobile US（NVDA）此前下跌约5.4%。",
+    "T-Mobile US（tmus）此前下跌约5.4%。", "T-Mobile US（TMUSExtra）此前下跌约5.4%。",
+    "链接https://example.com/T-Mobile US（TMUS） 保持不变。",
+])
+def test_global_tmus_alias_needs_exact_explicit_binding_and_protects_urls(text):
+    payload, raw, _ = fixture()
+    payload["allowed_tickers"].append("TMUS")
+    raw["summary_zh"] = text
+    translated = VerifiedMarketFocusResult.translate_known_prose(raw, SimpleNamespace(context={"allowed_codes": payload["allowed_tickers"]}))
+    assert translated["summary_zh"] == text
+    if not text.startswith("链接"):
+        with pytest.raises(ValueError):
+            validate_result("market_focus", json.dumps(raw), payload)
+
+
+def test_explicit_tmus_binding_cannot_add_an_input_ticker():
+    payload, raw, _ = fixture()
+    raw["summary_zh"] = "T-Mobile US（TMUS）此前下跌约5.4%。"
+    translated = VerifiedMarketFocusResult.translate_known_prose(raw, SimpleNamespace(context={"allowed_codes": ["NVDA"]}))
+    assert translated["summary_zh"] == raw["summary_zh"]
+    with pytest.raises(ValueError):
+        validate_result("market_focus", json.dumps(raw), payload)
+
+
+def test_tmus_assessment_does_not_override_conflicting_explicit_ticker():
+    payload, raw, _ = fixture()
+    payload["allowed_tickers"].append("TMUS")
+    raw["focus_ticker_assessments"][0].update(ticker="TMUS", summary="T-Mobile US（NVDA）此前下跌约5.4%。")
+    translated = VerifiedMarketFocusResult.translate_known_prose(raw, SimpleNamespace(context={"allowed_codes": payload["allowed_tickers"]}))
+    assert translated["focus_ticker_assessments"][0] == raw["focus_ticker_assessments"][0]

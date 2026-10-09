@@ -147,6 +147,7 @@ function nImpact(v: unknown): NewsImpactResult | null {
   if (!Object.keys(r).length) return null;
   const conf = pickN(r, 'confidence') ?? 0;
   return {
+    insufficientContext: pickB(r, 'insufficient_context', 'insufficientContext') === true,
     classification: nClassification(r.classification),
     // 个人版契约 confidence 为 0–100 整数；UI 口径 0–1
     confidence: conf > 1 ? conf / 100 : conf,
