@@ -22,6 +22,8 @@ from pydantic import (
     model_validator,
 )
 
+from app.json_validation import canonical_json_text
+
 
 AIJobStatus = Literal[
     "pending",
@@ -2267,14 +2269,7 @@ def earnings_input_hash(payload: dict[str, Any]) -> str:
             "release_status",
         )
     }
-    raw = json.dumps(
-        facts,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        allow_nan=False,
-    )
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return hashlib.sha256(canonical_json_text(facts).encode("utf-8")).hexdigest()
 
 
 def normalize_earnings_analysis_payload(

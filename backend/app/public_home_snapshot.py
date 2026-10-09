@@ -16,6 +16,7 @@ from typing import Any, Mapping
 from zoneinfo import ZoneInfo
 
 from app.json_validation import (
+    canonical_json_text,
     reject_duplicate_json_keys as _reject_duplicate_json_keys,
     reject_non_finite_json as _reject_non_finite_json,
 )
@@ -1614,12 +1615,8 @@ def write_public_home_snapshot(
         cleaned[resource] = entry
     if not cleaned:
         raise ValueError("public home snapshot must contain at least one resource")
-    encoded = json.dumps(
+    encoded = canonical_json_text(
         {"version": PUBLIC_HOME_SNAPSHOT_VERSION, "resources": cleaned},
-        allow_nan=False,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
     ).encode("utf-8")
     if len(encoded) > PUBLIC_HOME_SNAPSHOT_MAX_BYTES:
         raise ValueError("public home snapshot exceeds the size limit")

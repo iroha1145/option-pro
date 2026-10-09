@@ -21,6 +21,8 @@ from pathlib import Path
 from statistics import fmean, median
 from typing import Any, Iterable, Mapping, Sequence
 
+from app.json_validation import canonical_json_text
+
 from .repository import BreakoutRepository
 from .research_validation import (
     DEFAULT_FORWARD_HORIZONS,
@@ -441,13 +443,7 @@ def build_shadow_correlations(
 
 def _serialize_cell(value: Any) -> Any:
     if isinstance(value, (dict, list, tuple)):
-        return json.dumps(
-            value,
-            allow_nan=False,
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        )
+        return canonical_json_text(value)
     return value
 
 

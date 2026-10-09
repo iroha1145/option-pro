@@ -11,6 +11,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Sequence
 
+from app.json_validation import canonical_json_text
+
 
 SCHEMA_VERSION = "optix-worker-v2"
 LOCK_NAME = "optix-worker"
@@ -164,13 +166,7 @@ def _parse(value: str | None) -> datetime | None:
 
 
 def _details_json(details: Mapping[str, Any] | None) -> str:
-    raw = json.dumps(
-        dict(details or {}),
-        ensure_ascii=False,
-        allow_nan=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    )
+    raw = canonical_json_text(dict(details or {}))
     if len(raw.encode("utf-8")) > _MAX_DETAILS_BYTES:
         raise ValueError("worker task details are too large")
     return raw

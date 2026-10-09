@@ -13,6 +13,7 @@ from typing import Any, Iterable, Iterator, Mapping
 from urllib.parse import quote, urlsplit
 
 from app.failure_diagnostics import record_fallback_failure
+from app.json_validation import canonical_json_text
 from app.services.model_budget import (
     SharedModelBudget,
     JOB_MODELS,
@@ -652,13 +653,7 @@ class AIJobRepository:
         max_bytes: int,
         error_code: str,
     ) -> str:
-        raw = json.dumps(
-            payload,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        )
+        raw = canonical_json_text(payload)
         if len(raw.encode("utf-8")) > max_bytes:
             raise ValueError(error_code)
         return raw
@@ -674,13 +669,7 @@ class AIJobRepository:
             if str(exc) != "ai_input_too_large":
                 raise
             raise ValueError("ai_job_payload_too_large") from exc
-        return json.dumps(
-            payload,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        )
+        return canonical_json_text(payload)
 
     @classmethod
     def _canonical_result(cls, result: dict[str, Any]) -> str:
@@ -2205,7 +2194,7 @@ class AIJobRepository:
             raise ValueError("ai_job_provider_usage_invalid")
         if "request_ids" in receipt or "rounds" in receipt:
             AIJobRepository._validate_provider_rounds(receipt, complete=True)
-        value = json.dumps({**receipt, "evidence_sources": sources}, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        value = canonical_json_text({**receipt, "evidence_sources": sources})
         if len(value.encode("utf-8")) > 2 * _MAX_RESULT_JSON_BYTES:
             raise ValueError("ai_job_provider_receipt_too_large")
         return value
@@ -2245,7 +2234,7 @@ class AIJobRepository:
                 or progress["provider"] != "anthropic" or not _uses_claude(progress["model"])):
             raise ValueError("ai_job_provider_progress_invalid")
         AIJobRepository._validate_provider_rounds(progress, complete=False)
-        value = json.dumps(progress, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        value = canonical_json_text(progress)
         if len(value.encode("utf-8")) > 2 * _MAX_RESULT_JSON_BYTES:
             raise ValueError("ai_job_provider_progress_too_large")
         return value

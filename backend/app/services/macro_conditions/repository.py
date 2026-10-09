@@ -28,6 +28,8 @@ from pathlib import Path
 from typing import Any, Iterator, Mapping, Optional, Sequence
 from urllib.parse import quote
 
+from app.json_validation import canonical_json_text
+
 from .models import (
     EtfObservation,
     MacroError,
@@ -229,13 +231,7 @@ def _safe_db_path(path: str | Path) -> Path:
 
 
 def _stable_json(payload: Any) -> str:
-    text = json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        allow_nan=False,
-    )
+    text = canonical_json_text(payload)
     if len(text.encode("utf-8")) > _MAX_JSON_BYTES:
         raise MacroSchemaError("macro JSON payload exceeds its bound")
     return text
