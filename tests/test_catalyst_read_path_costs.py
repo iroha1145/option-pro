@@ -764,3 +764,52 @@ def test_window_job_snapshot_is_newest_first_without_a_temp_btree(
     # The ORDER BY used to sort every full row in a temp B-tree on disk.
     assert not any("TEMP B-TREE" in detail for detail in plan)
     assert [json.loads(job["payload_json"])["news_id"] for job in snapshot.values()] == [403, 402, 401]
+
+
+def test_ingest_does_not_skip_a_lower_sequence_from_a_later_page_of_the_same_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from test_catalyst_local_intelligence import _iso, _news_change
+
+    from app.services.catalysts.etl_client import NewsChangesPage
+
+    intelligence, etl = _journal_store(tmp_path, monkeypatch, 5)
+    as_of = _iso(NOW - timedelta(minutes=5))
+
+    def apply(page: dict) -> None:
+        state = etl.state("news")
+        etl.apply_news_page(
+            NewsChangesPage.model_validate(page),
+            expected_cursor=state.cursor,
+            expected_generation=state.generation,
+        )
+
+    # One sync run, two pages: sequences are ascending within a page only.
+    apply({
+        "items": [_news_change(90, 1090, available_at=NOW - timedelta(minutes=8))],
+        "has_more": True,
+        "next_cursor": "page-2",
+        "watermark": {"sequence": 100, "as_of": as_of},
+        "next_updated_after": None,
+        "next_after_sequence": None,
+    })
+    intelligence.reconcile()
+    apply({
+        "items": [_news_change(80, 1080, available_at=NOW - timedelta(minutes=9))],
+        "has_more": False,
+        "next_cursor": None,
+        "watermark": {"sequence": 100, "as_of": as_of},
+        "next_updated_after": as_of,
+        "next_after_sequence": 100,
+    })
+    intelligence.reconcile()
+    with intelligence._connect() as connection:
+        ingested = {
+            row[0]
+            for row in connection.execute(
+                "SELECT news_id FROM catalyst_local_news_revisions WHERE news_id IN (1080,1090)"
+            )
+        }
+    assert ingested == {1080, 1090}
+    # The run has completed: the next pass starts above everything it holds.
+    assert intelligence._ingest_watermark[1] == 90

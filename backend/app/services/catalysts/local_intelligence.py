@@ -2106,26 +2106,35 @@ class LocalCatalystIntelligence:
     ) -> tuple[int, tuple[int | None, int] | None]:
         """Insert revisions for journal upserts; returns (count, new watermark).
 
-        Journal sequences only grow between cursor resets, so after the first
-        full pass each reconcile reads only changes above the watermark. The
-        caller adopts the watermark once its transaction commits.
+        Every change at or below the stream's completed watermark is in the
+        journal: a sync run commits that watermark only with its last page.
+        Above it, pages of a run still in progress need not arrive in sequence
+        order, so the watermark never passes the completed one; each reconcile
+        reads only changes above it and the anti-join skips those already
+        ingested. A cursor reset starts over from zero. The caller adopts the
+        watermark once its transaction commits.
         """
 
         try:
             state = connection.execute(
-                "SELECT reset_count FROM macrolens_etl_state WHERE stream='news'"
+                """SELECT reset_count,completed_watermark_sequence
+                   FROM macrolens_etl_state WHERE stream='news'"""
             ).fetchone()
             reset_count = int(state["reset_count"]) if state is not None else None
+            completed = int(state["completed_watermark_sequence"]) if state is not None else 0
             floor = (
                 self._ingest_watermark[1]
                 if self._ingest_watermark is not None
                 and self._ingest_watermark[0] == reset_count
                 else 0
             )
-            high = int(
-                connection.execute(
-                    "SELECT COALESCE(MAX(change_sequence),0) FROM macrolens_etl_news_changes"
-                ).fetchone()[0]
+            high = min(
+                completed,
+                int(
+                    connection.execute(
+                        "SELECT COALESCE(MAX(change_sequence),0) FROM macrolens_etl_news_changes"
+                    ).fetchone()[0]
+                ),
             )
             rows = connection.execute(
                 """SELECT c.change_sequence,c.news_id,c.available_at,c.raw_json
