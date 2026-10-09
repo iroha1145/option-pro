@@ -335,6 +335,25 @@ def utc_seconds(value: datetime) -> str:
     return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def utc_micros(value: datetime) -> str:
+    """``YYYY-MM-DDTHH:MM:SS.ffffffZ`` with all six digits, even at zero."""
+
+    return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def parse_utc(value: object) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    return parsed.astimezone(timezone.utc)
+
+
 def _iso_seconds(value: object) -> str | None:
     text = str(value or "").strip()
     if not text:

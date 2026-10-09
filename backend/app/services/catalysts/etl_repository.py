@@ -202,6 +202,23 @@ class CatalystEtlRepository:
         finally:
             connection.close()
 
+    @contextmanager
+    def transaction(self) -> Iterator[sqlite3.Connection]:
+        """One write transaction shared by several repository calls.
+
+        Methods that take ``connection`` run inside it without committing, so
+        a collector round is stored completely or not at all.
+        """
+
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                yield connection
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+
     def initialize(self) -> None:
         observed = _utc_now()
         with self._connect() as connection:
@@ -275,12 +292,22 @@ class CatalystEtlRepository:
             raise ValueError("unknown ETL stream")
         return stream  # type: ignore[return-value]
 
-    def state(self, stream: StreamName) -> SyncState:
+    def state(
+        self,
+        stream: StreamName,
+        *,
+        connection: sqlite3.Connection | None = None,
+    ) -> SyncState:
         name = self._require_stream(stream)
-        with self._connect() as connection:
+        if connection is not None:
             row = connection.execute(
                 "SELECT * FROM macrolens_etl_state WHERE stream=?", (name,)
             ).fetchone()
+        else:
+            with self._connect() as owned:
+                row = owned.execute(
+                    "SELECT * FROM macrolens_etl_state WHERE stream=?", (name,)
+                ).fetchone()
         if row is None:
             raise EtlRepositoryError("macrolens_etl_state_not_initialized")
         return self._state_from_row(row)
@@ -349,199 +376,216 @@ class CatalystEtlRepository:
         *,
         expected_cursor: str | None,
         expected_generation: int,
+        connection: sqlite3.Connection | None = None,
+    ) -> dict[str, int | bool]:
+        if connection is not None:
+            return self._apply_news_page(
+                connection,
+                page,
+                expected_cursor=expected_cursor,
+                expected_generation=expected_generation,
+            )
+        with self.transaction() as owned:
+            return self._apply_news_page(
+                owned,
+                page,
+                expected_cursor=expected_cursor,
+                expected_generation=expected_generation,
+            )
+
+    def _apply_news_page(
+        self,
+        connection: sqlite3.Connection,
+        page: NewsChangesPage,
+        *,
+        expected_cursor: str | None,
+        expected_generation: int,
     ) -> dict[str, int | bool]:
         observed = _utc_now()
         upserts = 0
         deletes = 0
         replayed = 0
-        with self._connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            try:
-                row = connection.execute(
-                    "SELECT * FROM macrolens_etl_state WHERE stream='news'"
-                ).fetchone()
-                if row is None:
-                    raise EtlRepositoryError("macrolens_etl_state_not_initialized")
-                state = self._state_from_row(row)
-                self._assert_checkpoint(
-                    state,
-                    expected_cursor=expected_cursor,
-                    expected_generation=expected_generation,
+        row = connection.execute(
+            "SELECT * FROM macrolens_etl_state WHERE stream='news'"
+        ).fetchone()
+        if row is None:
+            raise EtlRepositoryError("macrolens_etl_state_not_initialized")
+        state = self._state_from_row(row)
+        self._assert_checkpoint(
+            state,
+            expected_cursor=expected_cursor,
+            expected_generation=expected_generation,
+        )
+        self._assert_frozen_news_window(state, page)
+        self._assert_sequence_boundary(
+            state,
+            watermark_sequence=page.watermark.sequence,
+            next_after_sequence=page.next_after_sequence,
+            next_updated_after=page.next_updated_after,
+            has_more=page.has_more,
+        )
+        if any(
+            change.sequence <= state.completed_watermark_sequence
+            for change in page.items
+        ):
+            raise EtlWatermarkConflict(
+                "macrolens_etl_news_sequence_did_not_advance"
+            )
+        for change in page.items:
+            raw = change.model_dump(mode="json")
+            raw_json = _json(raw)
+            payload_hash = hashlib.sha256(raw_json.encode()).hexdigest()
+            existing = connection.execute(
+                """SELECT payload_hash FROM macrolens_etl_news_changes
+                   WHERE change_sequence=?""",
+                (change.sequence,),
+            ).fetchone()
+            if existing is not None and str(existing["payload_hash"]) != payload_hash:
+                raise EtlWatermarkConflict(
+                    "macrolens_etl_change_sequence_was_reused"
                 )
-                self._assert_frozen_news_window(state, page)
-                self._assert_sequence_boundary(
-                    state,
-                    watermark_sequence=page.watermark.sequence,
-                    next_after_sequence=page.next_after_sequence,
-                    next_updated_after=page.next_updated_after,
-                    has_more=page.has_more,
+            is_replay = existing is not None
+            if is_replay:
+                replayed += 1
+            connection.execute(
+                """INSERT OR IGNORE INTO macrolens_etl_news_changes(
+                       change_sequence,news_id,operation,changed_at,
+                       source_updated_at,available_at,payload_hash,raw_json,applied_at
+                   ) VALUES(?,?,?,?,?,?,?,?,?)""",
+                (
+                    change.sequence,
+                    change.news_id,
+                    change.operation,
+                    change.changed_at,
+                    change.source_updated_at,
+                    change.available_at,
+                    payload_hash,
+                    raw_json,
+                    observed,
+                ),
+            )
+            if change.operation == "delete":
+                if not is_replay:
+                    deletes += 1
+                connection.execute(
+                    """INSERT OR IGNORE INTO macrolens_etl_news_tombstones(
+                           news_id,change_sequence,deleted_at,source_updated_at,
+                           raw_json,applied_at
+                       ) VALUES(?,?,?,?,?,?)""",
+                    (
+                        change.news_id,
+                        change.sequence,
+                        change.available_at,
+                        change.source_updated_at,
+                        raw_json,
+                        observed,
+                    ),
                 )
-                if any(
-                    change.sequence <= state.completed_watermark_sequence
-                    for change in page.items
-                ):
-                    raise EtlWatermarkConflict(
-                        "macrolens_etl_news_sequence_did_not_advance"
-                    )
-                for change in page.items:
-                    raw = change.model_dump(mode="json")
-                    raw_json = _json(raw)
-                    payload_hash = hashlib.sha256(raw_json.encode()).hexdigest()
-                    existing = connection.execute(
-                        """SELECT payload_hash FROM macrolens_etl_news_changes
-                           WHERE change_sequence=?""",
-                        (change.sequence,),
-                    ).fetchone()
-                    if existing is not None and str(existing["payload_hash"]) != payload_hash:
-                        raise EtlWatermarkConflict(
-                            "macrolens_etl_change_sequence_was_reused"
-                        )
-                    is_replay = existing is not None
-                    if is_replay:
-                        replayed += 1
-                    connection.execute(
-                        """INSERT OR IGNORE INTO macrolens_etl_news_changes(
-                               change_sequence,news_id,operation,changed_at,
-                               source_updated_at,available_at,payload_hash,raw_json,applied_at
-                           ) VALUES(?,?,?,?,?,?,?,?,?)""",
-                        (
-                            change.sequence,
-                            change.news_id,
-                            change.operation,
-                            change.changed_at,
-                            change.source_updated_at,
-                            change.available_at,
-                            payload_hash,
-                            raw_json,
-                            observed,
-                        ),
-                    )
-                    if change.operation == "delete":
-                        if not is_replay:
-                            deletes += 1
-                        connection.execute(
-                            """INSERT OR IGNORE INTO macrolens_etl_news_tombstones(
-                                   news_id,change_sequence,deleted_at,source_updated_at,
-                                   raw_json,applied_at
-                               ) VALUES(?,?,?,?,?,?)""",
-                            (
-                                change.news_id,
-                                change.sequence,
-                                change.available_at,
-                                change.source_updated_at,
-                                raw_json,
-                                observed,
-                            ),
-                        )
-                        connection.execute(
-                            """INSERT INTO macrolens_etl_news(
-                                   news_id,change_sequence,deleted,source_updated_at,
-                                   available_at,synced_at
-                               ) VALUES(?,?,1,?,?,?)
-                               ON CONFLICT(news_id) DO UPDATE SET
-                                   change_sequence=excluded.change_sequence,deleted=1,
-                                   source_updated_at=excluded.source_updated_at,
-                                   available_at=excluded.available_at,
-                                   synced_at=excluded.synced_at
-                               WHERE excluded.change_sequence>=macrolens_etl_news.change_sequence""",
-                            (
-                                change.news_id,
-                                change.sequence,
-                                change.source_updated_at,
-                                change.available_at,
-                                observed,
-                            ),
-                        )
-                        continue
+                connection.execute(
+                    """INSERT INTO macrolens_etl_news(
+                           news_id,change_sequence,deleted,source_updated_at,
+                           available_at,synced_at
+                       ) VALUES(?,?,1,?,?,?)
+                       ON CONFLICT(news_id) DO UPDATE SET
+                           change_sequence=excluded.change_sequence,deleted=1,
+                           source_updated_at=excluded.source_updated_at,
+                           available_at=excluded.available_at,
+                           synced_at=excluded.synced_at
+                       WHERE excluded.change_sequence>=macrolens_etl_news.change_sequence""",
+                    (
+                        change.news_id,
+                        change.sequence,
+                        change.source_updated_at,
+                        change.available_at,
+                        observed,
+                    ),
+                )
+                continue
 
-                    if not is_replay:
-                        upserts += 1
-                    assert change.news is not None
-                    news = change.news
-                    news_raw = news.model_dump(mode="json")
-                    connection.execute(
-                        """INSERT INTO macrolens_etl_news(
-                               news_id,change_sequence,deleted,source,title,summary,url,
-                               image_url,published_at,fetched_at,source_updated_at,
-                               available_at,content_hash,source_tickers_json,sources_json,
-                               source_observations_json,raw_json,synced_at
-                           ) VALUES(?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                           ON CONFLICT(news_id) DO UPDATE SET
-                               change_sequence=excluded.change_sequence,
-                               deleted=0,source=excluded.source,title=excluded.title,
-                               summary=excluded.summary,url=excluded.url,
-                               image_url=excluded.image_url,published_at=excluded.published_at,
-                               fetched_at=excluded.fetched_at,
-                               source_updated_at=excluded.source_updated_at,
-                               available_at=excluded.available_at,
-                               content_hash=excluded.content_hash,
-                               source_tickers_json=excluded.source_tickers_json,
-                               sources_json=excluded.sources_json,
-                               source_observations_json=excluded.source_observations_json,
-                               raw_json=excluded.raw_json,synced_at=excluded.synced_at
-                           WHERE excluded.change_sequence >=
-                                 macrolens_etl_news.change_sequence""",
-                        (
-                            news.id,
-                            change.sequence,
-                            news.source,
-                            news.title,
-                            news.summary,
-                            news.url,
-                            news.image_url,
-                            news.published_at,
-                            news.fetched_at,
-                            change.source_updated_at,
-                            change.available_at,
-                            news.content_hash,
-                            _json(news.source_tickers),
-                            _json(news.sources),
-                            _json(
-                                [
-                                    item.model_dump(mode="json")
-                                    for item in news.source_observations
-                                ]
-                            ),
-                            _json(news_raw),
-                            observed,
-                        ),
-                    )
+            if not is_replay:
+                upserts += 1
+            assert change.news is not None
+            news = change.news
+            news_raw = news.model_dump(mode="json")
+            connection.execute(
+                """INSERT INTO macrolens_etl_news(
+                       news_id,change_sequence,deleted,source,title,summary,url,
+                       image_url,published_at,fetched_at,source_updated_at,
+                       available_at,content_hash,source_tickers_json,sources_json,
+                       source_observations_json,raw_json,synced_at
+                   ) VALUES(?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                   ON CONFLICT(news_id) DO UPDATE SET
+                       change_sequence=excluded.change_sequence,
+                       deleted=0,source=excluded.source,title=excluded.title,
+                       summary=excluded.summary,url=excluded.url,
+                       image_url=excluded.image_url,published_at=excluded.published_at,
+                       fetched_at=excluded.fetched_at,
+                       source_updated_at=excluded.source_updated_at,
+                       available_at=excluded.available_at,
+                       content_hash=excluded.content_hash,
+                       source_tickers_json=excluded.source_tickers_json,
+                       sources_json=excluded.sources_json,
+                       source_observations_json=excluded.source_observations_json,
+                       raw_json=excluded.raw_json,synced_at=excluded.synced_at
+                   WHERE excluded.change_sequence >=
+                         macrolens_etl_news.change_sequence""",
+                (
+                    news.id,
+                    change.sequence,
+                    news.source,
+                    news.title,
+                    news.summary,
+                    news.url,
+                    news.image_url,
+                    news.published_at,
+                    news.fetched_at,
+                    change.source_updated_at,
+                    change.available_at,
+                    news.content_hash,
+                    _json(news.source_tickers),
+                    _json(news.sources),
+                    _json(
+                        [
+                            item.model_dump(mode="json")
+                            for item in news.source_observations
+                        ]
+                    ),
+                    _json(news_raw),
+                    observed,
+                ),
+            )
 
-                if page.has_more:
-                    connection.execute(
-                        """UPDATE macrolens_etl_state SET
-                               generation=generation+1,cursor=?,pending_watermark_sequence=?,
-                               pending_watermark_as_of=?,pending_snapshot_token=NULL,
-                               last_error_code=NULL,updated_at=?
-                           WHERE stream='news'""",
-                        (
-                            page.next_cursor,
-                            page.watermark.sequence,
-                            page.watermark.as_of,
-                            observed,
-                        ),
-                    )
-                else:
-                    connection.execute(
-                        """UPDATE macrolens_etl_state SET
-                               generation=generation+1,cursor=NULL,updated_after=?,
-                               pending_watermark_sequence=NULL,pending_watermark_as_of=NULL,
-                               pending_snapshot_token=NULL,completed_watermark_sequence=?,
-                               completed_as_of=?,last_success_at=?,last_error_code=NULL,
-                               updated_at=?
-                           WHERE stream='news'""",
-                        (
-                            page.next_updated_after,
-                            page.next_after_sequence,
-                            page.watermark.as_of,
-                            observed,
-                            observed,
-                        ),
-                    )
-                connection.commit()
-            except Exception:
-                connection.rollback()
-                raise
+        if page.has_more:
+            connection.execute(
+                """UPDATE macrolens_etl_state SET
+                       generation=generation+1,cursor=?,pending_watermark_sequence=?,
+                       pending_watermark_as_of=?,pending_snapshot_token=NULL,
+                       last_error_code=NULL,updated_at=?
+                   WHERE stream='news'""",
+                (
+                    page.next_cursor,
+                    page.watermark.sequence,
+                    page.watermark.as_of,
+                    observed,
+                ),
+            )
+        else:
+            connection.execute(
+                """UPDATE macrolens_etl_state SET
+                       generation=generation+1,cursor=NULL,updated_after=?,
+                       pending_watermark_sequence=NULL,pending_watermark_as_of=NULL,
+                       pending_snapshot_token=NULL,completed_watermark_sequence=?,
+                       completed_as_of=?,last_success_at=?,last_error_code=NULL,
+                       updated_at=?
+                   WHERE stream='news'""",
+                (
+                    page.next_updated_after,
+                    page.next_after_sequence,
+                    page.watermark.as_of,
+                    observed,
+                    observed,
+                ),
+            )
         return {
             "upserts": upserts,
             "deletes": deletes,
@@ -555,167 +599,184 @@ class CatalystEtlRepository:
         *,
         expected_cursor: str | None,
         expected_generation: int,
+        connection: sqlite3.Connection | None = None,
+    ) -> dict[str, int | bool]:
+        if connection is not None:
+            return self._apply_calendar_page(
+                connection,
+                page,
+                expected_cursor=expected_cursor,
+                expected_generation=expected_generation,
+            )
+        with self.transaction() as owned:
+            return self._apply_calendar_page(
+                owned,
+                page,
+                expected_cursor=expected_cursor,
+                expected_generation=expected_generation,
+            )
+
+    def _apply_calendar_page(
+        self,
+        connection: sqlite3.Connection,
+        page: CalendarPage,
+        *,
+        expected_cursor: str | None,
+        expected_generation: int,
     ) -> dict[str, int | bool]:
         observed = _utc_now()
         new_items = 0
         replayed = 0
-        with self._connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            try:
-                row = connection.execute(
-                    "SELECT * FROM macrolens_etl_state WHERE stream='calendar'"
-                ).fetchone()
-                if row is None:
-                    raise EtlRepositoryError("macrolens_etl_state_not_initialized")
-                state = self._state_from_row(row)
-                self._assert_checkpoint(
-                    state,
-                    expected_cursor=expected_cursor,
-                    expected_generation=expected_generation,
+        row = connection.execute(
+            "SELECT * FROM macrolens_etl_state WHERE stream='calendar'"
+        ).fetchone()
+        if row is None:
+            raise EtlRepositoryError("macrolens_etl_state_not_initialized")
+        state = self._state_from_row(row)
+        self._assert_checkpoint(
+            state,
+            expected_cursor=expected_cursor,
+            expected_generation=expected_generation,
+        )
+        self._assert_frozen_calendar_window(state, page)
+        self._assert_sequence_boundary(
+            state,
+            watermark_sequence=page.watermark.sequence,
+            next_after_sequence=page.next_after_sequence,
+            next_updated_after=page.next_updated_after,
+            has_more=page.has_more,
+        )
+        sequence = page.watermark.sequence
+        token = page.watermark.snapshot_token
+        if page.items and sequence <= state.completed_watermark_sequence:
+            raise EtlWatermarkConflict(
+                "macrolens_etl_calendar_sequence_did_not_advance"
+            )
+        if sequence:
+            existing = connection.execute(
+                """SELECT snapshot_token FROM macrolens_etl_calendar_snapshots
+                   WHERE snapshot_sequence=?""",
+                (sequence,),
+            ).fetchone()
+            if existing is not None and str(existing["snapshot_token"]) != token:
+                raise EtlWatermarkConflict(
+                    "macrolens_etl_calendar_sequence_was_reused"
                 )
-                self._assert_frozen_calendar_window(state, page)
-                self._assert_sequence_boundary(
-                    state,
-                    watermark_sequence=page.watermark.sequence,
-                    next_after_sequence=page.next_after_sequence,
-                    next_updated_after=page.next_updated_after,
-                    has_more=page.has_more,
+            should_restart_snapshot = (
+                expected_cursor is None
+                and (
+                    bool(page.items)
+                    or state.completed_watermark_sequence != sequence
                 )
-                sequence = page.watermark.sequence
-                token = page.watermark.snapshot_token
-                if page.items and sequence <= state.completed_watermark_sequence:
-                    raise EtlWatermarkConflict(
-                        "macrolens_etl_calendar_sequence_did_not_advance"
-                    )
-                if sequence:
-                    existing = connection.execute(
-                        """SELECT snapshot_token FROM macrolens_etl_calendar_snapshots
-                           WHERE snapshot_sequence=?""",
-                        (sequence,),
-                    ).fetchone()
-                    if existing is not None and str(existing["snapshot_token"]) != token:
-                        raise EtlWatermarkConflict(
-                            "macrolens_etl_calendar_sequence_was_reused"
-                        )
-                    should_restart_snapshot = (
-                        expected_cursor is None
-                        and (
-                            bool(page.items)
-                            or state.completed_watermark_sequence != sequence
-                        )
-                    )
-                    prior_event_payloads = {
-                        int(item["ordinal"]): str(item["raw_json"])
-                        for item in connection.execute(
-                            """SELECT ordinal,raw_json
-                               FROM macrolens_etl_calendar_events
-                               WHERE snapshot_sequence=?""",
-                            (sequence,),
-                        ).fetchall()
-                    }
-                    connection.execute(
-                        """INSERT INTO macrolens_etl_calendar_snapshots(
-                               snapshot_sequence,snapshot_token,as_of,data_through,is_stale,
-                               complete,last_ordinal,synced_at
-                           ) VALUES(?,?,?,?,?,0,0,?)
-                           ON CONFLICT(snapshot_sequence) DO UPDATE SET
-                               as_of=excluded.as_of,data_through=excluded.data_through,
-                               is_stale=excluded.is_stale,synced_at=excluded.synced_at""",
-                        (
-                            sequence,
-                            token,
-                            page.watermark.as_of,
-                            page.data_through,
-                            int(page.is_stale),
-                            observed,
-                        ),
-                    )
-                    if should_restart_snapshot:
-                        connection.execute(
-                            """DELETE FROM macrolens_etl_calendar_events
-                               WHERE snapshot_sequence=?""",
-                            (sequence,),
-                        )
-                        connection.execute(
-                            """UPDATE macrolens_etl_calendar_snapshots
-                               SET complete=0,last_ordinal=0 WHERE snapshot_sequence=?""",
-                            (sequence,),
-                        )
-                    for event in page.items:
-                        event_json = _json(event.model_dump(mode="json"))
-                        prior_payload = prior_event_payloads.get(event.ordinal)
-                        if prior_payload is None:
-                            new_items += 1
-                        elif prior_payload == event_json:
-                            replayed += 1
-                        else:
-                            raise EtlWatermarkConflict(
-                                "macrolens_etl_calendar_event_was_reused"
-                            )
-                        connection.execute(
-                            """INSERT INTO macrolens_etl_calendar_events(
-                                   snapshot_sequence,ordinal,event_id,scheduled_at_utc,
-                                   title,raw_json,synced_at
-                               ) VALUES(?,?,?,?,?,?,?)
-                               ON CONFLICT(snapshot_sequence,ordinal) DO UPDATE SET
-                                   event_id=excluded.event_id,
-                                   scheduled_at_utc=excluded.scheduled_at_utc,
-                                   title=excluded.title,raw_json=excluded.raw_json,
-                                   synced_at=excluded.synced_at""",
-                            (
-                                sequence,
-                                event.ordinal,
-                                event.event_id,
-                                event.scheduled_at_utc,
-                                event.title,
-                                event_json,
-                                observed,
-                            ),
-                        )
-                    last_ordinal = max((item.ordinal for item in page.items), default=0)
-                    connection.execute(
-                        """UPDATE macrolens_etl_calendar_snapshots SET
-                               complete=?,last_ordinal=MAX(last_ordinal,?),synced_at=?
-                           WHERE snapshot_sequence=?""",
-                        (int(not page.has_more), last_ordinal, observed, sequence),
-                    )
-
-                if page.has_more:
-                    connection.execute(
-                        """UPDATE macrolens_etl_state SET
-                               generation=generation+1,cursor=?,pending_watermark_sequence=?,
-                               pending_watermark_as_of=?,pending_snapshot_token=?,
-                               last_error_code=NULL,updated_at=?
-                           WHERE stream='calendar'""",
-                        (
-                            page.next_cursor,
-                            sequence,
-                            page.watermark.as_of,
-                            token,
-                            observed,
-                        ),
-                    )
+            )
+            prior_event_payloads = {
+                int(item["ordinal"]): str(item["raw_json"])
+                for item in connection.execute(
+                    """SELECT ordinal,raw_json
+                       FROM macrolens_etl_calendar_events
+                       WHERE snapshot_sequence=?""",
+                    (sequence,),
+                ).fetchall()
+            }
+            connection.execute(
+                """INSERT INTO macrolens_etl_calendar_snapshots(
+                       snapshot_sequence,snapshot_token,as_of,data_through,is_stale,
+                       complete,last_ordinal,synced_at
+                   ) VALUES(?,?,?,?,?,0,0,?)
+                   ON CONFLICT(snapshot_sequence) DO UPDATE SET
+                       as_of=excluded.as_of,data_through=excluded.data_through,
+                       is_stale=excluded.is_stale,synced_at=excluded.synced_at""",
+                (
+                    sequence,
+                    token,
+                    page.watermark.as_of,
+                    page.data_through,
+                    int(page.is_stale),
+                    observed,
+                ),
+            )
+            if should_restart_snapshot:
+                connection.execute(
+                    """DELETE FROM macrolens_etl_calendar_events
+                       WHERE snapshot_sequence=?""",
+                    (sequence,),
+                )
+                connection.execute(
+                    """UPDATE macrolens_etl_calendar_snapshots
+                       SET complete=0,last_ordinal=0 WHERE snapshot_sequence=?""",
+                    (sequence,),
+                )
+            for event in page.items:
+                event_json = _json(event.model_dump(mode="json"))
+                prior_payload = prior_event_payloads.get(event.ordinal)
+                if prior_payload is None:
+                    new_items += 1
+                elif prior_payload == event_json:
+                    replayed += 1
                 else:
-                    connection.execute(
-                        """UPDATE macrolens_etl_state SET
-                               generation=generation+1,cursor=NULL,updated_after=?,
-                               pending_watermark_sequence=NULL,
-                               pending_watermark_as_of=NULL,pending_snapshot_token=NULL,
-                               completed_watermark_sequence=?,completed_as_of=?,
-                               last_success_at=?,last_error_code=NULL,updated_at=?
-                           WHERE stream='calendar'""",
-                        (
-                            page.next_updated_after,
-                            page.next_after_sequence,
-                            page.watermark.as_of,
-                            observed,
-                            observed,
-                        ),
+                    raise EtlWatermarkConflict(
+                        "macrolens_etl_calendar_event_was_reused"
                     )
-                connection.commit()
-            except Exception:
-                connection.rollback()
-                raise
+                connection.execute(
+                    """INSERT INTO macrolens_etl_calendar_events(
+                           snapshot_sequence,ordinal,event_id,scheduled_at_utc,
+                           title,raw_json,synced_at
+                       ) VALUES(?,?,?,?,?,?,?)
+                       ON CONFLICT(snapshot_sequence,ordinal) DO UPDATE SET
+                           event_id=excluded.event_id,
+                           scheduled_at_utc=excluded.scheduled_at_utc,
+                           title=excluded.title,raw_json=excluded.raw_json,
+                           synced_at=excluded.synced_at""",
+                    (
+                        sequence,
+                        event.ordinal,
+                        event.event_id,
+                        event.scheduled_at_utc,
+                        event.title,
+                        event_json,
+                        observed,
+                    ),
+                )
+            last_ordinal = max((item.ordinal for item in page.items), default=0)
+            connection.execute(
+                """UPDATE macrolens_etl_calendar_snapshots SET
+                       complete=?,last_ordinal=MAX(last_ordinal,?),synced_at=?
+                   WHERE snapshot_sequence=?""",
+                (int(not page.has_more), last_ordinal, observed, sequence),
+            )
+
+        if page.has_more:
+            connection.execute(
+                """UPDATE macrolens_etl_state SET
+                       generation=generation+1,cursor=?,pending_watermark_sequence=?,
+                       pending_watermark_as_of=?,pending_snapshot_token=?,
+                       last_error_code=NULL,updated_at=?
+                   WHERE stream='calendar'""",
+                (
+                    page.next_cursor,
+                    sequence,
+                    page.watermark.as_of,
+                    token,
+                    observed,
+                ),
+            )
+        else:
+            connection.execute(
+                """UPDATE macrolens_etl_state SET
+                       generation=generation+1,cursor=NULL,updated_after=?,
+                       pending_watermark_sequence=NULL,
+                       pending_watermark_as_of=NULL,pending_snapshot_token=NULL,
+                       completed_watermark_sequence=?,completed_as_of=?,
+                       last_success_at=?,last_error_code=NULL,updated_at=?
+                   WHERE stream='calendar'""",
+                (
+                    page.next_updated_after,
+                    page.next_after_sequence,
+                    page.watermark.as_of,
+                    observed,
+                    observed,
+                ),
+            )
         return {
             "items": new_items,
             "replayed": replayed,
@@ -738,15 +799,142 @@ class CatalystEtlRepository:
             connection.commit()
         return self.state(name)
 
-    def record_error(self, stream: StreamName, error_code: str) -> None:
+    def record_error(
+        self,
+        stream: StreamName,
+        error_code: str,
+        *,
+        connection: sqlite3.Connection | None = None,
+    ) -> None:
         name = self._require_stream(stream)
+        statement = """UPDATE macrolens_etl_state SET last_error_code=?,updated_at=?
+                       WHERE stream=?"""
+        values = (error_code[:100], _utc_now(), name)
+        if connection is not None:
+            connection.execute(statement, values)
+            return
+        with self._connect() as owned:
+            owned.execute(statement, values)
+            owned.commit()
+
+    @staticmethod
+    def clear_pending_checkpoints(connection: sqlite3.Connection) -> int:
+        """Drop a remote pagination window left behind when the writer changes."""
+
+        return connection.execute(
+            """UPDATE macrolens_etl_state SET
+                   generation=generation+1,cursor=NULL,pending_watermark_sequence=NULL,
+                   pending_watermark_as_of=NULL,pending_snapshot_token=NULL,updated_at=?
+               WHERE cursor IS NOT NULL OR pending_watermark_sequence IS NOT NULL
+                  OR pending_watermark_as_of IS NOT NULL
+                  OR pending_snapshot_token IS NOT NULL""",
+            (_utc_now(),),
+        ).rowcount
+
+    @staticmethod
+    def latest_calendar_snapshot(connection: sqlite3.Connection) -> tuple[int, str] | None:
+        """Sequence and token of the completed snapshot readers currently use."""
+
+        row = connection.execute(
+            """SELECT snapshot.snapshot_sequence,snapshot.snapshot_token
+               FROM macrolens_etl_state AS state
+               JOIN macrolens_etl_calendar_snapshots AS snapshot
+                 ON snapshot.snapshot_sequence=state.completed_watermark_sequence
+               WHERE state.stream='calendar' AND snapshot.complete=1"""
+        ).fetchone()
+        return (int(row[0]), str(row[1])) if row is not None else None
+
+    @staticmethod
+    def next_calendar_sequence(connection: sqlite3.Connection) -> int:
+        row = connection.execute(
+            """SELECT MAX(
+                   COALESCE((SELECT completed_watermark_sequence FROM macrolens_etl_state
+                             WHERE stream='calendar'),0),
+                   COALESCE((SELECT MAX(snapshot_sequence)
+                             FROM macrolens_etl_calendar_snapshots),0)
+               )"""
+        ).fetchone()
+        return int(row[0]) + 1
+
+    def touch_calendar_snapshot(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        sequence: int,
+        data_through: str,
+        checked_at: str,
+    ) -> None:
+        """Confirm the latest snapshot again without moving its ``as_of``.
+
+        Moving ``as_of`` would send point-in-time reads between the old and the
+        new value back to the previous snapshot.
+        """
+
+        state = self.state("calendar", connection=connection)
+        if state.completed_watermark_sequence != sequence or state.cursor is not None:
+            raise EtlWatermarkConflict("macrolens_etl_calendar_watermark_changed")
+        if _parse_utc(checked_at) < _parse_utc(state.updated_after):
+            raise EtlWatermarkConflict("macrolens_etl_checkpoint_time_regressed")
+        observed = _utc_now()
+        touched = connection.execute(
+            """UPDATE macrolens_etl_calendar_snapshots SET data_through=?,synced_at=?
+               WHERE snapshot_sequence=? AND complete=1""",
+            (data_through, observed, sequence),
+        ).rowcount
+        if touched != 1:
+            raise EtlWatermarkConflict("macrolens_etl_calendar_watermark_changed")
+        connection.execute(
+            """UPDATE macrolens_etl_state SET
+                   generation=generation+1,updated_after=?,completed_as_of=?,
+                   last_success_at=?,last_error_code=NULL,updated_at=?
+               WHERE stream='calendar'""",
+            (checked_at, checked_at, observed, observed),
+        )
+
+    def prune_calendar_snapshots(self, *, before: str, limit: int, batch: int = 100) -> int:
+        """Delete up to ``limit`` snapshots older than ``before``.
+
+        The snapshot named by the calendar checkpoint and the newest complete
+        snapshot always stay. Each batch commits on its own so the deletion of
+        a large backlog never holds the write lock for long.
+        """
+
+        deleted = 0
         with self._connect() as connection:
-            connection.execute(
-                """UPDATE macrolens_etl_state SET last_error_code=?,updated_at=?
-                   WHERE stream=?""",
-                (error_code[:100], _utc_now(), name),
-            )
-            connection.commit()
+            while deleted < limit:
+                connection.execute("BEGIN IMMEDIATE")
+                try:
+                    sequences = [
+                        int(row[0])
+                        for row in connection.execute(
+                            """SELECT snapshot_sequence FROM macrolens_etl_calendar_snapshots
+                               WHERE as_of<?
+                                 AND snapshot_sequence<>COALESCE(
+                                     (SELECT completed_watermark_sequence
+                                      FROM macrolens_etl_state WHERE stream='calendar'),0)
+                                 AND snapshot_sequence<>COALESCE(
+                                     (SELECT MAX(snapshot_sequence)
+                                      FROM macrolens_etl_calendar_snapshots
+                                      WHERE complete=1),0)
+                               ORDER BY snapshot_sequence LIMIT ?""",
+                            (before, min(batch, limit - deleted)),
+                        ).fetchall()
+                    ]
+                    if sequences:
+                        marks = ",".join("?" for _ in sequences)
+                        connection.execute(
+                            "DELETE FROM macrolens_etl_calendar_snapshots"
+                            f" WHERE snapshot_sequence IN ({marks})",
+                            sequences,
+                        )
+                    connection.commit()
+                except Exception:
+                    connection.rollback()
+                    raise
+                if not sequences:
+                    break
+                deleted += len(sequences)
+        return deleted
 
     def get_news(self, news_id: int, *, include_deleted: bool = False) -> dict[str, Any] | None:
         if isinstance(news_id, bool) or news_id < 1:
