@@ -293,6 +293,8 @@ class PersonalCatalystService:
         capacity = {
             "daily_max_jobs": daily_limit,
             "daily_budget_usd": shared_budget if shared_budget > 0 else daily_budget,
+            "budget_enforced": shared_budget <= 0 or getattr(self.ai_settings, "model_budget_enforce_limit", True),
+            "budget_mode": ("tracking" if shared_budget > 0 and not getattr(self.ai_settings, "model_budget_enforce_limit", True) else "enforced"),
             "daily_token_limit": daily_token_limit,
             "submitted_jobs": 0,
             "budget_used_usd": 0.0,
@@ -327,7 +329,8 @@ class PersonalCatalystService:
                         daily_token_limit=daily_token_limit,
                         **(
                             {"shared_daily_budget_usd": shared_budget,
-                             "shared_budget_start_at": shared_start}
+                             "shared_budget_start_at": shared_start,
+                             "shared_budget_enforce_limit": getattr(self.ai_settings, "model_budget_enforce_limit", True)}
                             if shared_budget > 0 else {}
                         ),
                         cooldown_seconds=cooldown_seconds,

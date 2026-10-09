@@ -2203,6 +2203,7 @@ class AIJobRepository:
         daily_budget_usd: float = 2.0,
         shared_daily_budget_usd: float = 0,
         shared_budget_start_at: datetime | None = None,
+        shared_budget_enforce_limit: bool = True,
         daily_token_limit: int = 10_000_000,
         cooldown_seconds: int = 0,
         unknown_submission_hold_seconds: int = 86400,
@@ -2239,6 +2240,7 @@ class AIJobRepository:
             SharedModelBudget(
                 self.path, shared_daily_budget_usd, self.path.parent / "market-brief",
                 accounting_start_at=shared_budget_start_at,
+                enforce_limit=shared_budget_enforce_limit,
             ).bootstrap_brief_history(now_dt)
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -2304,6 +2306,7 @@ class AIJobRepository:
                 connection, daily_budget_microusd=shared_limit,
                 reservation_microusd=reservation_microusd, now=now_dt,
                 accounting_start_at=shared_budget_start_at,
+                enforce_limit=shared_budget_enforce_limit,
             ):
                 connection.execute(
                     """UPDATE ai_jobs SET status='budget_blocked',
@@ -3257,6 +3260,7 @@ class AIJobRepository:
         daily_budget_usd: float,
         shared_daily_budget_usd: float = 0,
         shared_budget_start_at: datetime | None = None,
+        shared_budget_enforce_limit: bool = True,
         daily_token_limit: int = 10_000_000,
         cooldown_seconds: int = 0,
         unknown_submission_hold_seconds: int = 86400,
@@ -3283,6 +3287,7 @@ class AIJobRepository:
             SharedModelBudget(
                 self.path, shared_daily_budget_usd, self.path.parent / "market-brief",
                 accounting_start_at=shared_budget_start_at,
+                enforce_limit=shared_budget_enforce_limit,
             ).bootstrap_brief_history(observed)
         day_start_dt = observed.replace(hour=0, minute=0, second=0, microsecond=0)
         day_end_dt = day_start_dt + timedelta(days=1)
@@ -3368,13 +3373,16 @@ class AIJobRepository:
             )
             dollar_budget_available = (
                 (shared_budget_start_at is None or observed >= shared_budget_start_at)
-                and charged_microusd + minimum_reservation <= shared_limit
+                and (not shared_budget_enforce_limit
+                     or charged_microusd + minimum_reservation <= shared_limit)
             )
             token_budget_available = True  # Observability only under the shared dollar gate.
         return {
             "daily_max_jobs": 0,
             "daily_budget_usd": shared_limit / 1_000_000 if shared_budget_enabled else 0.0,
             "budget_basis": "shared_usd" if shared_budget_enabled else "tokens",
+            "budget_enforced": shared_budget_enforce_limit if shared_budget_enabled else True,
+            "budget_mode": ("tracking" if shared_budget_enabled and not shared_budget_enforce_limit else "enforced"),
             "budget_timezone": "UTC",
             "budget_reset_at": _iso(day_end_dt),
             "accounting_start_at": _iso(shared_budget_start_at) if shared_budget_start_at else None,

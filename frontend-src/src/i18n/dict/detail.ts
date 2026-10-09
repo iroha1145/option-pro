@@ -8,6 +8,8 @@ export const DETAIL: Dict = {
   '共享预算暂时无法核对，请稍后重试': ['The shared budget cannot be verified right now. Try again later.', '共有予算を確認できません。しばらくしてから再試行してください。'],
   '共享日预算 {limit} 美元 · 估算及预留 {used} · 剩余 {remaining}': ['Shared daily budget USD {limit} · Estimates and reservations {used} · Remaining {remaining}', '共有の日次予算 {limit} 米ドル · 概算と予約額 {used} · 残り {remaining}'],
   'Haiku 与 Opus 共用，含未知任务占用；东京 09:00 重置': ['Shared by Haiku and Opus, including holds for unknown outcomes; resets at 09:00 Tokyo time', 'Haiku と Opus で共有し、結果未確認分の予約額を含みます。東京時間09:00にリセット'],
+  '共享日预算参考 {limit} 美元 · 估算及预留 {used}': ['Shared daily budget reference USD {limit} · Estimates and reservations {used}', '共有の日次予算目安 {limit} 米ドル · 概算と予約額 {used}'],
+  'Haiku 与 Opus 共用，仅统计费用，超过参考金额仍继续；东京 09:00 重置': ['Shared by Haiku and Opus. Costs are tracked; requests continue above the reference amount. Resets at 09:00 Tokyo time.', 'Haiku と Opus で共有します。費用の集計のみで、目安額を超えても処理を続けます。東京時間09:00にリセット'],
   '共享日预算不足': ['Shared daily budget is insufficient', '共有の日次予算が不足しています'],
   '共享模型日预算不足，东京 09:00 重置后再试': ['The shared daily model budget is insufficient. Try after it resets at 09:00 Tokyo time.', '共有のモデル日次予算が不足しています。東京時間09:00のリセット後に再試行してください。'],
   '本次研判的输出用量已达上限': ['The output limit for this analysis was reached', 'この分析の出力上限に達しました'],

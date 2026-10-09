@@ -84,7 +84,7 @@ def test_opus_api_preflight_imports_the_same_persistent_history(monkeypatch, tmp
     expected = 500_000 if complete else 6_060_000
     assert snapshot["used_microusd"] == expected
     assert SharedModelBudget(settings.openai_job_db_path, 9.5).snapshot(NOW)["used_microusd"] == expected
-    assert snapshot["budget_available"] is complete
+    assert snapshot["budget_available"] is True
 
 
 def test_opus_api_new_window_excludes_previous_report(monkeypatch, tmp_path):
@@ -176,3 +176,94 @@ def test_owner_status_reports_budget_storage_failure_safely(monkeypatch):
         response = client.get("/api/market-brief/status")
     assert response.status_code == 503
     assert response.json()["detail"] == {"code": "shared_budget_unavailable"}
+
+
+@pytest.mark.parametrize("enforce,used,available", [(True, 9_499_999, True), (True, 9_500_000, False), (False, 12_000_000, True)])
+def test_opus_api_status_and_queue_match_real_atomic_budget(monkeypatch, tmp_path, enforce, used, available):
+    path = tmp_path / "ai-jobs.db"
+    budget = SharedModelBudget(path, 9.5, enforce_limit=False)
+    budget.reserve_brief_request("prior", 1, used)
+    settings = Settings(model_daily_budget_usd=9.5, model_budget_enforce_limit=enforce, openai_job_db_path=path)
+    store = api_helpers.FakeStore(api_helpers.SAMPLE)
+    store.root = tmp_path / "market-brief"
+    monkeypatch.setattr(api, "get_settings", lambda: settings)
+    monkeypatch.setattr(api, "_store", lambda: store)
+    monkeypatch.setattr(api, "_key_configured", lambda: True)
+    api_helpers._worker_ready()
+    with TestClient(api_helpers._app(), base_url=api_helpers.ORIGIN) as client:
+        api_helpers._login(client)
+        status = client.get("/api/market-brief/status").json()["shared_budget"]
+        response = client.post("/api/market-brief/runs", json={}, headers=api_helpers._action_headers())
+    assert status["budget_available"] is available
+    assert status["budget_enforced"] is enforce
+    assert status["budget_mode"] == ("enforced" if enforce else "tracking")
+    assert response.status_code == (202 if available else 429)
+    atomic = SharedModelBudget(path, 9.5, enforce_limit=enforce)
+    if available:
+        assert atomic.reserve_brief_request("new", 1, 6_060_000)
+    else:
+        from app.services.model_budget import DailyBudgetExceeded
+        with pytest.raises(DailyBudgetExceeded):
+            atomic.reserve_brief_request("new", 1, 6_060_000)
+
+
+def test_tracking_profile_and_environment_propagate_to_scheduled_runtime(monkeypatch, tmp_path):
+    profile = PersonalConfig.model_validate({"model_budget": {"daily_budget_usd": 10, "enforce_limit": False}})
+    monkeypatch.setattr(settings_module, "_PERSONAL_CONFIG", profile)
+    monkeypatch.setenv("MODEL_BUDGET_ENFORCE_LIMIT", "true")
+    settings = Settings(openai_job_db_path=tmp_path / "jobs.db")
+    assert settings.model_budget_enforce_limit is False
+    config = MarketBriefTask("budget-test", settings=settings, personal_config=profile)._run_config()
+    assert config.shared_budget_enforce_limit is False
+    assert ModelBudgetConfig().enforce_limit is True
+    assert Settings(model_budget_enforce_limit=True).model_budget_enforce_limit is True
+
+
+@pytest.mark.parametrize("trigger", ["manual", "scheduled"])
+def test_cli_passes_tracking_policy_to_the_real_runner_boundary(monkeypatch, tmp_path, trigger):
+    import app.personal_config as personal_module
+    from app.services.market_brief import runner
+    from app.tools import market_brief_run as cli
+    profile = PersonalConfig.model_validate({"model_budget": {"daily_budget_usd": 10, "enforce_limit": False}})
+    settings = Settings(model_daily_budget_usd=10, model_budget_enforce_limit=False,
+                        anthropic_api_key="test-no-network", openai_job_db_path=tmp_path / "jobs.db")
+    monkeypatch.setattr(settings_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(personal_module, "get_personal_config", lambda: profile)
+    monkeypatch.setattr(cli, "default_trading_date", lambda *args: NOW.date())
+    class BoundaryReached(Exception):
+        pass
+    def checked_runner(**kwargs):
+        config = kwargs["config"]
+        assert config.shared_budget_enforce_limit is False
+        assert config.shared_daily_budget_usd == 10
+        assert config.budget_path == settings.openai_job_db_path
+        assert kwargs["trigger"] == trigger
+        raise BoundaryReached
+    monkeypatch.setattr(runner, "run_brief", checked_runner)
+    with pytest.raises(BoundaryReached):
+        cli.main(["--slot", "post_close", "--date", "2026-10-08", "--trigger", trigger])
+
+
+@pytest.mark.parametrize("enforce", [True, False])
+def test_haiku_worker_receives_amount_policy_before_mock_provider_call(monkeypatch, tmp_path, enforce):
+    import asyncio
+    import test_claude_job_worker as worker_helpers
+    from app.services.ai_jobs import worker
+    from app.services.ai_jobs.repository import AIJobRepository
+    path = tmp_path / "jobs.db"
+    budget = SharedModelBudget(path, 10, enforce_limit=False)
+    budget.reserve_brief_request("prior", 1, 11_000_000)
+    repo = AIJobRepository(path)
+    ident = worker_helpers.create_job(repo)
+    calls = worker_helpers.install_stream(monkeypatch)
+    settings = worker_helpers.settings(path).model_copy(update={
+        "model_daily_budget_usd": 10, "model_budget_enforce_limit": enforce,
+    })
+    asyncio.run(worker.run_once(repo, settings, "owner"))
+    row = repo.get_job(ident)
+    if enforce:
+        assert row["error_code"] == "daily_budget_usd_reached" and not calls
+    else:
+        assert row["status"] == "completed" and len(calls) == 1
+        assert row["budget_charge_microusd"] == 88
+        assert budget.snapshot()["used_microusd"] == 11_000_088

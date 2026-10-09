@@ -265,7 +265,7 @@ def cost_microusd(usage: Mapping[str, Any]) -> int | None:
 
 
 def request_budget_reservation_microusd(config: Any, max_tokens: int | None = None) -> int:
-    """Shared precheck allowance in microdollars; the atomic gate repeats it."""
+    """Conservative per-round accounting allowance, not a minimum balance."""
     ceiling = config.max_output_tokens if max_tokens is None else max_tokens
     input_allowance = PRICE_CACHE_WRITE_1H_PER_MTOK if config.prompt_cache_ttl == "1h" else PRICE_CACHE_WRITE_5M_PER_MTOK
     return input_allowance + (ceiling * PRICE_OUTPUT_PER_MTOK + 999_999) // 1_000_000 + config.web_search_max_uses * PRICE_WEB_SEARCH_EACH

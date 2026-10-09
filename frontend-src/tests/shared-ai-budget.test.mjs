@@ -32,6 +32,30 @@ test('partial snapshots never infer missing monetary amounts or invent a shared 
   assert.equal(normalizeAiBudgetSnapshot({}), null);
 });
 
+test('tracking mode shows spending beyond the shared reference without a false remaining allowance', () => {
+  const data = snapshot({ daily_budget_usd: 10, budget_used_usd: 12.34,
+    budget_remaining_usd: 0, budget_enforced: false, budget_mode: 'tracking' });
+  const output = sharedAiBudgetText(data);
+  assert.equal(data.budgetEnforced, false);
+  assert.match(output.summary, /共享日预算参考 10.00.*估算及预留 12.34/);
+  assert.doesNotMatch(output.summary, /剩余/);
+  assert.match(output.note, /仅统计费用.*超过参考金额仍继续.*09:00/);
+  assert.equal(snapshot().budgetEnforced, null);
+});
+
+test('tracking budget explanation is translated without changing reported spending', () => {
+  try {
+    for (const locale of ['en', 'ja']) {
+      setLocale(locale);
+      const output = sharedAiBudgetText(snapshot({ daily_budget_usd: 10,
+        budget_used_usd: 12.34, budget_enforced: false }));
+      assert.match(output.summary, /10.00.*12.34/);
+      assert.match(output.note, /09:00/);
+      assert.doesNotMatch(output.summary + output.note, /共享日预算|超过参考金额/);
+    }
+  } finally { setLocale('zh'); }
+});
+
 test('shared dollar exhaustion blocks paid retry and has translated reset guidance', () => {
   try {
     for (const locale of ['zh', 'en', 'ja']) {
@@ -94,6 +118,15 @@ test('existing owner availability cell shows estimates and shared reset, visitor
   assert.match(owner, /东京 09:00/);
   const visitor = text(hero({ owner: false }));
   assert.doesNotMatch(visitor, /9.50|共享日预算|估算及预留/);
+});
+
+test('owner tracking display stays available above the reference; visitor amounts remain private', () => {
+  const budget = snapshot({ daily_budget_usd: 10, budget_used_usd: 12.34,
+    budget_remaining_usd: 0, budget_enforced: false });
+  const output = text(hero({ budget }));
+  assert.match(output, /共享日预算参考 10.00.*估算及预留 12.34/);
+  assert.doesNotMatch(output, /共享日预算不足|剩余 0.00/);
+  assert.doesNotMatch(text(hero({ budget, owner: false })), /10.00|12.34|预算参考/);
 });
 
 test('positive shared USD never displays token statistics as the active gate', () => {

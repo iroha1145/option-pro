@@ -50,6 +50,7 @@ class BriefRunConfig:
     daily_max_runs: int = 6
     shared_daily_budget_usd: float = 0
     shared_budget_start_at: datetime | None = None
+    shared_budget_enforce_limit: bool = True
     budget_path: Path | None = None
     model: str = "claude-opus-5-5"
     effort: str = "xhigh"
@@ -328,6 +329,7 @@ def _run_admitted(
                 config.budget_path or store.root.parent / "ai-jobs.db",
                 config.shared_daily_budget_usd, brief_store_path=store.root,
                 accounting_start_at=config.shared_budget_start_at,
+                enforce_limit=config.shared_budget_enforce_limit,
             )
 
         def before_request(round_index: int, max_tokens: int) -> None:

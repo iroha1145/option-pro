@@ -93,6 +93,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         {
             "shared_daily_budget_usd": float(settings.model_daily_budget_usd),
             "shared_budget_start_at": settings.model_budget_start_at,
+            "shared_budget_enforce_limit": getattr(settings, "model_budget_enforce_limit", True),
             "budget_path": settings.openai_job_db_path,
         }
         if float(getattr(settings, "model_daily_budget_usd", 0.0)) > 0 else {}

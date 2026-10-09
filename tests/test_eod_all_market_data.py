@@ -450,6 +450,84 @@ def test_split_capture_fails_closed_on_invalid_ratio(
         load_all_market_panel(end=END, root=tmp_path)
 
 
+def test_delayed_grouped_days_build_panel_and_preserve_provider_status(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    grouped = {
+        "2026-09-14": [_bar("AAAA", 10)],
+        "2026-09-15": [_bar("AAAA", 11)],
+        "2026-09-16": [_bar("AAAA", 12)],
+    }
+    calls: list[tuple[str, dict]] = []
+    _install_provider(monkeypatch, [_directory_row("AAAA")], grouped, calls=calls)
+    original_get = massive._get
+
+    def delayed_get(path, params=None):
+        payload = original_get(path, params)
+        if "/grouped/" in path:
+            payload["status"] = "DELAYED"
+        return payload
+
+    monkeypatch.setattr(massive, "_get", delayed_get)
+    panel, coverage, manifest = load_all_market_panel(end=END, root=tmp_path)
+
+    assert panel["AAAA"].raw_close.tolist() == pytest.approx([10, 11, 12])
+    assert coverage[0]["status"] == "ok"
+    assert manifest["status"] == "complete"
+    assert manifest["complete_bar_count"] == 1
+    assert all(
+        params == {"adjusted": "false", "include_otc": "false"}
+        for path, params in calls if "/grouped/" in path
+    )
+    with sqlite3.connect(market_data._db_path(tmp_path)) as connection:
+        assert connection.execute(
+            "SELECT session_date, result_count, provider_status FROM market_sessions ORDER BY session_date"
+        ).fetchall() == [(day, 1, "DELAYED") for day in sorted(grouped)]
+
+
+@pytest.mark.parametrize("status", ["ERROR", "NOT_AUTHORIZED", "PENDING", "delayed", ""])
+def test_grouped_capture_rejects_unsuccessful_or_unknown_status(monkeypatch, status) -> None:
+    monkeypatch.setattr(market_data, "_provider_get", lambda *_args, **_kwargs: {
+        "status": status,
+        "adjusted": False,
+        "resultsCount": 1,
+        "results": _rows_for_day([_bar("AAAA", 10)], END.isoformat()),
+    })
+    with pytest.raises(massive.MassiveError, match="provider status") as captured:
+        market_data._fetch_grouped_session(END)
+    assert captured.value.code == "protocol"
+
+
+@pytest.mark.parametrize(
+    ("bad_content", "code", "message"),
+    [
+        ({"results": _rows_for_day([_bar("AAAA", 10)], "2026-09-15")}, "protocol", "another session"),
+        ({"resultsCount": 2}, "protocol", "incomplete"),
+        ({"results": [], "resultsCount": 0}, "empty_session", "empty grouped daily"),
+        ({"results": None, "resultsCount": 0}, "empty_session", "empty grouped daily"),
+        ({"adjusted": True}, "protocol", "raw bars"),
+        ({"adjusted": None}, "protocol", "raw bars"),
+        ({"results": _rows_for_day([_bar("AAAA", 10), _bar("AAAA", 11)], END.isoformat()),
+          "resultsCount": 2}, "protocol", "duplicate tickers"),
+        ({"results": _rows_for_day([_bar("bad/ticker", 10)], END.isoformat())}, "protocol", "invalid ticker"),
+        ({"results": [{**_bar("AAAA", 10), "t": 0}]}, "protocol", "valid timestamp"),
+    ],
+)
+def test_delayed_grouped_capture_still_rejects_bad_content(monkeypatch, bad_content, code, message) -> None:
+    payload = {
+        "status": "DELAYED",
+        "adjusted": False,
+        "resultsCount": 1,
+        "results": _rows_for_day([_bar("AAAA", 10)], END.isoformat()),
+        **bad_content,
+    }
+    monkeypatch.setattr(market_data, "_provider_get", lambda *_args, **_kwargs: payload)
+    with pytest.raises(massive.MassiveError, match=message) as captured:
+        market_data._fetch_grouped_session(END)
+    assert captured.value.code == code
+
+
 @pytest.mark.parametrize("adjusted", [None, True])
 def test_grouped_capture_requires_explicit_raw_bars_and_matching_new_york_session(
     monkeypatch: pytest.MonkeyPatch,

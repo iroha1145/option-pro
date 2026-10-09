@@ -46,10 +46,11 @@ def _claim(repository, ident, owner="owner"):
                      (owner, repository_module._iso(NOW + timedelta(days=1)), ident))
 
 
-def _mark(repository, ident, *, limit=9.5, start=None, tokens=10_000_000, owner="owner"):
+def _mark(repository, ident, *, limit=9.5, start=None, tokens=10_000_000, owner="owner", enforce=True):
     return repository.mark_submission_started(
         ident, owner, daily_token_limit=tokens, max_concurrency=4,
         shared_daily_budget_usd=limit, shared_budget_start_at=start,
+        shared_budget_enforce_limit=enforce,
     )
 
 
@@ -281,7 +282,7 @@ def _contend(path, run_id, barrier, queue):
     budget = SharedModelBudget(path, 1.5)
     barrier.wait(timeout=20)
     try:
-        queue.put(budget.reserve_brief_request(run_id, 0, 1_000_000, NOW))
+        queue.put(budget.reserve_brief_request(run_id, 0, 2_000_000, NOW))
     except DailyBudgetExceeded:
         queue.put("blocked")
 
@@ -301,7 +302,7 @@ def test_two_processes_cannot_spend_the_same_remaining_budget(tmp_path):
         assert process.exitcode == 0
     assert outcomes.count(True) == 1
     assert outcomes.count("blocked") == 1
-    assert budget.snapshot(NOW)["used_microusd"] == 1_000_000
+    assert budget.snapshot(NOW)["used_microusd"] == 1_500_000
 
 
 def _contend_ai(path, ident, barrier, queue):
@@ -330,9 +331,10 @@ def test_haiku_and_opus_compete_in_the_same_sqlite_transaction(tmp_path):
     for process in processes:
         process.join(timeout=30)
         assert process.exitcode == 0
-    assert outcomes.count(True) == 1
-    assert outcomes.count("blocked") == 1
-    assert 0 < budget.snapshot(NOW)["used_microusd"] <= 1_500_000
+    # If Haiku wins first, Opus takes the positive remainder; if Opus wins
+    # first, Haiku keeps its original full-reservation rejection policy.
+    assert outcomes.count(True) in {1, 2}
+    assert budget.snapshot(NOW)["used_microusd"] == 1_500_000
 
 
 def test_date_cutoff_includes_fractional_second_and_rejects_naive_start(tmp_path):
@@ -536,3 +538,67 @@ def test_zero_charge_backfill_uses_durable_receipt_tool_usage(tmp_path, monkeypa
     reopened = AIJobRepository(repo.path)
     reopened.initialize()
     assert reopened.get_job(ident)["budget_charge_microusd"] == searches * 10_000
+
+
+@pytest.mark.parametrize("remaining", [1, 200_000, 6_059_999])
+def test_opus_positive_balance_allows_initial_and_continuation_without_fixed_minimum(tmp_path, remaining):
+    repo = AIJobRepository(tmp_path / "jobs.db")
+    _seed_charge(repo, 9_500_000 - remaining)
+    budget = SharedModelBudget(repo.path, 9.5)
+    assert budget.snapshot(NOW, reservation_microusd=6_060_000)["budget_available"]
+    assert budget.reserve_brief_request("run", 1, 6_060_000, NOW)
+    with sqlite3.connect(repo.path) as conn:
+        assert conn.execute("SELECT reservation_microusd FROM model_budget_brief_requests").fetchone()[0] == remaining
+    assert budget.snapshot(NOW)["used_microusd"] == 9_500_000
+    budget.settle_brief_request("run", 1, cost_microusd=0, accounting_complete=True)
+    assert budget.reserve_brief_request("run", 2, 6_060_000, NOW)
+    budget.settle_brief_request("run", 2, accounting_complete=False)
+    assert budget.snapshot(NOW)["opus_unsettled_microusd"] == remaining
+    with pytest.raises(DailyBudgetExceeded):
+        budget.reserve_brief_request("other", 1, 6_060_000, NOW)
+    # Actual provider fees remain authoritative even above a partial hold.
+    budget.settle_brief_request("run", 2, cost_microusd=remaining + 10, accounting_complete=True)
+    assert budget.snapshot(NOW)["used_microusd"] == 9_500_010
+
+
+def test_tracking_mode_records_full_over_budget_hold_and_keeps_unknown_day_and_cutoff(tmp_path):
+    before = datetime(2026, 10, 8, 23, 59, 59, tzinfo=timezone.utc)
+    after = before + timedelta(seconds=2)
+    budget = SharedModelBudget(tmp_path / "jobs.db", 1, enforce_limit=False)
+    assert budget.reserve_brief_request("run", 1, 6_060_000, before)
+    budget.settle_brief_request("run", 1, accounting_complete=False)
+    snapshot = budget.snapshot(before)
+    assert snapshot["budget_available"] and snapshot["budget_mode"] == "tracking"
+    assert snapshot["budget_enforced"] is False and snapshot["budget_remaining_usd"] == 0
+    assert snapshot["opus_unsettled_microusd"] == 6_060_000
+    assert budget.reserve_brief_request("run", 2, 6_060_000, after)
+    assert budget.snapshot(after)["used_microusd"] == 6_060_000
+    assert not budget.reserve_brief_request("run", 1, 6_060_000, after)
+    cutoff = SharedModelBudget(budget.path, 1, accounting_start_at=after, enforce_limit=False)
+    assert cutoff.snapshot(after)["used_microusd"] == 6_060_000
+    assert budget.snapshot(before)["used_microusd"] == 6_060_000
+
+
+def test_haiku_tracking_mode_bypasses_amount_but_keeps_full_reservation(tmp_path, monkeypatch):
+    monkeypatch.setattr(repository_module, "_utcnow", lambda: NOW)
+    repo = AIJobRepository(tmp_path / "jobs.db")
+    _seed_charge(repo, 11_000_000, ticker="ALREADY")
+    ident = _job(repo)
+    _claim(repo, ident)
+    assert _mark(repo, ident, limit=10, enforce=False) == "started"
+    held = repo.get_job(ident)["budget_charge_microusd"]
+    assert held > 0
+    snapshot = repo.budget_snapshot(daily_limit=0, daily_budget_usd=0,
+        shared_daily_budget_usd=10, shared_budget_enforce_limit=False, now=NOW, model=HAIKU_MODEL)
+    assert snapshot["budget_available"] and snapshot["dollar_budget_available"]
+    assert snapshot["budget_mode"] == "tracking" and snapshot["budget_enforced"] is False
+    assert snapshot["budget_used_usd"] == (11_000_000 + held) / 1_000_000
+    assert snapshot["budget_remaining_usd"] == 0
+
+
+@pytest.mark.parametrize("enforce", [True, False])
+def test_new_opus_unknown_hold_cannot_start_as_zero(tmp_path, enforce):
+    budget = SharedModelBudget(tmp_path / "jobs.db", 10, enforce_limit=enforce)
+    with pytest.raises(ValueError, match="positive"):
+        budget.reserve_brief_request("run", 1, 0, NOW)
+    assert budget.snapshot(NOW)["used_microusd"] == 0

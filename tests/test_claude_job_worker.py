@@ -581,7 +581,7 @@ def test_other_claude_job_types_keep_native_json_and_v2_identity(tmp_path, job_t
     request = runtime.build_runtime_request(job_type, payload)
     expected = claude_provider.prepare_message(
         config, instructions=runtime.claude_instructions(request.instructions),
-        input_text=request.input_text, schema=request.schema,
+        input_text=request.input_text, schema=runtime.claude_output_schema(job_type, request.schema),
         max_tokens=runtime.max_output_tokens_for(job_type, model="claude-haiku-5-5"),
         tools=runtime.claude_tools_for(job_type, payload),
     )

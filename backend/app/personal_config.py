@@ -108,6 +108,7 @@ class ModelBudgetConfig(StrictConfigModel):
         allow_inf_nan=False,
     )
     accounting_start_at: datetime | None = None
+    enforce_limit: bool = True
 
     @field_validator("daily_budget_usd", mode="before")
     @classmethod
@@ -405,6 +406,7 @@ class MarketBriefConfig(StrictConfigModel):
     def to_run_config(
         self, *, shared_daily_budget_usd: float = 0.0,
         shared_budget_start_at: datetime | None = None,
+        shared_budget_enforce_limit: bool = True,
         budget_path: str | Path | None = None,
     ) -> Any:
         """映射成 ``BriefRunConfig``（同名字段）。
@@ -418,6 +420,7 @@ class MarketBriefConfig(StrictConfigModel):
         return BriefRunConfig(
             shared_daily_budget_usd=shared_daily_budget_usd,
             shared_budget_start_at=shared_budget_start_at,
+            shared_budget_enforce_limit=shared_budget_enforce_limit,
             budget_path=budget_path,
             daily_max_runs=self.daily_max_runs,
             model=self.model,

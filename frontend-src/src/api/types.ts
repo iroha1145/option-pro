@@ -760,6 +760,7 @@ export interface AiBudgetSnapshot {
   budgetUsedUsd: number | null;
   budgetRemainingUsd: number | null;
   dollarBudgetAvailable: boolean | null;
+  budgetEnforced: boolean | null;
   budgetBasis: 'shared_usd' | 'tokens';
   budgetResetAt: string | null;
   accountingStartAt: string | null;

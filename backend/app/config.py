@@ -90,6 +90,10 @@ class Settings(BaseSettings):
         default=_PERSONAL_CONFIG.model_budget.accounting_start_at,
         alias="MODEL_BUDGET_START_AT",
     )
+    model_budget_enforce_limit: bool = Field(
+        default=_PERSONAL_CONFIG.model_budget.enforce_limit,
+        alias="MODEL_BUDGET_ENFORCE_LIMIT",
+    )
     openai_daily_token_limit: int = Field(
         default=_PERSONAL_CONFIG.ai.daily_token_limit,
         ge=102_400,
@@ -319,6 +323,7 @@ class Settings(BaseSettings):
             "openai_daily_budget_usd": _PERSONAL_CONFIG.ai.daily_budget_usd,
             "model_daily_budget_usd": _PERSONAL_CONFIG.model_budget.daily_budget_usd,
             "model_budget_start_at": _PERSONAL_CONFIG.model_budget.accounting_start_at,
+            "model_budget_enforce_limit": _PERSONAL_CONFIG.model_budget.enforce_limit,
             "openai_daily_token_limit": _PERSONAL_CONFIG.ai.daily_token_limit,
             "openai_manual_cooldown_seconds": (
                 _PERSONAL_CONFIG.catalyst.manual_refresh_cooldown_seconds

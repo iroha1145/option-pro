@@ -756,6 +756,7 @@ async def process_job(
                 {
                     "shared_daily_budget_usd": shared_budget,
                     "shared_budget_start_at": getattr(settings, "model_budget_start_at", None),
+                    "shared_budget_enforce_limit": getattr(settings, "model_budget_enforce_limit", True),
                 }
                 if shared_budget > 0 else {}
             )

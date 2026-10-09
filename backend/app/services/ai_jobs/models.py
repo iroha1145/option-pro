@@ -1865,6 +1865,32 @@ def _longest_unbound_foreign_span(
     return max(spans, key=len, default=text)
 
 
+def _news_source_bound_name(
+    span: str, sentence: str, start: int, end: int, payload: dict,
+) -> bool:
+    """News-only product series and legal names, bound to the supplied source."""
+    sources = _validation_source_texts("news_impact", payload)
+    if re.search(r"(?:股票代码|证券代码|交易代码|代码)[：:、\s]*$", sentence[:start]):
+        return False
+    if re.fullmatch(r"[A-Z]", span) and sentence[end:].startswith("系列"):
+        pattern = re.compile(
+            rf"(?<![A-Za-z0-9]){re.escape(span)} series(?![A-Za-z0-9])"
+        )
+        return any(pattern.search(source) for source in sources)
+    # Only a compact hyphenated legal name, never a code or a headline clause.
+    if not 3 <= len(span) <= 60 or not re.fullmatch(
+        r"[A-Z][A-Za-z]*-[A-Za-z]+(?: [A-Z][A-Za-z]+){0,3}", span,
+    ):
+        return False
+    if not _is_source_bound_foreign_entity(span, sources):
+        return False
+    pattern = re.compile(
+        rf"(?<![A-Za-z0-9]){re.escape(span)},? "
+        r"(?:Inc\.|Ltd\.|Corporation|Limited)(?![A-Za-z0-9])"
+    )
+    return any(pattern.search(source) for source in sources)
+
+
 def validate_simplified_chinese_text(
     value: str,
     info: ValidationInfo | None,
@@ -1968,6 +1994,14 @@ def validate_simplified_chinese_text(
                 end=match.end(),
                 allowed_codes=normalized_codes,
                 source_texts=source_texts,
+            ):
+                continue
+            news_payload = (
+                info.context.get("news_payload")
+                if info is not None and isinstance(info.context, dict) else None
+            )
+            if isinstance(news_payload, dict) and _news_source_bound_name(
+                match.group(0), sentence, match.start(), match.end(), news_payload,
             ):
                 continue
             raise _english_prose_error(match.group(0))
@@ -2469,6 +2503,35 @@ class NewsCommodityImpact(StrictModel):
     reason: ZhBoundedText
 
 
+def _translate_news_metadata(value: str, payload: dict) -> str:
+    """Translate only known input labels; never rewrite facts or output keys."""
+    translations = {"allowed_tickers": "允许股票代码名单", "affected_stocks": "受影响个股"}
+    if payload.get("article_status") == "unavailable":
+        translations.update({"article_status": "正文状态", "unavailable": "不可用", "article": "新闻正文"})
+        if payload.get("article_reason") == "no_matching_article_body":
+            translations.update({"article_reason": "正文缺失原因", "no_matching_article_body": "未找到匹配正文"})
+    # Names are exact ASCII tokens, not substrings of an unknown program label.
+    tokens = "|".join(sorted(map(re.escape, translations), key=len, reverse=True))
+    pattern = re.compile(r"(?<![A-Za-z0-9_])(" + tokens + r")(?![A-Za-z0-9_])")
+
+    def replace(match: re.Match[str]) -> str:
+        if any(url.start() <= match.start() < url.end() for url in re.finditer(r"https?://[^\s，。；）]+", value)):
+            return match.group(0)
+        if _approved_span_requires_ticker_binding(match.group(0), sentence=value, start=match.start(), end=match.end()):
+            return match.group(0)
+        return translations[match.group(0)]
+    value = pattern.sub(replace, value)
+    value = re.sub(r"((?:商业|业务)发展公司)[（(]BDC[）)]", r"\1", value)
+    sources = _validation_source_texts("news_impact", payload)
+    if any(re.search(r"\bSarbanes[-– ]Oxley\b", source, re.I) for source in sources):
+        def translate_regulation(match: re.Match[str]) -> str:
+            if _approved_span_requires_ticker_binding("SOX", sentence=value, start=match.start(), end=match.end()):
+                return match.group(0)
+            return "《萨班斯—奥克斯利法案》"
+        value = re.sub(r"(?<![A-Za-z0-9_])SOX(?=认证)", translate_regulation, value)
+    return value
+
+
 class NewsImpactResult(SimplifiedChineseResult):
     news_id: StrictInt = Field(ge=1)
     change_sequence: StrictInt = Field(ge=1)
@@ -2490,6 +2553,25 @@ class NewsImpactResult(SimplifiedChineseResult):
     key_factors: list[ZhShortText] = Field(max_length=30)
     uncertainty_notes: list[ZhShortText] = Field(max_length=30)
     insufficient_context: StrictBool
+
+    @model_validator(mode="before")
+    @classmethod
+    def translate_news_input_labels(cls, value: Any, info: ValidationInfo) -> Any:
+        payload = info.context.get("news_payload") if isinstance(info.context, dict) else None
+        if not isinstance(value, dict) or not isinstance(payload, dict):
+            return value
+        result = dict(value)
+        for name in ("title_zh", "summary_zh", "headline_summary", "causal_summary"):
+            if isinstance(result.get(name), str):
+                result[name] = _translate_news_metadata(result[name], payload)
+        for name in ("key_factors", "uncertainty_notes", "affected_sectors"):
+            if isinstance(result.get(name), list):
+                result[name] = [
+                    _translate_news_metadata(item, payload)
+                    if isinstance(item, str) else item
+                    for item in result[name]
+                ]
+        return result
 
     @field_validator("affected_stocks")
     @classmethod
@@ -2884,6 +2966,7 @@ def validate_result(job_type: str, raw_json: str, payload: dict) -> dict:
         raw_json,
         context={
             "allowed_codes": allowed_codes,
+            "news_payload": payload if job_type == "news_impact" else None,
             "source_texts": _validation_source_texts(job_type, payload),
             "macro_conditions_status": (
                 payload["macro_conditions"].get("status")

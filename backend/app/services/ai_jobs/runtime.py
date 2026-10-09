@@ -936,6 +936,15 @@ def claude_output_schema(job_type: str, schema: dict[str, Any]) -> dict[str, Any
     requests have a distinct v3 transport identity; market focus uses v4.
     """
     result = deepcopy(schema)
+    if job_type == "news_impact":
+        result["properties"]["uncertainty_notes"]["description"] = (
+            "用简体中文说明证据限制。输入字段名和状态值只用于内部判断，不得照抄到正文："
+            "article写新闻正文，article_status写正文状态，unavailable写不可用，"
+            "article_reason写正文缺失原因，no_matching_article_body写未找到匹配正文，"
+            "allowed_tickers写允许股票代码名单，affected_stocks写受影响个股。"
+            "输入缺正文与工具补抓结果分开说明；只有确实取得内容才可声称已抓取。"
+        )
+        return result
     if job_type == "market_focus":
         fields = result["properties"]
         for name in ("cycle_id", "as_of", "input_hash"):
