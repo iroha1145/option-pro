@@ -269,3 +269,29 @@ def test_s5r2_four_digit_hong_kong_codes_need_binding(text):
 )
 def test_s5r2_months_counts_and_years_after_hong_kong_stocks_publish(text):
     assert _news_field(text) == text
+
+
+# --- Suggestion 3. More information-technology phrases ------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "企业IT基础设施更新加快。",
+        "客户削减IT预算。",
+        "公司加大IT投入。",
+        "IT架构迁移到云端。",
+        "IT运维外包比例上升。",
+        "IT人员招聘放缓。",
+        "IT资产管理需求增长。",
+        "公司提供IT解决方案。",
+    ],
+)
+def test_s3r2_more_it_phrases_publish(text):
+    assert _news_field(text) == text
+
+
+@pytest.mark.parametrize("text", ["股票代码IT基础设施。", "IT股价上涨。", "高德纳（IT）暴跌20%。"])
+def test_s3r2_it_in_security_context_still_needs_binding(text):
+    with pytest.raises(ValueError):
+        _news_field(text)
