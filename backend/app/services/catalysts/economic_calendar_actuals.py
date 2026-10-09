@@ -1,7 +1,8 @@
 """Best-effort actual-value enrichment for recent economic-calendar events.
 
-MacroLens remains the calendar-of-record.  TradingView is queried only for
-already-released events whose upstream ``actual`` value is still empty.
+The collected Forex Factory snapshot remains the calendar-of-record; its weekly
+file carries no actual values. TradingView is queried only for already-released
+events whose stored ``actual`` value is still empty.
 Matches are conservative: currency and release time must agree, then the
 translated title or published forecast/previous values must identify one
 unambiguous source row.
