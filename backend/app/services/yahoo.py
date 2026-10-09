@@ -7,7 +7,6 @@ import threading
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from app.config import get_settings
 from app.failure_diagnostics import record_fallback_failure
 from app.services.market_calendar import options_close_minutes
 from app.services.key_locks import acquire_key_lock, release_key_lock
@@ -296,6 +295,9 @@ def _annotate_expiration_snapshot(
     }
 
 
+_EXPIRATIONS_TTL_SECONDS = 900
+
+
 def _get_expirations_cached(ticker: str, *, with_metadata: bool = False) -> Any:
     symbol = canonicalize_option_symbol(ticker)
     if is_declared_unsupported(symbol):
@@ -305,10 +307,9 @@ def _get_expirations_cached(ticker: str, *, with_metadata: bool = False) -> Any:
             "source_status": "unsupported_by_provider",
         }
         return _cache_value([], metadata, with_metadata)
-    empty_ttl = int(get_settings().option_empty_discovery_seconds)
     return _cached(
         f"expirations:{symbol}",
-        empty_ttl,
+        _EXPIRATIONS_TTL_SECONDS,
         lambda: run_yahoo_option_io(lambda: list(_get_ticker(symbol).options)),
         with_metadata=with_metadata,
         is_valid=lambda value: isinstance(value, list),

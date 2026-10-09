@@ -14,8 +14,6 @@ from collections.abc import Callable
 import threading
 from typing import Any, TypeVar
 
-from app.config import get_settings
-
 
 T = TypeVar("T")
 
@@ -121,21 +119,11 @@ _io: YahooOptionIO | None = None
 _io_lock = threading.Lock()
 
 
-def _settings_io() -> YahooOptionIO:
-    settings = get_settings()
-    return YahooOptionIO(
-        max_in_flight=int(getattr(settings, "yahoo_option_max_in_flight", 3)),
-        max_queue=int(getattr(settings, "yahoo_option_max_queue", 8)),
-        queue_wait_seconds=float(getattr(settings, "yahoo_option_queue_wait_seconds", 8.0)),
-        call_timeout_seconds=float(getattr(settings, "yahoo_option_call_timeout_seconds", 20.0)),
-    )
-
-
 def get_yahoo_option_io() -> YahooOptionIO:
     global _io
     with _io_lock:
         if _io is None:
-            _io = _settings_io()
+            _io = YahooOptionIO()
         return _io
 
 
@@ -143,7 +131,7 @@ def reset_yahoo_option_io(instance: YahooOptionIO | None = None) -> YahooOptionI
     """Test helper. Production callers should not rebuild the process budget."""
     global _io
     with _io_lock:
-        _io = instance if instance is not None else _settings_io()
+        _io = instance if instance is not None else YahooOptionIO()
         return _io
 
 

@@ -267,21 +267,23 @@ def _finalize_history_fetch(
     return pd.concat(frames, axis=1).sort_index(), loaded, missing
 
 
+_MARKETDATA_FALLBACK_LIMIT = 260
+_STOOQ_FALLBACK_LIMIT = 260
+_FINNHUB_FALLBACK_LIMIT = 80
+_FALLBACK_REQUEST_TIMEOUT_SECONDS = 6.0
+
+
 def _download_marketdata_history(tickers: list[str], period: str) -> tuple[pd.DataFrame, list[str], list[str]]:
     settings = get_settings()
     token = settings.marketdata_token.strip()
-    if not token or not settings.marketdata_stock_candle_fallback_enabled:
-        return pd.DataFrame(), [], tickers
-
-    limit = max(0, int(settings.marketdata_stock_candle_fallback_limit or 0))
-    if limit <= 0:
+    if not token:
         return pd.DataFrame(), [], tickers
 
     base_url = str(settings.marketdata_base_url).rstrip("/")
     end_date = datetime.now(timezone.utc).date()
     start_date = end_date - timedelta(days=_period_to_days(period) + 10)
-    symbols = [symbol for symbol in tickers if symbol and not symbol.startswith("^")][:limit]
-    timeout = min(float(settings.request_timeout or 20.0), 6.0)
+    symbols = [symbol for symbol in tickers if symbol and not symbol.startswith("^")][:_MARKETDATA_FALLBACK_LIMIT]
+    timeout = _FALLBACK_REQUEST_TIMEOUT_SECONDS
 
     try:
         with httpx.Client(
@@ -340,18 +342,10 @@ def _stooq_candle_frame(symbol: str, csv_text: str) -> pd.DataFrame:
 
 
 def _download_stooq_history(tickers: list[str], period: str) -> tuple[pd.DataFrame, list[str], list[str]]:
-    settings = get_settings()
-    if not settings.stooq_price_fallback_enabled:
-        return pd.DataFrame(), [], tickers
-
-    limit = max(0, int(settings.stooq_price_fallback_limit or 0))
-    if limit <= 0:
-        return pd.DataFrame(), [], tickers
-
     end_date = datetime.now(timezone.utc).date()
     start_date = end_date - timedelta(days=_period_to_days(period) + 10)
-    symbols = [symbol for symbol in tickers if _stooq_symbol(symbol)][:limit]
-    timeout = min(float(settings.request_timeout or 20.0), 6.0)
+    symbols = [symbol for symbol in tickers if _stooq_symbol(symbol)][:_STOOQ_FALLBACK_LIMIT]
+    timeout = _FALLBACK_REQUEST_TIMEOUT_SECONDS
 
     try:
         with httpx.Client(timeout=timeout) as client:
@@ -382,18 +376,14 @@ def _download_stooq_history(tickers: list[str], period: str) -> tuple[pd.DataFra
 def _download_finnhub_history(tickers: list[str], period: str) -> tuple[pd.DataFrame, list[str], list[str]]:
     settings = get_settings()
     token = (settings.finnhub_api_key or "").strip()
-    if not token or not settings.finnhub_candle_fallback_enabled:
-        return pd.DataFrame(), [], tickers
-
-    limit = max(0, int(settings.finnhub_candle_fallback_limit or 0))
-    if limit <= 0:
+    if not token:
         return pd.DataFrame(), [], tickers
 
     base_url = str(settings.finnhub_base_url).rstrip("/")
     end_ts = int(datetime.now(timezone.utc).timestamp())
     start_ts = end_ts - (_period_to_days(period) + 10) * 24 * 60 * 60
-    symbols = [symbol for symbol in tickers if symbol and not symbol.startswith("^")][:limit]
-    timeout = min(float(settings.request_timeout or 20.0), 6.0)
+    symbols = [symbol for symbol in tickers if symbol and not symbol.startswith("^")][:_FINNHUB_FALLBACK_LIMIT]
+    timeout = _FALLBACK_REQUEST_TIMEOUT_SECONDS
 
     try:
         with httpx.Client(timeout=timeout, headers={"X-Finnhub-Token": token}) as client:
@@ -1370,13 +1360,7 @@ async def market_strength(*, as_of: datetime | None = None) -> dict[str, Any]:
     observed_at = as_of or datetime.now(timezone.utc)
     if observed_at.tzinfo is None or observed_at.utcoffset() is None:
         raise ValueError("as_of must include a timezone")
-    settings = get_settings()
-    key = (
-        f"market-strength:{MARKET_SHAPE_VERSION}:{_completed_daily_key(observed_at)}"
-        f":fh:{int(bool(settings.finnhub_candle_fallback_enabled))}"
-        f":md:{int(bool(settings.marketdata_stock_candle_fallback_enabled))}"
-        f":stooq:{int(bool(settings.stooq_price_fallback_enabled))}"
-    )
+    key = f"market-strength:{MARKET_SHAPE_VERSION}:{_completed_daily_key(observed_at)}"
 
     async def produce() -> dict[str, Any]:
         import asyncio
