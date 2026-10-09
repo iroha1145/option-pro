@@ -66,6 +66,7 @@ from app.stock_data_reads import (
 )
 from app.stock_chart_snapshot import read_stock_chart_resource, write_stock_chart_resource
 from app.stock_pull_snapshot import (
+    STOCK_CHART_RESOURCE_RANGES,
     STOCK_PULL_RESOURCE_FRESH_SECONDS,
     validate_stock_pull_payload,
     write_stock_pull_resources,
@@ -336,6 +337,22 @@ async def _reuse_fresh_public_home_entry(
     return _cache_result(hydrated, stale=not bool(disk_entry["fresh"]))
 
 
+def _durable_entry(
+    resource: str,
+    saved: dict[str, Any],
+    value: Any,
+) -> _EndpointCacheEntry:
+    saved_at = float(saved["saved_at"])
+    return _EndpointCacheEntry(
+        expires_at=saved_at + saved.get(
+            "fresh_seconds", STOCK_PULL_RESOURCE_FRESH_SECONDS[resource],
+        ),
+        stale_until=saved_at + int(saved["max_age"]),
+        fetched_at=saved_at,
+        value=value,
+    )
+
+
 async def _hydrate_stock_pull_resource(
     ticker: str,
     resource: str,
@@ -345,6 +362,19 @@ async def _hydrate_stock_pull_resource(
 
     now = time.time()
     current = _usable_hit(key, now)
+    if current is not None and resource not in STOCK_CHART_RESOURCE_RANGES:
+        # The payload-free summary tells whether a newer version exists; the
+        # full read deep-copies a two-year chart, so it runs only for one.
+        summary = await asyncio.to_thread(read_latest_stock_summary, ticker, now=now)
+        latest = summary.get(resource)
+        if latest is None or float(latest["saved_at"]) < current.fetched_at:
+            return current
+        if float(latest["saved_at"]) == current.fetched_at:
+            # Same durable version: only its freshness window can have moved,
+            # because public bundles follow the market phase.
+            entry = _durable_entry(resource, latest, current.value)
+            _endpoint_cache[key] = entry
+            return entry
     saved = await asyncio.to_thread(
         read_stock_pull_resource,
         ticker,
@@ -353,15 +383,7 @@ async def _hydrate_stock_pull_resource(
     )
     if saved is None:
         return current
-    saved_at = float(saved["saved_at"])
-    entry = _EndpointCacheEntry(
-        expires_at=saved_at + saved.get(
-            "fresh_seconds", STOCK_PULL_RESOURCE_FRESH_SECONDS[resource],
-        ),
-        stale_until=saved_at + int(saved["max_age"]),
-        fetched_at=saved_at,
-        value=saved["payload"],
-    )
+    entry = _durable_entry(resource, saved, saved["payload"])
     if current is None or entry.fetched_at >= current.fetched_at:
         _endpoint_cache[key] = entry
         return entry
