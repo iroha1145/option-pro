@@ -19,6 +19,7 @@ import pytest
 from app.services.ai_jobs import runtime, worker
 from app.services.ai_jobs.models import validate_result
 from app.services.ai_jobs.repository import AIJobRepository
+from app.tools import recover_ai_schema_results as recovery
 from test_ai_jobs_zh_contract import (
     _market_focus_payload,
     _market_focus_result,
@@ -507,3 +508,64 @@ def test_both_current_luna_variants_are_current_for_reads_and_submission():
     assert not runtime.schema_identity_current(
         "news_impact", prompt, *runtime.LUNA_ARTICLE_NEWS_IDENTITY, model=runtime.OFFICIAL_OPENAI_MODEL,
     )
+
+
+# --- D. Paid results are recovered locally ------------------------------------
+
+
+def _failed_receipt_row(repo, sample):
+    job_id = _pending_luna_job(repo, sample["payload"], runtime.LUNA_ALWAYS_WEB_NEWS_IDENTITY)
+    assert repo.claim_due("owner", 60)["job_id"] == job_id
+    assert repo.mark_submission_started(job_id, "owner", max_concurrency=4) == "started"
+    repo.link_background_response(job_id, "owner", sample["receipt"]["id"])
+    repo.record_openai_result(job_id, "owner", sample["receipt"])
+    repo.fail(job_id, "owner", "schema_validation_failed", usage=sample["receipt"]["usage"],
+              detail=sample["production_error"])
+    return job_id
+
+
+def test_recovery_tool_republishes_production_receipts_without_provider_calls(tmp_path, monkeypatch, capsys):
+    repo = AIJobRepository(tmp_path / "news.db")
+    job_ids = [_failed_receipt_row(repo, sample) for sample in FIXTURES[:3]]
+    before = {job_id: repo.get_job(job_id) for job_id in job_ids}
+
+    async def forbidden(*_args, **_kwargs):
+        raise AssertionError("recovery must reuse the stored receipt")
+
+    monkeypatch.setattr(runtime, "retrieve", forbidden)
+    monkeypatch.setattr(runtime, "submit_background", forbidden)
+    monkeypatch.setattr(recovery, "get_settings", lambda: luna_settings(repo.path))
+
+    since = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    assert recovery.main(["--failed-since", since, "--job-type", "news_impact"]) == 0
+    dry_run = json.loads(capsys.readouterr().out)
+    assert [item["status"] for item in dry_run] == ["validated"] * 3
+    assert all(repo.get_job(job_id)["status"] == "failed" for job_id in job_ids)
+
+    assert recovery.main(["--failed-since", since, "--apply"]) == 0
+    applied = json.loads(capsys.readouterr().out)
+    assert {item["job_id"] for item in applied} == set(job_ids)
+    assert {item["status"] for item in applied} == {"recovered"}
+    for job_id, sample in zip(job_ids, FIXTURES[:3]):
+        row = repo.get_job(job_id)
+        assert row["status"] == "completed" and row["error_code"] is None and row["error_detail"] is None
+        result = json.loads(row["result_json"])
+        assert result == validate_result("news_impact", row["result_json"], sample["payload"])
+        for key in ("budget_charge_microusd", "usage_output_tokens", "provider_result_json", "openai_response_id"):
+            assert row[key] == before[job_id][key]
+    assert recovery.main(["--failed-since", since, "--apply"]) == 1
+    assert json.loads(capsys.readouterr().out) == []
+
+
+def test_bulk_selection_skips_rows_that_would_need_a_provider_retrieve(tmp_path):
+    repo = AIJobRepository(tmp_path / "news.db")
+    with_receipt = _failed_receipt_row(repo, FIXTURES[0])
+    job_id = _pending_luna_job(repo, {**luna_payload(), "news_id": 2}, runtime.LUNA_WEB_NEWS_IDENTITY)
+    assert repo.claim_due("owner-2", 60)["job_id"] == job_id
+    assert repo.mark_submission_started(job_id, "owner-2", max_concurrency=4) == "started"
+    repo.link_background_response(job_id, "owner-2", "resp_without_receipt")
+    repo.fail(job_id, "owner-2", "schema_validation_failed")
+    since = datetime.now(timezone.utc) - timedelta(hours=1)
+    assert repo.recoverable_receipt_failures(since=since) == [with_receipt]
+    assert repo.recoverable_receipt_failures(since=since, job_types=["market_focus"]) == []
+    assert repo.recoverable_receipt_failures(since=datetime.now(timezone.utc) + timedelta(minutes=1)) == []

@@ -4,6 +4,9 @@ import argparse
 import asyncio
 import json
 import sqlite3
+import sys
+from collections import Counter
+from datetime import datetime
 from typing import Any, Sequence
 
 from app.config import get_settings
@@ -27,9 +30,31 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--job-id",
         action="append",
-        required=True,
+        default=[],
         dest="job_ids",
         help="Exact failed AI job id; repeat for more than one job.",
+    )
+    parser.add_argument(
+        "--failed-since",
+        type=_aware_timestamp,
+        help=(
+            "Also select every recoverable failed job updated at or after this "
+            "ISO-8601 time whose paid receipt is stored locally."
+        ),
+    )
+    parser.add_argument(
+        "--job-type",
+        action="append",
+        default=[],
+        dest="job_types",
+        choices=sorted(runtime.AI_TASK_MAX_OUTPUT_TOKENS),
+        help="Limit --failed-since to this job type; repeatable.",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=2000,
+        help="Maximum number of rows --failed-since selects (default 2000).",
     )
     parser.add_argument(
         "--apply",
@@ -39,11 +64,32 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-async def recover(job_ids: Sequence[str], *, apply: bool) -> list[dict[str, Any]]:
+def _aware_timestamp(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise argparse.ArgumentTypeError("timestamp must include a timezone")
+    return parsed
+
+
+async def recover(
+    job_ids: Sequence[str],
+    *,
+    apply: bool,
+    failed_since: datetime | None = None,
+    job_types: Sequence[str] = (),
+    limit: int = 2000,
+) -> list[dict[str, Any]]:
     settings = get_settings()
     repository = AIJobRepository(settings.openai_job_db_path)
+    selected = list(job_ids)
+    if failed_since is not None:
+        selected.extend(
+            repository.recoverable_receipt_failures(
+                since=failed_since, job_types=job_types, limit=limit,
+            )
+        )
     output: list[dict[str, Any]] = []
-    for raw_job_id in dict.fromkeys(job_ids):
+    for raw_job_id in dict.fromkeys(selected):
         job_id = str(raw_job_id).strip()
         row = repository.get_job(job_id)
         if row is None:
@@ -100,6 +146,7 @@ async def recover(job_ids: Sequence[str], *, apply: bool) -> list[dict[str, Any]
                     "job_id": job_id,
                     "status": "validation_failed",
                     "error_type": type(error).__name__,
+                    "error": str(error)[:500],
                 }
             )
             continue
@@ -132,9 +179,24 @@ async def recover(job_ids: Sequence[str], *, apply: bool) -> list[dict[str, Any]
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
-    results = asyncio.run(recover(args.job_ids, apply=bool(args.apply)))
+    parser = _parser()
+    args = parser.parse_args(argv)
+    if not args.job_ids and args.failed_since is None:
+        parser.error("give --job-id or --failed-since")
+    results = asyncio.run(
+        recover(
+            args.job_ids,
+            apply=bool(args.apply),
+            failed_since=args.failed_since,
+            job_types=args.job_types,
+            limit=args.limit,
+        )
+    )
     print(json.dumps(results, ensure_ascii=False, separators=(",", ":")))
+    print(
+        json.dumps(dict(Counter(item["status"] for item in results)), sort_keys=True),
+        file=sys.stderr,
+    )
     successful = {"validated", "recovered"}
     return 0 if results and all(item["status"] in successful for item in results) else 1
 

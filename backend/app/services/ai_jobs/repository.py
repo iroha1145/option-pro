@@ -1447,6 +1447,46 @@ class AIJobRepository:
         )
         return hashlib.sha256(envelope.encode("utf-8")).hexdigest()
 
+    def recoverable_receipt_failures(
+        self,
+        *,
+        since: datetime,
+        job_types: Iterable[str] = (),
+        limit: int = 2000,
+    ) -> list[str]:
+        """Failed jobs whose paid provider receipt is stored locally, oldest first.
+
+        Rows without a stored receipt are left out: reusing them would need a
+        provider retrieve, so they are recovered one id at a time instead.
+        """
+
+        if not 1 <= int(limit) <= 100_000:
+            raise ValueError("recovery_limit_invalid")
+        self.ensure_initialized()
+        types = sorted({str(job_type) for job_type in job_types})
+        codes = sorted(RECOVERABLE_FAILURE_CODES)
+        type_filter = (
+            f" AND job_type IN ({','.join('?' for _ in types)})" if types else ""
+        )
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""SELECT job_id FROM ai_jobs
+                    WHERE status='failed'
+                      AND error_code IN ({','.join('?' for _ in codes)})
+                      AND result_json IS NULL
+                      AND provider_result_json IS NOT NULL
+                      AND updated_at>=?{type_filter}
+                    ORDER BY updated_at,job_id
+                    LIMIT ?""",
+                (
+                    *codes,
+                    since.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+                    *types,
+                    int(limit),
+                ),
+            ).fetchall()
+        return [str(row["job_id"]) for row in rows]
+
     def get_job(self, job_id: str) -> dict[str, Any] | None:
         self.ensure_initialized()
         with self._connect() as connection:
