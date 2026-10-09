@@ -181,3 +181,34 @@ def test_history_prune_rechecks_rows_that_changed_after_selection(
     assert removed == 2
     with repository._connect() as connection:
         assert [row[0] for row in connection.execute("SELECT job_id FROM ai_jobs")] == [jobs[1]]
+
+
+def test_pruned_history_keeps_published_analyses_and_queues_nothing(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from app.access import request_owner_access_context
+    from app.services.catalysts import local_intelligence as local_module
+    from tests.test_catalyst_read_path_costs import NOW as STORE_NOW, _analyzed_store
+
+    with request_owner_access_context(True):
+        intelligence = _analyzed_store(tmp_path, monkeypatch)
+        later = STORE_NOW + timedelta(days=45)
+        monkeypatch.setattr(local_module, "_utc_now", lambda: later)
+        monkeypatch.setattr(repo_mod, "_utcnow", lambda: later)
+        intelligence.mode = "scheduled"
+        before = intelligence.feed(as_of=STORE_NOW, window_hours=24, limit=20)
+        removed = intelligence.ai_repository.prune_scheduled_history(retain_days=30, now=later)
+        rounds = [intelligence.reconcile(allow_scheduled_jobs=True) for _ in range(2)]
+        local_module._reset_revision_cache()
+        after = intelligence.feed(as_of=STORE_NOW, window_hours=24, limit=20)
+    with sqlite3.connect(tmp_path / "ai-jobs.db") as connection:
+        remaining = connection.execute("SELECT COUNT(*) FROM ai_jobs").fetchone()[0]
+
+    # Published results live with the news links in catalyst-cache.db: deleting
+    # the settled jobs neither re-queues paid work nor hides those analyses.
+    assert removed == 3
+    assert [round_["queued"] for round_ in rounds] == [0, 0]
+    assert remaining == 0
+    assert sum(isinstance(item.get("analysis"), dict) for item in before["items"]) == 3
+    assert after["items"] == before["items"]
+    assert after["summary"] == before["summary"]
