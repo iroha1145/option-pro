@@ -215,14 +215,22 @@ def test_a_news_outage_stays_degraded_on_every_slot_until_a_source_recovers(tmp_
 
     async def scenario():
         results = [await task()]
+        # A pass between sync slots reports the last known health, not idle.
+        between = await task()
         # Every failed source is backing off; nothing is due on the next slot.
         results.append(await slot(timedelta(minutes=2)))
         feeds.results["massive"] = NewsBatch(_items("massive", 1, source="massive/Benzinga"))
         results.append(await slot(timedelta(hours=2)))
+        after = await task()
         await task.aclose()
-        return results
+        return results, between, after
 
-    first, second, recovered = asyncio.run(scenario())
+    (first, second, recovered), between, after = asyncio.run(scenario())
+
+    assert between.status == "degraded"
+    assert between.details["errors"] == {"news": "news_sources_stale"}
+    assert between.details["processed"] == []
+    assert after.status == "idle"
 
     for result in (first, second):
         assert result.status == "degraded"

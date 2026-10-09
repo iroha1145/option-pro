@@ -804,6 +804,9 @@ class CatalystSyncTask:
         self._intelligence: Any = None
         self._last_personal_sync_monotonic: float | None = None
         self._last_journal_prune_monotonic: float | None = None
+        # Stream health from the last pass that ran the streams, reported again
+        # by a pass between sync slots instead of a misleading idle.
+        self._stream_errors: dict[str, str] = {}
 
     async def _prepare_local(self) -> str:
         from app.services.catalysts.etl_repository import CatalystEtlRepository
@@ -996,9 +999,9 @@ class CatalystSyncTask:
             else None
         )
         if not scheduled_due and requested_type is None and not errors:
-            if intelligence is None:
+            if intelligence is None or self._stream_errors:
                 # Stay visibly degraded between sync slots; nothing else can
-                # run until the next slot retries the build.
+                # run until the next slot retries the build or the sources.
                 return TaskResult(
                     status="degraded",
                     error_code="catalyst_sync_degraded",
@@ -1006,9 +1009,12 @@ class CatalystSyncTask:
                         "processed": [],
                         "streams": {},
                         "refresh_requested": False,
-                        "errors": {
-                            "local_intelligence": "local_intelligence_unavailable"
-                        },
+                        "errors": (
+                            {"local_intelligence": "local_intelligence_unavailable"}
+                            if intelligence is None
+                            else {}
+                        )
+                        | self._stream_errors,
                     },
                     next_delay_seconds=self._until_next_sync(sync_seconds),
                 )
@@ -1053,6 +1059,10 @@ class CatalystSyncTask:
                 errors[stream] = outcome.error_code
                 continue
             processed.append(stream)
+        if local:
+            self._stream_errors = {
+                stream: errors[stream] for stream in selected_streams if stream in errors
+            }
 
         projection = None
         if selected_streams and intelligence is None:
