@@ -3206,7 +3206,40 @@ def validate_result(job_type: str, raw_json: str, payload: dict) -> dict:
             ),
         },
     )
-    data = result.model_dump(mode="json")
+    return _bind_result_to_payload(job_type, result.model_dump(mode="json"), payload)
+
+
+def has_current_result_shape(job_type: str, result: Any, payload: dict) -> bool:
+    """Whether a stored result has exactly the current model's top-level fields."""
+
+    model = result_model_for(job_type, payload=payload)
+    return (
+        isinstance(result, dict)
+        and set(result) == set(model.model_fields)
+        and result.get("output_language") == "zh-CN"
+    )
+
+
+def check_stored_result(job_type: str, result: Any, payload: dict) -> dict:
+    """Read-time check for a result that validate_result accepted before it was stored.
+
+    Callers use it only for rows still under the current schema identity,
+    which folds in RESULT_VALIDATION_CONTRACT_VERSION: any change to what
+    validate_result accepts or rewrites has to bump that version, so older
+    rows take the full check again. This skips the model and
+    Simplified-Chinese validation but keeps the top-level shape, the language
+    marker and every binding of the output to its payload.
+    """
+
+    if not has_current_result_shape(job_type, result, payload):
+        raise ValueError("stored_result_shape_mismatch")
+    try:
+        return _bind_result_to_payload(job_type, dict(result), payload)
+    except (AttributeError, KeyError, TypeError) as exc:
+        raise ValueError("stored_result_binding_invalid") from exc
+
+
+def _bind_result_to_payload(job_type: str, data: dict, payload: dict) -> dict:
     if job_type == "earnings_impact":
         expected = str(payload.get("ticker") or "").upper()
         if data["ticker"] != expected:

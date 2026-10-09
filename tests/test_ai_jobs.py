@@ -2369,6 +2369,68 @@ def test_cached_get_hides_a_forged_zh_cn_legacy_result(monkeypatch, tmp_path):
     assert repository.get_job(row["job_id"])["result_json"] is not None
 
 
+def test_trusted_bulk_read_skips_prose_validation_but_keeps_bindings(
+    monkeypatch, tmp_path,
+):
+    from app.services.ai_jobs import repository as repo_module
+
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    row, _ = _create_earnings_job(repository)
+    owner = "current-identity-owner"
+    claimed = repository.claim_due(owner, 60)
+    repository.complete(claimed["job_id"], owner, _earnings_result(), {})
+    full_checks = []
+    original = repo_module.validate_result
+
+    def counted(*args, **kwargs):
+        full_checks.append(args[0])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(repo_module, "validate_result", counted)
+    stored = repository.get_job(row["job_id"])
+    trusted = repository.public(stored, trust_current_identity=True)
+    assert trusted["result"]["ticker"] == "AAPL"
+    assert trusted["result"] == repository.public(stored)["result"]
+    assert full_checks == ["earnings_impact"]
+
+    tampered = _earnings_result()
+    tampered["ticker"] = "MSFT"
+    tampered["impacted"] = [
+        item for item in tampered["impacted"] if item["ticker"] != "MSFT"
+    ]
+    with repository._connect() as connection:
+        connection.execute(
+            "UPDATE ai_jobs SET result_json=? WHERE job_id=?",
+            (json.dumps(tampered, ensure_ascii=False, sort_keys=True), row["job_id"]),
+        )
+        connection.commit()
+    hidden = repository.public(repository.get_job(row["job_id"]), trust_current_identity=True)
+    assert hidden["result"] is None
+    assert hidden["error_code"] == "legacy_output_hidden"
+    assert full_checks == ["earnings_impact"]
+
+
+def test_trusted_bulk_read_gives_older_identities_the_full_check(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    row, _ = _create_earnings_job(repository)
+    owner = "older-identity-owner"
+    claimed = repository.claim_due(owner, 60)
+    legacy = _earnings_result()
+    legacy["summary"] = "Markets rally after strong earnings"
+    repository.complete(claimed["job_id"], owner, legacy, {})
+    with repository._connect() as connection:
+        connection.execute(
+            "UPDATE ai_jobs SET schema_sha256=? WHERE job_id=?",
+            ("0" * 64, row["job_id"]),
+        )
+        connection.commit()
+
+    hidden = repository.public(repository.get_job(row["job_id"]), trust_current_identity=True)
+
+    assert hidden["result"] is None
+    assert hidden["error_code"] == "legacy_output_hidden"
+
+
 def test_option_alert_failed_job_requires_explicit_force_to_requeue(
     monkeypatch,
     tmp_path,

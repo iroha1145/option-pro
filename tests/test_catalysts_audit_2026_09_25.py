@@ -1449,6 +1449,76 @@ def test_counts_follow_the_analyses_the_public_boundary_shows(tmp_path, monkeypa
     )
 
 
+def test_public_feed_trusts_analyses_the_local_layer_marked_current(tmp_path, monkeypatch):
+    with request_owner_access_context(True):
+        _etl, ai, engine, now = _ai27_published_news(tmp_path, (55,))
+        job = engine.request_analysis(55, force=False)
+        _ai_finish(ai, job["job_id"], _ai_news_result(55))
+        engine.reconcile()
+        engine.reconcile()
+    full_checks = []
+    original = personal_module.validate_result
+
+    def counted(*args, **kwargs):
+        full_checks.append(args[0])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(personal_module, "validate_result", counted)
+    local_module._reset_revision_cache()
+    with request_owner_access_context(False):
+        public_feed = _ai27_service(engine).feed(
+            window_hours=72,
+            limit=10,
+            as_of=now + timedelta(minutes=1),
+        )
+
+    assert public_feed["items"][0]["analysis"]["title_zh"] == "英伟达发布新一代芯片平台"
+    assert full_checks == []
+
+
+def test_public_boundary_rechecks_bindings_of_a_trusted_analysis(monkeypatch):
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("a current analysis must not re-run the full check")
+
+    monkeypatch.setattr(personal_module, "validate_result", forbidden)
+    analysis = _ai_news_result(56)
+    item = {
+        "news_id": 56,
+        "change_sequence": 1,
+        "content_hash": "hash-56-1",
+        "source": "Reuters",
+        "source_tickers": ["NVDA"],
+        "_analysis_current": True,
+    }
+
+    assert PersonalCatalystService._project_news_analysis(analysis, item=item) == analysis
+    assert PersonalCatalystService._project_news_analysis(
+        {**analysis, "news_id": 57}, item=item,
+    ) is None
+    assert PersonalCatalystService._project_news_analysis(
+        {**analysis, "affected_stocks": [{**analysis["affected_stocks"][0], "ticker": "PANIC"}]},
+        item=item,
+    ) is None
+
+
+def test_analysis_progress_trusts_current_identity_rows_only(tmp_path, monkeypatch):
+    with request_owner_access_context(True):
+        _etl, ai, engine, _now = _ai27_published_news(tmp_path, (58,))
+        job = engine.request_analysis(58, force=False)
+        _ai_finish(ai, job["job_id"], _ai_news_result(58))
+        engine.reconcile()
+    row = ai.get_job(job["job_id"])
+
+    def reject_news(job_type, raw_json, payload):
+        raise ValueError("future_language_style_rejected")
+
+    monkeypatch.setattr(local_module, "validate_result", reject_news)
+
+    assert engine.news_result_audit_states([row]) == {job["job_id"]: "accepted"}
+    older = {**row, "schema_sha256": "0" * 64}
+    assert engine.news_result_audit_states([older]) == {job["job_id"]: "rejected"}
+
+
 def test_batch_returns_only_items_with_chinese_copy(tmp_path):
     with request_owner_access_context(True):
         _etl, ai, engine, now = _ai27_published_news(tmp_path, (61, 62))
