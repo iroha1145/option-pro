@@ -217,8 +217,8 @@ def prune_snapshots(repository: CatalystEtlRepository, *, now: datetime) -> int:
     )
 
 
-def calendar_stale(state_last_success_at: str | None, *, now: datetime) -> bool:
+def calendar_stale(completed_as_of: str | None, *, now: datetime) -> bool:
     """A failed fetch degrades the task only once the calendar is a day old."""
 
-    succeeded = parse_utc(state_last_success_at)
-    return succeeded is None or now - succeeded > timedelta(hours=24)
+    confirmed = parse_utc(completed_as_of)
+    return confirmed is None or now - confirmed > timedelta(hours=24)
