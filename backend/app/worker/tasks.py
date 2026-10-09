@@ -1128,7 +1128,12 @@ class CatalystSyncTask:
             intelligence,
             "complete_refresh_request",
         ):
-            error_code = next(iter(errors.values()), None)
+            # A news refresh does not fail because the calendar stream is stale.
+            unrequested = {"news", "calendar"} - requested
+            error_code = next(
+                (code for key, code in errors.items() if key not in unrequested),
+                None,
+            )
             try:
                 await _call_local(
                     intelligence.complete_refresh_request,

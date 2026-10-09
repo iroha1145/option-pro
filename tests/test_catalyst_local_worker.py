@@ -292,6 +292,42 @@ def test_manual_news_refresh_forces_news_sources_and_leaves_the_calendar(tmp_pat
     assert completed == [("manual-1", None)]
 
 
+def test_a_news_refresh_completes_even_while_the_calendar_is_stale(tmp_path):
+    completed: list[tuple[str, str | None]] = []
+
+    class Intelligence:
+        def __init__(self, *_args, **_options) -> None:
+            pass
+
+        def initialize(self) -> None:
+            return None
+
+        def consume_refresh_requested(self):
+            return {"request_id": "manual-news", "operation_type": "news"}
+
+        def reconcile(self, *, allow_scheduled_jobs: bool = False) -> dict:
+            return {"ingested": 0}
+
+        def complete_refresh_request(self, request_id: str, *, error_code=None) -> None:
+            completed.append((request_id, error_code))
+
+    feeds = Feeds(
+        massive=NewsBatch(_items("massive", 1, source="massive/Benzinga")),
+        forexfactory=SourceError("timeout"),
+    )
+    task = _task(
+        tmp_path,
+        feeds.mapping("massive", "forexfactory"),
+        intelligence_factory=Intelligence,
+    )
+
+    [result] = asyncio.run(_run(task))
+
+    assert result.status == "degraded"
+    assert result.details["errors"]["calendar"] == "calendar_stale"
+    assert completed == [("manual-news", None)]
+
+
 def test_a_failed_store_names_its_sources_and_logs_the_cause(tmp_path, monkeypatch, caplog):
     from app.services.catalysts.news_collector import NewsCollector
 
