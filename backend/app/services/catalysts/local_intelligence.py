@@ -4044,9 +4044,19 @@ class LocalCatalystIntelligence:
                     )
                 continue
             if public.get("status") != "completed":
+                # A failed or blocked cycle keeps its job's reason code; without
+                # it the hotspot card can only say the analysis did not finish.
+                status = str(public["status"])
+                error_code = (
+                    str(public.get("error_code") or "focus_job_failed")[:120]
+                    if status in {"failed", "budget_blocked"}
+                    else None
+                )
                 connection.execute(
-                    "UPDATE catalyst_local_focus_cycles SET status=?,updated_at=? WHERE cycle_id=?",
-                    (str(public["status"]), str(public["updated_at"]), str(cycle["cycle_id"])),
+                    """UPDATE catalyst_local_focus_cycles
+                       SET status=?,error_code=COALESCE(?,error_code),updated_at=?
+                       WHERE cycle_id=?""",
+                    (status, error_code, str(public["updated_at"]), str(cycle["cycle_id"])),
                 )
                 continue
             observed_at = _iso()
@@ -8270,6 +8280,13 @@ class LocalCatalystIntelligence:
             cancel_requested = bool(
                 public_job and public_job.get("cancel_requested")
             )
+            # 失败周期附上付费任务的失败细节（校验字段路径与被拒片段），只给 owner。
+            payload["error_detail"] = (
+                linked_job.get("error_detail")
+                if linked_job is not None
+                and payload.get("status") in {"failed", "budget_blocked"}
+                else None
+            )
         payload.update(
             {
                 "status": (
@@ -8311,6 +8328,7 @@ class LocalCatalystIntelligence:
             for field in (
                 "job_id",
                 "error_code",
+                "error_detail",
                 "retry_of_cycle_id",
                 "updated_at",
                 "cancel_requested",

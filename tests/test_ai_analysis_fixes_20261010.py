@@ -569,3 +569,66 @@ def test_bulk_selection_skips_rows_that_would_need_a_provider_retrieve(tmp_path)
     assert repo.recoverable_receipt_failures(since=since) == [with_receipt]
     assert repo.recoverable_receipt_failures(since=since, job_types=["market_focus"]) == []
     assert repo.recoverable_receipt_failures(since=datetime.now(timezone.utc) + timedelta(minutes=1)) == []
+
+
+# --- E. Failed hotspot cycles carry their reason for the owner ----------------
+
+
+def test_failed_focus_cycle_shows_the_validation_detail_to_the_owner_only(tmp_path, monkeypatch):
+    from app.access import request_owner_access_context
+    from app.services.catalysts import local_intelligence as local_module
+    from test_catalyst_local_intelligence import _apply_news, _news_change, _stack
+
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime(2030, 7, 16, 19, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: now)
+    _apply_news(etl, [_news_change(1, 221, available_at=now - timedelta(minutes=10))], as_of=now - timedelta(minutes=9))
+    revision = intelligence.reconcile()["prepared_revision"]
+    cycle = intelligence.request_market_focus_cycle(expected_prepared_revision=revision)
+    detail = "3 validation errors for VerifiedMarketFocusResult\nheadline_summary\n  Value error, unbound_numeric_security_code"
+    claimed = ai.claim_due("owner", lease_seconds=60)
+    assert claimed["job_id"] == cycle["job_id"]
+    ai.fail(cycle["job_id"], "owner", "schema_validation_failed", detail=detail)
+    intelligence.reconcile()
+
+    owner_view = intelligence.latest_market_focus_cycle(now=now + timedelta(minutes=1))["cycle"]
+    assert owner_view["status"] == "failed"
+    assert owner_view["error_code"] == "schema_validation_failed"
+    assert owner_view["error_detail"] == detail
+    with request_owner_access_context(False):
+        assert intelligence.market_focus_cycle(cycle["cycle_id"]) is None
+        visitor = intelligence.latest_market_focus_cycle(now=now + timedelta(minutes=1))
+    assert visitor["cycle"] is None
+
+
+def test_failed_focus_cycle_is_published_once_its_paid_job_is_recovered(tmp_path, monkeypatch):
+    from app.services.catalysts import local_intelligence as local_module
+    from test_catalyst_local_intelligence import _apply_news, _focus_result, _news_change, _stack
+
+    etl, ai, intelligence = _stack(tmp_path)
+    now = datetime(2030, 7, 16, 19, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: now)
+    _apply_news(etl, [_news_change(1, 221, available_at=now - timedelta(minutes=10))], as_of=now - timedelta(minutes=9))
+    revision = intelligence.reconcile()["prepared_revision"]
+    cycle = intelligence.request_market_focus_cycle(expected_prepared_revision=revision)
+    assert ai.claim_due("owner", lease_seconds=60)["job_id"] == cycle["job_id"]
+    ai.fail(cycle["job_id"], "owner", "schema_validation_failed", detail="unbound_numeric_security_code")
+    intelligence.reconcile()
+    assert intelligence.latest_market_focus_cycle(now=now + timedelta(minutes=1))["cycle"]["status"] == "failed"
+
+    # What recover_schema_validation_failure writes for the paid job.
+    with sqlite3.connect(ai.path) as db:
+        db.execute(
+            """UPDATE ai_jobs SET status='completed',result_json=?,error_code=NULL,
+                   error_detail=NULL,completed_at=? WHERE job_id=?""",
+            (
+                json.dumps(_focus_result(ai, cycle), ensure_ascii=False),
+                (now - timedelta(seconds=30)).isoformat().replace("+00:00", "Z"),
+                cycle["job_id"],
+            ),
+        )
+    intelligence.reconcile()
+    latest = intelligence.latest_market_focus_cycle(now=now + timedelta(minutes=1))["cycle"]
+    assert latest["status"] == "completed"
+    assert latest["error_code"] is None
+    assert latest["result"] is not None
