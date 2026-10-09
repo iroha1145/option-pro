@@ -2,7 +2,7 @@
  * Index Tape（design.md §7.1）
  * 36px 指数跑马灯 marquee · hover 与键盘焦点暂停 · 涨跌 tick-flash · 右侧固定「延迟行情」毛玻璃标签
  */
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { marketApi } from '@/api/modules/market';
 import { usePolling } from '@/hooks/usePolling';
@@ -64,14 +64,32 @@ const tapeKey = (q: IndexQuote) => q.code;
 const tapePrice = (q: IndexQuote) => q.price;
 
 const FUND_LABELS: Record<string, string> = { SPY: t('标普500基金'), QQQ: t('纳斯达克100基金'), DIA: t('道琼斯基金'), IWM: t('罗素2000基金') };
+const FUND_PRICE_CLASS = 'tnum text-caption text-ink-600 [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:[&>.tick-flash]:inline-flex';
+const FUND_CHANGE_CLASS = '[@media(pointer:coarse)]:text-caption';
+
+/* 报价到达前后芯片等宽：隐形样例用等宽数字排出比常见读数略宽的一格（四位整数的价格、两位整数的涨跌），
+   实际读数叠在同一格里，「—」换成价格时后面的芯片和副本都不动。样例是纯文字，不带滚动数字的十行字形。 */
+function SameWidth({ sample, children }: { sample: ReactNode; children: ReactNode }) {
+  return (
+    <span className="inline-grid items-center justify-items-start">
+      <span aria-hidden="true" className="invisible col-start-1 row-start-1">{sample}</span>
+      <span className="col-start-1 row-start-1">{children}</span>
+    </span>
+  );
+}
+
 function FundTapeItem({ symbol, onOpen }: { symbol: string; onOpen: () => void }) {
   const quote = useLiveQuote(symbol);
   return <button type="button" onClick={onOpen} title={t('{fund} · 美元价格', { fund: FUND_LABELS[symbol] })} className="inline-flex items-center gap-2 rounded-xs px-1 hover:bg-paper-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600">
     <span className="text-caption font-medium text-ink-800">{FUND_LABELS[symbol]}</span>
     <span className="tnum text-micro text-ink-400 [@media(pointer:coarse)]:text-caption">{symbol}</span>
     {/* 触屏用同一字阶；价格的行内盒会给滚动数字留下下降空间，改成弹性盒后按可见数字居中。 */}
-    <LivePrice symbol={symbol} prefix="$" indicator={false} className="tnum text-caption text-ink-600 [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:[&>.tick-flash]:inline-flex" />
-    <LiveChange symbol={symbol} fallback={quote?.change_pct} size="sm" className="[@media(pointer:coarse)]:text-caption" />
+    <SameWidth sample={<span className={FUND_PRICE_CLASS}>$0000.00</span>}>
+      <LivePrice symbol={symbol} prefix="$" indicator={false} className={FUND_PRICE_CLASS} />
+    </SameWidth>
+    <SameWidth sample={<span className={cn('change-badge inline-flex items-center gap-0.5 text-[12px] leading-[16px] tnum', FUND_CHANGE_CLASS)}><span className="size-3" />−10.01%</span>}>
+      <LiveChange symbol={symbol} fallback={quote?.change_pct} size="sm" className={FUND_CHANGE_CLASS} />
+    </SameWidth>
   </button>;
 }
 
@@ -131,6 +149,9 @@ export default function IndexTape() {
     revealKeyboardFocus(document.activeElement);
   }, [reducedMotion, revealKeyboardFocus]);
 
+  const tapeLabels = [t('基金行情 · 美元'), t('行情连接中'), t('延迟行情')];
+  const label = useFunds ? (quoteStatus.connected ? tapeLabels[0] : tapeLabels[1]) : tapeLabels[2];
+
   const row = useFunds
     ? MARKET_FUNDS.map(symbol => <FundTapeItem key={symbol} symbol={symbol} onOpen={() => navigate(`/stock/${symbol}`)} />)
     : <TapeRow items={items} flashes={flashes} onOpen={openMarket} />;
@@ -152,9 +173,12 @@ export default function IndexTape() {
       </div>
       <span className="marquee-label absolute inset-y-0 right-0 z-10 flex items-stretch">
         <span className="pointer-events-none w-8 bg-gradient-to-r from-transparent to-paper-2" aria-hidden="true" />
-        {/* 不用 .glass：底色已是 95% 不透明，磨砂看不出来，却要随下面一直滚动的跑马灯逐帧重算模糊 */}
-        <span className="flex items-center border-l border-line bg-paper-2/95 px-3 text-micro text-ink-400">
-          {useFunds ? (quoteStatus.connected ? t('基金行情 · 美元') : t('行情连接中')) : t('延迟行情')}
+        {/* 不用 .glass：底色已是 95% 不透明，磨砂看不出来，却要随下面一直滚动的跑马灯逐帧重算模糊。
+            三种说明叠在同一格、宽度取最长的一种，连接状态变化时标签左缘不动。 */}
+        <span className="grid items-center border-l border-line bg-paper-2/95 px-3 text-micro text-ink-400">
+          {tapeLabels.map((text) => (
+            <span key={text} className={cn('col-start-1 row-start-1', text !== label && 'invisible')} aria-hidden={text !== label || undefined}>{text}</span>
+          ))}
         </span>
       </span>
     </div>

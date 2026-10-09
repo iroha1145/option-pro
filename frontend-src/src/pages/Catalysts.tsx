@@ -180,6 +180,7 @@ export default function Catalysts() {
       <PageHeader
         title={__t("新闻")}
         className="[&_h1]:basis-auto"
+        inlineMeta
         meta={
           <>
             {lastLoadedAt && (

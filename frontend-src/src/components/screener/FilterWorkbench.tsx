@@ -50,7 +50,8 @@ function TierSegmented({
   onChange,
 }: {
   value: TierFilter;
-  counts: Record<TierFilter, number>;
+  /** null：候选池还没读到，计数显示「—」，不显示假的 0。 */
+  counts: Record<TierFilter, number> | null;
   /** 计数覆盖整个候选池时不加限定语；否则明确它只描述当前快照的行。 */
   coversPool: boolean;
   onChange: (v: TierFilter) => void;
@@ -70,8 +71,9 @@ function TierSegmented({
       renderLabel={(o, active) => (
         <span className="flex items-center gap-1.5">
           {o.label}
-          <span className={cn('min-w-4 rounded-sm px-1 py-px text-[12px] leading-[14px] tnum', active ? 'bg-paper-2 text-ink-600' : 'text-ink-400')}>
-            {counts[o.value]}
+          {/* 计数格按两位数留宽：读到前的「—」与读到后的计数同宽，后面的周期、风险偏好分段不被挤动。 */}
+          <span className={cn('min-w-[calc(2ch+0.5rem)] rounded-sm px-1 py-px text-center text-[12px] leading-[14px] tnum', active ? 'bg-paper-2 text-ink-600' : 'text-ink-400')}>
+            {counts ? counts[o.value] : '—'}
           </span>
         </span>
       )}
@@ -138,7 +140,8 @@ export function ScanButton({
 }: {
   scanning: boolean;
   dirty: boolean;
-  universeCount: number;
+  /** null：候选池还没读到，显示「—」。 */
+  universeCount: number | null;
   onScan: () => void;
   className?: string;
 }) {
@@ -182,7 +185,7 @@ export function ScanButton({
           <>
             <Icon name="crosshair" size={16} />
             <span className="text-body-s font-medium">{__t('开始扫描')}</span>
-            <span className="text-micro text-on-accent tnum">≈{universeCount} {__t('只')}</span>
+            <span className="text-micro text-on-accent tnum">≈<span className="inline-block min-w-[4ch] text-center">{universeCount ?? '—'}</span> {__t('只')}</span>
           </>
         )}
       </span>
@@ -195,11 +198,11 @@ interface FilterWorkbenchProps {
   draft: ScanFilters;
   onChange: (f: ScanFilters) => void;
   universe: {
-    tierCounts: Record<TierFilter, number>;
+    tierCounts: Record<TierFilter, number> | null;
     /** 计数是否覆盖整个候选池；false 时只描述当前结果中的股票（审计 P2-10）。 */
     tierCountsCoverPool: boolean;
     sectors: string[];
-    count: number;
+    count: number | null;
   };
   /** 板块选项：live 来自 /strength/profiles sectors（id+中文名，下发 id）；mock 回退扫描行 sector 名（id=name） */
   sectorOptions: SectorOption[];
@@ -233,8 +236,8 @@ export default function FilterWorkbench({
   };
 
   const row = {
-    hidden: { opacity: 0, y: 14 },
-    show: { opacity: 1, y: 0, transition: { duration: DUR_SECTION, ease: EASE_PAPER } },
+    hidden: { opacity: 0 },
+    show: { opacity: 1, transition: { duration: DUR_SECTION, ease: EASE_PAPER } },
   };
 
   const selectedSectors = draft.sectors.map((id) => sectorOptions.find((sector) => sector.id === id)?.name ?? id);

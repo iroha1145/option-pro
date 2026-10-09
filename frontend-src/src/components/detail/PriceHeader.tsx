@@ -6,8 +6,6 @@ import SoftBadge from '@/components/shared/SoftBadge';
 import { useLiveQuote, useQuoteStatus } from '@/hooks/useLiveQuote';
 import { LivePrice } from '@/components/shared/LiveQuote';
 import { displayedQuoteLabel, preferLiveQuote } from '@/lib/liveQuotes';
-import { motion } from 'framer-motion';
-import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { marketApi } from '@/api/modules/market';
 import { usePolling } from '@/hooks/usePolling';
 import { cn } from '@/lib/utils';
@@ -35,12 +33,9 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
   const updatedAt = useLive ? quote?.trade_at : detail?.updatedAt;
   const priceLabel = quote ? displayedQuoteLabel(quote, quoteStatus, useLive || !isNum(detail?.price)) : null;
 
+  /* 不做入场位移：读取中与读到后是两棵树，页头会重挂，位移动画会在数据到达时再播一遍。 */
   return (
-    <motion.header
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
-    >
+    <header>
       <div className="flex flex-wrap items-center gap-3">
         <TickerLogo ticker={symbol} size={44} />
         <div className="min-w-0">
@@ -48,11 +43,16 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
             <span className="font-display text-[26px] leading-[32px] font-semibold tracking-[-0.02em] text-ink-900">{symbol}</span>
             <span className="text-body text-ink-500">{detail?.name ?? symbol}</span>
           </h1>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
+          {/* 手机上行业徽标与交易时段各占一行，时段读到之前先留出这一行，读到前后页头同高。 */}
+          <div className="mt-1 flex flex-col items-start gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
             <SoftBadge>
               {detail?.sector ? t(detail.sector) : t('个股行情')}
             </SoftBadge>
-            {market && <SessionLED session={quoteSession === 'postmarket' ? 'afterhours' : quoteSession ?? market.session} label={priceLabel ?? t('{label} · 延迟 15 分钟', { label: market.label })} />}
+            {market ? (
+              <SessionLED session={quoteSession === 'postmarket' ? 'afterhours' : quoteSession ?? market.session} label={priceLabel ?? t('{label} · 延迟 15 分钟', { label: market.label })} />
+            ) : (
+              <span className="min-h-[1lh] text-caption sm:hidden" aria-hidden="true" />
+            )}
           </div>
         </div>
         <div className="ml-auto text-right">
@@ -70,9 +70,10 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
         {/* Insight Cards 的数值块口径：大读数 + 涨跌 + 绝对变动 + **比较基准**。
             基准不是装饰——只给「+2.57%」而不说跟谁比，读者只能猜；tick-flash
             仍要贴在价格本体上，所以外面再包一层承接闪动类名。 */}
+        {/* 手机上价格独占一行：读取中只有「—」，读到后价格、涨跌与基准占满一行，两种情况下面的指标组都另起一行。 */}
         <div
           className={cn(
-            'tick-flash min-w-0 max-w-full rounded-sm px-1',
+            'tick-flash min-w-0 max-w-full basis-full rounded-sm px-1 sm:basis-auto',
           )}
         >
           <InsightValue
@@ -83,7 +84,8 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
             basis={__t('较昨收')}
           />
         </div>
-        <dl className="flex flex-wrap items-end gap-x-7 gap-y-3 pb-1.5" data-price-header-stats="">
+        {/* 手机上报价时间单独一行，读到后的长说明不会把这一组从一行挤成两行。 */}
+        <dl className="grid w-full grid-cols-2 items-end gap-x-7 gap-y-3 pb-1.5 sm:flex sm:w-auto sm:flex-wrap" data-price-header-stats="">
           <div className="min-w-0">
             <dt className="text-micro text-ink-400">{__t('成交量')}</dt>
             <dd className="mt-0.5 text-body-s text-ink-900 tnum">{compactOr(detail?.volume)}</dd>
@@ -92,7 +94,7 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
             <dt className="text-micro text-ink-400">{__t('市值')}</dt>
             <dd className="mt-0.5 text-body-s text-ink-900 tnum">{isNum(detail?.marketCap) ? `$${fmtCompact(detail?.marketCap)}` : '—'}</dd>
           </div>
-          <div className="min-w-0">
+          <div className="col-span-2 min-w-0">
             <dt className="text-micro text-ink-400">{__t('报价时间')}</dt>
             <dd className="mt-0.5 text-body-s text-ink-900">
               <span className="tnum">{updatedAt ? fmtTimeHHMMSS(new Date(updatedAt)) : '—'}</span>
@@ -101,6 +103,6 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
           </div>
         </dl>
       </div>
-    </motion.header>
+    </header>
   );
 }

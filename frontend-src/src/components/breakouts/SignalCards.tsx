@@ -74,8 +74,8 @@ function SignalCard({ ev: initialEvent, index, flash, locate, onOpen, showT1 = f
   return (
     <motion.article
       ref={ref}
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
       transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: Math.min(index * 0.045, 0.5) }}
       className="relative"
     >

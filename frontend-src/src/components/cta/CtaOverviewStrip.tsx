@@ -127,8 +127,8 @@ export default function CtaOverviewStrip({
       {rows.map((row, i) => (
         <motion.div
           key={row.instrument}
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
           transition={{ duration: DUR_SECTION, delay: Math.min(i * 0.07, 0.3), ease: EASE_PAPER }}
         >
           <OverviewCard row={row} selected={row.instrument === selected} onSelect={() => onSelect(row.instrument)} />

@@ -38,9 +38,9 @@ import PageHeader from '@/components/shared/PageHeader';
 import Segmented from '@/components/shared/Segmented';
 import FilterButton from '@/components/shared/FilterButton';
 import EmptyState from '@/components/shared/EmptyState';
-import { SkeletonCard, SkeletonRows } from '@/components/shared/Skeleton';
+import { SkeletonRows } from '@/components/shared/Skeleton';
 import FilterWorkbench from '@/components/screener/FilterWorkbench';
-import MarketRegimeCard from '@/components/screener/MarketRegimeCard';
+import MarketRegimeCard, { MarketRegimeCardSkeleton } from '@/components/screener/MarketRegimeCard';
 import ResultTable from '@/components/screener/ResultTable';
 import ResultCards from '@/components/screener/ResultCards';
 import ScanHistoryPopover from '@/components/screener/ScanHistoryPopover';
@@ -173,25 +173,31 @@ export default function Screener() {
    */
   const universe = useMemo(() => {
     const hasAppliedSnapshot = scanMeta !== null && rows !== null;
+    /* 候选池还没读到时计数是未知，不是 0：分档与扫描按钮显示「—」。 */
+    const known = hasAppliedSnapshot || universeQ.data !== null;
     const snapshotRows = hasAppliedSnapshot ? rows : (universeQ.data?.rows ?? []);
     const distribution = hasAppliedSnapshot
       ? scanMeta.tierDistribution
       : (universeQ.data?.tierDistribution ?? null);
     return {
-      tierCounts: distribution
-        ? {
-            all: distribution.total,
-            S: distribution.S,
-            A: distribution.A,
-            B: distribution.B,
-            C: distribution.C,
-          }
-        : countByTier(snapshotRows.map((r) => r.strengthScore)),
+      tierCounts: !known
+        ? null
+        : distribution
+          ? {
+              all: distribution.total,
+              S: distribution.S,
+              A: distribution.A,
+              B: distribution.B,
+              C: distribution.C,
+            }
+          : countByTier(snapshotRows.map((r) => r.strengthScore)),
       tierCountsCoverPool: distribution !== null,
       sectors: [...new Set(snapshotRows.map((r) => r.sector))].sort(SECTOR_COLLATOR.compare),
-      count: hasAppliedSnapshot
-        ? scanMeta.universeCount
-        : (universeQ.data?.universeCount ?? snapshotRows.length),
+      count: !known
+        ? null
+        : hasAppliedSnapshot
+          ? scanMeta.universeCount
+          : (universeQ.data?.universeCount ?? snapshotRows.length),
     };
   }, [universeQ.data, scanMeta, rows]);
 
@@ -1298,7 +1304,7 @@ export default function Screener() {
               </button>
             </div>
           ) : (
-            <SkeletonCard />
+            <MarketRegimeCardSkeleton />
           )}
           <MethodCard
             profile={activeProfile}

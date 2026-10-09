@@ -26,6 +26,8 @@ interface WeekScrubberProps {
 }
 
 const MAX_CHIPS = 3;
+/** 日格固定留足三只代码加「+N」一行：周与周之间、读取前后，周历高度都不变。 */
+export const WEEK_DAY_MIN_H = 'min-h-[165px]';
 
 const timingLabel = (timing: EarningsRow['timing']) => (
   timing === 'bmo' ? __t('盘前') : timing === 'amc' ? __t('盘后') : __t('时间待定')
@@ -134,11 +136,12 @@ export default function WeekScrubber({
                       onSelectDay(isSelected ? null : date);
                     }
                   }}
-                  initial={{ opacity: 0, y: 14 }}
-                  animate={{ opacity: 1, y: 0 }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
                   transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: di * 0.035 }}
                   className={cn(
-                    'flex min-h-[96px] w-[92px] shrink-0 cursor-pointer snap-start flex-col border-r border-line px-2 py-2.5 text-left transition-colors duration-fast last:border-r-0 sm:w-auto sm:min-w-0',
+                    'flex w-[92px] shrink-0 cursor-pointer snap-start flex-col border-r border-line px-2 py-2.5 text-left transition-colors duration-fast last:border-r-0 sm:w-auto sm:min-w-0',
+                    WEEK_DAY_MIN_H,
                     isSelected ? 'bg-brand-50' : 'hover:bg-paper-2',
                     'tick-flash',
                     flashing && hasReports && 'tick-flash-up',

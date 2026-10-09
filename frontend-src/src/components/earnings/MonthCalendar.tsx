@@ -195,8 +195,8 @@ export default function MonthCalendar({
                     onSelectDay(isSelected ? null : date);
                   }
                 }}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
                 transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: enteredRef.current ? 0 : ci * 0.025 }}
                 className={cn(
                   'flex min-h-[64px] cursor-pointer flex-col border-r border-line p-1.5 text-left transition-colors duration-fast sm:min-h-[104px] sm:p-2',

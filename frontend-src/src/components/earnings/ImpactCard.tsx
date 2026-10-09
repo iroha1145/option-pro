@@ -854,8 +854,8 @@ function Section({ children }: { children: ReactNode }) {
   return (
     <motion.section
       variants={{
-        hidden: { opacity: 0, y: 10 },
-        show: { opacity: 1, y: 0, transition: { duration: DUR_SECTION, ease: EASE_PAPER } },
+        hidden: { opacity: 0 },
+        show: { opacity: 1, transition: { duration: DUR_SECTION, ease: EASE_PAPER } },
       }}
       className="border-b border-line pb-4 pt-4 first:pt-0 last:border-b-0 last:pb-0"
     >

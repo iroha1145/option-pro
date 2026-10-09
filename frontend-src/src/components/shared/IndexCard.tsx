@@ -87,8 +87,8 @@ export default function IndexCard(props: IndexCardProps) {
   return (
     <motion.div
       className="h-full min-w-0"
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
       transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: Math.min(index * 0.045, 0.4) }}
     >
       {/* 联合类型保证 to 与 ref 的元素类型成对出现；解构后 TS 不再收窄，这里按分支断言 */}

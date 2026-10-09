@@ -8,6 +8,7 @@
 import SoftBadge from '@/components/shared/SoftBadge';
 import type { MarketRegimeDims, MarketRegimeInfo, MarketStrength } from '@/api/types';
 import InfoHint from '@/components/shared/InfoHint';
+import { SkeletonLine } from '@/components/shared/Skeleton';
 import { SCORE_HINTS, type ScoreHintKey } from '@/lib/scoreHints';
 import { t } from '../../i18n/core.ts';
 
@@ -58,6 +59,30 @@ function RegimeBar({ dim }: { dim: RegimeDim }) {
         <span className="metric-value text-right text-caption text-ink-800 tnum">
           {dim.value !== null ? Math.round(v) : '—'}
         </span>
+    </div>
+  );
+}
+
+/** 读取中的同尺寸骨架：标题行、标签行与六项走势条按真实卡片的行盒排。 */
+export function MarketRegimeCardSkeleton() {
+  return (
+    <div className="card-surface p-5" data-state="loading" aria-hidden="true">
+      <div className="flex items-baseline justify-between">
+        <SkeletonLine className="eyebrow" bar="h-2.5 w-16" />
+        <SkeletonLine className="text-data-m" bar="h-3.5 w-8" />
+      </div>
+      <p className="mt-1.5 flex items-center gap-1.5">
+        <span className="skeleton-shimmer h-5 w-16 rounded-pill" />
+      </p>
+      <div className="mt-4 grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-3">
+        {Array.from({ length: 6 }, (_, i) => (
+          <div key={i} className="col-span-3 grid grid-cols-subgrid items-center gap-x-3">
+            <SkeletonLine className="text-caption" bar="h-3 w-14" />
+            <span className="strength-track h-1.5 rounded-pill bg-paper" />
+            <SkeletonLine className="text-caption" bar="h-3 w-5" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

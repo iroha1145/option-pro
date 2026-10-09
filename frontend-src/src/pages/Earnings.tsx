@@ -20,10 +20,11 @@ import Icon from '@/components/icons';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonBlock, SkeletonCard, SkeletonRows } from '@/components/shared/Skeleton';
+import { cn } from '@/lib/utils';
 import Segmented from '@/components/shared/Segmented';
 import AutoHeight from '@/components/shared/AutoHeight';
 import { BusyIcon } from '@/components/shared/IconSwap';
-import WeekScrubber from '@/components/earnings/WeekScrubber';
+import WeekScrubber, { WEEK_DAY_MIN_H } from '@/components/earnings/WeekScrubber';
 import MonthCalendar from '@/components/earnings/MonthCalendar';
 import EarningsList from '@/components/earnings/EarningsList';
 import DeferredEpsChart from '@/components/earnings/DeferredEpsChart';
@@ -439,6 +440,21 @@ export default function Earnings() {
     </>
   );
 
+  /* 周 / 月视图切换（Segmented 滑块 260ms ease-paper；月历 accordion 320ms 展开） */
+  const calendarHeading = (
+    <div className="mb-3 flex items-center justify-between">
+      <p className="eyebrow">{t('财报日程（纽约时间）')}</p>
+      <Segmented
+        options={[
+          { value: 'week' as const, label: t('周历') },
+          { value: 'month' as const, label: t('月历') },
+        ]}
+        value={calView}
+        onChange={setCalView}
+      />
+    </div>
+  );
+
   return (
     <div>
       {/* B0 页头带 */}
@@ -491,22 +507,26 @@ export default function Earnings() {
         </div>
       )}
 
-      {/* B1 周历 scrubber */}
+      {/* B1 周历 scrubber。读取中与读到后共用标题行，骨架的表头与日格按真实周历的高度排（日格固定留足三只代码加「+N」），
+          下面的财报列表读到前后不被推动。 */}
       <div className="mt-6">
         {loading ? (
-          <div className="card-surface overflow-hidden" aria-label={t("周历加载中")}>
-            <div className="flex h-11 items-center justify-center border-b border-line">
-              <SkeletonBlock className="h-3 w-40" />
-            </div>
-            <div className="grid grid-cols-7">
-              {Array.from({ length: 7 }, (_, i) => (
-                <div key={i} className="min-h-[96px] space-y-2 border-r border-line p-2.5 last:border-r-0">
-                  <SkeletonBlock className="h-3 w-8" />
-                  <SkeletonBlock className="h-2.5 w-10" />
-                  <SkeletonBlock className="h-5 w-full" />
-                  <SkeletonBlock className="h-5 w-full" />
-                </div>
-              ))}
+          <div>
+            {calendarHeading}
+            <div className="card-surface overflow-hidden" aria-label={t("周历加载中")}>
+              <div className="flex h-11 items-center justify-center border-b border-line [@media(pointer:coarse)]:h-14">
+                <SkeletonBlock className="h-3 w-40" />
+              </div>
+              <div className="grid grid-cols-7">
+                {Array.from({ length: 7 }, (_, i) => (
+                  <div key={i} className={cn(WEEK_DAY_MIN_H, 'space-y-2 border-r border-line p-2.5 last:border-r-0')}>
+                    <SkeletonBlock className="h-3 w-8" />
+                    <SkeletonBlock className="h-2.5 w-10" />
+                    <SkeletonBlock className="h-5 w-full" />
+                    <SkeletonBlock className="h-5 w-full" />
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         ) : error503 ? (
@@ -531,18 +551,7 @@ export default function Earnings() {
           </section>
         ) : (
           <div>
-            {/* 周 / 月视图切换（Segmented 滑块 260ms ease-paper；月历 accordion 320ms 展开） */}
-            <div className="mb-3 flex items-center justify-between">
-              <p className="eyebrow">{t('财报日程（纽约时间）')}</p>
-              <Segmented
-                options={[
-                  { value: 'week' as const, label: t('周历') },
-                  { value: 'month' as const, label: t('月历') },
-                ]}
-                value={calView}
-                onChange={setCalView}
-              />
-            </div>
+            {calendarHeading}
             {/* 周 ↔ 月：容器高度一段补间（01-card-resize），新视图按 key 重挂后淡入；
                 不再先收成 0 再撑开（旧写法两段共 640ms，下方列表先上跳再下落）。 */}
             <AutoHeight>

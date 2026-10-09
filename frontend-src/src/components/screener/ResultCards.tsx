@@ -63,8 +63,8 @@ export default function ResultCards({
           <motion.div
             key={r.ticker}
             layout="position"
-            initial={page === 1 ? { opacity: 0, y: 14 } : false}
-            animate={{ opacity: 1, y: 0 }}
+            initial={page === 1 ? { opacity: 0 } : false}
+            animate={{ opacity: 1 }}
             transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: page === 1 ? Math.min(i * 0.03, 0.3) : 0, layout: { duration: DUR_UI, ease: EASE_PAPER } }}
             /* 可展开结果卡：2026-10-06 起卡片在 768–1279px 也用（两列），悬停按全站规则只加深描边（card-lift，精确指针门控），不再上浮投影 */
             className="card-surface card-lift overflow-hidden"

@@ -7,6 +7,18 @@ export function SkeletonBlock({ className }: { className?: string }) {
   return <div className={cn('skeleton-shimmer rounded-sm', className)} aria-hidden="true" />;
 }
 
+/**
+ * 在与真实文字同一字阶的行盒里画一条骨架：行高由 className 里的字阶决定，读到后的文字落在同一个高度上。
+ * bar 只管骨架条本身的宽高，须比该字阶的行高矮。
+ */
+export function SkeletonLine({ className, bar }: { className?: string; bar: string }) {
+  return (
+    <span className={cn('block', className)} aria-hidden="true">
+      <span className={cn('skeleton-shimmer inline-block rounded-sm align-middle', bar)} />
+    </span>
+  );
+}
+
 export function SkeletonText({ lines = 3, className }: { lines?: number; className?: string }) {
   return (
     <div className={cn('space-y-2', className)} aria-hidden="true">

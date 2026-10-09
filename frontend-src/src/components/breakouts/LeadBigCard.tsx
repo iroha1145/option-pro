@@ -676,8 +676,8 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
   return (
     <motion.article
       ref={ref}
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
       transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
       aria-label={t('{ticker} {setup} 重点信号', { ticker: e.ticker, setup: SETUP_CN[e.setup_type] ?? e.setup_type ?? '' })}
       className={cn('radar-lead-card card-surface p-5', locate && 'bk-locate')}

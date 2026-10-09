@@ -95,7 +95,8 @@ export default function Layout() {
             {__t('演示模式 · 当前行情与信号为示例数据')}
           </aside>
         )}
-        <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-shell flex-1 scroll-mt-24 px-4 pt-6 md:px-8 md:pt-8">
+        {/* 主区至少一屏高：页面骨架比真实内容矮时，页脚也停在首屏以外，内容长高时不会被看见下移。 */}
+        <main id="main-content" tabIndex={-1} className="mx-auto min-h-[100dvh] w-full max-w-shell flex-1 scroll-mt-24 px-4 pt-6 md:px-8 md:pt-8">
           {/* page-fade 转场改纯 CSS（enter 240ms opacity + translateY(6px)）。
               原先 AnimatePresence mode="wait" + initial opacity:0 意味着新页面
               「默认不可见、靠一帧 JS 动画亮起来」——催化这类重页面在低端手机上

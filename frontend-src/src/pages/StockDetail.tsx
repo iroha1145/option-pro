@@ -28,7 +28,7 @@ import { getDetail, getTechnicalStructure, prefetchStockDetailPanels } from '@/c
 import PriceHeader from '@/components/detail/PriceHeader';
 import SidebarEvents from '@/components/detail/SidebarEvents';
 import KlineChart from '@/components/detail/KlineChart';
-import TechnicalPanel from '@/components/detail/TechnicalPanel';
+import TechnicalPanel, { TechnicalPanelSkeleton } from '@/components/detail/TechnicalPanel';
 import StructurePanel from '@/components/detail/StructurePanel';
 import TrendBiasPanel from '@/components/detail/TrendBiasPanel';
 import SignalList from '@/components/detail/SignalList';
@@ -110,15 +110,38 @@ export default function StockDetail() {
     </div>
   );
 
+  /* 技术结构三态回退：加载骨架 / 未拉取（拉取 CTA）/ 瞬时失败（重试）。
+     快照缺失 ≠ 读取失败——没拉过数据的股票给「拉取并分析」，不误导重试；
+     侧栏技术指标卡只放占位与短注，整页的卡内拉取入口集中在结构卡。 */
+  const techSkeleton = (
+    <div className="mt-3 space-y-2" aria-hidden="true">
+      <span className="skeleton-shimmer block h-4 w-full rounded-xs" />
+      <span className="skeleton-shimmer block h-4 w-3/4 rounded-xs" />
+    </div>
+  );
+  /* 读取中的骨架按读到后的版式排：同样的操作行间距、页头、手动更新入口和「K 线 + 关键数据」一行，
+     K 线卡占读到后的常见高度，右栏的关键数据卡随行拉伸到同样的高度。 */
   if (loading && !detail) {
     return (
-      <div className="space-y-5" aria-busy="true" {...pageRegionProps('stock', 'loading')}>
-        <div className="flex flex-wrap items-center justify-between gap-2">
+      <div aria-busy="true" {...pageRegionProps('stock', 'loading')}>
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
           {toolbar}
         </div>
         <PriceHeader symbol={symbol} />
-        <SkeletonBlock className="h-[380px] w-full rounded-md" />
-        <SkeletonText lines={4} />
+        <ManualStockPull ticker={symbol} onPulled={handlePulled} compact quiet className="mt-3" />
+        <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-12">
+          <div className="card-surface p-5 xl:col-span-8">
+            <SkeletonBlock className="h-[1062px] w-full rounded-md xl:h-[763px]" />
+          </div>
+          <aside className="flex flex-col gap-6 xl:col-span-4">
+            <KeyStats detail={null} className="flex-1" />
+            <div className="card-surface p-5">
+              <h3 className="text-h3 text-ink-900">{__t('技术指标')}</h3>
+              <TechnicalPanelSkeleton />
+            </div>
+          </aside>
+        </div>
+        <SkeletonText lines={4} className="mt-6" />
       </div>
     );
   }
@@ -209,15 +232,6 @@ export default function StockDetail() {
     </div>
   );
 
-  /* 技术结构三态回退：加载骨架 / 未拉取（拉取 CTA）/ 瞬时失败（重试）。
-     快照缺失 ≠ 读取失败——没拉过数据的股票给「拉取并分析」，不误导重试；
-     侧栏技术指标卡只放占位与短注，整页的卡内拉取入口集中在结构卡。 */
-  const techSkeleton = (
-    <div className="mt-3 space-y-2" aria-hidden="true">
-      <span className="skeleton-shimmer block h-4 w-full rounded-xs" />
-      <span className="skeleton-shimmer block h-4 w-3/4 rounded-xs" />
-    </div>
-  );
   const techError = technical ? null : techQ.error;
   const techSnapshotMissing = techError?.bizCode === 'public_snapshot_unavailable';
   const techRetryRow = (
@@ -267,7 +281,7 @@ export default function StockDetail() {
             {technical ? (
               <TechnicalPanel technical={technical} />
             ) : techQ.loading ? (
-              techSkeleton
+              <TechnicalPanelSkeleton />
             ) : techSnapshotMissing ? (
               <>
                 <TechnicalPanel technical={null} />
