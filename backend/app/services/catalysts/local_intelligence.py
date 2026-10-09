@@ -1690,30 +1690,18 @@ class LocalCatalystIntelligence:
                    ) VALUES(?,?,?)""",
                 (SCHEMA_VERSION, SCHEMA_CHECKSUM, _iso()),
             )
-            timestamp_row = connection.execute(
-                "SELECT checksum FROM catalyst_local_schema WHERE version=?",
-                (TIMESTAMP_NORMALIZATION_VERSION,),
-            ).fetchone()
-            if (
-                timestamp_row is not None
-                and str(timestamp_row["checksum"])
-                != TIMESTAMP_NORMALIZATION_CHECKSUM
-            ):
-                raise RuntimeError(
-                    "local_catalyst_timestamp_normalization_checksum_mismatch"
-                )
-            if timestamp_row is None:
-                self._normalize_local_news_timestamps(connection)
-                connection.execute(
-                    """INSERT OR IGNORE INTO catalyst_local_schema(
-                           version,checksum,applied_at
-                       ) VALUES(?,?,?)""",
-                    (
-                        TIMESTAMP_NORMALIZATION_VERSION,
-                        TIMESTAMP_NORMALIZATION_CHECKSUM,
-                        _iso(),
-                    ),
-                )
+            # The timestamp row marks a retired one-shot normalization; new
+            # stores record it too so their registry matches production.
+            connection.execute(
+                """INSERT OR IGNORE INTO catalyst_local_schema(
+                       version,checksum,applied_at
+                   ) VALUES(?,?,?)""",
+                (
+                    TIMESTAMP_NORMALIZATION_VERSION,
+                    TIMESTAMP_NORMALIZATION_CHECKSUM,
+                    _iso(),
+                ),
+            )
             connection.commit()
         self._local_schema_ready = True
 
@@ -1893,52 +1881,6 @@ class LocalCatalystIntelligence:
             ).rowcount
             connection.commit()
         return totals
-
-    @staticmethod
-    def _normalize_local_news_timestamps(
-        connection: sqlite3.Connection,
-    ) -> int:
-        rows = connection.execute(
-            """SELECT news_id,change_sequence,content_hash,published_at,
-                      fetched_at,source_available_at
-               FROM catalyst_local_news_revisions
-               WHERE (published_at IS NOT NULL AND published_at NOT LIKE '%Z')
-                  OR fetched_at NOT LIKE '%Z'
-                  OR source_available_at NOT LIKE '%Z'"""
-        ).fetchall()
-        updates: list[tuple[str | None, str, str, int, int, str]] = []
-        for row in rows:
-            updates.append(
-                (
-                    _normalize_utc_timestamp(
-                        row["published_at"],
-                        field="published_at",
-                        optional=True,
-                    ),
-                    str(
-                        _normalize_utc_timestamp(
-                            row["fetched_at"],
-                            field="fetched_at",
-                        )
-                    ),
-                    str(
-                        _normalize_utc_timestamp(
-                            row["source_available_at"],
-                            field="source_available_at",
-                        )
-                    ),
-                    int(row["news_id"]),
-                    int(row["change_sequence"]),
-                    str(row["content_hash"]),
-                )
-            )
-        connection.executemany(
-            """UPDATE catalyst_local_news_revisions
-               SET published_at=?,fetched_at=?,source_available_at=?
-               WHERE news_id=? AND change_sequence=? AND content_hash=?""",
-            updates,
-        )
-        return len(updates)
 
     def validate_tickers(self, values: Iterable[Any]) -> list[str]:
         output: list[str] = []

@@ -408,6 +408,33 @@ def test_v4_local_database_gains_audit_job_index_without_checksum_conflict(
     assert payload["items"] == []
 
 
+def test_fresh_store_registry_matches_production(tmp_path):
+    """Production's registry holds these rows; a changed checksum stops
+    initialize() there, so the values are pinned. The timestamp row marks a
+    retired one-shot rewrite and is still recorded."""
+
+    _etl, _ai, intelligence = _stack(tmp_path)
+    intelligence.initialize()
+
+    with sqlite3.connect(intelligence.db_path) as connection:
+        versions = dict(
+            connection.execute(
+                "SELECT version,checksum FROM catalyst_local_schema"
+            ).fetchall()
+        )
+    assert versions == {
+        "optix-local-catalyst-v7": (
+            "2ccd6bdb3c2d02df4df5b7333105cd995b2e104a172cc4453dd00737532987a2"
+        ),
+        "optix-local-catalyst-timestamps-v1": (
+            "a3afed8ff2311b1b73691d2a7e9d4cb4ec512a48400e38cc356b7760c99a6edd"
+        ),
+        "optix-verified-focus-publication-v1": (
+            "5253a22cd937b503e7906af5ab02eda64afa97dfade0e419e8bf33f4798dd139"
+        ),
+    }
+
+
 def test_prune_journal_removes_stale_items_and_keeps_live_history(tmp_path):
     etl, _, intelligence = _stack(tmp_path)
     now = datetime.now(timezone.utc).replace(microsecond=0)
@@ -1223,101 +1250,6 @@ def test_recent_windows_compare_timezone_offsets_as_instants(
         (203, "2026-07-18T07:00:00Z"),
         (204, "2026-07-18T06:00:00Z"),
     ]
-
-
-def test_initialize_normalizes_legacy_local_timestamp_offsets(tmp_path):
-    etl, _ai, intelligence = _stack(tmp_path)
-    now = datetime(2026, 7, 19, 6, 30, tzinfo=timezone.utc)
-    _apply_news(
-        etl,
-        [_news_change(1, 205, available_at=now - timedelta(minutes=5))],
-        as_of=now - timedelta(minutes=4),
-    )
-    intelligence.reconcile()
-    with sqlite3.connect(intelligence.db_path) as connection:
-        connection.execute(
-            """UPDATE catalyst_local_news_revisions
-               SET published_at='',
-                   fetched_at='2026-07-19T01:25:00-0500',
-                   source_available_at='2026-07-19T01:26:00-0500'
-               WHERE news_id=205"""
-        )
-        connection.execute(
-            "DELETE FROM catalyst_local_schema WHERE version=?",
-            (local_module.TIMESTAMP_NORMALIZATION_VERSION,),
-        )
-        connection.commit()
-
-    intelligence.initialize()
-
-    with sqlite3.connect(intelligence.db_path) as connection:
-        stored = connection.execute(
-            """SELECT published_at,fetched_at,source_available_at
-               FROM catalyst_local_news_revisions WHERE news_id=205"""
-        ).fetchone()
-    assert stored == (
-        None,
-        "2026-07-19T06:25:00Z",
-        "2026-07-19T06:26:00Z",
-    )
-
-
-def test_completed_news_job_survives_timestamp_normalization(tmp_path):
-    etl, ai, intelligence = _stack(tmp_path)
-    now = datetime(2026, 7, 19, 6, 30, tzinfo=timezone.utc)
-    _apply_news(
-        etl,
-        [_news_change(1, 206, available_at=now - timedelta(minutes=5))],
-        as_of=now - timedelta(minutes=4),
-    )
-    intelligence.reconcile()
-    with sqlite3.connect(intelligence.db_path) as connection:
-        connection.execute(
-            """UPDATE catalyst_local_news_revisions
-               SET published_at='2026-07-19T01:20:00-0500',
-                   fetched_at='2026-07-19T01:24:00-0500',
-                   source_available_at='2026-07-19T01:25:00-0500'
-               WHERE news_id=206"""
-        )
-        connection.commit()
-    job = intelligence.request_analysis(206, force=False)
-    with sqlite3.connect(ai.path) as connection:
-        payload = json.loads(
-            connection.execute(
-                "SELECT payload_json FROM ai_jobs WHERE job_id=?",
-                (job["job_id"],),
-            ).fetchone()[0]
-        )
-    assert payload["published_at"] == "2026-07-19T01:20:00-0500"
-    assert payload["fetched_at"] == "2026-07-19T01:24:00-0500"
-    _finish_job(
-        ai,
-        job["job_id"],
-        _news_result(news_id=206, change_sequence=1, content_hash="hash-206-1"),
-    )
-    with sqlite3.connect(intelligence.db_path) as connection:
-        connection.execute(
-            "DELETE FROM catalyst_local_schema WHERE version=?",
-            (local_module.TIMESTAMP_NORMALIZATION_VERSION,),
-        )
-        connection.commit()
-
-    intelligence.initialize()
-    with sqlite3.connect(intelligence.db_path) as connection:
-        normalized = connection.execute(
-            """SELECT published_at,fetched_at
-               FROM catalyst_local_news_revisions WHERE news_id=206"""
-        ).fetchone()
-    assert normalized == (
-        "2026-07-19T06:20:00Z",
-        "2026-07-19T06:24:00Z",
-    )
-    reconciled = intelligence.reconcile()
-
-    assert reconciled["analyses_published"] == 1
-    detail = intelligence.news(206, as_of=datetime.now(timezone.utc))
-    assert detail is not None
-    assert detail["item"]["analysis"] is not None
 
 
 def test_jobs_can_be_cancelled_after_switching_to_read_mode(tmp_path):
