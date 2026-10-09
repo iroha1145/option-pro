@@ -42,7 +42,6 @@ import StaleStrip from '@/components/shared/StaleStrip';
 import StockDataCoverage from '@/components/shared/StockDataCoverage';
 import SessionLED from '@/components/shared/SessionLED';
 import SoftBadge from '@/components/shared/SoftBadge';
-import { SIGNAL_TONE } from '@/lib/signalTone';
 import { strengthBarClass } from '@/lib/strengthColor';
 import { exNum, isFeaturedRow, type EarningsRow } from '@/components/earnings/types';
 import ChangeBadge from '@/components/shared/ChangeBadge';
@@ -777,7 +776,7 @@ function RadarSignalRow({ signal: s, index: i }: { signal: BreakoutSignal; index
         <span className="min-w-0 truncate text-caption text-ink-500">{s.name}</span>
       </span>
       <span className="flex min-w-0 items-center gap-2 [grid-area:meta] xl:contents">
-        <SoftBadge tone={SIGNAL_TONE[s.type] ?? 'neutral'} className="min-w-0 xl:justify-self-start xl:[grid-area:chip]">
+        <SoftBadge className="min-w-0 xl:justify-self-start xl:[grid-area:chip]">
           <span className="truncate">{s.label}</span>
         </SoftBadge>
         <span className="shrink-0 text-micro text-ink-400 xl:justify-self-end xl:[grid-area:time]">{fmtRelative(s.at)}</span>

@@ -1106,7 +1106,6 @@ export default function Screener() {
                               onClick={() => onPresetQuick(p.id)}
                               className="control-button"
                             >
-                              <Icon name="spark-ai" size={13} className="text-ink-400" />
                               {p.name}
                             </button>
                           ))}

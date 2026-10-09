@@ -1,0 +1,1 @@
+import{r as a,j as r}from"./prefetchRouteChunk-BPZCwk7Q.js";function c({swapKey:e,children:s}){const[t,n]=a.useState({key:e,changed:!1});return t.key!==e&&n({key:e,changed:!0}),r.jsx("span",{className:t.changed&&t.key===e?"t-text-swap":void 0,children:s},e)}export{c as T};

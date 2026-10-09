@@ -339,7 +339,7 @@ export default function FilterWorkbench({
             ) : presets === null ? (
               <div className="flex gap-2" aria-hidden="true">
                 {Array.from({ length: 3 }, (_, i) => (
-                  <span key={i} className="skeleton-shimmer h-8 w-20 rounded-md" />
+                  <span key={i} className="skeleton-shimmer h-8 w-20 rounded-pill" />
                 ))}
               </div>
             ) : (
@@ -352,8 +352,8 @@ export default function FilterWorkbench({
                       key={preset.id}
                       onClick={() => applyPreset(preset.id)}
                       active={active}
+                      className="choice-chip"
                     >
-                      <Icon name="spark-ai" size={13} className={active ? 'text-brand-600' : 'text-ink-400'} />
                       {preset.name}
                     </FilterButton>
                   );
@@ -367,36 +367,42 @@ export default function FilterWorkbench({
             {sectorOptions.length === 0 ? (
               <div className="flex flex-wrap gap-2" aria-hidden="true">
                 {Array.from({ length: 5 }, (_, i) => (
-                  <span key={i} className="skeleton-shimmer h-7 w-16 rounded-md" />
+                  <span key={i} className="skeleton-shimmer h-8 w-16 rounded-pill" />
                 ))}
               </div>
             ) : (
               <SelectionViewport>
-              <div className="mobile-selection-rail flex flex-wrap items-center gap-1.5">
+              <div className="mobile-selection-rail flex flex-wrap items-center gap-2">
                 {visibleSectors.map((sector) => (
-                  <FilterButton key={sector.id} onClick={() => toggleSector(sector.id)} active={draft.sectors.includes(sector.id)} className="shrink-0">
+                  <FilterButton key={sector.id} onClick={() => toggleSector(sector.id)} active={draft.sectors.includes(sector.id)} className="choice-chip shrink-0">
+                    {/* 多选：选中时对勾从 0 宽长出（index.css .choice-chip-check），无障碍名称仍只是板块名 */}
+                    <span className="choice-chip-check" aria-hidden="true"><Icon name="check" size={13} /></span>
                     {sector.name}
                   </FilterButton>
                 ))}
+                {/* 展开与收起和芯片同形同色（灰底胶囊），字色浅一档，箭头指明是展开不是筛选项 */}
                 {hiddenCount > 0 && (
                   <button
                     type="button"
                     onClick={() => setShowAllSectors(true)}
-                    className="flex h-8 shrink-0 items-center whitespace-nowrap rounded-lg bg-paper-2 px-2.5 text-caption text-ink-500 tnum transition-colors duration-fast hover:bg-paper hover:text-ink-800"
+                    className="control-button choice-chip choice-chip-more shrink-0 tnum"
                   >
                     +{hiddenCount}
+                    <Icon name="chevron-down" size={13} />
                   </button>
                 )}
                 {showAllSectors && sectorOptions.length > SECTOR_COLLAPSE_AT && (
-                  <button type="button" onClick={() => setShowAllSectors(false)} className="flex h-8 shrink-0 items-center whitespace-nowrap rounded-lg px-2 text-caption text-ink-400 transition-colors duration-fast hover:text-ink-600">
+                  <button type="button" onClick={() => setShowAllSectors(false)} className="control-button choice-chip choice-chip-more shrink-0">
                     {__t('收起')}
+                    <Icon name="chevron-down" size={13} className="rotate-180" />
                   </button>
                 )}
               </div>
               </SelectionViewport>
             )}
           </div>
-          <div className="flex flex-wrap items-end gap-x-6 gap-y-4 border-t border-line/60 pt-4">
+          {/* 顶对齐：成交额下限下面可能挂一行说明，底对齐会把三个字段标签顶成三种高度 */}
+          <div className="flex flex-wrap items-start gap-x-6 gap-y-4 border-t border-line/60 pt-4">
             <div data-screener-field="price">
               <FieldLabel>{__t('价格范围')}</FieldLabel>
               <div className="flex items-center gap-1.5">

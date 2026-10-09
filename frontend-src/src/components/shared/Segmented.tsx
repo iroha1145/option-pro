@@ -15,7 +15,7 @@ interface SegmentedOption<T extends string> {
   value: T;
   label: string;
   /** 选中时的文字颜色（有含义的选项按含义着色）；缺省为品牌群青。 */
-  tone?: 'ok' | 'warn' | 'sky' | 'violet' | 'amber' | 'orange' | 'neutral';
+  tone?: 'ok' | 'warn' | 'sky' | 'orange' | 'neutral';
 }
 
 interface SegmentedProps<T extends string> {

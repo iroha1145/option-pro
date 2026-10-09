@@ -1,7 +1,7 @@
 import type { HTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
 
-export type BadgeTone = 'neutral' | 'brand' | 'ai' | 'up' | 'down' | 'ok' | 'danger' | 'warn' | 'sky' | 'violet' | 'amber' | 'orange' | 'pink';
+export type BadgeTone = 'neutral' | 'brand' | 'ai' | 'up' | 'down' | 'ok' | 'danger' | 'warn' | 'amber' | 'orange';
 
 /* 2026-10-09 Arc 改版：胶囊形、浅色底加同色细边（Arc badge 的 Ready / Needs attention 样式）。 */
 const TONES: Record<BadgeTone, string> = {
@@ -13,12 +13,9 @@ const TONES: Record<BadgeTone, string> = {
   ok: 'border-ok-600/20 bg-ok-50 text-ok-700',
   danger: 'border-danger-600/20 bg-danger-50 text-danger-700',
   warn: 'border-warn-600/25 bg-warn-50 text-warn-700',
-  /* 分类色：类别标签（技术事件等），不表示好坏与涨跌。 */
-  sky: 'border-cat-sky-600/20 bg-cat-sky-50 text-cat-sky-700',
-  violet: 'border-cat-violet-600/20 bg-cat-violet-50 text-cat-violet-700',
+  /* 分类色：只给经济事件重要度（高橙、中琥珀），不表示好坏与涨跌。技术事件标签保持灰色（见 SignalChip）。 */
   amber: 'border-cat-amber-600/25 bg-cat-amber-50 text-cat-amber-700',
   orange: 'border-cat-orange-600/20 bg-cat-orange-50 text-cat-orange-700',
-  pink: 'border-cat-pink-600/20 bg-cat-pink-50 text-cat-pink-700',
 };
 
 /** Shared treatment for semantic readings, statuses and company categories. */

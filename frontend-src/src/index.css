@@ -71,24 +71,18 @@
        同族但相距 60°+，与涨绿（hue 157°）差 36° 不会误读为行情方向。 */
     --ai-600: #0B7285;
     --ai-50: #E7F3F6;
-    /* 2026-10-09 分类色（用户要求「选项与信号标签用更多配色」）：给类别用，不表示好坏、不表示涨跌。
-       突破、放量、跳空这类技术事件，经济事件重要度，风险偏好等各取一色；避开涨跌的红绿与 AI 的青瓷。
-       50 底色 · 600 圆点与细线 · 700 文字。 */
+    /* 2026-10-09 分类色（用户要求「选项用更多配色」）：给类别用，不表示好坏、不表示涨跌。
+       现用于经济事件重要度（高橙、中琥珀）与风险偏好（稳健天蓝、进取橙）；避开涨跌的红绿与 AI 的青瓷。
+       技术事件标签试过按类着色，用户看过后改回灰色（见 SignalChip）。50 底色 · 600 圆点与细线 · 700 文字。 */
     --cat-sky-50: #E9F4FC;
     --cat-sky-600: #2786D4;
     --cat-sky-700: #155F9E;
-    --cat-violet-50: #F2EEFE;
-    --cat-violet-600: #7C5CF0;
-    --cat-violet-700: #5B3CC4;
     --cat-amber-50: #FCF3DF;
     --cat-amber-600: #D08A0E;
     --cat-amber-700: #8F5D00;
     --cat-orange-50: #FDEDE4;
     --cat-orange-600: #E46A2C;
     --cat-orange-700: #B04712;
-    --cat-pink-50: #FCEBF3;
-    --cat-pink-600: #D6488A;
-    --cat-pink-700: #A82B66;
     /* §4.1 缓动 */
     --ease-paper: cubic-bezier(.16, 1, .3, 1);
     /* 圆角（docs/UI_DESIGN_SYSTEM.md §3，2026-10-06 第二轮整体上调一档，参照 uiarc.dev）：
@@ -217,18 +211,12 @@
     --cat-sky-50: #10273A;
     --cat-sky-600: #5AAEF0;
     --cat-sky-700: #8CC8F7;
-    --cat-violet-50: #231B3D;
-    --cat-violet-600: #A08CFA;
-    --cat-violet-700: #C2B5FC;
     --cat-amber-50: #33270C;
     --cat-amber-600: #F0B23A;
     --cat-amber-700: #F6CF7A;
     --cat-orange-50: #3A1E10;
     --cat-orange-600: #F59360;
     --cat-orange-700: #F9B893;
-    --cat-pink-50: #3A1527;
-    --cat-pink-600: #EE7EB2;
-    --cat-pink-700: #F5AACC;
     --control-track: #1E1E20;
     --timing-bmo: #FACC15;
     --timing-amc: #6FA8FF;
@@ -697,8 +685,6 @@
 .t-tabs.selection-group .t-tab[data-tone="ok"]:is([aria-selected="true"]) { color: var(--ok-700); }
 .t-tabs.selection-group .t-tab[data-tone="warn"]:is([aria-selected="true"]) { color: var(--warn-700); }
 .t-tabs.selection-group .t-tab[data-tone="sky"]:is([aria-selected="true"]) { color: var(--cat-sky-700); }
-.t-tabs.selection-group .t-tab[data-tone="violet"]:is([aria-selected="true"]) { color: var(--cat-violet-700); }
-.t-tabs.selection-group .t-tab[data-tone="amber"]:is([aria-selected="true"]) { color: var(--cat-amber-700); }
 .t-tabs.selection-group .t-tab[data-tone="orange"]:is([aria-selected="true"]) { color: var(--cat-orange-700); }
 .t-tabs.selection-group .t-tab[data-tone="neutral"]:is([aria-selected="true"]) { color: var(--ink-900); }
 @media (hover: hover) and (pointer: fine) {
@@ -709,6 +695,46 @@
 @media (pointer: coarse) {
   .control-button, .filter-group .control-button, .t-tabs.selection-group .t-tab { min-height: 44px; }
 }
+/* 选择芯片（2026-10-09 第二版，选股「更多筛选」的预设策略与行业）：灰底无边，和上面分段控件的
+   灰色底槽同一家族；选中是群青浅底、群青字、一圈淡群青边。第一版照搬 Arc 的白底细边芯片，
+   在白卡片上边界几乎看不出来，用户看过说不好看。只在宽屏生效：手机上这两行仍是可横向滑动的
+   灰色轨道（.mobile-selection-rail）。不设 min-height，粗指针下仍由上面的 44px 规则兜底。 */
+@media (min-width: 768px) {
+  .control-button.choice-chip {
+    padding-inline: 14px;
+    border-color: transparent;
+    background: var(--control-track);
+    color: var(--ink-700);
+  }
+  .control-button.choice-chip[aria-pressed="true"] {
+    border-color: color-mix(in srgb, var(--brand-600) 24%, transparent);
+    background: var(--brand-50);
+    color: var(--brand-700);
+  }
+  .control-button.choice-chip-more { color: var(--ink-500); }
+}
+@media (min-width: 768px) and (hover: hover) and (pointer: fine) {
+  .control-button.choice-chip:not(:disabled):not([aria-pressed="true"]):hover {
+    border-color: transparent;
+    background: var(--line);
+    color: var(--ink-900);
+  }
+}
+/* 多选芯片的对勾：选中时从 0 宽长出来（同时抵掉按钮里 6px 的间距），取消时收回，后面的芯片跟着平移，
+   不会一下子跳开。单选的预设策略不加对勾，靠底色区分。 */
+.choice-chip-check {
+  display: inline-flex;
+  width: 0;
+  margin-inline-end: -6px;
+  overflow: hidden;
+  opacity: 0;
+  transition:
+    width var(--duration-quick) var(--ease-snap),
+    margin var(--duration-quick) var(--ease-snap),
+    opacity var(--duration-quick) var(--ease-snap);
+}
+[aria-pressed="true"] > .choice-chip-check { width: 13px; margin-inline-end: 0; opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .choice-chip-check { transition: none; } }
 @media (max-width: 767px), (pointer: coarse) {
   .touch-target { min-height: 44px; min-width: 44px; }
 }

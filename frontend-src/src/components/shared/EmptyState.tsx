@@ -19,10 +19,12 @@ export default function EmptyState({ image, icon, title, description, action, fo
   /* transitions.dev 18 texts-reveal 的入场半边：插画 → 标题 → 说明 → 操作依次上浮、
      去模糊（--stagger-* 令牌，40ms 一档）。空态常在加载结束的同一刻出现，
      一起硬切出来显得突兀；分层浮现让视线先落在标题上。 */
+  /* 序号变量叫 --reveal-index，不能叫 --line：--line 是全站发丝线颜色令牌，写成数字后
+     空态里所有 var(--line) 的边框整条失效（按钮与图标圆圈的描边曾因此消失）。 */
   let line = 0;
   const reveal = (): { className: string; style: CSSProperties } => ({
     className: 't-reveal-line',
-    style: { '--line': line++ } as CSSProperties,
+    style: { '--reveal-index': line++ } as CSSProperties,
   });
   const art = reveal();
   const heading = reveal();

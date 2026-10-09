@@ -92,12 +92,10 @@ module.exports = {
           600: token('--ai-600'),
           50: token('--ai-50'),
         },
-        /* 2026-10-09 分类色：类别用（技术事件、重要度、风险偏好），不表示好坏与涨跌。见 index.css。 */
+        /* 2026-10-09 分类色：类别用（经济事件重要度、风险偏好），不表示好坏与涨跌。见 index.css。 */
         'cat-sky': { 50: token('--cat-sky-50'), 600: token('--cat-sky-600'), 700: token('--cat-sky-700') },
-        'cat-violet': { 50: token('--cat-violet-50'), 600: token('--cat-violet-600'), 700: token('--cat-violet-700') },
         'cat-amber': { 50: token('--cat-amber-50'), 600: token('--cat-amber-600'), 700: token('--cat-amber-700') },
         'cat-orange': { 50: token('--cat-orange-50'), 600: token('--cat-orange-600'), 700: token('--cat-orange-700') },
-        'cat-pink': { 50: token('--cat-pink-50'), 600: token('--cat-pink-600'), 700: token('--cat-pink-700') },
         /* ---- shadcn/ui 兼容令牌（ui/ 基座仍可用）---- */
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
