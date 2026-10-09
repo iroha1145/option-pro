@@ -33,8 +33,6 @@ export const SCREENER: Dict = {
   '开始扫描': ['Start scan', 'スキャン開始'],
   '筛选条件': ['Filters', '絞り込み条件'],
   '评分分档': ["Score tier", "スコア区分"],
-  '预设策略': ['Preset strategy', 'プリセット戦略'],
-  '预设暂不可用 · 使用默认分档': ['Presets unavailable · using default tiers', 'プリセット利用不可 · デフォルトの区分を使用'],
   '评分周期': ['Timeframe', 'スコア期間'],
   '显示数量': ['Results', '表示件数'],
   '最多显示数量': ['Maximum results', '最大表示件数'],

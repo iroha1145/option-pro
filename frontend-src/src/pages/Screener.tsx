@@ -885,8 +885,6 @@ export default function Screener() {
           onChange={updateDraft}
           universe={universe}
           sectorOptions={sectorOptions}
-          presets={profiles}
-          presetsFailed={!!profilesQ.error}
           scanning={scanTriggerLocked}
           dirty={dirty}
           dollarVolumeFilterSupported={draftDollarVolumeFilterSupported}

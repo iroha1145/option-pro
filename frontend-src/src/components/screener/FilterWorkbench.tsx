@@ -1,13 +1,14 @@
 /**
  * B1 筛选条件（screener.md）
  * 常驻：分档 / 周期 / 偏好 / 扫描
- * 更多筛选：预设、行业、价格、成交额与显示数量；折叠时仍展示当前约束（含显示数量上限）
+ * 更多筛选：行业、价格、成交额与显示数量；折叠时仍展示当前约束（含显示数量上限）
+ * 原来的「预设策略」一行与常驻的「风险偏好」是同一组三个选项，2026-10-09 按用户确认删除
  * 行 stagger 60ms；过滤器变更主按钮脉冲（box-shadow 呼吸 1.2s ×2）
  */
 import SoftBadge from '@/components/shared/SoftBadge';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import type { SectorOption, StrengthProfile } from '@/api/types';
+import type { SectorOption } from '@/api/types';
 import { cn } from '@/lib/utils';
 import { DUR_FAST, DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import Icon from '@/components/icons';
@@ -202,8 +203,6 @@ interface FilterWorkbenchProps {
   };
   /** 板块选项：live 来自 /strength/profiles sectors（id+中文名，下发 id）；mock 回退扫描行 sector 名（id=name） */
   sectorOptions: SectorOption[];
-  presets: StrengthProfile[] | null;
-  presetsFailed: boolean;
   scanning: boolean;
   dirty: boolean;
   dollarVolumeFilterSupported: boolean;
@@ -217,8 +216,6 @@ export default function FilterWorkbench({
   onChange,
   universe,
   sectorOptions,
-  presets,
-  presetsFailed,
   scanning,
   dirty,
   dollarVolumeFilterSupported,
@@ -235,28 +232,11 @@ export default function FilterWorkbench({
     patch({ sectors: has ? draft.sectors.filter((x) => x !== id) : [...draft.sectors, id] });
   };
 
-  const applyPreset = (id: string) => {
-    if (draft.presetId === id) {
-      patch({ presetId: null, minScore: null });
-      return;
-    }
-    // 契约 /strength/profiles 枚举（conservative/balanced/aggressive）→ 直接落偏好
-    if (id === 'conservative' || id === 'balanced' || id === 'aggressive') {
-      patch({ presetId: id, profile: id, minScore: null });
-      return;
-    }
-    // mock 预设策略 → 偏好映射 + 强度下限
-    if (id === 'breakout') patch({ presetId: id, profile: 'aggressive', minScore: 70 });
-    else if (id === 'lowvol') patch({ presetId: id, profile: 'conservative', minScore: null });
-    else patch({ presetId: id, profile: 'balanced', minScore: null });
-  };
-
   const row = {
     hidden: { opacity: 0, y: 14 },
     show: { opacity: 1, y: 0, transition: { duration: DUR_SECTION, ease: EASE_PAPER } },
   };
 
-  const selectedPreset = presets?.find((preset) => preset.id === draft.presetId);
   const selectedSectors = draft.sectors.map((id) => sectorOptions.find((sector) => sector.id === id)?.name ?? id);
   const priceSummary = draft.priceMin !== null && draft.priceMax !== null
     ? `${__t('价格范围')} $${draft.priceMin} – $${draft.priceMax}`
@@ -269,7 +249,6 @@ export default function FilterWorkbench({
   // 显示数量收进「更多筛选」后，折叠状态下仍要看得到返回上限。
   const topNSummary = `${__t('显示数量')} ${TOPN_OPTIONS.find((option) => option.value === draft.topN)?.label ?? `Top ${draft.topN}`}`;
   const advancedSummary = [
-    selectedPreset?.name,
     selectedSectors.length > 0 ? `${selectedSectors.slice(0, 2).join(' / ')}${selectedSectors.length > 2 ? ` +${selectedSectors.length - 2}` : ''}` : null,
     priceSummary,
     volumeSummary,
@@ -332,36 +311,6 @@ export default function FilterWorkbench({
         </summary>
 
         <div className="space-y-4 pt-4">
-          <div className="min-w-0">
-            <FieldLabel>{__t('预设策略')}</FieldLabel>
-            {presetsFailed ? (
-              <p className="flex h-8 items-center text-caption text-ink-400">{__t('预设暂不可用 · 使用默认分档')}</p>
-            ) : presets === null ? (
-              <div className="flex gap-2" aria-hidden="true">
-                {Array.from({ length: 3 }, (_, i) => (
-                  <span key={i} className="skeleton-shimmer h-8 w-20 rounded-pill" />
-                ))}
-              </div>
-            ) : (
-              <SelectionViewport>
-              <div className="mobile-selection-rail flex flex-wrap gap-2">
-                {presets.map((preset) => {
-                  const active = draft.presetId === preset.id;
-                  return (
-                    <FilterButton
-                      key={preset.id}
-                      onClick={() => applyPreset(preset.id)}
-                      active={active}
-                      className="choice-chip"
-                    >
-                      {preset.name}
-                    </FilterButton>
-                  );
-                })}
-              </div>
-              </SelectionViewport>
-            )}
-          </div>
           <div data-screener-field="sectors" className="min-w-0">
             <FieldLabel>{__t('行业（多选）')}</FieldLabel>
             {sectorOptions.length === 0 ? (

@@ -1110,8 +1110,6 @@ export const EN: Record<string, string> = {
   "开始扫描": "Start scan",
   "筛选条件": "Filters",
   "评分分档": "Score tier",
-  "预设策略": "Preset strategy",
-  "预设暂不可用 · 使用默认分档": "Presets unavailable · using default tiers",
   "评分周期": "Timeframe",
   "显示数量": "Results",
   "最多显示数量": "Maximum results",
