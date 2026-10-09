@@ -10,7 +10,7 @@ import { useNow } from '@/hooks/useNow';
 import { fmtCountdown, fmtNyTime } from '@/lib/format';
 import SessionLED from '@/components/shared/SessionLED';
 import EmptyState from '@/components/shared/EmptyState';
-import { SkeletonCard } from '@/components/shared/Skeleton';
+import { SkeletonLine } from '@/components/shared/Skeleton';
 import { BusyIcon } from '@/components/shared/IconSwap';
 import Icon from '@/components/icons';
 import { t } from '../../i18n/core.ts';
@@ -37,6 +37,36 @@ function CountdownRow({ label, at, now }: { label: string; at: string | null; no
   );
 }
 
+/** 与读到后的卡片逐行同高：标题、时段、时钟、两行倒计时、假日安排与时段说明。 */
+function StatusCardSkeleton() {
+  return (
+    <div className="card-surface flex h-full flex-col p-5" data-state="loading" aria-hidden="true">
+      <div className="flex items-start justify-between">
+        <SkeletonLine className="text-h3" bar="h-4 w-20" />
+        <span className="size-[18px]" />
+      </div>
+      <SkeletonLine className="mt-4 text-[20px] leading-[26px]" bar="h-5 w-16" />
+      <div className="mt-3">
+        <SkeletonLine className="text-data-xl" bar="h-7 w-32" />
+        <SkeletonLine className="mt-1 text-micro" bar="h-3 w-36" />
+      </div>
+      <div className="mt-4">
+        {[0, 1].map((row) => (
+          <div key={row} className="flex items-center justify-between border-t border-line py-2.5">
+            <SkeletonLine className="text-caption" bar="h-3 w-12" />
+            <SkeletonLine className="text-data-m" bar="h-3.5 w-16" />
+          </div>
+        ))}
+        <div className="flex items-center justify-between border-y border-line py-2.5">
+          <SkeletonLine className="text-caption" bar="h-3 w-14" />
+          <SkeletonLine className="text-data-m" bar="h-3.5 w-10" />
+        </div>
+      </div>
+      <SkeletonLine className="mt-3 text-caption" bar="h-3 w-48 max-w-full" />
+    </div>
+  );
+}
+
 export default function StatusCard({
   data,
   loading,
@@ -52,7 +82,7 @@ export default function StatusCard({
 }) {
   const now = useNow(1000);
 
-  if (loading) return <SkeletonCard className="h-full" />;
+  if (loading) return <StatusCardSkeleton />;
   if (error) {
     return (
       <div className="card-surface h-full">

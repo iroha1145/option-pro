@@ -404,8 +404,8 @@ export default function EarningsList({
                         onSelectTicker(row.ticker);
                       }
                     }}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
                     transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: Math.min(i * 0.04, 0.3) }}
                     className={cn(
                       'hidden cursor-pointer items-center border-b border-line px-4 py-3 transition-colors duration-fast last:border-b-0 md:grid md:gap-3',
@@ -458,8 +458,8 @@ export default function EarningsList({
 
                   {/* 移动卡片（<md） */}
                   <motion.button
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
                     transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: Math.min(i * 0.04, 0.3) }}
                     onClick={() => onSelectTicker(row.ticker)}
                     aria-pressed={selected}

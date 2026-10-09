@@ -76,9 +76,10 @@ interface Outcome {
   reason: string | null;
 }
 
+/* 骨架至少撑到首屏以下：研判正文远长于一屏，骨架偏矮时下面的市场状态、突破信号会先露出来、再被正文推下去。 */
 function BriefSkeleton() {
   return (
-    <div>
+    <div className="min-h-[calc(100dvh-24rem)]">
       <span className="sr-only" role="status">{t('加载中')}</span>
       <div aria-hidden="true">
         <SkeletonBlock className="h-3 w-3/4" />
@@ -232,12 +233,22 @@ export default function MarketBriefCard({ className }: { className?: string }) {
           {brief && (
             <SoftBadge tone="ai">{t('{model} 生成', { model: brief.model.label ?? brief.model.id ?? 'AI' })}</SoftBadge>
           )}
+          {/* 首次读取时按常见读数留出模型与时段标签的位置，窄屏上标题行的折行与读到后一致。 */}
+          {state === 'loading' && (
+            <SoftBadge tone="ai" aria-hidden="true" className="invisible">{t('{model} 生成', { model: 'Claude Opus 5.5' })}</SoftBadge>
+          )}
         </div>
         {brief && (
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             {previous && <SoftBadge tone="warn">{t('上一份')}</SoftBadge>}
             <SoftBadge>{slotTag(brief.slot, brief.tradingDate, year)}</SoftBadge>
             {generated && <span className="text-micro text-ink-400 tnum">{generated}</span>}
+          </div>
+        )}
+        {state === 'loading' && (
+          <div aria-hidden="true" className="invisible flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <SoftBadge>{slotTag('pre_open', '2026-10-09')}</SoftBadge>
+            <span className="text-micro tnum">{t('生成于 纽约时间 {time}', { time: '08:40' })}</span>
           </div>
         )}
         <div className="ml-auto flex shrink-0 items-center gap-2">

@@ -158,8 +158,6 @@ export const MOCKS: Dict = {
     'AI analysis complete: combines fundamentals, price/volume action, and options pricing — see the full result below.',
     'AI分析が完了しました。ファンダメンタルズ・値動き・オプション価格を総合的に評価しました。詳細は本文でご確認ください。',
   ],
-  '板块聚合': ['Sector aggregation', 'セクター集計'],
-  '期权异动': ['Unusual options scan', 'オプション異常検知'],
   '运行正常': ['Running normally', '正常稼働'],
 
   /* fixtures2.ts：热点主题关键词标签（THEME_DEFS.keywords） */

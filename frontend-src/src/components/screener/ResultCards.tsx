@@ -11,7 +11,6 @@ import { DUR_SECTION, DUR_UI, EASE_PAPER } from '@/lib/motion';
 import Icon from '@/components/icons';
 import TickerLogo from '@/components/shared/TickerLogo';
 import InfoHint from '@/components/shared/InfoHint';
-import MacroFitBadge from '@/components/shared/MacroFitBadge';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import { rowPrimarySortScore } from '@/lib/screenerSort';
 import RowExpansion from './RowExpansion';
@@ -36,8 +35,6 @@ export interface ResultCardsProps {
   animKey: string;
   /** 当前页码：入场 stagger 只在第一页触发 */
   page?: number;
-  /** 与桌面端可选列同一个开关 */
-  showMacro?: boolean;
 }
 
 export default function ResultCards({
@@ -50,7 +47,6 @@ export default function ResultCards({
   onOpenDetail,
   animKey,
   page = 1,
-  showMacro = false,
 }: ResultCardsProps) {
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:items-start" key={animKey}>
@@ -63,8 +59,8 @@ export default function ResultCards({
           <motion.div
             key={r.ticker}
             layout="position"
-            initial={page === 1 ? { opacity: 0, y: 14 } : false}
-            animate={{ opacity: 1, y: 0 }}
+            initial={page === 1 ? { opacity: 0 } : false}
+            animate={{ opacity: 1 }}
             transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: page === 1 ? Math.min(i * 0.03, 0.3) : 0, layout: { duration: DUR_UI, ease: EASE_PAPER } }}
             /* 可展开结果卡：2026-10-06 起卡片在 768–1279px 也用（两列），悬停按全站规则只加深描边（card-lift，精确指针门控），不再上浮投影 */
             className="card-surface card-lift overflow-hidden"
@@ -137,12 +133,6 @@ export default function ResultCards({
               <span className="mt-3 flex items-center justify-between border-t border-line pt-3">
                 <SubscoreTicks row={r} />
                 <span className="flex items-center gap-1.5">
-                  {/* 开关是用户自己打开的，所以「无读数」也要显示出来。只在有分数时
-                      才出现，等于让「列关着」和「这只票没读数」长得一样 —— 那正是这
-                      整个字段想避免的含混。 */}
-                  {showMacro && (
-                    <MacroFitBadge score={r.macroFit} tailwind={r.macroTailwind} compact />
-                  )}
                   <CatalystBadge summary={catalysts[r.ticker]} />
                 </span>
               </span>

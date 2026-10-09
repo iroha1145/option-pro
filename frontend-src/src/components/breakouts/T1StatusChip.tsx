@@ -1,6 +1,5 @@
 import { cn } from '@/lib/utils';
 import { t1StatusPresentation, type T1Status } from '@/lib/t1Status';
-export type { T1Status };
 
 export default function T1StatusChip({
   status,

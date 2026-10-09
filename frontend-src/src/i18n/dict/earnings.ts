@@ -132,7 +132,6 @@ export const EARNINGS: Dict = {
   "本次未执行：开始时自动分析已关闭": ["This run was skipped because auto-analysis was off when it started.", "開始時に自動分析がオフだったため、今回は実行されませんでした。"],
   'AI 分析已关闭': ["AI analysis is turned off", "AI 分析はオフになっています"],
   '今天的 AI 分析额度已用完，明天会自动重试': ["Today's AI analysis quota is used up. It will retry automatically tomorrow.", "本日の AI 分析枠を使い切りました。明日、自動的に再試行されます。"],
-  '今天的 AI 预算已用完，明天会自动重试': ["Today's AI budget has been reached. It will retry automatically tomorrow.", "本日の AI 予算の上限に達しました。明日、自動的に再試行されます。"],
   '今天的 AI 分析次数已用完，明天会自动重试': ["Today's AI analysis limit has been reached. It will retry automatically tomorrow.", "本日の AI 分析回数の上限に達しました。明日、自動的に再試行されます。"],
   '同时进行的分析过多，稍后会自动重试': ["Too many analyses running at once; it will automatically retry shortly.", "同時実行中の分析が多すぎます。しばらくすると自動的に再試行されます。"],
   '排队的分析过多，稍后会自动重试': ["Too many analyses queued; it will automatically retry shortly.", "キュー待ちの分析が多すぎます。しばらくすると自動的に再試行されます。"],

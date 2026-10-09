@@ -195,13 +195,7 @@ export const HINTS: Dict = {
   ],
 
   /* 顶底证据指标逐条口径 */
-  '距 20 日均线': ['Distance from the 20-day MA', '20日移動平均との乖離'],
-  '距 50 日均线': ['Distance from the 50-day MA', '50日移動平均との乖離'],
-  '距 200 日均线': ['Distance from the 200-day MA', '200日移動平均との乖離'],
-  '20 日涨跌': ['20-day change', '20日騰落率'],
   '相对 SPY 强度': ["Relative strength vs SPY", "SPY に対する相対強度"],
-  '收盘位置': ['Closing position', '終値の位置'],
-  'MACD 柱': ['MACD histogram', 'MACD ヒストグラム'],
   'SPY 距 20 日线': ['SPY distance from its 20-day MA', 'SPY と20日線の乖離'],
   '大盘对 20 日均线的偏离（%）。高于→顶部证据（×8），低于→底部证据。': [
     'The index’s deviation from its 20-day MA (%). Above it counts as top evidence (×8); below it counts as bottom evidence.',

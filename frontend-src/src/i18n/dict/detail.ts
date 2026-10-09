@@ -185,9 +185,6 @@ export const DETAIL: Dict = {
   ' · 暂未更新，显示最近一次结果': ['· not updated yet, showing the last available result', ' · 未更新、直近の結果を表示'],
   '行权价': ['Strike', '権利行使価格'],
   /* OptionsPanel UI 重构：摘要条 / 三带数据条表 / 移动卡片 / 图例 */
-  '异动合约': ['Unusual contracts', '注目契約'],
-  'PUTS': ['PUTS', 'プット'],
-  '中价': ['Mid', '仲値'],
   '持': ['OI', '建玉'],
 
   /* src/components/detail/SignalList.tsx */
@@ -302,7 +299,6 @@ export const DETAIL: Dict = {
   K线数据不足: ['Not enough chart data', 'ローソク足データが不足'],
   价格异常: ['Invalid price', '価格が異常'],
   量价数据不足: ['Not enough volume/price data', '量価データが不足'],
-  技术点位: ['Levels', 'テクニカル水準'],
   '{price}（距 {dist}）': ['{price} ({dist} away)', '{price}（乖離 {dist}）'],
   '技术结构读取失败，请重试': ['Failed to load chart structure. Try again.', 'チャート形状を読み込めません。再試行してください。'],
   趋势偏向与近期信号: ['Trend bias & recent signals', 'トレンドバイアスと直近シグナル'],

@@ -9,6 +9,7 @@ import subprocess
 import sys
 import textwrap
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
@@ -1975,12 +1976,20 @@ def test_strength_shutdown_drains_local_publication_before_releasing_lease(
             assert await asyncio.to_thread(started.wait, 2)
             before = repository.health(expected_tasks=("strength_refresh",))["heartbeat_at"]
             supervisor.request_stop()
-            # Outlive both the ordinary shutdown grace and a heartbeat interval.
-            await asyncio.sleep(0.3)
-            assert not running.done() and not finished.is_set()
-            health = repository.health(expected_tasks=("strength_refresh",))
+            # Outlive the ordinary shutdown grace, then wait for the next
+            # heartbeat renewal instead of assuming it lands inside a fixed
+            # 0.3s window: the renewal thread runs every lease/3 = 0.2s and a
+            # loaded CI runner can delay it past that window.
+            await asyncio.sleep(0.05)
+            deadline = time.monotonic() + 2.0
+            while True:
+                assert not running.done() and not finished.is_set()
+                health = repository.health(expected_tasks=("strength_refresh",))
+                if health["heartbeat_at"] != before:
+                    break
+                assert time.monotonic() < deadline, "heartbeat did not advance while draining"
+                await asyncio.sleep(0.05)
             assert health["lock_live"] is True
-            assert health["heartbeat_at"] != before
             contender = ProcessFileLock(lock_path)
             assert contender.acquire("contender") is False
         finally:

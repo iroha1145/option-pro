@@ -41,11 +41,16 @@ from app.worker.tasks import StrengthRefreshTask  # noqa: E402
 from app.worker.runtime import TaskSpec, WorkerSupervisor  # noqa: E402
 from app.worker.lock import ProcessFileLock
 from app.worker.state import WorkerStateRepository  # noqa: E402
-from app.services.strength.freshness import expected_complete_session  # noqa: E402
+from app.services.research_eod_v1.calendar_asof import settled_eod_session  # noqa: E402
 
 SNAPSHOT = DATA_DIR / "strength-snapshot-v1.json"
 NOW = time.time()
-DATA_THROUGH = expected_complete_session(datetime.now(timezone.utc)).isoformat()
+# The scan API judges a served session stale against settled_eod_session (close +
+# 60 min). The fixture used to publish expected_complete_session (close + 6 h),
+# so between 17:00 and 22:00 ET on a trading day every refresh read back as
+# "newer_session_available" and the page kept re-requesting. Publish the same
+# session the API expects.
+DATA_THROUGH = settled_eod_session(datetime.now(timezone.utc)).isoformat()
 REPOSITORY: WorkerStateRepository | None = None
 SUPERVISOR: WorkerSupervisor | None = None
 WORKER_RUN: asyncio.Task | None = None

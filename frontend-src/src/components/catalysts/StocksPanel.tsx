@@ -132,8 +132,8 @@ export default function StocksPanel({ filters }: { filters: CatalystFilters; ref
         {impactful.map((r, i) => (
           <motion.button
             key={r.ticker}
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: Math.min(i * 0.035, 0.42) }}
             onClick={() => navigate(`/stock/${r.ticker}`)}
             className="group flex w-full flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 text-left transition-colors duration-fast hover:bg-paper-2/70 sm:px-5"
