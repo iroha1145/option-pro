@@ -73,7 +73,11 @@ SEEKING_ALPHA_FEEDS = {
 }
 
 _WHITESPACE_RE = re.compile(r"\s+")
-_ZERO_WIDTH_RE = re.compile("[​‌‍﻿]")
+_ZERO_WIDTH_RE = re.compile("[\u200b\u200c\u200d\ufeff]")
+# JSON escapes can carry half of a UTF-16 pair (a summary cut mid-emoji); such
+# text cannot be encoded for hashing, SQLite or the page models.
+_SURROGATES_RE = re.compile("[\ud800-\udfff]")
+_EARLIEST_PUBLICATION_YEAR = 1970
 _TICKER_RE = re.compile(r"[A-Z0-9][A-Z0-9.^/_-]{0,19}")
 _DOCTYPE_RE = re.compile(rb"<!DOCTYPE", re.IGNORECASE)
 _GLOBENEWSWIRE_STOCK_DOMAIN = "https://www.globenewswire.com/rss/stock"
@@ -292,7 +296,7 @@ def validator_cursor(response: SourceResponse) -> str | None:
 def parse_json(body: bytes) -> Any:
     try:
         return json.loads(body)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
         raise SourceError("invalid_response") from exc
 
 
@@ -303,7 +307,7 @@ def parse_feed(body: bytes) -> list[ET.Element]:
         raise SourceError("invalid_response")
     try:
         root = ET.fromstring(body)
-    except ET.ParseError as exc:
+    except (ET.ParseError, LookupError) as exc:
         raise SourceError("invalid_response") from exc
     channel = root.find("channel")
     if root.tag != "rss" or channel is None:
@@ -331,16 +335,24 @@ def source_tickers(values: object) -> tuple[str, ...]:
 
 
 def utc_seconds(value: datetime) -> str:
-    """``YYYY-MM-DDTHH:MM:SSZ``; a naive value is read as UTC."""
+    """``YYYY-MM-DDTHH:MM:SSZ``; a naive value is read as UTC.
+
+    Built field by field: glibc's ``strftime`` does not pad a year before 1000.
+    """
 
     moment = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
-    return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    moment = moment.astimezone(timezone.utc)
+    return (
+        f"{moment.year:04d}-{moment.month:02d}-{moment.day:02d}"
+        f"T{moment.hour:02d}:{moment.minute:02d}:{moment.second:02d}Z"
+    )
 
 
 def utc_micros(value: datetime) -> str:
     """``YYYY-MM-DDTHH:MM:SS.ffffffZ`` with all six digits, even at zero."""
 
-    return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    moment = value.astimezone(timezone.utc)
+    return f"{utc_seconds(moment)[:-1]}.{moment.microsecond:06d}Z"
 
 
 def parse_utc(value: object) -> datetime | None:
@@ -356,13 +368,20 @@ def parse_utc(value: object) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
+def _publication(moment: datetime) -> str | None:
+    """Publication time as UTC seconds; a date before 1970 is not a real one."""
+
+    text = utc_seconds(moment)
+    return text if int(text[:4]) >= _EARLIEST_PUBLICATION_YEAR else None
+
+
 def _iso_seconds(value: object) -> str | None:
     text = str(value or "").strip()
     if not text:
         return None
     try:
-        return utc_seconds(datetime.fromisoformat(text.replace("Z", "+00:00")))
-    except ValueError:
+        return _publication(datetime.fromisoformat(text.replace("Z", "+00:00")))
+    except (ValueError, OverflowError):
         return None
 
 
@@ -370,14 +389,28 @@ def _rss_seconds(value: str | None) -> str | None:
     if not value:
         return None
     try:
-        return utc_seconds(parsedate_to_datetime(value))
+        return _publication(parsedate_to_datetime(value))
     except (TypeError, ValueError, OverflowError):
         return None
 
 
-def _optional_url(value: object) -> str | None:
-    text = clean_news_text(value)
-    return text if text and len(text) <= MAX_URL_CHARS else None
+def web_url(value: str | None) -> str | None:
+    """An http or https address with a host and a usable port, else ``None``."""
+
+    if not value or len(value) > MAX_URL_CHARS:
+        return None
+    try:
+        parts = urlsplit(value)
+        port = parts.port
+    except ValueError:
+        return None
+    if parts.scheme.lower() not in {"http", "https"} or not parts.hostname or port == 0:
+        return None
+    return value
+
+
+def strip_surrogates(value: str | None) -> str:
+    return _SURROGATES_RE.sub("", value or "")
 
 
 def _item(
@@ -391,15 +424,18 @@ def _item(
     published_at: str | None = None,
     tickers: tuple[str, ...] = (),
 ) -> SourceItem | None:
-    if not title or not url or len(url) > MAX_URL_CHARS:
+    title = strip_surrogates(title).strip()
+    address = web_url(strip_surrogates(url))
+    if not title or address is None:
         return None
+    summary = strip_surrogates(summary).strip()
     return SourceItem(
-        source_item_id=(source_item_id or url)[:1_000],
-        source=source[:500],
+        source_item_id=(strip_surrogates(source_item_id) or address)[:1_000],
+        source=strip_surrogates(source)[:500],
         title=title[:MAX_TITLE_CHARS],
-        url=url,
-        summary=summary[:MAX_SUMMARY_CHARS] if summary else None,
-        image_url=image_url,
+        url=address,
+        summary=summary[:MAX_SUMMARY_CHARS] or None,
+        image_url=web_url(strip_surrogates(image_url)),
         published_at=published_at,
         tickers=tickers,
     )
@@ -417,7 +453,7 @@ def parse_massive_item(raw: Mapping[str, Any]) -> SourceItem | None:
         title=clean_news_text(raw.get("title"), empty="") or "",
         url=clean_news_text(raw.get("article_url"), empty="") or "",
         summary=clean_news_text(raw.get("description")),
-        image_url=_optional_url(raw.get("image_url")),
+        image_url=clean_news_text(raw.get("image_url")),
         published_at=_iso_seconds(raw.get("published_utc")),
         tickers=source_tickers(raw.get("tickers")),
     )
@@ -428,7 +464,7 @@ def parse_finnhub_item(raw: Mapping[str, Any]) -> SourceItem | None:
     stamp = raw.get("datetime")
     if isinstance(stamp, (int, float)) and not isinstance(stamp, bool) and stamp > 0:
         try:
-            published_at = utc_seconds(datetime.fromtimestamp(int(stamp), tz=timezone.utc))
+            published_at = _publication(datetime.fromtimestamp(int(stamp), tz=timezone.utc))
         except (OverflowError, OSError, ValueError):
             published_at = None
     related = str(raw.get("related") or "")
@@ -438,7 +474,7 @@ def parse_finnhub_item(raw: Mapping[str, Any]) -> SourceItem | None:
         title=clean_news_text(raw.get("headline"), empty="") or "",
         url=clean_news_text(raw.get("url"), empty="") or "",
         summary=clean_news_text(raw.get("summary")),
-        image_url=_optional_url(raw.get("image")),
+        image_url=clean_news_text(raw.get("image")),
         published_at=published_at,
         tickers=source_tickers([value for value in related.split(",") if value.strip()]),
     )

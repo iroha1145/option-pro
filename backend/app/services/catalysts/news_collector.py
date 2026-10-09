@@ -23,7 +23,7 @@ import hashlib
 import json
 import sqlite3
 from contextlib import closing
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Literal, Mapping
@@ -42,7 +42,7 @@ from .calendar_source import (
     store_calendar,
 )
 from .etl_repository import CatalystEtlRepository
-from .ingest_models import NEWS_PAGE_LIMIT, NewsChangesPage
+from .ingest_models import NEWS_PAGE_LIMIT, NewsChangesPage, RawNewsItem
 from .news_dedup import (
     compute_content_hash,
     fuzzy_title,
@@ -61,6 +61,7 @@ from .news_sources import (
     build_news_fetchers,
     parse_utc,
     utc_micros,
+    web_url,
 )
 
 
@@ -186,6 +187,15 @@ class _PendingChange:
     sources: list[str]
     tickers: list[str]
     previous_available_at: str | None = None
+
+
+@dataclass
+class _Taken:
+    news_id: int
+    minted: bool = False
+    corroborated: bool = False
+    entry: _PendingChange | None = None
+    title: tuple[str, str] | None = None
 
 
 def utc_now() -> datetime:
@@ -521,13 +531,14 @@ class NewsCollector:
         ]
         stats = {"new": 0, "corroborated": 0, "observed": 0}
         watermark = 0
+        invalid: dict[str, int] = {}
         if failed or succeeded or plan.unconfigured:
             with self.repository.transaction() as connection:
                 self._mark_unconfigured(connection, plan)
                 for outcome in failed:
                     self._record_failure(connection, outcome, plan.now)
                 if succeeded:
-                    stats, watermark = self._store_news(connection, plan.now, succeeded)
+                    stats, watermark, invalid = self._store_news(connection, plan.now, succeeded)
                     for outcome in succeeded:
                         batch = outcome.batch
                         assert isinstance(batch, NewsBatch)
@@ -549,11 +560,14 @@ class NewsCollector:
             "sources_deferred": len(plan.due) - len(succeeded) - len(failed),
             "fetched": sum(len(getattr(outcome.batch, "items", ())) for outcome in succeeded),
             **stats,
+            "invalid_items": sum(invalid.values()),
             "watermark_sequence": watermark,
         }
+        source_errors = {f"source:{key}": "invalid_items" for key in invalid}
+        source_errors.update({f"source:{outcome.key}": outcome.error.code for outcome in failed})
         return StreamOutcome(
             metrics,
-            {f"source:{outcome.key}": outcome.error.code for outcome in failed},
+            source_errors,
             error_code=failed[0].error.code if failed and not succeeded else None,
         )
 
@@ -628,7 +642,7 @@ class NewsCollector:
         connection: sqlite3.Connection,
         now: datetime,
         outcomes: list[FetchOutcome],
-    ) -> tuple[dict[str, int], int]:
+    ) -> tuple[dict[str, int], int, dict[str, int]]:
         state = self.repository.state("news", connection=connection)
         checkpoint = max(now, parse_utc(state.updated_after) or now)
         checkpoint_text = utc_micros(checkpoint)
@@ -637,26 +651,48 @@ class NewsCollector:
         buckets: dict[str, list[tuple[str, int]]] = {}
         pending: dict[int, _PendingChange] = {}
         stats = {"new": 0, "corroborated": 0, "observed": 0}
+        invalid: dict[str, int] = {}
         for outcome in outcomes:
             batch = outcome.batch
             assert isinstance(batch, NewsBatch)
             fetched_text = utc_micros(outcome.fetched_at)
             for item in batch.items:
-                minted = self._take(
-                    connection,
-                    outcome.key,
-                    item,
-                    fetched_at=fetched_text,
-                    first_seen_at=checkpoint_text,
-                    checkpoint=checkpoint,
-                    next_news_id=next_news_id,
-                    linked=linked,
-                    buckets=buckets,
-                    pending=pending,
-                    stats=stats,
-                )
-                if minted:
+                # One malformed item must not take the round, and every healthy
+                # source in it, down with it.
+                connection.execute("SAVEPOINT catalyst_ingest_item")
+                try:
+                    taken = self._take(
+                        connection,
+                        outcome.key,
+                        item,
+                        fetched_at=fetched_text,
+                        checkpoint=checkpoint,
+                        checkpoint_text=checkpoint_text,
+                        next_news_id=next_news_id,
+                        linked=linked,
+                        buckets=buckets,
+                        pending=pending,
+                    )
+                except (ValueError, TypeError, sqlite3.IntegrityError) as error:
+                    connection.execute("ROLLBACK TO catalyst_ingest_item")
+                    connection.execute("RELEASE catalyst_ingest_item")
+                    record_fallback_failure(f"catalyst_item_{outcome.key}", error)
+                    invalid[outcome.key] = invalid.get(outcome.key, 0) + 1
+                    continue
+                connection.execute("RELEASE catalyst_ingest_item")
+                if taken is None:
+                    continue
+                stats["observed"] += 1
+                if taken.entry is not None:
+                    pending[taken.news_id] = taken.entry
+                if taken.title is not None:
+                    bucket, title_key = taken.title
+                    buckets.setdefault(bucket, []).append((title_key, taken.news_id))
+                if taken.minted:
+                    stats["new"] += 1
                     next_news_id += 1
+                elif taken.corroborated:
+                    stats["corroborated"] += 1
         sequence = self._next_sequence(connection, state.completed_watermark_sequence)
         changes: list[dict[str, Any]] = []
         for news_id, entry in pending.items():
@@ -673,14 +709,7 @@ class NewsCollector:
                     "source_updated_at": available_text,
                     "available_at": available_text,
                     "news_id": news_id,
-                    "news": {
-                        **entry.news,
-                        "id": news_id,
-                        "updated_at": available_text,
-                        "source_tickers": entry.tickers,
-                        "sources": entry.sources,
-                        "source_count": len(entry.sources),
-                    },
+                    "news": self._payload(news_id, entry, available_text),
                 }
             )
             sequence += 1
@@ -693,7 +722,18 @@ class NewsCollector:
                 ((next_news_id - 1, "news_id"), (watermark, "change_sequence")),
             )
         self._count_local_write(connection)
-        return stats, watermark
+        return stats, watermark, invalid
+
+    @staticmethod
+    def _payload(news_id: int, entry: _PendingChange, updated_at: str) -> dict[str, Any]:
+        return {
+            **entry.news,
+            "id": news_id,
+            "updated_at": updated_at,
+            "source_tickers": entry.tickers,
+            "sources": entry.sources,
+            "source_count": len(entry.sources),
+        }
 
     def _take(
         self,
@@ -702,15 +742,20 @@ class NewsCollector:
         item: SourceItem,
         *,
         fetched_at: str,
-        first_seen_at: str,
         checkpoint: datetime,
+        checkpoint_text: str,
         next_news_id: int,
         linked: bool,
         buckets: dict[str, list[tuple[str, int]]],
         pending: dict[int, _PendingChange],
-        stats: dict[str, int],
-    ) -> bool:
-        """Observe one source item; returns whether it minted ``next_news_id``."""
+    ) -> _Taken | None:
+        """Observe one source item inside the caller's savepoint.
+
+        Only database rows change here; the caller applies the returned effect
+        to the round's pending changes once the savepoint is released, so a
+        rejected item leaves no trace. ``None`` means the source already
+        reported this item.
+        """
 
         seen = connection.execute(
             """SELECT 1 FROM catalyst_ingest_observations
@@ -718,35 +763,51 @@ class NewsCollector:
             (source_key, item.source_item_id),
         ).fetchone()
         if seen is not None:
-            return False
+            return None
         url = normalize_url(item.url)
-        if not url or len(url) > MAX_URL_CHARS:
-            return False
+        if web_url(item.url) is None or len(url) > MAX_URL_CHARS:
+            raise ValueError("source item has no usable URL")
         content_hash = compute_content_hash(item.title, url, item.published_at)
         title_key = fuzzy_title(item.title)
         bucket = publication_bucket(item.published_at or fetched_at)
         news_id = self._match(connection, content_hash, url, title_key, bucket, buckets)
-        minted = news_id is None
+        taken = _Taken(news_id=news_id or next_news_id)
         if news_id is None:
-            news_id = next_news_id
+            taken.minted = True
+            taken.entry = _PendingChange(
+                news={
+                    "source": item.source,
+                    "title": item.title,
+                    "summary": item.summary,
+                    "url": url,
+                    "image_url": item.image_url,
+                    "published_at": item.published_at,
+                    "fetched_at": fetched_at,
+                    "content_hash": content_hash,
+                },
+                sources=[item.source],
+                tickers=list(item.tickers[:MAX_TICKERS_PER_ITEM]),
+            )
             self._mint(
                 connection,
-                news_id,
-                item,
+                taken.news_id,
                 url=url,
                 content_hash=content_hash,
                 title_key=title_key,
                 bucket=bucket,
-                fetched_at=fetched_at,
-                first_seen_at=first_seen_at,
-                buckets=buckets,
-                pending=pending,
+                first_seen_at=checkpoint_text,
             )
-            stats["new"] += 1
+            if title_key:
+                taken.title = (bucket, title_key)
         elif news_id in pending:
-            self._merge(pending[news_id], item)
-        elif self._extend(connection, news_id, item, checkpoint=checkpoint, linked=linked, pending=pending):
-            stats["corroborated"] += 1
+            taken.entry = self._merged(pending[news_id], item)
+        else:
+            taken.entry = self._extension(
+                connection, news_id, item, checkpoint=checkpoint, linked=linked
+            )
+            taken.corroborated = taken.entry is not None
+        if taken.entry is not None:
+            RawNewsItem.model_validate(self._payload(taken.news_id, taken.entry, checkpoint_text))
         connection.execute(
             """INSERT INTO catalyst_ingest_observations(
                    source_key,source_item_id,news_id,source,title,url,
@@ -755,7 +816,7 @@ class NewsCollector:
             (
                 source_key,
                 item.source_item_id,
-                news_id,
+                taken.news_id,
                 item.source,
                 item.title,
                 item.url,
@@ -763,8 +824,7 @@ class NewsCollector:
                 fetched_at,
             ),
         )
-        stats["observed"] += 1
-        return minted
+        return taken
 
     @staticmethod
     def _match(
@@ -802,16 +862,12 @@ class NewsCollector:
     def _mint(
         connection: sqlite3.Connection,
         news_id: int,
-        item: SourceItem,
         *,
         url: str,
         content_hash: str,
         title_key: str,
         bucket: str,
-        fetched_at: str,
         first_seen_at: str,
-        buckets: dict[str, list[tuple[str, int]]],
-        pending: dict[int, _PendingChange],
     ) -> None:
         connection.execute(
             """INSERT INTO catalyst_ingest_items(news_id,first_seen_at,preexisting)
@@ -827,36 +883,24 @@ class NewsCollector:
                 "INSERT INTO catalyst_ingest_titles(news_id,bucket,title) VALUES(?,?,?)",
                 (news_id, bucket, title_key),
             )
-            buckets.setdefault(bucket, []).append((title_key, news_id))
-        pending[news_id] = _PendingChange(
-            news={
-                "source": item.source,
-                "title": item.title,
-                "summary": item.summary,
-                "url": url,
-                "image_url": item.image_url,
-                "published_at": item.published_at,
-                "fetched_at": fetched_at,
-                "content_hash": content_hash,
-            },
-            sources=[item.source],
-            tickers=list(item.tickers),
-        )
 
     @staticmethod
-    def _merge(entry: _PendingChange, item: SourceItem) -> bool:
-        changed = False
-        known = {source.casefold() for source in entry.sources}
-        if item.source.casefold() not in known and len(entry.sources) < MAX_SOURCES_PER_ITEM:
-            entry.sources.append(item.source)
-            changed = True
-        for ticker in item.tickers:
-            if ticker not in entry.tickers and len(entry.tickers) < MAX_TICKERS_PER_ITEM:
-                entry.tickers.append(ticker)
-                changed = True
-        return changed
+    def _merged(entry: _PendingChange, item: SourceItem) -> _PendingChange | None:
+        """``entry`` with the item's source and tickers added; ``None`` if nothing is new."""
 
-    def _extend(
+        sources = list(entry.sources)
+        tickers = list(entry.tickers)
+        if item.source.casefold() not in {source.casefold() for source in sources}:
+            if len(sources) < MAX_SOURCES_PER_ITEM:
+                sources.append(item.source)
+        for ticker in item.tickers:
+            if ticker not in tickers and len(tickers) < MAX_TICKERS_PER_ITEM:
+                tickers.append(ticker)
+        if sources == entry.sources and tickers == entry.tickers:
+            return None
+        return replace(entry, sources=sources, tickers=tickers)
+
+    def _extension(
         self,
         connection: sqlite3.Connection,
         news_id: int,
@@ -864,9 +908,8 @@ class NewsCollector:
         *,
         checkpoint: datetime,
         linked: bool,
-        pending: dict[int, _PendingChange],
-    ) -> bool:
-        """Append one corroboration change when the item is still open for it."""
+    ) -> _PendingChange | None:
+        """The one corroboration change an item may still receive, if any."""
 
         record = connection.execute(
             """SELECT first_seen_at,preexisting,corroboration_appends
@@ -881,19 +924,19 @@ class NewsCollector:
             or int(record["corroboration_appends"])
             or checkpoint - first_seen > CORROBORATION_WINDOW
         ):
-            return False
+            return None
         if linked and connection.execute(
             "SELECT 1 FROM catalyst_local_analysis_links WHERE news_id=? LIMIT 1",
             (news_id,),
         ).fetchone():
-            return False
+            return None
         mirror = connection.execute(
             "SELECT * FROM macrolens_etl_news WHERE news_id=? AND deleted=0",
             (news_id,),
         ).fetchone()
         if mirror is None:
-            return False
-        entry = _PendingChange(
+            return None
+        current = _PendingChange(
             news={
                 "source": mirror["source"],
                 "title": mirror["title"],
@@ -908,15 +951,14 @@ class NewsCollector:
             tickers=list(json.loads(mirror["source_tickers_json"])),
             previous_available_at=str(mirror["available_at"]),
         )
-        if not self._merge(entry, item):
-            return False
-        pending[news_id] = entry
-        connection.execute(
-            """UPDATE catalyst_ingest_items
-               SET corroboration_appends=corroboration_appends+1 WHERE news_id=?""",
-            (news_id,),
-        )
-        return True
+        extended = self._merged(current, item)
+        if extended is not None:
+            connection.execute(
+                """UPDATE catalyst_ingest_items
+                   SET corroboration_appends=corroboration_appends+1 WHERE news_id=?""",
+                (news_id,),
+            )
+        return extended
 
     @staticmethod
     def _next_news_id(connection: sqlite3.Connection) -> int:

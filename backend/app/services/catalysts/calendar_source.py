@@ -29,6 +29,7 @@ from .news_sources import (
     fetch_url,
     parse_json,
     parse_utc,
+    strip_surrogates,
     utc_micros,
     utc_seconds,
     validator_cursor,
@@ -81,9 +82,9 @@ def normalize_events(raw_events: object) -> tuple[dict[str, Any], ...]:
             continue
         country_code = str(raw.get("country") or "").upper()
         impact = str(raw.get("impact", "") or "").lower()
-        date_text = str(raw.get("date") or "").strip()
-        title = str(raw.get("title") or "").strip()
-        actual = str(raw.get("actual") or "")
+        date_text = strip_surrogates(str(raw.get("date") or "")).strip()
+        title = strip_surrogates(str(raw.get("title") or "")).strip()
+        actual = strip_surrogates(str(raw.get("actual") or ""))
         if not date_text or not title:
             continue
         if country_code not in MAJOR_CURRENCIES or not (impact in {"high", "medium"} or actual):
@@ -91,7 +92,7 @@ def normalize_events(raw_events: object) -> tuple[dict[str, Any], ...]:
         if impact not in IMPACT_MAP:
             continue
         scheduled = parse_utc(date_text)
-        if scheduled is None:
+        if scheduled is None or scheduled.year < 1970:
             raise SourceError("invalid_response")
         event_id = calendar_event_id(date_text, country_code, title)
         scheduled_text = utc_seconds(scheduled)
@@ -107,8 +108,8 @@ def normalize_events(raw_events: object) -> tuple[dict[str, Any], ...]:
                 "impact_zh": IMPACT_MAP[impact],
                 "scheduled_at": scheduled_text,
                 "scheduled_at_utc": scheduled_text,
-                "forecast": str(raw.get("forecast") or "") or None,
-                "previous": str(raw.get("previous") or "") or None,
+                "forecast": strip_surrogates(str(raw.get("forecast") or "")) or None,
+                "previous": strip_surrogates(str(raw.get("previous") or "")) or None,
                 "actual": actual or None,
             },
         )

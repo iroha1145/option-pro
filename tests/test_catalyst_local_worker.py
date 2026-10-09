@@ -146,6 +146,43 @@ def test_one_failing_source_is_reported_without_degrading_the_task(tmp_path):
     assert result.details["errors"] == {"source:massive": "http_503"}
 
 
+def test_one_malformed_item_never_blocks_the_healthy_sources(tmp_path):
+    bad = SourceItem(
+        source_item_id="m-bad",
+        source="massive/Zacks Investment Research",
+        title="Chip stocks rally \ud83d after earnings",
+        url="https://www.zacks.com/a/bad",
+        published_at=PUBLISHED,
+    )
+    feeds = Feeds(
+        massive=NewsBatch((bad,)),
+        globenewswire=NewsBatch(_items("gnw", 3, source="globenewswire/public_companies")),
+        forexfactory=CalendarBatch(normalize_events(_raw_events())),
+    )
+    task = _task(tmp_path, feeds.mapping("massive", "globenewswire", "forexfactory"))
+
+    async def scenario():
+        first = await task()
+        # Next sync slot, with Massive due again and the bad item still listed.
+        task._last_personal_sync_monotonic = None
+        task._collector._clock = lambda: datetime.now(timezone.utc) + timedelta(minutes=10)
+        second = await task()
+        await task.aclose()
+        return [first, second]
+
+    results = asyncio.run(scenario())
+
+    assert [result.status for result in results] == ["idle", "idle"]
+    assert all(
+        result.details["errors"] == {"source:massive": "invalid_items"} for result in results
+    )
+    assert results[0].details["streams"]["news"]["new"] == 3
+    assert feeds.calls.count("massive") == 2
+    with sqlite3.connect(tmp_path / "catalyst-cache.db") as connection:
+        stored = connection.execute("SELECT COUNT(*) FROM macrolens_etl_news").fetchone()[0]
+    assert stored == 3
+
+
 def test_a_failing_calendar_without_any_snapshot_degrades_the_task(tmp_path):
     feeds = Feeds(
         massive=NewsBatch(_items("massive", 1, source="massive/Benzinga")),

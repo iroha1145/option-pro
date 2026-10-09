@@ -313,3 +313,19 @@ def test_clearing_pending_checkpoints_drops_a_remote_pagination_window(tmp_path)
     assert after.pending_watermark_as_of is None
     assert after.generation == before.generation + 1
     assert after.completed_watermark_sequence == before.completed_watermark_sequence
+
+
+def test_calendar_text_loses_lone_surrogates_and_pre_1970_dates_fail_the_fetch():
+    rows = json.loads(
+        '[{"title":"CPI \\ud83dm/m","country":"USD","date":"2026-10-14T08:30:00-04:00",'
+        '"impact":"High","forecast":"0.2%\\udc00","previous":"0.1%"}]'
+    )
+    [event] = normalize_events(rows)
+
+    assert event["title"] == "CPI m/m"
+    assert event["forecast"] == "0.2%"
+    assert event["event_id"] == hashlib.sha256(
+        "\n".join(("2026-10-14T08:30:00-04:00", "USD", "CPI m/m")).encode()
+    ).hexdigest()
+    with pytest.raises(SourceError, match="invalid_response"):
+        normalize_events([{**rows[0], "date": "0999-10-14T08:30:00-04:00"}])

@@ -136,3 +136,8 @@ def test_publication_bucket_uses_the_utc_day():
     assert publication_bucket("2026-07-15T23:59:59Z") == "2026-07-15"
     assert publication_bucket(None) == "unknown"
     assert publication_bucket("2026-07-15 garbage") == "2026-07-15"
+
+
+def test_normalize_url_keeps_an_address_with_an_unusable_port_as_is():
+    assert normalize_url("https://www.zacks.com:99999/a") == "https://www.zacks.com:99999/a"
+    assert normalize_url("https://www.zacks.com:abc/a") == "https://www.zacks.com:abc/a"

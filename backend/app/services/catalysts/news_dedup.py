@@ -41,13 +41,13 @@ def normalize_url(url: str) -> str:
         return ""
     try:
         parts = urlsplit(url.strip())
+        port = parts.port
     except ValueError:
         return url.strip()
     if parts.scheme not in {"http", "https"} or not parts.hostname:
         return url.strip()
 
     host = parts.hostname.lower()
-    port = parts.port
     if port and not ((parts.scheme == "http" and port == 80) or (parts.scheme == "https" and port == 443)):
         host = f"{host}:{port}"
 

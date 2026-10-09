@@ -587,6 +587,53 @@ def test_disabled_sources_are_never_planned(tmp_path):
     assert [planned.spec.key for planned in collector.plan("news").due] == ["globenewswire"]
 
 
+def test_malformed_items_are_skipped_and_the_rest_of_the_round_lands(tmp_path):
+    feeds = Feeds()
+    clock = Clock(T0)
+    collector = _collector(tmp_path, feeds, clock, "massive", "globenewswire")
+    poisoned = (
+        _item("bad-title", "Chip stocks rally \ud83d after earnings"),
+        _item("bad-source", "Fed minutes due today", source="massive/Zacks \udc00Research"),
+        _item("bad-summary", "Oil climbs on supply worries", summary="cut \ud83d"),
+        _item("bad-port", "Dollar steadies after jobs data", url="https://www.zacks.com:99999/a"),
+        _item("good", "Treasury yields edge higher ahead of inflation data"),
+    )
+    feeds.batches["massive"] = NewsBatch(poisoned, cursor="2026-10-09T11:30:00Z")
+    feeds.batches["globenewswire"] = NewsBatch(
+        (
+            _item("g1", "Contoso Energy declares dividend", source="globenewswire/public_companies"),
+            _item("g2", "Fabrikam to acquire Litware", source="globenewswire/public_companies"),
+        )
+    )
+
+    first = _round(collector)
+    clock.advance(minutes=10)
+    second = _round(collector, force=True)
+
+    assert first.error_code is None
+    assert first.metrics["new"] == 3
+    assert first.metrics["invalid_items"] == 4
+    assert first.source_errors == {"source:massive": "invalid_items"}
+    assert second.metrics["new"] == 0
+    assert second.metrics["invalid_items"] == 4
+    titles = sorted(change["news"]["title"] for change in _changes(collector.repository))
+    assert titles == [
+        "Contoso Energy declares dividend",
+        "Fabrikam to acquire Litware",
+        "Treasury yields edge higher ahead of inflation data",
+    ]
+    assert [change["news_id"] for change in _changes(collector.repository)] == [1, 2, 3]
+    assert _query(
+        collector.repository,
+        "SELECT source_key,source_item_id FROM catalyst_ingest_observations ORDER BY news_id",
+    ) == [("massive", "good"), ("globenewswire", "g1"), ("globenewswire", "g2")]
+    assert _query(
+        collector.repository,
+        """SELECT cursor,consecutive_failures,last_error_code FROM catalyst_ingest_sources
+           WHERE source_key='massive'""",
+    ) == [("2026-10-09T11:30:00Z", 0, None)]
+
+
 def test_initialize_is_idempotent_and_versions_its_own_schema(tmp_path):
     feeds = Feeds()
     collector = _collector(tmp_path, feeds, Clock(T0))

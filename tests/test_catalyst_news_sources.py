@@ -559,3 +559,56 @@ def test_fetchers_exist_only_for_configured_credentials():
         "seekingalpha_daily",
     }
     assert _run(build(keyed)) == {spec.key for spec in NEWS_SOURCES}
+
+
+def test_items_lose_lone_surrogates_and_unusable_addresses():
+    raw = json.loads(
+        '{"id":"m\\ud83d-9","publisher":{"name":"Zacks \\udc00Research"},'
+        '"title":"Chip stocks rally \\ud83d after earnings","description":"cut \\ud83d",'
+        '"published_utc":"2026-10-09T12:00:00Z","article_url":"https://www.zacks.com/a/9",'
+        '"image_url":"https://img.example:99999/x.png"}'
+    )
+    item = parse_massive_item(raw)
+
+    assert item.title == "Chip stocks rally  after earnings"
+    assert item.summary == "cut"
+    assert item.source == "massive/Zacks Research"
+    assert item.source_item_id == "m-9"
+    assert item.image_url is None
+    for address in (
+        "https://www.zacks.com:99999/a",
+        "https://www.zacks.com:abc/a",
+        "https://www.zacks.com:0/a",
+        "javascript:alert(1)",
+        "ftp://files.example/a",
+        "https:///no-host",
+    ):
+        assert parse_massive_item({**raw, "article_url": address}) is None
+    finnhub = parse_finnhub_item(
+        json.loads('{"id":2,"headline":"Fed minutes due","url":"https://x.example/2",'
+                   '"datetime":1791554700,"source":"Reu\\udc00ters"}')
+    )
+    assert finnhub.source == "finnhub/Reuters"
+
+
+def test_publication_dates_before_1970_are_unparseable_and_years_stay_padded():
+    raw = json.loads(_fixture("massive_news.json"))["results"][0]
+
+    assert parse_massive_item({**raw, "published_utc": "0999-01-01T00:00:00Z"}).published_at is None
+    assert parse_massive_item({**raw, "published_utc": "1969-12-31T23:59:59Z"}).published_at is None
+    assert news_sources.utc_seconds(datetime(999, 1, 2, 3, 4, 5, tzinfo=timezone.utc)) == (
+        "0999-01-02T03:04:05Z"
+    )
+    assert news_sources.utc_micros(datetime(999, 1, 2, 3, 4, 5, tzinfo=timezone.utc)) == (
+        "0999-01-02T03:04:05.000000Z"
+    )
+    assert parse_finnhub_item(
+        {"id": 3, "headline": "Huge timestamp", "url": "https://x.example/3", "datetime": 10**20}
+    ).published_at is None
+
+
+def test_hostile_documents_are_classified_as_invalid_responses():
+    with pytest.raises(SourceError, match="invalid_response"):
+        news_sources.parse_json(b"[" * 200_000 + b"]" * 200_000)
+    with pytest.raises(SourceError, match="invalid_response"):
+        parse_feed(b'<?xml version="1.0" encoding="x-unknown-enc"?><rss><channel></channel></rss>')
