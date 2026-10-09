@@ -1,0 +1,68 @@
+[
+ {
+  "category": "merger",
+  "datetime": 1791547500,
+  "headline": "Fabrikam Semiconductor to buy Litware Photonics in $1.2 billion deal",
+  "id": 7620000,
+  "image": "https://static.finnhub.io/fixture/merger-0.jpg",
+  "related": "FBKM,LTWP",
+  "source": "Reuters",
+  "summary": "Fabrikam agreed to acquire Litware.",
+  "url": "https://www.reuters.com/business/fabrikam-semiconductor-buy-litware-photonics-2026-10-09/"
+ },
+ {
+  "category": "merger",
+  "datetime": 1791550800,
+  "headline": "McEwen Signs US$55 Million Agreement to Sell Fuller and Paymaster",
+  "id": 7620001,
+  "image": "https://static.finnhub.io/fixture/merger-1.jpg",
+  "related": "MUX",
+  "source": "GlobeNewswire",
+  "summary": "McEwen agreed to sell two properties.",
+  "url": "https://www.globenewswire.com/news-release/2026/10/09/3378099/0/en/McEwen-Signs-US-55-Million-Agreement-to-Sell-Fuller-and-Paymaster.html"
+ },
+ {
+  "category": "merger",
+  "datetime": 1791545400,
+  "headline": "Private equity firm nears deal for software maker",
+  "id": 7620002,
+  "image": "https://static.finnhub.io/fixture/merger-2.jpg",
+  "related": "",
+  "source": "Bloomberg",
+  "summary": "A buyout firm is in advanced talks.",
+  "url": "https://www.bloomberg.com/news/articles/2026-10-09/private-equity-software-deal"
+ },
+ {
+  "category": "merger",
+  "datetime": 1791496800,
+  "headline": "Regional bank merger wins regulatory approval",
+  "id": 7620003,
+  "image": "https://static.finnhub.io/fixture/merger-3.jpg",
+  "related": "WGBK",
+  "source": "MarketWatch",
+  "summary": "Regulators approved the combination.",
+  "url": "https://www.marketwatch.com/story/regional-bank-merger-approval-2026-10-08"
+ },
+ {
+  "category": "merger",
+  "datetime": 1791485100,
+  "headline": "Chemical maker explores sale of coatings unit",
+  "id": 7620004,
+  "image": "https://static.finnhub.io/fixture/merger-4.jpg",
+  "related": "",
+  "source": "Reuters",
+  "summary": "The company hired advisers.",
+  "url": "https://www.reuters.com/business/chemical-maker-explores-sale-coatings-unit-2026-10-08/"
+ },
+ {
+  "category": "merger",
+  "datetime": 1791472200,
+  "headline": "Biotech agrees to licensing deal worth up to $900 million",
+  "id": 7620005,
+  "image": "https://static.finnhub.io/fixture/merger-5.jpg",
+  "related": "NWBX",
+  "source": "CNBC",
+  "summary": "The deal includes milestone payments.",
+  "url": "https://www.cnbc.com/2026/10/08/biotech-licensing-deal.html"
+ }
+]

@@ -1,0 +1,72 @@
+{
+ "results": [
+  {
+   "id": "e657f3bc73ccf5be274fd79ebcfcf092fda51515f68e7d8fba08cc39120a7035",
+   "publisher": {
+    "name": "GlobeNewswire Inc."
+   },
+   "title": "McEwen Signs US$55 Million Agreement to Sell Fuller and Paymaster",
+   "published_utc": "2026-10-09T13:00:00Z",
+   "article_url": "https://www.globenewswire.com/news-release/2026/10/09/3378099/37420/en/mcewen-signs-us-55-million-agreement-to-sell-fuller-and-paymaster.html",
+   "tickers": [
+    "MUX"
+   ],
+   "image_url": "https://ml.globenewswire.com/Resource/Download/3c7c9746-356d-4d7d-a994-ede769eddafc",
+   "description": "McEwen Inc. has agreed to sell its Fuller and Paymaster properties in Timmins, Ontario to Discovery Mining's subsidiary Dome Mine Ltd. for US$55 million (US$5M cash, US$50M in Discovery shares). The proceeds will support McEwen's growth strategy targeting 250,000-300,000 gold equivalent ounces annually by 2030, with major projects including Stock Mine production in Q4 2026 and El Gallo construction in Mexico."
+  },
+  {
+   "id": "c43f3afa62290ba14846c8aefc6c1a2c1681673a4489c52c15d14ee79ee3620b",
+   "publisher": {
+    "name": "The Motley Fool"
+   },
+   "title": "The S&P 500 Is Not Enough: My 3-Stock Starter Portfolio for New Investors",
+   "published_utc": "2026-10-09T12:30:00Z",
+   "article_url": "https://www.fool.com/investing/2026/10/09/the-sp-500-is-not-enough-my-3-stock-starter-portfo/?source=iedfolrf0000001",
+   "tickers": [
+    "GOOG",
+    "GOOGL",
+    "GOOGM",
+    "GOOGN",
+    "GEV",
+    "BRK.A",
+    "BRK.B"
+   ],
+   "image_url": "https://g.foolcdn.com/image/?url=https%3A%2F%2Fg.foolcdn.com%2Feditorial%2Fimages%2F889605%2Fyoung-investor-sitting-at-desk.jpg&w=1200&op=resize",
+   "description": "While S&P 500 index funds offer reliable long-term returns, the author recommends three individual stocks for new investors seeking more upside potential: Alphabet for its dominant search business, GE Vernova for its growing energy infrastructure backlog, and Berkshire Hathaway as a diversified holding company with Warren Buffett's proven investment philosophy."
+  },
+  {
+   "id": "e1a857faa6b7b27f32a38508f790d8220aeab7c9d64d846f8152d0fdc57ba00e",
+   "publisher": {
+    "name": "The Motley Fool"
+   },
+   "title": "AMC Stock Is in the Spotlight for All the Right Reasons. Here's Why It's a Buy Now.",
+   "published_utc": "2026-10-09T12:08:00Z",
+   "article_url": "https://www.fool.com/investing/2026/10/09/amc-stock-is-in-the-spotlight-for-all-the-right-re/?source=iedfolrf0000001",
+   "tickers": [
+    "AMC",
+    "CNK",
+    "MCS"
+   ],
+   "image_url": "https://g.foolcdn.com/image/?url=https%3A%2F%2Fg.foolcdn.com%2Feditorial%2Fimages%2F889211%2Fgettyimages-187999774.jpg&w=1200&op=resize",
+   "description": "AMC Entertainment has surged 86% in 2026 as domestic box office receipts reach their highest levels since 2019. Despite a challenging five-year track record and delayed profitability expectations until 2028, the company is benefiting from increased moviegoing, particularly among younger audiences."
+  },
+  {
+   "id": "b93ddbd4b4505d2396b73beb3bc950dd755cf4c970cf4f8adc647497e43c8252",
+   "publisher": {
+    "name": "GlobeNewswire Inc."
+   },
+   "title": "Arcutis Presents ZORYVE® (roflumilast) Data and Real-World Topical Corticosteroid Research at EADV and Fall Clinical",
+   "published_utc": "2026-10-09T12:00:00Z",
+   "article_url": "https://www.globenewswire.com/news-release/2026/10/09/3378045/0/en/arcutis-presents-zoryve-roflumilast-data-and-real-world-topical-corticosteroid-research-at-eadv-and-fall-clinical.html",
+   "tickers": [
+    "ARQT"
+   ],
+   "image_url": "https://ml.globenewswire.com/Resource/Download/1b166f47-afb1-44f1-91be-2d73e97c0ec3",
+   "description": "Arcutis Biotherapeutics presented clinical data for ZORYVE (roflumilast) across multiple inflammatory skin conditions at major dermatology conferences. The INTEGUMENT-INFANT trial showed the drug was well-tolerated in infants aged 3-24 months with atopic dermatitis, with 34.4% achieving disease clearance at 4 weeks."
+  }
+ ],
+ "status": "OK",
+ "request_id": "sample-2026-10-09",
+ "count": 4,
+ "next_url": "https://api.massive.com/v2/reference/news?cursor=YXA9MjAyNi0xMC0wOVQxMiUzQTAwJTNBMDBaJmFzPWI5M2RkYmQ0YjQ1MDVkMjM5NmI3M2JlYjNiYzk1MGRkNzU1Y2Y0Yzk3MGNmNGY4YWRjNjQ3NDk3ZTQzYzgyNTImbGltaXQ9MTImb3JkZXI9ZGVzY2VuZGluZw"
+}
