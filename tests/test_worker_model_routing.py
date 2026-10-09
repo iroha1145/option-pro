@@ -53,7 +53,7 @@ def setup(tmp_path, monkeypatch):
     config = SimpleNamespace(
         ai=SimpleNamespace(model="claude-haiku-5-5", reasoning="xhigh"),
         features=SimpleNamespace(catalyst_mode="scheduled"),
-        catalyst=SimpleNamespace(sync_seconds=120, focus_seconds=1800),
+        catalyst=SimpleNamespace(sync_seconds=120, focus_seconds=1800, news_source="macrolens"),
     )
     return settings, config, now, article_reads
 

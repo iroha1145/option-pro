@@ -24,7 +24,7 @@ from app.services.ai_jobs.repository import AIJobRepository
 from app.services.catalysts import local_intelligence as local_module
 from app.services.catalysts import personal_service as personal_module
 from app.services.catalysts.errors import CatalystError
-from app.services.catalysts.etl_client import NewsChangesPage
+from app.services.catalysts.ingest_models import NewsChangesPage
 from app.services.catalysts.etl_repository import CatalystEtlRepository
 from app.services.catalysts.local_intelligence import LocalCatalystIntelligence
 from app.services.catalysts.personal_service import PersonalCatalystService
@@ -37,7 +37,7 @@ def test_require_utc_text_normalizes_offsets_to_z_preserving_fraction_width():
     """_require_utc_text 必须把带偏移的时间戳转成以 Z 结尾的 UTC 文本，且
     小数秒位数跟输入保持一致（无小数秒则不补、3 位/6 位原样保留）。"""
 
-    from app.services.catalysts.etl_client import _require_utc_text
+    from app.services.catalysts.ingest_models import _require_utc_text
 
     # +00:00：只换后缀，不改时刻，也不产生原本没有的小数秒。
     assert (
@@ -64,7 +64,7 @@ def test_require_utc_text_normalizes_offsets_to_z_preserving_fraction_width():
 def test_require_utc_text_already_z_is_returned_byte_for_byte():
     """已是 Z 的输入必须逐字节原样返回：既有数据/哈希不能因为归一化而抖动。"""
 
-    from app.services.catalysts.etl_client import _require_utc_text
+    from app.services.catalysts.ingest_models import _require_utc_text
 
     for value in (
         "2026-09-25T08:00:00Z",
@@ -75,7 +75,7 @@ def test_require_utc_text_already_z_is_returned_byte_for_byte():
 
 
 def test_require_utc_text_rejects_invalid_or_naive_input():
-    from app.services.catalysts.etl_client import _require_utc_text
+    from app.services.catalysts.ingest_models import _require_utc_text
 
     with pytest.raises(ValueError, match="must be a timestamp"):
         _require_utc_text("", field="t")
@@ -88,11 +88,11 @@ def test_require_utc_text_rejects_invalid_or_naive_input():
 
 
 def test_offset_timestamp_normalizes_through_the_real_pydantic_parse_path():
-    """不只测 _require_utc_text 本身：证明带偏移的时间戳经过 etl_client 的
+    """不只测 _require_utc_text 本身：证明带偏移的时间戳经过 ingest_models 的
     真实解析路径（pydantic field_validator）后，模型字段已经是 Z 串——也就是
     下游 local_intelligence 按字典序比较/存库时看到的值。"""
 
-    from app.services.catalysts.etl_client import NewsChange
+    from app.services.catalysts.ingest_models import NewsChange
 
     change = NewsChange.model_validate(
         {

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ipaddress
 from datetime import datetime, timezone
+from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
@@ -182,6 +183,48 @@ class AIConfig(StrictConfigModel):
         return self
 
 
+# 本地采集器各来源的默认轮询间隔（秒），与 News-feed personal.toml 一致，
+# Massive 从每小时一次改为五分钟一次。
+CATALYST_SOURCE_SECONDS = {
+    "massive": 300,
+    "finnhub": 300,
+    "globenewswire": 300,
+    "google_news": 900,
+    "seekingalpha_breaking": 300,
+    "seekingalpha_daily": 21_600,
+    "calendar": 600,
+}
+
+
+class CatalystSourceConfig(StrictConfigModel):
+    enabled: bool = True
+    interval_seconds: int = Field(ge=60, le=86_400)
+
+
+class CatalystSourcesConfig(StrictConfigModel):
+    """本地采集器每个来源的开关与轮询间隔；只写 enabled 时沿用默认间隔。"""
+
+    massive: CatalystSourceConfig
+    finnhub: CatalystSourceConfig
+    globenewswire: CatalystSourceConfig
+    google_news: CatalystSourceConfig
+    seekingalpha_breaking: CatalystSourceConfig
+    seekingalpha_daily: CatalystSourceConfig
+    calendar: CatalystSourceConfig
+
+    @model_validator(mode="before")
+    @classmethod
+    def apply_default_intervals(cls, value: Any) -> Any:
+        if not isinstance(value, Mapping):
+            return value
+        merged = dict(value)
+        for name, seconds in CATALYST_SOURCE_SECONDS.items():
+            entry = merged.get(name, {})
+            if isinstance(entry, Mapping):
+                merged[name] = {"interval_seconds": seconds, **entry}
+        return merged
+
+
 class CatalystConfig(StrictConfigModel):
     sync_seconds: int = Field(default=120, ge=30, le=86_400)
     focus_seconds: int = Field(default=1800, ge=300, le=86_400)
@@ -195,6 +238,10 @@ class CatalystConfig(StrictConfigModel):
         min_length=1,
         max_length=24,
     )
+    # 新闻与经济日历的写入方：local 由 worker 直接抓取各来源；macrolens 沿用
+    # MacroLens ETL 远端同步，只为回滚保留（回滚前要恢复切换前的库备份）。
+    news_source: Literal["local", "macrolens"] = "local"
+    sources: CatalystSourcesConfig = Field(default_factory=CatalystSourcesConfig)
 
     @field_validator("scheduled_times_et")
     @classmethod

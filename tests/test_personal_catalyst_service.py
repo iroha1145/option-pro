@@ -18,11 +18,11 @@ from app.access import (
     require_public_read_or_owner_access,
 )
 from app.api import catalysts as catalyst_api
-from app.personal_config import AccessConfig, FeatureConfig, PersonalConfig
+from app.personal_config import AccessConfig, CatalystConfig, FeatureConfig, PersonalConfig
 from app.services.ai_jobs import runtime as ai_runtime
 from app.services.ai_jobs.repository import AIJobRepository
 from app.services.catalysts.errors import CatalystError
-from app.services.catalysts.etl_client import NewsChangesPage
+from app.services.catalysts.ingest_models import NewsChangesPage
 from app.services.catalysts.etl_repository import CatalystEtlRepository
 from app.services.catalysts.personal_service import PersonalCatalystService
 from app.services.catalysts.config import CatalystSettings
@@ -319,6 +319,7 @@ def _service(
     *,
     cache_path=None,
     personal_etl_enabled: bool = True,
+    news_source: str = "local",
 ) -> PersonalCatalystService:
     settings = type(
         "SettingsStub",
@@ -329,7 +330,10 @@ def _service(
             "reasoning": "max",
         },
     )()
-    personal = PersonalConfig(features=FeatureConfig(catalyst_mode=mode))
+    personal = PersonalConfig(
+        features=FeatureConfig(catalyst_mode=mode),
+        catalyst=CatalystConfig(news_source=news_source),
+    )
     return PersonalCatalystService(
         settings,
         intelligence=engine or FakeIntelligence(),
@@ -999,6 +1003,7 @@ def test_refresh_fails_closed_when_personal_etl_is_disabled(
         mode,
         engine=engine,
         personal_etl_enabled=False,
+        news_source="macrolens",
     )
     monkeypatch.setattr(
         service,
@@ -1016,7 +1021,7 @@ def test_refresh_fails_closed_when_personal_etl_is_disabled(
 
 def test_refresh_fails_closed_when_etl_capability_is_not_declared() -> None:
     engine = FakeIntelligence()
-    service = _service("manual", engine=engine)
+    service = _service("manual", engine=engine, news_source="macrolens")
     service.ai_settings = SimpleNamespace()
 
     with pytest.raises(CatalystError) as captured:
@@ -1024,6 +1029,55 @@ def test_refresh_fails_closed_when_etl_capability_is_not_declared() -> None:
 
     assert captured.value.code == "catalyst_sync_disabled"
     assert engine.actions == []
+
+
+def test_local_collector_refreshes_without_macrolens_settings() -> None:
+    engine = FakeIntelligence()
+    service = _service("manual", engine=engine, personal_etl_enabled=False)
+
+    assert service.request_refresh() == {"request_id": "refresh-1", "status": "queued"}
+    assert engine.actions == [("refresh",)]
+
+
+def test_status_reports_one_card_per_collected_source(tmp_path) -> None:
+    from app.services.catalysts.news_collector import NewsCollector
+    from app.services.catalysts.news_sources import NewsBatch, SourceItem
+
+    cache_path = tmp_path / "catalyst-cache.db"
+
+    async def massive(_request):
+        return NewsBatch(
+            (
+                SourceItem(
+                    source_item_id="m1",
+                    source="massive/Zacks Investment Research",
+                    title="Status card headline",
+                    url="https://news.example/m1",
+                    published_at="2026-07-15T03:00:00Z",
+                ),
+            )
+        )
+
+    collector = NewsCollector(
+        CatalystEtlRepository(cache_path),
+        sources=PersonalConfig().catalyst.sources,
+        fetchers={"massive": massive},
+        clock=lambda: NOW - timedelta(minutes=2),
+    )
+    collector.initialize()
+    plan = collector.plan("news")
+    collector.commit(plan, asyncio.run(collector.fetch(plan)))
+
+    local = _service("manual", cache_path=cache_path).status(now=NOW)
+    remote = _service("manual", cache_path=cache_path, news_source="macrolens").status(now=NOW)
+
+    cards = {card["key"]: card for card in local["sources"]}
+    assert cards["massive"]["source"] == "Massive"
+    assert cards["massive"]["status"] == "active"
+    assert cards["massive"]["lag_ms"] == 120_000
+    assert cards["massive"]["items_last_24h"] == 1
+    assert cards["finnhub_general"]["note"] == "not_configured"
+    assert "sources" not in remote
 
 
 def test_unrelated_worker_degradation_does_not_block_catalyst(
@@ -1570,7 +1624,10 @@ def test_local_api_settings_keep_fixed_model_and_drop_remote_hmac_credentials(
 def test_unified_worker_disables_safely_when_owner_token_is_missing(
     tmp_path,
 ) -> None:
-    personal = PersonalConfig(features=FeatureConfig(catalyst_mode="read"))
+    personal = PersonalConfig(
+        features=FeatureConfig(catalyst_mode="read"),
+        catalyst=CatalystConfig(news_source="macrolens"),
+    )
     settings = SimpleNamespace(
         internal_api_token=SecretStr(""),
         macrolens_url="",

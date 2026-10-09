@@ -1,0 +1,90 @@
+[
+ {
+  "category": "top news",
+  "datetime": 1791415200,
+  "headline": "Wall Street ends lower, off record highs, as Treasury yields climb",
+  "id": 7600000,
+  "image": "https://static.finnhub.io/fixture/top-news-0.jpg",
+  "related": "",
+  "source": "Reuters",
+  "summary": "U.S. stocks ended lower as Treasury yields rose.",
+  "url": "https://www.reuters.com/markets/us/wall-street-ends-lower-off-record-highs-treasury-yields-climb-2026-10-07/"
+ },
+ {
+  "category": "top news",
+  "datetime": 1791540300,
+  "headline": "Bank earnings, CPI headline busy markets week as S&P 500 hovers near records",
+  "id": 7600001,
+  "image": "https://static.finnhub.io/fixture/top-news-1.jpg",
+  "related": "JPM,WFC,C",
+  "source": "Yahoo",
+  "summary": "Big banks kick off the earnings season next week.",
+  "url": "https://finance.yahoo.com/news/bank-earnings-cpi-headline-busy-markets-week-100209.html?guccounter=1"
+ },
+ {
+  "category": "top news",
+  "datetime": 1791537300,
+  "headline": "Oil climbs as Middle East supply worries persist",
+  "id": 7600002,
+  "image": "https://static.finnhub.io/fixture/top-news-2.jpg",
+  "related": "",
+  "source": "CNBC",
+  "summary": "Crude futures rose for a second session.",
+  "url": "https://www.cnbc.com/2026/10/09/oil-prices-middle-east-supply.html"
+ },
+ {
+  "category": "top news",
+  "datetime": 1791553200,
+  "headline": "Chipmakers slide as export curbs weigh on outlook",
+  "id": 7600003,
+  "image": "https://static.finnhub.io/fixture/top-news-3.jpg",
+  "related": "NVDA,AMD,AVGO",
+  "source": "MarketWatch",
+  "summary": "Semiconductor shares fell in premarket trading.",
+  "url": "https://www.marketwatch.com/story/chipmakers-slide-export-curbs-2026-10-09?mod=mw_rss_topstories"
+ },
+ {
+  "category": "top news",
+  "datetime": 1791534600,
+  "headline": "Treasury yields edge higher ahead of inflation data",
+  "id": 7600004,
+  "image": "https://static.finnhub.io/fixture/top-news-4.jpg",
+  "related": "",
+  "source": "Reuters",
+  "summary": "Benchmark yields rose before Thursday's consumer price report.",
+  "url": "https://www.reuters.com/markets/rates-bonds/treasury-yields-edge-higher-ahead-inflation-data-2026-10-09/"
+ },
+ {
+  "category": "top news",
+  "datetime": 1791554700,
+  "headline": "Stocks fall as yields rise - Reuters",
+  "id": 7600005,
+  "image": "https://static.finnhub.io/fixture/top-news-5.jpg",
+  "related": "",
+  "source": "Reuters",
+  "summary": "Stocks fell as yields rose.",
+  "url": "https://www.reuters.com/markets/us/stocks-fall-yields-rise-2026-10-09/"
+ },
+ {
+  "category": "top news",
+  "datetime": 1791531900,
+  "headline": "Dollar steadies after jobs data surprise",
+  "id": 7600006,
+  "image": "https://static.finnhub.io/fixture/top-news-6.jpg",
+  "related": "",
+  "source": "Forbes",
+  "summary": "The dollar was little changed.",
+  "url": "https://www.forbes.com/sites/markets/2026/10/09/dollar-steadies-after-jobs-data/"
+ },
+ {
+  "category": "top news",
+  "datetime": 1791526200,
+  "headline": "Retail sales preview: holiday spending expectations soften",
+  "id": 7600007,
+  "image": "https://static.finnhub.io/fixture/top-news-7.jpg",
+  "related": "WMT,TGT",
+  "source": "Bloomberg",
+  "summary": "Economists expect a modest rise in retail sales.",
+  "url": "https://www.bloomberg.com/news/articles/2026-10-09/retail-sales-preview"
+ }
+]

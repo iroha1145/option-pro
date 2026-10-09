@@ -3,7 +3,7 @@
 Optix Pro 是面向个人使用的美股期权、突破信号与新闻分析工作台。正式运行只有两个常驻容器：
 
 - `backend`：提供网页、接口和查询，也接收所有者明确发起的任务。
-- `worker`：统一管理突破扫描、新闻同步、焦点快照、模型任务、刷新、备份与清理。
+- `worker`：统一管理突破扫描、新闻与经济日历采集、焦点快照、模型任务、刷新、备份与清理。
 
 两个容器共用同一镜像和数据卷。新分析默认使用 Claude Haiku 5.5，推理强度为 `xhigh`，Claude 默认总并发数为 4，可设置为 1 到 4。新闻标题、摘要、等待提示和分析内容必须通过简体中文校验；来源原文只作为内部证据保留。
 
@@ -73,6 +73,8 @@ chmod 600 .env machine.env secrets.env
 `FMP_API_KEY`（Financial Modeling Prep）是可选的第二财报日历来源与批量市值来源：
 未配置时财报页完全走 Finnhub 主源，不影响启动与刷新；配置后双日历交叉验证
 （日期冲突显式标注，不静默合并），市值批量补全并持久缓存，由 Worker 低频刷新。
+
+新闻与经济日历默认由 Worker 直接抓取各来源（`[catalyst].news_source = "local"`），只用已有的 `MASSIVE_API_KEY` 与 `FINNHUB_API_KEY`。`MACROLENS_URL` 与 `INTERNAL_API_TOKEN` 只在切回 `macrolens` 回滚时使用，下一个版本随远端同步一起删除；来源清单、切换、回滚与上线手动项见 `docs/catalysts/news-ingest.md`。
 
 旧名称 `MARKETDATA_API_TOKEN` 不再读取，应改为 `MARKETDATA_TOKEN`。只填 `MACROLENS_BASE_URL` 或 `MACROLENS_INTERNAL_TOKEN`，或旧名与新名取值不一致时，启动会失败并提示改用 `MACROLENS_URL`、`INTERNAL_API_TOKEN`，不会猜测采用哪一项。旧签名密钥、请求随机数（Nonce）、密钥编号（Key ID）、前一把密钥和浏览器令牌不会进入运行配置。
 

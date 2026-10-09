@@ -39,6 +39,7 @@ from .local_intelligence import (
     _cursor_encode,
     _feed_query_hash,
 )
+from .news_collector import source_health
 
 
 _HOTSPOT_PROJECTION_SCAN_LIMIT = 100
@@ -281,7 +282,9 @@ class PersonalCatalystService:
         except (OSError, sqlite3.Error, TypeError, ValueError):
             return False
 
-    def _personal_etl_enabled(self) -> bool:
+    def _catalyst_sync_configured(self) -> bool:
+        if self.personal_config.catalyst.news_source == "local":
+            return True
         return bool(
             getattr(
                 self.ai_settings,
@@ -289,6 +292,23 @@ class PersonalCatalystService:
                 False,
             )
         )
+
+    def _source_health(self, payload: Mapping[str, Any], observed: datetime) -> list[dict[str, Any]]:
+        streams = payload.get("streams")
+        calendar = streams.get("calendar") if isinstance(streams, Mapping) else None
+        try:
+            return source_health(
+                self.settings.cache_db_path,
+                sources=self.personal_config.catalyst.sources,
+                now=observed,
+                calendar_items_last_24h=(
+                    calendar.get("items_last_24h") if isinstance(calendar, Mapping) else None
+                ),
+            )
+        except sqlite3.Error as error:
+            # The page falls back to the stream rows when no source card is sent.
+            record_fallback_failure("catalyst_source_health", error)
+            return []
 
     def analysis_availability(
         self,
@@ -1253,6 +1273,8 @@ class PersonalCatalystService:
             if not include_owner_state:
                 payload.pop("manual_refreshes", None)
             return payload
+        if self.personal_config.catalyst.news_source == "local":
+            payload["sources"] = self._source_health(payload, observed)
         payload["model"], payload["reasoning"] = self._analysis_identity("news_impact")
         payload["analysis_trigger_enabled"] = bool(
             include_owner_state
@@ -1665,7 +1687,7 @@ class PersonalCatalystService:
                 retryable=False,
                 counts_for_circuit=False,
             )
-        if not self._personal_etl_enabled():
+        if not self._catalyst_sync_configured():
             raise CatalystError(
                 "catalyst_sync_disabled",
                 "Catalyst refresh is disabled until MacroLens sync is configured",

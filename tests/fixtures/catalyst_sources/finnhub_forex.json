@@ -1,0 +1,68 @@
+[
+ {
+  "category": "forex",
+  "datetime": 1791536400,
+  "headline": "EUR/USD holds near 1.0850 as traders await ECB minutes",
+  "id": 7610000,
+  "image": "https://static.finnhub.io/fixture/forex-0.jpg",
+  "related": "",
+  "source": "Forexlive",
+  "summary": "The euro was steady against the dollar.",
+  "url": "https://www.forexlive.com/news/eurusd-holds-near-10850-ecb-minutes-20261009/"
+ },
+ {
+  "category": "forex",
+  "datetime": 1791534000,
+  "headline": "USD/JPY climbs above 152 on yield differentials",
+  "id": 7610001,
+  "image": "https://static.finnhub.io/fixture/forex-1.jpg",
+  "related": "",
+  "source": "Forexlive",
+  "summary": "The yen weakened.",
+  "url": "https://www.forexlive.com/news/usdjpy-climbs-above-152-20261009/"
+ },
+ {
+  "category": "forex",
+  "datetime": 1791525900,
+  "headline": "GBP/USD dips after UK GDP miss",
+  "id": 7610002,
+  "image": "https://static.finnhub.io/fixture/forex-2.jpg",
+  "related": "",
+  "source": "Forexlive",
+  "summary": "Sterling slipped after weaker growth data.",
+  "url": "https://www.forexlive.com/news/gbpusd-dips-after-uk-gdp-miss-20261009/"
+ },
+ {
+  "category": "forex",
+  "datetime": 1791517200,
+  "headline": "AUD/USD steadies as China stimulus hopes linger",
+  "id": 7610003,
+  "image": "https://static.finnhub.io/fixture/forex-3.jpg",
+  "related": "",
+  "source": "Forexlive",
+  "summary": "The Australian dollar was flat.",
+  "url": "https://www.forexlive.com/news/audusd-steadies-china-stimulus-20261009/"
+ },
+ {
+  "category": "forex",
+  "datetime": 1791512100,
+  "headline": "Swiss franc firms as risk appetite cools",
+  "id": 7610004,
+  "image": "https://static.finnhub.io/fixture/forex-4.jpg",
+  "related": "",
+  "source": "Forexlive",
+  "summary": "The franc gained.",
+  "url": "https://www.forexlive.com/news/swiss-franc-firms-risk-appetite-20261009/"
+ },
+ {
+  "category": "forex",
+  "datetime": 1791491400,
+  "headline": "Canadian dollar tracks oil higher",
+  "id": 7610005,
+  "image": "https://static.finnhub.io/fixture/forex-5.jpg",
+  "related": "",
+  "source": "Forexlive",
+  "summary": "The loonie rose with crude.",
+  "url": "https://www.forexlive.com/news/canadian-dollar-tracks-oil-20261008/"
+ }
+]

@@ -29,9 +29,9 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 from app.access import request_owner_access_context  # noqa: E402
 from app.services.ai_jobs.repository import AIJobRepository  # noqa: E402
-from app.services.catalysts.etl_client import NewsChangesPage  # noqa: E402
 from app.services.catalysts.etl_repository import CatalystEtlRepository  # noqa: E402
 from app.services.catalysts.config import CatalystSettings  # noqa: E402
+from app.services.catalysts.ingest_models import NewsChangesPage  # noqa: E402
 from app.services.catalysts.local_intelligence import (  # noqa: E402
     LocalCatalystIntelligence,
     _reset_revision_cache,
