@@ -134,25 +134,33 @@ def test_every_complete_production_luna_failure_now_validates(sample):
     assert "https://" not in narrative
 
 
-def test_domain_label_must_name_the_linked_site():
-    url = "https://www.sec.gov/Archives/edgar/data/1137774/d11107dex991.htm"
-    receipt = runtime.openai_receipt(luna_response(
+def _luna_receipt(urls, **fields):
+    return runtime.openai_receipt(luna_response(
         calls=[dict(type="web_search_call", id="ws_1", status="completed",
-                    action=dict(type="search", sources=[dict(url=url, title="核验来源")]))],
+                    action=dict(type="search", sources=[dict(url=url, title="核验来源") for url in urls]))],
         text=json.dumps({
-            **_news_result(),
-            "news_id": 1, "change_sequence": 1, "content_hash": "hash-1",
-            "summary_zh": f"暂停期限延长至2027年1月31日。([sec.gov]({url}))",
-            "causal_summary": f"监管命令要求整改。 ([www.sec.gov]({url})) 可能限制新单销售。",
-            "key_factors": [f"命令已披露（[ec.gov]({url})）"],
+            **_news_result(), "news_id": 1, "change_sequence": 1, "content_hash": "hash-1", **fields,
         }, ensure_ascii=False),
     ))
+
+
+def test_domain_label_must_name_the_linked_site():
+    url = "https://www.sec.gov/Archives/edgar/data/1137774/d11107dex991.htm"
+    receipt = _luna_receipt(
+        [url],
+        summary_zh=f"暂停期限延长至2027年1月31日。([sec.gov]({url}))",
+        causal_summary=f"监管命令要求整改。 ([www.sec.gov]({url})) 可能限制新单销售。",
+    )
     result = runtime.receipt_result(receipt, "news_impact", luna_payload())
     assert result["summary_zh"] == "暂停期限延长至2027年1月31日。"
     assert result["causal_summary"] == "监管命令要求整改。可能限制新单销售。"
-    # A label that is not the linked site is reduced to its text; a bare
-    # domain in brackets then leaves the published prose entirely.
-    assert result["key_factors"] == ["命令已披露"]
+    # A label that is not the linked site is reduced to its text and is not a
+    # retrieved site, so it stays; the language gate then judges it as usual
+    # (here a compact gloss right after Chinese text).
+    mislabeled = _luna_receipt([url], key_factors=[f"命令已披露（[ec.gov]({url})）"])
+    assert runtime.receipt_result(mislabeled, "news_impact", luna_payload())["key_factors"] == [
+        "命令已披露（ec.gov）"
+    ]
 
 
 def test_bare_trusted_url_in_brackets_is_a_citation_but_unbound_url_still_rejects():
@@ -175,6 +183,15 @@ def test_bare_trusted_url_in_brackets_is_a_citation_but_unbound_url_still_reject
         )
 
 
+_RETRIEVED = [
+    "https://www.globenewswire.com/news-release/2026/10/09/1/0/en/a.html",
+    "https://www.tradingview.com/news/a/",
+    "https://www.sec.gov/Archives/edgar/data/1/a.htm",
+    "https://www.cnbc.com/2026/10/09/a.html",
+    "https://investor.kimberly-clark.com/news/a",
+]
+
+
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
@@ -184,9 +201,26 @@ def test_bare_trusted_url_in_brackets_is_a_citation_but_unbound_url_still_reject
         ("资料来自投资者关系网站（来源：investor.kimberly-clark.com）。", "资料来自投资者关系网站。"),
     ],
 )
-def test_bracketed_source_domains_leave_the_published_text(text, expected):
-    assert _news_field(text) == expected
-    assert _focus_field(text) == expected
+def test_bracketed_domains_of_retrieved_sites_leave_the_published_text(text, expected):
+    receipt = _luna_receipt(_RETRIEVED, summary_zh=text)
+    assert runtime.receipt_result(receipt, "news_impact", luna_payload())["summary_zh"] == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "公司公布融资安排。(globenewswire.com)",
+        "会议延期（sec.gov、othersite.com）至10月19日。",
+    ],
+)
+def test_bracketed_domains_without_a_retrieved_site_stay_for_the_language_gate(text):
+    receipt = _luna_receipt(_RETRIEVED[2:], summary_zh=text)
+    with pytest.raises(ValueError, match="english_prose_not_allowed"):
+        runtime.receipt_result(receipt, "news_impact", luna_payload())
+    with pytest.raises(ValueError, match="english_prose_not_allowed"):
+        _news_field(text)
+    with pytest.raises(ValueError, match="english_prose_not_allowed"):
+        _focus_field(text)
 
 
 @pytest.mark.parametrize(

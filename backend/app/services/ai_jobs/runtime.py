@@ -1412,6 +1412,13 @@ _PAREN_SOURCE_LINK = re.compile(
 _PAREN_BARE_URL = re.compile(
     r"[ \t]*(?P<open>[（(])(?P<url>https?://[^\s()（）<>\[\]]+)(?P<close>[）)])[ \t]*"
 )
+_HOSTNAME = r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}"
+# 括号里只写网站域名的来源标注：「。(globenewswire.com)」「（sec.gov、cnbc.com）」。
+_PAREN_SOURCE_DOMAINS = re.compile(
+    r"[ \t]*(?P<open>[（(])[ \t]*(?:来源[：:][ \t]*)?"
+    rf"(?P<hosts>{_HOSTNAME}(?:[ \t]*[、,，;；][ \t]*{_HOSTNAME})*)"
+    r"[ \t]*(?P<close>[）)])[ \t]*"
+)
 _NEWS_NARRATIVE_FIELDS = (
     "title_zh",
     "summary_zh",
@@ -1505,6 +1512,9 @@ def _normalize_luna_news_citations(
     )
     if not isinstance(data, dict):
         return output_text
+    trusted_hosts = {
+        (urlsplit(key).hostname or "").casefold() for key in trusted_keys
+    } - {""}
 
     def narrative(value: Any) -> Any:
         if not isinstance(value, str):
@@ -1530,6 +1540,16 @@ def _normalize_luna_news_citations(
             bound = _citation_url_key(match.group("url")) in trusted_keys
             return "" if bound and paired(match) else match.group(0)
 
+        def domains(match: re.Match[str]) -> str:
+            # Only the sites this response actually retrieved; any other
+            # bracketed domain stays in the text for the language gate.
+            labels = re.split(r"[ \t]*[、,，;；][ \t]*", match.group("hosts"))
+            bound = all(
+                any(host == label or host.endswith("." + label) for host in trusted_hosts)
+                for label in labels
+            )
+            return "" if bound and paired(match) else match.group(0)
+
         def link(match: re.Match[str]) -> str:
             return (
                 match.group("label")
@@ -1537,9 +1557,12 @@ def _normalize_luna_news_citations(
                 else match.group(0)
             )
 
-        normalized = _PAREN_BARE_URL.sub(
-            bare,
-            _MARKDOWN_SOURCE_LINK.sub(link, _PAREN_SOURCE_LINK.sub(standalone, value)),
+        normalized = _PAREN_SOURCE_DOMAINS.sub(
+            domains,
+            _PAREN_BARE_URL.sub(
+                bare,
+                _MARKDOWN_SOURCE_LINK.sub(link, _PAREN_SOURCE_LINK.sub(standalone, value)),
+            ),
         )
         if re.search(r"https?://", normalized, re.IGNORECASE):
             # Leave unknown and unsupported URLs in the original receipt and

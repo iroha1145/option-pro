@@ -141,3 +141,15 @@ def test_b3_field_names_are_published_in_chinese(text, changes, published):
 def test_b3_words_outside_the_payload_vocabulary_are_still_rejected(text, changes):
     with pytest.raises(ValueError, match="english_prose_not_allowed"):
         _news_field(text, **changes)
+
+
+# --- Suggestion: only domains of retrieved sites are removed ------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["开发者转向（node.js）生态。", "监管文件见（sec.gov/news.html）。"],
+)
+def test_bracketed_text_that_is_not_a_retrieved_site_is_not_deleted(text):
+    assert _news_field(text) == text
+    assert _focus_field(text, field="summary_zh") == text

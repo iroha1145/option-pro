@@ -692,16 +692,6 @@ _LETTER_GRADE = re.compile(
 )
 # 统计量写法「p<0.001」「n=712例」。
 _STATISTIC_COMPARISON = re.compile(r"^[ \t]*(?:<=|>=|[<>=≤≥＜＞＝])[ \t]*[0-9]")
-# 括号里只有网站域名的来源标注（「。(globenewswire.com)」「（sec.gov、cnbc.com）」）。
-# 来源由联网工具记录另行保存，域名不是叙述，也不留在发布文本里。
-_HOSTNAME = r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}"
-_SOURCE_DOMAIN_CITATION = re.compile(
-    r"[ \t]*[（(][ \t]*(?:来源[：:][ \t]*)?"
-    + _HOSTNAME
-    + r"(?:[ \t]*[、,，;；/][ \t]*"
-    + _HOSTNAME
-    + r")*[ \t]*[）)][ \t]*"
-)
 _NUMERIC_SUFFIX_HARD_BOUNDARIES = frozenset("；;。.!！?？%％")
 _SECURITY_REFERENCE_MARKERS = (
     "股价",
@@ -1985,11 +1975,7 @@ def validate_simplified_chinese_text(
     text = _REGULATORY_RULE_PREFIX.sub("规则", value.strip())
     if not text:
         raise ValueError("simplified_chinese_text_required")
-    scan_text = _SOURCE_DOMAIN_CITATION.sub(
-        "", _normalize_compatibility_alphanumerics(text)
-    ).strip()
-    if not scan_text:
-        raise ValueError("simplified_chinese_text_required")
+    scan_text = _normalize_compatibility_alphanumerics(text)
     compatibility_text = unicodedata.normalize("NFKC", scan_text)
     if any(
         marker in scan_text or marker in compatibility_text
