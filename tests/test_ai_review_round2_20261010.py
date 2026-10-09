@@ -176,11 +176,33 @@ def test_n2_a_retrieved_bare_domain_is_still_removed():
 
 @pytest.mark.parametrize(
     "text",
-    ["价格出现上冲回落（Upthrust）形态。", "公司首席执行官（CEO）辞职。", "电动垂直起降飞行器（eVTOL）获批。"],
+    [
+        "价格出现上冲回落（Upthrust）形态。",
+        "公司首席执行官（CEO）辞职。",
+        "电动垂直起降飞行器（eVTOL）获批。",
+        # Only www. hosts and hosts ending in a common lower-case top-level
+        # domain are host names; technical and company names stay glosses.
+        "开发者转向（node.js）生态。",
+        "前端框架（Vue.js）更新。",
+        "框架基于（ASP.NET）。",
+        "网络协议（TCP/IP）。",
+        "聊天机器人公司（Character.AI）获融资。",
+    ],
 )
 def test_n2_term_glosses_still_publish(text):
     assert _news_field(text) == text
     assert _focus_field(text, field="summary_zh") == text
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["公司公布融资安排（GlobeNewswire.com）。", "公司提交了文件（SEC.gov）。", "英国广播公司（bbc.co.uk）报道。"],
+)
+def test_n2_mixed_case_and_country_hosts_are_not_published(text):
+    with pytest.raises(ValueError):
+        _news_field(text)
+    with pytest.raises(ValueError):
+        _focus_field(text, field="summary_zh")
 
 
 # --- Suggestion 7. Benchmark rate names describe the rate itself --------------

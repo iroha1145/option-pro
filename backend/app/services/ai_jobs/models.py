@@ -654,9 +654,19 @@ _SECURITY_PRICE_MOVEMENTS = (
     "收涨",
     "收跌",
 )
-# 主机名或网址路径不是术语注释：「（sec.gov）」「（www.nvidia.com/zh-cn）」是来源
-# 标注，未经联网来源核对就不能借注释位发布。
-_HOSTNAME_SHAPE = re.compile(r"\.[A-Za-z]{2,}|/")
+# 括号里的主机名不是术语注释：「（sec.gov）」「（www.nvidia.com/zh-cn）」
+# 「（GlobeNewswire.com）」是来源标注，未经联网来源核对就不能借注释位发布。
+# 只认以 www. 开头、或最后一段是下列小写顶级域名的主机（可带路径）；
+# 「（node.js）」「（Character.AI）」这类技术名、公司名照旧算注释。
+_HOST_TOP_LEVEL_DOMAINS = (
+    "com", "net", "org", "gov", "edu", "io", "co", "xyz", "cn", "jp", "uk", "de",
+    "fr", "ca", "au", "info", "biz", "news", "app", "tv", "me", "us", "ai", "ly", "it",
+)
+_BRACKETED_HOSTNAME = re.compile(
+    r"(?:www\.[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*"
+    rf"|[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.(?:{'|'.join(_HOST_TOP_LEVEL_DOMAINS)}))"
+    r"(?:/\S*)?"
+)
 # IT 也是股票代码（高德纳），只有这些搭配才是信息技术的意思（「企业IT服务」）。
 _IT_CONTEXT_SUFFIXES = (
     "服务", "支出", "行业", "系统", "板块", "部门",
@@ -1549,14 +1559,14 @@ def _is_cjk_gloss_annotation(
     - 片段紧凑（≤24、无空白）且含小写字母或数字，或长度 ≥6；
     - 1–5 位全大写的代码形状**不进此通道**——未绑定证券代码不得借括号
       漂白，仍走代码绑定规则；prose word 同样拒绝；
-    - 主机名与网址路径（_HOSTNAME_SHAPE）也不进此通道。
+    - 主机名（可带路径，_BRACKETED_HOSTNAME）也不进此通道。
     """
 
     if not 1 < len(span) <= 24 or any(char.isspace() for char in span):
         return False
     if not any(char.isalpha() for char in span):
         return False
-    if _HOSTNAME_SHAPE.search(span) is not None:
+    if _BRACKETED_HOSTNAME.fullmatch(span) is not None:
         return False
     if span.isupper() and len(span) <= 5:
         return False

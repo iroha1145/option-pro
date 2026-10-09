@@ -10,7 +10,7 @@
 | `86a05b61` | 找回工具按时间批量重验本地回执 |
 | `3f4507ca` | 热点周期失败时保留原因 |
 
-分支开了 PR #237。独立审查之后追加了 10 个修正提交，复核之后又追加了 10 个，见「审查后的修正」与「复核后的修正」两节；下文各节写的都是修正后的行为。
+分支开了 PR #237。独立审查之后追加了 10 个修正提交，复核之后又追加了 10 个，另有一个按要求收窄 N2 的补充提交，见「审查后的修正」与「复核后的修正」两节；下文各节写的都是修正后的行为。
 
 ## 结论
 
@@ -45,7 +45,7 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
 ### 1. 括号里的来源域名（Luna 主因）
 
 - 根因：见结论第二条。归一化在 `runtime._normalize_luna_news_citations`。
-- 修法：标签按点号边界比对主机名（`sec.gov` 能匹配 `www.sec.gov`，`ec.gov` 不能），对得上的链接整段去掉；括号里受信的裸网址同样去掉；不在联网记录里的网址照旧以 `ai_news_unbound_or_unhandled_url` 拒绝，不为了过中文校验抹掉未核实的来源。括号里只写域名的来源标注（含「来源：」前缀、多个域名用顿号分隔），只有每个域名都与本次联网工具实际取回的来源主机按点号边界一致时才去掉。中文校验器本身不删除任何括号内容，但括号里的主机名或网址路径（点号后接两个以上字母，或带斜杠）不算「中文术语（外文标注）」，会被拒绝，例如「（reuters.com）」「（www.nvidia.com/zh-cn）」。
+- 修法：标签按点号边界比对主机名（`sec.gov` 能匹配 `www.sec.gov`，`ec.gov` 不能），对得上的链接整段去掉；括号里受信的裸网址同样去掉；不在联网记录里的网址照旧以 `ai_news_unbound_or_unhandled_url` 拒绝，不为了过中文校验抹掉未核实的来源。括号里只写域名的来源标注（含「来源：」前缀、多个域名用顿号分隔），只有每个域名都与本次联网工具实际取回的来源主机按点号边界一致时才去掉。中文校验器本身不删除任何括号内容，但括号里的主机名不算「中文术语（外文标注）」，会被拒绝。主机名指以 www. 开头、或最后一段是 com、net、org、gov 等 25 个常见小写顶级域名之一的写法，可带路径，例如「（reuters.com）」「（www.nvidia.com/zh-cn）」「（GlobeNewswire.com）」；「（node.js）」「（Character.AI）」不算主机名。
 - 测试：10 条生产回执重放；标签与链接不符时留下的「（ec.gov）」被拒；可信与不可信裸网址；不属于本次联网来源的括号主机名被拒而不是被删。
 
 ### 2. 字段名回显（article、source、http、unsupported）
@@ -183,7 +183,7 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
 
 | 项 | 提交 | 改动 | 反例测试 |
 | --- | --- | --- | --- |
-| 括号域名会删掉不是域名的内容 | `f9251db5` | 中文校验器不再删除括号内容；只有 Luna 回执里与本次联网来源主机一致的括号域名才去掉。 | 现名 `test_bracketed_hosts_that_are_not_retrieved_sites_are_rejected_not_deleted`（2 句，复核后改为断言拒绝，见 N2）；`tests/test_ai_analysis_fixes_20261010.py` 的 `test_bracketed_domains_without_a_retrieved_site_stay_for_the_language_gate`（2 句）与 `test_domain_label_must_name_the_linked_site` |
+| 括号域名会删掉不是域名的内容 | `f9251db5` | 中文校验器不再删除括号内容；只有 Luna 回执里与本次联网来源主机一致的括号域名才去掉。 | 现名 `test_bracketed_hosts_that_are_not_retrieved_sites_are_rejected_not_deleted`（复核后只留「（sec.gov/news.html）」并改为断言拒绝，「（node.js）」移到第二轮的正向测试，见 N2）；`tests/test_ai_analysis_fixes_20261010.py` 的 `test_bracketed_domains_without_a_retrieved_site_stay_for_the_language_gate`（2 句）与 `test_domain_label_must_name_the_linked_site` |
 | 「有没有正文」两处口径不同 | `79f31734` | 发布时的两处判断与 Claude 工具判断都改用 `news_article_available`。 | `test_a_blank_article_body_counts_as_missing_when_publishing` |
 | Luna 上下文窗口 | `5bfbd921` | 核对官方模型页后，联网输入上界按 1,050,000 计；缺正文身份随之变为 `cda8f76d…`。依据与数字见「Luna 联网门控」。 | `test_luna_search_reservation_uses_the_published_context_window` |
 | 当日词元账的方向写反 | 本次文档提交 | 审查时是每条在途的有正文任务少记 11,264（提交预留 139,264，账按 128,000）。上下文窗口修正后，同一口径变为每条多记 910,736。按审查意见只改文档。 | 无（未改代码） |
@@ -197,12 +197,12 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
 
 ## 复核后的修正
 
-复核在 `414be099` 上跑了 134 条样本，并用 183 个白名单名称逐个接 14 个新增涨跌词扫描，给出 1 个阻塞项、1 个应修项和 9 条建议。修正追加在 `414be099` 之后，没有改写历史。反例测试除注明的以外都在 `tests/test_ai_review_round2_20261010.py`，都在 `414be099` 的导出树上确认过会失败；正向和红线用例修正前后都通过。整份文件 133 项，在 `414be099` 上 101 项失败、32 项通过，在现在的代码上全部通过。
+复核在 `414be099` 上跑了 134 条样本，并用 183 个白名单名称逐个接 14 个新增涨跌词扫描，给出 1 个阻塞项、1 个应修项和 9 条建议。修正追加在 `414be099` 之后，没有改写历史。反例测试除注明的以外都在 `tests/test_ai_review_round2_20261010.py`，都在 `414be099` 的导出树上确认过会失败；正向和红线用例修正前后都通过。整份文件 141 项（含 N2 收窄时加的 8 项），在 `414be099` 上 104 项失败、37 项通过，在现在的代码上全部通过。
 
 | 项 | 提交 | 改动 | 反例测试 |
 | --- | --- | --- | --- |
 | N1 涨跌词表扩充误伤市场术语（阻塞） | `e15f4277` | 撤回 `f6169672` 补的 14 个涨跌词，恢复原来的 8 个；IT 的后缀限定保留，「高德纳（IT）暴跌20%」照旧被拒。 | `test_n1_review_sentences_publish_in_every_task`（复核给的 17 句，期权、信号、新闻各验一次）；`test_n1_market_vocabulary_takes_movement_words_in_every_task`（市场术语、宏观指标代码、基准利率名、技术术语接大涨、暴跌、飙升、反弹、走高、走低）；`test_n1_no_whitelisted_name_is_rejected_for_a_common_movement_word`（白名单逐个名称接 10 个常见涨跌词）。红线：`test_n1_unbound_codes_stay_rejected` |
-| N2 紧跟中文的括号主机名照常发布（应修） | `b9b04f04` | 「中文术语（外文标注）」通道拒绝主机名形状的片段：点号后接两个以上字母，或含斜杠。Luna 的引用归一化不变。 | `test_n2_bracketed_host_names_are_not_published`（6 句，新闻与热点各验一次）；`test_n2_luna_hosts_other_than_a_retrieved_bare_domain_are_rejected`（2 句）。正向：`test_n2_a_retrieved_bare_domain_is_still_removed`、`test_n2_term_glosses_still_publish` |
+| N2 紧跟中文的括号主机名照常发布（应修） | `b9b04f04`，之后的补充提交按要求收窄 | 「中文术语（外文标注）」通道拒绝括号里的主机名：以 www. 开头、或最后一段是常见小写顶级域名，可带路径。最初的写法（点号后接两个以上字母，或含斜杠）误伤「（node.js）」，补充提交收窄成现在这样。Luna 的引用归一化不变。 | `test_n2_bracketed_host_names_are_not_published`（6 句，新闻与热点各验一次）；`test_n2_luna_hosts_other_than_a_retrieved_bare_domain_are_rejected`（2 句）；`test_n2_mixed_case_and_country_hosts_are_not_published`（「（GlobeNewswire.com）」「（SEC.gov）」「（bbc.co.uk）」）。正向：`test_n2_a_retrieved_bare_domain_is_still_removed`、`test_n2_term_glosses_still_publish`（含「（node.js）」「（Vue.js）」「（ASP.NET）」「（TCP/IP）」「（Character.AI）」；收窄前 node.js、Vue.js、Character.AI 三句会失败） |
 | 建议 1 大写 P、N 统计写法 | `203da258` | P、N 接比较号再接数字、数字后不接币种时放行。 | `test_s1r2_upper_case_p_and_n_statistics_publish`（4 句）。红线：`test_s1r2_a_letter_compared_with_a_price_still_needs_binding` |
 | 建议 2 「股票」后的股数 | `deca6ddd` | 「股票」后接量级加股或币种、数字不是六位数时算数量。 | `test_s2r2_share_counts_after_the_word_stock_publish`（4 句）。红线：`test_s2r2_code_shaped_numbers_after_the_word_stock_still_need_binding` |
 | 建议 3 IT 搭配 | `004264fa` | 补基础设施、预算、投入、架构、运维、人员、资产、解决方案。 | `test_s3r2_more_it_phrases_publish`（8 句）。红线：`test_s3r2_it_in_security_context_still_needs_binding` |
@@ -217,7 +217,7 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
 
 - S2 去掉「Apple暴跌拖累科技股」：词表恢复后它与基线一样通过。测试改名为 `test_s2_it_outside_its_phrases_needs_binding`。
 - S3 的「试验结果P<0.001」从拒绝一侧移到通过一侧。拒绝一侧改名为 `test_s3_ticker_letters_and_other_symbols_take_no_comparison_exemption`。
-- 括号里的「（node.js）」「（sec.gov/news.html）」从「原样保留」改为断言拒绝，测试改名为 `test_bracketed_hosts_that_are_not_retrieved_sites_are_rejected_not_deleted`。`test_domain_label_must_name_the_linked_site` 里标签对不上链接时留下的「（ec.gov）」也改为断言拒绝。
+- 括号里的「（sec.gov/news.html）」从「原样保留」改为断言拒绝，测试改名为 `test_bracketed_hosts_that_are_not_retrieved_sites_are_rejected_not_deleted`；「（node.js）」在 N2 收窄后仍原样发布，移到第二轮的 `test_n2_term_glosses_still_publish`。`test_domain_label_must_name_the_linked_site` 里标签对不上链接时留下的「（ec.gov）」也改为断言拒绝。
 
 ### 与复核原文不同的地方
 
@@ -225,7 +225,7 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
 - 建议 7：按「走宏观指标代码那套例外」做，8 个名称列进了白名单，白名单从 183 个名称变为 191 个。这与「不加实体白名单」的原则不一致，是按复核的决定做的。
 - 建议 8：配置层按既有约定不引用服务层，门槛写成字面量 1,050,000（所有任务类型与模型里的最大预留），由测试核对它与 `runtime.token_reservation` 一致。只配 Claude 模型时实际最大预留是 1,000,000，这时 1,000,000 至 1,049,999 之间的额度也会被拒。
 - 建议 6：只改了新闻的翻译。热点的 as_of、catalyst_bias 等翻译是基线代码，没有加这项检查。
-- N2 的代价：带点号或斜杠的外文标注也会被拒，例如「（node.js）」「（ASP.NET）」「（TCP/IP）」。Luna 回执里引用了本次没取回的站点、或带路径的网址时，结果判 `schema_validation_failed`，找回工具也救不回来，这是复核要的结果。10 条生产 Luna 回执的重放不受影响。
+- N2：主机名的判定按复核要求收窄过一次，只认以 www. 开头、或最后一段是 com、net、org、gov 等 25 个常见顶级域名之一的写法，可带路径。复核原文要求整段全小写，但实测没有别的规则会拒「（GlobeNewswire.com）」「（SEC.gov）」，按全小写判定它们会原样发布，所以只要求顶级域名这一段是小写。结果：「（node.js）」「（Vue.js）」「（Character.AI）」照常发布；「（ASP.NET）」「（TCP/IP）」本来就由缩写规则放行，不经过这条规则（上一版说它们会被拒，说错了）；「（Booking.com）」这类以小写 .com 结尾的公司名作为注释会被拒，除非出现在来源文本里；「（Sec.Gov）」这种顶级域名也大写的写法会通过。Luna 回执里引用了本次没取回的站点、或带路径的网址时，结果判 `schema_validation_failed`，找回工具也救不回来，这是复核要的结果。10 条生产 Luna 回执的重放不受影响。
 
 ## 部署后操作
 
@@ -278,6 +278,7 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
 - `python -m compileall -q backend/app` 通过。
 - 审查修正后（代码到 `5bfbd921`）：完整后端测试 6,526 通过、7 跳过（7 个子测试通过），比变基后多 68 项；`compileall backend/app scripts` 通过，`git diff --check 82e2312d...HEAD` 干净。审查反例文件 66 项，在 `b21cf87c` 上 46 项失败、20 项通过（正向与红线用例），在现在的代码上全部通过。三个库的建表文本、版本名与校验和没有变动。
 - 复核修正后（代码到 `e23f0fdf`）：完整后端测试 6,658 通过、7 跳过（7 个子测试通过），比第一轮修正后多 132 项；`compileall backend/app scripts` 通过，`git diff --check 82e2312d...HEAD` 干净；建表文本、版本名与校验和仍没有变动。
+- N2 收窄后：完整后端测试 6,665 通过、7 跳过（7 个子测试通过），多出的 7 项是新增的 8 项减去第一轮移走的「（node.js）」一项；`compileall backend/app scripts` 通过，`git diff --check 82e2312d...HEAD` 干净。
 
 ## 未覆盖
 
