@@ -662,11 +662,18 @@ _SECURITY_REFERENCE_PREFIX = re.compile(
     r"股票|普通股|股份|个股|证券)(?:为|是)?$"
 )
 _NUMERIC_CONTEXT_BOUNDARIES = frozenset("，,；;。.!！?？%％、")
-# 数字后紧跟数量级、币种、百分号或倍数时是数量，不是证券代码：「发现矿业股份
-# 5000万美元」（2026-10-09 热点周期被拒）。「股」只在不接价、票、份时算单位。
+# 数字后接「量级加币种或股」（「发现矿业股份5000万美元」「300万股」，2026-10-09
+# 热点周期被拒），或直接接币种、百分号（「500美元」「股份5%」）时是数量，不是
+# 证券代码。量级后面不是计量单位就不算（「600309 万华化学」「300014亿纬锂能」），
+# 「股」后接东、本、权、份、票、价时也不是单位。
+_CURRENCY_UNITS = r"美元|美分|港元|港币|欧元|日元|英镑|人民币|元"
 _NUMERIC_QUANTITY_SUFFIX = re.compile(
-    r"^[ \t]*(?:[万亿千百]|美元|美分|港元|港币|欧元|日元|英镑|元|%|％|‰|倍|股(?![价票份]))"
+    rf"^[ \t]*(?:[万亿千百]+[ \t]*(?:{_CURRENCY_UNITS}|股(?![东本权份票价]))"
+    rf"|(?:{_CURRENCY_UNITS})|[%％])"
 )
+# 这些词后面的数字只会是证券代码，数量写法不豁免（「股票600519万股」）；
+# 0 开头的五位数（港股代码）在更前面就已判定。
+_NUMERIC_CODE_ONLY_PREFIX = re.compile(r"(?:代码|编号|股票|港股|个股)(?:为|是)?$")
 # 分号隔开的是另一个分句：「流通股份；Hexa Creation聚焦……」里的「股份」不指向
 # 分号后的名称。逗号仍连着同一分句，照旧计入证券语境。
 _CLAUSE_BREAKS = frozenset("；;")
@@ -1854,8 +1861,6 @@ def _numeric_code_is_in_security_context(
         return False
     if _FORMATTED_NUMBER_CONTINUATION.match(sentence[end:]) is not None:
         return False
-    if _NUMERIC_QUANTITY_SUFFIX.match(sentence[end:]) is not None:
-        return False
     if len(span) == 5 and span.startswith("0"):
         return True
     before_index = start - 1
@@ -1889,6 +1894,11 @@ def _numeric_code_is_in_security_context(
         else _normalize_security_reference_phrase(sentence[after_index:])
     )
     if len(span) == 4 and suffix.startswith(("年", "年度", "财年")):
+        return False
+    if (
+        _NUMERIC_QUANTITY_SUFFIX.match(sentence[end:]) is not None
+        and _NUMERIC_CODE_ONLY_PREFIX.search(prefix) is None
+    ):
         return False
     return (
         _SECURITY_REFERENCE_PREFIX.search(prefix) is not None
