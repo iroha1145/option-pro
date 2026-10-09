@@ -329,3 +329,44 @@ def test_s6r2_text_without_chinese_is_rejected_not_translated(text, field, chang
 
 def test_s6r2_field_names_inside_chinese_text_are_still_translated():
     assert _news_field("原文title与url均来自输入。") == "原文标题与网址均来自输入。"
+
+
+# --- Suggestion 8. The token-only budget admits the largest task -------------
+
+
+def _personal_config(**sections):
+    from app.personal_config import PersonalConfig
+
+    return PersonalConfig.model_validate(sections)
+
+
+_LUNA_NEWS = {"model": "claude-haiku-5-5", "reasoning": "xhigh", "news_model": "gpt-5.6-luna", "news_reasoning": "max"}
+
+
+def test_s8r2_the_config_mirror_is_the_largest_task_reservation():
+    from app.personal_config import LARGEST_TASK_TOKEN_RESERVATION
+    from app.services.model_budget import JOB_MODELS
+
+    assert LARGEST_TASK_TOKEN_RESERVATION == max(
+        runtime.token_reservation(job_type, model=model)
+        for job_type in runtime.AI_TASK_MAX_OUTPUT_TOKENS
+        for model in JOB_MODELS
+    ) == runtime.token_reservation("news_impact", model=runtime.LUNA_MODEL)
+
+
+@pytest.mark.parametrize("limit", [102_400, 1_049_999])
+def test_s8r2_token_only_budget_below_one_task_is_a_config_error(limit):
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="largest single-task token reservation 1050000"):
+        _personal_config(ai={**_LUNA_NEWS, "daily_token_limit": limit}, model_budget={"daily_budget_usd": 0})
+
+
+@pytest.mark.parametrize(
+    ("limit", "shared_budget"),
+    [(1_050_000, 0), (10_000_000, 0), (102_400, 10.0)],
+)
+def test_s8r2_limits_that_admit_one_task_or_a_shared_budget_are_accepted(limit, shared_budget):
+    _personal_config(
+        ai={**_LUNA_NEWS, "daily_token_limit": limit}, model_budget={"daily_budget_usd": shared_budget},
+    )

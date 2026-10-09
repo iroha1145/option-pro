@@ -26,7 +26,8 @@ daily_max_jobs = 0
 daily_budget_usd = 0.0
 # 日词元额度只在 model_budget.daily_budget_usd = 0 时拦截：用满后当天新任务记
 # budget_blocked，次日（UTC）由调度重试。取值 102400 至 100000000；0 不是
-# 「不限」，配置校验会直接拒绝。
+# 「不限」，配置校验会直接拒绝。这时额度还不能低于单条任务的最大词元预留
+# 1050000（缺正文的 Luna 新闻），否则配置校验报错。
 daily_token_limit = 10000000
 execution_mode = "background"
 
