@@ -1103,10 +1103,8 @@ def prepare_background(
 
 def claude_tools_for(job_type: str, payload: dict[str, Any], *, model: str | None = None) -> list[dict[str, Any]]:
     """Make tools available where missing evidence or calculation can help."""
-    if job_type == "news_impact":
-        article = payload.get("article")
-        if isinstance(article, dict) and str(article.get("text") or "").strip():
-            return []
+    if job_type == "news_impact" and news_article_available(payload):
+        return []
     if job_type not in AI_TASK_MAX_OUTPUT_TOKENS:
         raise ValueError("unsupported_job_type")
     tools: list[dict[str, Any]] = [{
@@ -1638,7 +1636,7 @@ def openai_receipt(response: Any) -> dict[str, Any]:
 
 def receipt_result(receipt: dict[str, Any], job_type: str, payload: dict[str, Any]) -> dict[str, Any]:
     if (receipt["provider"] == "openai" and receipt["model"] == LUNA_MODEL
-            and job_type == "news_impact" and not payload.get("article")
+            and job_type == "news_impact" and not news_article_available(payload)
             and not receipt.get("evidence_sources")):
         # No provider evidence: do not publish unsupported model claims, even
         # when the model forgot to mark its output as insufficient.
@@ -1657,7 +1655,7 @@ def receipt_result(receipt: dict[str, Any], job_type: str, payload: dict[str, An
         output_text = _normalize_luna_news_citations(output_text, payload, trusted_keys)
     result = validate_result(job_type, output_text, payload)
     if (receipt["provider"] == "openai" and job_type == "news_impact"
-            and not payload.get("article") and receipt.get("evidence_sources")):
+            and not news_article_available(payload) and receipt.get("evidence_sources")):
         note = "原始正文未取得；分析采用另行联网检索的来源，请查阅来源链接。"
         result["uncertainty_notes"] = [*result["uncertainty_notes"][:29], note]
     return result

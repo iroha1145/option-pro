@@ -316,3 +316,27 @@ def test_s4_limit_outside_its_range_is_a_usage_error(tmp_path, monkeypatch, caps
     assert raised.value.code == 2
     error = capsys.readouterr().err
     assert "argument --limit" in error and "Traceback" not in error
+
+
+# --- Suggestion: one rule decides whether the article body was obtained -------
+
+
+def test_a_blank_article_body_counts_as_missing_when_publishing():
+    from test_luna_news_web_fallback import payload as luna_payload
+    from test_luna_news_web_fallback import response as luna_response
+    from test_luna_news_web_fallback import search
+
+    blank = {**_ARTICLE, "text": "  "}
+    data = {**luna_payload(), "article_status": "available", "article": blank}
+    # The request gate already treats a blank body as missing and searches.
+    assert runtime.task_uses_web_search("news_impact", data, model=runtime.LUNA_MODEL)
+    assert runtime.claude_tools_for("news_impact", data)
+
+    unsupported = runtime.receipt_result(runtime.openai_receipt(luna_response()), "news_impact", data)
+    assert unsupported["insufficient_context"] is True
+    assert unsupported["affected_stocks"] == []
+
+    searched = runtime.receipt_result(
+        runtime.openai_receipt(luna_response(calls=[search()])), "news_impact", data,
+    )
+    assert searched["uncertainty_notes"][-1] == "原始正文未取得；分析采用另行联网检索的来源，请查阅来源链接。"
