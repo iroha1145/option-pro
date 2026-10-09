@@ -10,7 +10,11 @@ from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
 from typing import Any
 
-from app.execution_limits import BREAKOUT_TASK_TIMEOUT_SECONDS
+from app.execution_limits import (
+    AI_JOBS_SUPERVISOR_MARGIN_SECONDS,
+    AI_JOBS_TASK_TIMEOUT_SECONDS,
+    BREAKOUT_TASK_TIMEOUT_SECONDS,
+)
 from app.failure_diagnostics import record_fallback_failure
 from app.services.ai_jobs import runtime
 from app.services.ai_jobs.models import InvalidJobPayloadError
@@ -67,6 +71,15 @@ async def _finish_claude_receipt(
     await _with_storage_retry(repository.complete, job["job_id"], owner, result, usage)
 
 
+def _paid_stream_seconds(settings: Any) -> float:
+    """The paid wait limit, kept inside the worker supervisor's pass timeout."""
+
+    return min(
+        float(settings.openai_background_poll_timeout_seconds),
+        AI_JOBS_TASK_TIMEOUT_SECONDS - AI_JOBS_SUPERVISOR_MARGIN_SECONDS,
+    )
+
+
 async def _stream_claude_with_controls(
     repository: AIJobRepository,
     settings: Any,
@@ -99,7 +112,7 @@ async def _stream_claude_with_controls(
         else stream_message(prepared, on_message_start=started)
     )
     operation = asyncio.create_task(invocation)
-    deadline = time.monotonic() + float(settings.openai_background_poll_timeout_seconds)
+    deadline = time.monotonic() + _paid_stream_seconds(settings)
     try:
         while True:
             remaining = deadline - time.monotonic()

@@ -18,7 +18,7 @@ from typing import Any, Awaitable, Callable, Mapping, Sequence
 from app.access import bind_trusted_system_task
 from app.failure_diagnostics import record_fallback_failure
 from app.data_paths import get_data_paths
-from app.execution_limits import BREAKOUT_TASK_TIMEOUT_SECONDS
+from app.execution_limits import AI_JOBS_TASK_TIMEOUT_SECONDS, BREAKOUT_TASK_TIMEOUT_SECONDS
 from app.personal_config import get_personal_config
 
 from .inventory import DEFAULT_TASK_NAMES
@@ -4211,7 +4211,7 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
             "ai_jobs",
             ai,
             interval_seconds=AI_JOBS_IDLE_SECONDS,
-            timeout_seconds=2000.0,
+            timeout_seconds=AI_JOBS_TASK_TIMEOUT_SECONDS,
             drain_on_shutdown=True,
             wake_probe=AIJobRepository(
                 settings.openai_job_db_path

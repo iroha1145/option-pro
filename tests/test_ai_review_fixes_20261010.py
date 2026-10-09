@@ -204,3 +204,38 @@ def test_s3_upper_case_letters_and_other_symbols_take_no_comparison_exemption(te
 )
 def test_s3_statistic_notation_still_passes(text):
     assert _news_field(text) == text
+
+
+# --- S1. The worker supervisor never cuts a paid wait short -------------------
+
+
+def _ai_jobs_task_timeout(tmp_path) -> float:
+    from app.worker.tasks import build_default_tasks
+    from test_macro_worker import _settings as worker_settings
+
+    specs = build_default_tasks("review", settings=worker_settings(tmp_path))
+    return next(spec.timeout_seconds for spec in specs if spec.name == "ai_jobs")
+
+
+def test_s1_ai_jobs_pass_outlasts_the_default_paid_wait(tmp_path):
+    from app.config import Settings
+
+    paid_wait = Settings.model_fields["openai_background_poll_timeout_seconds"].default
+    # A paid Claude stream needs room to finish before the supervisor's
+    # asyncio.wait_for cancels the whole pass (and every other slot in it).
+    assert _ai_jobs_task_timeout(tmp_path) >= paid_wait + 300.0
+
+
+@pytest.mark.parametrize("configured", [60.0, 3600.0, 86_400.0])
+def test_s1_paid_stream_deadline_stays_inside_the_pass(tmp_path, configured):
+    from types import SimpleNamespace
+
+    from app.execution_limits import AI_JOBS_SUPERVISOR_MARGIN_SECONDS
+    from app.services.ai_jobs import worker
+
+    task_timeout = _ai_jobs_task_timeout(tmp_path)
+    seconds = worker._paid_stream_seconds(
+        SimpleNamespace(openai_background_poll_timeout_seconds=configured)
+    )
+    assert seconds == min(configured, task_timeout - AI_JOBS_SUPERVISOR_MARGIN_SECONDS)
+    assert seconds <= task_timeout - AI_JOBS_SUPERVISOR_MARGIN_SECONDS
