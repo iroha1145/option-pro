@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -21,6 +22,7 @@ _TRACKING_KEYS = {
     "vero_conv", "vero_id", "mkt_tok", "oly_anon_id", "oly_enc_id",
     "ref_src", "ref_url", "spm", "yclid",
 }
+_NUMBER_RE = re.compile(r"\b\d+(?:\.\d+)?%?\b")
 _PUBLISHER_SUFFIX = re.compile(
     r"\s+[-–—|]\s+([A-Z][A-Za-z.&'’]*(?:\s+[A-Z&][A-Za-z.&'’]*){0,3})\s*\Z"
 )
@@ -94,25 +96,42 @@ def compute_content_hash(title: str, url: str = "", published_at: object = None)
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
-def similar_titles(left: str, right: str, threshold: float = 0.92) -> bool:
-    if left == right:
+@dataclass(frozen=True)
+class PreparedTitle:
+    """A normalized title with the word and number sets the comparison needs."""
+
+    text: str
+    tokens: frozenset[str]
+    numbers: frozenset[str]
+
+
+def prepare_title(title: str) -> PreparedTitle:
+    return PreparedTitle(title, frozenset(title.split()), frozenset(_NUMBER_RE.findall(title)))
+
+
+def similar_prepared(
+    left: PreparedTitle,
+    right: PreparedTitle,
+    threshold: float = 0.92,
+) -> bool:
+    if left.text == right.text:
         return True
-    left_tokens = set(left.split())
-    right_tokens = set(right.split())
-    left_numbers = set(re.findall(r"\b\d+(?:\.\d+)?%?\b", left))
-    right_numbers = set(re.findall(r"\b\d+(?:\.\d+)?%?\b", right))
-    if left_numbers != right_numbers:
+    if left.numbers != right.numbers:
         return False
-    union = left_tokens | right_tokens
-    token_similarity = len(left_tokens & right_tokens) / len(union) if union else 0
+    union = left.tokens | right.tokens
+    token_similarity = len(left.tokens & right.tokens) / len(union) if union else 0
     if token_similarity >= threshold:
         return True
     return token_similarity >= 0.75 and SequenceMatcher(
         None,
-        left,
-        right,
+        left.text,
+        right.text,
         autojunk=False,
     ).ratio() >= threshold
+
+
+def similar_titles(left: str, right: str, threshold: float = 0.92) -> bool:
+    return similar_prepared(prepare_title(left), prepare_title(right), threshold)
 
 
 def strip_publisher_suffix(title: str) -> str:

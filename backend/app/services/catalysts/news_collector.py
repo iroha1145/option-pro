@@ -8,7 +8,8 @@ single transaction. Its own bookkeeping lives in the ``catalyst_ingest_*``
 tables, versioned separately so the ETL schema checksum never changes.
 
 Duplicates are found by content hash or canonical URL first, then by fuzzy
-title within the item's UTC publication day. A corroborating source records
+title among news published within 36 hours of the item, so a story that
+crosses UTC midnight is still one item. A corroborating source records
 an observation. It appends a change (new ``sources`` or tickers; title,
 summary and URL unchanged) only while the item has no analysis link, was
 first seen less than six hours ago and was never extended before. Items that
@@ -24,7 +25,7 @@ import json
 import sqlite3
 from contextlib import closing
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Literal, Mapping
 from urllib.parse import quote
@@ -44,11 +45,12 @@ from .calendar_source import (
 from .etl_repository import CatalystEtlRepository
 from .ingest_models import NEWS_PAGE_LIMIT, NewsChangesPage, RawNewsItem
 from .news_dedup import (
+    PreparedTitle,
     compute_content_hash,
     fuzzy_title,
     normalize_url,
-    publication_bucket,
-    similar_titles,
+    prepare_title,
+    similar_prepared,
 )
 from .news_sources import (
     MAX_URL_CHARS,
@@ -100,11 +102,11 @@ CREATE TABLE IF NOT EXISTS catalyst_ingest_keys (
 
 CREATE TABLE IF NOT EXISTS catalyst_ingest_titles (
     news_id INTEGER PRIMARY KEY CHECK(news_id >= 1),
-    bucket TEXT NOT NULL,
+    seen_at TEXT NOT NULL,
     title TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_catalyst_ingest_titles_bucket
-    ON catalyst_ingest_titles(bucket,news_id);
+CREATE INDEX IF NOT EXISTS idx_catalyst_ingest_titles_seen
+    ON catalyst_ingest_titles(seen_at);
 
 CREATE TABLE IF NOT EXISTS catalyst_ingest_items (
     news_id INTEGER PRIMARY KEY CHECK(news_id >= 1),
@@ -137,6 +139,7 @@ FRESH_AT_LEAST = timedelta(minutes=30)
 ROUND_BUDGET_SECONDS = 60.0
 SOURCE_TIMEOUT_SECONDS = 45.0
 CORROBORATION_WINDOW = timedelta(hours=6)
+TITLE_WINDOW = timedelta(hours=36)
 MAX_BACKOFF = timedelta(hours=1)
 MAX_SOURCES_PER_ITEM = 500
 MAX_TICKERS_PER_ITEM = 100
@@ -199,7 +202,48 @@ class _Taken:
     minted: bool = False
     corroborated: bool = False
     entry: _PendingChange | None = None
-    title: tuple[str, str] | None = None
+    title: tuple[datetime, PreparedTitle] | None = None
+
+
+class _TitlePool:
+    """Fuzzy-match candidates near an item's time, read a UTC day at a time."""
+
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self._connection = connection
+        self._days: dict[date, list[tuple[int, datetime, PreparedTitle]]] = {}
+
+    def _day(self, day: date) -> list[tuple[int, datetime, PreparedTitle]]:
+        if day not in self._days:
+            start = datetime.combine(day, time.min, tzinfo=timezone.utc)
+            rows = self._connection.execute(
+                """SELECT news_id,seen_at,title FROM catalyst_ingest_titles
+                   WHERE seen_at>=? AND seen_at<?""",
+                (utc_micros(start), utc_micros(start + timedelta(days=1))),
+            )
+            self._days[day] = [
+                (int(row[0]), seen, prepare_title(str(row[2])))
+                for row in rows
+                if (seen := parse_utc(row[1])) is not None
+            ]
+        return self._days[day]
+
+    def match(self, title: PreparedTitle, seen_at: datetime) -> int | None:
+        low, high = seen_at - TITLE_WINDOW, seen_at + TITLE_WINDOW
+        candidates: list[tuple[int, datetime, PreparedTitle]] = []
+        day = low.date()
+        while day <= high.date():
+            candidates.extend(entry for entry in self._day(day) if low <= entry[1] <= high)
+            day += timedelta(days=1)
+        candidates.sort(key=lambda entry: entry[0])
+        return next(
+            (news_id for news_id, _, candidate in candidates if similar_prepared(title, candidate)),
+            None,
+        )
+
+    def add(self, news_id: int, seen_at: datetime, title: PreparedTitle) -> None:
+        loaded = self._days.get(seen_at.date())
+        if loaded is not None:
+            loaded.append((news_id, seen_at, title))
 
 
 def utc_now() -> datetime:
@@ -414,9 +458,9 @@ class NewsCollector:
             if url:
                 keys.append((f"url:{url}", news_id))
             title = fuzzy_title(str(row["title"] or ""))
-            if title:
-                bucket = publication_bucket(row["published_at"] or row["fetched_at"])
-                titles.append((news_id, bucket, title))
+            seen_at = parse_utc(row["published_at"]) or parse_utc(row["fetched_at"])
+            if title and seen_at is not None:
+                titles.append((news_id, utc_micros(seen_at), title))
         connection.executemany(
             """INSERT INTO catalyst_ingest_items(news_id,first_seen_at,preexisting)
                VALUES(?,?,1)""",
@@ -427,7 +471,7 @@ class NewsCollector:
             keys,
         )
         connection.executemany(
-            "INSERT OR IGNORE INTO catalyst_ingest_titles(news_id,bucket,title) VALUES(?,?,?)",
+            "INSERT OR IGNORE INTO catalyst_ingest_titles(news_id,seen_at,title) VALUES(?,?,?)",
             titles,
         )
         return len(rows)
@@ -681,7 +725,7 @@ class NewsCollector:
         checkpoint_text = utc_micros(checkpoint)
         next_news_id = self._next_news_id(connection)
         linked = bool(_tables(connection, "catalyst_local_analysis_links"))
-        buckets: dict[str, list[tuple[str, int]]] = {}
+        pool = _TitlePool(connection)
         pending: dict[int, _PendingChange] = {}
         stats = {"new": 0, "corroborated": 0, "observed": 0}
         invalid: dict[str, int] = {}
@@ -703,7 +747,7 @@ class NewsCollector:
                         checkpoint_text=checkpoint_text,
                         next_news_id=next_news_id,
                         linked=linked,
-                        buckets=buckets,
+                        pool=pool,
                         pending=pending,
                     )
                 except (ValueError, TypeError, sqlite3.IntegrityError) as error:
@@ -719,8 +763,7 @@ class NewsCollector:
                 if taken.entry is not None:
                     pending[taken.news_id] = taken.entry
                 if taken.title is not None:
-                    bucket, title_key = taken.title
-                    buckets.setdefault(bucket, []).append((title_key, taken.news_id))
+                    pool.add(taken.news_id, *taken.title)
                 if taken.minted:
                     stats["new"] += 1
                     next_news_id += 1
@@ -779,7 +822,7 @@ class NewsCollector:
         checkpoint_text: str,
         next_news_id: int,
         linked: bool,
-        buckets: dict[str, list[tuple[str, int]]],
+        pool: _TitlePool,
         pending: dict[int, _PendingChange],
     ) -> _Taken | None:
         """Observe one source item inside the caller's savepoint.
@@ -802,8 +845,12 @@ class NewsCollector:
             raise ValueError("source item has no usable URL")
         content_hash = compute_content_hash(item.title, url, item.published_at)
         title_key = fuzzy_title(item.title)
-        bucket = publication_bucket(item.published_at or fetched_at)
-        news_id = self._match(connection, content_hash, url, title_key, bucket, buckets)
+        title = prepare_title(title_key) if title_key else None
+        seen_at = parse_utc(item.published_at) or parse_utc(fetched_at)
+        assert seen_at is not None
+        news_id = self._match(connection, content_hash, url)
+        if news_id is None and title is not None:
+            news_id = pool.match(title, seen_at)
         taken = _Taken(news_id=news_id or next_news_id)
         if news_id is None:
             taken.minted = True
@@ -827,11 +874,11 @@ class NewsCollector:
                 url=url,
                 content_hash=content_hash,
                 title_key=title_key,
-                bucket=bucket,
+                seen_at=seen_at,
                 first_seen_at=checkpoint_text,
             )
-            if title_key:
-                taken.title = (bucket, title_key)
+            if title is not None:
+                taken.title = (seen_at, title)
         elif news_id in pending:
             taken.entry = self._merged(pending[news_id], item)
         else:
@@ -860,14 +907,7 @@ class NewsCollector:
         return taken
 
     @staticmethod
-    def _match(
-        connection: sqlite3.Connection,
-        content_hash: str,
-        url: str,
-        title_key: str,
-        bucket: str,
-        buckets: dict[str, list[tuple[str, int]]],
-    ) -> int | None:
+    def _match(connection: sqlite3.Connection, content_hash: str, url: str) -> int | None:
         for key in (f"hash:{content_hash}", f"url:{url}"):
             row = connection.execute(
                 "SELECT news_id FROM catalyst_ingest_keys WHERE dedup_key=?",
@@ -875,21 +915,7 @@ class NewsCollector:
             ).fetchone()
             if row is not None:
                 return int(row[0])
-        if not title_key:
-            return None
-        if bucket not in buckets:
-            buckets[bucket] = [
-                (str(row[0]), int(row[1]))
-                for row in connection.execute(
-                    """SELECT title,news_id FROM catalyst_ingest_titles
-                       WHERE bucket=? ORDER BY news_id""",
-                    (bucket,),
-                )
-            ]
-        return next(
-            (news_id for title, news_id in buckets[bucket] if similar_titles(title_key, title)),
-            None,
-        )
+        return None
 
     @staticmethod
     def _mint(
@@ -899,7 +925,7 @@ class NewsCollector:
         url: str,
         content_hash: str,
         title_key: str,
-        bucket: str,
+        seen_at: datetime,
         first_seen_at: str,
     ) -> None:
         connection.execute(
@@ -913,8 +939,8 @@ class NewsCollector:
         )
         if title_key:
             connection.execute(
-                "INSERT INTO catalyst_ingest_titles(news_id,bucket,title) VALUES(?,?,?)",
-                (news_id, bucket, title_key),
+                "INSERT INTO catalyst_ingest_titles(news_id,seen_at,title) VALUES(?,?,?)",
+                (news_id, utc_micros(seen_at), title_key),
             )
 
     @staticmethod

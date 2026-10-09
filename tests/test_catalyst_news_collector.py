@@ -654,6 +654,40 @@ def test_malformed_items_are_skipped_and_the_rest_of_the_round_lands(tmp_path):
     ) == [("2026-10-09T11:30:00Z", 0, None)]
 
 
+def test_fuzzy_matching_spans_utc_midnight_but_not_more_than_36_hours(tmp_path):
+    feeds = Feeds()
+    clock = Clock(T0)
+    collector = _collector(tmp_path, feeds, clock, "massive", "finnhub_general", "google_news_stocks")
+    title = "Nvidia stock jumps after earnings beat expectations"
+    feeds.batches["massive"] = NewsBatch(
+        (_item("m1", title, published_at="2026-10-08T23:50:00Z"),)
+    )
+    _round(collector)
+    clock.advance(minutes=10)
+    feeds.batches["massive"] = NewsBatch()
+    # Same story, ten minutes after midnight: another day bucket and content hash.
+    feeds.batches["finnhub_general"] = NewsBatch(
+        (
+            _item(
+                "f1",
+                "Nvidia stock surges after earnings beat expectations",
+                source="finnhub/CNBC",
+                published_at="2026-10-09T00:20:00Z",
+            ),
+        )
+    )
+    feeds.batches["google_news_stocks"] = NewsBatch(
+        (_item("g1", title, source="google/Reuters", published_at="2026-10-10T12:00:00Z"),)
+    )
+
+    outcome = _round(collector, force=True)
+
+    assert outcome.metrics["new"] == 1
+    assert dict(
+        _query(collector.repository, "SELECT source_key,news_id FROM catalyst_ingest_observations")
+    ) == {"massive": 1, "finnhub_general": 1, "google_news_stocks": 2}
+
+
 def test_initialize_is_idempotent_and_versions_its_own_schema(tmp_path):
     feeds = Feeds()
     collector = _collector(tmp_path, feeds, Clock(T0))
