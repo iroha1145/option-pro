@@ -1893,6 +1893,7 @@ export const EN: Record<string, string> = {
   "AI 生成于": "AI-generated at",
   "资料不足": "Insufficient information",
   "资料不足，暂不判断方向与置信度": "Insufficient information to assess direction or confidence",
+  "核验于 {time}": "Verified {time}",
   "信息不足 · 未调用模型": "Insufficient info · model not called",
   "这条新闻信息量不足，未做 AI 分析": "This news item doesn't contain enough information, so no AI analysis was run.",
   "登录后可用模型分析": "Sign in to use model analysis",

@@ -515,6 +515,7 @@ function nHotspot(r: Rec): HotspotGroup {
         : null,
       tickers: Array.isArray(r.validated_tickers) ? (r.validated_tickers as string[]) : [],
       updatedAt: pickS(r, 'prepared_at', 'available_at') ?? '',
+      verifiedAt: pickS(r, 'verified_at'),
     };
   }
   // mock 契约

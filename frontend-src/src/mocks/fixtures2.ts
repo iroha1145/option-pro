@@ -993,6 +993,7 @@ export interface CatalystNewsItem {
 }
 
 export interface HotspotGroup {
+  verifiedAt?: string | null;
   hotspotId: string;
   theme: string;
   keywords: string[];
