@@ -670,7 +670,11 @@ _NUMERIC_QUANTITY_SUFFIX = re.compile(
 # 分号隔开的是另一个分句：「流通股份；Hexa Creation聚焦……」里的「股份」不指向
 # 分号后的名称。逗号仍连着同一分句，照旧计入证券语境。
 _CLAUSE_BREAKS = frozenset("；;")
-# 浮动利率写法「复合SOFR加1.730%」：缩写后接利差，是基准利率名。
+# 浮动利率写法「复合SOFR加1.730%」「LIBOR加150个基点」。只认下列基准利率名；
+# 其他缩写后接「+3.5%」「减2%」是涨跌（「盘前TSLA +3.5%」），照旧要求代码绑定。
+_RATE_BENCHMARK_NAMES = frozenset(
+    {"ESTR", "EURIBOR", "HIBOR", "LIBOR", "SHIBOR", "SOFR", "SONIA", "TONA"}
+)
 _RATE_BENCHMARK_SPREAD = re.compile(
     r"^[ \t]*(?:加|减|[+＋\-－])[ \t]*[0-9]+(?:\.[0-9]+)?[ \t]*"
     r"(?:%|％|个?基点|bps?(?![A-Za-z]))"
@@ -1191,7 +1195,10 @@ def _is_contextual_initialism(
         for token in prose_tokens
     ):
         return False
-    rate_spread = _RATE_BENCHMARK_SPREAD.match(sentence[end:]) is not None
+    rate_spread = (
+        span in _RATE_BENCHMARK_NAMES
+        and _RATE_BENCHMARK_SPREAD.match(sentence[end:]) is not None
+    )
     if span.isalpha() and len(span) > 4 and not rate_spread:
         return False
     if not any(_is_cjk(char) for char in sentence):
