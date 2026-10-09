@@ -767,6 +767,13 @@ _CATALYST_MIN_DELAY_SECONDS = 2.0
 
 
 class CatalystSyncTask:
+    """Collect news and the calendar, then reconcile the local catalyst store.
+
+    ``catalyst.news_source`` picks the writer: the local collector polls the
+    sources itself (``source_fetchers`` maps a source key to its fetch
+    function); ``macrolens`` keeps the remote ETL sync for a rollback.
+    """
+
     def __init__(
         self,
         owner_id: str,
@@ -774,6 +781,7 @@ class CatalystSyncTask:
         settings: Any,
         personal_config: Any | None = None,
         etl_transport: Any | None = None,
+        source_fetchers: Mapping[str, Any] | None = None,
         intelligence_factory: Any | None = None,
         initial_sync_complete: asyncio.Event | None = None,
     ) -> None:
@@ -785,28 +793,61 @@ class CatalystSyncTask:
         self._runtime_settings = settings
         self._personal_config = personal_config or get_personal_config()
         self._etl_transport = etl_transport
+        self._source_fetchers = source_fetchers
         self._intelligence_factory = intelligence_factory
         self._initial_sync_complete = initial_sync_complete
         self._mode: str | None = None
         self._repository: Any = None
         self._client: Any = None
         self._service: Any = None
+        self._collector: Any = None
         self._intelligence: Any = None
         self._last_personal_sync_monotonic: float | None = None
         self._last_journal_prune_monotonic: float | None = None
+
+    async def _prepare_local(self) -> str:
+        from app.services.catalysts.etl_repository import CatalystEtlRepository
+        from app.services.catalysts.news_collector import NewsCollector, default_fetchers
+        from app.services.catalysts.news_sources import http_client
+
+        fetchers = self._source_fetchers
+        client = None
+        if fetchers is None:
+            client = http_client()
+            fetchers = default_fetchers(self._runtime_settings, client)
+        collector = NewsCollector(
+            CatalystEtlRepository(self._runtime_settings.macrolens_cache_db_path),
+            sources=self._personal_config.catalyst.sources,
+            fetchers=fetchers,
+        )
+        try:
+            await _call_local(collector.initialize)
+        except BaseException:
+            await _close_optional(client)
+            raise
+        self._repository = collector.repository
+        self._client = client
+        self._collector = collector
+        self._mode = "local"
+        return self._mode
 
     async def _prepare_personal(self) -> str:
         from app.services.catalysts.etl_client import EtlClientConfig, MacroLensEtlClient
         from app.services.catalysts.etl_repository import CatalystEtlRepository
         from app.services.catalysts.etl_sync import MacroLensIncrementalSync
+        from app.services.catalysts.news_collector import local_ingest_has_written
 
+        cache_path = self._runtime_settings.macrolens_cache_db_path
+        # Ids the collector minted would collide with the remote numbering:
+        # rolling back needs the database backup taken before the switch.
+        if await _call_local(local_ingest_has_written, cache_path):
+            return "rollback_blocked"
         token = self._runtime_settings.internal_api_token.get_secret_value()
         client_config = EtlClientConfig(
             base_url=self._runtime_settings.macrolens_url,
             owner_token=token,
             ca_bundle=self._runtime_settings.macrolens_ca_bundle or None,
         )
-        cache_path = self._runtime_settings.macrolens_cache_db_path
         repository = CatalystEtlRepository(cache_path)
         await asyncio.to_thread(repository.initialize)
         client = MacroLensEtlClient(
@@ -844,11 +885,34 @@ class CatalystSyncTask:
         return self._intelligence
 
     async def _prepare(self) -> str:
-        if self._mode == "personal":
+        if self._mode is not None:
             return self._mode
+        if self._personal_config.catalyst.news_source == "local":
+            return await self._prepare_local()
         if not self._runtime_settings.personal_etl_enabled:
             return "disabled"
         return await self._prepare_personal()
+
+    async def _sync_stream(self, stream: str, *, force: bool) -> Any:
+        from app.services.catalysts.news_collector import StreamOutcome
+
+        if self._collector is not None:
+            plan = await _call_local(self._collector.plan, stream, force=force)
+            fetched = await self._collector.fetch(plan)
+            return await _call_local(self._collector.commit, plan, fetched)
+        result = await (
+            self._service.sync_news() if stream == "news" else self._service.sync_calendar()
+        )
+        metrics: dict[str, int | bool] = {
+            "pages": int(result.pages),
+            "records": int(result.records),
+            "replayed": int(result.replayed),
+            "complete": bool(result.complete),
+            "watermark_sequence": int(result.watermark_sequence),
+        }
+        if stream == "news":
+            metrics["deletes"] = int(result.deletes)
+        return StreamOutcome(metrics)
 
     @staticmethod
     def _error_code(error: Exception) -> str:
@@ -944,31 +1008,28 @@ class CatalystSyncTask:
                 },
                 next_delay_seconds=self._until_next_sync(sync_seconds),
             )
-        stream_operations = {
-            "news": ("news", self._service.sync_news),
-            "calendar": ("calendar", self._service.sync_calendar),
-        }
         selected_streams = (
-            [stream_operations[requested_type]]
-            if requested_type in stream_operations
-            else list(stream_operations.values())
+            [requested_type]
+            if requested_type in ("news", "calendar")
+            else ["news", "calendar"]
         )
-        for stream, operation in selected_streams:
+        # A single failing source is reported here without degrading the task.
+        source_errors: dict[str, str] = {}
+        for stream in selected_streams:
             try:
-                result = await operation()
+                outcome = await self._sync_stream(
+                    stream,
+                    force=requested_type is not None,
+                )
             except Exception as exc:
                 errors[stream] = self._error_code(exc)
                 continue
+            metrics[stream] = outcome.metrics
+            source_errors.update(outcome.source_errors)
+            if outcome.error_code:
+                errors[stream] = outcome.error_code
+                continue
             processed.append(stream)
-            metrics[stream] = {
-                "pages": int(result.pages),
-                "records": int(result.records),
-                "replayed": int(result.replayed),
-                "complete": bool(result.complete),
-                "watermark_sequence": int(result.watermark_sequence),
-            }
-            if stream == "news":
-                metrics[stream]["deletes"] = int(result.deletes)
 
         projection = None
         if selected_streams and intelligence is None:
@@ -1012,6 +1073,11 @@ class CatalystSyncTask:
                     intelligence.prune_journal,
                     retention_days=retention_days,
                 )
+                ingest_pruned = (
+                    await _call_local(self._collector.prune_orphans)
+                    if self._collector is not None
+                    else None
+                )
             except Exception as exc:
                 errors["journal_prune"] = self._error_code(exc)
             else:
@@ -1022,6 +1088,11 @@ class CatalystSyncTask:
                         str(key)[:64]: int(value)
                         for index, (key, value) in enumerate(pruned.items())
                         if index < 8 and isinstance(value, int)
+                    }
+                if ingest_pruned is not None:
+                    journal_prune_metrics = {
+                        **(journal_prune_metrics or {}),
+                        "pruned_ingest_rows": int(ingest_pruned),
                     }
 
         if manual_request is not None and hasattr(
@@ -1062,8 +1133,9 @@ class CatalystSyncTask:
                 if isinstance(value, (bool, int, float, type(None))):
                     projection_metrics[str(key)[:64]] = value
             details["local_intelligence"] = projection_metrics
+        if errors or source_errors:
+            details["errors"] = {**errors, **source_errors}
         if errors:
-            details["errors"] = errors
             return TaskResult(
                 status="degraded",
                 error_code="catalyst_sync_degraded",
@@ -1092,6 +1164,18 @@ class CatalystSyncTask:
         mode = await self._prepare()
         if mode == "disabled":
             return TaskResult(status="disabled", next_delay_seconds=30.0)
+        if mode == "rollback_blocked":
+            return TaskResult(
+                status="degraded",
+                error_code="catalyst_rollback_requires_restore",
+                details={
+                    "processed": [],
+                    "streams": {},
+                    "refresh_requested": False,
+                    "errors": {"news_source": "local_ingest_has_written"},
+                },
+                next_delay_seconds=300.0,
+            )
         return await self._run_personal()
 
     @bind_trusted_system_task
@@ -1109,6 +1193,7 @@ class CatalystSyncTask:
         await _close_optional(self._intelligence)
         self._service = None
         self._client = None
+        self._collector = None
         self._repository = None
         self._intelligence = None
         self._mode = None
@@ -1139,13 +1224,14 @@ class FocusTask:
         self._intelligence: Any = None
 
     async def _prepare_personal(self) -> str:
-        from app.services.catalysts.etl_client import EtlClientConfig
+        if self._personal_config.catalyst.news_source == "macrolens":
+            from app.services.catalysts.etl_client import EtlClientConfig
 
-        EtlClientConfig(
-            base_url=self._runtime_settings.macrolens_url,
-            owner_token=self._runtime_settings.internal_api_token.get_secret_value(),
-            ca_bundle=self._runtime_settings.macrolens_ca_bundle or None,
-        )
+            EtlClientConfig(
+                base_url=self._runtime_settings.macrolens_url,
+                owner_token=self._runtime_settings.internal_api_token.get_secret_value(),
+                ca_bundle=self._runtime_settings.macrolens_ca_bundle or None,
+            )
         intelligence = await _build_local_intelligence(
             self._personal_config,
             self._runtime_settings,
@@ -1161,7 +1247,10 @@ class FocusTask:
             return "disabled"
         if self._mode == "personal":
             return self._mode
-        if not self._runtime_settings.personal_etl_enabled:
+        if (
+            self._personal_config.catalyst.news_source == "macrolens"
+            and not self._runtime_settings.personal_etl_enabled
+        ):
             return "disabled"
         return await self._prepare_personal()
 

@@ -54,6 +54,34 @@ def _isolated_finnhub_budget(monkeypatch, tmp_path, _isolated_runtime_data):
     monkeypatch.setattr(finnhub_budget, "default_budget_path", lambda: tmp_path / "finnhub-budget.sqlite")
 
 
+@pytest.fixture(autouse=True)
+def _offline_news_sources(monkeypatch):
+    """The news collector's default client never reaches a real source in tests.
+
+    A catalyst task built from the repository configuration collects news
+    locally; a test that forgets to inject fetchers fails here instead of
+    polling Google News or Forex Factory.
+    """
+    import httpx
+
+    from app.services.catalysts import news_sources
+
+    attempts: list[str] = []
+
+    def refuse(request: httpx.Request) -> httpx.Response:
+        attempts.append(f"{request.url.scheme}://{request.url.host}{request.url.path}")
+        raise httpx.ConnectError("network is disabled in tests", request=request)
+
+    real_client = news_sources.http_client
+
+    def offline_client(*, transport=None):
+        return real_client(transport=transport or httpx.MockTransport(refuse))
+
+    monkeypatch.setattr(news_sources, "http_client", offline_client)
+    yield
+    assert not attempts, f"tests must inject catalyst source fetchers: {attempts}"
+
+
 @pytest.fixture
 def anchor_ai_jobs_clock(monkeypatch):
     """把 ai_jobs 仓储的私有时钟锚到用例的夹具时钟上。

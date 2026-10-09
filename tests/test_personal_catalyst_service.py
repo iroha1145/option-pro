@@ -1624,7 +1624,10 @@ def test_local_api_settings_keep_fixed_model_and_drop_remote_hmac_credentials(
 def test_unified_worker_disables_safely_when_owner_token_is_missing(
     tmp_path,
 ) -> None:
-    personal = PersonalConfig(features=FeatureConfig(catalyst_mode="read"))
+    personal = PersonalConfig(
+        features=FeatureConfig(catalyst_mode="read"),
+        catalyst=CatalystConfig(news_source="macrolens"),
+    )
     settings = SimpleNamespace(
         internal_api_token=SecretStr(""),
         macrolens_url="",

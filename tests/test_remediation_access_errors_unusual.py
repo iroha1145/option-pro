@@ -293,7 +293,7 @@ def test_ac04_direct_catalyst_cli_entry_writes_without_outer_owner(
             personal_etl_enabled=True,
         ),
         personal_config=SimpleNamespace(
-            catalyst=SimpleNamespace(sync_seconds=37),
+            catalyst=SimpleNamespace(sync_seconds=37, news_source="macrolens"),
             features=SimpleNamespace(catalyst_mode="read"),
             ai=SimpleNamespace(model="gpt-5.6-terra", reasoning="max"),
         ),

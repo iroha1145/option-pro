@@ -2205,7 +2205,8 @@ def test_worker_once_selects_personal_etl_from_repository_files_offline(
         features = config.features.model_copy(
             update={{"breakout_enabled": False, "catalyst_mode": "manual"}}
         )
-        config = config.model_copy(update={{"features": features}})
+        catalyst = config.catalyst.model_copy(update={{"news_source": "macrolens"}})
+        config = config.model_copy(update={{"features": features, "catalyst": catalyst}})
         personal_config.get_personal_config = lambda: config
         runtime_environment.RUNTIME_ENV_FILES = (
             Path({str(root_env)!r}),
@@ -2453,7 +2454,7 @@ def test_personal_catalyst_task_uses_https_bearer_etl_and_closes_client(
     monkeypatch.setenv("MACROLENS_URL", "https://macrolens.example")
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     config = SimpleNamespace(
-        catalyst=SimpleNamespace(sync_seconds=37),
+        catalyst=SimpleNamespace(sync_seconds=37, news_source="macrolens"),
         features=SimpleNamespace(catalyst_mode="read"),
         ai=SimpleNamespace(model="gpt-5.6-terra", reasoning="max"),
     )
@@ -2519,7 +2520,7 @@ def test_personal_catalyst_task_reconciles_with_real_local_store(
     monkeypatch.setenv("MACROLENS_URL", "https://macrolens.example")
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     config = SimpleNamespace(
-        catalyst=SimpleNamespace(sync_seconds=53),
+        catalyst=SimpleNamespace(sync_seconds=53, news_source="macrolens"),
         features=SimpleNamespace(catalyst_mode="read"),
         ai=SimpleNamespace(model="gpt-5.6-terra", reasoning="max"),
     )
@@ -2592,7 +2593,9 @@ def test_personal_catalyst_task_prunes_journal_when_due(
             return {"pruned_items": 0, "pruned_changes": 0}
 
     config = SimpleNamespace(
-        catalyst=SimpleNamespace(sync_seconds=53, journal_retention_days=9),
+        catalyst=SimpleNamespace(
+            sync_seconds=53, journal_retention_days=9, news_source="macrolens"
+        ),
         features=SimpleNamespace(catalyst_mode="read"),
         ai=SimpleNamespace(model="gpt-5.6-terra", reasoning="max"),
     )
@@ -2750,7 +2753,9 @@ def test_personal_catalyst_task_rejects_http_without_network(
             token="owner-token",
             url="http://macrolens.example",
         ),
-        personal_config=SimpleNamespace(catalyst=SimpleNamespace(sync_seconds=43)),
+        personal_config=SimpleNamespace(
+            catalyst=SimpleNamespace(sync_seconds=43, news_source="macrolens")
+        ),
     )
 
     with pytest.raises(ValueError, match="HTTPS"):
@@ -2770,7 +2775,9 @@ def test_personal_tasks_disable_without_token_and_never_choose_legacy(
         token="",
     )
     config = SimpleNamespace(
-        catalyst=SimpleNamespace(sync_seconds=120, focus_seconds=1800),
+        catalyst=SimpleNamespace(
+            sync_seconds=120, focus_seconds=1800, news_source="macrolens"
+        ),
     )
     catalyst = CatalystSyncTask(
         "disabled-personal",
@@ -2828,7 +2835,7 @@ def test_catalyst_intelligence_failure_keeps_sync_and_caches_no_half_state(
         lambda: _runtime_settings(sync_seconds=0),
     )
     config = SimpleNamespace(
-        catalyst=SimpleNamespace(sync_seconds=120),
+        catalyst=SimpleNamespace(sync_seconds=120, news_source="macrolens"),
         features=SimpleNamespace(catalyst_mode="read"),
         ai=SimpleNamespace(model="gpt-5.6-terra", reasoning="max"),
     )
@@ -2903,7 +2910,7 @@ def test_read_and_off_focus_ignore_stale_enabled_runtime_switches(
         ),
     )
     config = SimpleNamespace(
-        catalyst=SimpleNamespace(focus_seconds=1800),
+        catalyst=SimpleNamespace(focus_seconds=1800, news_source="macrolens"),
         catalyst_manual_enabled=False,
         catalyst_scheduled_enabled=False,
         features=SimpleNamespace(catalyst_mode=mode),
@@ -2958,7 +2965,7 @@ def test_scheduled_focus_calls_local_scheduler_once(
         lambda: _runtime_settings(scheduled=True, focus_seconds=601),
     )
     config = SimpleNamespace(
-        catalyst=SimpleNamespace(focus_seconds=777),
+        catalyst=SimpleNamespace(focus_seconds=777, news_source="macrolens"),
         catalyst_scheduled_enabled=True,
         features=SimpleNamespace(catalyst_mode="scheduled"),
         ai=SimpleNamespace(model="gpt-5.6-terra", reasoning="max"),

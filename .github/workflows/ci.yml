@@ -241,17 +241,15 @@ jobs:
               /ci-tests/fixtures/breakouts/provider_regular.json |
             python -c 'import json,sys; p=json.load(sys.stdin); assert p["closed"]["status"]=="paused"; assert p["closed"]["scan_run_id"] is None; assert p["active"]["status"]=="completed"; assert p["active"]["event_count"]==0'
 
-      - name: Exercise Catalyst ETL with offline fixtures
+      - name: Exercise local Catalyst collection with offline fixtures
         shell: bash
         run: |
           ./scripts/compose.sh run --rm --no-deps \
-            --env INTERNAL_API_TOKEN=container-fixture-owner \
-            --env MACROLENS_URL=https://macrolens.fixture \
             --env DATA_DIR=/data/container-catalyst-fixture \
             --env PYTHONPATH=/app/backend \
             --volume "${GITHUB_WORKSPACE}/tests:/ci-tests:ro" \
             worker python /ci-tests/container_personal_catalyst_smoke.py |
-            python -c 'import json,sys; p=json.load(sys.stdin); assert p["status"]=="idle"; assert p["processed"]==["news","calendar","local_intelligence","journal_prune"]; assert p["model"]=="claude-haiku-5-5"; assert p["reasoning"]=="xhigh"; assert p["max_concurrency"]==4; assert p["authorization_checked"] is True'
+            python -c 'import json,sys; p=json.load(sys.stdin); assert p["status"]=="idle"; assert p["processed"]==["news","calendar","local_intelligence","journal_prune"]; assert p["model"]=="claude-haiku-5-5"; assert p["reasoning"]=="xhigh"; assert p["max_concurrency"]==4; assert p["all_due_sources_requested"] is True'
 
       - name: Exercise Optix macro conditions with offline fixtures
         shell: bash

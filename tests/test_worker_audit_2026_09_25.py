@@ -1100,7 +1100,7 @@ def test_catalyst_sync_publishes_when_ai_jobs_initialization_fails(
             url="https://macrolens.example",
         ),
         personal_config=SimpleNamespace(
-            catalyst=SimpleNamespace(sync_seconds=120),
+            catalyst=SimpleNamespace(sync_seconds=120, news_source="macrolens"),
             features=SimpleNamespace(catalyst_mode="read"),
             ai=SimpleNamespace(model="gpt-5.6-terra", reasoning="max"),
         ),
