@@ -73,7 +73,7 @@ for (const width of [1440, 390]) {
       const identity = await (await page.request.get('/api/access/status')).json();
       expect(identity.logged_in).toBe(false);
       expect(identity.account.logged_in).toBe(true);
-      const saved = await page.request.put('/api/account/watchlist', { headers, data: { tickers: members } });
+      const saved = await page.request.patch('/api/account/watchlist', { headers, data: { add: members, remove: [] } });
       expect(saved.status()).toBe(200);
       expect((await saved.json()).tickers.sort()).toEqual([...members].sort());
       await page.goto('/');
@@ -81,7 +81,7 @@ for (const width of [1440, 390]) {
       await page.reload();
       await expect.poll(symbols).toEqual([...members].sort());
     }
-    const emptied = await page.request.put('/api/account/watchlist', { headers, data: { tickers: [] } });
+    const emptied = await page.request.patch('/api/account/watchlist', { headers, data: { add: [], remove: ['AAPL'] } });
     expect(emptied.status()).toBe(200);
     await page.reload();
     await expect(movers).toContainText('暂无关注股票');
