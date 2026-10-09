@@ -23,6 +23,12 @@ def settings(path):
         openai_api_key="test-legacy-key",
         openai_model="claude-haiku-5-5",
         openai_reasoning="xhigh",
+        # These fixtures exercise the previous all-Haiku configuration.
+        # New route tests override the specific task model explicitly.
+        openai_news_model=None,
+        openai_news_reasoning=None,
+        openai_market_focus_model=None,
+        openai_market_focus_reasoning=None,
         openai_manual_cooldown_seconds=0,
     )
 

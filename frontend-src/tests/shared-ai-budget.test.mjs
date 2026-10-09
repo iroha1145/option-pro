@@ -22,7 +22,7 @@ test('new accounting window uses reported zero and 9.5 instead of historical tot
   assert.match(text.summary, /估算及预留 0.00/);
   assert.match(text.summary, /剩余 9.50/);
   assert.doesNotMatch(text.summary, /7.31|9483009|10000000/);
-  assert.match(text.note, /Haiku.*Opus.*未知.*东京 09:00/);
+  assert.match(text.note, /所有模型共用.*未知任务预留.*东京 09:00/);
 });
 
 test('partial snapshots never infer missing monetary amounts or invent a shared panel', () => {

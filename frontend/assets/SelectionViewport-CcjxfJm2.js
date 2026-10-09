@@ -1,1 +1,0 @@
-import{j as t}from"./prefetchRouteChunk-Cpjj8Y42.js";import{O as e,d as s}from"./app-shell-B3PL9E2W.js";function a({children:o,className:r}){return t.jsx(e.div,{layoutScroll:!0,className:s("selection-viewport no-scrollbar",r),children:o})}export{a as S};

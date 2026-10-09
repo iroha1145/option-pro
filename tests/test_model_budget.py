@@ -95,8 +95,8 @@ def test_existing_haiku_unknowns_and_opus_share_budget_but_terra_is_excluded(tmp
     result = budget.snapshot(NOW)
     assert result["haiku_charge_microusd"] == 5_643_821
     assert result["opus_charge_microusd"] == 1_663_375
-    assert result["used_microusd"] == 7_307_196
-    assert result["budget_remaining_usd"] == 2.192804
+    assert result["used_microusd"] == 13_969_993
+    assert result["budget_remaining_usd"] == 0
 
 
 def test_user_reset_filters_old_costs_without_modifying_old_unknowns(tmp_path, monkeypatch):

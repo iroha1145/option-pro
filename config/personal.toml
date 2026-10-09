@@ -15,6 +15,11 @@ catalyst_mode = "scheduled"
 [ai]
 model = "claude-haiku-5-5"
 reasoning = "xhigh"
+# 新闻只翻译和分析已有材料；热点由 Sonnet 联网核验后发布。
+news_model = "gpt-5.6-luna"
+news_reasoning = "max"
+market_focus_model = "claude-sonnet-5-5"
+market_focus_reasoning = "xhigh"
 max_concurrency = 4
 daily_max_jobs = 0
 daily_budget_usd = 0.0
@@ -22,7 +27,7 @@ daily_token_limit = 10000000
 execution_mode = "background"
 
 [model_budget]
-# Haiku 与 Opus 共用每日应用预算；正值启用后，日词元数只作统计。
+# 所有模型共用每日应用预算；正值启用后，日词元数只作统计。
 # 0 保持旧配置的词元额度。每日 UTC 00:00（东京 09:00）重置。
 daily_budget_usd = 0.0
 # false 仅统计费用，超过参考金额仍继续；true 保留金额准入限制。
@@ -100,7 +105,7 @@ grace_minutes = 150
 web_search_max_uses = 10
 web_fetch_max_uses = 8
 web_fetch_max_content_tokens = 12000
-code_execution_tool = false
+code_execution_tool = true
 refusal_fallback = false
 # 结构化输出与网页工具并用没有文档背书，默认关（JSON Schema 附在系统提示词里）；
 # 跑通过一次后可改 true 试，被 400 拒绝就改回。

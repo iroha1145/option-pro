@@ -1,6 +1,6 @@
-"""Shared UTC-day admission accounting for Haiku jobs and Opus brief requests.
+"""Shared UTC-day accounting for supported job models and Opus brief requests.
 
-Haiku's existing job charge is authoritative: it already represents either a
+Each job's existing charge is authoritative: it already represents either a
 reservation or a settled estimate. Only Opus needs a new request ledger. This
 is an application admission budget, not an upper bound on provider invoices.
 """
@@ -18,6 +18,7 @@ from typing import Any, Iterator
 
 HAIKU_MODEL = "claude-haiku-5-5"
 OPUS_MODEL = "claude-opus-5-5"
+JOB_MODELS = (HAIKU_MODEL, "claude-sonnet-5-5", "gpt-5.6-luna", "gpt-5.6-terra")
 _SCHEMA_VERSION = "shared-model-budget-v1"
 _MAX_INTEGER = 2**63 - 1
 _MAX_HISTORY_JSON_BYTES = 8 * 1024 * 1024
@@ -113,7 +114,7 @@ def initialize_schema(connection: sqlite3.Connection) -> None:
 def totals_in_transaction(
     connection: sqlite3.Connection, now: datetime,
     accounting_start_at: datetime | None = None,
-) -> dict[str, int]:
+) -> dict[str, Any]:
     """Indexed sums only; called inside the same transaction as new admission."""
     day, start, end = _day_bounds(_time(now), accounting_start_at)
     # Legacy repository timestamps omit the fractional part when it is zero.
@@ -125,12 +126,16 @@ def totals_in_transaction(
         start_time.replace(microsecond=0).isoformat().replace("+00:00", "Z")
         if start_time.microsecond else ""
     )
-    haiku = connection.execute(
-        """SELECT COALESCE(SUM(budget_charge_microusd),0) FROM ai_jobs
-           WHERE model=? AND submission_started_at>=? AND submission_started_at<?
-             AND submission_started_at<>?""",
-        (HAIKU_MODEL, start, end, excluded_whole_second),
-    ).fetchone()[0]
+    model_charges = {model: 0 for model in JOB_MODELS}
+    rows = connection.execute(
+        f"""SELECT model,COALESCE(SUM(budget_charge_microusd),0) FROM ai_jobs
+           WHERE model IN ({','.join('?' for _ in JOB_MODELS)})
+             AND submission_started_at>=? AND submission_started_at<?
+             AND submission_started_at<>? GROUP BY model""",
+        (*JOB_MODELS, start, end, excluded_whole_second),
+    ).fetchall()
+    model_charges.update({row[0]: int(row[1]) for row in rows})
+    job_charge = sum(model_charges.values())
     brief = connection.execute(
         """SELECT COALESCE(SUM(charge_microusd),0),
                   COALESCE(SUM(CASE WHEN status IN ('reserved','unknown')
@@ -138,10 +143,12 @@ def totals_in_transaction(
            FROM model_budget_brief_requests WHERE budget_day=? AND created_at>=? AND created_at<?""", (day, start, end),
     ).fetchone()
     return {
-        "haiku_charge_microusd": int(haiku),
+        "haiku_charge_microusd": model_charges[HAIKU_MODEL],
+        "job_charge_microusd": job_charge,
+        "job_model_charges_microusd": model_charges,
         "opus_charge_microusd": int(brief[0]),
         "opus_unsettled_microusd": int(brief[1]),
-        "used_microusd": int(haiku) + int(brief[0]),
+        "used_microusd": job_charge + int(brief[0]),
     }
 
 

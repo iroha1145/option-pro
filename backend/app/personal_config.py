@@ -135,8 +135,12 @@ class ModelBudgetConfig(StrictConfigModel):
 
 
 class AIConfig(StrictConfigModel):
-    model: Literal["claude-haiku-5-5", "gpt-5.6-terra"] = "claude-haiku-5-5"
+    model: Literal["claude-haiku-5-5", "gpt-5.6-terra", "gpt-5.6-luna", "claude-sonnet-5-5"] = "claude-haiku-5-5"
     reasoning: Literal["xhigh", "max"] = "xhigh"
+    news_model: Literal["gpt-5.6-luna", "gpt-5.6-terra", "claude-haiku-5-5"] | None = None
+    news_reasoning: Literal["max", "xhigh"] | None = None
+    market_focus_model: Literal["claude-sonnet-5-5", "claude-haiku-5-5"] | None = None
+    market_focus_reasoning: Literal["xhigh"] | None = None
     max_concurrency: int = Field(default=4, ge=1, le=4)
     # Retained for one migration cycle so old personal.toml files remain
     # readable. Zero means unlimited; the active safety boundary is Token use.
@@ -162,9 +166,17 @@ class AIConfig(StrictConfigModel):
 
     @model_validator(mode="after")
     def validate_model_reasoning(self) -> "AIConfig":
-        expected = "xhigh" if self.model == "claude-haiku-5-5" else "max"
+        expected = "xhigh" if self.model.startswith("claude-") else "max"
         if self.reasoning != expected:
             raise ValueError("AI model and reasoning must use a supported pair")
+        selected = self.news_model or self.model
+        effort = self.news_reasoning
+        if effort is not None and effort != ("xhigh" if selected.startswith("claude-") else "max"):
+            raise ValueError("AI task model and reasoning must use a supported pair")
+        selected = self.market_focus_model or self.model
+        effort = self.market_focus_reasoning
+        if effort is not None and effort != ("xhigh" if selected.startswith("claude-") else "max"):
+            raise ValueError("AI task model and reasoning must use a supported pair")
         if self.model == "gpt-5.6-terra" and self.max_concurrency != 1:
             raise ValueError("legacy OpenAI configuration supports concurrency 1 only")
         return self
@@ -356,7 +368,7 @@ class MarketBriefConfig(StrictConfigModel):
     web_search_max_uses: int = Field(default=10, ge=0, le=20)
     web_fetch_max_uses: int = Field(default=8, ge=0, le=20)
     web_fetch_max_content_tokens: int = Field(default=12_000, ge=1_000, le=100_000)
-    code_execution_tool: bool = False
+    code_execution_tool: bool = True
     refusal_fallback: bool = False
     #: 结构化输出与网页工具并用没有文档背书（文档写明结构化输出与引用不兼容，而网页
     #: 搜索结果自带引用），所以部署默认关：JSON Schema 附在系统提示词里，解析与校验流程

@@ -28,9 +28,14 @@ from app.services.ai_jobs import repository as ai_job_store
 from app.services.ai_jobs import runtime as ai_runtime
 from app.services.ai_jobs.models import (
     validate_result,
+    FOCUS_VERIFICATION_VERSION,
+    validate_market_focus_evidence,
     validate_simplified_chinese_text,
 )
 from app.services.ai_jobs.repository import AIJobRepository
+from app.services.ai_jobs.focus_verification import (
+    public_focus_result, public_focus_sources, supported_events,
+)
 from app.services.sqlite_errors import is_sqlite_lock_contention
 
 from .errors import CatalystError, InvalidCursorError
@@ -91,7 +96,7 @@ NEWS_RESULT_AUDIT_VERSION = "news-result-validation-v2"
 NEWS_PROMPT_FAMILY_RE = re.compile(r"^news-impact-zh-cn-v[1-9][0-9]*$")
 NEWS_SCHEMA_FAMILY_RE = re.compile(r"^news_impact_zh_cn_v[1-9][0-9]*$")
 FOCUS_PROMPT_FAMILY_RE = re.compile(r"^market-focus-zh-cn-v[1-9][0-9]*$")
-FOCUS_SCHEMA_FAMILY_RE = re.compile(r"^market_focus_zh_cn_v[1-9][0-9]*$")
+FOCUS_SCHEMA_FAMILY_RE = re.compile(r"^market_focus_(?:verified_)?zh_cn_v[1-9][0-9]*$")
 SCHEMA_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 TITLE_WAITING = "中文标题等待生成"
 SUMMARY_WAITING = "中文摘要等待生成"
@@ -364,6 +369,27 @@ CREATE TABLE IF NOT EXISTS catalyst_local_legacy_import_audit (
 );
 """.strip()
 SCHEMA_CHECKSUM = hashlib.sha256(_SCHEMA.encode("utf-8")).hexdigest()
+
+_VERIFIED_FOCUS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS catalyst_local_verified_focus_publications (
+    cycle_id TEXT NOT NULL REFERENCES catalyst_local_focus_cycles(cycle_id) ON DELETE CASCADE,
+    job_id TEXT NOT NULL,
+    prepared_revision INTEGER NOT NULL,
+    snapshot_as_of TEXT NOT NULL,
+    published_at TEXT NOT NULL,
+    input_hash TEXT NOT NULL,
+    result_sha256 TEXT NOT NULL,
+    public_result_json TEXT NOT NULL CHECK(json_valid(public_result_json)),
+    hotspot_items_json TEXT NOT NULL CHECK(json_valid(hotspot_items_json)),
+    evidence_sources_json TEXT NOT NULL CHECK(json_valid(evidence_sources_json)),
+    PRIMARY KEY(cycle_id,job_id)
+);
+CREATE INDEX IF NOT EXISTS idx_verified_focus_revision
+    ON catalyst_local_verified_focus_publications(prepared_revision,snapshot_as_of DESC);
+"""
+_VERIFIED_FOCUS_SCHEMA_VERSION = "optix-verified-focus-publication-v1"
+_VERIFIED_FOCUS_SCHEMA_CHECKSUM = hashlib.sha256(_VERIFIED_FOCUS_SCHEMA.encode("utf-8")).hexdigest()
+
 TIMESTAMP_NORMALIZATION_VERSION = "optix-local-catalyst-timestamps-v1"
 TIMESTAMP_NORMALIZATION_CHECKSUM = hashlib.sha256(
     b"normalize local catalyst timestamps to UTC Z v1"
@@ -1558,6 +1584,10 @@ class LocalCatalystIntelligence:
         *,
         model: str = MODEL,
         reasoning: str = REASONING,
+        news_model: str | None = None,
+        news_reasoning: str | None = None,
+        focus_model: str | None = None,
+        focus_reasoning: str | None = None,
         max_queued: int = 200,
         manual_refresh_cooldown_seconds: int = 30,
         article_fetcher: Callable[..., dict[str, Any]] | None = None,
@@ -1571,8 +1601,14 @@ class LocalCatalystIntelligence:
         self.db_path = Path(db_path)
         self.ai_repository = ai_repository
         self.mode = mode
-        self.model = model
-        self.reasoning = reasoning
+        self.model = news_model or model
+        self.reasoning = news_reasoning or reasoning
+        self.focus_model = focus_model or model
+        self.focus_reasoning = focus_reasoning or reasoning
+        for selected_model, selected_reasoning in ((self.model, self.reasoning), (self.focus_model, self.focus_reasoning)):
+            if not ai_runtime.analysis_identity_supported(selected_model, selected_reasoning):
+                raise ValueError("local catalyst model configuration is unsupported")
+        self.focus_verification_enabled = "sonnet" in self.focus_model
         self.max_queued = max_queued
         self._article_fetcher = article_fetcher
         if (
@@ -1623,6 +1659,7 @@ class LocalCatalystIntelligence:
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("PRAGMA synchronous=FULL")
             connection.executescript(_SCHEMA)
+            connection.executescript(_VERIFIED_FOCUS_SCHEMA)
             row = connection.execute(
                 "SELECT checksum FROM catalyst_local_schema WHERE version=?",
                 (SCHEMA_VERSION,),
@@ -1632,6 +1669,15 @@ class LocalCatalystIntelligence:
             # Several worker tasks initialize their own instance at startup;
             # the write lock serializes the check-then-ALTER column upgrade.
             connection.execute("BEGIN IMMEDIATE")
+            verified_schema = connection.execute(
+                "SELECT checksum FROM catalyst_local_schema WHERE version=?", (_VERIFIED_FOCUS_SCHEMA_VERSION,),
+            ).fetchone()
+            if verified_schema is not None and verified_schema["checksum"] != _VERIFIED_FOCUS_SCHEMA_CHECKSUM:
+                raise RuntimeError("local_catalyst_schema_checksum_mismatch")
+            connection.execute(
+                "INSERT OR IGNORE INTO catalyst_local_schema(version,checksum,applied_at) VALUES(?,?,?)",
+                (_VERIFIED_FOCUS_SCHEMA_VERSION, _VERIFIED_FOCUS_SCHEMA_CHECKSUM, _iso()),
+            )
             self._add_missing_columns(
                 connection, "catalyst_local_hotspot_items", _HOTSPOT_ITEM_SCORE_COLUMNS,
             )
@@ -2278,7 +2324,7 @@ class LocalCatalystIntelligence:
             row.get("prompt_version"),
             row.get("schema_version"),
             row.get("schema_sha256"),
-            current_identity=(expected_schema if row.get("model") == self.model else None),
+            current_identity=(expected_schema if row.get("model") == (self.model if expected_type == "news_impact" else self.focus_model) else None),
             model=row.get("model"),
         )
         prompt = (
@@ -3610,6 +3656,57 @@ class LocalCatalystIntelligence:
             published += 1
         return published
 
+    def _publish_verified_focus(
+        self, connection: sqlite3.Connection, *, cycle: sqlite3.Row,
+        job: dict[str, Any], payload: dict[str, Any], completed_at: str,
+    ) -> dict[str, Any]:
+        """Write the supported projection in the cycle's publication transaction."""
+        result = validate_result("market_focus", str(job.get("result_json") or ""), payload)
+        receipt = _loads(job.get("provider_result_json"), None)
+        if not isinstance(receipt, dict):
+            raise ValueError("market_focus_verification_receipt_missing")
+        AIJobRepository._provider_receipt_json(receipt)
+        if (receipt.get("model") != job.get("model")
+                or receipt.get("id") != job.get("anthropic_message_id")
+                or receipt.get("terminal_error") is not None
+                or receipt.get("tool_evidence_version") != "v1"):
+            raise ValueError("market_focus_verification_receipt_mismatch")
+        evidence = receipt.get("tool_evidence", [])
+        validate_market_focus_evidence(result, payload, evidence)
+        paid_result = validate_result("market_focus", receipt["output_text"], payload)
+        validate_market_focus_evidence(paid_result, payload, evidence)
+        if paid_result != result:
+            raise ValueError("market_focus_verification_receipt_mismatch")
+        _revision, prepared_items = self._hotspots_for_revision(int(cycle["prepared_revision"]), limit=100)
+        prepared = {(item["event_group_id"], item["event_group_version"]): item for item in prepared_items}
+        items = []
+        for event in supported_events(result):
+            original = prepared.get((event["event_group_id"], event["event_group_version"]))
+            if original is None:
+                # Calendar evidence contributes to the cycle but is not a news hotspot.
+                continue
+            item = {key: value for key, value in original.items() if not key.startswith("_")}
+            item.update({"representative_title": event["title_zh"], "summary_zh": event["summary_zh"],
+                         "status": "verified", "verification_status": "verified"})
+            items.append(item)
+        digest = hashlib.sha256(_json(result).encode("utf-8")).hexdigest()
+        existing = connection.execute(
+            "SELECT input_hash,result_sha256 FROM catalyst_local_verified_focus_publications WHERE cycle_id=? AND job_id=?",
+            (cycle["cycle_id"], job["job_id"]),
+        ).fetchone()
+        if existing is not None and (existing["input_hash"] != payload["input_hash"] or existing["result_sha256"] != digest):
+            raise ValueError("market_focus_verification_publication_conflict")
+        connection.execute(
+            """INSERT OR IGNORE INTO catalyst_local_verified_focus_publications(
+                   cycle_id,job_id,prepared_revision,snapshot_as_of,published_at,input_hash,result_sha256,
+                   public_result_json,hotspot_items_json,evidence_sources_json
+               ) VALUES(?,?,?,?,?,?,?,?,?,?)""",
+            (cycle["cycle_id"], job["job_id"], cycle["prepared_revision"], payload["as_of"], completed_at,
+             payload["input_hash"], digest, _json(public_focus_result(result)), _json(items),
+             _json(public_focus_sources(result, evidence))),
+        )
+        return result
+
     def _publish_completed_focus(
         self,
         connection: sqlite3.Connection,
@@ -3687,6 +3784,19 @@ class LocalCatalystIntelligence:
                     observed_at=_iso(),
                 )
                 continue
+            if job_payload.get("verification_version") == FOCUS_VERIFICATION_VERSION:
+                try:
+                    verified_result = self._publish_verified_focus(
+                        connection, cycle=cycle, job=job, payload=job_payload,
+                        completed_at=str(public.get("completed_at") or public["updated_at"]),
+                    )
+                except (TypeError, ValueError) as error:
+                    self._retire_focus_binding_failure(
+                        connection, cycle=cycle, job=job, reason=str(error)[:120],
+                        error_code="market_focus_verification_failed", observed_at=_iso(),
+                    )
+                    continue
+                public = {**public, "result": verified_result}
             if public.get("result") is None:
                 raw_result = job.get("result_json")
                 if isinstance(raw_result, str) and raw_result:
@@ -5439,8 +5549,8 @@ class LocalCatalystIntelligence:
             "prepared_since": revision["prepared_at"] if revision else None,
             "last_cycle_at": last_cycle["created_at"] if last_cycle else None,
             "next_scheduled_at": None,
-            "model": self.model,
-            "reasoning": self.reasoning,
+            "model": self.focus_model,
+            "reasoning": self.focus_reasoning,
             "data_through": revision["data_through"] if revision else None,
             "status": "active" if revision else "empty",
             "as_of": _iso(observed),
@@ -5450,6 +5560,38 @@ class LocalCatalystIntelligence:
         }
 
     def hotspots(self, *, limit: int, now: datetime | None = None) -> dict[str, Any]:
+        if not self.focus_verification_enabled:
+            return self._prepared_hotspots(limit=limit, now=now)
+        observed = now or _utc_now()
+        with self._connect() as connection:
+            revision = connection.execute(
+                "SELECT * FROM catalyst_local_hotspot_revisions WHERE prepared_at<=? ORDER BY prepared_revision DESC LIMIT 1",
+                (_iso(observed),),
+            ).fetchone()
+            publication = None
+            if revision is not None:
+                # Choose by input snapshot, not completion order: a slow older
+                # response cannot undo a newer rejection. No cross-revision reuse.
+                publication = connection.execute(
+                    """SELECT p.*,c.result_json AS bound_result_json FROM catalyst_local_verified_focus_publications p
+                       JOIN catalyst_local_focus_cycles c ON c.cycle_id=p.cycle_id AND c.job_id=p.job_id AND c.input_hash=p.input_hash
+                       WHERE p.prepared_revision=? AND p.published_at<=?
+                         AND c.status='completed' AND c.result_json IS NOT NULL
+                       ORDER BY p.snapshot_as_of DESC,c.created_at DESC,p.cycle_id DESC LIMIT 1""",
+                    (revision["prepared_revision"], _iso(observed)),
+                ).fetchone()
+        if publication is not None:
+            bound_result = _loads(publication["bound_result_json"], None)
+            if not isinstance(bound_result, dict) or hashlib.sha256(_json(bound_result).encode("utf-8")).hexdigest() != publication["result_sha256"]:
+                publication = None
+        items = _loads(publication["hotspot_items_json"], []) if publication is not None else []
+        return {
+            "status": "active" if items else "empty", "as_of": _iso(observed),
+            "data_through": revision["data_through"] if revision else None,
+            "items": items[:min(100, max(1, limit))], "warnings": [],
+        }
+
+    def _prepared_hotspots(self, *, limit: int, now: datetime | None = None) -> dict[str, Any]:
         observed = now or _utc_now()
         with self._connect() as connection:
             revision = connection.execute(
@@ -5464,6 +5606,7 @@ class LocalCatalystIntelligence:
                     f"""SELECT g.*,i.prepared_revision,
                               {_hotspot_plan_score_columns(connection)},
                               r.source AS representative_source,
+                              r.url AS representative_source_url,
                               r.raw_title AS representative_source_title,
                               r.raw_summary AS representative_source_summary,
                               r.article_json AS representative_article_json,
@@ -5571,6 +5714,18 @@ class LocalCatalystIntelligence:
                     else row["representative_summary_zh"]
                 ),
                 "representative_news_id": int(row["representative_news_id"]),
+                "_verification_source": {
+                    "news_id": int(row["representative_news_id"]),
+                    "change_sequence": (
+                        int(row["representative_change_sequence"])
+                        if row["representative_change_sequence"] is not None else None
+                    ),
+                    "content_hash": row["representative_content_hash"],
+                    "source_url": str(row["representative_source_url"] or ""),
+                    "source": str(row["representative_source"] or ""),
+                    "raw_title": str(row["representative_source_title"] or ""),
+                    "raw_summary": str(row["representative_source_summary"] or "")[:4000],
+                },
                 "_validation_source": str(row["representative_source"] or ""),
                 "_validation_title": str(
                     row["representative_source_title"] or ""
@@ -5617,6 +5772,7 @@ class LocalCatalystIntelligence:
                 f"""SELECT g.*,i.prepared_revision,
                           {_hotspot_plan_score_columns(connection)},
                           r.source AS representative_source,
+                              r.url AS representative_source_url,
                           r.raw_title AS representative_source_title,
                           r.raw_summary AS representative_source_summary,
                           r.article_json AS representative_article_json,
@@ -5901,6 +6057,11 @@ class LocalCatalystIntelligence:
             if existing is not None and (
                 existing["status"] in {"pending", "queued", "in_progress"}
                 or (not force and existing["status"] == "completed")
+                or existing.get("error_code") == "submission_outcome_unknown"
+                or _paid_runtime_configuration_change(
+                    existing.get("error_code"), status=existing.get("status"),
+                    provider_response_seen=existing.get("submitted_at") is not None,
+                )
             ):
                 return {**existing, "cached": existing["status"] == "completed"}
         payload = {
@@ -6341,8 +6502,10 @@ class LocalCatalystIntelligence:
                 }
             )
         output["_scheduled_attempts"] = scheduled_attempts
-        output["_provider_response_seen"] = (
-            latest_job.get("openai_response_id") is not None
+        output["_provider_response_seen"] = any(
+            latest_job.get(field) is not None
+            for field in ("openai_response_id", "anthropic_message_id", "provider_result_json",
+                          "submission_started_at", "submitted_at")
         )
         if job_id not in linked_job_ids:
             output["local_link_pending"] = True
@@ -6493,7 +6656,9 @@ class LocalCatalystIntelligence:
                 connection.commit()
             if claimed != 1:
                 return {"queued": queued, "skipped": skipped}
-        snapshot = self.hotspots(limit=SCHEDULED_FOCUS_EVENT_LIMIT, now=observed)
+        snapshot = (self._prepared_hotspots if self.focus_verification_enabled else self.hotspots)(
+            limit=SCHEDULED_FOCUS_EVENT_LIMIT, now=observed,
+        )
         # Keep one queue position available for a ready market-focus cycle. A
         # continuous news backlog must not fill the queue and starve the hourly
         # aggregate indefinitely. The daily Token budget, not an item-count
@@ -6959,12 +7124,14 @@ class LocalCatalystIntelligence:
         *,
         submission_source: SubmissionSource = "manual",
     ) -> tuple[dict[str, Any], bool]:
-        schema_version, schema_hash = ai_runtime.schema_identity("market_focus", model=self.model)
+        if self.focus_verification_enabled and payload.get("verification_version") != FOCUS_VERIFICATION_VERSION:
+            raise CatalystError("market_focus_cycle_not_retryable", "Historical analysis requires a new hotspot snapshot", counts_for_circuit=False)
+        schema_version, schema_hash = ai_runtime.schema_identity("market_focus", model=self.focus_model)
         return self.ai_repository.create_job(
             job_type="market_focus",
             payload=payload,
-            model=self.model,
-            reasoning=self.reasoning,
+            model=self.focus_model,
+            reasoning=self.focus_reasoning,
             execution_mode=EXECUTION_MODE,
             prompt_version=FOCUS_PROMPT_VERSION,
             schema_version=schema_version,
@@ -7130,18 +7297,41 @@ class LocalCatalystIntelligence:
             }
             for item in items
         ]
+        if self.focus_verification_enabled:
+            from app.services.ai_jobs.claude_provider import _public_source_url
+
+            for event, item in zip(event_snapshot, items):
+                source = dict(item.get("_verification_source") or {})
+                source["source_url"] = _public_source_url(source.get("source_url"))
+                source["raw_title"] = str(source.get("raw_title") or "")[:300]
+                source["raw_summary"] = str(source.get("raw_summary") or "")[:300]
+                source["article_text"] = str(item.get("_validation_article_text") or "")[:500]
+                event["title_zh"] = str(event["title_zh"])[:300]
+                event["summary_zh"] = str(event["summary_zh"])[:500]
+                event["source_snapshot"] = source
         event_snapshot.extend(calendar_events)
         # Optix 宏观环境 context. Deterministic, bounded, read-only: the analysis
         # receives already-computed scores and may not recompute or override
         # them. Missing macro data omits the field rather than inventing values.
         macro_context = macro_conditions_context()
         input_document: dict[str, Any] = {
-            "input_schema_version": FOCUS_INPUT_SCHEMA_VERSION,
+            "input_schema_version": "market-focus-input-v3" if self.focus_verification_enabled else FOCUS_INPUT_SCHEMA_VERSION,
             "prepared_revision": revision,
             "events": event_snapshot,
         }
+        if self.focus_verification_enabled:
+            input_document["verification_version"] = FOCUS_VERIFICATION_VERSION
         if macro_context is not None:
             input_document["macro_conditions"] = macro_context
+        if self.focus_verification_enabled:
+            for text_limit in (240, 100, 0):
+                if ai_runtime.untrusted_json_size(input_document) <= 45_000:
+                    break
+                for event in event_snapshot:
+                    source = event.get("source_snapshot")
+                    if isinstance(source, dict):
+                        for key in ("article_text", "raw_summary"):
+                            source[key] = str(source.get(key) or "")[:text_limit]
         input_hash = _sha(input_document)
         allowed_events = [str(item["event_group_id"]) for item in event_snapshot]
         allowed_tickers = sorted({ticker for item in items for ticker in item["validated_tickers"]})
@@ -7149,13 +7339,15 @@ class LocalCatalystIntelligence:
             "cycle_id": cycle_id,
             "as_of": snapshot_as_of,
             "input_hash": input_hash,
-            "input_schema_version": FOCUS_INPUT_SCHEMA_VERSION,
+            "input_schema_version": "market-focus-input-v3" if self.focus_verification_enabled else FOCUS_INPUT_SCHEMA_VERSION,
             "prepared_revision": revision,
             "allowed_event_group_ids": allowed_events,
             "allowed_tickers": allowed_tickers,
             "events": event_snapshot,
             "force": bool(force),
         }
+        if self.focus_verification_enabled:
+            payload["verification_version"] = FOCUS_VERIFICATION_VERSION
         if macro_context is not None:
             payload["macro_conditions"] = macro_context
         force_bucket = _minute_bucket(observed) if force else None
@@ -7354,7 +7546,7 @@ class LocalCatalystIntelligence:
                 submission_source=submission_source,
             )
 
-        schema_version, schema_hash = ai_runtime.schema_identity("market_focus", model=self.model)
+        schema_version, schema_hash = ai_runtime.schema_identity("market_focus", model=self.focus_model)
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
@@ -7415,11 +7607,13 @@ class LocalCatalystIntelligence:
                         "Focus cycle snapshot is unavailable",
                         counts_for_circuit=False,
                     )
+                if self.focus_verification_enabled and payload.get("verification_version") != FOCUS_VERIFICATION_VERSION:
+                    raise CatalystError("market_focus_cycle_not_retryable", "Historical analysis requires a new hotspot snapshot", counts_for_circuit=False)
                 job, created = self.ai_repository.create_job(
                     job_type="market_focus",
                     payload=payload,
-                    model=self.model,
-                    reasoning=self.reasoning,
+                    model=self.focus_model,
+                    reasoning=self.focus_reasoning,
                     execution_mode=EXECUTION_MODE,
                     prompt_version=FOCUS_PROMPT_VERSION,
                     schema_version=schema_version,
@@ -7500,10 +7694,37 @@ class LocalCatalystIntelligence:
         payload = dict(row)
         result = _loads(payload.pop("result_json"), None)
         cycle_payload = _loads(payload.pop("payload_json", None), {})
+        payload["snapshot_as_of"] = payload.get("snapshot_as_of") or cycle_payload.get("as_of") or payload.get("created_at")
         if not include_owner_state and (
             payload.get("status") != "completed" or result is None
         ):
             return None
+        # Completion time is accounting/availability metadata, not the order
+        # of market decisions. A delayed old receipt must remain historical.
+        with self._connect() as connection:
+            latest_input = connection.execute(
+                """SELECT cycle_id FROM catalyst_local_focus_cycles
+                   WHERE created_at<=? AND COALESCE(NULLIF(snapshot_as_of,''),created_at)<=?
+                   ORDER BY COALESCE(NULLIF(snapshot_as_of,''),created_at) DESC,created_at DESC,cycle_id DESC LIMIT 1""",
+                (_iso(), _iso()),
+            ).fetchone()
+        payload["is_historical"] = bool(
+            latest_input is not None and latest_input["cycle_id"] != payload["cycle_id"]
+        )
+        verified_publication = None
+        if cycle_payload.get("verification_version") == FOCUS_VERIFICATION_VERSION and isinstance(result, dict):
+            digest = hashlib.sha256(_json(result).encode("utf-8")).hexdigest()
+            with self._connect() as connection:
+                verified_publication = connection.execute(
+                    """SELECT * FROM catalyst_local_verified_focus_publications
+                       WHERE cycle_id=? AND job_id=? AND input_hash=? AND result_sha256=?""",
+                    (payload["cycle_id"], payload["job_id"], payload["input_hash"], digest),
+                ).fetchone()
+            payload["_validation_raw_result"] = result
+            result = _loads(verified_publication["public_result_json"], None) if verified_publication else None
+            payload["verification_status"] = "verified" if verified_publication else "pending"
+        else:
+            payload["verification_status"] = "legacy_unverified" if cycle_payload.get("verification_version") != FOCUS_VERIFICATION_VERSION else "pending"
         cancel_requested = False
         # Read-only: use the paid job identity for owners and visitors alike.
         linked_job = self._read_ai_job(str(payload["job_id"]))
@@ -7544,7 +7765,11 @@ class LocalCatalystIntelligence:
                 "_validation_payload": cycle_payload,
                 "model": identity_job.get("model") if identity_job else None,
                 "reasoning_effort": identity_job.get("reasoning") if identity_job else None,
-                "evidence_sources": identity_job.get("evidence_sources", []) if identity_job else [],
+                "evidence_sources": (
+                    _loads(verified_publication["evidence_sources_json"], []) if verified_publication
+                    else [] if cycle_payload.get("verification_version") == FOCUS_VERIFICATION_VERSION
+                    else identity_job.get("evidence_sources", []) if identity_job else []
+                ),
                 "result": result,
             }
         )
@@ -7640,42 +7865,42 @@ class LocalCatalystIntelligence:
 
     def latest_market_focus_cycle(self, *, now: datetime | None = None) -> dict[str, Any]:
         observed = now or _utc_now()
+        visible_at = _iso(observed)
         include_owner_state = current_request_is_owner()
         with self._connect() as connection:
             row = connection.execute(
                 """SELECT cycle_id FROM catalyst_local_focus_cycles
-                   WHERE created_at<=? ORDER BY created_at DESC LIMIT 1""",
-                (_iso(observed),),
+                   WHERE created_at<=? AND COALESCE(NULLIF(snapshot_as_of,''),created_at)<=?
+                   ORDER BY COALESCE(NULLIF(snapshot_as_of,''),created_at) DESC,created_at DESC,cycle_id DESC LIMIT 1""",
+                (visible_at, visible_at),
             ).fetchone()
-            successful_rows = connection.execute(
-                """SELECT cycle_id FROM catalyst_local_focus_cycles
-                   WHERE status='completed' AND result_json IS NOT NULL
-                     AND completed_at<=?
-                   ORDER BY completed_at DESC,created_at DESC LIMIT 2""",
-                (_iso(observed),),
-            ).fetchall()
-        successful_row = successful_rows[0] if successful_rows else None
         latest_cycle_id = str(row["cycle_id"]) if row is not None else None
-        latest_successful_id = (
-            str(successful_row["cycle_id"])
-            if successful_row is not None
-            else None
-        )
-        if (
-            include_owner_state
-            and latest_cycle_id is not None
-            and latest_cycle_id != latest_successful_id
-        ):
-            previous_successful_row = successful_row
-        else:
-            previous_successful_row = (
-                successful_rows[1] if len(successful_rows) > 1 else None
-            )
         cycle = (
             self.market_focus_cycle(latest_cycle_id)
             if latest_cycle_id is not None and include_owner_state
             else None
         )
+        # Owner polling above may finish publication of a saved paid receipt.
+        # Select successful decisions afterwards so fallback and current cannot
+        # disagree within this response. completed_at only gates visibility.
+        with self._connect() as connection:
+            successful_rows = connection.execute(
+                """SELECT cycle_id FROM catalyst_local_focus_cycles
+                   WHERE status='completed' AND result_json IS NOT NULL
+                     AND completed_at<=? AND created_at<=? AND COALESCE(NULLIF(snapshot_as_of,''),created_at)<=?
+                   ORDER BY COALESCE(NULLIF(snapshot_as_of,''),created_at) DESC,created_at DESC,cycle_id DESC LIMIT 2""",
+                (visible_at, visible_at, visible_at),
+            ).fetchall()
+        successful_row = successful_rows[0] if successful_rows else None
+        latest_successful_id = (
+            str(successful_row["cycle_id"])
+            if successful_row is not None
+            else None
+        )
+        if include_owner_state and latest_cycle_id != latest_successful_id:
+            previous_successful_row = successful_row
+        else:
+            previous_successful_row = successful_rows[1] if len(successful_rows) > 1 else None
         latest_successful_cycle = (
             self.market_focus_cycle(latest_successful_id)
             if latest_successful_id is not None
@@ -7688,10 +7913,18 @@ class LocalCatalystIntelligence:
         )
         if not include_owner_state:
             cycle = latest_successful_cycle
+        # These flags are relative to the requested as-of view, unlike direct
+        # history reads, which compare with today's latest input.
+        if cycle is not None:
+            cycle["is_historical"] = cycle["cycle_id"] != latest_cycle_id
+        if latest_successful_cycle is not None:
+            latest_successful_cycle["is_historical"] = latest_successful_id != latest_cycle_id
+        if previous_successful_cycle is not None:
+            previous_successful_cycle["is_historical"] = True
         if (
             cycle is not None
             and cycle.get("completed_at")
-            and str(cycle["completed_at"]) > _iso(observed)
+            and str(cycle["completed_at"]) > visible_at
         ):
             cycle = dict(cycle)
             cycle["result"] = None
@@ -7699,7 +7932,7 @@ class LocalCatalystIntelligence:
             cycle["status"] = "in_progress"
         return {
             "status": "active" if cycle else "empty",
-            "as_of": _iso(observed),
+            "as_of": visible_at,
             "data_through": self.hotspot_status(now=observed).get("data_through"),
             "cycle": cycle,
             "latest_successful_cycle": latest_successful_cycle,

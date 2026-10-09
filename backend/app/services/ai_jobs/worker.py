@@ -48,11 +48,12 @@ async def _finish_claude_receipt(
         )
         return
     try:
-        from app.services.ai_jobs.models import validate_result
+        from app.services.ai_jobs.models import validate_result, validate_market_focus_evidence
 
-        result = validate_result(
-            job["job_type"], receipt["output_text"], json.loads(job["payload_json"]),
-        )
+        payload = json.loads(job["payload_json"])
+        result = validate_result(job["job_type"], receipt["output_text"], payload)
+        if job["job_type"] == "market_focus" and payload.get("verification_version") == "web-evidence-v1":
+            validate_market_focus_evidence(result, payload, receipt.get("tool_evidence") or [])
     except (TypeError, ValueError) as exc:
         await _with_storage_retry(
             repository.fail, job["job_id"], owner,
@@ -71,7 +72,7 @@ async def _stream_claude_with_controls(
     prepared: Any,
 ) -> Any:
     """Bound total runtime and honor cancellation while the lease stays live."""
-    from app.services.ai_jobs.claude_provider import stream_message
+    from app.services.ai_jobs.claude_provider import stream_message, stream_market_focus
 
     async def started(message_id: str) -> None:
         # This identity is for diagnostics, never a remotely retrievable handle.
@@ -80,7 +81,21 @@ async def _stream_claude_with_controls(
             repository.link_anthropic_message, job["job_id"], owner, message_id,
         )
 
-    operation = asyncio.create_task(stream_message(prepared, on_message_start=started))
+    async def progress(snapshot: dict[str, Any], *, will_continue: bool = False) -> None:
+        await _with_storage_retry(
+            repository.record_provider_progress, job["job_id"], owner, snapshot,
+            will_continue=will_continue,
+            shared_daily_budget_usd=float(getattr(settings, "model_daily_budget_usd", 0.0)),
+            shared_budget_enforce_limit=getattr(settings, "model_budget_enforce_limit", True),
+            shared_budget_start_at=getattr(settings, "model_budget_start_at", None),
+        )
+
+    invocation = (
+        stream_market_focus(prepared, on_message_start=started, on_progress=progress)
+        if job["model"] == runtime.SONNET_MODEL and job["job_type"] == "market_focus"
+        else stream_message(prepared, on_message_start=started)
+    )
+    operation = asyncio.create_task(invocation)
     deadline = time.monotonic() + float(settings.openai_background_poll_timeout_seconds)
     try:
         while True:
@@ -469,6 +484,10 @@ async def _finish_response(
     # 此前不可见，只能重取响应现场复现（2026-08-14 预算误锁事故）。
     provider_detail = runtime.response_error_detail(response)
     if status == "completed":
+        if job.get("model") == runtime.LUNA_MODEL and getattr(response, "model", None) != runtime.LUNA_MODEL:
+            repository.fail(job["job_id"], owner, "provider_model_mismatch", usage=usage,
+                            detail="Luna returned a missing or unexpected model identity")
+            return
         if terminal_error:
             repository.fail(
                 job["job_id"],
@@ -721,6 +740,11 @@ async def process_job(
             repository.fail(job["job_id"], owner, source_disabled_error)
             return
 
+        try:
+            settings = runtime.settings_for_job(settings, job["job_type"])
+        except ValueError:
+            repository.fail(job["job_id"], owner, "runtime_configuration_changed")
+            return
         current_identity = runtime.schema_identity(
             job["job_type"], model=str(settings.openai_model),
         )
@@ -1036,11 +1060,7 @@ async def run_configured_once(
             scheduled_analysis_enabled=scheduled_analysis_enabled,
         )
 
-    concurrency = (
-        min(4, max(1, int(effective_settings.openai_max_concurrency)))
-        if runtime.uses_claude(effective_settings.openai_model)
-        else 1
-    )
+    concurrency = min(4, max(1, int(effective_settings.openai_max_concurrency)))
     # Independent paid submissions must not be cancelled by a sibling's local
     # failure. A single slot also needs a separate task so its own cancellation
     # cannot masquerade as cancellation of the supervisor's parent round.

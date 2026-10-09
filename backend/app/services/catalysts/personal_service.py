@@ -5,6 +5,7 @@ import sqlite3
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Literal, Protocol, cast
 
 from app.access import current_request_is_owner
@@ -17,6 +18,7 @@ from app.services.ai_jobs.models import (
     validate_simplified_chinese_text,
 )
 from app.services.ai_jobs.repository import AIJobRepository
+from app.services.ai_jobs.focus_verification import public_focus_result
 from app.services.runtime_settings import (
     RuntimeSettingsStorageError,
     get_effective_runtime_settings,
@@ -210,6 +212,10 @@ class PersonalCatalystService:
                 canonical_tickers=_canonical_tickers(),
                 model=resolved_ai_settings.openai_model,
                 reasoning=resolved_ai_settings.openai_reasoning,
+                news_model=ai_runtime.model_identity_for_job(resolved_ai_settings, "news_impact")[0],
+                news_reasoning=ai_runtime.model_identity_for_job(resolved_ai_settings, "news_impact")[1],
+                focus_model=ai_runtime.model_identity_for_job(resolved_ai_settings, "market_focus")[0],
+                focus_reasoning=ai_runtime.model_identity_for_job(resolved_ai_settings, "market_focus")[1],
                 max_queued=resolved_ai_settings.openai_job_max_queued,
                 article_fetcher=fetch_article,
                 manual_refresh_cooldown_seconds=(
@@ -226,9 +232,32 @@ class PersonalCatalystService:
         except RuntimeSettingsStorageError:
             return None
 
-    def _ai_configured(self) -> bool:
-        model = getattr(self.ai_settings, "openai_model", self.settings.model)
-        key_field = "anthropic_api_key" if model == "claude-haiku-5-5" else "openai_api_key"
+    def _analysis_identity(self, job_type: str = "news_impact") -> tuple[str, str]:
+        # Injected read facades may provide feature flags or an explicit model
+        # without the full worker Settings. Preserve that supported interface
+        # without changing the strict worker configuration validator.
+        explicit_model = getattr(self.ai_settings, "openai_model", None)
+        model = explicit_model or self.settings.model
+        default_effort = "xhigh" if ai_runtime.uses_claude(model) else "max"
+        reasoning = getattr(self.ai_settings, "openai_reasoning", None) or (
+            default_effort if explicit_model else getattr(self.settings, "reasoning", None) or default_effort
+        )
+        identity_settings = SimpleNamespace(
+            openai_model=model,
+            openai_reasoning=reasoning,
+            **{
+                field: getattr(self.ai_settings, field, None)
+                for field in (
+                    "openai_news_model", "openai_news_reasoning",
+                    "openai_market_focus_model", "openai_market_focus_reasoning",
+                )
+            },
+        )
+        return ai_runtime.model_identity_for_job(identity_settings, job_type)
+
+    def _ai_configured(self, job_type: str = "news_impact") -> bool:
+        model, _ = self._analysis_identity(job_type)
+        key_field = "anthropic_api_key" if ai_runtime.uses_claude(model) else "openai_api_key"
         secret = getattr(self.ai_settings, key_field, None)
         if secret is None:
             return bool(self._ai_repository_injected or self._intelligence_injected)
@@ -265,6 +294,7 @@ class PersonalCatalystService:
         self,
         *,
         now: datetime | None = None,
+        job_type: str = "news_impact",
     ) -> dict[str, Any]:
         observed = now or _utc_now()
         runtime_settings = self._effective_runtime()
@@ -320,10 +350,7 @@ class PersonalCatalystService:
                 capacity.update(
                     self.ai_repository.budget_snapshot(
                         max_concurrency=int(getattr(self.ai_settings, "openai_max_concurrency", 1)),
-                        model=getattr(
-                            self.ai_settings, "openai_model",
-                            getattr(getattr(self.personal_config, "ai", None), "model", "claude-haiku-5-5"),
-                        ),
+                        model=self._analysis_identity(job_type)[0],
                         daily_limit=daily_limit,
                         daily_budget_usd=daily_budget,
                         daily_token_limit=daily_token_limit,
@@ -371,7 +398,7 @@ class PersonalCatalystService:
             and runtime_settings is not None
             and runtime_settings.ai.manual_analysis_enabled
         )
-        configured = self._ai_configured()
+        configured = self._ai_configured(job_type)
         worker_healthy = self._worker_healthy()
         reason = "available"
         if runtime_settings is None:
@@ -402,6 +429,10 @@ class PersonalCatalystService:
         return {
             "enabled": enabled,
             "configured": configured,
+            "configured_by_job": {
+                "news_impact": self._ai_configured("news_impact"),
+                "market_focus": self._ai_configured("market_focus"),
+            },
             "worker_healthy": worker_healthy,
             "budget_available": bool(capacity["budget_available"]),
             "concurrency_available": bool(capacity["concurrency_available"]),
@@ -424,17 +455,18 @@ class PersonalCatalystService:
         *,
         include_owner_state: bool,
         now: datetime,
+        job_type: str = "news_impact",
     ) -> dict[str, Any]:
         if include_owner_state:
-            return self.analysis_availability(now=now)
+            return self.analysis_availability(now=now, job_type=job_type)
         return self.public_analysis_availability()
 
     @staticmethod
     def _resolve_owner_state(value: bool | None) -> bool:
         return current_request_is_owner() if value is None else bool(value)
 
-    def _require_analysis_available(self) -> None:
-        availability = self.analysis_availability()
+    def _require_analysis_available(self, job_type: str = "news_impact") -> None:
+        availability = self.analysis_availability(job_type=job_type)
         if availability["enabled"] or availability["reason"] in {
             # The durable queue performs the final atomic check. Allowing these
             # active states through preserves duplicate-request idempotency.
@@ -472,7 +504,7 @@ class PersonalCatalystService:
             "worker_unavailable": "后台工作进程暂不可用",
             "read_only_mode": "当前模式只允许读取新闻",
             "manual_analysis_disabled": "手动分析功能当前未启用",
-        }.get(code, "当前无法开始新闻分析")
+        }.get(code, "当前无法开始热点分析" if job_type == "market_focus" else "当前无法开始新闻分析")
         raise CatalystError(
             code,
             message,
@@ -941,6 +973,7 @@ class PersonalCatalystService:
                 continue
             item = dict(raw)
             item.pop("_analysis_published", None)
+            item.pop("_verification_source", None)
             validation_sources = item.pop("_validation_sources", [])
             if not isinstance(validation_sources, list):
                 validation_sources = []
@@ -1032,6 +1065,7 @@ class PersonalCatalystService:
         if not isinstance(allowed_event_group_ids, list):
             allowed_event_group_ids = []
         stored_payload = projected.pop("_validation_payload", None)
+        raw_result = projected.pop("_validation_raw_result", None)
         result = projected.get("result")
         if result is None:
             return projected
@@ -1075,7 +1109,7 @@ class PersonalCatalystService:
             result_data = validate_result(
                 "market_focus",
                 json.dumps(
-                    result,
+                    raw_result if raw_result is not None else result,
                     ensure_ascii=False,
                     separators=(",", ":"),
                     allow_nan=False,
@@ -1088,7 +1122,13 @@ class PersonalCatalystService:
                 projected.get("error_code") or "legacy_output_hidden"
             )
             return projected
-        projected["result"] = result_data
+        if validation_payload.get("verification_version") == "web-evidence-v1":
+            # A successful job alone is insufficient: the local publication
+            # transaction must have committed its exact verified projection.
+            projected["result"] = public_focus_result(result_data) if projected.get("verification_status") == "verified" else None
+        else:
+            projected["verification_status"] = "legacy_unverified"
+            projected["result"] = result_data
         return projected
 
     def _project_focus_cycle_for_access(
@@ -1120,6 +1160,8 @@ class PersonalCatalystService:
             "model",
             "reasoning_effort",
             "evidence_sources",
+            "verification_status",
+            "is_historical",
             "result",
         )
         return {
@@ -1144,8 +1186,8 @@ class PersonalCatalystService:
                 "data_through": None,
                 "last_sync_at": None,
                 "analysis_trigger_enabled": False,
-                "model": self.settings.model,
-                "reasoning": self.settings.reasoning,
+                "model": self._analysis_identity()[0],
+                "reasoning": self._analysis_identity()[1],
                 "execution_mode": "background",
                 "manual_refreshes": {},
                 "warnings": [],
@@ -1166,8 +1208,8 @@ class PersonalCatalystService:
                 "last_sync_at": None,
                 "remote_status": None,
                 "analysis_trigger_enabled": False,
-                "model": self.settings.model,
-                "reasoning": self.settings.reasoning,
+                "model": self._analysis_identity()[0],
+                "reasoning": self._analysis_identity()[1],
                 "execution_mode": "background",
                 "manual_refreshes": {},
                 "warnings": ["cache_unavailable"],
@@ -1197,8 +1239,8 @@ class PersonalCatalystService:
                 "last_sync_at": None,
                 "remote_status": None,
                 "analysis_trigger_enabled": False,
-                "model": self.settings.model,
-                "reasoning": self.settings.reasoning,
+                "model": self._analysis_identity()[0],
+                "reasoning": self._analysis_identity()[1],
                 "execution_mode": "background",
                 "manual_refreshes": {},
                 "warnings": ["cache_unavailable"],
@@ -1210,9 +1252,11 @@ class PersonalCatalystService:
             if not include_owner_state:
                 payload.pop("manual_refreshes", None)
             return payload
+        payload["model"], payload["reasoning"] = self._analysis_identity("news_impact")
         payload["analysis_trigger_enabled"] = bool(
             include_owner_state
             and self._manual_analysis_enabled()
+            and self._ai_configured("news_impact")
             and payload.get("analysis_trigger_enabled", True)
         )
         payload["analysis_availability"] = self._analysis_availability_for_access(
@@ -1741,8 +1785,8 @@ class PersonalCatalystService:
                 "prepared_since": None,
                 "last_cycle_at": None,
                 "next_scheduled_at": None,
-                "model": self.settings.model,
-                "reasoning": self.settings.reasoning,
+                "model": self._analysis_identity("market_focus")[0],
+                "reasoning": self._analysis_identity("market_focus")[1],
                 "data_through": status.get("data_through"),
                 "status": status["status"],
                 "as_of": status["as_of"],
@@ -1750,7 +1794,7 @@ class PersonalCatalystService:
                 "manual_enabled": False,
                 "warnings": status.get("warnings", []),
             }
-            payload["analysis_availability"] = status["analysis_availability"]
+            payload["analysis_availability"] = self._analysis_availability_for_access(include_owner_state=include_owner_state, now=observed, job_type="market_focus")
             return payload
         try:
             payload = dict(self.intelligence.hotspot_status(now=observed))
@@ -1763,8 +1807,8 @@ class PersonalCatalystService:
                     "prepared_since": None,
                     "last_cycle_at": None,
                     "next_scheduled_at": None,
-                    "model": self.settings.model,
-                    "reasoning": self.settings.reasoning,
+                    "model": self._analysis_identity("market_focus")[0],
+                    "reasoning": self._analysis_identity("market_focus")[1],
                     "data_through": None,
                     "status": "unavailable",
                     "as_of": _iso(observed),
@@ -1775,17 +1819,21 @@ class PersonalCatalystService:
                 payload["analysis_availability"] = self._analysis_availability_for_access(
                     include_owner_state=include_owner_state,
                     now=observed,
+                    job_type="market_focus",
                 )
                 return payload
             raise
+        payload["model"], payload["reasoning"] = self._analysis_identity("market_focus")
         payload["manual_enabled"] = bool(
             include_owner_state
             and self._manual_analysis_enabled()
+            and self._ai_configured("market_focus")
             and payload.get("manual_enabled", True)
         )
         payload["analysis_availability"] = self._analysis_availability_for_access(
             include_owner_state=include_owner_state,
             now=observed,
+            job_type="market_focus",
         )
         return payload
 
@@ -1891,7 +1939,7 @@ class PersonalCatalystService:
         force: bool = False,
     ) -> dict[str, Any]:
         self._require_cache_ready()
-        self._require_analysis_available()
+        self._require_analysis_available("market_focus")
         try:
             arguments = {
                 "expected_prepared_revision": expected_prepared_revision,

@@ -139,6 +139,7 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
         <h3 className={cn('font-display font-medium text-ink-900', compact ? 'text-[16px]' : 'text-[20px] leading-[28px]')}>
           {cycle.dominantEvent}
         </h3>
+        {cycle.isHistorical && <SoftBadge>{t('历史分析')}</SoftBadge>}
         {statusCn && (
           <SoftBadge tone="warn">
             <Led tone="warn" pulse={cycle.status === 'in_progress' || cycle.status === 'cancel_requested'} className="size-1.5" />

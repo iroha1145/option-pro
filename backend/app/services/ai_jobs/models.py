@@ -2701,6 +2701,88 @@ class MarketFocusResult(SimplifiedChineseResult):
         return self
 
 
+FOCUS_VERIFICATION_VERSION = "web-evidence-v1"
+
+
+class FocusEvidenceReference(StrictModel):
+    tool_use_id: Optional[Annotated[str, StringConstraints(min_length=1, max_length=256)]]
+    url: Annotated[str, StringConstraints(min_length=1, max_length=2048)]
+    relation: Literal["supports", "contradicts"]
+
+
+class FocusEventVerification(StrictModel):
+    event_group_id: Annotated[str, StringConstraints(min_length=1, max_length=100)]
+    event_group_version: StrictInt = Field(ge=1)
+    verdict: Literal["supported", "contradicted", "unverifiable"]
+    evidence_refs: list[FocusEvidenceReference] = Field(max_length=20)
+    # These independent, event-bound texts are the only news prose published.
+    # Global prose in the paid output stays available in the internal audit.
+    title_zh: ZhShortText
+    summary_zh: ZhBoundedText
+    affected_sectors: list[ZhShortText] = Field(max_length=10)
+
+
+class VerifiedMarketFocusResult(MarketFocusResult):
+    event_verifications: list[FocusEventVerification] = Field(max_length=200)
+
+
+def validate_market_focus_evidence(
+    result: dict, payload: dict, tool_evidence: list[dict] | None,
+) -> None:
+    """Bind verdicts to the immutable input and actual successful web receipts.
+
+    This verifies provenance, not real-world truth: the model still evaluates
+    whether a retrieved source supports the individual claim.
+    """
+    if payload.get("verification_version") != FOCUS_VERIFICATION_VERSION:
+        return
+    from app.services.ai_jobs.claude_provider import _public_source_url
+
+    expected = {
+        event["event_group_id"]: event["event_group_version"]
+        for event in payload.get("events", [])
+        if isinstance(event, dict)
+    }
+    verifications = result.get("event_verifications", [])
+    actual = {entry["event_group_id"]: entry["event_group_version"] for entry in verifications}
+    if len(actual) != len(verifications) or actual != expected:
+        raise ValueError("market_focus_verification_event_mismatch")
+    receipts = {
+        (entry.get("tool_use_id"), entry.get("url"))
+        for entry in tool_evidence or []
+        if isinstance(entry, dict)
+        and isinstance(entry.get("tool_use_id"), str)
+        and bool(entry["tool_use_id"])
+        and entry.get("status") == "success"
+        and entry.get("tool_name") in {"web_search", "web_fetch"}
+        and isinstance(entry.get("content_sha256"), str)
+        and re.fullmatch(r"[0-9a-f]{64}", entry["content_sha256"])
+        and _public_source_url(entry.get("url")) == entry.get("url")
+    }
+    for entry in verifications:
+        refs = entry["evidence_refs"]
+        for ref in refs:
+            normalized_url = _public_source_url(ref["url"])
+            if ref["tool_use_id"] is None:
+                # The model may not see server-generated IDs. Resolve only a
+                # unique successful call in this exact persisted receipt.
+                candidates = {call_id for call_id, url in receipts if url == normalized_url}
+                if len(candidates) != 1:
+                    raise ValueError("market_focus_verification_evidence_ambiguous")
+                ref["tool_use_id"] = candidates.pop()
+            if (ref["tool_use_id"], normalized_url) not in receipts:
+                raise ValueError("market_focus_verification_evidence_unbound")
+            ref["url"] = normalized_url
+        keys = [(ref["tool_use_id"], ref["url"]) for ref in refs]
+        if len(keys) != len(set(keys)):
+            raise ValueError("market_focus_verification_duplicate_evidence")
+        if any(key not in receipts for key in keys):
+            raise ValueError("market_focus_verification_evidence_unbound")
+        required = {"supported": "supports", "contradicted": "contradicts"}.get(entry["verdict"])
+        if required and not any(ref["relation"] == required for ref in refs):
+            raise ValueError("market_focus_verification_evidence_missing")
+
+
 class AIJobPublic(StrictModel):
     job_id: Annotated[str, StringConstraints(min_length=10, max_length=80)]
     job_type: AIJobType
@@ -2734,7 +2816,9 @@ class CancelRequest(StrictModel):
     confirm: StrictBool = True
 
 
-def result_model_for(job_type: str) -> type[BaseModel]:
+def result_model_for(
+    job_type: str, *, payload: dict | None = None, model: str | None = None,
+) -> type[BaseModel]:
     if job_type == "earnings_impact":
         return EarningsImpactResult
     if job_type == "option_alerts":
@@ -2744,6 +2828,10 @@ def result_model_for(job_type: str) -> type[BaseModel]:
     if job_type == "news_impact":
         return NewsImpactResult
     if job_type == "market_focus":
+        if (payload or {}).get("verification_version") == FOCUS_VERIFICATION_VERSION or (
+            payload is None and isinstance(model, str) and "sonnet" in model
+        ):
+            return VerifiedMarketFocusResult
         return MarketFocusResult
     raise ValueError("unsupported_job_type")
 
@@ -2861,6 +2949,21 @@ def _validate_job_payload_identities(job_type: str, payload: dict) -> None:
         )
         if any(_TICKER_PATTERN.fullmatch(ticker) is None for ticker in tickers):
             raise ValueError("allowed_tickers_invalid")
+        marker = payload.get("verification_version")
+        if marker is not None:
+            if marker != FOCUS_VERIFICATION_VERSION:
+                raise ValueError("market_focus_verification_version_invalid")
+            events = payload.get("events")
+            if not isinstance(events, list) or len(events) > 200:
+                raise ValueError("market_focus_verification_events_invalid")
+            event_ids = []
+            for event in events:
+                if not isinstance(event, dict):
+                    raise ValueError("market_focus_verification_events_invalid")
+                event_ids.append(_require_identity_text(event, "event_group_id", max_length=100))
+                _require_identity_integer(event, "event_group_version")
+            if len(set(event_ids)) != len(event_ids) or set(event_ids) != set(payload["allowed_event_group_ids"]):
+                raise ValueError("market_focus_verification_events_invalid")
         return
     if job_type == "signal_analysis":
         # 证据包 v2 的上下文代码表（并入 allowed_codes）。自建载荷始终合规，
@@ -2939,7 +3042,7 @@ _SIGNAL_BENCHMARK_CODES = ("SPY", "QQQ", "IWM", "RSP", "HYG", "TLT")
 
 
 def validate_result(job_type: str, raw_json: str, payload: dict) -> dict:
-    model = result_model_for(job_type)
+    model = result_model_for(job_type, payload=payload)
     if job_type in {"news_impact", "market_focus"}:
         raw_allowed_codes = list(payload.get("allowed_tickers") or [])
     elif job_type == "signal_analysis":
@@ -3037,6 +3140,12 @@ def validate_result(job_type: str, raw_json: str, payload: dict) -> dict:
             output_event_ids.update(assessment["conflicting_event_ids"])
         if not output_event_ids <= allowed_event_ids:
             raise ValueError("market_focus_event_binding_mismatch")
+        if payload.get("verification_version") == FOCUS_VERIFICATION_VERSION:
+            expected = {event["event_group_id"]: event["event_group_version"] for event in payload["events"]}
+            verifications = data["event_verifications"]
+            actual = {entry["event_group_id"]: entry["event_group_version"] for entry in verifications}
+            if len(actual) != len(verifications) or actual != expected:
+                raise ValueError("market_focus_verification_event_mismatch")
         allowed_tickers = {
             str(ticker).strip().upper() for ticker in payload["allowed_tickers"]
         }

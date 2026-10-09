@@ -49,6 +49,7 @@ _USAGE_KEYS = (
     "cache_read_input_tokens",
     "web_search_requests",
     "web_fetch_requests",
+    "code_execution_requests",
 )
 
 
@@ -111,8 +112,7 @@ def build_request(*, config: Any, system_text: str, user_text: str) -> dict[str,
         },
     ]
     if config.code_execution_tool:
-        # 默认关：官方文档说明 20260209 版网页工具的动态过滤已内建代码执行，
-        # 再并列声明独立的代码执行工具会出现第二个执行环境，让模型困惑。
+        # 与 20260209 及更新网页工具同请求时，独立代码执行仅收模型词元费用。
         tools.append({"type": "code_execution_20260521", "name": "code_execution"})
     output_config: dict[str, Any] = {"effort": config.effort}
     if config.structured_output:
@@ -205,6 +205,15 @@ def _round_usage(usage: Any, *, message: Any = None) -> dict[str, int | None]:
             for block in _field(message, "content") or []
         )
         result[key] = 0 if value is None and message is not None and not used else _int(value)
+    # Count returned invocations once, including results completed in a later
+    # continuation. Pairing is verified separately before accepting the result.
+    result["code_execution_requests"] = None if message is None else sum(
+        _field(block, "type") in {
+            "code_execution_tool_result", "bash_code_execution_tool_result",
+            "text_editor_code_execution_tool_result",
+        }
+        for block in _field(message, "content") or []
+    )
     return result
 
 

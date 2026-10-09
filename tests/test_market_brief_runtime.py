@@ -127,7 +127,9 @@ def test_request_shape_follows_the_documented_parameters() -> None:
     # 顶层自动缓存固定 5 分钟：1 小时断点在前、5 分钟尾巴在后是允许的顺序，反过来会被拒。
     assert built["cache_control"] == {"type": "ephemeral"}
     assert built["messages"] == [{"role": "user", "content": [{"type": "text", "text": "证据"}]}]
-    assert [tool["type"] for tool in built["tools"]] == ["web_search_20260209", "web_fetch_20260209"]
+    assert [tool["type"] for tool in built["tools"]] == [
+        "web_search_20260209", "web_fetch_20260209", "code_execution_20260521",
+    ]
     assert built["tools"][0]["user_location"] == {"type": "approximate", "country": "US", "timezone": "America/New_York"}
     assert built["tools"][0]["max_uses"] == CONFIG.web_search_max_uses
     assert built["tools"][1]["max_content_tokens"] == CONFIG.web_fetch_max_content_tokens
@@ -211,6 +213,7 @@ def test_successful_response_is_parsed_with_usage_and_sources() -> None:
         "cache_read_input_tokens": 50,
         "web_search_requests": 2,
         "web_fetch_requests": 1,
+        "code_execution_requests": 0,
         "rounds": 1,
     }
     assert result.external_sources == (
@@ -221,6 +224,26 @@ def test_successful_response_is_parsed_with_usage_and_sources() -> None:
     )
     assert len(client.messages.calls) == 1
     assert client.beta.messages.calls == []
+
+
+def test_code_execution_survives_continuation_and_has_no_separate_tool_charge() -> None:
+    call = SimpleNamespace(type="server_tool_use", id="code_1", name="code_execution", input={"code": "1 + 1"})
+    returned = SimpleNamespace(type="code_execution_tool_result", tool_use_id="code_1",
+                               content=SimpleNamespace(type="code_execution_result", return_code=0, stdout="2", stderr=""))
+    paused = [call]
+    client = FakeClient([
+        message(paused, stop_reason="pause_turn"),
+        message([returned, json_text()], message_id="msg_2"),
+    ])
+    result = runtime.invoke(client, request(), config=CONFIG)
+    assert result.error_code is None and result.parsed == SAMPLE_RESULT
+    assert result.usage["code_execution_requests"] == 1
+    assert result.continuation_count == 1
+    assert result.cost_microusd == 28_000
+    assert client.messages.calls[1]["messages"][-1]["content"] is paused
+    assert {item["name"] for item in client.messages.calls[1]["tools"]} == {
+        "web_search", "web_fetch", "code_execution",
+    }
 
 
 def test_pause_turn_resends_the_paused_content_once_then_succeeds() -> None:

@@ -29,13 +29,13 @@ export function sharedAiBudgetText(budget: AiBudgetSnapshot | null | undefined):
       summary: t('共享日预算参考 {limit} 美元 · 估算及预留 {used}', {
         limit: amount(budget.dailyBudgetUsd), used: amount(budget.budgetUsedUsd),
       }),
-      note: t('Haiku 与 Opus 共用，仅统计费用，超过参考金额仍继续；东京 09:00 重置'),
+      note: t('所有模型共用，仅统计费用，超过参考金额仍继续；东京 09:00 重置'),
     };
   }
   return {
     summary: t('共享日预算 {limit} 美元 · 估算及预留 {used} · 剩余 {remaining}', {
       limit: amount(budget.dailyBudgetUsd), used: amount(budget.budgetUsedUsd), remaining: amount(budget.budgetRemainingUsd),
     }),
-    note: t('Haiku 与 Opus 共用，含未知任务占用；东京 09:00 重置'),
+    note: t('所有模型共用，含未知任务预留；东京 09:00 重置'),
   };
 }

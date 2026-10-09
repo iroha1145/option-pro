@@ -6,6 +6,8 @@ import { aiJobKnownErrorMessage } from '../src/api/aiJobNormalize.ts';
 
 test('actual task model and reasoning determine the label', () => {
   assert.equal(aiModelLabel('claude-haiku-5-5', 'xhigh'), 'Claude Haiku 5.5 · xhigh');
+  assert.equal(aiModelLabel('claude-sonnet-5-5', 'xhigh'), 'Claude Sonnet 5.5 · xhigh');
+  assert.equal(aiModelLabel('gpt-5.6-luna', 'max'), 'GPT-5.6 Luna · max');
   assert.equal(aiModelLabel('gpt-5.6-terra', 'max'), 'GPT-5.6 Terra · max');
   assert.equal(aiModelLabel('historical-provider-model', 'high'), 'historical-provider-model · high');
   assert.equal(aiModelLabel('gpt-5.6-terra'), 'GPT-5.6 Terra');

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+import hashlib
 import ipaddress
 import json
 import time
@@ -82,11 +83,11 @@ def prepare_message(
     if not key:
         raise RuntimeError("ai_not_configured")
     output_config: dict[str, Any] = {
-        "effort": EFFORT,
+        "effort": str(getattr(settings, "openai_reasoning", EFFORT)),
         "format": {"type": "json_schema", "schema": _output_schema(schema)},
     }
     params: dict[str, Any] = {
-        "model": MODEL,
+        "model": str(getattr(settings, "openai_model", MODEL)),
         "max_tokens": max_tokens,
         "thinking": {"type": "adaptive"},
         "output_config": output_config,
@@ -120,6 +121,7 @@ async def stream_message(
     prepared: PreparedMessage,
     *,
     on_message_start: Callable[[str], Awaitable[None]] | None = None,
+    tool_counts: dict[str, int] | None = None,
 ) -> Message:
     # A fresh client avoids retaining rotated secrets or connections from another
     # event loop. Create it lazily so abandoned preparation owns no open sockets.
@@ -138,7 +140,7 @@ async def stream_message(
             completed = False
             cache_creation_tokens = None
             cache_creation_details = None
-            counts = {"web_search": 0, "web_fetch": 0, "code": 0, "total": 0}
+            counts = tool_counts if tool_counts is not None else {"web_search": 0, "web_fetch": 0, "code": 0, "total": 0}
             async for event in stream:
                 if event.type == "message_start":
                     current = event.message.id
@@ -171,7 +173,8 @@ async def stream_message(
                         raise RuntimeError("provider_unknown_server_tool")
                     counts[group] += 1
                     counts["total"] += 1
-                    if counts[group] > (2 if group == "code" else 1) or counts["total"] > 4:
+                    network_limit = 12 if prepared.params["model"] == "claude-sonnet-5-5" and prepared.diagnostic_task == "ai_jobs:market_focus" else 1
+                    if counts[group] > (2 if group == "code" else network_limit) or counts["total"] > network_limit * 2 + 2:
                         raise RuntimeError("provider_tool_limit_exceeded")
             # SDK accumulation can retain a snapshot even after a premature EOF.
             if not completed:
@@ -365,3 +368,157 @@ def response_sources(message: Message) -> list[dict[str, str]]:
                     kind = "web_search" if citation.type == "web_search_result_location" else "web_fetch"
                     add(getattr(citation, "title", None), url, kind)
     return sources
+
+
+def response_tool_evidence(message: Message) -> list[dict[str, str]]:
+    """Proof from matched successful server results, never model citations."""
+    completed, error = _server_pairs(message)
+    if error:
+        return []
+    evidence: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for block in message.content:
+        call_id = getattr(block, "tool_use_id", None)
+        name = completed.get(call_id)
+        if name == "web_search" and block.type == "web_search_tool_result" and isinstance(block.content, list):
+            entries = [(item, getattr(item, "url", None), getattr(item, "title", None)) for item in block.content if getattr(item, "type", None) == "web_search_result"]
+        elif name == "web_fetch" and block.type == "web_fetch_tool_result" and getattr(block.content, "type", None) == "web_fetch_result":
+            entries = [(block.content, block.content.url, getattr(block.content.content, "title", None))]
+        else:
+            continue
+        for content, url, title in entries:
+            normalized = _public_source_url(url)
+            if normalized is None or (call_id, normalized) in seen or len(evidence) >= 512:
+                continue
+            if hasattr(content, "model_dump"):
+                raw = content.model_dump(mode="json")
+            else:
+                raw = vars(content)
+            digest = hashlib.sha256(json.dumps(raw, sort_keys=True, ensure_ascii=False, default=str, separators=(",", ":")).encode()).hexdigest()
+            evidence.append({"tool_use_id": call_id, "tool_name": name, "status": "success", "url": normalized, "title": " ".join("".join(char if char.isprintable() else " " for char in str(title or "")).split())[:512], "content_sha256": digest})
+            seen.add((call_id, normalized))
+    return evidence
+
+
+MAX_FOCUS_ROUNDS = 4
+_USAGE_KEYS = (
+    "input_tokens", "cached_input_tokens", "cache_creation_input_tokens",
+    "cache_creation_5m_input_tokens", "cache_creation_1h_input_tokens",
+    "output_tokens", "reasoning_tokens", "total_tokens",
+    "web_search_requests", "web_fetch_requests", "code_execution_requests",
+)
+
+
+def sum_round_usage(rounds: list[dict[str, Any]]) -> dict[str, int | None]:
+    """Sum complete request receipts; one unknown component stays unknown."""
+    total: dict[str, int | None] = dict.fromkeys(_USAGE_KEYS, 0)
+    for item in rounds:
+        for key in _USAGE_KEYS:
+            value = item["usage"].get(key)
+            previous = total[key]
+            total[key] = previous + value if type(previous) is int and type(value) is int and value >= 0 else None
+    return total
+
+
+@dataclass(frozen=True)
+class ConversationResult:
+    receipt: dict[str, Any]
+
+
+async def stream_market_focus(
+    prepared: PreparedMessage,
+    *,
+    on_message_start: Callable[[str], Awaitable[None]],
+    on_progress: Callable[..., Awaitable[None]],
+) -> ConversationResult:
+    """Bound pause-turn continuations under the worker's one absolute deadline.
+
+    Progress is durable before each next request. It deliberately contains no
+    thinking or assistant content, so restart cannot replay a paid conversation.
+    """
+    if prepared.params["model"] != "claude-sonnet-5-5" or prepared.diagnostic_task != "ai_jobs:market_focus":
+        raise ValueError("provider_continuation_not_supported")
+    original_model = prepared.params["model"]
+    ceiling = int(prepared.params["max_tokens"])
+    messages = deepcopy(prepared.params["messages"])
+    completed: list[Message] = []
+    rounds: list[dict[str, Any]] = []
+    request_ids: list[str] = []
+    counts = {"web_search": 0, "web_fetch": 0, "code": 0, "total": 0}
+
+    async def persist_progress(*, will_continue: bool = False) -> None:
+        await on_progress({
+            "provider": "anthropic", "model": original_model, "id": request_ids[0],
+            "request_ids": list(request_ids), "rounds": deepcopy(rounds),
+            "confirmed_usage": sum_round_usage(rounds),
+        }, will_continue=will_continue)
+
+    async def started(message_id: str) -> None:
+        if not message_id or message_id in request_ids or len(request_ids) >= MAX_FOCUS_ROUNDS:
+            raise RuntimeError("provider_invalid_message_identity")
+        if not request_ids:
+            await on_message_start(message_id)
+        request_ids.append(message_id)
+        await persist_progress()
+
+    def finish(error: str | None = None) -> ConversationResult:
+        combined = completed[-1].model_copy(update={
+            "id": request_ids[0],
+            "content": [block for message in completed for block in message.content],
+        })
+        terminal = error or response_terminal_error(combined)
+        final_blocks = completed[-1].content
+        tool_indices = [index for index, block in enumerate(final_blocks) if block.type == "server_tool_use" or block.type.endswith("_tool_result")]
+        if tool_indices:
+            final_blocks = final_blocks[max(tool_indices) + 1:]
+        final_text = "".join(block.text for block in final_blocks if block.type == "text")
+        if not terminal and not final_text.strip():
+            terminal = "provider_empty_response"
+        return ConversationResult({
+            "provider": "anthropic", "model": original_model, "id": request_ids[0],
+            "request_ids": list(request_ids), "rounds": deepcopy(rounds),
+            "output_text": "" if terminal else final_text,
+            "stop_reason": str(combined.stop_reason), "terminal_error": terminal,
+            "usage": sum_round_usage(rounds),
+            "evidence_sources": response_sources(combined),
+            "tool_evidence_version": "v1", "tool_evidence": response_tool_evidence(combined),
+        })
+
+    for index in range(MAX_FOCUS_ROUNDS):
+        used_output = sum_round_usage(rounds)["output_tokens"]
+        if type(used_output) is not int:
+            return finish("provider_usage_incomplete")
+        remaining = ceiling - used_output
+        if remaining <= 0:
+            return finish("provider_incomplete_max_output_tokens")
+        params = {**prepared.params, "messages": messages, "max_tokens": remaining}
+        message = await stream_message(replace(prepared, params=params), on_message_start=started, tool_counts=counts)
+        if message.model != original_model or not request_ids or message.id != request_ids[-1]:
+            raise RuntimeError("provider_model_or_message_mismatch")
+        completed.append(message)
+        round_usage = response_usage(message)
+        round_usage["code_execution_requests"] = sum(
+            block.type == "server_tool_use" and block.name in _CODE_TOOLS for block in message.content
+        )
+        rounds.append({"id": message.id, "stop_reason": str(message.stop_reason), "usage": round_usage})
+        await persist_progress()
+        combined = message.model_copy(update={"content": [block for item in completed for block in item.content]})
+        _, pair_error = _server_pairs(combined)
+        if pair_error and pair_error != "provider_incomplete_tool_result":
+            return finish(pair_error)
+        consumed_output = sum_round_usage(rounds)["output_tokens"]
+        if type(consumed_output) is int and consumed_output > ceiling:
+            return finish("provider_incomplete_max_output_tokens")
+        if message.stop_reason != "pause_turn":
+            return finish()
+        # Unknown billing or output accounting cannot authorize another request.
+        usage = sum_round_usage(rounds)
+        if any(type(usage[key]) is not int for key in ("input_tokens", "output_tokens", "cached_input_tokens", "cache_creation_input_tokens", "web_search_requests", "web_fetch_requests")):
+            return finish("provider_usage_incomplete")
+        if index == MAX_FOCUS_ROUNDS - 1:
+            return finish("provider_continuation_limit")
+        # Preserve SDK content verbatim, including thinking signatures and tool
+        # blocks. The next request must continue the same assistant turn.
+        await persist_progress(will_continue=True)
+        messages = [*messages, {"role": "assistant", "content": message.content}]
+    raise AssertionError("unreachable")
