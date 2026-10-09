@@ -1214,6 +1214,13 @@
   *, *::before, *::after {
     transition-duration: 160ms !important;
   }
+  /* 浮层定位容器（Radix Popper）不吃上面这条：transition-property 默认是 all，全局 160ms 会让原本
+     没有过渡的属性也补成动画。下拉菜单打开时先放在 translate(0, -200%) 量尺寸、再移到触发器下方，
+     这一步被补成从页面上方滑下约 850px 的动画（减少动态效果反而动得更多）；滑过静止的鼠标时，
+     Radix 按「指针离开选项」把键盘选中的选项焦点抢回菜单容器，回车就选不中（CI 出现过一次）。 */
+  [data-radix-popper-content-wrapper] {
+    transition: none !important;
+  }
   /* 不动的跑马灯改成可横向滑动的一条：副本藏起来，免得同一只指数出现两次；
      右侧标签改为贴边占位，滑到头时不再盖住最后一项。 */
   .marquee-track { overflow-x: auto; }

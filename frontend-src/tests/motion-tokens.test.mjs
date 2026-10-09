@@ -154,6 +154,14 @@ test('index.css does not duplicate the transitions-root :root block', async () =
   assert.doesNotMatch(index, /--dropdown-open-dur:/);
 });
 
+test('reduced motion does not animate the Radix popper positioning wrapper', async () => {
+  // 全局 reduced-motion 规则把所有元素的 transition-duration 改成 160ms；浮层定位容器必须排除，
+  // 否则下拉菜单从测量位置 translate(0, -200%) 滑下来，经过静止鼠标时会抢走键盘焦点。
+  const css = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
+  const block = css.slice(css.indexOf('transition-duration: 160ms !important;'));
+  assert.match(block.slice(0, 1200), /\[data-radix-popper-content-wrapper\]\s*\{\s*transition:\s*none !important;/);
+});
+
 test('each catalog snippet keeps prefers-reduced-motion', async () => {
   const catalog = await source('styles/transitions-catalog.css');
   const snippets = [
