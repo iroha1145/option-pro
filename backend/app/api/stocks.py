@@ -11,10 +11,8 @@ import ipaddress
 import json
 import logging
 import math
-import os
 from pathlib import Path
 import re
-import tempfile
 import threading
 import time
 from typing import Annotated, Any, Optional
@@ -37,6 +35,7 @@ from app.access import (
     require_same_origin_json,
 )
 from app.failure_diagnostics import record_fallback_failure
+from app.file_identity import replace_file_atomically
 from app.services import company_logo_cache
 from app.data_paths import get_data_paths
 from app.personal_config import get_personal_config
@@ -1067,24 +1066,7 @@ def _write_stock_directory_snapshot(
     if len(encoded) > _STOCK_DIRECTORY_MAX_BYTES:
         raise ValueError("stock symbol directory exceeds the size limit")
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{path.name}.",
-        suffix=".tmp",
-        dir=path.parent,
-    )
-    try:
-        with os.fdopen(descriptor, "wb") as handle:
-            handle.write(encoded)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary_name, path)
-    except BaseException:
-        try:
-            os.unlink(temporary_name)
-        except FileNotFoundError:
-            pass
-        raise
+    replace_file_atomically(path, encoded)
 
 
 def _snapshot_file_identity(path: Path) -> tuple[int, int, int]:
@@ -1635,24 +1617,7 @@ def _write_watchlist_snapshot(
     if len(encoded) > _WATCHLIST_SNAPSHOT_MAX_BYTES:
         raise ValueError("watchlist snapshot exceeds the size limit")
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{path.name}.",
-        suffix=".tmp",
-        dir=path.parent,
-    )
-    try:
-        with os.fdopen(descriptor, "wb") as handle:
-            handle.write(encoded)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary_name, path)
-    except BaseException:
-        try:
-            os.unlink(temporary_name)
-        except FileNotFoundError:
-            pass
-        raise
+    replace_file_atomically(path, encoded)
 
 
 def _persist_watchlist_snapshot(payload: Any, saved_at: float) -> None:

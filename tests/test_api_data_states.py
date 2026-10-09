@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 from fastapi import HTTPException
 
+from app import file_identity
 from app.access import request_owner_access_context
 from app.api import earnings, options, stocks
 from app.services import sectors as sector_service
@@ -664,7 +665,7 @@ def test_watchlist_snapshot_write_failure_does_not_fail_refresh(monkeypatch, tmp
             raise OSError("disk unavailable")
 
         monkeypatch.setattr(stocks, "_build_watchlist", refreshed_watchlist)
-        monkeypatch.setattr(stocks.os, "replace", failed_replace)
+        monkeypatch.setattr(file_identity.os, "replace", failed_replace)
 
         stale = await stocks.watchlist(None)
         assert stale["groups"][0]["id"] == "old"

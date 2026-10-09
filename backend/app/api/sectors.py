@@ -4,8 +4,6 @@ import asyncio
 from collections import deque
 import json
 import math
-import os
-import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +18,7 @@ from app.json_validation import (
 )
 from app.access import require_same_origin_request
 from app.data_paths import get_data_paths
+from app.file_identity import replace_file_atomically
 from app.services import massive, yahoo
 from app.services.numeric import finite_number as _finite_number_base
 from app.services.request_security import request_client_ip
@@ -367,24 +366,7 @@ def _write_sector_iv_snapshot(
     if len(encoded) > _SECTOR_IV_SNAPSHOT_MAX_BYTES:
         raise ValueError("sector snapshot exceeds the size limit")
 
-    target.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{target.name}.",
-        suffix=".tmp",
-        dir=target.parent,
-    )
-    try:
-        with os.fdopen(descriptor, "wb") as handle:
-            handle.write(encoded)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary_name, target)
-    except BaseException:
-        try:
-            os.unlink(temporary_name)
-        except FileNotFoundError:
-            pass
-        raise
+    replace_file_atomically(target, encoded)
 
 
 # Validated per-sector IV snapshots keyed by file identity (atomic publish
