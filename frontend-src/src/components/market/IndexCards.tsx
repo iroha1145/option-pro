@@ -68,7 +68,7 @@ export default function IndexCards({
   /* 读取中按读到后的两组排（美股指数三张、其他市场两张），手机上上下两组、宽屏并排，骨架与读数同高。 */
   if (loading) {
     return (
-      <div className="space-y-6 xl:flex xl:gap-4 xl:space-y-0" data-state="loading">
+      <div className="space-y-6 xl:flex xl:gap-4 xl:space-y-0">
         {[3, 2].map((count) => (
           <div key={count} className="min-w-0 xl:basis-0" style={{ flexGrow: count }}>
             <SkeletonLine className="eyebrow mb-3" bar="h-2.5 w-24" />
