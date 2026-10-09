@@ -250,3 +250,22 @@ def test_s2r2_share_counts_after_the_word_stock_publish(text):
 def test_s2r2_code_shaped_numbers_after_the_word_stock_still_need_binding(text):
     with pytest.raises(ValueError, match="unbound_numeric_security_code"):
         _news_field(text)
+
+
+# --- Suggestion 5. Four-digit Hong Kong codes ---------------------------------
+
+
+@pytest.mark.parametrize("text", ["港股9888百度集团盘中走高。", "港股代码1810小米集团走强。"])
+def test_s5r2_four_digit_hong_kong_codes_need_binding(text):
+    with pytest.raises(ValueError, match="unbound_numeric_security_code"):
+        _news_field(text)
+    with pytest.raises(ValueError, match="unbound_numeric_security_code"):
+        _focus_field(text, field="summary_zh")
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["港股10月以来累计上涨。", "港股3只科技股走强。", "港股2026年表现分化。", "港股1000万股成交。"],
+)
+def test_s5r2_months_counts_and_years_after_hong_kong_stocks_publish(text):
+    assert _news_field(text) == text
