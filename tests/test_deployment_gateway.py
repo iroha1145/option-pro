@@ -29,7 +29,8 @@ import app.access as access_module
 from app.api import access as access_api
 from app.api import stocks
 import app.main as main
-from app.main import _GatewayMiddleware, _configured_allowed_hosts
+from app.deployment_boundary import normalize_allowed_hosts
+from app.main import _GatewayMiddleware
 from app.personal_config import AccessConfig
 
 
@@ -1442,20 +1443,20 @@ def test_frontend_integrity_and_host_validation_remain_fail_closed(
     assert integrity["ready"] is False
     assert integrity["missing"]
 
-    assert "example.com" in _configured_allowed_hosts(
+    assert "example.com" in normalize_allowed_hosts(
         "127.0.0.1", "example.com"
     )
-    internationalized = _configured_allowed_hosts("127.0.0.1", "faß.de")
+    internationalized = normalize_allowed_hosts("127.0.0.1", "faß.de")
     assert "xn--fa-hia.de" in internationalized
     assert "fass.de" not in internationalized
-    assert "2001:db8::1" in _configured_allowed_hosts(
+    assert "2001:db8::1" in normalize_allowed_hosts(
         "127.0.0.1",
         "2001:0db8:0:0:0:0:0:1",
     )
     with pytest.raises(RuntimeError):
-        _configured_allowed_hosts("127.0.0.1", "*.example.com")
+        normalize_allowed_hosts("127.0.0.1", "*.example.com")
     with pytest.raises(RuntimeError):
-        _configured_allowed_hosts("127.0.0.1", "[[::1]]")
+        normalize_allowed_hosts("127.0.0.1", "[[::1]]")
 
 
 def test_health_probe_does_not_rehash_the_frontend_per_request(

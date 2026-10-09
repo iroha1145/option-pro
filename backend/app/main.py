@@ -42,7 +42,7 @@ from app.access import (
     require_public_read_or_owner_access,
     require_same_origin_action,
 )
-from app.deployment_boundary import canonicalize_hostname, normalize_allowed_hosts
+from app.deployment_boundary import canonicalize_hostname
 from app.document_policy import is_stock_document_path, static_cache_control
 from app.request_limits import BodyRejected, ClientDisconnected, bounded_api_receive
 from app.api import (
@@ -82,10 +82,6 @@ _FRONTEND_MANIFEST_REQUIRED = (
     _os.environ.get("FRONTEND_MANIFEST_REQUIRED", "").strip().lower() in _TRUTHY_VALUES
 )
 _FRONTEND_MANIFEST_PATH = _os.environ.get("FRONTEND_MANIFEST_PATH", "").strip()
-
-
-def _configured_allowed_hosts(host_bind: str, raw: str) -> list[str]:
-    return list(normalize_allowed_hosts(host_bind, raw))
 
 
 _ACCESS_RUNTIME = get_access_runtime()

@@ -369,14 +369,6 @@ def _parse_observation_value(raw: Any, scale: float) -> Optional[float]:
     return scaled
 
 
-def build_client(
-    api_key: str,
-    *,
-    transport: httpx.BaseTransport | None = None,
-    sleep: Callable[[float], None] | None = None,
-) -> FredClient:
-    return FredClient(api_key, transport=transport, sleep=sleep)
-
 
 __all__ = [
     "CONNECT_TIMEOUT_SECONDS",
@@ -386,5 +378,4 @@ __all__ = [
     "READ_TIMEOUT_SECONDS",
     "TOTAL_TIMEOUT_SECONDS",
     "FredClient",
-    "build_client",
 ]

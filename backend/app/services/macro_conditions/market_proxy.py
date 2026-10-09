@@ -11,11 +11,11 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timezone
-from typing import Callable, Iterable, Mapping, Sequence
+from typing import Callable, Mapping, Sequence
 
 from app.services.market_calendar import last_completed_trading_day
 
-from .models import EtfObservation, MacroError, finite, iso_instant
+from .models import EtfObservation, finite, iso_instant
 from .registry import ETF_SYMBOLS
 
 
@@ -114,17 +114,9 @@ class MarketProxyReader:
         return results, failures
 
 
-def require_symbols(symbols: Iterable[str]) -> tuple[str, ...]:
-    unknown = [symbol for symbol in symbols if symbol not in ETF_SYMBOLS]
-    if unknown:
-        raise MacroError("etf_history_unavailable", "unregistered ETF requested")
-    return tuple(symbols)
-
-
 __all__ = [
     "BACKFILL_PERIOD",
     "INCREMENTAL_PERIOD",
     "MarketProxyReader",
     "last_completed_trading_day",
-    "require_symbols",
 ]

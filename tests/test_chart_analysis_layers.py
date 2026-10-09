@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from app.services.strength.price_action import _find_swings
 from app.services.technical.auto_patterns import (
     ALGORITHM_VERSION,
-    apply_volume_confirmation,
+    apply_display_evidence,
     compute_display_priority,
     detect_auto_patterns,
 )
@@ -159,8 +159,8 @@ def test_volume_confirmation_changes_priority_not_geometry() -> None:
     bars = _zigzag(180, lambda i: 50 + 0.18 * i, lambda i: 62 + 0.18 * i)
     row = _detect(bars)[0]
     geom = [dict(a) for a in row["anchors"]]
-    low = apply_volume_confirmation(row, 0.1)
-    high = apply_volume_confirmation(row, 0.9)
+    low = apply_display_evidence(row, 0.1, row["trendAlignment"])
+    high = apply_display_evidence(row, 0.9, row["trendAlignment"])
     assert low["anchors"] == geom == high["anchors"]
     assert low["shapeQuality"] == high["shapeQuality"]
     assert high["displayPriority"] > low["displayPriority"]

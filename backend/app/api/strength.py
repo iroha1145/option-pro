@@ -405,14 +405,6 @@ def a0_companion_scan_parameters(
     return normalize_strength_scan_parameters(base)
 
 
-def a0_companion_for_admin_default(
-    parameters: dict[str, Any] | None = None,
-) -> dict[str, Any] | None:
-    """Historical callers no longer trigger an A0 shadow computation."""
-
-    return None
-
-
 def _unwrap_query_value(value: Any) -> Any:
     if value is not None and not isinstance(value, (str, bytes, int, float, bool)) and hasattr(
         value, "default"
