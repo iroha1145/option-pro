@@ -148,6 +148,9 @@ export const CATALYSTS: Dict = {
   '· 列表摘要仍然有效': ["· the list summary is still valid", '· 一覧の要約は引き続き有効です'],
   '未能取得正文': ['Article text unavailable', '記事本文を取得できませんでした'],
   'AI 生成于': ['AI-generated at', 'AI生成日時'],
+  '资料不足': ['Insufficient information', '資料不足'],
+  '资料不足，暂不判断方向与置信度': ['Insufficient information to assess direction or confidence', '資料が不足しているため、方向性や確信度は判断できません'],
+  '核验于 {time}': ['Verified {time}', '確認 {time}'],
   '信息不足 · 未调用模型': ['Insufficient info · model not called', '情報不足 · モデル未呼び出し'],
   '这条新闻信息量不足，未做 AI 分析': [
     "This news item doesn't contain enough information, so no AI analysis was run.",

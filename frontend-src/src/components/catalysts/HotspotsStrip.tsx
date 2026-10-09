@@ -15,7 +15,7 @@ import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { fmtRelative } from '@/lib/format';
 import { t as __t } from '../../i18n/core.ts';
 
-function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: number; onOpen: () => void }) {
+export function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: number; onOpen: () => void }) {
   const openable = !!h.representative?.newsId;
   return (
     <motion.button
@@ -42,6 +42,11 @@ function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: number; onO
         <HeatMeter level={h.heatLevel} heat={h.heat} className="ml-auto" />
       </div>
       <p className="mt-4 line-clamp-2 min-h-12 text-body font-medium leading-6 text-ink-800">{h.theme}</p>
+      {h.verifiedAt && (
+        <p className="mt-1 text-micro text-ink-400">
+          <time dateTime={h.verifiedAt}>{__t('核验于 {time}', { time: fmtRelative(h.verifiedAt) })}</time>
+        </p>
+      )}
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
         {h.tickers.slice(0, 3).map((t) => (
           <TickerChip key={t} ticker={t} />

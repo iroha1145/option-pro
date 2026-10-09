@@ -619,7 +619,8 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
     ? null
     : running
       ? (job.status === 'queued' ? 'queued' : 'in_progress')
-      : settledJob && inFlight(item.analysisStatus) ? itemStatusOf(settledJob) : item.analysisStatus;
+      : settledJob && inFlight(item.analysisStatus) ? itemStatusOf(settledJob)
+        : analysis?.insufficientContext && item.analysisStatus === 'completed' ? 'insufficient_context' : item.analysisStatus;
   /* 详情仍指向已确认缺失的在途任务：不再显示排队/分析中，改给重新发起的入口。 */
   const jobMissing = Boolean(
     item?.analysisJobId && item.analysisJobId === missingJobId && inFlight(item.analysisStatus),
@@ -774,17 +775,19 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
                     ? <span className="ml-1">{__t('未能取得正文')}</span>
                     : null}
                 </p>
-                <div className="flex flex-wrap items-center gap-2.5">
+                {analysis.insufficientContext ? (
+                  <p className="rounded-md bg-warn-50 p-3 text-body-s text-warn-700">{__t('资料不足，暂不判断方向与置信度')}</p>
+                ) : <div className="flex flex-wrap items-center gap-2.5">
                   <ClassificationChip classification={analysis.classification} />
                   <ConfidenceLabel value={analysis.confidence} />
-                </div>
+                </div>}
                 <p className="mt-3 text-body-s font-medium text-ink-800">{analysis.headlineSummary}</p>
                 {/* causal_summary serif 引文 */}
                 <blockquote className="mt-3 border-l-[3px] border-ai-600/40 pl-3.5">
                   <p className="text-[14px] leading-[24px] text-ink-800">{analysis.causalSummary}</p>
                 </blockquote>
                 <div className="mt-4 space-y-2">
-                  {analysis.trustedStockImpacts.map((imp, i) => (
+                  {!analysis.insufficientContext && analysis.trustedStockImpacts.map((imp, i) => (
                     <StockImpactCard key={imp.ticker} imp={imp} index={i} />
                   ))}
                 </div>

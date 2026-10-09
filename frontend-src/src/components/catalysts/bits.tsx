@@ -51,7 +51,7 @@ const ANALYSIS_STYLE: Record<NewsAnalysisStatus, { label: string; tone: BadgeTon
   queued: { label: t('排队中'), tone: 'warn', led: 'warn', pulse: true },
   in_progress: { label: t('分析中'), tone: 'brand', led: 'brand', pulse: true },
   completed: { label: t('已分析'), tone: 'ai' },
-  insufficient_context: { label: t('信息不足'), tone: 'warn' },
+  insufficient_context: { label: t('资料不足'), tone: 'warn' },
   failed: { label: t('分析失败'), tone: 'danger' },
 };
 
