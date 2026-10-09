@@ -28,12 +28,7 @@ from typing import Any, Mapping, Optional
 from app.failure_diagnostics import record_fallback_failure
 
 from .exposures import EXPOSURE_VERSION
-from .linkage import (
-    UNAVAILABLE,
-    MacroFit,
-    compute_macro_fit,
-    structural_macro_score,
-)
+from .linkage import UNAVAILABLE, MacroFit, compute_macro_fit
 
 #: Why no fit is available, when none is. Reported verbatim so the interface can
 #: tell "the macro module is not installed" apart from "nothing published yet".
@@ -50,7 +45,6 @@ class MacroFitReader:
     snapshot_date: Optional[str] = None
     scoring_version: Optional[str] = None
     available_at: Optional[str] = None
-    structural_score: Optional[float] = None
     factors: tuple[Mapping[str, Any], ...] = ()
     _fits: dict[str, MacroFit] = field(default_factory=dict, repr=False)
 
@@ -195,7 +189,6 @@ def _load_macro_fit_reader_uncached() -> MacroFitReader:
         snapshot_date=inputs.get("snapshot_date"),
         scoring_version=inputs.get("scoring_version"),
         available_at=inputs.get("available_at"),
-        structural_score=structural_macro_score(inputs.get("modules") or []),
         factors=tuple(inputs.get("factors") or ()),
     )
 

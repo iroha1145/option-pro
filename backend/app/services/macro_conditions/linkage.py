@@ -33,9 +33,9 @@ from .registry import FACTORS_BY_ID, MODULES_BY_ID
 #: change meaning when the factor registry grows.
 MIN_EXPOSURE_COVERAGE = 0.5
 
-#: How far a shadow adjustment may move a ranking score, in points. The review
-#: fixes these caps: macro must never overrule a stock's own price evidence.
-STRENGTH_SHADOW_CAP = 3.0
+#: How far a shadow adjustment may move a breakout alert priority, in points.
+#: The review fixed this cap: macro must never overrule a stock's own price
+#: evidence.
 BREAKOUT_PRIORITY_SHADOW_CAP = 4.0
 
 #: Tailwind labels. Deliberately coarse: the underlying number is a percentile
@@ -224,19 +224,6 @@ def compute_macro_fit(
     )
 
 
-def shadow_ranking_adjustment(fit: MacroFit) -> float:
-    """Points a macro fit would move a ranking score, capped at +/-3.
-
-    Shadow only. The cap exists so macro can never overrule a stock's own trend
-    and volume evidence -- it is a tilt, not a vote.
-    """
-
-    if fit.score is None:
-        return 0.0
-    raw = (fit.score - 50.0) / 50.0 * STRENGTH_SHADOW_CAP
-    return round(max(-STRENGTH_SHADOW_CAP, min(STRENGTH_SHADOW_CAP, raw)), 3)
-
-
 def shadow_alert_priority_adjustment(fit: MacroFit) -> float:
     """Points a macro fit would move a breakout alert priority, capped at +/-4."""
 
@@ -247,24 +234,6 @@ def shadow_alert_priority_adjustment(fit: MacroFit) -> float:
         max(-BREAKOUT_PRIORITY_SHADOW_CAP, min(BREAKOUT_PRIORITY_SHADOW_CAP, raw)),
         3,
     )
-
-
-def macro_technical_gap(
-    technical_market_fit: Optional[float],
-    structural_macro_score: Optional[float],
-) -> Optional[float]:
-    """Technical minus structural macro, as a two-dimensional read.
-
-    A single blended number hides the interesting cases. A large positive gap
-    says price has run ahead of the environment; a large negative one says the
-    environment improved first and price has not followed.
-    """
-
-    technical = _finite(technical_market_fit)
-    macro = _finite(structural_macro_score)
-    if technical is None or macro is None:
-        return None
-    return round(technical - macro, 1)
 
 
 #: Structural macro is liquidity/funding/treasury/rates. Credit and risk are
@@ -302,15 +271,12 @@ __all__ = [
     "BREAKOUT_PRIORITY_SHADOW_CAP",
     "CONFIRMING_MODULES",
     "MIN_EXPOSURE_COVERAGE",
-    "STRENGTH_SHADOW_CAP",
     "STRUCTURAL_MODULES",
     "MacroFit",
     "UNAVAILABLE",
     "compute_macro_fit",
     "factor_driver",
-    "macro_technical_gap",
     "shadow_alert_priority_adjustment",
-    "shadow_ranking_adjustment",
     "structural_macro_score",
     "tailwind_label",
 ]
