@@ -184,7 +184,7 @@ export default function HistoryRail({
               <div key={day}>
                 {/* 日期分组小头（Serif 13px + 计数） */}
                 <div className="radar-history-date flex items-baseline justify-between px-4 py-2">
-                  <p className="text-[13px] font-medium leading-[18px] text-ink-500">{dayLabel(day)}</p>
+                  <p className="text-[13px] leading-[18px] text-ink-500">{dayLabel(day)}</p>
                   <span className="text-micro text-ink-400 tnum">{items.length} {t('条')}</span>
                 </div>
                 <ul className="radar-history-list divide-y divide-line">

@@ -26,7 +26,7 @@ export default function StaleStrip({
           type="button"
           onClick={onRetry}
           disabled={refreshing}
-          className="min-h-9 rounded-md px-2 text-caption font-medium text-brand-600 underline-offset-2 hover:bg-brand-50 hover:underline disabled:opacity-60"
+          className="min-h-9 rounded-md px-2 text-caption font-medium text-brand-600 underline-offset-2 hover:bg-paper-2 hover:underline disabled:opacity-60"
         >
           {t('重试')}
         </button>

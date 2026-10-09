@@ -192,7 +192,7 @@ export default function DetailBand({
                     key={ticker}
                     type="button"
                     onClick={() => onOpenTicker(ticker)}
-                    className="min-w-0 rounded-md border border-line bg-card-warm px-2 py-2 text-center tnum text-caption font-medium text-ink-700 transition-colors duration-fast hover:border-brand-400 hover:text-brand-700"
+                    className="min-w-0 rounded-md border border-line bg-card-warm px-2 py-2 text-center tnum text-caption text-ink-700 transition-colors duration-fast hover:border-brand-400 hover:text-brand-700"
                   >
                     <span className="block truncate">{ticker}</span>
                   </button>

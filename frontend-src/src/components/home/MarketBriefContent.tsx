@@ -57,7 +57,7 @@ function Part({ title, badge, children }: { title: string; badge?: ReactNode; ch
   return (
     <div className="min-w-0">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <h3 className="text-body-s font-medium text-ink-700">{title}</h3>
+        <h3 className="text-body-s font-medium text-ink-900">{title}</h3>
         {badge}
       </div>
       {children}
@@ -265,7 +265,7 @@ export default function MarketBriefContent({ brief, year }: { brief: MarketBrief
           )}
           {result.invalidators.length > 0 && (
             <div className="mt-4 rounded-lg bg-paper-2 px-3 py-2.5">
-              <p className="text-caption font-medium text-ink-700">{t('出现以下情况应撤回当前判断')}</p>
+              <p className="text-caption text-ink-700">{t('出现以下情况应撤回当前判断')}</p>
               <Bullets items={result.invalidators} className="mt-1.5" />
             </div>
           )}

@@ -44,7 +44,7 @@ export default class ChartLoadErrorBoundary extends Component<Props, State> {
         <button
           type="button"
           onClick={this.retry}
-          className="mt-3 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 hover:border-brand-400 hover:text-brand-600"
+          className="mt-3 rounded-pill border border-line px-3 py-1.5 text-caption text-ink-600 hover:border-brand-400 hover:text-brand-600"
         >
           {t('重试图表')}
         </button>

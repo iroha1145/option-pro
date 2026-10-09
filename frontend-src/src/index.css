@@ -9,24 +9,27 @@
 
 @layer base {
   :root {
-    /* §1.1 纸面基底（v8 清新：降温冷灰蓝） */
-    --paper: #F6F7F9;
-    --paper-2: #FAFBFC;
+    /* 2026-10-09 Arc 改版：表面与文字改成纯灰（参照 uiarc.dev 的语义令牌）。
+       页面底近白、卡片纯白，分层只靠一圈细线；颜色只留给涨跌、状态和选中以外的强调。 */
+    /* §1.1 表面：页面底 · 弱填充（悬停、凹槽）· 卡片 */
+    --paper: #FAFAFA;
+    --paper-2: #F5F5F5;
     --card: #FFFFFF;
-    --card-warm: #FBFCFD;
-    --overlay: rgba(250, 251, 253, 0.72); /* v8.1 随纸面降温（原暖白 253,252,249 与冷纸面打架） */
-    /* §1.2 墨色 */
-    --ink-900: #0D1626;
-    --ink-800: #182338;
-    --ink-700: #2A3550;
-    --ink-600: #3D4A68;
-    --ink-500: #5A6788;
-    --ink-400: #626F8B;
-    --ink-300: #B7BFD3;
-    /* §1.3 发丝线（v8 更淡；v8.1 随纸面降温——冷纸面配暖灰线会显脏，同族蓝灰 hue≈218°） */
-    --line: #E9ECF1;
-    --line-strong: #DBE0E8;
-    --line-chart: #EDF0F4;
+    --card-warm: #FCFCFC;
+    --overlay: rgba(255, 255, 255, 0.8);
+    /* §1.2 文字三档为主：900 标题与数值、600 正文与说明（全站最多）、400 提示与元信息；
+       800/700/500 是兼容旧调用点的过渡档，都落在这三档附近。300 只给线条与装饰。 */
+    --ink-900: #111111;
+    --ink-800: #1C1C1C;
+    --ink-700: #383838;
+    --ink-600: #525252;
+    --ink-500: #666666;
+    --ink-400: #6E6E6E;
+    --ink-300: #C4C4C4;
+    /* §1.3 细线：默认一圈 · 悬停或按下加深 · 图表网格 */
+    --line: #EBEBEB;
+    --line-strong: #D6D6D6;
+    --line-chart: #F0F0F0;
     /* §1.4 群青品牌 */
     --brand-700: #2338C8;
     --brand-600: #2E46E0;
@@ -56,71 +59,98 @@
     --warn-700: #935B00;
     --warn-600: #E8930C;
     --warn-50: #FCF3E2;
-    --scrim: rgba(13, 22, 38, .32);
-    --scrim-strong: rgba(13, 22, 38, .45);
+    --scrim: rgba(17, 17, 17, .32);
+    --scrim-strong: rgba(17, 17, 17, .45);
+    /* 主操作色（主按钮、登录）：Arc 用近黑。要换回品牌群青只改这三行：
+       --action: var(--brand-600); --action-hover: var(--brand-700); --on-action: #FFFFFF。 */
+    --action: #111111;
+    --action-hover: #333333;
+    --on-action: #FFFFFF;
     /* v8.1：AI 语义色弃紫。「紫 + AI」是 2024–26 最烂大街的生成式设计签名；
        换青瓷 teal（Open Color cyan-8）——纸面印刷的传统第二油墨色，冷调与群青
        同族但相距 60°+，与涨绿（hue 157°）差 36° 不会误读为行情方向。 */
     --ai-600: #0B7285;
     --ai-50: #E7F3F6;
+    /* 2026-10-09 分类色（用户要求「选项与信号标签用更多配色」）：给类别用，不表示好坏、不表示涨跌。
+       突破、放量、跳空这类技术事件，经济事件重要度，风险偏好等各取一色；避开涨跌的红绿与 AI 的青瓷。
+       50 底色 · 600 圆点与细线 · 700 文字。 */
+    --cat-sky-50: #E9F4FC;
+    --cat-sky-600: #2786D4;
+    --cat-sky-700: #155F9E;
+    --cat-violet-50: #F2EEFE;
+    --cat-violet-600: #7C5CF0;
+    --cat-violet-700: #5B3CC4;
+    --cat-amber-50: #FCF3DF;
+    --cat-amber-600: #D08A0E;
+    --cat-amber-700: #8F5D00;
+    --cat-orange-50: #FDEDE4;
+    --cat-orange-600: #E46A2C;
+    --cat-orange-700: #B04712;
+    --cat-pink-50: #FCEBF3;
+    --cat-pink-600: #D6488A;
+    --cat-pink-700: #A82B66;
     /* §4.1 缓动 */
     --ease-paper: cubic-bezier(.16, 1, .3, 1);
     /* 圆角（docs/UI_DESIGN_SYSTEM.md §3，2026-10-06 第二轮整体上调一档，参照 uiarc.dev）：
        组内小件 6、普通控件 8、控件组与浮层 10；卡片 16、抽屉 20 走 Tailwind 的 rounded-lg / rounded-xl。 */
-    --r-chip: 6px;
-    --r-control: 8px;
-    --r-group: 10px;
+    /* 2026-10-09 Arc 改版：按钮、分段、筛选块、徽章用胶囊（--r-pill）；输入与下拉触发 10；
+       浮层（菜单、提示、弹出面板）14；卡片 18 走 .card-surface 与 rounded-lg。 */
+    --r-chip: 999px;
+    --r-control: 10px;
+    --r-group: 14px;
+    --r-pill: 999px;
     --ease-snap: cubic-bezier(.22, 1, .36, 1);
     /* v8 阴影三层制：更柔更大（rgba(16,24,40,*)），内高光 .7 保持 */
-    --shadow-sh-1: 0 1px 2px rgba(16, 24, 40, .03);
-    --shadow-sh-2: 0 1px 2px rgba(16, 24, 40, .03), 0 12px 32px -14px rgba(16, 24, 40, .10);
-    --shadow-sh-3: 0 2px 4px rgba(16, 24, 40, .04), 0 24px 56px -16px rgba(16, 24, 40, .16);
+    --shadow-sh-1: 0 1px 2px rgba(0, 0, 0, .035);
+    --shadow-sh-2: 0 1px 2px rgba(0, 0, 0, .06), 0 12px 32px -14px rgba(0, 0, 0, .14);
+    --shadow-sh-3: 0 1px 2px rgba(0, 0, 0, .08), 0 24px 56px -16px rgba(0, 0, 0, .22);
     /* 按钮/控件立体阴影（暗色模式下内高光转为极微弱暗部高光或去除，避免白边） */
     /* 2026-10-06 平面化：卡片、按钮静止时不投影，只靠发丝边分层；选中的分段滑块
        与芯片留一圈淡描边。真正浮起的下拉、抽屉、对话框、提示仍有阴影。 */
     --btn-shadow: none;
     --btn-hi-shadow: none;
-    --chip-shadow: 0 0 0 1px rgba(16, 24, 40, .07), 0 1px 2px rgba(16, 24, 40, .05);
+    --chip-shadow: 0 0 0 1px rgba(0, 0, 0, .05), 0 1px 2px rgba(0, 0, 0, .06);
     --card-hover-shadow: none;
     --inset-hi-shadow: none;
-    --zone-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 1px 2px rgba(16, 24, 40, .10);
+    --zone-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 1px 2px rgba(0, 0, 0, .08);
     --btn-primary-highlight: 0 0 0 transparent;
     --insight-frame-shadow: none;
     /* Cloud Monitor 的细节层次，保留 Optix 的纸面与群青。 */
-    --control-track: #F2F4F7;
+    --control-track: #F2F2F2;
     /* 财报时段图标（2026-10-06 用户要求按类别着色）：盘前太阳黄、盘后月亮蓝、时间待定闹钟橙。
        浅底上取够深的色，图形对比度约 3:1。 */
     --timing-bmo: #C98A00;
     --timing-amc: #2F7AE5;
     --timing-tbd: #E0670B;
-    --control-selected-shadow: 0 0 0 1px rgba(16, 24, 40, .07), 0 1px 2px rgba(16, 24, 40, .05);
+    --control-selected-shadow: 0 0 0 1px rgba(0, 0, 0, .05), 0 1px 2px rgba(0, 0, 0, .06);
     /* 手机分段与筛选的选中块：2026-10-06 用户要求改回原版——只有柔和投影、不加描边。 */
-    --control-selected-shadow-raised: 0 2px 4px rgba(24, 43, 68, .045), 0 5px 12px -4px rgba(24, 43, 68, .09);
+    --control-selected-shadow-raised: 0 2px 4px rgba(0, 0, 0, .05), 0 5px 12px -4px rgba(0, 0, 0, .10);
     --card-shadow: none;
-    --popover-shadow: 0 2px 5px rgba(24, 43, 68, .045), 0 10px 28px -10px rgba(24, 43, 68, .15);
-    --knob-shadow: 0 1px 3px rgba(16, 24, 40, .18), 0 1px 1px rgba(16, 24, 40, .10);
-    --shadow-xs: 0 1px 2px 0 rgba(16, 24, 40, .05);
-    --track-shadow: inset 0 1px 2px rgba(16, 24, 40, .16);
-    --overlay-shadow: 0 24px 64px -16px rgba(16, 24, 40, 0.35), 0 6px 20px -8px rgba(16, 24, 40, 0.16);
-    --dock-shadow: 0 18px 40px -14px rgba(16, 24, 40, 0.30), 0 4px 14px -6px rgba(16, 24, 40, 0.14);
+    /* 阴影只给浮起的层（Arc 的 --shadow-floating）：贴身一道 + 下方一团柔影。 */
+    --popover-shadow: 0 1px 2px rgba(0, 0, 0, .08), 0 12px 28px -12px rgba(0, 0, 0, .26);
+    --knob-shadow: 0 1px 3px rgba(0, 0, 0, .16), 0 1px 1px rgba(0, 0, 0, .08);
+    --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, .05);
+    --track-shadow: inset 0 1px 2px rgba(0, 0, 0, .12);
+    --overlay-shadow: 0 1px 2px rgba(0, 0, 0, .12), 0 24px 56px -16px rgba(0, 0, 0, .32);
+    --dock-shadow: 0 1px 2px rgba(0, 0, 0, .08), 0 18px 40px -14px rgba(0, 0, 0, .26);
 
     /* shadcn/ui 基座变量（亮纸面映射；v8.1 hue 44°→220° 随纸面降温，杜绝冷暖混用） */
-    --background: 220 20% 97%;
-    --foreground: 218 48% 10%;
+    --background: 0 0% 98%;
+    --foreground: 0 0% 7%;
     --popover: 0 0% 100%;
-    --popover-foreground: 218 48% 10%;
-    --primary: 232 74% 53%;
+    --popover-foreground: 0 0% 7%;
+    --primary: 0 0% 7%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 20% 97%;
-    --secondary-foreground: 220 26% 32%;
-    --muted: 218 16% 95%;
-    --muted-foreground: 222 20% 45%;
-    --accent: 231 100% 97%;
-    --accent-foreground: 232 74% 53%;
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 25%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 42%;
+    --accent: 0 0% 96%;
+    --accent-foreground: 0 0% 9%;
     --destructive: 359 75% 59%;
     --destructive-foreground: 0 0% 98%;
-    --border: 220 22% 89%;
-    --input: 220 18% 80%;
+    --border: 0 0% 92%;
+    --input: 0 0% 84%;
     --ring: 232 74% 53%;
     /* Catalog paint 重映射只有一份，在 transitions-catalog.css 的适配区——
        这里 @layer base 的副本在层叠里永远输给未分层的 transitions-root.css，
@@ -140,21 +170,22 @@
   /* 夜间模式：画布/卡片/墨色取 Cloud Monitor 暗色板，群青品牌只做对比度抬升。 */
   html.dark {
     color-scheme: dark;
-    --paper: #191B20;
-    --paper-2: #1D1F24;
-    --card: #24262D;
-    --card-warm: #21242B;
-    --overlay: rgba(25, 27, 32, 0.88);
-    --ink-900: #F1F3F5;
-    --ink-800: #F1F3F5;
-    --ink-700: #B0B6C0;
-    --ink-600: #B0B6C0;
-    --ink-500: #A0A8B5;
-    --ink-400: #A0A8B5;
-    --ink-300: #6B7382;
-    --line: #323640;
-    --line-strong: #454B58;
-    --line-chart: #353944;
+    /* 夜间单独调（Arc：dark values are tuned separately），同样是纯灰：页面最深，卡片抬一档。 */
+    --paper: #0F0F10;
+    --paper-2: #1A1A1C;
+    --card: #161617;
+    --card-warm: #141415;
+    --overlay: rgba(15, 15, 16, 0.86);
+    --ink-900: #F2F2F2;
+    --ink-800: #EBEBEB;
+    --ink-700: #C7C7C7;
+    --ink-600: #A6A6A6;
+    --ink-500: #999999;
+    --ink-400: #8F8F8F;
+    --ink-300: #4D4D4F;
+    --line: #262628;
+    --line-strong: #38383B;
+    --line-chart: #222224;
     --brand-700: #8B9CFF;
     --brand-600: #6B82FF;
     --brand-500: #8B9CFF;
@@ -174,13 +205,31 @@
     --danger-700: #FFB4AE;
     --danger-600: #FF8A80;
     --danger-50: #3A1618;
-    --on-accent: #191B20;
+    --on-accent: #111112;
+    --action: #F2F2F2;
+    --action-hover: #FFFFFF;
+    --on-action: #111112;
     --warn-700: #FDE047;
     --warn-600: #FACC15;
     --warn-50: #3A3008;
     --ai-600: #4EC4D4;
     --ai-50: #12353A;
-    --control-track: #21242B;
+    --cat-sky-50: #10273A;
+    --cat-sky-600: #5AAEF0;
+    --cat-sky-700: #8CC8F7;
+    --cat-violet-50: #231B3D;
+    --cat-violet-600: #A08CFA;
+    --cat-violet-700: #C2B5FC;
+    --cat-amber-50: #33270C;
+    --cat-amber-600: #F0B23A;
+    --cat-amber-700: #F6CF7A;
+    --cat-orange-50: #3A1E10;
+    --cat-orange-600: #F59360;
+    --cat-orange-700: #F9B893;
+    --cat-pink-50: #3A1527;
+    --cat-pink-600: #EE7EB2;
+    --cat-pink-700: #F5AACC;
+    --control-track: #1E1E20;
     --timing-bmo: #FACC15;
     --timing-amc: #6FA8FF;
     --timing-tbd: #FB923C;
@@ -207,22 +256,22 @@
     --insight-frame-shadow: none;
     --scrim: rgba(0, 0, 0, .55);
     --scrim-strong: rgba(0, 0, 0, .65);
-    --background: 220 12% 11%;
-    --foreground: 210 17% 95%;
-    --popover: 225 11% 16%;
-    --popover-foreground: 210 17% 95%;
-    --primary: 232 100% 71%;
-    --primary-foreground: 220 12% 11%;
-    --secondary: 220 10% 14%;
-    --secondary-foreground: 216 12% 72%;
-    --muted: 225 10% 15%;
-    --muted-foreground: 216 12% 67%;
-    --accent: 213 35% 22%;
-    --accent-foreground: 210 70% 74%;
+    --background: 240 3% 6%;
+    --foreground: 0 0% 95%;
+    --popover: 240 2% 9%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 0 0% 95%;
+    --primary-foreground: 240 3% 6%;
+    --secondary: 240 3% 11%;
+    --secondary-foreground: 0 0% 72%;
+    --muted: 240 3% 11%;
+    --muted-foreground: 0 0% 62%;
+    --accent: 240 3% 13%;
+    --accent-foreground: 0 0% 95%;
     --destructive: 4 100% 75%;
     --destructive-foreground: 0 0% 10%;
-    --border: 220 13% 22%;
-    --input: 222 13% 31%;
+    --border: 240 3% 15%;
+    --input: 240 3% 22%;
     --ring: 232 100% 71%;
   }
 
@@ -337,11 +386,11 @@
     -webkit-backdrop-filter: blur(14px) saturate(1.5);
   }
 
-  /* 卡片规范：白底 + 发丝边 + sh-1（墨色 16,24,40）+ 内高光 .7 + 12px 圆角（v8 回暖） */
+  /* 卡片：白底 + 一圈细线 + 18px 圆角，静止不投影（2026-10-09 Arc 改版，原 16px）。 */
   .card-surface {
     background: var(--card);
     border: 1px solid var(--line);
-    border-radius: 16px;
+    border-radius: 18px;
     box-shadow: var(--card-shadow);
   }
 
@@ -353,13 +402,13 @@
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    border-radius: var(--r-group);
-    background: var(--brand-600);
-    padding: 0.5rem 1rem;
+    border-radius: var(--r-pill);
+    background: var(--action);
+    padding: 0.5rem 1.125rem;
     font-size: 14px;
     font-weight: 500;
     line-height: 1.25;
-    color: var(--on-accent);
+    color: var(--on-action);
     box-shadow: none;
     transition:
       transform var(--duration-quick) var(--ease-smooth-out),
@@ -376,7 +425,7 @@
   }
   @media (hover: hover) and (pointer: fine) {
     .btn-primary:not(:disabled):hover {
-      background: var(--brand-700);
+      background: var(--action-hover);
     }
   }
   /* shadcn Button size="sm"：卡片内、行内的紧凑主按钮。此前这类按钮在 50 多处
@@ -385,8 +434,8 @@
   .btn-primary.btn-sm {
     min-height: 2rem;
     gap: 0.375rem;
-    border-radius: 6px;
-    padding: 0.375rem 0.75rem;
+    border-radius: var(--r-pill);
+    padding: 0.375rem 0.875rem;
     font-size: 13px;
   }
   @media (pointer: coarse) {
@@ -468,7 +517,7 @@
     width: 0;
     height: 32px;
     margin-top: -16px;
-    border-radius: var(--r-group);
+    border-radius: var(--r-pill);
     background: color-mix(in srgb, var(--ink-900) 5%, transparent);
     opacity: 0;
     pointer-events: none;
@@ -506,7 +555,7 @@
   /* 2026-10-06 第二轮：小标签不再全大写、不加字距（uiarc 的区块标签就是普通的灰色小字）。 */
   .eyebrow {
     @apply font-sans text-eyebrow text-ink-400;
-    font-weight: 500;
+    font-weight: 400;
   }
 
   /* v8 内容节奏：页内区块间距 32→36（作用于 Layout main 内的 mt-8 区块，不改页面结构） */
@@ -563,13 +612,13 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 5px 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-control);
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
   background: var(--card);
-  color: var(--ink-600);
+  color: var(--ink-700);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 400;
   line-height: 18px;
   white-space: nowrap;
   transition:
@@ -602,32 +651,35 @@
   padding: 3px;
   /* 2026-10-06 第二轮（参照 uiarc.dev）：底槽只靠浅灰底色，不再描边；边框留透明占位，尺寸不变。 */
   border: 1px solid transparent;
-  border-radius: var(--r-group);
+  /* 2026-10-09 Arc 改版：底槽与组内按钮都是胶囊，选中项白底、近黑字。 */
+  border-radius: var(--r-pill);
   background: var(--control-track);
 }
 .filter-group .control-button {
   min-height: 28px;
-  padding: 4px 10px;
+  padding: 4px 12px;
   border-color: transparent;
-  border-radius: var(--r-chip);
+  border-radius: var(--r-pill);
   background: transparent;
+  color: var(--ink-600);
 }
 .filter-group .control-button[aria-pressed="true"] {
   border-color: transparent;
   background: var(--card);
   color: var(--brand-700);
+  font-weight: 500;
   box-shadow: var(--control-selected-shadow);
 }
 .t-tabs.selection-group {
   padding: 3px;
-  border-radius: var(--r-group);
+  border-radius: var(--r-pill);
   border-color: transparent;
   background: var(--control-track);
 }
 @layer components {
   /* 移动导航可通过已有 bg-brand-50 / shadow-none 保留自身的选中底色。 */
   .selection-indicator {
-    border-radius: calc(var(--r-group) - 3px);
+    border-radius: var(--r-pill);
     background: var(--card);
     box-shadow: var(--control-selected-shadow);
   }
@@ -635,11 +687,20 @@
 .t-tabs.selection-group .t-tab {
   height: auto;
   min-height: 28px;
-  border-radius: calc(var(--r-group) - 3px);
-  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  padding: 4px 12px;
   color: var(--ink-600);
+  font-weight: 400;
 }
 .t-tabs.selection-group .t-tab:is([aria-selected="true"], [aria-current="page"]) { color: var(--brand-700); font-weight: 500; }
+/* 有含义的选项按含义着色（Segmented 的 option.tone）：评分分档跟分数档颜色，风险偏好由冷到暖。 */
+.t-tabs.selection-group .t-tab[data-tone="ok"]:is([aria-selected="true"]) { color: var(--ok-700); }
+.t-tabs.selection-group .t-tab[data-tone="warn"]:is([aria-selected="true"]) { color: var(--warn-700); }
+.t-tabs.selection-group .t-tab[data-tone="sky"]:is([aria-selected="true"]) { color: var(--cat-sky-700); }
+.t-tabs.selection-group .t-tab[data-tone="violet"]:is([aria-selected="true"]) { color: var(--cat-violet-700); }
+.t-tabs.selection-group .t-tab[data-tone="amber"]:is([aria-selected="true"]) { color: var(--cat-amber-700); }
+.t-tabs.selection-group .t-tab[data-tone="orange"]:is([aria-selected="true"]) { color: var(--cat-orange-700); }
+.t-tabs.selection-group .t-tab[data-tone="neutral"]:is([aria-selected="true"]) { color: var(--ink-900); }
 @media (hover: hover) and (pointer: fine) {
   .control-button:not(:disabled):not([aria-pressed="true"]):hover { background: var(--paper-2); border-color: var(--line-strong); color: var(--ink-800); }
   .filter-group .control-button:not(:disabled):not([aria-pressed="true"]):hover { border-color: transparent; }
@@ -651,6 +712,53 @@
 @media (max-width: 767px), (pointer: coarse) {
   .touch-target { min-height: 44px; min-width: 44px; }
 }
+/* 页内标签（2026-10-09 Arc 改版，Arc page header 的下划线标签）：标题下方的二级页面导航
+   与新闻页栏目共用。当前项近黑字 + 2px 近黑下划线压在底线上，其余中灰；放不下时横向滚动。 */
+.page-tabs {
+  display: flex;
+  gap: 24px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+  scrollbar-width: none;
+}
+.page-tabs::-webkit-scrollbar { display: none; }
+.page-tab {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding-bottom: 2px;
+  color: var(--ink-500);
+  font-size: 14px;
+  line-height: 20px;
+  white-space: nowrap;
+  transition: color var(--duration-quick) var(--ease-snap);
+}
+.page-tab:is([aria-current="page"], [aria-selected="true"]) {
+  color: var(--brand-700);
+  font-weight: 500;
+}
+.page-tab:is([aria-current="page"], [aria-selected="true"])::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--brand-600);
+}
+.page-tab-count { color: var(--ink-400); font-weight: 400; }
+@media (hover: hover) and (pointer: fine) {
+  .page-tab:hover { color: var(--ink-900); }
+}
+@media (pointer: coarse) {
+  .page-tab { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) { .page-tab { transition: none; } }
+
 /* 页头右侧的搜索、设置、登录（2026-10-08）：手机页头只有 48px 高，44px 的描边按钮把上下沿
    顶满。外层 .header-action 是透明的触控区（配 .touch-target，手机与触屏仍是 44px），
    看得见的按钮由里面的 .header-chip 画，固定 32px；桌面没有 .touch-target 的下限，外层
@@ -675,8 +783,8 @@
   justify-content: center;
   gap: 0.375rem;
   border: 1px solid var(--line);
-  border-radius: var(--r-control);
-  background: var(--card-warm);
+  border-radius: var(--r-pill);
+  background: var(--card);
   color: var(--ink-500);
   font-size: 13px;
   line-height: 1;
@@ -689,18 +797,18 @@
 }
 .header-chip-primary {
   border-color: transparent;
-  background: var(--brand-600);
-  color: var(--on-accent);
-  padding: 0 0.75rem;
+  background: var(--action);
+  color: var(--on-action);
+  padding: 0 0.875rem;
   font-weight: 500;
 }
-.header-action[aria-expanded="true"] > .header-chip { border-color: var(--brand-400); color: var(--brand-600); }
+.header-action[aria-expanded="true"] > .header-chip { border-color: var(--brand-400); color: var(--brand-600); background: var(--card); }
 .header-action:disabled { cursor: wait; }
 .header-action:disabled > .header-chip { opacity: 0.6; }
 .header-action:not(:disabled):active > .header-chip { transform: scale(0.97); }
 @media (hover: hover) and (pointer: fine) {
   .header-action:not(:disabled):hover > .header-chip { border-color: var(--line-strong); color: var(--ink-800); }
-  .header-action:not(:disabled):hover > .header-chip-primary { border-color: transparent; background: var(--brand-700); color: var(--on-accent); }
+  .header-action:not(:disabled):hover > .header-chip-primary { border-color: transparent; background: var(--action-hover); color: var(--on-action); }
 }
 @media (prefers-reduced-motion: reduce) { .header-chip { transition: none; } }
 @media (prefers-reduced-motion: reduce) { .control-button { transition: none; } }
@@ -730,7 +838,7 @@
   gap: 6px;
   padding: 5px 12px;
   border: 1px solid color-mix(in srgb, var(--ai-600) 26%, transparent);
-  border-radius: var(--r-control);
+  border-radius: var(--r-pill);
   background: var(--ai-50);
   color: var(--ai-600);
   font-size: 13px;
@@ -792,7 +900,7 @@
     padding: 2px;
     overflow: visible;
     border: 1px solid transparent;
-    border-radius: var(--r-group);
+    border-radius: var(--r-pill);
     background: var(--control-track);
   }
   .selection-viewport-full > .mobile-selection-rail { width: 100%; }
@@ -807,19 +915,19 @@
     height: 44px;
     min-height: 44px;
     min-width: 44px;
-    padding: 8px 12px;
+    padding: 8px 14px;
     border: 0;
-    /* 与外框同心：外框 --r-group、内衬 2px；组内按钮仍守 §3 的克制圆角（≤ 9px）。 */
-    border-radius: calc(var(--r-group) - 2px);
+    /* 2026-10-09 Arc 改版：外框与组内按钮都是胶囊（原「≤ 9px 克制圆角」规则作废）。 */
+    border-radius: var(--r-pill);
     background: transparent;
     color: var(--ink-600);
     font-size: 13px;
-    font-weight: 500;
+    font-weight: 400;
     line-height: 20px;
     white-space: nowrap;
   }
   .t-tabs.selection-group .selection-indicator {
-    border-radius: calc(var(--r-group) - 2px);
+    border-radius: var(--r-pill);
     background: var(--card);
     box-shadow: var(--control-selected-shadow-raised);
   }
@@ -828,6 +936,7 @@
   .mobile-selection-rail .mobile-selection-option[aria-pressed="true"] {
     background: var(--card);
     color: var(--brand-700);
+    font-weight: 500;
     box-shadow: var(--control-selected-shadow-raised);
   }
   .mobile-selection-rail [data-selection-decoration] { display: none; }
@@ -877,8 +986,8 @@
   box-shadow: var(--insight-frame-shadow);
 }
 .menu-select-trigger {
-  border-radius: var(--r-control);
-  box-shadow: 0 1px 2px rgba(24, 43, 68, .025);
+  border-radius: var(--r-pill);
+  box-shadow: none;
 }
 .data-coverage-strip {
   padding: 8px 0;

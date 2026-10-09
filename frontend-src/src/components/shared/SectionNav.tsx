@@ -1,7 +1,8 @@
 /**
  * 二级页面切换：选股（条件选股、突破雷达）与市场（美股概况、行业表现、CTA 趋势资金）。
- * 外观沿用分段控件，和新闻页的栏目切换同一副样子；语义是页面导航——
- * nav + 链接 + aria-current，不是 tablist。每页重新挂载，选中底块不做滑行。
+ * 语义是页面导航——nav + 链接 + aria-current，不是 tablist。
+ * 2026-10-09 Arc 改版：从标题上方的分段控件改成标题下方的下划线标签（Arc page header 的标签样式），
+ * 当前页近黑字加 2px 下划线，其余中灰；窄屏放不下时横向滚动并把当前页滚进视野。
  */
 import { useLayoutEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router';
@@ -29,26 +30,22 @@ export default function SectionNav({ section, className }: { section: NavSection
     viewport.scrollLeft += item.left - box.left - (box.width - item.width) / 2;
   }, [pathname]);
   return (
-    <nav aria-label={SECTION_LABEL[section]} className={cn('mb-5', className)}>
-      <div ref={viewportRef} className="selection-viewport no-scrollbar">
-        <div className="t-tabs selection-group border border-line">
-          {navSectionPages(section).map((page) => {
-            const active = isNavPathActive(pathname, page.path);
-            return (
-              <div key={page.path} className="relative">
-                {active && <span aria-hidden="true" className="selection-indicator pointer-events-none absolute inset-0" />}
-                <Link
-                  to={page.path}
-                  aria-current={active ? 'page' : undefined}
-                  className="t-tab relative z-10 inline-flex items-center whitespace-nowrap text-caption font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
-                  {...routeIntentHandlers(page.path)}
-                >
-                  {page.label}
-                </Link>
-              </div>
-            );
-          })}
-        </div>
+    <nav aria-label={SECTION_LABEL[section]} className={cn('mt-5', className)}>
+      <div ref={viewportRef} className="page-tabs">
+        {navSectionPages(section).map((page) => {
+          const active = isNavPathActive(pathname, page.path);
+          return (
+            <Link
+              key={page.path}
+              to={page.path}
+              aria-current={active ? 'page' : undefined}
+              className="page-tab focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+              {...routeIntentHandlers(page.path)}
+            >
+              {page.label}
+            </Link>
+          );
+        })}
       </div>
     </nav>
   );

@@ -99,7 +99,7 @@ function ForceRefreshButton({ onRefresh, spinning }: { onRefresh: () => void; sp
       onClick={onRefresh}
       disabled={identityUnavailable || spinning}
       title={t('更新关注股票的行情与评分')}
-      className="flex h-9 items-center gap-2 rounded-md border border-line bg-card px-3 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+      className="flex h-9 items-center gap-2 rounded-pill border border-line bg-card px-3 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
     >
       <BusyIcon busy={spinning} size={15} tone="brand" />
       {t('更新数据')}
@@ -584,7 +584,7 @@ export default function Watchlist() {
                   event.stopPropagation();
                   void onRemoveTicker(r.ticker);
                 }}
-                className="inline-flex size-7 items-center justify-center rounded-sm border border-line bg-card text-ink-400 opacity-0 transition-[opacity,color] duration-fast hover:border-danger-600/40 hover:text-danger-600 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 group-hover:opacity-100 disabled:cursor-wait disabled:opacity-40"
+                className="inline-flex size-7 items-center justify-center rounded-pill border border-line bg-card text-ink-400 opacity-0 transition-[opacity,color] duration-fast hover:border-danger-600/40 hover:text-danger-600 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 group-hover:opacity-100 disabled:cursor-wait disabled:opacity-40"
               >
                 <Icon name="x" size={13} />
               </button>
@@ -770,7 +770,7 @@ export default function Watchlist() {
                   <Icon name="plus" size={15} />{t('管理关注')}
                 </button>
               ) : (
-                <Link to="/login" state={{ from: '/watchlist' }} className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-line-strong bg-card px-3 text-caption text-ink-600 hover:border-brand-400 hover:text-brand-600">
+                <Link to="/login" state={{ from: '/watchlist' }} className="inline-flex min-h-11 items-center gap-1.5 rounded-pill border border-line-strong bg-card px-3 text-caption text-ink-600 hover:border-brand-400 hover:text-brand-600">
                   <Icon name="plus" size={15} />{t('登录后管理关注')}
                 </Link>
               )}
@@ -943,7 +943,7 @@ export default function Watchlist() {
                 <button
                   type="button"
                   onClick={progressive.loadMore}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-md border border-line-strong bg-card px-4 py-2 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:bg-paper-2"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-pill border border-line-strong bg-card px-4 py-2 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:bg-paper-2"
                 >
                   {t('加载更多')}
                   <span className="text-micro text-ink-400 tnum">

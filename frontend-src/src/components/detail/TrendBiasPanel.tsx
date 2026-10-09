@@ -184,7 +184,7 @@ export default function TrendBiasPanel({
             <li key={f.key} className="flex items-start gap-2.5">
               <span className={cn('mt-[7px] size-1.5 shrink-0 rounded-full', TONE_DOT[f.tone])} aria-hidden="true" />
               <div className="min-w-0">
-                <span className="mr-2 rounded-xs border border-line-strong bg-card-warm px-1.5 py-px text-micro font-medium text-ink-600">
+                <span className="mr-2 rounded-xs border border-line-strong bg-card-warm px-1.5 py-px text-micro text-ink-600">
                   {f.label}
                 </span>
                 <span className="text-body-s text-ink-500">{f.reading}</span>

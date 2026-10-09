@@ -519,7 +519,7 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
       )}
       {chainError && !shownChain ? (
           <div className="flex flex-col items-center gap-2.5 px-4 py-10 text-center">
-            <p className="text-body-s font-medium text-ink-700">{chainError.bizCode === 'public_option_snapshot_pending' ? t('期权数据准备中') : t('该到期日的期权链暂不可用')}</p>
+            <p className="text-body-s text-ink-700">{chainError.bizCode === 'public_option_snapshot_pending' ? t('期权数据准备中') : t('该到期日的期权链暂不可用')}</p>
             <p className="text-caption text-ink-400">
               {chainError.bizCode === 'public_option_snapshot_pending' ? t('期权数据正在更新，请稍后重试') : t('可切换到其他到期日查看')}
               {retrySeconds > 0 ? t(' · {n} 秒后可重试', { n: retrySeconds }) : ''}

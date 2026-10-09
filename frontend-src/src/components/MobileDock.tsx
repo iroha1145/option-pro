@@ -120,7 +120,7 @@ function MobileDockContent({ onHeightChange }: MobileDockProps) {
           {...routeIntentHandlers(item.path)}
         >
           <Icon name={item.icon} size={19} className={cn('shrink-0', active ? 'text-brand-600' : 'text-ink-400')} />
-          <span className={cn('w-full text-center text-micro leading-tight [overflow-wrap:anywhere]', active ? 'font-medium text-brand-600' : 'text-ink-400')}>{item.label}</span>
+          <span className={cn('w-full text-center text-tag leading-tight [overflow-wrap:anywhere]', active ? 'font-medium text-brand-600' : 'text-ink-500')}>{item.label}</span>
         </Link>
       </div>
     );
@@ -149,7 +149,7 @@ function MobileDockContent({ onHeightChange }: MobileDockProps) {
               aria-current={moreActive ? 'page' : undefined}
             >
               <Icon name="menu" size={19} className={cn('shrink-0', moreActive ? 'text-brand-600' : 'text-ink-400')} />
-              <span className={cn('w-full text-center text-micro leading-tight [overflow-wrap:anywhere]', moreActive ? 'font-medium text-brand-600' : 'text-ink-400')}>{t('更多')}</span>
+              <span className={cn('w-full text-center text-tag leading-tight [overflow-wrap:anywhere]', moreActive ? 'font-medium text-brand-600' : 'text-ink-500')}>{t('更多')}</span>
             </button>
           </div>
         </motion.div>
@@ -205,7 +205,7 @@ function MobileDockContent({ onHeightChange }: MobileDockProps) {
                     aria-current={isNavPathActive(location.pathname, m.path) ? 'page' : undefined}
                     className={cn(
                       'flex w-full items-center gap-3 rounded-md px-3 py-3 text-left transition-[transform,background-color] hover:bg-paper-2 active:bg-line/60',
-                      isNavPathActive(location.pathname, m.path) && 'bg-brand-50',
+                      isNavPathActive(location.pathname, m.path) && 'bg-brand-50 text-brand-700',
                     )}
                   >
                     <span className="flex size-9 items-center justify-center rounded-md border border-line bg-card-warm text-brand-600">

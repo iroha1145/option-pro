@@ -42,6 +42,7 @@ import StaleStrip from '@/components/shared/StaleStrip';
 import StockDataCoverage from '@/components/shared/StockDataCoverage';
 import SessionLED from '@/components/shared/SessionLED';
 import SoftBadge from '@/components/shared/SoftBadge';
+import { SIGNAL_TONE } from '@/components/shared/SignalChip';
 import { strengthBarClass } from '@/lib/strengthColor';
 import { exNum, isFeaturedRow, type EarningsRow } from '@/components/earnings/types';
 import ChangeBadge from '@/components/shared/ChangeBadge';
@@ -696,7 +697,7 @@ function MarketStatusPanel({
       {/* 辅助指标直接展示；缺失读数仍遵守原有数据纪律，不补零。 */}
       {(signalMetrics && signalMetrics.length > 0) && (
         <div className="mt-auto border-t border-line/70 pt-3" data-testid="home-supporting-metrics">
-          <p className="text-caption font-medium text-ink-600">{t('辅助指标')}</p>
+          <p className="text-caption text-ink-600">{t('辅助指标')}</p>
           <div className="mt-2 rounded-lg bg-paper-2/60 p-3">
             {signalMetrics && signalMetrics.length > 0 && (
               <div className="grid grid-cols-2 gap-x-4 gap-y-2">
@@ -756,7 +757,7 @@ function GrowStrength({ score, delay = 0, className }: { score: number | null | 
           />
         )}
       </motion.span>
-      <span className="w-8 text-right text-caption font-medium text-ink-600 tnum">{valid ? score.toFixed(1) : '—'}</span>
+      <span className="w-8 text-right text-caption text-ink-600 tnum">{valid ? score.toFixed(1) : '—'}</span>
     </span>
   );
 }
@@ -776,7 +777,7 @@ function RadarSignalRow({ signal: s, index: i }: { signal: BreakoutSignal; index
         <span className="min-w-0 truncate text-caption text-ink-500">{s.name}</span>
       </span>
       <span className="flex min-w-0 items-center gap-2 [grid-area:meta] xl:contents">
-        <SoftBadge className="min-w-0 xl:justify-self-start xl:[grid-area:chip]">
+        <SoftBadge tone={SIGNAL_TONE[s.type] ?? 'neutral'} className="min-w-0 xl:justify-self-start xl:[grid-area:chip]">
           <span className="truncate">{s.label}</span>
         </SoftBadge>
         <span className="shrink-0 text-micro text-ink-400 xl:justify-self-end xl:[grid-area:time]">{fmtRelative(s.at)}</span>

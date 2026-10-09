@@ -246,7 +246,7 @@ export default function MacroConditionsPanel({
               onClick={() => void onRefresh()}
               disabled={refreshPhase === 'sending'}
               className={cn(
-                'flex items-center gap-1.5 rounded-md border border-line bg-card px-3 py-1.5 text-caption text-ink-700 shadow-btn outline-none transition-colors duration-fast',
+                'flex items-center gap-1.5 rounded-pill border border-line bg-card px-3 py-1.5 text-caption text-ink-700 shadow-btn outline-none transition-colors duration-fast',
                 'hover:border-line-strong hover:text-ink-900 focus-visible:border-brand-400 disabled:opacity-60',
               )}
             >

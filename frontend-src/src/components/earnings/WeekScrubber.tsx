@@ -75,7 +75,7 @@ export default function WeekScrubber({
       <div className="flex h-11 items-center justify-between gap-2 border-b border-line px-4 max-[359px]:px-2 [@media(pointer:coarse)]:h-14">
         <button
           onClick={() => onWeekChange(-1)}
-          className="flex size-7 shrink-0 items-center justify-center rounded-sm border border-line bg-card text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 [@media(pointer:coarse)]:size-11"
+          className="flex size-7 shrink-0 items-center justify-center rounded-pill border border-line bg-card text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 [@media(pointer:coarse)]:size-11"
           aria-label={__t("上一周")}
         >
           <Icon name="chevron-right" size={14} className="rotate-180" />
@@ -86,7 +86,7 @@ export default function WeekScrubber({
         </p>
         <button
           onClick={() => onWeekChange(1)}
-          className="flex size-7 shrink-0 items-center justify-center rounded-sm border border-line bg-card text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 [@media(pointer:coarse)]:size-11"
+          className="flex size-7 shrink-0 items-center justify-center rounded-pill border border-line bg-card text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 [@media(pointer:coarse)]:size-11"
           aria-label={__t("下一周")}
         >
           <Icon name="chevron-right" size={14} />
@@ -157,7 +157,7 @@ export default function WeekScrubber({
                       {isToday && <span className="size-1.5 rounded-full bg-brand-600" aria-label={__t("今天")} />}
                     </span>
                     {hasReports && (
-                      <span className="shrink-0 whitespace-nowrap text-micro font-medium text-ink-600 tnum">
+                      <span className="shrink-0 whitespace-nowrap text-micro text-ink-600 tnum">
                         {__t('{n} 条', { n: dayItems.length })}
                       </span>
                     )}

@@ -149,7 +149,7 @@ export default function ChainBrowser({ chain }: { chain: OptionChain }) {
         </ul>
       </>}
       <details className="group/howto mt-3 rounded-md border border-line px-3 py-2 text-caption text-ink-500">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 font-medium text-ink-600 [&::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 py-1 text-ink-600 [&::-webkit-details-marker]:hidden">
           <span>{t('报价说明')}</span>
           <Icon name="chevron-down" size={14} className="shrink-0 transition-transform duration-fast group-open/howto:rotate-180 motion-reduce:transition-none" />
         </summary>

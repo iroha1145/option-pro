@@ -457,7 +457,7 @@ export default function Earnings() {
           </p>
           <button
             onClick={() => q.refresh()}
-            className="shrink-0 rounded-sm border border-warn-600/40 px-2 py-1 text-caption text-warn-700 transition-colors hover:bg-warn-600 hover:text-on-accent"
+            className="shrink-0 rounded-pill border border-warn-600/40 px-2 py-1 text-caption text-warn-700 transition-colors hover:bg-warn-600 hover:text-on-accent"
           >
             {t('重试')}
           </button>
@@ -470,7 +470,7 @@ export default function Earnings() {
           <p className="text-caption text-warn-700">{t('更新失败，显示上次数据。')}</p>
           <button
             onClick={() => void onRefresh()}
-            className="shrink-0 rounded-sm border border-warn-600/40 px-2 py-1 text-caption text-warn-700 transition-colors hover:bg-warn-600 hover:text-on-accent"
+            className="shrink-0 rounded-pill border border-warn-600/40 px-2 py-1 text-caption text-warn-700 transition-colors hover:bg-warn-600 hover:text-on-accent"
           >
             {t('重试')}
           </button>
@@ -643,7 +643,7 @@ export default function Earnings() {
                     </p>
                     <button
                       onClick={() => setSelectedDay(null)}
-                      className="flex items-center gap-1 rounded-sm border border-line bg-card px-2 py-1 text-caption text-ink-500 shadow-btn transition-colors hover:text-ink-800"
+                      className="flex items-center gap-1 rounded-pill border border-line bg-card px-2 py-1 text-caption text-ink-500 shadow-btn transition-colors hover:text-ink-800"
                     >
                       <Icon name="x" size={12} />
                       {t('清空条件')}

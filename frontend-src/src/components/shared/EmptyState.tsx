@@ -35,12 +35,12 @@ export default function EmptyState({ image, icon, title, description, action, fo
       {image ? (
         <img src={image} alt="" width={220} height={165} className={cn('mb-5 h-auto w-[220px] max-w-full opacity-95 dark:brightness-0 dark:invert dark:opacity-60', art.className)} style={art.style} loading="lazy" />
       ) : (
-        <span className={cn('mb-4 flex size-14 items-center justify-center rounded-lg border border-line bg-card-warm text-ink-400', art.className)} style={art.style}>
+        <span className={cn('mb-4 flex size-12 items-center justify-center rounded-full border border-line bg-card text-ink-500', art.className)} style={art.style}>
           <Icon name={icon ?? 'doc-quote'} size={26} />
         </span>
       )}
-      <h3 className={cn('text-h3 text-ink-800', heading.className)} style={heading.style}>{title}</h3>
-      {body && <p className={cn('mt-1.5 max-w-[340px] text-body-s text-ink-500', body.className)} style={body.style}>{description}</p>}
+      <h3 className={cn('text-h3 text-ink-900', heading.className)} style={heading.style}>{title}</h3>
+      {body && <p className={cn('mt-1.5 max-w-[340px] text-body-s text-ink-600', body.className)} style={body.style}>{description}</p>}
       {note && (
         <p className={cn('mt-1 text-micro text-ink-400', note.className)} style={note.style}>{t('稍后刷新再试')}</p>
       )}

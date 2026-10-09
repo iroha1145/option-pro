@@ -92,7 +92,7 @@ export default function DrawingInspector({
   const listed = [...(drawings ?? [])].sort((a, b) => a.zOrder - b.zOrder);
   return (
     <div className="flex flex-col gap-3 text-caption text-ink-600">
-      <p className="text-micro font-medium text-ink-500">{t('图形列表')}</p>
+      <p className="text-micro text-ink-500">{t('图形列表')}</p>
       {listed.length === 0 ? (
         <p className="text-micro text-ink-400">{t('暂无手绘图形')}</p>
       ) : (
@@ -150,7 +150,7 @@ export default function DrawingInspector({
       )}
       {drawing ? (
         <>
-          <p className="text-micro font-medium text-ink-500">{t('图形样式')}</p>
+          <p className="text-micro text-ink-500">{t('图形样式')}</p>
           <div className="flex flex-wrap gap-1" role="group" aria-label={t('颜色')}>
             {COLORS.map((color) => (
               <button
@@ -254,7 +254,7 @@ export default function DrawingInspector({
             aria-expanded={filesOpen}
             aria-controls={filesId}
             onClick={() => setFilesOpen((open) => !open)}
-            className="flex min-h-8 flex-1 items-center justify-between gap-2 rounded-xs px-1 text-left text-micro font-medium text-ink-500 outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+            className="flex min-h-8 flex-1 items-center justify-between gap-2 rounded-xs px-1 text-left text-micro text-ink-500 outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
           >
             {t('绘图文件')}
             <Icon

@@ -157,7 +157,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
           {activeCount > 0 && (
             <button
               onClick={() => onChange({ ...DEFAULT_FILTERS })}
-              className="touch-target flex items-center gap-1 rounded-md border border-line bg-card px-2 py-1.5 text-micro text-ink-500 shadow-btn transition-colors duration-fast hover:border-down-600/40 hover:text-down-700"
+              className="touch-target flex items-center gap-1 rounded-pill border border-line bg-card px-2 py-1.5 text-micro text-ink-500 shadow-btn transition-colors duration-fast hover:border-down-600/40 hover:text-down-700"
             >
               <Icon name="x" size={11} />
               {t('清空条件')}
@@ -175,7 +175,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
           aria-expanded={moreOpen}
           aria-controls={moreOpen ? morePanelId : undefined}
           className={cn(
-            'disclosure-trigger flex items-center gap-2 rounded-md border px-3 py-1.5 text-caption font-medium shadow-btn transition-colors duration-fast',
+            'disclosure-trigger flex items-center gap-2 rounded-pill border px-3 py-1.5 text-caption font-medium shadow-btn transition-colors duration-fast',
             moreSummary.length > 0 ? 'border-brand-400 bg-brand-50 text-brand-700' : 'border-line bg-card text-ink-600',
           )}
         >

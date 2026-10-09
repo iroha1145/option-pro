@@ -194,7 +194,7 @@ export default function StructurePanel({ technical }: { technical: TechnicalStru
             <InfoHint hint={STRUCTURE_HINTS.vol_price} />
           </span>
           {/* 量价形态是规则算出的类别，用中性底；青瓷色只留给模型分析结果 */}
-          <span className="rounded-pill bg-paper-2 px-2 py-0.5 text-micro font-medium text-ink-600">
+          <span className="rounded-pill bg-paper-2 px-2 py-0.5 text-micro text-ink-600">
             {vpm.setup_label ? t(vpm.setup_label) : '—'}
           </span>
         </div>

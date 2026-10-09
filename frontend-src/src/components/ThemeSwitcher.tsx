@@ -99,8 +99,8 @@ export default function ThemeSwitcher({ className }: { className?: string }) {
         aria-label={t('切换外观')}
         title={t('当前外观：{mode}', { mode: preferenceLabel(preference) })}
         className={cn(
-          'theme-switcher-control flex size-9 shrink-0 items-center justify-center rounded-md border shadow-btn transition-colors duration-fast md:h-8 md:w-8',
-          open ? 'border-brand-400 text-brand-600' : 'border-line bg-card-warm text-ink-500 hover:text-ink-800',
+          'theme-switcher-control flex size-9 shrink-0 items-center justify-center rounded-pill border shadow-btn transition-colors duration-fast md:h-8 md:w-8',
+          open ? 'border-brand-400 text-brand-600' : 'border-line bg-card text-ink-500 hover:text-ink-900',
         )}
       >
         <Icon name={triggerIcon} size={14} />

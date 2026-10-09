@@ -223,7 +223,7 @@ function Card({ title, meta, children, className }: { title: string; meta?: stri
   return (
     <section className={cn('rounded-lg border border-line bg-card p-2 shadow-card', className)}>
       <div className="mb-1 flex h-6 items-center justify-between px-1.5 pt-0.5">
-        <h3 className="font-medium leading-none text-ink-600">{title}</h3>
+        <h3 className="font-medium leading-none text-ink-900">{title}</h3>
         {meta && <span className="text-micro leading-none text-ink-400 tnum">{meta}</span>}
       </div>
       {children}
@@ -349,7 +349,7 @@ export default function LayerMenu({
                 type="button"
                 onClick={() => onChange(settingsFromPreset('minimal'))}
                 className={cn(
-                  'inline-flex h-7 items-center rounded-md border border-line bg-card px-2.5 text-micro leading-none text-ink-500 shadow-btn transition-[transform,color,background-color] duration-fast hover:bg-paper-2 hover:text-ink-700 active:scale-95',
+                  'inline-flex h-7 items-center rounded-pill border border-line bg-card px-2.5 text-micro leading-none text-ink-500 shadow-btn transition-[transform,color,background-color] duration-fast hover:bg-paper-2 hover:text-ink-700 active:scale-95',
                   FOCUS_RING,
                 )}
               >
@@ -393,14 +393,14 @@ export default function LayerMenu({
             </div>
 
             <section className="mt-3 rounded-lg border border-line bg-card p-2 shadow-card">
-              <h3 className="font-medium leading-none text-ink-600">
+              <h3 className="font-medium leading-none text-ink-900">
                 <button
                   type="button"
                   aria-expanded={detailsOpen}
                   aria-controls={detailsId}
                   onClick={() => setDetailsOpen((open) => !open)}
                   className={cn(
-                    'flex h-8 w-full items-center justify-between gap-2 rounded-md px-1.5 text-left font-medium leading-none text-ink-600 transition-colors duration-fast hover:bg-paper-2/70',
+                    'flex h-8 w-full items-center justify-between gap-2 rounded-md px-1.5 text-left leading-none text-ink-600 transition-colors duration-fast hover:bg-paper-2/70',
                     FOCUS_RING,
                   )}
                 >

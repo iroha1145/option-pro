@@ -31,13 +31,16 @@ import { t as __t } from '../../i18n/core.ts';
 
 
 /* ---------------- 分档 Segmented（共享件 + Mono 11 数量徽标） ---------------- */
-const TIER_OPTIONS: { value: TierFilter; label: string }[] = [
+/* 选中时按分数档着色，与结果里的评分条同色：S 绿、A/B 群青、C 琥珀（2026-10-09）。 */
+const TIER_OPTIONS: { value: TierFilter; label: string; tone?: 'ok' | 'warn' }[] = [
   { value: 'all', label: __t('全部') },
-  { value: 'S', label: 'S' },
+  { value: 'S', label: 'S', tone: 'ok' },
   { value: 'A', label: 'A' },
   { value: 'B', label: 'B' },
-  { value: 'C', label: 'C' },
+  { value: 'C', label: 'C', tone: 'warn' },
 ];
+/* 风险偏好由冷到暖：稳健天蓝、均衡群青、进取橙。 */
+const PROFILE_TONE = { conservative: 'sky', balanced: undefined, aggressive: 'orange' } as const;
 
 function TierSegmented({
   value,
@@ -77,7 +80,7 @@ function TierSegmented({
 
 /* ---------------- 小件：字段标签 ---------------- */
 function FieldLabel({ children }: { children: string }) {
-  return <p className="mb-2 text-caption font-medium text-ink-500">{children}</p>;
+  return <p className="mb-2 text-caption text-ink-500">{children}</p>;
 }
 
 /* ---------------- 价格区间输入（Mono，$ 前缀） ---------------- */
@@ -304,7 +307,7 @@ export default function FilterWorkbench({
         <div className="min-w-0">
           <FieldLabel>{__t('风险偏好')}</FieldLabel>
           <Segmented<ProfilePref>
-            options={(['conservative', 'balanced', 'aggressive'] as const).map((v) => ({ value: v, label: PROFILE_CN[v] }))}
+            options={(['conservative', 'balanced', 'aggressive'] as const).map((v) => ({ value: v, label: PROFILE_CN[v], tone: PROFILE_TONE[v] }))}
             value={draft.profile}
             onChange={(profile) => patch({ profile, presetId: null })}
             ariaLabel={__t('风险偏好')}
@@ -316,7 +319,7 @@ export default function FilterWorkbench({
       {/* 次要条件收纳；已选择的范围常驻，避免折叠后忘记当前扫描门槛。 */}
       <details className="group/filters mt-5 border-t border-line/70 pt-3" data-testid="screener-advanced-filters">
         <summary className="disclosure-trigger flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-2 rounded-lg py-1 text-caption text-ink-500 outline-none transition-colors duration-fast hover:text-ink-800 focus-visible:ring-2 focus-visible:ring-brand-400/40 [&::-webkit-details-marker]:hidden">
-          <span className="inline-flex shrink-0 items-center gap-2 font-medium text-ink-700">
+          <span className="inline-flex shrink-0 items-center gap-2 text-ink-700">
             <Icon name="filter-funnel" size={14} className="text-ink-400" />
             {__t('更多筛选')}
             <Icon name="chevron-down" size={13} className="text-ink-400 transition-transform group-open/filters:rotate-180" />

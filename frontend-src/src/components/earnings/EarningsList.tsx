@@ -138,7 +138,7 @@ function ExpectedMoveCell({
     const missing = expectedMoveMissingCopy(status);
     return (
       <span
-        className={cn('block min-w-0 text-[13px] font-medium leading-4 text-ink-400', align === 'end' && 'text-right')}
+        className={cn('block min-w-0 text-[13px] leading-4 text-ink-400', align === 'end' && 'text-right')}
         title={missing.title}
         data-expected-move-state={status || 'unknown'}
       >
@@ -495,7 +495,7 @@ export default function EarningsList({
                         </span>
                       </span>
                       <span className="ml-auto min-w-[96px] max-w-full text-right">
-                        <span className="mb-0.5 block text-micro font-medium leading-4 text-ink-400">
+                        <span className="mb-0.5 block text-micro leading-4 text-ink-400">
                           {t('预期波动')}
                         </span>
                         <ExpectedMoveCell pct={move} index={i} status={moveStatus} align="end" />

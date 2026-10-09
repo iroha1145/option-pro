@@ -442,7 +442,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
       <button
         type="button"
         onClick={resumePolling}
-        className="mt-2 flex h-8 items-center gap-1.5 rounded-md border border-line bg-card px-3 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:text-ink-800"
+        className="mt-2 flex h-8 items-center gap-1.5 rounded-pill border border-line bg-card px-3 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:text-ink-800"
       >
         <Icon name="refresh" size={13} />
         {__t('查询进度')}
@@ -592,7 +592,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               <button
                 type="button"
                 disabled
-                className="mt-4 h-8 cursor-not-allowed rounded-md bg-paper-2 px-3 text-caption font-medium text-ink-400"
+                className="mt-4 h-8 cursor-not-allowed rounded-md bg-paper-2 px-3 text-caption text-ink-400"
               >
                 {__t('分析更新中')}
               </button>
@@ -616,7 +616,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               <button
                 type="button"
                 disabled
-                className="mt-4 h-8 cursor-not-allowed rounded-md bg-paper-2 px-3 text-caption font-medium text-ink-400"
+                className="mt-4 h-8 cursor-not-allowed rounded-md bg-paper-2 px-3 text-caption text-ink-400"
               >
                 {__t('已完成最终分析')}
               </button>
@@ -701,7 +701,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
             <div>
               {jobCancelled ? (
                 <div className="rounded-md border border-line bg-paper-2 p-3">
-                  <p className="text-caption font-medium text-ink-700">{__t('分析任务已取消')}</p>
+                  <p className="text-caption text-ink-700">{__t('分析任务已取消')}</p>
                   <p className="mt-0.5 text-micro text-ink-500">{__t('可以重新生成分析')}</p>
                 </div>
               ) : (

@@ -1,24 +1,22 @@
-/** SignalChip：无描边的中性标签。突破、放量、跳空这些是技术事件的类别，不是状态，
-    不借品牌、警示或 AI 色；靠文字区分，突破略深一档便于扫读。 */
-import { cn } from '@/lib/utils';
+/** SignalChip：技术事件的类别标签。2026-10-09 用户要求「突破、放量等改成多种颜色」：
+    每类一种分类色（见 index.css 的 --cat-*），只表示类别，不表示好坏、不借涨跌红绿与 AI 青瓷；
+    同一类事件全站同一个颜色（首页、突破雷达、关注列表、个股页）。 */
 import type { SignalType } from '@/api/types';
-import SoftBadge from './SoftBadge';
+import SoftBadge, { type BadgeTone } from './SoftBadge';
 
-const STYLE: Record<SignalType, string> = {
-  breakout: 'text-ink-800 bg-paper-2',
-  volume: 'text-ink-600 bg-paper-2',
-  pullback: 'text-ink-600 bg-paper-2',
-  'ma-touch': 'text-ink-600 bg-paper-2',
-  gap: 'text-ink-600 bg-paper-2',
-  'iv-spike': 'text-ink-600 bg-paper-2',
+export const SIGNAL_TONE: Record<SignalType, BadgeTone> = {
+  breakout: 'violet',
+  volume: 'amber',
+  gap: 'orange',
+  pullback: 'sky',
+  'ma-touch': 'brand',
+  'iv-spike': 'pink',
 };
 
 export default function SignalChip({ type, label, className }: { type: SignalType | string; label: string; className?: string }) {
-  const style = (STYLE as Record<string, string>)[type] ?? STYLE.pullback;
+  const tone = (SIGNAL_TONE as Record<string, BadgeTone>)[type] ?? 'neutral';
   return (
-    <SoftBadge
-      className={cn(style, className)}
-    >
+    <SoftBadge tone={tone} className={className}>
       {label}
     </SoftBadge>
   );

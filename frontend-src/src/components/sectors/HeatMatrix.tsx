@@ -70,7 +70,7 @@ function returnScale(sectors: SectorVm[], span: number): ReturnScale {
 
 function ColumnHeader({ period, className }: { period: SectorVm['period']; className?: string }) {
   return (
-    <div className={cn(ROW_GRID, 'border-b border-line px-2 pb-2 text-micro font-medium text-ink-500', className)} aria-hidden="true">
+    <div className={cn(ROW_GRID, 'border-b border-line px-2 pb-2 text-micro text-ink-500', className)} aria-hidden="true">
       <span />
       <span>{t('行业')}</span>
       <span className="col-span-2 text-right md:col-span-2">{t('{period}平均收益', { period: periodLabel(period) })}</span>

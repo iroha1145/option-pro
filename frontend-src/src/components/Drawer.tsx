@@ -2,6 +2,8 @@
  * Drawer 基座（design.md §7.3 + transitions.dev panel reveal）
  * 右侧/底部面板用 `.t-panel-slide`（open 400ms / close 350ms + 交叉模糊）。
  * 移动端变全屏 bottom sheet；ESC/点背板关闭。
+ * 2026-10-09 新增 variant="modal"：桌面居中弹窗（transitions.dev modal，open 250ms / close 150ms，
+ * 缩放 .96 + 淡入），手机仍是底部全屏面板。新闻详情改用它（用户要求把侧边抽屉改成弹窗）。
  */
 import { useEffect, useId, useRef } from 'react';
 import type { ReactNode } from 'react';
@@ -12,6 +14,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
 import {
+  overlayClassName,
   overlayDataOpen,
   overlayVisible,
   readRootDurationMs,
@@ -28,9 +31,11 @@ interface DrawerProps {
   label?: string;
   children: ReactNode;
   width?: number;
+  /** side：右侧抽屉（默认）；modal：桌面居中弹窗，手机仍是底部全屏面板。 */
+  variant?: 'side' | 'modal';
 }
 
-export default function Drawer({ open, onClose, title, label, children, width = 560 }: DrawerProps) {
+export default function Drawer({ open, onClose, title, label, children, width = 560, variant = 'side' }: DrawerProps) {
   /* 单实例（审计 2.6.5）：以前桌面/移动两块面板同时挂载、仅靠 CSS 断点互斥，
      children 整棵渲染两遍——组件各自持有独立定时器与图表实例，framer 的
      layoutId 也在两棵树里撞名；DOM 中还同时存在两个 aria-modal dialog。
@@ -39,7 +44,8 @@ export default function Drawer({ open, onClose, title, label, children, width = 
   const overlayId = useId();
   const titleId = useId();
   const panelsRef = useRef<HTMLDivElement>(null);
-  const closeMs = readRootDurationMs('--panel-close-dur', 350);
+  const modal = variant === 'modal' && !isMobile;
+  const closeMs = modal ? readRootDurationMs('--modal-close-dur', 150) : readRootDurationMs('--panel-close-dur', 350);
   const phase = useOverlayPhase(open, closeMs);
   const mounted = overlayVisible(open, phase);
   useFocusTrap(panelsRef, open);
@@ -60,6 +66,48 @@ export default function Drawer({ open, onClose, title, label, children, width = 
   }, [open, onClose]);
 
   if (!mounted) return null;
+
+  if (modal) {
+    return (
+      <>
+        <div
+          className={cn('t-backdrop fixed inset-0 z-[70] bg-[var(--scrim-strong)] backdrop-blur-[3px]', phase === 'open' && 'is-open')}
+          onClick={onClose}
+          data-focus-backdrop={overlayId}
+          aria-hidden="true"
+        />
+        {/* 外壳 pointer-events-none：关闭动画期间不挡背板；t-modal 的缩放落在面板本身。 */}
+        <div ref={panelsRef} className="pointer-events-none fixed inset-0 z-[71] flex items-center justify-center p-6">
+          <section
+            role="dialog"
+            aria-modal="true"
+            data-focus-overlay={overlayId}
+            aria-label={label ?? (title == null ? t('详情面板') : undefined)}
+            aria-labelledby={!label && title != null ? titleId : undefined}
+            data-open={overlayDataOpen(phase)}
+            className={cn(
+              't-modal pointer-events-auto flex max-h-[min(88vh,980px)] w-full flex-col overflow-hidden rounded-xl border border-line bg-card shadow-overlay',
+              overlayClassName(phase),
+            )}
+            style={{ maxWidth: width }}
+          >
+            <div className="flex items-center justify-between gap-4 border-b border-line px-6 py-3.5">
+              <div id={titleId} className="min-w-0 flex-1">{title}</div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-pill text-ink-400 transition-[transform,color,background-color] duration-fast hover:bg-paper-2 hover:text-ink-700 active:scale-95"
+                aria-label={t('关闭面板')}
+              >
+                <Icon name="x" size={16} />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+          </section>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>

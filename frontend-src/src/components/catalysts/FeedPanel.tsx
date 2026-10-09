@@ -93,7 +93,7 @@ export function NewsRow({
       >
         {/* 顶行：来源 · 相对时间 · 多源 · 过期 */}
         <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-micro text-ink-400">
-          <span className="font-medium text-ink-500">{item.source}</span>
+          <span className="text-ink-500">{item.source}</span>
           <span aria-hidden="true">·</span>
           <span className="tnum">{fmtRelative(item.publishedAt)}</span>
           {item.sourceCount > 1 && (

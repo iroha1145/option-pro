@@ -303,7 +303,7 @@ export default function StockDetail() {
             ) : techSnapshotMissing ? (
               <div className="mt-3 flex flex-col items-center rounded-md border border-line bg-card-warm px-4 py-8 text-center">
                 <Icon name="doc-quote" size={26} className="text-ink-300" />
-                <p className="mt-3 text-body-s font-medium text-ink-600">{__t('该股尚未获取数据，获取后自动分析')}</p>
+                <p className="mt-3 text-body-s text-ink-600">{__t('该股尚未获取数据，获取后自动分析')}</p>
                 <ManualStockPull ticker={detail.ticker} minimal className="mt-3" onPulled={handlePulled} />
               </div>
             ) : techError ? (

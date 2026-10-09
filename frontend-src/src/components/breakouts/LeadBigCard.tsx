@@ -225,7 +225,7 @@ function LifecycleStepper({ state }: { state: string }) {
           tone === 'current' && 'font-medium text-brand-700',
           (tone === 'past' || tone === 'future') && 'text-ink-400',
           tone === 'down' && 'font-medium text-danger-700',
-          tone === 'ink-end' && 'font-medium text-ink-500',
+          tone === 'ink-end' && 'text-ink-500',
         )}
       >
         {label}
@@ -447,7 +447,7 @@ function MiniKline({ ticker, dailyVersion, preparation, statusReadFailed, pivot,
       ) : error || !option ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-4 text-center">
           <img src="/empty-chart.svg" alt="" className="h-12 w-auto opacity-90 dark:brightness-0 dark:invert dark:opacity-60" loading="lazy" />
-          <p className="text-caption font-medium text-ink-600">
+          <p className="text-caption text-ink-600">
             {error && !snapshotMissing ? t('K 线读取失败') : t('暂无日线走势')}
           </p>
           <p className="text-micro text-ink-400">
