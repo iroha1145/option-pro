@@ -98,3 +98,66 @@ def test_r3s1_country_and_upper_case_hosts_are_not_published(text):
 )
 def test_r3s1_technical_and_product_suffixes_stay_glosses(text):
     _publish_both(text)
+
+
+# --- Suggestion 2. Runtime settings writes keep the same token floor ---------
+
+
+def _settings_client(monkeypatch, shared_budget):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.api.runtime_settings import router
+    from app.personal_config import PersonalConfig
+    from app.services import runtime_settings
+
+    config = PersonalConfig.model_validate({"model_budget": {"daily_budget_usd": shared_budget}})
+    monkeypatch.setattr(runtime_settings, "get_personal_config", lambda: config)
+    runtime_settings.get_runtime_settings_store.cache_clear()
+    store = runtime_settings.get_runtime_settings_store()
+    app = FastAPI()
+    app.include_router(router)
+    return TestClient(app, base_url="http://localhost"), store
+
+
+def _write_token_limit(client, version, limit):
+    return client.put(
+        "/api/runtime-settings",
+        json={"expected_version": version, "settings": {"ai": {"daily_token_limit": limit}}},
+    )
+
+
+def test_r3s2_token_only_budget_rejects_a_low_daily_token_limit(monkeypatch):
+    client, store = _settings_client(monkeypatch, 0)
+    response = _write_token_limit(client, 1, 102_400)
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["code"] == "token_limit_below_task_reservation"
+    assert detail["minimum"] == 1_050_000
+    assert "1,050,000" in detail["message"] and "model_budget" in detail["message"]
+    assert store.read().version == 1
+
+
+def test_r3s2_rollback_to_a_low_limit_is_refused_under_a_token_only_budget(monkeypatch):
+    from app.services.runtime_settings import RuntimeAISettingsPatch, RuntimeSettingsPatch, RuntimeSettingsStore
+
+    client, store = _settings_client(monkeypatch, 0)
+    # A revision written while a shared budget was configured.
+    unchecked = RuntimeSettingsStore(store.path, defaults=store.defaults)
+    for version, limit in ((1, 102_400), (2, 9_000_000)):
+        unchecked.update(
+            RuntimeSettingsPatch(ai=RuntimeAISettingsPatch(daily_token_limit=limit)),
+            expected_version=version,
+        )
+    response = client.post("/api/runtime-settings/rollback", json={"expected_version": 3, "target_version": 2})
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "token_limit_below_task_reservation"
+    assert store.read().settings.ai.daily_token_limit == 9_000_000
+
+
+@pytest.mark.parametrize(("shared_budget", "limit"), [(0, 1_050_000), (0, 9_000_000), (10.0, 102_400)])
+def test_r3s2_limits_that_admit_one_task_or_a_shared_budget_are_saved(monkeypatch, shared_budget, limit):
+    client, store = _settings_client(monkeypatch, shared_budget)
+    response = _write_token_limit(client, 1, limit)
+    assert response.status_code == 200
+    assert store.read().settings.ai.daily_token_limit == limit

@@ -17,6 +17,7 @@ from app.services.runtime_settings import (
     RuntimeSettingsRevisionNotFound,
     RuntimeSettingsStorageError,
     RuntimeSettingsStore,
+    RuntimeSettingsTokenLimitError,
     RuntimeSettingsValidationError,
     RuntimeSettingsVersionConflict,
     get_runtime_settings_store,
@@ -136,6 +137,14 @@ def _translate_store_error(exc: Exception) -> HTTPException:
             "revision_not_found",
             "找不到可回滚的设置版本",
         )
+    if isinstance(exc, RuntimeSettingsTokenLimitError):
+        return _safe_error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "token_limit_below_task_reservation",
+            f"共享每日美元预算为 0 时，日词元额度不能低于单条任务的最大预留 "
+            f"{exc.minimum:,} 词元；请调高额度，或在服务器的 model_budget 配置里设置共享预算",
+            minimum=exc.minimum,
+        )
     if isinstance(exc, RuntimeSettingsValidationError):
         return _safe_error(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -226,6 +235,7 @@ async def rollback_runtime_settings(
     except (
         RuntimeSettingsRevisionNotFound,
         RuntimeSettingsStorageError,
+        RuntimeSettingsValidationError,
         RuntimeSettingsVersionConflict,
     ) as exc:
         raise _translate_store_error(exc) from exc
