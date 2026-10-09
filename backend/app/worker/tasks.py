@@ -1074,7 +1074,10 @@ class CatalystSyncTask:
                     retention_days=retention_days,
                 )
                 ingest_pruned = (
-                    await _call_local(self._collector.prune_orphans)
+                    await _call_local(
+                        self._collector.prune_orphans,
+                        retention_days=retention_days,
+                    )
                     if self._collector is not None
                     else None
                 )

@@ -141,7 +141,6 @@ _PRIVATE_TABLES_BY_NEWS_ID = (
     "catalyst_ingest_keys",
     "catalyst_ingest_titles",
     "catalyst_ingest_items",
-    "catalyst_ingest_observations",
 )
 
 
@@ -1061,9 +1060,15 @@ class NewsCollector:
             ),
         )
 
-    def prune_orphans(self) -> int:
-        """Drop private rows of news the journal prune removed from the mirror."""
+    def prune_orphans(self, *, retention_days: int) -> int:
+        """Drop private rows of news the journal prune removed from the mirror.
 
+        Observations of such news stay until the retention period has passed
+        since they were made: an old story a feed keeps listing is then still
+        recognised as seen instead of being minted again after every prune.
+        """
+
+        cutoff = utc_micros(self._clock() - timedelta(days=retention_days))
         removed = 0
         with self.repository.transaction() as connection:
             for table in _PRIVATE_TABLES_BY_NEWS_ID:
@@ -1071,4 +1076,11 @@ class NewsCollector:
                     f"DELETE FROM {table} WHERE news_id NOT IN "
                     "(SELECT news_id FROM macrolens_etl_news)"
                 ).rowcount
+            removed += connection.execute(
+                """DELETE FROM catalyst_ingest_observations
+                   WHERE observed_at<? AND news_id NOT IN (
+                       SELECT news_id FROM macrolens_etl_news
+                   )""",
+                (cutoff,),
+            ).rowcount
         return removed
