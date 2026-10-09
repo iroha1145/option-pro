@@ -1,0 +1,27 @@
+{
+  "case": "production-distinct-news-clusters-share-truncated-title-key",
+  "observed_at": "2026-10-09T05:41:10.046435+00:00",
+  "captured_at": "2026-10-09T05:47:03.549896+00:00",
+  "source": "Read-only indexed SELECT under container uid 100; public headlines and identifiers only",
+  "legacy_event_group_id": "evt_057df72105315c1fe500c1b0e54e6e7f",
+  "rows": [
+    {
+      "news_id": 192140,
+      "change_sequence": 202666,
+      "raw_title": "INVESTOR ALERT: Pomerantz Law Firm Investigates Claims On Behalf of Investors of Ultragenyx Pharmaceutical Inc. - RARE",
+      "published_at": "2026-10-06T20:54:00Z",
+      "fetched_at": "2026-10-06T21:53:44.641919Z",
+      "source_available_at": "2026-10-06T21:53:44.750739Z",
+      "canonical_tickers": []
+    },
+    {
+      "news_id": 192183,
+      "change_sequence": 202721,
+      "raw_title": "INVESTOR ALERT: Pomerantz Law Firm Investigates Claims On Behalf of Investors of Sionna Therapeutics, Inc. - SION",
+      "published_at": "2026-10-06T22:37:00Z",
+      "fetched_at": "2026-10-06T23:55:02.534591Z",
+      "source_available_at": "2026-10-06T23:55:02.709256Z",
+      "canonical_tickers": []
+    }
+  ]
+}

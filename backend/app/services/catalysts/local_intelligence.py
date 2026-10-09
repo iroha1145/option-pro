@@ -1528,23 +1528,16 @@ def _cluster_rows(rows: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
 
 
 def _cluster_key(members: list[dict[str, Any]]) -> str:
-    representative = min(
-        members,
-        key=lambda row: (
-            " ".join(sorted(_title_tokens(str(row.get("raw_title") or "")))),
-            int(row["news_id"]),
-        ),
-    )
-    kind = _event_type(
-        str(representative.get("raw_title") or ""), representative.get("raw_summary")
-    )
-    tickers = sorted(
-        {ticker for row in members for ticker in row.get("canonical_tickers") or []}
-    )
-    signature = "-".join(
-        sorted(_title_tokens(str(representative.get("raw_title") or "")))[:10]
-    ) or f"news-{representative['news_id']}"
-    return f"{kind}:{','.join(tickers[:5])}:{signature}"
+    """Give disjoint news clusters distinct identities without lossy text keys.
+
+    Active revisions contain one row per news ID, and clustering partitions
+    those rows. Their minimum IDs therefore cannot collide across clusters.
+    Members with larger news IDs keep the anchor; content still versions through
+    the plan's full identities. When the anchor leaves the active window, the
+    remaining cluster gets a new identity without rewriting its stored history.
+    """
+    anchor_news_id = min(int(row["news_id"]) for row in members)
+    return f"news-cluster-v2:{anchor_news_id}"
 
 
 def _market_focus_payload_has_waiting_placeholder(
@@ -4496,6 +4489,12 @@ class LocalCatalystIntelligence:
         now: datetime,
     ) -> tuple[int, int, bool]:
         """Persist a prepared plan in one short, caller-owned transaction."""
+
+        group_ids = [proposal["event_group_id"] for proposal in planned]
+        if len(group_ids) != len(set(group_ids)):
+            # Reject before any group/version writes. Never hide a collision
+            # by dropping a proposal or merging unrelated source events.
+            raise ValueError("hotspot_plan_duplicate_event_group_id")
 
         current_snapshot = connection.execute(
             """SELECT prepared_revision,item_count
