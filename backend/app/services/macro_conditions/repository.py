@@ -376,9 +376,6 @@ class MacroRepository:
             if mode != "wal":
                 raise MacroSchemaError(f"SQLite WAL mode is required, got {mode}")
             connection.execute("BEGIN IMMEDIATE")
-            # Before the CREATE IF NOT EXISTS pass: an existing v1 table would
-            # otherwise satisfy "IF NOT EXISTS" and silently keep its old shape.
-            self._upgrade_etf_observations_to_v2(connection)
             for statement in _SCHEMA:
                 connection.execute(statement)
             rows = connection.execute(
@@ -408,130 +405,6 @@ class MacroRepository:
             if connection.in_transaction:
                 connection.rollback()
             connection.close()
-
-    @staticmethod
-    def _upgrade_etf_observations_to_v2(connection: sqlite3.Connection) -> int:
-        """Rekey ETF observations on the value, collapsing duplicate prices.
-
-        v1 keyed rows on ``available_at``, which is stamped at write time, so
-        ``INSERT OR IGNORE`` never ignored anything: an unchanged price was
-        written again on every refresh -- 8 symbols x ~252 sessions, twice a day.
-        The table shape now mirrors ``macro_series_revisions``: identity is the
-        value, and re-seeing it only moves ``last_seen_at``.
-
-        Rows are collapsed by (symbol, observation_date, provider, value), which
-        is the same grouping the new primary key expresses, so this rewrite
-        cannot merge two genuinely different prices. ``first_seen_at`` keeps the
-        earliest ``available_at`` we ever recorded for that price -- discarding
-        it would move the point-in-time visibility of history that is already
-        stored, which is the one thing this table exists to preserve.
-
-        Returns the number of rows the collapse removed. Idempotent: a database
-        already on the v2 shape is left untouched.
-        """
-
-        tables = {
-            str(row["name"])
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
-        }
-        if "macro_etf_observations" not in tables:
-            return 0
-        columns = {
-            str(row["name"])
-            for row in connection.execute(
-                "PRAGMA table_info(macro_etf_observations)"
-            ).fetchall()
-        }
-        if "value_hash" in columns:
-            return 0
-        if "available_at" not in columns:
-            raise MacroSchemaError(
-                "macro_etf_observations has neither available_at nor value_hash"
-            )
-
-        before = int(
-            connection.execute(
-                "SELECT COUNT(*) AS n FROM macro_etf_observations"
-            ).fetchone()["n"]
-        )
-        # Group by exactly what the new primary key expresses, so the rewrite
-        # cannot merge two genuinely different prices.
-        #
-        # history_basis is *not* part of the grouping: the same price can appear
-        # once as a backfill and again as a live observation, and those are one
-        # price, not two. The merged row takes the basis of its earliest
-        # sighting, because first_seen_at comes from that sighting -- keeping the
-        # label attached to the timestamp it describes. Deciding it by insert
-        # order instead would be non-deterministic and would sometimes label a
-        # backfill-derived visibility as locally observed, which is the one
-        # distinction this whole storage design rests on.
-        rows = connection.execute(
-            """SELECT symbol, observation_date, adjusted_close, provider,
-                      MAX(data_through)   AS data_through,
-                      MIN(fetched_at)     AS fetched_at,
-                      MIN(available_at)   AS first_seen_at,
-                      MAX(available_at)   AS last_seen_at,
-                      (SELECT inner.history_basis
-                         FROM macro_etf_observations AS inner
-                        WHERE inner.symbol = outer.symbol
-                          AND inner.observation_date = outer.observation_date
-                          AND inner.provider = outer.provider
-                          AND inner.adjusted_close = outer.adjusted_close
-                        ORDER BY inner.available_at ASC, inner.rowid ASC
-                        LIMIT 1)  AS history_basis
-               FROM macro_etf_observations AS outer
-               GROUP BY symbol, observation_date, provider, adjusted_close"""
-        ).fetchall()
-
-        connection.execute("ALTER TABLE macro_etf_observations RENAME TO macro_etf_observations_v1")
-        connection.execute("DROP INDEX IF EXISTS idx_macro_etf_observations_lookup")
-        connection.execute(
-            """CREATE TABLE macro_etf_observations (
-                   symbol TEXT NOT NULL,
-                   observation_date TEXT NOT NULL,
-                   adjusted_close REAL NOT NULL,
-                   provider TEXT NOT NULL,
-                   value_hash TEXT NOT NULL,
-                   data_through TEXT NOT NULL,
-                   fetched_at TEXT NOT NULL,
-                   first_seen_at TEXT NOT NULL,
-                   last_seen_at TEXT NOT NULL,
-                   history_basis TEXT NOT NULL
-                       CHECK(history_basis IN ('latest_revised_backfill','local_point_in_time')),
-                   PRIMARY KEY(symbol, observation_date, provider, value_hash)
-               )"""
-        )
-        for row in rows:
-            connection.execute(
-                """INSERT INTO macro_etf_observations(
-                       symbol,observation_date,adjusted_close,provider,value_hash,
-                       data_through,fetched_at,first_seen_at,last_seen_at,history_basis
-                   ) VALUES(?,?,?,?,?,?,?,?,?,?)""",
-                (
-                    row["symbol"],
-                    row["observation_date"],
-                    row["adjusted_close"],
-                    row["provider"],
-                    _value_hash(row["adjusted_close"]),
-                    row["data_through"],
-                    row["fetched_at"],
-                    row["first_seen_at"],
-                    row["last_seen_at"],
-                    row["history_basis"],
-                ),
-            )
-        after = int(
-            connection.execute(
-                "SELECT COUNT(*) AS n FROM macro_etf_observations"
-            ).fetchone()["n"]
-        )
-        if after == 0 and before > 0:
-            # Never trade real history for a tidier table.
-            raise MacroSchemaError("macro ETF migration would have emptied the table")
-        connection.execute("DROP TABLE macro_etf_observations_v1")
-        return before - after
 
     def integrity_report(self) -> dict[str, Any]:
         with self.read() as connection:
@@ -770,26 +643,6 @@ class MacroRepository:
                 raise MacroSchemaError("macro ETF write failed") from exc
         return {"inserted": inserted, "unchanged": touched}
 
-    @staticmethod
-    def _etf_columns(connection: sqlite3.Connection) -> tuple[str, str]:
-        """(first-visible column, newest-revision column) for the shape on disk.
-
-        The migration runs in the worker, inside ``refresh()``. The API process
-        opens the same database read-only and ships in the same release, so
-        between a deploy and the worker next macro run a v2 read path would meet
-        a v1 table and the macro panel would report unavailable for hours.
-        Reading whichever shape is present removes that window instead of
-        relying on the two containers starting in a particular order.
-        """
-
-        columns = {
-            str(row["name"])
-            for row in connection.execute("PRAGMA table_info(macro_etf_observations)")
-        }
-        if "first_seen_at" in columns:
-            return "first_seen_at", "last_seen_at"
-        return "available_at", "available_at"
-
     def active_etf(self, symbol: str) -> list[dict[str, Any]]:
         """Latest recorded close per observation date, ascending by date.
 
@@ -802,18 +655,17 @@ class MacroRepository:
         """
 
         with self.read() as connection:
-            first_seen, newest = self._etf_columns(connection)
             rows = connection.execute(
-                f"""
+                """
                 SELECT o.observation_date, o.adjusted_close, o.provider,
-                       o.{first_seen} AS available_at, o.history_basis
+                       o.first_seen_at AS available_at, o.history_basis
                 FROM macro_etf_observations AS o
                 WHERE o.symbol=?
                   AND o.rowid = (
                       SELECT candidate.rowid FROM macro_etf_observations AS candidate
                       WHERE candidate.symbol = o.symbol
                         AND candidate.observation_date = o.observation_date
-                      ORDER BY candidate.{newest} DESC, candidate.rowid DESC
+                      ORDER BY candidate.last_seen_at DESC, candidate.rowid DESC
                       LIMIT 1
                   )
                 ORDER BY o.observation_date ASC

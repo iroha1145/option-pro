@@ -360,125 +360,57 @@ def test_maintenance_and_retention_back_up_the_macro_database(tmp_path) -> None:
     assert any(name.startswith("macro-conditions-") for name in produced)
 
 
-# ---------------- schema v2 migration (incremental review P1/P2) ----------------
-
-_V1_ETF_TABLE = """
-    CREATE TABLE macro_etf_observations (
-        symbol TEXT NOT NULL,
-        observation_date TEXT NOT NULL,
-        adjusted_close REAL NOT NULL,
-        provider TEXT NOT NULL,
-        data_through TEXT NOT NULL,
-        fetched_at TEXT NOT NULL,
-        available_at TEXT NOT NULL,
-        history_basis TEXT NOT NULL
-            CHECK(history_basis IN ('latest_revised_backfill','local_point_in_time')),
-        PRIMARY KEY(symbol, observation_date, provider, available_at)
-    )
-"""
+# ---------------- schema v2 (incremental review P1/P2) ----------------
 
 
-def _v1_database(path, rows):
-    """A database in the shape the previous release wrote."""
+def test_fresh_database_has_the_v2_etf_shape_and_registry_row(tmp_path) -> None:
+    """New stores get the value-keyed ETF table from _SCHEMA alone.
+
+    Production reached it through a v1 rekey that has been removed; its
+    registry also keeps the historical macro-conditions-v1 row.
+    """
 
     import sqlite3
 
-    connection = sqlite3.connect(path)
-    connection.execute("PRAGMA journal_mode=WAL")
-    connection.execute(_V1_ETF_TABLE)
-    connection.executemany(
-        """INSERT INTO macro_etf_observations(
-               symbol,observation_date,adjusted_close,provider,
-               data_through,fetched_at,available_at,history_basis
-           ) VALUES(?,?,?,?,?,?,?,?)""",
-        rows,
+    from app.services.macro_conditions.repository import (
+        SCHEMA_CHECKSUM,
+        SCHEMA_VERSION,
+        MacroRepository,
     )
-    connection.commit()
-    connection.close()
-
-
-def test_v1_etf_duplicates_collapse_without_losing_first_visibility(tmp_path) -> None:
-    """The v1 key was the write-time stamp, so identical prices piled up.
-
-    ``INSERT OR IGNORE`` never ignored anything: 8 symbols x ~252 sessions,
-    rewritten twice a day. The migration collapses them on the value, and keeps
-    the earliest stamp as first_seen_at -- discarding that would move the
-    point-in-time visibility of history that is already stored, which is the one
-    thing this table exists to preserve.
-    """
-
-    from app.services.macro_conditions.repository import MacroRepository
 
     database = tmp_path / "macro-conditions.db"
-    _v1_database(
-        database,
-        [
-            # Same price seen on three separate refreshes.
-            ("SPY", "2026-07-20", 500.0, "yahoo", "2026-07-20", "2026-07-20T22:00:00Z",
-             "2026-07-20T22:00:00Z", "local_point_in_time"),
-            ("SPY", "2026-07-20", 500.0, "yahoo", "2026-07-21", "2026-07-21T22:00:00Z",
-             "2026-07-21T22:00:00Z", "local_point_in_time"),
-            ("SPY", "2026-07-20", 500.0, "yahoo", "2026-07-22", "2026-07-22T22:00:00Z",
-             "2026-07-22T22:00:00Z", "local_point_in_time"),
-            # A genuine restatement of the same session must survive as its own row.
-            ("SPY", "2026-07-20", 501.5, "yahoo", "2026-07-23", "2026-07-23T22:00:00Z",
-             "2026-07-23T22:00:00Z", "local_point_in_time"),
-            ("HYG", "2026-07-20", 78.25, "yahoo", "2026-07-20", "2026-07-20T22:00:00Z",
-             "2026-07-20T22:00:00Z", "local_point_in_time"),
-        ],
-    )
+    MacroRepository(database).initialize()
 
-    repository = MacroRepository(database)
-    repository.initialize()
+    connection = sqlite3.connect(database)
+    try:
+        columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(macro_etf_observations)")
+        }
+        key = [
+            row[1]
+            for row in sorted(
+                connection.execute("PRAGMA table_info(macro_etf_observations)"),
+                key=lambda row: row[5],
+            )
+            if row[5]
+        ]
+        registry = dict(
+            connection.execute("SELECT version,checksum FROM macro_schema").fetchall()
+        )
+    finally:
+        connection.close()
 
-    with repository.read() as connection:
-        rows = connection.execute(
-            """SELECT symbol,observation_date,adjusted_close,first_seen_at,last_seen_at
-               FROM macro_etf_observations ORDER BY symbol, adjusted_close"""
-        ).fetchall()
-    collapsed = [dict(row) for row in rows]
-
-    assert len(collapsed) == 3, f"five v1 rows should collapse to three: {collapsed}"
-    spy_500 = next(r for r in collapsed if r["symbol"] == "SPY" and r["adjusted_close"] == 500.0)
-    assert spy_500["first_seen_at"] == "2026-07-20T22:00:00Z", (
-        "the earliest sighting is when that price first became visible"
-    )
-    assert spy_500["last_seen_at"] == "2026-07-22T22:00:00Z"
-    # The restatement is a separate revision, not a duplicate.
-    assert any(r["adjusted_close"] == 501.5 for r in collapsed)
-    assert any(r["symbol"] == "HYG" for r in collapsed)
-
-    # active_etf picks the newest revision and reports its first-visible time.
-    active = repository.active_etf("SPY")
-    assert [row["adjusted_close"] for row in active] == [501.5]
-    assert active[0]["available_at"] == "2026-07-23T22:00:00Z"
-
-
-def test_migration_is_idempotent_and_refuses_to_empty_the_table(tmp_path) -> None:
-    from app.services.macro_conditions.repository import MacroRepository
-
-    database = tmp_path / "macro-conditions.db"
-    _v1_database(
-        database,
-        [
-            ("SPY", "2026-07-20", 500.0, "yahoo", "2026-07-20", "2026-07-20T22:00:00Z",
-             "2026-07-20T22:00:00Z", "local_point_in_time"),
-        ],
-    )
-    repository = MacroRepository(database)
-    repository.initialize()
-    repository.initialize()
-    repository.initialize()
-
-    with repository.read() as connection:
-        count = connection.execute(
-            "SELECT COUNT(*) AS n FROM macro_etf_observations"
-        ).fetchone()["n"]
-        leftovers = connection.execute(
-            "SELECT name FROM sqlite_master WHERE name='macro_etf_observations_v1'"
-        ).fetchall()
-    assert count == 1
-    assert leftovers == [], "the v1 table must not be left behind"
+    assert {"value_hash", "first_seen_at", "last_seen_at"} <= columns
+    assert "available_at" not in columns
+    assert key == ["symbol", "observation_date", "provider", "value_hash"]
+    assert registry == {SCHEMA_VERSION: SCHEMA_CHECKSUM}
+    # Production's registry holds this row; a changed checksum fails there.
+    assert registry == {
+        "macro-conditions-v2": (
+            "aa8c895dc861e5cd9e41a626d06b960eb2d3987a3fecde1168ce2aa79ea979d5"
+        ),
+    }
 
 
 def test_reseeing_a_price_moves_last_seen_at_and_writes_no_new_row(tmp_path) -> None:
@@ -583,95 +515,3 @@ def test_publication_log_is_append_only_and_survives_a_republish(tmp_path) -> No
     assert second[0]["composite_payload"] == first[0]["composite_payload"], (
         "an earlier publication must never be rewritten"
     )
-
-
-def test_merged_rows_keep_the_basis_of_their_earliest_sighting(tmp_path) -> None:
-    """The same price under two bases is one price, and the label must follow the stamp.
-
-    A close can be recorded once by the ten-year backfill and again by an
-    incremental refresh. Those are not two prices. The merged row keeps the
-    earliest ``available_at`` as ``first_seen_at``, so it has to keep that
-    sighting's ``history_basis`` too -- otherwise a backfill-derived visibility
-    gets labelled as locally observed, which is exactly the distinction the
-    point-in-time design rests on. Deciding by insert order would be
-    non-deterministic on top of being wrong.
-    """
-
-    from app.services.macro_conditions.repository import MacroRepository
-
-    database = tmp_path / "macro-conditions.db"
-    _v1_database(
-        database,
-        [
-            # Backfill saw it first...
-            ("SPY", "2026-07-20", 500.0, "yahoo", "2026-07-20", "2026-07-20T22:00:00Z",
-             "2026-07-20T22:00:00Z", "latest_revised_backfill"),
-            # ...and an incremental refresh re-read the identical close later.
-            ("SPY", "2026-07-20", 500.0, "yahoo", "2026-07-22", "2026-07-22T22:00:00Z",
-             "2026-07-22T22:00:00Z", "local_point_in_time"),
-            # A close only ever seen live keeps its local label.
-            ("SPY", "2026-07-21", 502.0, "yahoo", "2026-07-22", "2026-07-22T22:00:00Z",
-             "2026-07-22T22:00:00Z", "local_point_in_time"),
-        ],
-    )
-
-    MacroRepository(database).initialize()
-
-    import sqlite3
-
-    connection = sqlite3.connect(database)
-    connection.row_factory = sqlite3.Row
-    merged = {
-        row["observation_date"]: dict(row)
-        for row in connection.execute(
-            "SELECT observation_date,history_basis,first_seen_at,last_seen_at"
-            " FROM macro_etf_observations"
-        )
-    }
-    connection.close()
-
-    assert len(merged) == 2
-    backfilled = merged["2026-07-20"]
-    assert backfilled["history_basis"] == "latest_revised_backfill", (
-        "the earliest sighting was a backfill, so its visibility is backfill-derived"
-    )
-    assert backfilled["first_seen_at"] == "2026-07-20T22:00:00Z"
-    assert backfilled["last_seen_at"] == "2026-07-22T22:00:00Z"
-    assert merged["2026-07-21"]["history_basis"] == "local_point_in_time"
-
-
-def test_reads_work_against_a_v1_table_before_the_worker_migrates(tmp_path) -> None:
-    """The API ships with the migration but does not run it.
-
-    initialize() is only called inside refresh(), which lives in the worker. The
-    API process opens the same database read-only, so between a deploy and the
-    worker next macro run a v2-only read path would meet a v1 table and the
-    macro panel would report unavailable for hours. Reading whichever shape is
-    on disk removes that window rather than assuming a container start order.
-    """
-
-    from app.services.macro_conditions.repository import MacroRepository
-
-    database = tmp_path / "macro-conditions.db"
-    _v1_database(
-        database,
-        [
-            ("SPY", "2026-07-20", 500.0, "yahoo", "2026-07-20", "2026-07-20T22:00:00Z",
-             "2026-07-20T22:00:00Z", "local_point_in_time"),
-            ("SPY", "2026-07-21", 502.0, "yahoo", "2026-07-21", "2026-07-21T22:00:00Z",
-             "2026-07-21T22:00:00Z", "local_point_in_time"),
-        ],
-    )
-
-    # No initialize(): exactly the state the API sees straight after a deploy.
-    reader = MacroRepository(database, read_only=True)
-    rows = reader.active_etf("SPY")
-
-    assert [row["adjusted_close"] for row in rows] == [500.0, 502.0]
-    assert rows[0]["available_at"] == "2026-07-20T22:00:00Z"
-
-    # And the same reader keeps working once the worker has migrated.
-    MacroRepository(database).initialize()
-    migrated = MacroRepository(database, read_only=True).active_etf("SPY")
-    assert [row["adjusted_close"] for row in migrated] == [500.0, 502.0]
-    assert migrated[0]["available_at"] == "2026-07-20T22:00:00Z"
