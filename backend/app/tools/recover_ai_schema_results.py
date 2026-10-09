@@ -11,7 +11,7 @@ from typing import Any, Sequence
 
 from app.config import get_settings
 from app.services.ai_jobs import runtime
-from app.services.ai_jobs.models import validate_result
+from app.services.ai_jobs.models import _is_cjk
 from app.services.ai_jobs.repository import (
     RECOVERABLE_FAILURE_CODES,
     AIJobRepository,
@@ -52,9 +52,9 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--limit",
-        type=int,
+        type=_selection_limit,
         default=2000,
-        help="Maximum number of rows --failed-since selects (default 2000).",
+        help="Maximum number of rows --failed-since selects, 1 to 100000 (default 2000).",
     )
     parser.add_argument(
         "--apply",
@@ -62,6 +62,37 @@ def _parser() -> argparse.ArgumentParser:
         help="Persist recovered results. Without this flag the command is read-only.",
     )
     return parser
+
+
+def _selection_limit(value: str) -> int:
+    try:
+        limit = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("limit must be a whole number") from None
+    if not 1 <= limit <= 100_000:
+        raise argparse.ArgumentTypeError("limit must be between 1 and 100000")
+    return limit
+
+
+def _narrative(value: Any, path: str = "") -> dict[str, str]:
+    """Every string the result would publish as Chinese text, by field path.
+
+    The Chinese-text validator rejects a field without a CJK character, so
+    the strings that contain one are exactly the narrative fields.
+    """
+
+    if isinstance(value, str):
+        return {path: value} if any(_is_cjk(char) for char in value) else {}
+    if isinstance(value, dict):
+        children = [(f"{path}.{key}" if path else str(key), item) for key, item in value.items()]
+    elif isinstance(value, list):
+        children = [(f"{path}[{index}]", item) for index, item in enumerate(value)]
+    else:
+        return {}
+    found: dict[str, str] = {}
+    for child_path, item in children:
+        found.update(_narrative(item, child_path))
+    return found
 
 
 def _aware_timestamp(value: str) -> datetime:
@@ -83,11 +114,21 @@ async def recover(
     repository = AIJobRepository(settings.openai_job_db_path)
     selected = list(job_ids)
     if failed_since is not None:
-        selected.extend(
-            repository.recoverable_receipt_failures(
-                since=failed_since, job_types=job_types, limit=limit,
-            )
+        chosen = repository.recoverable_receipt_failures(
+            since=failed_since, job_types=job_types, limit=limit,
         )
+        counts = repository.recoverable_receipt_failure_counts(
+            since=failed_since, job_types=job_types,
+        )
+        print(f"selected by job type: {json.dumps(counts, sort_keys=True)}", file=sys.stderr)
+        remaining = sum(counts.values()) - len(chosen)
+        if remaining > 0:
+            print(
+                f"{remaining} recoverable job(s) beyond --limit {limit} were not "
+                "selected; raise --limit to include them",
+                file=sys.stderr,
+            )
+        selected.extend(chosen)
     output: list[dict[str, Any]] = []
     for raw_job_id in dict.fromkeys(selected):
         job_id = str(raw_job_id).strip()
@@ -174,7 +215,9 @@ async def recover(
                 }
             )
         else:
-            output.append({"job_id": job_id, "status": "validated"})
+            output.append(
+                {"job_id": job_id, "status": "validated", "narrative": _narrative(result)}
+            )
     return output
 
 

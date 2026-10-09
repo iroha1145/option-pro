@@ -1953,7 +1953,10 @@ def test_recovery_tool_is_dry_run_by_default_and_never_resubmits(
     monkeypatch.setattr(runtime, "retrieve", retrieve)
 
     validated = asyncio.run(recovery_tool.recover([row["job_id"]], apply=False))
-    assert validated == [{"job_id": row["job_id"], "status": "validated"}]
+    assert [(item["job_id"], item["status"]) for item in validated] == [
+        (row["job_id"], "validated")
+    ]
+    assert validated[0]["narrative"]["summary"] == _earnings_result()["summary"]
     assert repository.get_job(row["job_id"])["status"] == "failed"
 
     recovered = asyncio.run(recovery_tool.recover([row["job_id"]], apply=True))

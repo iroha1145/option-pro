@@ -7,9 +7,17 @@ fixes were made for.
 
 from __future__ import annotations
 
+import json
+import re
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
-from test_ai_analysis_fixes_20261010 import _focus_field, _news_field
+from app.services.ai_jobs import runtime
+from app.services.ai_jobs.repository import AIJobRepository
+from app.tools import recover_ai_schema_results as recovery
+from test_ai_analysis_fixes_20261010 import FIXTURES, _failed_receipt_row, _focus_field, _news_field
+from test_luna_news_web_fallback import settings as luna_settings
 
 
 @pytest.fixture(autouse=True)
@@ -239,3 +247,72 @@ def test_s1_paid_stream_deadline_stays_inside_the_pass(tmp_path, configured):
     )
     assert seconds == min(configured, task_timeout - AI_JOBS_SUPERVISOR_MARGIN_SECONDS)
     assert seconds <= task_timeout - AI_JOBS_SUPERVISOR_MARGIN_SECONDS
+
+
+# --- S4. The recovery dry run shows what it would publish ---------------------
+
+
+def _receipts_only(monkeypatch, repo):
+    async def forbidden(*_args, **_kwargs):
+        raise AssertionError("recovery must reuse the stored receipt")
+
+    monkeypatch.setattr(runtime, "retrieve", forbidden)
+    monkeypatch.setattr(runtime, "submit_background", forbidden)
+    monkeypatch.setattr(recovery, "get_settings", lambda: luna_settings(repo.path))
+
+
+def _since() -> str:
+    return (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+
+
+def _at(value, path):
+    for name, index in re.findall(r"([^.\[\]]+)|\[(\d+)\]", path):
+        value = value[int(index)] if index else value[name]
+    return value
+
+
+def test_s4_dry_run_shows_the_text_apply_then_publishes(tmp_path, monkeypatch, capsys):
+    repo = AIJobRepository(tmp_path / "news.db")
+    job_id = _failed_receipt_row(repo, FIXTURES[0])
+    _receipts_only(monkeypatch, repo)
+
+    assert recovery.main(["--failed-since", _since()]) == 0
+    [item] = json.loads(capsys.readouterr().out)
+    assert (item["job_id"], item["status"]) == (job_id, "validated")
+    preview = item["narrative"]
+    assert repo.get_job(job_id)["status"] == "failed"
+
+    assert recovery.main(["--job-id", job_id, "--apply"]) == 0
+    capsys.readouterr()
+    stored = json.loads(repo.get_job(job_id)["result_json"])
+    expected = {name: stored[name] for name in ("title_zh", "summary_zh", "headline_summary", "causal_summary")}
+    for name in ("key_factors", "uncertainty_notes", "affected_sectors"):
+        expected.update({f"{name}[{index}]": text for index, text in enumerate(stored[name])})
+    assert expected.items() <= preview.items()
+    assert {path: _at(stored, path) for path in preview} == preview
+    assert "classification" not in preview
+
+
+def test_s4_rows_beyond_the_limit_are_reported(tmp_path, monkeypatch, capsys):
+    repo = AIJobRepository(tmp_path / "news.db")
+    job_ids = [_failed_receipt_row(repo, sample) for sample in FIXTURES[:3]]
+    _receipts_only(monkeypatch, repo)
+
+    assert recovery.main(["--failed-since", _since(), "--limit", "2"]) == 0
+    captured = capsys.readouterr()
+    assert [item["job_id"] for item in json.loads(captured.out)] == job_ids[:2]
+    assert 'selected by job type: {"news_impact": 3}' in captured.err
+    assert "1 recoverable job(s) beyond --limit 2 were not selected" in captured.err
+    assert all(repo.get_job(job_id)["status"] == "failed" for job_id in job_ids)
+
+
+@pytest.mark.parametrize("limit", ["0", "100001", "-1", "many"])
+def test_s4_limit_outside_its_range_is_a_usage_error(tmp_path, monkeypatch, capsys, limit):
+    repo = AIJobRepository(tmp_path / "news.db")
+    _receipts_only(monkeypatch, repo)
+
+    with pytest.raises(SystemExit) as raised:
+        recovery.main(["--failed-since", _since(), "--limit", limit])
+    assert raised.value.code == 2
+    error = capsys.readouterr().err
+    assert "argument --limit" in error and "Traceback" not in error

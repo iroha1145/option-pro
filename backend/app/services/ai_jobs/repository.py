@@ -1447,6 +1447,28 @@ class AIJobRepository:
         )
         return hashlib.sha256(envelope.encode("utf-8")).hexdigest()
 
+    @staticmethod
+    def _recoverable_receipt_filter(
+        since: datetime, job_types: Iterable[str],
+    ) -> tuple[str, tuple[Any, ...]]:
+        types = sorted({str(job_type) for job_type in job_types})
+        codes = sorted(RECOVERABLE_FAILURE_CODES)
+        type_filter = (
+            f" AND job_type IN ({','.join('?' for _ in types)})" if types else ""
+        )
+        return (
+            f"""status='failed'
+                AND error_code IN ({','.join('?' for _ in codes)})
+                AND result_json IS NULL
+                AND provider_result_json IS NOT NULL
+                AND updated_at>=?{type_filter}""",
+            (
+                *codes,
+                since.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+                *types,
+            ),
+        )
+
     def recoverable_receipt_failures(
         self,
         *,
@@ -1463,29 +1485,32 @@ class AIJobRepository:
         if not 1 <= int(limit) <= 100_000:
             raise ValueError("recovery_limit_invalid")
         self.ensure_initialized()
-        types = sorted({str(job_type) for job_type in job_types})
-        codes = sorted(RECOVERABLE_FAILURE_CODES)
-        type_filter = (
-            f" AND job_type IN ({','.join('?' for _ in types)})" if types else ""
-        )
+        condition, parameters = self._recoverable_receipt_filter(since, job_types)
         with self._connect() as connection:
             rows = connection.execute(
-                f"""SELECT job_id FROM ai_jobs
-                    WHERE status='failed'
-                      AND error_code IN ({','.join('?' for _ in codes)})
-                      AND result_json IS NULL
-                      AND provider_result_json IS NOT NULL
-                      AND updated_at>=?{type_filter}
-                    ORDER BY updated_at,job_id
-                    LIMIT ?""",
-                (
-                    *codes,
-                    since.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
-                    *types,
-                    int(limit),
-                ),
+                f"""SELECT job_id FROM ai_jobs WHERE {condition}
+                    ORDER BY updated_at,job_id LIMIT ?""",
+                (*parameters, int(limit)),
             ).fetchall()
         return [str(row["job_id"]) for row in rows]
+
+    def recoverable_receipt_failure_counts(
+        self,
+        *,
+        since: datetime,
+        job_types: Iterable[str] = (),
+    ) -> dict[str, int]:
+        """How many rows recoverable_receipt_failures could select, per job type."""
+
+        self.ensure_initialized()
+        condition, parameters = self._recoverable_receipt_filter(since, job_types)
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""SELECT job_type,COUNT(*) AS jobs FROM ai_jobs WHERE {condition}
+                    GROUP BY job_type ORDER BY job_type""",
+                parameters,
+            ).fetchall()
+        return {str(row["job_type"]): int(row["jobs"]) for row in rows}
 
     def get_job(self, job_id: str) -> dict[str, Any] | None:
         self.ensure_initialized()
