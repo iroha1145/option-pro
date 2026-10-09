@@ -210,7 +210,7 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
    看标准错误输出里的计数，逐条看 `narrative` 里将要发布的文字，以及 `validation_failed` 各条的 `error`。按取证的 72 小时数字估算，有本地回执的约为 Luna 新闻 171 条、Haiku 新闻 458 条、Sonnet 热点 2 条（7 天窗口会更多；默认最多选 2,000 条，超过时标准错误会给出剩余条数，再调大 `--limit`）；Terra 新闻 110 条没有回执，不会被选中。
    确认后加 `--apply`，在任务少的时段执行；要分批就按 `--job-type` 分开跑（重验不通过的行会留在失败状态，下次仍会被选中，所以不要靠 `--limit` 反复跑来分批）。每条恢复各占一次很短的 ai-jobs.db 写事务，worker 的 `claim_due` 近期有过 `database is locked`，执行时留意 worker 日志。
    退出码只有在选中的每一条都 validated 或 recovered 时才是 0：有任何一条 `validation_failed` 是 1，选不出任何行（输出 `[]`，例如已经处理完）也是 1。
-3. 涨跌词表补全只会让判定更严。已发布的旧结果里如果有「外文名＋大涨、暴跌等」，而这个名字不在该条的允许代码里，读取时会被隐藏，回退记录里记为 `ai_job_result_hidden`。部署后看这类记录有多少。
+3. 涨跌词表补全只会让判定更严。已发布的旧结果里如果有「外文名＋大涨、暴跌等」，而这个名字不在该条的允许代码里，新闻列表仍照常展示这条分析，也不会因此新建付费任务：之前通过过校验的付费结果跨规则变化保留，热点周期走同样的保留逻辑（`_audit_published_focus_results`）。只有按任务读取的接口会隐藏这条结果，回退记录里记为 `ai_job_result_hidden`。部署后看这类记录有多少。新闻这一点用本地实验确认过：旧规则下发布含「Apple暴跌」的结果，换成新规则重建服务后，列表仍有分析，`request_analysis` 返回原任务，`ai_jobs` 仍只有 1 行。
 4. 观察（只读 SQL，`:deployed` 填部署时刻）：
 
    ```sql
@@ -252,4 +252,4 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
 - `news_identity_mismatch` 未诊断。
 - 当日词元账对在途的 Luna 有正文任务按缺正文口径计入，每条多记 910,736 词元；只在只用日词元额度拦截时有影响，共享预算启用后该账只作统计（见「Luna 联网门控」）。
 - 缺正文身份 `e46819f9…` 没有列进上一版名单，依据是它不在 origin/main 上。如果 PR 分支在合并前曾单独部署过，需要把它加进 `_IDENTITY_PREDECESSORS`，否则那段时间建的待处理任务会判 `runtime_configuration_changed`。
-- 涨跌词表补全后，生产里已发布的结果有多少会在读取时被隐藏，本地无法统计，只能部署后看 `ai_job_result_hidden`。
+- 涨跌词表补全后，生产里有多少已发布结果会在按任务读取的接口里被隐藏，本地无法统计，只能部署后看 `ai_job_result_hidden`。新闻列表与热点周期不受影响，也不会因此重做。
