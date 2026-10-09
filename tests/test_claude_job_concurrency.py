@@ -79,7 +79,7 @@ def test_atomic_thread_race_admits_exactly_four(tmp_path):
 
 
 def test_atomic_threads_also_preserve_daily_token_reservations(tmp_path, monkeypatch):
-    monkeypatch.setattr(storage, "_task_token_reservation", lambda job_type, *, model=None: 40_000)
+    monkeypatch.setattr(storage, "_task_token_reservation", lambda job_type, *, model=None, payload=None: 40_000)
     repo = AIJobRepository(tmp_path / "jobs.db")
     for index in range(6):
         _create(repo, index, lane="manual" if index % 2 == 0 else "scheduled")

@@ -759,11 +759,13 @@ async def process_job(
         except ValueError:
             repository.fail(job["job_id"], owner, "runtime_configuration_changed")
             return
+        payload = json.loads(job["payload_json"])
+        # The task's own variant (a Luna news task with an article body never
+        # searches) and the job's own model decide whether its stored identity
+        # is still current, including the listed predecessor identities.
         current_identity = runtime.schema_identity(
-            job["job_type"], model=str(settings.openai_model),
+            job["job_type"], model=str(settings.openai_model), payload=payload,
         )
-        # The job's own model decides which predecessor identities stay
-        # current, so a resource-policy change does not void its queue.
         schema_matches = runtime.schema_identity_current(
             job["job_type"],
             job.get("prompt_version"),
@@ -787,7 +789,6 @@ async def process_job(
             return
 
         require_live_lease()
-        payload = json.loads(job["payload_json"])
         prepare = runtime.prepare_claude if claude_job else runtime.prepare_background
         prepared = prepare(settings, job["job_type"], payload)
         require_live_lease()

@@ -433,3 +433,77 @@ def test_completed_always_web_result_stays_in_the_feed_without_a_new_paid_job(tm
     assert service.request_analysis(900, force=False)["job_id"] == job["job_id"]
     with sqlite3.connect(repo.path) as db:
         assert db.execute("SELECT count(*) FROM ai_jobs").fetchone()[0] == 1
+
+
+# --- B. Luna searches only when the article body is missing ------------------
+
+
+def test_luna_request_tools_follow_each_tasks_article():
+    settings = luna_settings(Path("/nonexistent/news.db"))
+    without = luna_payload()
+    with_article = {**luna_payload(), "article_status": "available", "article": _ARTICLE}
+
+    searching = runtime._create_params(settings, "news_impact", without)
+    assert searching["tools"][0]["type"] == "web_search"
+    assert searching["tool_choice"] == "required"
+    assert searching["max_tool_calls"] == 3
+    assert "必须先联网搜索原始事件" in searching["instructions"]
+    assert "不得附加网址、Markdown链接或括号中的网站域名" in searching["instructions"]
+
+    plain = runtime._create_params(settings, "news_impact", with_article)
+    assert not {"tools", "tool_choice", "max_tool_calls", "include"} & set(plain)
+    assert "不浏览网页" in plain["instructions"]
+    assert "联网搜索" not in plain["instructions"]
+    assert "不得照抄输入或输出的字段名与状态值" in plain["instructions"]
+    assert plain["max_output_tokens"] == searching["max_output_tokens"] == 65_536
+
+    assert runtime.schema_identity("news_impact", model=runtime.LUNA_MODEL, payload=without) == runtime.LUNA_WEB_NEWS_IDENTITY
+    assert runtime.schema_identity("news_impact", model=runtime.LUNA_MODEL, payload=with_article) == runtime.LUNA_ARTICLE_NEWS_IDENTITY
+    assert runtime.max_tool_calls_for("news_impact", model=runtime.LUNA_MODEL, payload=without) == 3
+    assert runtime.max_tool_calls_for("news_impact", model=runtime.LUNA_MODEL, payload=with_article) == 0
+    assert runtime.budget_reservation_microusd(
+        "news_impact", model=runtime.LUNA_MODEL, payload=with_article,
+    ) < runtime.budget_reservation_microusd(
+        "news_impact", model=runtime.LUNA_MODEL, payload=without,
+    )
+
+
+def test_other_models_and_job_types_never_take_the_luna_search_path():
+    with_article = {**luna_payload(), "article_status": "available", "article": _ARTICLE}
+    for model in (runtime.OFFICIAL_OPENAI_MODEL, runtime.OFFICIAL_CLAUDE_MODEL, runtime.SONNET_MODEL):
+        assert not runtime.task_uses_web_search("news_impact", luna_payload(), model=model)
+    assert not runtime.task_uses_web_search("market_focus", {}, model=runtime.LUNA_MODEL)
+    assert not runtime.task_uses_web_search("news_impact", with_article, model=runtime.LUNA_MODEL)
+
+
+@pytest.mark.parametrize(
+    "stored_identity",
+    [runtime.LUNA_ALWAYS_WEB_NEWS_IDENTITY, runtime.LEGACY_LUNA_NEWS_IDENTITY],
+    ids=["always-web", "legacy-plain"],
+)
+def test_queued_job_with_an_article_is_submitted_without_search(tmp_path, monkeypatch, stored_identity):
+    repo = AIJobRepository(tmp_path / "news.db")
+    payload = {**luna_payload(), "article_status": "available", "article": _ARTICLE}
+    job_id = _pending_luna_job(repo, payload, stored_identity)
+    (params,) = _submit_pending(repo, monkeypatch)
+    row = repo.get_job(job_id)
+    assert row["error_code"] != "runtime_configuration_changed"
+    assert row["openai_response_id"] == "resp_policy_transition"
+    assert not {"tools", "tool_choice", "max_tool_calls", "include"} & set(params)
+    assert row["budget_charge_microusd"] == runtime.budget_reservation_microusd(
+        "news_impact", model=runtime.LUNA_MODEL, payload=payload,
+    )
+
+
+def test_both_current_luna_variants_are_current_for_reads_and_submission():
+    prompt = runtime.PROMPT_VERSIONS["news_impact"]
+    web = runtime.schema_identity("news_impact", model=runtime.LUNA_MODEL)
+    for stored in (runtime.LUNA_WEB_NEWS_IDENTITY, runtime.LUNA_ARTICLE_NEWS_IDENTITY):
+        # Readers pass the model's default variant; the article variant is
+        # still current.
+        assert runtime.schema_identity_current(
+            "news_impact", prompt, *stored, current_identity=web, model=runtime.LUNA_MODEL,
+        )
+    assert not runtime.schema_identity_current(
+        "news_impact", prompt, *runtime.LUNA_ARTICLE_NEWS_IDENTITY, model=runtime.OFFICIAL_OPENAI_MODEL,
+    )

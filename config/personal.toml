@@ -15,7 +15,8 @@ catalyst_mode = "scheduled"
 [ai]
 model = "claude-haiku-5-5"
 reasoning = "xhigh"
-# 新闻只翻译和分析已有材料；热点由 Sonnet 联网核验后发布。
+# 新闻按已抓到的正文分析，只有没拿到正文时 Luna 才联网查原始报道；
+# 热点由 Sonnet 联网核验后发布。
 news_model = "gpt-5.6-luna"
 news_reasoning = "max"
 market_focus_model = "claude-sonnet-5-5"

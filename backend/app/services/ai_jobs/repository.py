@@ -308,16 +308,26 @@ def _parse_time(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
-def _task_budget_reservation_microusd(job_type: str, *, model: str | None = None) -> int:
+def _task_budget_reservation_microusd(
+    job_type: str,
+    *,
+    model: str | None = None,
+    payload: Mapping[str, Any] | None = None,
+) -> int:
     from app.services.ai_jobs.runtime import budget_reservation_microusd
 
-    return budget_reservation_microusd(job_type, model=model)
+    return budget_reservation_microusd(job_type, model=model, payload=payload)
 
 
-def _task_token_reservation(job_type: str, *, model: str | None = None) -> int:
+def _task_token_reservation(
+    job_type: str,
+    *,
+    model: str | None = None,
+    payload: Mapping[str, Any] | None = None,
+) -> int:
     from app.services.ai_jobs.runtime import token_reservation
 
-    return token_reservation(job_type, model=model)
+    return token_reservation(job_type, model=model, payload=payload)
 
 
 def _minimum_task_token_reservation(*, model: str | None = None) -> int:
@@ -2209,6 +2219,7 @@ class AIJobRepository:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 """SELECT j.job_type,j.model,j.status,j.lease_owner,j.submission_started_at,
+                          j.payload_json,
                           COALESCE(s.submission_source,'scheduled') AS lane
                    FROM ai_jobs AS j
                    LEFT JOIN ai_job_sources AS s ON s.job_id=j.job_id
@@ -2224,11 +2235,14 @@ class AIJobRepository:
                 connection.rollback()
                 raise RuntimeError("ai_job_not_submittable")
             lane = str(row["lane"])
+            # The task's own reservation: a Luna news task with an article body
+            # reserves no search calls.
+            task_payload = json.loads(str(row["payload_json"]))
             reservation_microusd = _task_budget_reservation_microusd(
-                str(row["job_type"]), model=str(row["model"])
+                str(row["job_type"]), model=str(row["model"]), payload=task_payload,
             )
             token_reservation = _task_token_reservation(
-                str(row["job_type"]), model=str(row["model"])
+                str(row["job_type"]), model=str(row["model"]), payload=task_payload,
             )
             block = self._lane_submission_block(
                 connection,

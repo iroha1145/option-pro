@@ -6663,7 +6663,9 @@ class LocalCatalystIntelligence:
         ) != (row["change_sequence"], row["content_hash"]):
             raise CatalystError("news_revision_changed", "News changed while reading the article", counts_for_circuit=False)
         payload.update(_news_request_source_fields(row))
-        schema_version, schema_hash = ai_runtime.schema_identity("news_impact", model=self.model)
+        schema_version, schema_hash = ai_runtime.schema_identity(
+            "news_impact", model=self.model, payload=payload,
+        )
         job, created = self.ai_repository.create_job(
             job_type="news_impact",
             payload=payload,
