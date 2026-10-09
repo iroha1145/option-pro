@@ -756,12 +756,9 @@ export default function Watchlist() {
             className={STAT_GRID}
           >
             {[
-              ...(signalsQ.data?.topScore !== null && signalsQ.data?.topScore !== undefined
-                ? [<StatCard key="top-risk" label={t("顶部风险分")} icon="flag" value={signalsQ.data.topScore} sub={signalsQ.data.topLabel ?? t('市场信号模型')} className="card-lift" />]
-                : []),
-              ...(signalsQ.data?.bottomScore !== null && signalsQ.data?.bottomScore !== undefined
-                ? [<StatCard key="bottom-repair" label={t("底部修复分")} icon="target" value={signalsQ.data.bottomScore} sub={signalsQ.data.bottomLabel ?? t('市场信号模型')} className="card-lift" />]
-                : []),
+              /* 评分缺失时卡片照常占位、读数显示「—」：整张卡消失会让整排变矮，下面的列表跟着上移 */
+              <StatCard key="top-risk" label={t("顶部风险分")} icon="flag" value={signalsQ.data?.topScore ?? Number.NaN} sub={signalsQ.data?.topLabel ?? t('市场信号模型')} className="card-lift" />,
+              <StatCard key="bottom-repair" label={t("底部修复分")} icon="target" value={signalsQ.data?.bottomScore ?? Number.NaN} sub={signalsQ.data?.bottomLabel ?? t('市场信号模型')} className="card-lift" />,
               <div key="ad" className="card-surface h-full p-4 sm:p-5">
                 <div className="flex items-start justify-between">
                   <p className="eyebrow">{t('上涨 / 下跌')}</p>
