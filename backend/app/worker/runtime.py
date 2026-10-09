@@ -8,7 +8,7 @@ import re
 import sqlite3
 import threading
 import time
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Hashable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Literal
@@ -78,6 +78,11 @@ class TaskSpec:
     # days; ordinary interval tasks keep their configured interval and bound.
     next_calendar_run_at: Callable[[datetime], datetime | None] | None = None
     close: Callable[[], Awaitable[None] | None] | None = None
+    # Cheap read-only probe of demand written by another process or task (a
+    # queue row, a refresh request). The supervisor polls it with the manual
+    # action watcher and ends the loop's idle wait when the value changes, so
+    # the task's own idle interval can stay long.
+    wake_probe: Callable[[], Hashable] | None = None
 
     def __post_init__(self) -> None:
         if not _TASK_NAME.fullmatch(self.name):
@@ -120,8 +125,46 @@ async def _maybe_await(value: Any) -> Any:
     return value
 
 
+_UNOBSERVED = object()
+
+
+@dataclass
+class _TaskDemand:
+    """What the demand watcher last saw for one task loop (loop-clock times).
+
+    An observation counts only when it started after the loop's last claim
+    (actions) or round start (probe): an older read may still show work the
+    loop has already taken.
+    """
+
+    signal: asyncio.Event = field(default_factory=asyncio.Event)
+    action_ready_at: float | None = None
+    actions_observed_at: float = -math.inf
+    claimed_at: float = -math.inf
+    # Probes start after the loop's first round, which creates the stores
+    # they read.
+    probe_armed: bool = False
+    probe_value: Any = _UNOBSERVED
+    probe_changed_at: float | None = None
+    round_started_at: float = -math.inf
+
+    def wake_at(self, now: float) -> float | None:
+        if (
+            self.probe_changed_at is not None
+            and self.probe_changed_at >= self.round_started_at
+        ):
+            return now
+        if self.action_ready_at is not None and self.actions_observed_at >= self.claimed_at:
+            return self.action_ready_at
+        return None
+
+
 class WorkerSupervisor:
     """Run isolated task loops behind one fenced process lease."""
+
+    # One read of queued manual actions and wake probes serves every loop;
+    # this bounds how long a queued owner action waits to be claimed.
+    DEMAND_POLL_SECONDS = 0.5
 
     def __init__(
         self,
@@ -157,6 +200,9 @@ class WorkerSupervisor:
         self._results: dict[str, dict[str, Any]] = {}
         # When each scheduled loop next intends to run its task.
         self._planned_run_at: dict[str, datetime] = {}
+        self._demand: dict[str, _TaskDemand] = {
+            task.name: _TaskDemand() for task in self.tasks
+        }
 
     def request_stop(self) -> None:
         """Stop accepting new task runs; in-flight paid work is drained."""
@@ -615,7 +661,9 @@ class WorkerSupervisor:
                 and not thread_finished.is_set()
             ):
                 last_loop_pulse = time.monotonic()
-                await asyncio.sleep(min(0.05, interval))
+                # The stall limit is minutes long; half-second pulses keep its
+                # resolution without waking the idle loop twenty times a second.
+                await asyncio.sleep(min(0.5, interval))
             if lease_lost.is_set():
                 self._lease_lost.set()
                 self.stop.set()
@@ -632,6 +680,9 @@ class WorkerSupervisor:
         )
 
     async def _execute(self, task: TaskSpec) -> dict[str, Any]:
+        loop = asyncio.get_running_loop()
+        demand = self._demand[task.name]
+        demand.round_started_at = loop.time()
         started = utc_now()
         resume_at: datetime | None = None
         if task.honor_persisted_schedule:
@@ -671,6 +722,7 @@ class WorkerSupervisor:
                 token,
                 task.name,
             )
+            demand.claimed_at = loop.time()
         except sqlite3.OperationalError as error:
             # 认领不到就整轮跳过：不确定手动请求是否在场时直接跑 runner
             # 会让手动动作在下一轮被再次认领、重复执行。
@@ -919,26 +971,94 @@ class WorkerSupervisor:
         # slot, or one configured interval for non-calendar tasks.
         return min(max(0.0, remaining), maximum)
 
-    async def _has_pending_actions(self, task: TaskSpec) -> bool:
-        # 轮询本身每 0.5s 一次，锁竞争时当作「暂无手动请求」继续等即可。
+    def _observe_demand(
+        self,
+        probes: Mapping[str, Callable[[], Hashable]],
+    ) -> tuple[dict[str, float] | None, dict[str, Hashable]]:
         try:
-            return bool(
-                await asyncio.to_thread(
-                    self.repository.has_claimable_actions,
-                    task.name,
-                )
-            )
-        except sqlite3.OperationalError:
-            return False
+            delays: dict[str, float] | None = self.repository.queued_action_delays()
+        except sqlite3.Error as error:
+            # A locked or briefly unreadable state database only delays
+            # pickup until the next poll; the claim itself stays fenced.
+            record_fallback_failure("worker_action_watch", error)
+            delays = None
+        values: dict[str, Hashable] = {}
+        for name, probe in probes.items():
+            try:
+                values[name] = probe()
+            except (sqlite3.Error, OSError) as error:
+                record_fallback_failure("worker_wake_probe", error)
+        return delays, values
 
-    async def _next_retry_delay(self, task: TaskSpec) -> float | None:
+    async def _watch_demand(self) -> None:
+        """Poll queued owner actions and wake probes for every task loop."""
+
+        loop = asyncio.get_running_loop()
+        enabled = {task.name for task in self.tasks if task.enabled}
         try:
-            return await asyncio.to_thread(
-                self.repository.next_action_retry_delay,
-                task.name,
-            )
-        except sqlite3.OperationalError:
-            return None
+            while not self.stop.is_set():
+                observed_at = loop.time()
+                probes = {
+                    task.name: task.wake_probe
+                    for task in self.tasks
+                    if task.name in enabled
+                    and task.wake_probe is not None
+                    and self._demand[task.name].probe_armed
+                }
+                delays, values = await asyncio.to_thread(self._observe_demand, probes)
+                for name in enabled:
+                    demand = self._demand[name]
+                    woken = False
+                    if delays is not None:
+                        delay = delays.get(name)
+                        demand.action_ready_at = (
+                            None if delay is None else observed_at + delay
+                        )
+                        demand.actions_observed_at = observed_at
+                        woken = delay is not None
+                    if name in values:
+                        value = values[name]
+                        if (
+                            demand.probe_value is not _UNOBSERVED
+                            and value != demand.probe_value
+                        ):
+                            demand.probe_changed_at = observed_at
+                            woken = True
+                        demand.probe_value = value
+                    if woken:
+                        demand.signal.set()
+                try:
+                    await asyncio.wait_for(
+                        self.stop.wait(),
+                        timeout=self.DEMAND_POLL_SECONDS,
+                    )
+                except asyncio.TimeoutError:
+                    continue
+        finally:
+            for demand in self._demand.values():
+                demand.signal.set()
+
+    async def _wait_for_demand(self, task: TaskSpec, deadline: float | None) -> bool:
+        """Sleep until the deadline or observed demand; False when stopping."""
+
+        loop = asyncio.get_running_loop()
+        demand = self._demand[task.name]
+        while not self.stop.is_set():
+            demand.signal.clear()
+            now = loop.time()
+            candidates = [
+                value
+                for value in (deadline, demand.wake_at(now))
+                if value is not None
+            ]
+            remaining = min(candidates) - now if candidates else None
+            if remaining is not None and remaining <= 0:
+                return True
+            try:
+                await asyncio.wait_for(demand.signal.wait(), timeout=remaining)
+            except asyncio.TimeoutError:
+                continue
+        return False
 
     async def _wait_for_next(self, task: TaskSpec, delay: float) -> bool:
         """Wake for claimable actions; delayed retries keep their backoff."""
@@ -946,38 +1066,12 @@ class WorkerSupervisor:
         if self.stop.is_set():
             return False
         loop = asyncio.get_running_loop()
-        deadline = loop.time() + max(0.0, delay)
-        while not self.stop.is_set():
-            if await self._has_pending_actions(task):
-                return True
-            remaining = deadline - loop.time()
-            retry_delay = await self._next_retry_delay(task)
-            if retry_delay is not None:
-                remaining = min(remaining, max(0.0, retry_delay))
-            if remaining <= 0:
-                return True
-            try:
-                await asyncio.wait_for(
-                    self.stop.wait(),
-                    timeout=min(0.5, remaining),
-                )
-                return False
-            except asyncio.TimeoutError:
-                continue
-        return False
+        return await self._wait_for_demand(task, loop.time() + max(0.0, delay))
 
     async def _wait_for_manual_action(self, task: TaskSpec) -> bool:
         """Wait indefinitely; manual-only tasks have no scheduled deadline."""
 
-        while not self.stop.is_set():
-            if await self._has_pending_actions(task):
-                return True
-            try:
-                await asyncio.wait_for(self.stop.wait(), timeout=0.5)
-                return False
-            except asyncio.TimeoutError:
-                continue
-        return False
+        return await self._wait_for_demand(task, None)
 
     async def _task_loop(self, task: TaskSpec) -> None:
         if task.manual_only:
@@ -1035,6 +1129,7 @@ class WorkerSupervisor:
                 if self.stop.is_set():
                     return
                 result = await self._execute(task)
+                self._demand[task.name].probe_armed = True
                 delay = float(result["next_delay_seconds"])
                 if result["error_code"] in _STATE_ERROR_CODES:
                     if not await self._pause_after_state_error(result):
@@ -1108,19 +1203,27 @@ class WorkerSupervisor:
     async def _wait_for_stop_or_loop_failure(
         self,
         loops: Mapping[TaskSpec, asyncio.Task[None]],
+        watcher: asyncio.Task[None],
     ) -> None:
         """Stop the process when an enabled task loop exits unexpectedly."""
 
         stop_waiter = asyncio.create_task(self.stop.wait(), name="worker-stop-waiter")
         try:
             done, _pending = await asyncio.wait(
-                (stop_waiter, *loops.values()),
+                (stop_waiter, watcher, *loops.values()),
                 return_when=asyncio.FIRST_COMPLETED,
             )
             if stop_waiter in done:
                 return
 
             self.stop.set()
+            if watcher in done:
+                # Without the watcher, manual-only tasks would never wake.
+                if watcher.cancelled():
+                    raise RuntimeError("worker demand watcher was cancelled unexpectedly")
+                raise RuntimeError(
+                    "worker demand watcher stopped unexpectedly"
+                ) from watcher.exception()
             failed = next(loop for loop in loops.values() if loop in done)
             # 带上任务名：崩溃循环时（生产实测一夜 85 次重启）日志必须能一眼
             # 看出死的是哪个循环，而不是匿名的「task loop failed」。
@@ -1147,6 +1250,7 @@ class WorkerSupervisor:
         if not await asyncio.to_thread(self.process_lock.acquire, self.owner_id):
             raise WorkerAlreadyRunning("another unified worker holds the process file lock")
         heartbeat: asyncio.Task[None] | None = None
+        watcher: asyncio.Task[None] | None = None
         loops: dict[TaskSpec, asyncio.Task[None]] = {}
         completed_normally = False
         try:
@@ -1229,6 +1333,10 @@ class WorkerSupervisor:
                         "error_code": None,
                         "next_delay_seconds": task.interval_seconds,
                     }
+                watcher = asyncio.create_task(
+                    self._watch_demand(),
+                    name="worker-demand-watcher",
+                )
                 loops = {
                     task: asyncio.create_task(
                         self._task_loop(task),
@@ -1237,7 +1345,7 @@ class WorkerSupervisor:
                     for task in self.tasks
                     if task.enabled
                 }
-                await self._wait_for_stop_or_loop_failure(loops)
+                await self._wait_for_stop_or_loop_failure(loops, watcher)
                 await self._drain(loops)
             if self._lease_lost.is_set():
                 raise WorkerLeaseLost("unified worker lease was lost")
@@ -1252,6 +1360,10 @@ class WorkerSupervisor:
                     if not loop.done():
                         loop.cancel()
                 await asyncio.gather(*loops.values(), return_exceptions=True)
+            if watcher is not None:
+                if not watcher.done():
+                    watcher.cancel()
+                await asyncio.gather(watcher, return_exceptions=True)
             await self._close_tasks()
             self._heartbeat_stop.set()
             if heartbeat is not None:

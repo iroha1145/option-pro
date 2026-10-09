@@ -1867,6 +1867,64 @@ class AIJobRepository:
             (now, now, *parameters),
         ).fetchone()
 
+    @contextmanager
+    def _connect_read_only(self) -> Iterator[sqlite3.Connection]:
+        uri = self.path.resolve().as_uri() + "?mode=ro"
+        connection = sqlite3.connect(uri, uri=True, timeout=5.0)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA busy_timeout=5000")
+        try:
+            yield connection
+        finally:
+            connection.close()
+
+    def active_queue_signature(self) -> tuple[int, str | None] | None:
+        """Changes when an active job is added, updated, cancelled or settled.
+
+        The worker polls this to wake its idle AI loop; it is read-only and
+        served by ``idx_ai_jobs_due``.
+        """
+
+        if not self.path.is_file():
+            return None
+        with self._connect_read_only() as connection:
+            row = connection.execute(
+                """SELECT COUNT(*),MAX(updated_at) FROM ai_jobs
+                   WHERE status IN ('pending','queued','in_progress')"""
+            ).fetchone()
+        return int(row[0]), row[1]
+
+    def next_due_delay(self, *, now: datetime | None = None) -> float | None:
+        """Seconds until the earliest active job is due and unleased.
+
+        ``0.0`` means a job is due now; ``None`` means nothing is active.
+        """
+
+        if not self.path.is_file():
+            return None
+        observed = now or _utcnow()
+        with self._connect_read_only() as connection:
+            rows = connection.execute(
+                """SELECT next_attempt_at,lease_expires_at FROM ai_jobs
+                   WHERE status IN ('pending','queued','in_progress')"""
+            ).fetchall()
+        delays: list[float] = []
+        for row in rows:
+            moments = [
+                moment
+                for moment in (
+                    _parse_time(row["next_attempt_at"]),
+                    _parse_time(row["lease_expires_at"]),
+                )
+                if moment is not None
+            ]
+            delays.append(
+                max(0.0, (max(moments) - observed).total_seconds())
+                if moments
+                else 0.0
+            )
+        return min(delays) if delays else None
+
     def claim_due(
         self,
         owner: str,
@@ -1882,6 +1940,15 @@ class AIJobRepository:
         now = _iso(now_dt)
         lease_expires = _iso(now_dt + timedelta(seconds=lease_seconds))
         with self._connect() as connection:
+            # 空队列不拿写锁：先用只读查询看有没有到期且未被租走的任务。worker
+            # 空闲时每轮都会走到这里，原先每次都开一个空的 BEGIN IMMEDIATE，
+            # 与后端入队、取消抢 ai-jobs.db 的写锁。
+            if self._next_due_candidate(
+                connection,
+                now=now,
+                blocked_scopes=set(),
+            ) is None:
+                return None
             connection.execute("BEGIN IMMEDIATE")
             # 不可提交车道上尚未提交的任务直接跳过，不再「认领、构造请求、过
             # 闸门、推迟两秒」地空转：那样每秒两个写事务，还让被挡住的车道

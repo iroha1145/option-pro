@@ -1564,6 +1564,28 @@ def _market_focus_payload_has_waiting_placeholder(
     return False
 
 
+def queued_manual_operations_signature(
+    db_path: str | Path,
+) -> tuple[int, str | None] | None:
+    """Read-only view of queued owner refreshes for the worker's wake probe."""
+
+    path = Path(db_path)
+    if not path.is_file():
+        return None
+    uri = f"file:{quote(path.resolve().as_posix(), safe='/')}?mode=ro"
+    connection = sqlite3.connect(uri, uri=True, timeout=5.0)
+    try:
+        connection.execute("PRAGMA busy_timeout=5000")
+        row = connection.execute(
+            """SELECT COUNT(*),MAX(requested_at)
+               FROM catalyst_local_manual_operations
+               WHERE status='queued'"""
+        ).fetchone()
+    finally:
+        connection.close()
+    return int(row[0]), row[1]
+
+
 class LocalCatalystIntelligence:
     """Local-only news intelligence and Chinese presentation store.
 

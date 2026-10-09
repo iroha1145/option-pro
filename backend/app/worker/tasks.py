@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import inspect
 import logging
 import math
@@ -266,6 +267,10 @@ async def _build_local_intelligence(
     return intelligence
 
 
+AI_JOBS_IDLE_SECONDS = 30.0
+AI_JOBS_HELD_RECHECK_SECONDS = 5.0
+
+
 class AIJobsTask:
     def __init__(
         self,
@@ -334,8 +339,20 @@ class AIJobsTask:
         return TaskResult(
             status="idle",
             details={"processed": int(processed)},
-            next_delay_seconds=0.5 if processed else 2.0,
+            next_delay_seconds=0.5 if processed else await self._idle_delay(),
         )
+
+    async def _idle_delay(self) -> float:
+        # New, retried or cancelled jobs end this wait through the supervisor's
+        # wake probe; the delay only has to cover jobs that become due later.
+        due = await asyncio.to_thread(self._repository.next_due_delay)
+        if due is None:
+            return AI_JOBS_IDLE_SECONDS
+        if due <= 0:
+            # The claim skipped due work: a lane hold (cooldown, unknown
+            # submission, credit) whose end is not stored on the job.
+            return AI_JOBS_HELD_RECHECK_SECONDS
+        return min(due, AI_JOBS_IDLE_SECONDS)
 
 
 class EarningsAnalysisTask:
@@ -746,6 +763,7 @@ class EarningsAnalysisTask:
 # 变更日志修剪的节流间隔：修剪是 cutoff 幂等操作，6 小时一次足以压住增长；
 # 稳态一轮只有一个索引探测查询，代价可忽略。
 _JOURNAL_PRUNE_INTERVAL_SECONDS = 6 * 3600.0
+_CATALYST_MIN_DELAY_SECONDS = 2.0
 
 
 class CatalystSyncTask:
@@ -913,11 +931,10 @@ class CatalystSyncTask:
                             "local_intelligence": "local_intelligence_unavailable"
                         },
                     },
-                    next_delay_seconds=max(
-                        2.0,
-                        sync_seconds - (clock - self._last_personal_sync_monotonic),
-                    ),
+                    next_delay_seconds=self._until_next_sync(sync_seconds),
                 )
+            # Owner refresh requests end this wait through the supervisor's
+            # wake probe, so an idle loop sleeps until the next sync slot.
             return TaskResult(
                 status="idle",
                 details={
@@ -925,7 +942,7 @@ class CatalystSyncTask:
                     "streams": {},
                     "refresh_requested": False,
                 },
-                next_delay_seconds=2.0,
+                next_delay_seconds=self._until_next_sync(sync_seconds),
             )
         stream_operations = {
             "news": ("news", self._service.sync_news),
@@ -1021,7 +1038,7 @@ class CatalystSyncTask:
             except Exception as exc:
                 errors["refresh_completion"] = self._error_code(exc)
 
-        delay = 2.0
+        delay = self._until_next_sync(sync_seconds)
         details: dict[str, Any] = {
             "processed": processed,
             "streams": metrics,
@@ -1064,6 +1081,12 @@ class CatalystSyncTask:
             details=details,
             next_delay_seconds=delay,
         )
+
+    def _until_next_sync(self, sync_seconds: float) -> float:
+        if self._last_personal_sync_monotonic is None:
+            return _CATALYST_MIN_DELAY_SECONDS
+        elapsed = time.monotonic() - self._last_personal_sync_monotonic
+        return max(_CATALYST_MIN_DELAY_SECONDS, sync_seconds - elapsed)
 
     async def _run_once(self) -> TaskResult:
         mode = await self._prepare()
@@ -3859,6 +3882,18 @@ class RetentionTask:
         }, None
 
 
+SECTOR_IV_BUSY_SECONDS = 5.0
+# Scheduled sector refreshes are 15 minutes apart in the regular session and
+# six hours outside it; visitor requests wake the loop through its probe.
+SECTOR_IV_IDLE_SECONDS = 60.0
+
+
+def _sector_iv_queue_signature() -> Any:
+    from app.services.sector_iv_refresh import default_store
+
+    return default_store().queued_signature()
+
+
 class SectorIVTask:
     """Independent public sector coverage, using the same queue as manual demand."""
 
@@ -3867,15 +3902,23 @@ class SectorIVTask:
         from app.services.sector_iv_refresh import run_refresh_batch
 
         outcome = await run_refresh_batch()
+        worked = bool(outcome["completed"] or outcome["failed"])
         return TaskResult(
             status="degraded" if outcome["failed"] else "idle",
             error_code="sector_iv_refresh_failed" if outcome["failed"] else None,
             details=outcome,
-            next_delay_seconds=5.0,
+            next_delay_seconds=(
+                SECTOR_IV_BUSY_SECONDS if worked else SECTOR_IV_IDLE_SECONDS
+            ),
         )
 
 
 def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]:
+    from app.services.ai_jobs.repository import AIJobRepository
+    from app.services.catalysts.local_intelligence import (
+        queued_manual_operations_signature,
+    )
+
     config = get_personal_config()
     ai = AIJobsTask(owner_id, settings=settings, personal_config=config)
     initial_sync_complete = asyncio.Event()
@@ -3957,10 +4000,11 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         TaskSpec(
             "sector_iv_refresh",
             SectorIVTask(),
-            interval_seconds=5.0,
+            interval_seconds=SECTOR_IV_IDLE_SECONDS,
             timeout_seconds=900.0,
             failure_backoff_seconds=30.0,
             max_backoff_seconds=300.0,
+            wake_probe=_sector_iv_queue_signature,
         ),
         TaskSpec(
             "breakout",
@@ -3980,6 +4024,10 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
             # cannot finish inside 120s; incremental rounds stay far below.
             timeout_seconds=600.0,
             close=catalyst.aclose,
+            wake_probe=functools.partial(
+                queued_manual_operations_signature,
+                settings.macrolens_cache_db_path,
+            ),
         ),
         TaskSpec(
             "focus",
@@ -3992,9 +4040,12 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         TaskSpec(
             "ai_jobs",
             ai,
-            interval_seconds=2.0,
+            interval_seconds=AI_JOBS_IDLE_SECONDS,
             timeout_seconds=2000.0,
             drain_on_shutdown=True,
+            wake_probe=AIJobRepository(
+                settings.openai_job_db_path
+            ).active_queue_signature,
         ),
         TaskSpec(
             "maintenance",

@@ -2481,7 +2481,9 @@ def test_personal_catalyst_task_uses_https_bearer_etl_and_closes_client(
     result, client = asyncio.run(run())
 
     assert result.status == "idle"
-    assert result.next_delay_seconds == 2
+    # The next round waits for the next 120 s sync slot; owner refreshes wake
+    # the loop early through the supervisor's wake probe.
+    assert 100 < result.next_delay_seconds <= 120
     assert result.details["processed"] == [
         "news",
         "calendar",
@@ -3500,7 +3502,12 @@ def test_default_task_inventory_and_maintenance_backup(
     assert isinstance(sector_iv_spec.runner, worker_tasks.SectorIVTask)
     assert sector_iv_spec.enabled is True
     assert sector_iv_spec.manual_only is False
-    assert sector_iv_spec.interval_seconds == 5
+    assert sector_iv_spec.interval_seconds == worker_tasks.SECTOR_IV_IDLE_SECONDS
+    # Demand written by the web process or other tasks ends these idle waits.
+    probed = {spec.name for spec in specs if spec.wake_probe is not None}
+    assert probed == {"ai_jobs", "catalyst_sync", "sector_iv_refresh"}
+    ai_spec = next(spec for spec in specs if spec.name == "ai_jobs")
+    assert ai_spec.interval_seconds == worker_tasks.AI_JOBS_IDLE_SECONDS
     manual_specs = {spec.name: spec for spec in specs if spec.manual_only}
     assert set(manual_specs) == MANUAL_TASK_NAMES
     assert isinstance(manual_specs["focus_refresh"].runner, FocusRefreshTask)

@@ -650,45 +650,41 @@ class WorkerStateRepository:
     def has_pending_actions(self, task_name: str, *, now: datetime | None = None) -> bool:
         return self.has_claimable_actions(task_name, now=now)
 
-    def _queued_action_rows(self, task_name: str) -> list[sqlite3.Row]:
+    def queued_action_delays(self, *, now: datetime | None = None) -> dict[str, float]:
+        """Seconds until each task's earliest queued action becomes claimable.
+
+        One read serves every task loop. The redundant ``IN`` term lets SQLite
+        use the partial index over active requests instead of scanning the
+        whole request history.
+        """
+
         if not self.path.is_file():
-            return []
+            return {}
+        observed = _as_utc(now or utc_now())
         with self._connect(read_only=True) as connection:
-            return list(
-                connection.execute(
-                    """
-                    SELECT * FROM worker_action_requests
-                    WHERE task_name=? AND status='queued'
-                    ORDER BY requested_at,request_id
-                    """,
-                    (task_name,),
-                ).fetchall()
-            )
-
-    def has_claimable_actions(self, task_name: str, *, now: datetime | None = None) -> bool:
-        observed = _as_utc(now or utc_now())
-        for row in self._queued_action_rows(task_name):
-            try:
-                details = json.loads(row["details_json"])
-            except (TypeError, json.JSONDecodeError):
-                details = {}
-            if action_is_claimable(details if isinstance(details, dict) else {}, observed):
-                return True
-        return False
-
-    def next_action_retry_delay(self, task_name: str, *, now: datetime | None = None) -> float | None:
-        observed = _as_utc(now or utc_now())
-        delays: list[float] = []
-        for row in self._queued_action_rows(task_name):
+            rows = connection.execute(
+                """
+                SELECT task_name,details_json FROM worker_action_requests
+                WHERE status IN ('queued','running') AND status='queued'
+                """
+            ).fetchall()
+        delays: dict[str, float] = {}
+        for row in rows:
             try:
                 details = json.loads(row["details_json"])
             except (TypeError, json.JSONDecodeError):
                 details = {}
             eligible = action_next_eligible_at(details if isinstance(details, dict) else {})
-            if eligible is None:
-                return 0.0
-            delays.append(max(0.0, (eligible - observed).total_seconds()))
-        return min(delays) if delays else None
+            delay = 0.0 if eligible is None else max(0.0, (eligible - observed).total_seconds())
+            task_name = str(row["task_name"])
+            delays[task_name] = min(delay, delays.get(task_name, delay))
+        return delays
+
+    def has_claimable_actions(self, task_name: str, *, now: datetime | None = None) -> bool:
+        return self.queued_action_delays(now=now).get(task_name) == 0.0
+
+    def next_action_retry_delay(self, task_name: str, *, now: datetime | None = None) -> float | None:
+        return self.queued_action_delays(now=now).get(task_name)
 
     def claim_actions(
         self,
