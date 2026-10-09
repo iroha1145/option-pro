@@ -248,10 +248,6 @@ curl --fail http://127.0.0.1:2000/ready
 
 升级和回滚时不要附加 `--volumes` 或 `-v`。迁移工具会生成 `personal.toml`、`machine.env`、`secrets.env` 和不含任何值的 `migration-report.json`。详细边界见[个人版迁移说明](docs/personal-edition/migration.md)。
 
-## 期权异动范围
-
-`GET /api/options/unusual` 不是全市场实时扫描。它只扫描 `NVDA`、`TSLA`、`AAPL`、`AMD`、`AMZN`、`META`、`MSFT`、`SPY`、`QQQ`、`GOOGL`，每个标的检查 Yahoo 返回的前两个到期日，结果缓存 120 秒并最多返回 50 条。
-
 ## Optix 宏观环境
 
 `/market` 页第 B4 区块（六维形态之后、信号解读之前）展示 **Optix 宏观环境**：

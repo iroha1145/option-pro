@@ -238,7 +238,7 @@ _CACHED_MARKET_READ_PATTERNS = tuple(
     _re.compile(pattern, _re.IGNORECASE)
     for pattern in (
         r"^/api/stocks/[^/]+$",
-        r"^/api/stocks/[^/]+/(?:signals|chart|technical)$",
+        r"^/api/stocks/[^/]+/(?:chart|technical)$",
         r"^/api/options/[^/]+/(?:expirations|chain)$",
         r"^/api/signals/stock/[^/]+$",
         r"^/api/strength/stocks/[^/]+$",
@@ -295,7 +295,6 @@ _PUBLIC_READ_API_PATHS = {
     "/api/stocks/watchlist",
     "/api/stocks/search",
     "/api/stocks/data/status",
-    "/api/options/unusual",
     "/api/earnings/upcoming",
     "/api/sectors",
     "/api/market/indices",
@@ -330,7 +329,7 @@ _PUBLIC_READ_API_PATTERNS = tuple(
     _re.compile(pattern, _re.IGNORECASE)
     for pattern in (
         r"^/api/stocks/[^/]+$",
-        r"^/api/stocks/[^/]+/(?:signals|logo|chart|technical)$",
+        r"^/api/stocks/[^/]+/(?:logo|chart|technical)$",
         r"^/api/options/[^/]+/(?:expirations|chain)$",
         r"^/api/sectors/[^/]+/iv-ranking$",
         r"^/api/signals/stock/[^/]+$",

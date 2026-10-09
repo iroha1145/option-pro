@@ -184,7 +184,7 @@ case "${{1:-}}" in
         elif [[ " $* " == *" worker python -m app.tools.verify_release_data"* ]]; then
             printf '{{"ready":true,"required":true,"stock_directory_ready":true,"earnings_complete":true}}\n'
         elif [[ " $* " == *" worker python - "* ]]; then
-            printf '{{"watchlist":true,"available":["watchlist","indices","focus_overview","focus_chart","focus_signals","earnings","unusual"]}}\n'
+            printf '{{"watchlist":true,"available":["watchlist","indices","focus_overview","focus_chart","earnings"]}}\n'
         else
             exit 2
         fi

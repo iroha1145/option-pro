@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from types import SimpleNamespace
 
@@ -12,162 +11,17 @@ from fastapi import HTTPException
 from app.access import request_owner_access_context
 from app.api import options
 from app.services import yahoo
-from tests.http_response_support import anonymous_get_request as _areq
 
 
 @pytest.fixture(autouse=True)
 def _clear_option_state() -> None:
-    options._unusual_failure_deadlines.clear()
     options._option_failure_cache.clear()
     options.cache.clear()
     yahoo._cache.clear()
     yield
-    options._unusual_failure_deadlines.clear()
     options._option_failure_cache.clear()
     options.cache.clear()
     yahoo._cache.clear()
-
-
-def _unusual_chain(*, strike: float = 110.0) -> SimpleNamespace:
-    return SimpleNamespace(
-        calls=pd.DataFrame(
-            [
-                {
-                    "contractSymbol": "GOOD-CALL",
-                    "strike": strike,
-                    "volume": 100,
-                    "openInterest": 10,
-                    "lastPrice": 2.5,
-                    "impliedVolatility": float("inf"),
-                    "inTheMoney": float("nan"),
-                },
-                {
-                    "contractSymbol": "BAD-CALL",
-                    "strike": float("nan"),
-                    "volume": 100,
-                    "openInterest": 10,
-                    "lastPrice": 2.5,
-                    "impliedVolatility": 0.4,
-                    "inTheMoney": False,
-                },
-            ]
-        ),
-        puts=pd.DataFrame(),
-    )
-
-
-def test_unusual_options_emits_only_finite_numbers_and_explicit_semantics(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    ticker = SimpleNamespace(
-        options=["2030-08-16"],
-        fast_info=SimpleNamespace(last_price=100.0),
-        option_chain=lambda _expiration: _unusual_chain(),
-    )
-    monkeypatch.setattr(options, "POPULAR_TICKERS", ["AAA"])
-    monkeypatch.setattr(options.yf, "Ticker", lambda _symbol: ticker)
-
-    payload = asyncio.run(options._unusual_activity_impl("all", 1.0))
-
-    assert len(payload["results"]) == 1
-    row = payload["results"][0]
-    assert row["contract_ticker"] == "GOOD-CALL"
-    assert row["implied_volatility"] is None
-    assert row["in_the_money"] is False
-    assert row["moneyness"] == "otm"
-    assert row["direction"] is None
-    assert row["direction_confidence"] == 0
-    assert row["direction_status"] == "unavailable_without_trade_side"
-    assert row["signal"] == row["inferred_direction"] == "unknown"
-    assert row["direction_deprecated"] is True
-    json.dumps(payload, allow_nan=False)
-
-
-def test_unusual_options_keeps_partial_success(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    good = SimpleNamespace(
-        options=["2030-08-16"],
-        fast_info=SimpleNamespace(last_price=100.0),
-        option_chain=lambda _expiration: _unusual_chain(),
-    )
-
-    def ticker_factory(symbol: str):
-        if symbol == "BROKEN":
-            raise RuntimeError("provider down")
-        return good
-
-    monkeypatch.setattr(options, "POPULAR_TICKERS", ["GOOD", "BROKEN"])
-    monkeypatch.setattr(options.yf, "Ticker", ticker_factory)
-
-    payload = asyncio.run(options._unusual_activity_impl("all", 1.0))
-
-    assert payload["succeeded"] == 1
-    assert payload["failed_symbols"] == ["BROKEN"]
-    assert payload["source_status"] == "degraded"
-
-
-def test_unusual_total_failure_uses_short_negative_cache(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    now = [100.0]
-    calls = 0
-
-    def broken_ticker(_symbol: str):
-        nonlocal calls
-        calls += 1
-        raise RuntimeError("provider down")
-
-    monkeypatch.setattr(options, "POPULAR_TICKERS", ["AAA", "BBB"])
-    monkeypatch.setattr(options.yf, "Ticker", broken_ticker)
-    monkeypatch.setattr(options.time, "monotonic", lambda: now[0])
-
-    with request_owner_access_context(True), pytest.raises(HTTPException) as first:
-        asyncio.run(options.unusual_activity(_areq(), "all", 1.0))
-    assert first.value.status_code == 503
-    assert first.value.headers == {"Retry-After": "30"}
-    assert calls == 2
-
-    with request_owner_access_context(True), pytest.raises(HTTPException) as cooled:
-        asyncio.run(options.unusual_activity(_areq(), "all", 1.0))
-    assert cooled.value.status_code == 503
-    assert cooled.value.headers == {"Retry-After": "30"}
-    assert calls == 2
-
-    now[0] += 31
-    with request_owner_access_context(True), pytest.raises(HTTPException):
-        asyncio.run(options.unusual_activity(_areq(), "all", 1.0))
-    assert calls == 4
-
-
-def test_concurrent_total_failures_share_one_negative_result(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls = 0
-
-    def broken_ticker(_symbol: str):
-        nonlocal calls
-        calls += 1
-        raise RuntimeError("provider down")
-
-    monkeypatch.setattr(options, "POPULAR_TICKERS", ["AAA", "BBB"])
-    monkeypatch.setattr(options.yf, "Ticker", broken_ticker)
-
-    async def scenario():
-        with request_owner_access_context(True):
-            return await asyncio.gather(
-                *[options.unusual_activity(_areq(), "all", 1.0) for _ in range(5)],
-                return_exceptions=True,
-            )
-
-    results = asyncio.run(scenario())
-
-    assert calls == 2
-    assert len(results) == 5
-    assert all(
-        isinstance(result, HTTPException) and result.status_code == 503
-        for result in results
-    )
 
 
 def test_owner_option_reads_cold_pull_yahoo_and_coalesce(
@@ -337,31 +191,6 @@ def test_option_chain_rejects_expiration_outside_ticker_membership_and_cools(
 
     assert calls == 1
     assert chain_calls == 0
-
-
-def test_unusual_scan_keeps_a_ticker_when_one_expiration_fails(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def option_chain(expiration: str):
-        if expiration == "2030-08-23":
-            raise RuntimeError("one expiration failed")
-        return _unusual_chain()
-
-    ticker = SimpleNamespace(
-        options=["2030-08-16", "2030-08-23"],
-        fast_info=SimpleNamespace(last_price=100.0),
-        option_chain=option_chain,
-    )
-    monkeypatch.setattr(options, "POPULAR_TICKERS", ["PARTIAL"])
-    monkeypatch.setattr(options.yf, "Ticker", lambda _symbol: ticker)
-
-    payload = asyncio.run(options._unusual_activity_impl("all", 1.0))
-
-    assert payload["succeeded"] == 1
-    assert payload["results"][0]["ticker"] == "PARTIAL"
-    assert payload["data_limited"] is True
-    assert payload["source_status"] == "degraded"
-    assert payload["partial_symbols"] == ["PARTIAL"]
 
 
 def _chain_row(strike: float, symbol: str, *, last_price: float | None = 2.0) -> dict:
