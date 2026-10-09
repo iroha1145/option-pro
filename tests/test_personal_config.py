@@ -8,6 +8,8 @@ from pydantic import ValidationError
 from app.personal_config import (
     AIConfig,
     AccessConfig,
+    CATALYST_SOURCE_SECONDS,
+    CatalystConfig,
     MarketBriefConfig,
     load_personal_config,
 )
@@ -32,6 +34,40 @@ def test_repository_personal_config_freezes_paid_runtime() -> None:
     assert config.public_home.signals_seconds == 900
     assert config.public_home.earnings_seconds == 21_600
     assert config.public_home.unusual_seconds == 1800
+
+
+def test_repository_collects_news_locally_with_the_default_source_schedule() -> None:
+    catalyst = load_personal_config().catalyst
+
+    assert catalyst.news_source == "local"
+    assert catalyst == CatalystConfig(
+        sync_seconds=catalyst.sync_seconds,
+        focus_seconds=catalyst.focus_seconds,
+        scheduled_times_et=catalyst.scheduled_times_et,
+    )
+    assert {
+        name: (entry.enabled, entry.interval_seconds)
+        for name, entry in catalyst.sources
+    } == {name: (True, seconds) for name, seconds in CATALYST_SOURCE_SECONDS.items()}
+
+
+def test_catalyst_source_entries_keep_their_default_interval_and_reject_drift() -> None:
+    config = CatalystConfig.model_validate(
+        {"news_source": "macrolens", "sources": {"massive": {"enabled": False}}}
+    )
+    assert config.news_source == "macrolens"
+    assert config.sources.massive.enabled is False
+    assert config.sources.massive.interval_seconds == 300
+    assert config.sources.seekingalpha_daily.interval_seconds == 21_600
+
+    for invalid in (
+        {"news_source": "newsapi"},
+        {"sources": {"newsapi": {"enabled": True}}},
+        {"sources": {"massive": {"interval_seconds": 30}}},
+        {"sources": {"massive": {"enabled": True, "api_key": "x"}}},
+    ):
+        with pytest.raises(ValidationError):
+            CatalystConfig.model_validate(invalid)
 
 
 def test_repository_market_brief_section_pins_model_and_maps_to_runtime_types() -> None:

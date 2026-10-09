@@ -41,6 +41,20 @@ focus_seconds = 1800
 scheduled_times_et = ["00:00", "01:00", "02:00", "03:00", "04:00", "05:00", "06:00", "07:00", "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00", "23:00"]
 manual_force_reanalysis = true
 manual_refresh_cooldown_seconds = 30
+# 新闻与经济日历的写入方：local 由 Worker 直接抓取下面各来源；macrolens 沿用
+# MacroLens ETL 远端同步，只为回滚保留，回滚步骤见 docs/catalysts/news-ingest.md。
+news_source = "local"
+
+[catalyst.sources]
+# 各来源的开关与轮询间隔（秒）。到期的来源在下一个同步周期（sync_seconds）抓取，
+# 同一主机两次请求至少相隔 60 秒；finnhub 的三个类别、google_news 的三条搜索各自轮询。
+massive = { enabled = true, interval_seconds = 300 }
+finnhub = { enabled = true, interval_seconds = 300 }
+globenewswire = { enabled = true, interval_seconds = 300 }
+google_news = { enabled = true, interval_seconds = 900 }
+seekingalpha_breaking = { enabled = true, interval_seconds = 300 }
+seekingalpha_daily = { enabled = true, interval_seconds = 21600 }
+calendar = { enabled = true, interval_seconds = 600 }
 
 [breakout]
 regular_seconds = 300
