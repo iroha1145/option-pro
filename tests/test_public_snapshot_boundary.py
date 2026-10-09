@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime, timezone
-import time
 
 import pytest
 from fastapi import Depends, FastAPI, HTTPException
@@ -88,8 +87,6 @@ def _clear_process_caches(monkeypatch: pytest.MonkeyPatch):
     stocks._endpoint_refresh_tasks.clear()
     stocks._endpoint_refresh_retry_after.clear()
     cache.clear()
-    sectors._cache.clear()
-    sectors._locks.clear()
     sectors._public_sector_iv_recent.clear()
     with signal_service._cache_lock:
         signal_service._cache.clear()
@@ -254,16 +251,10 @@ def test_public_endpoints_never_read_the_owner_process_cache(
     owner's live-rebuild cache entries, and (with no published snapshot) the
     endpoints stay unavailable without ever calling a loader."""
 
-    now = time.time()
     today = earnings._market_today()
     cache.set(f"earnings:upcoming:{today.isoformat()}", {"items": ["saved"]}, 60)
     cache.set("market:indices", {"indices": ["saved"]}, 60)
     sector_id = next(iter(sectors.SECTORS))
-    sectors._cache[f"iv:{sector_id}"] = (
-        now + 60,
-        now,
-        {"sector_id": sector_id, "rankings": []},
-    )
 
     monkeypatch.setattr(earnings, "_build_upcoming_earnings", lambda *_args: pytest.fail("loader called"))
     monkeypatch.setattr(market, "_build_indices", lambda: pytest.fail("loader called"))
@@ -291,8 +282,6 @@ def test_public_endpoints_never_read_the_owner_process_cache(
             with pytest.raises(HTTPException) as idx_exc:
                 await market.market_indices(_request())
             assert idx_exc.value.status_code == 503
-            # The sector IV process cache is deliberately shared: it only ever
-            # holds data that is simultaneously published to disk.
             assert (
                 await sectors.iv_ranking(sector_id, _request())
             )["sector_id"] == sector_id
@@ -574,9 +563,7 @@ def test_owner_cold_sector_scan_persists_for_public_restart_without_strength_hit
     assert json.loads(snapshot_path.read_text())["snapshot_origin"] == "worker"
     original = snapshot_path.read_bytes()
 
-    # 模拟发布重启：进程内缓存清空，Strength Top20 仍没有半导体。
-    sectors._cache.clear()
-    sectors._locks.clear()
+    # 模拟发布重启：Strength Top20 仍没有半导体。
 
     async def unexpected_live_rows(_sector_id: str) -> list[dict]:
         raise AssertionError("public restart read must not scan providers")
@@ -669,9 +656,6 @@ def test_public_cold_sector_iv_uses_yahoo_and_persists_restart_snapshot(
     assert snapshot_path.is_file()
     assert json.loads(snapshot_path.read_text())["snapshot_origin"] == "worker"
     original = snapshot_path.read_bytes()
-
-    sectors._cache.clear()
-    sectors._locks.clear()
 
     async def unexpected_live_rows(_sector_id: str) -> list[dict]:
         raise AssertionError("durable public IV snapshot must suppress a repeat scan")

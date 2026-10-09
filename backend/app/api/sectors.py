@@ -18,10 +18,7 @@ from app.json_validation import (
     reject_duplicate_json_keys as _reject_duplicate_json_keys,
     reject_non_finite_json as _reject_non_finite_json,
 )
-from app.access import (
-    public_snapshot_unavailable,
-    require_same_origin_request,
-)
+from app.access import require_same_origin_request
 from app.data_paths import get_data_paths
 from app.services import massive, yahoo
 from app.services.numeric import finite_number as _finite_number_base
@@ -33,16 +30,6 @@ from app.services.zh_names import get_zh_name
 
 router = APIRouter(prefix="/api/sectors", tags=["sectors"])
 
-# Simple TTL cache shared by sector endpoints (10 min — IV ranks change slowly).
-# Per-key locks prevent thundering herd: without them, concurrent cold-cache
-# requests would each kick off a full sector scan.
-#
-# No production endpoint calls _cached() (the snapshot-backed path below
-# replaced it); it stays because tests/test_backend_cache_and_iv.py exercises
-# it directly through the module's `sector_api` alias.
-_cache: dict[str, tuple[float, float, Any]] = {}
-_locks: dict[str, asyncio.Lock] = {}
-_MAX_STALE_SECONDS = 60 * 60
 _REAL_OPTION_PROVIDERS = frozenset({"Yahoo/yfinance", "MarketData.app"})
 _SECTOR_IV_SNAPSHOT_VERSION = 1
 _SECTOR_IV_SNAPSHOT_MAX_BYTES = 512 * 1024
@@ -51,14 +38,6 @@ _PUBLIC_SECTOR_IV_CLIENT_WINDOW_SECONDS = 5 * 60
 _PUBLIC_SECTOR_IV_CLIENT_LIMIT = 8
 _PUBLIC_SECTOR_IV_MAX_CLIENTS = 2048
 _public_sector_iv_recent: dict[str, deque[float]] = {}
-
-
-def _lock_for(key: str) -> asyncio.Lock:
-    lock = _locks.get(key)
-    if lock is None:
-        lock = asyncio.Lock()
-        _locks[key] = lock
-    return lock
 
 
 def _reserve_public_sector_iv(client_id: str) -> None:
@@ -100,68 +79,6 @@ def _reserve_public_sector_iv(client_id: str) -> None:
             ),
         )
         _public_sector_iv_recent.pop(oldest_client, None)
-
-
-def _with_cache_status(value: Any, *, fetched_at: float, cache_stale: bool) -> Any:
-    if not isinstance(value, dict):
-        return value
-    result = dict(value)
-    stale = cache_stale or bool(result.get("_stale"))
-    result["_stale"] = stale
-    result.setdefault("as_of", datetime.fromtimestamp(fetched_at, timezone.utc).isoformat())
-    if cache_stale:
-        result["source_status"] = "stale"
-        result["stale_age_seconds"] = round(max(time.time() - fetched_at, 0.0), 1)
-    else:
-        result.setdefault("source_status", "active")
-    return result
-
-
-async def _cached(
-    key: str,
-    ttl: int,
-    loader,
-    *,
-    max_stale_seconds: int = _MAX_STALE_SECONDS,
-    allow_refresh: bool = True,
-):
-    now = time.time()
-    hit = _cache.get(key)
-    if hit and hit[0] > now:
-        return _with_cache_status(hit[2], fetched_at=hit[1], cache_stale=False)
-    if not allow_refresh:
-        if hit and now - hit[1] <= max(0, max_stale_seconds):
-            return _with_cache_status(
-                hit[2],
-                fetched_at=hit[1],
-                cache_stale=True,
-            )
-        raise public_snapshot_unavailable(key)
-    async with _lock_for(key):
-        now = time.time()
-        hit = _cache.get(key)
-        if hit and hit[0] > now:
-            return _with_cache_status(hit[2], fetched_at=hit[1], cache_stale=False)
-        try:
-            value = await loader()
-        except Exception:
-            if hit:
-                stale_age = now - hit[1]
-                if stale_age <= max(0, max_stale_seconds):
-                    return _with_cache_status(hit[2], fetched_at=hit[1], cache_stale=True)
-                _cache.pop(key, None)
-            raise
-        if isinstance(value, dict) and value.get("source_status") == "insufficient_data":
-            if hit:
-                stale_age = now - hit[1]
-                if stale_age <= max(0, max_stale_seconds):
-                    return _with_cache_status(hit[2], fetched_at=hit[1], cache_stale=True)
-                _cache.pop(key, None)
-                raise RuntimeError(f"Sector data source unavailable and stale cache exceeded {max_stale_seconds}s")
-            return _with_cache_status(value, fetched_at=now, cache_stale=False)
-        fetched_at = time.time()
-        _cache[key] = (fetched_at + ttl, fetched_at, value)
-        return _with_cache_status(value, fetched_at=fetched_at, cache_stale=False)
 
 
 def ensure_sector(sector_id: str) -> None:

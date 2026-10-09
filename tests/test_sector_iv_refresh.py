@@ -59,7 +59,6 @@ def test_request_worker_persistence_and_read_share_public_path(monkeypatch, clie
         assert result == {'completed': 1, 'failed': 0}
         assert sorted(calls) == sorted(sectors.SECTORS['semiconductors']['tickers'])
         # Fresh store instance and disk read prove that process-local caches are unnecessary.
-        sectors._cache.clear()
         sectors._sector_iv_documents.invalidate()
         assert refresh.default_store().status('semiconductors')['status'] == 'idle'
         second = client.get('/api/sectors/semiconductors/iv-ranking').json()

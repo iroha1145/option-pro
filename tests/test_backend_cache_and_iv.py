@@ -184,35 +184,6 @@ def test_expiration_snapshot_and_stock_iv_snapshot_expose_freshness(monkeypatch:
     assert iv["source_status"] == "stale"
 
 
-def test_sector_cache_stale_fallback_is_marked_and_expires() -> None:
-    sector_api._cache.clear()
-    sector_api._locks.clear()
-    now = time.time()
-    sector_api._cache["recent"] = (
-        now - 1,
-        now - 60,
-        {"rankings": [{"ticker": "AAA"}], "source_status": "active"},
-    )
-
-    async def fail():
-        raise RuntimeError("provider down")
-
-    recent = asyncio.run(sector_api._cached("recent", 600, fail, max_stale_seconds=120))
-    assert recent["_stale"] is True
-    assert recent["source_status"] == "stale"
-    assert recent["as_of"]
-
-    sector_api._locks.clear()
-    sector_api._cache["old"] = (
-        now - 1,
-        now - 300,
-        {"rankings": [{"ticker": "OLD"}]},
-    )
-    with pytest.raises(RuntimeError, match="provider down"):
-        asyncio.run(sector_api._cached("old", 600, fail, max_stale_seconds=120))
-    assert "old" not in sector_api._cache
-
-
 def test_sector_iv_fields_are_explicit_and_sorted_high_to_low(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(
         sector_api.SECTORS,
