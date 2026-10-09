@@ -184,7 +184,7 @@ case "${{1:-}}" in
         elif [[ " $* " == *" worker python -m app.tools.verify_release_data"* ]]; then
             printf '{{"ready":true,"required":true,"stock_directory_ready":true,"earnings_complete":true}}\n'
         elif [[ " $* " == *" worker python - "* ]]; then
-            printf '{{"watchlist":true,"available":["watchlist","indices","focus_overview","focus_chart","focus_signals","earnings","unusual"]}}\n'
+            printf '{{"watchlist":true,"available":["watchlist","indices","focus_overview","focus_chart","earnings"]}}\n'
         else
             exit 2
         fi
@@ -245,14 +245,12 @@ def _copy_deployment_validator(root: Path) -> None:
         "data_paths.py",
         "deployment_boundary.py",
         "failure_diagnostics.py",
-        "legacy_env_adapter.py",
         "personal_config.py",
         "runtime_environment.py",
         "secret_keys.py",
         "services/__init__.py",
         "services/request_security.py",
         "tools/__init__.py",
-        "tools/migrate_legacy_machine_environment.py",
         "tools/validate_personal_deployment.py",
         "tools/verify_release_data.py",
     ):
@@ -374,7 +372,6 @@ def test_deploy_builds_only_current_services_and_verifies_both(tmp_path: Path) -
     assert "compose build --pull backend" in script
     assert "compose up -d --no-build --force-recreate" in script
     assert '"$ROOT_DIR/scripts/compose.sh" "$@"' in script
-    assert "Stopping legacy workers before the unified worker starts." in script
     assert "verify_public_snapshots" in script
     assert 'payload.get("status") != "ok"' in script
     assert '"ai_jobs",' in script
@@ -1058,34 +1055,15 @@ def test_setup_separates_and_preserves_a_safe_service_secret(
     assert stat.S_IMODE((root / "secrets.env").stat().st_mode) == 0o600
 
 
-def test_setup_migrates_legacy_machine_values_without_template_overrides(
+def test_setup_fills_a_missing_machine_file_from_the_template(
     tmp_path: Path,
 ) -> None:
     root, environment = _setup_root(tmp_path)
-    token = "legacy-internal-token-never-printed"
-    legacy_values = {
-        "HOST_BIND": "10.24.5.6",
-        "PORT": "3201",
-        "MACROLENS_URL": "https://macrolens.example:9443",
-        "ALLOWED_HOSTS": "10.24.5.6",
-        "TRUST_PROXY_HEADERS": "false",
-        "TRUSTED_PROXY_CIDRS": "",
-        "DATA_DIR": "/data/legacy-option-pro",
-    }
-    (root / ".env").write_text(
-        "HOST_BIND='10.24.5.6'\n"
-        'PORT="3201"\n'
-        "MACROLENS_URL='https://macrolens.example:9443'\n"
-        "ALLOWED_HOSTS=10.24.5.6\n"
-        "TRUST_PROXY_HEADERS=false\n"
-        "TRUSTED_PROXY_CIDRS=\n",
-        encoding="utf-8",
-    )
-    (root / "secrets.env").write_text(
-        f"INTERNAL_API_TOKEN={token}\n"
-        "DATA_DIR=/data/legacy-option-pro\n",
-        encoding="utf-8",
-    )
+    token = "sk-existing_openai_key-never-printed"
+    deployment = "RANGE_PERSISTENCE_VERSION=range-persistence-v1\n"
+    secrets = f"OPENAI_API_KEY={token}\n"
+    (root / ".env").write_text(deployment, encoding="utf-8")
+    (root / "secrets.env").write_text(secrets, encoding="utf-8")
 
     result = subprocess.run(
         ["bash", "setup.sh"],
@@ -1099,111 +1077,15 @@ def test_setup_migrates_legacy_machine_values_without_template_overrides(
     )
 
     assert result.returncode == 0, result.stderr
-    assert dotenv_values(root / "machine.env") == legacy_values
-    assert "旧运行配置中的主机设置已迁移" in result.stdout
-    assert "沿用原配置" not in result.stdout
+    assert (root / "machine.env").read_text(encoding="utf-8") == (
+        ROOT / "machine.env.example"
+    ).read_text(encoding="utf-8")
+    assert (root / ".env").read_text(encoding="utf-8") == deployment
+    assert (root / "secrets.env").read_text(encoding="utf-8") == secrets
+    assert "检测到已有运行配置" in result.stdout
     assert token not in result.stdout + result.stderr
     for name in (".env", "machine.env", "secrets.env"):
         assert stat.S_IMODE((root / name).stat().st_mode) == 0o600
-
-
-def test_setup_migrates_legacy_url_alias_and_secret_data_directory(
-    tmp_path: Path,
-) -> None:
-    root, environment = _setup_root(tmp_path)
-    token = "legacy-owner-token-never-printed"
-    (root / ".env").write_text(
-        "MACROLENS_BASE_URL=https://legacy-macrolens.example\n",
-        encoding="utf-8",
-    )
-    (root / "secrets.env").write_text(
-        f"INTERNAL_API_TOKEN={token}\n"
-        "DATA_DIR=/data/legacy-database\n",
-        encoding="utf-8",
-    )
-
-    result = subprocess.run(
-        ["bash", "setup.sh"],
-        cwd=root,
-        env=environment,
-        input="",
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=15,
-    )
-
-    assert result.returncode == 0, result.stderr
-    machine = dotenv_values(root / "machine.env")
-    assert list(machine) == [
-        "HOST_BIND",
-        "PORT",
-        "MACROLENS_URL",
-        "ALLOWED_HOSTS",
-        "TRUST_PROXY_HEADERS",
-        "TRUSTED_PROXY_CIDRS",
-        "DATA_DIR",
-    ]
-    assert machine["HOST_BIND"] == "127.0.0.1"
-    assert machine["MACROLENS_URL"] == "https://legacy-macrolens.example"
-    assert machine["DATA_DIR"] == "/data/legacy-database"
-    assert token not in result.stdout + result.stderr
-
-
-def test_setup_rejects_conflicting_legacy_macrolens_aliases(
-    tmp_path: Path,
-) -> None:
-    root, environment = _setup_root(tmp_path)
-    (root / ".env").write_text(
-        "MACROLENS_URL=https://canonical.example\n"
-        "MACROLENS_BASE_URL=https://legacy.example\n",
-        encoding="utf-8",
-    )
-
-    result = subprocess.run(
-        ["bash", "setup.sh"],
-        cwd=root,
-        env=environment,
-        input="",
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=15,
-    )
-
-    assert result.returncode != 0
-    assert "无法安全迁移旧 .env 中的 MACROLENS_URL" in result.stderr
-    assert "canonical.example" not in result.stdout + result.stderr
-    assert "legacy.example" not in result.stdout + result.stderr
-    assert not (root / "machine.env").exists()
-
-
-def test_setup_fails_closed_when_a_legacy_machine_value_cannot_be_preserved(
-    tmp_path: Path,
-) -> None:
-    root, environment = _setup_root(tmp_path)
-    unsafe = "${UNTRUSTED_HOST_BIND}"
-    (root / ".env").write_text(
-        f"HOST_BIND={unsafe}\nPORT=3201\n",
-        encoding="utf-8",
-    )
-
-    result = subprocess.run(
-        ["bash", "setup.sh"],
-        cwd=root,
-        env=environment,
-        input="",
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=15,
-    )
-
-    assert result.returncode != 0
-    assert "无法安全迁移旧 .env 中的 HOST_BIND" in result.stderr
-    assert unsafe not in result.stdout + result.stderr
-    assert not (root / "machine.env").exists()
-    assert not (root / ".fake-order").exists()
 
 
 @pytest.mark.parametrize(

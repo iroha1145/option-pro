@@ -1,4 +1,4 @@
-"""Content checks shared by persisted JSON readers.
+"""JSON helpers shared by persisted writers and readers.
 
 The 64-level finite-tree check is for the API snapshots. Public-home and
 stock-pull documents retain their stricter depth, size, and node budgets.
@@ -6,8 +6,25 @@ stock-pull documents retain their stricter depth, size, and node budgets.
 
 from __future__ import annotations
 
+import json
 import math
 from typing import Any
+
+
+def canonical_json_text(value: Any) -> str:
+    """Sorted, compact, UTF-8-preserving JSON that refuses NaN and Infinity.
+
+    Hashes, identities and stored documents are computed from these bytes, so
+    the arguments must never change.
+    """
+
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
 
 
 def reject_duplicate_json_keys(

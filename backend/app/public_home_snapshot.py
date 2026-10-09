@@ -16,6 +16,7 @@ from typing import Any, Mapping
 from zoneinfo import ZoneInfo
 
 from app.json_validation import (
+    canonical_json_text,
     reject_duplicate_json_keys as _reject_duplicate_json_keys,
     reject_non_finite_json as _reject_non_finite_json,
 )
@@ -37,10 +38,8 @@ PUBLIC_HOME_RESOURCE_ORDER = (
     "indices",
     "focus_overview",
     "focus_chart",
-    "focus_signals",
     "market_signals",
     "earnings",
-    "unusual",
 )
 # cta_trend 是可选资源：不进 release 闸门（首次部署时 worker 尚未发布过
 # 它的快照，设为必需会让部署在第一次发布前永远过不了验证）。
@@ -268,6 +267,9 @@ PUBLIC_HOME_RESOURCE_SPECS: dict[str, PublicHomeResourceSpec] = {
     # the same ticker already use 7 days, which is what the comment above intends.
     "focus_overview": PublicHomeResourceSpec("focus-overview-v2", 7 * 24 * 60 * 60),
     "focus_chart": PublicHomeResourceSpec("focus-chart-v1", 7 * 24 * 60 * 60),
+    # worker 不再生成 focus_signals 与 unusual。生产快照文件里仍有这两项，
+    # 解析遇到未知资源名会拒绝整份文档，所以规格、参数和校验器还在；
+    # 下一次发布只带走仍在生成的资源，会把它们从文件里清掉。
     "focus_signals": PublicHomeResourceSpec("focus-signals-v1", 7 * 24 * 60 * 60),
     "market_signals": PublicHomeResourceSpec("market-signals-v1", 7 * 24 * 60 * 60),
     "breakout_lead_chart": PublicHomeResourceSpec(
@@ -1613,12 +1615,8 @@ def write_public_home_snapshot(
         cleaned[resource] = entry
     if not cleaned:
         raise ValueError("public home snapshot must contain at least one resource")
-    encoded = json.dumps(
+    encoded = canonical_json_text(
         {"version": PUBLIC_HOME_SNAPSHOT_VERSION, "resources": cleaned},
-        allow_nan=False,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
     ).encode("utf-8")
     if len(encoded) > PUBLIC_HOME_SNAPSHOT_MAX_BYTES:
         raise ValueError("public home snapshot exceeds the size limit")

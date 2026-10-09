@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+from collections import OrderedDict
+import copy
 import hashlib
 import json
 import re
+import threading
 import unicodedata
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, Any, Iterable, Literal, Optional
+from typing import Annotated, Any, Callable, Iterable, Literal, Optional
 
 from pydantic import (
     AfterValidator,
@@ -21,6 +24,8 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+from app.json_validation import canonical_json_text
 
 
 AIJobStatus = Literal[
@@ -2267,14 +2272,7 @@ def earnings_input_hash(payload: dict[str, Any]) -> str:
             "release_status",
         )
     }
-    raw = json.dumps(
-        facts,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        allow_nan=False,
-    )
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return hashlib.sha256(canonical_json_text(facts).encode("utf-8")).hexdigest()
 
 
 def normalize_earnings_analysis_payload(
@@ -3287,3 +3285,51 @@ def validate_result(job_type: str, raw_json: str, payload: dict) -> dict:
         if not output_tickers <= allowed_tickers:
             raise ValueError("market_focus_ticker_binding_mismatch")
     return data
+
+
+_RESULT_VERDICT_LIMIT = 2048
+_result_verdicts: OrderedDict[tuple[Any, ...], tuple[bool, Any]] = OrderedDict()
+_result_verdicts_lock = threading.Lock()
+
+
+def validate_result_cached(
+    job_type: str,
+    raw_json: str,
+    payload: dict,
+    *,
+    validator: Callable[[str, str, dict], dict] = validate_result,
+) -> dict:
+    """``validator(job_type, raw_json, payload)`` with its verdict remembered per process.
+
+    validate_result reads no clock and no mutable state, so the job type, the
+    result bytes and the payload fix its outcome; rejections are remembered
+    and raised again. A deploy restarts the process, so changed rules always
+    start from an empty cache.
+    """
+
+    try:
+        key = (
+            validator,
+            job_type,
+            hashlib.sha256(raw_json.encode("utf-8")).digest(),
+            hashlib.sha256(canonical_json_text(payload).encode("utf-8")).digest(),
+        )
+    except (TypeError, ValueError):
+        return validator(job_type, raw_json, payload)
+    with _result_verdicts_lock:
+        verdict = _result_verdicts.get(key)
+        if verdict is not None:
+            _result_verdicts.move_to_end(key)
+    if verdict is None:
+        try:
+            verdict = (True, validator(job_type, raw_json, payload))
+        except (TypeError, ValueError) as exc:
+            verdict = (False, exc)
+        with _result_verdicts_lock:
+            _result_verdicts[key] = verdict
+            while len(_result_verdicts) > _RESULT_VERDICT_LIMIT:
+                _result_verdicts.popitem(last=False)
+    accepted, outcome = verdict
+    if not accepted:
+        raise outcome.with_traceback(None)
+    return copy.deepcopy(outcome)

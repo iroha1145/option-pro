@@ -1761,12 +1761,13 @@ def test_failure_detail_is_persisted_exposed_and_cleared_by_recovery(tmp_path):
     assert recovered["error_code"] is None
 
 
-def test_error_detail_migration_survives_v3_v4_checksum_registry(tmp_path):
-    """精确复刻 2026-08-08 生产事故：老库带 v3 校验和 + 无 error_detail 列。
+def test_v3_v4_registry_rows_survive_beside_the_current_v5_row(tmp_path):
+    """2026-08-08 生产事故的登记表一半：老库带 v3、v4 行（旧建表文本的校验和）。
 
-    加列改变建表文本 → 校验和改变；版本号没升时，老库 registry 里的 v3 行
+    加列改变建表文本 → 校验和改变；版本号没升时，老库 registry 里的旧行
     与新代码计算值不匹配，ensure_initialized 每次 RuntimeError，ai_jobs/
-    catalyst/focus 任务全停。修复=版本升到 v5：老行保留、新行独立成键。
+    catalyst/focus 任务全停。修复=版本随建表文本升级：老行保留、新行独立
+    成键。补 error_detail 列的升级路径已随生产完成而删除，这里只锁登记表。
     """
     import hashlib as _hashlib
 
@@ -1787,7 +1788,6 @@ def test_error_detail_migration_survives_v3_v4_checksum_registry(tmp_path):
         ).encode("utf-8")
     ).hexdigest()
     with repository._connect() as connection:
-        connection.execute("ALTER TABLE ai_jobs DROP COLUMN error_detail")
         connection.execute(
             "DELETE FROM ai_job_schema WHERE version IN ('ai-jobs-v3','ai-jobs-v4','ai-jobs-v5')"
         )
@@ -1810,19 +1810,12 @@ def test_error_detail_migration_survives_v3_v4_checksum_registry(tmp_path):
     reopened.ensure_initialized()
 
     with reopened._connect() as connection:
-        columns = {
-            str(item["name"])
-            for item in connection.execute(
-                "PRAGMA table_info(ai_jobs)"
-            ).fetchall()
-        }
         registry = {
             str(item["version"]): str(item["checksum"])
             for item in connection.execute(
                 "SELECT version,checksum FROM ai_job_schema"
             ).fetchall()
         }
-    assert "error_detail" in columns
     # 老 v3/v4 行原样保留（回滚安全），v5 行写入当前校验和。
     assert registry["ai-jobs-v3"] == old_checksum
     assert registry["ai-jobs-v4"] == (
@@ -1832,26 +1825,59 @@ def test_error_detail_migration_survives_v3_v4_checksum_registry(tmp_path):
     assert reopened.get_job(row["job_id"]) is not None
 
 
-def test_error_detail_column_backfills_on_existing_database(tmp_path):
-    database = tmp_path / "ai-jobs.db"
-    repository = AIJobRepository(database)
-    row, _ = _create_earnings_job(repository)
-    # 老库形态：没有 error_detail 列（与 budget_charge_microusd 同款的
-    # 列探测式 ALTER 迁移路径）。
+def test_fresh_database_has_every_column_and_registry_row_production_has(
+    tmp_path,
+):
+    """新库只靠建表文本得到全部列；补列与旧表重建的升级路径已删除。
+
+    生产库这些列来自已删除的 ALTER/重建迁移；登记表除 ai-jobs-v1/v3/v4 等
+    历史行（只有旧代码写过）外，与新库一致。校验和变了会让生产
+    ensure_initialized 失败，所以按生产值钉住。
+    """
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    repository.initialize()
+
     with repository._connect() as connection:
-        connection.execute("ALTER TABLE ai_jobs DROP COLUMN error_detail")
-        connection.commit()
-    reopened = AIJobRepository(database)
-    reopened.ensure_initialized()
-    with reopened._connect() as connection:
         columns = {
             str(item["name"])
+            for item in connection.execute("PRAGMA table_info(ai_jobs)").fetchall()
+        }
+        registry = {
+            str(item["version"]): str(item["checksum"])
             for item in connection.execute(
-                "PRAGMA table_info(ai_jobs)"
+                "SELECT version,checksum FROM ai_job_schema"
             ).fetchall()
         }
-    assert "error_detail" in columns
-    assert reopened.get_job(row["job_id"]) is not None
+    assert {
+        "budget_charge_microusd",
+        "error_detail",
+        "execution_number",
+        "retry_of_job_id",
+        "legacy_execution_mode",
+        "anthropic_message_id",
+        "provider_result_json",
+    } <= columns
+    assert registry == {
+        "ai-jobs-v5": "2f06c215736fe635b8d29792bbb4eacd0c875a80a2357434bd4372893fb9ef74",
+        "ai-job-sources-v1": "1dc4fa74c9dfdad32936cd896d2422d18d771700b52d4779144bdfa2ac843feb",
+        "ai-job-batch-members-v1": "ad0fe9d62541faf14b048a3a11f47495a3fd53cfe18ebb2a762aa3f3a7f9de24",
+        "ai-earnings-final-locks-v1": "adbaf0f8bfe306da3445d55aa5f94f6b67693fe7510e9eb6f419c6294ada87e3",
+        "ai-job-identities-v2": "fd4566c3f6b801ea5accfdec1995885a10a9d11ba9cae9b9e1ec2562cd0cb408",
+        "ai-job-provider-progress-v1": "b88558c7a39767b1f90a396a4f0f2be6f1cb104959d8c786441e8fe776bdad4e",
+        "shared-model-budget-v1": "021fbead0d453783492065ba6018da75b1931ec34e25b48027c016ce219f6795",
+    }
+
+
+def test_retired_identity_row_with_another_checksum_stops_initialize(tmp_path):
+    database = tmp_path / "ai-jobs.db"
+    AIJobRepository(database).initialize()
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE ai_job_schema SET checksum='other' WHERE version='ai-job-identities-v2'"
+        )
+
+    with pytest.raises(RuntimeError, match="ai_job_identity_migration_checksum_mismatch"):
+        AIJobRepository(database).initialize()
 
 
 def test_paid_schema_failure_recovery_rejects_wrong_response_or_invalid_result(
@@ -2355,35 +2381,6 @@ def test_cached_get_hides_a_forged_zh_cn_legacy_result(monkeypatch, tmp_path):
     assert repository.get_job(row["job_id"])["result_json"] is not None
 
 
-def test_job_post_is_fast_local_and_idempotent(monkeypatch, tmp_path):
-    repository = AIJobRepository(tmp_path / "ai-jobs.db")
-    settings = _settings(tmp_path / "ai-jobs.db")
-    monkeypatch.setattr(ai, "_job_repository", lambda: repository)
-    monkeypatch.setattr(ai, "get_settings", lambda: settings)
-    monkeypatch.setattr(ai, "_require_runtime_capability", lambda: None)
-
-    app = FastAPI()
-    app.include_router(ai.router)
-    client = TestClient(app, base_url="http://localhost")
-    body = {
-        "ticker": "AAPL",
-        "name": "Apple",
-        "sector": "Technology",
-        "earnings_date": "2026-07-30",
-    }
-
-    first = client.post("/api/ai/jobs/earnings-impact", json=body)
-    second = client.post("/api/ai/jobs/earnings-impact", json=body)
-
-    assert first.status_code == 202
-    assert second.status_code == 202
-    assert first.json()["job_id"] == second.json()["job_id"]
-    assert first.json()["status"] == "pending"
-    assert second.json()["cached"] is False
-    stored = repository.get_job(first.json()["job_id"])
-    assert stored["prompt_version"] == "earnings-impact-zh-cn-v6"
-
-
 def test_option_alert_failed_job_requires_explicit_force_to_requeue(
     monkeypatch,
     tmp_path,
@@ -2456,23 +2453,6 @@ def test_large_valid_signal_result_is_persisted_separately_from_request_limit(
     completed = repository.public(repository.get_job(row["job_id"]))
     assert completed["status"] == "completed"
     assert completed["result"]["asset"] == "AAPL"
-
-
-def test_paid_job_route_has_no_extra_action_capability(monkeypatch, tmp_path):
-    repository = AIJobRepository(tmp_path / "ai-jobs.db")
-    monkeypatch.setattr(ai, "_job_repository", lambda: repository)
-    monkeypatch.setattr(ai, "_require_runtime_capability", lambda: None)
-    app = FastAPI()
-    app.include_router(ai.router)
-    client = TestClient(app, base_url="http://localhost")
-
-    response = client.post(
-        "/api/ai/jobs/earnings-impact",
-        json={"ticker": "AAPL"},
-    )
-
-    assert response.status_code == 202
-    assert repository.health()["pending"] == 1
 
 
 def test_pending_cancel_is_idempotent(tmp_path):

@@ -38,7 +38,7 @@ chmod 600 .env machine.env secrets.env
 
 `./personal.sh doctor` 与密钥管理命令会使用一次性后台容器中的锁定依赖，主机不需要另建 Python 虚拟环境。首次执行会构建该容器，后续使用构建缓存。
 
-部署脚本会校验配置、构建当前提交，停止同一编排项目中的旧工作容器，确认旧写入者已经退出，再启动 `backend` 与统一的 `worker`。它不会刷新新闻、运行扫描或创建模型任务，也不能用单纯重启容器代替新版本构建。
+部署脚本会校验配置、构建当前提交，再用 `--force-recreate --remove-orphans` 重建 `backend` 与统一的 `worker`；编排文件里已经删除的旧服务容器会一并移除。它不会刷新新闻、运行扫描或创建模型任务，也不能用单纯重启容器代替新版本构建。
 
 日常容器命令统一通过 `./scripts/compose.sh` 执行。这个入口会让 `.env` 与 `machine.env` 同时参与编排插值；直接运行原始 `docker compose` 会停止并提示使用安全入口，避免静默采用错误的监听地址、端口或 MacroLens 配置。
 
@@ -68,13 +68,13 @@ chmod 600 .env machine.env secrets.env
 - `INTERNAL_API_TOKEN`
 - `APP_PASSWORD_HASH`
 
-进程已经导出的值优先级最高；`.env` 只保留一个版本迁移期的兼容用途，`machine.env` 只接收七个机器字段，`secrets.env` 只接收九个密钥。错放到其他文件的字段不会覆盖正式来源。
+进程已经导出的值优先级最高；`.env` 是部署级覆盖文件，只放其他配置文件都没有归属的运维覆盖（例如 `RANGE_PERSISTENCE_VERSION`），`machine.env` 只接收七个机器字段，`secrets.env` 只接收九个密钥。错放到其他文件的字段不会覆盖正式来源。
 
 `FMP_API_KEY`（Financial Modeling Prep）是可选的第二财报日历来源与批量市值来源：
 未配置时财报页完全走 Finnhub 主源，不影响启动与刷新；配置后双日历交叉验证
 （日期冲突显式标注，不静默合并），市值批量补全并持久缓存，由 Worker 低频刷新。
 
-旧名称 `MARKETDATA_API_TOKEN`、`MACROLENS_BASE_URL` 和 `MACROLENS_INTERNAL_TOKEN` 只供迁移工具识别。旧名与新名同时存在且值不一致时，迁移会停止，不会猜测采用哪一项。旧签名密钥、请求随机数（Nonce）、密钥编号（Key ID）、前一把密钥和浏览器令牌不会进入最终运行配置。
+旧名称 `MARKETDATA_API_TOKEN` 不再读取，应改为 `MARKETDATA_TOKEN`。只填 `MACROLENS_BASE_URL` 或 `MACROLENS_INTERNAL_TOKEN`，或旧名与新名取值不一致时，启动会失败并提示改用 `MACROLENS_URL`、`INTERNAL_API_TOKEN`，不会猜测采用哪一项。旧签名密钥、请求随机数（Nonce）、密钥编号（Key ID）、前一把密钥和浏览器令牌不会进入运行配置。
 
 ## 实时行情
 
@@ -246,11 +246,7 @@ curl --fail http://127.0.0.1:2000/ready
 
 非日线图表快照的目录上限、各周期 `max_age` 以及与日线手动拉取分桶的说明见 [stock-chart-snapshots.md](docs/stock-chart-snapshots.md)。
 
-升级和回滚时不要附加 `--volumes` 或 `-v`。迁移工具会生成 `personal.toml`、`machine.env`、`secrets.env` 和不含任何值的 `migration-report.json`。详细边界见[个人版迁移说明](docs/personal-edition/migration.md)。
-
-## 期权异动范围
-
-`GET /api/options/unusual` 不是全市场实时扫描。它只扫描 `NVDA`、`TSLA`、`AAPL`、`AMD`、`AMZN`、`META`、`MSFT`、`SPY`、`QQQ`、`GOOGL`，每个标的检查 Yahoo 返回的前两个到期日，结果缓存 120 秒并最多返回 50 条。
+升级和回滚时不要附加 `--volumes` 或 `-v`。配置文件分工与发布、回滚边界见[个人版迁移说明](docs/personal-edition/migration.md)。
 
 ## Optix 宏观环境
 

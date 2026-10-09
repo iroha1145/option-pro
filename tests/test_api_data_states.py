@@ -4,12 +4,12 @@ import asyncio
 from datetime import date
 import json
 import time
-from types import SimpleNamespace
 
 import pandas as pd
 import pytest
 from fastapi import HTTPException
 
+from app import file_identity
 from app.access import request_owner_access_context
 from app.api import earnings, options, stocks
 from app.services import sectors as sector_service
@@ -49,46 +49,6 @@ def _watchlist_payload(label: str, *, succeeded: int = 1):
     }
 
 
-def test_endpoint_cache_uses_only_bounded_marked_stale_data(monkeypatch):
-    async def scenario():
-        clock = [1_000.0]
-        monkeypatch.setattr(stocks.time, "time", lambda: clock[0])
-        stocks._endpoint_cache.clear()
-        stocks._endpoint_locks.clear()
-        stocks._endpoint_lock_users.clear()
-
-        async def healthy_loader():
-            return {"value": 42}
-
-        fresh = await stocks._cached_endpoint(
-            "test:bounded-stale", 10, healthy_loader, stale_ttl=20
-        )
-        assert fresh["value"] == 42
-        assert fresh["_stale"] is False
-        assert fresh["source_status"] == "active"
-
-        async def failed_loader():
-            raise RuntimeError("provider unavailable")
-
-        clock[0] = 1_011.0
-        stale = await stocks._cached_endpoint(
-            "test:bounded-stale", 10, failed_loader, stale_ttl=20
-        )
-        assert stale["value"] == 42
-        assert stale["_stale"] is True
-        assert stale["source_status"] == "degraded"
-        assert stale["stale_reason"] == "upstream_refresh_failed"
-
-        clock[0] = 1_031.0
-        with pytest.raises(RuntimeError, match="provider unavailable"):
-            await stocks._cached_endpoint(
-                "test:bounded-stale", 10, failed_loader, stale_ttl=20
-            )
-        assert "test:bounded-stale" not in stocks._endpoint_cache
-
-    asyncio.run(scenario())
-
-
 def test_endpoint_cache_has_a_hard_capacity_limit():
     stocks._endpoint_cache.clear()
     stocks._endpoint_locks.clear()
@@ -105,7 +65,7 @@ def test_endpoint_cache_has_a_hard_capacity_limit():
     async def load():
         return {"value": "new"}
 
-    result = asyncio.run(stocks._cached_endpoint("full:new", 60, load))
+    result = asyncio.run(stocks._stale_while_revalidate_endpoint("full:new", 60, 120, load))
 
     assert result["value"] == "new"
     assert len(stocks._endpoint_cache) == stocks._ENDPOINT_MAX_ENTRIES
@@ -123,7 +83,7 @@ def test_endpoint_cache_failed_unique_loads_do_not_retain_locks():
 
         for index in range(20):
             with pytest.raises(RuntimeError, match="provider down"):
-                await stocks._cached_endpoint(f"failure:{index}", 60, fail)
+                await stocks._stale_while_revalidate_endpoint(f"failure:{index}", 60, 60, fail)
 
     asyncio.run(scenario())
 
@@ -201,52 +161,6 @@ def test_logo_invalid_variants_cannot_bypass_the_canonical_negative_cache(monkey
             asyncio.run(stocks._cached_company_logo(invalid))
         assert exc_info.value.status_code == 404
     assert calls == 1
-
-
-def test_unusual_options_reports_total_provider_failure(monkeypatch):
-    class BrokenTicker:
-        def __init__(self, _symbol):
-            raise RuntimeError("provider unavailable")
-
-    monkeypatch.setattr(options, "POPULAR_TICKERS", ["AAA", "BBB"])
-    monkeypatch.setattr(options.yf, "Ticker", BrokenTicker)
-
-    with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(options._unusual_activity_impl("all", 1.0))
-    assert exc_info.value.status_code == 503
-
-
-def test_unusual_options_treats_empty_expiration_payload_as_provider_failure(monkeypatch):
-    class EmptyTicker:
-        options = []
-
-    monkeypatch.setattr(options, "POPULAR_TICKERS", ["AAA", "BBB"])
-    monkeypatch.setattr(options.yf, "Ticker", lambda _symbol: EmptyTicker())
-
-    with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(options._unusual_activity_impl("all", 1.0))
-    assert exc_info.value.status_code == 503
-
-
-def test_unusual_options_allows_a_valid_chain_with_no_matching_activity(monkeypatch):
-    class UsableTicker:
-        options = ["2026-08-21"]
-        fast_info = SimpleNamespace(last_price=100.0)
-
-        def option_chain(self, _expiration):
-            return SimpleNamespace(
-                calls=pd.DataFrame([{"volume": 0, "openInterest": 100}]),
-                puts=pd.DataFrame(),
-            )
-
-    monkeypatch.setattr(options, "POPULAR_TICKERS", ["AAA", "BBB"])
-    monkeypatch.setattr(options.yf, "Ticker", lambda _symbol: UsableTicker())
-
-    payload = asyncio.run(options._unusual_activity_impl("all", 1.0))
-
-    assert payload["results"] == []
-    assert payload["succeeded"] == 2
-    assert payload["source_status"] == "active"
 
 
 def test_expirations_route_preserves_freshness_metadata(monkeypatch):
@@ -351,88 +265,6 @@ def test_earnings_fetches_full_info_only_for_tickers_with_a_date(monkeypatch):
     assert table_accesses == ["MISS"]
     assert payload["source_status"] == "degraded"
     assert payload["failed_symbols"] == ["MISS"]
-
-
-def test_legacy_stock_signals_reports_provider_failure(monkeypatch):
-    class BrokenTicker:
-        def __init__(self, _symbol):
-            raise RuntimeError("provider unavailable")
-
-    monkeypatch.setattr(stocks.yf, "Ticker", BrokenTicker)
-
-    with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(stocks.stock_signals("AAA"))
-    assert exc_info.value.status_code == 503
-
-
-def test_legacy_stock_signals_accepts_indices_but_rejects_invalid_symbols(monkeypatch):
-    called = False
-
-    class RecordingTicker:
-        def __init__(self, _symbol):
-            nonlocal called
-            called = True
-
-    monkeypatch.setattr(stocks.yf, "Ticker", RecordingTicker)
-
-    with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(stocks.stock_signals("../../secret"))
-
-    assert exc_info.value.status_code == 400
-    assert called is False
-    assert stocks._WATCHLIST_TICKER_PATTERN.fullmatch("^GSPC")
-
-
-def test_legacy_stock_signals_ignores_incomplete_daily_bar(monkeypatch):
-    completed_closes = [100.0 + index * 0.5 for index in range(60)]
-    history = pd.DataFrame(
-        {
-            "Close": completed_closes + [float("nan")],
-            "Volume": [1_000_000 + index for index in range(60)] + [5_000_000],
-        },
-        index=pd.date_range("2026-04-01", periods=61, freq="B"),
-    )
-
-    class IncompleteTicker:
-        def __init__(self, _symbol):
-            pass
-
-        def history(self, *, period):
-            assert period == "100d"
-            return history
-
-    monkeypatch.setattr(stocks.yf, "Ticker", IncompleteTicker)
-    stocks._endpoint_cache.pop("technical-signals:NANBAR", None)
-
-    payload = asyncio.run(stocks.stock_signals("NANBAR"))
-
-    assert payload["price"] == completed_closes[-1]
-    assert payload["signals"]["rsi"]["value"] == 100.0
-    assert payload["signals"]["volume"]["value"] < 2
-
-
-def test_stock_signals_rsi_is_the_value_the_chart_rsi_pane_plots(monkeypatch):
-    from app.services.technical.indicators import rsi_series
-
-    closes = [100.0 + ((index * 7) % 11) - index * 0.1 for index in range(80)]
-    history = pd.DataFrame(
-        {"Close": closes, "Volume": [1_000_000] * len(closes)},
-        index=pd.date_range("2026-03-02", periods=len(closes), freq="B"),
-    )
-
-    class FixedTicker:
-        def __init__(self, _symbol):
-            pass
-
-        def history(self, *, period):
-            return history
-
-    monkeypatch.setattr(stocks.yf, "Ticker", FixedTicker)
-    stocks._endpoint_cache.pop("technical-signals:RSIX", None)
-
-    payload = asyncio.run(stocks.stock_signals("RSIX"))
-
-    assert payload["signals"]["rsi"]["value"] == round(rsi_series(closes)[-1], 1)
 
 
 def test_watchlist_reports_provider_failure_without_unbounded_stale_data(monkeypatch):
@@ -833,7 +665,7 @@ def test_watchlist_snapshot_write_failure_does_not_fail_refresh(monkeypatch, tmp
             raise OSError("disk unavailable")
 
         monkeypatch.setattr(stocks, "_build_watchlist", refreshed_watchlist)
-        monkeypatch.setattr(stocks.os, "replace", failed_replace)
+        monkeypatch.setattr(file_identity.os, "replace", failed_replace)
 
         stale = await stocks.watchlist(None)
         assert stale["groups"][0]["id"] == "old"
@@ -972,7 +804,6 @@ def test_targeted_watchlist_uses_normalized_tickers_without_provider_fetches(mon
 
     monkeypatch.setattr(stocks, "_cached_selected_watchlist", cached)
     monkeypatch.setattr(stocks, "_build_watchlist", forbidden)
-    monkeypatch.setattr(stocks, "_cached_endpoint", forbidden)
     monkeypatch.setattr(stocks, "_stale_while_revalidate_endpoint", forbidden)
     assert asyncio.run(stocks.watchlist(" msft,AAPL,msft "))["attempted"] == 2
     assert asyncio.run(stocks.watchlist("AAPL,MSFT"))["attempted"] == 2

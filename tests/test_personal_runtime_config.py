@@ -140,8 +140,8 @@ def test_retired_strength_settings_do_not_block_startup(tmp_path, monkeypatch, s
     else:
         env_file = tmp_path / "retired.env"
         env_file.write_text("\n".join(f"{key}=retired-invalid-value" for key in retired))
-    settings = Settings(_env_file=env_file, YAHOO_OPTION_MAX_IN_FLIGHT=2)
-    assert settings.yahoo_option_max_in_flight == 2
+    settings = Settings(_env_file=env_file, QUOTES_MAX_SYMBOLS=20)
+    assert settings.quotes_max_symbols == 20
     assert not ({name.lower() for name in retired} & settings.model_dump().keys())
 
 

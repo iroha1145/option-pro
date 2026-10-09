@@ -17,8 +17,7 @@ from fastapi.testclient import TestClient
 import app.main as main
 from app.access import owner_password_hash_is_valid
 from app.tools import personal_secrets
-from app import legacy_env_adapter, runtime_environment
-from app.api.settings import settings_status
+from app import runtime_environment
 
 
 def _set_stdin(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
@@ -80,7 +79,6 @@ def test_option_pro_secret_allowlist_is_exact() -> None:
         "FRED_API_KEY",
     }
     assert set(personal_secrets.SECRET_KEYS) == expected
-    assert legacy_env_adapter.SECRET_KEYS == expected
     assert runtime_environment.SECRET_ENV_KEYS == expected
 
 
@@ -96,35 +94,6 @@ def test_interactive_secret_input_uses_hidden_terminal_prompt(
     monkeypatch.setattr(personal_secrets.getpass, "getpass", lambda _prompt: sentinel)
 
     assert personal_secrets._read_secret() == sentinel
-
-
-def test_browser_settings_expose_only_option_pro_configuration_booleans(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    values = {
-        "ANTHROPIC_API_KEY": "sk-ant-never-return-this",
-        "OPENAI_API_KEY": "sk-never-return-this",
-        "ANTHROPIC_API_KEY": "sk-ant-never-return-this",
-        "FINNHUB_API_KEY": "finnhub-never-return-this",
-        "MARKETDATA_TOKEN": "market-never-return-this",
-        "INTERNAL_API_TOKEN": "internal-never-return-this",
-        "MASSIVE_API_KEY": "not-an-option-pro-setting",
-        "FRED_API_KEY": "abcdef0123456789abcdef0123456789",
-    }
-    for key, value in values.items():
-        monkeypatch.setenv(key, value)
-
-    report = settings_status()
-    assert report == {
-        "openai": {"configured": True},
-        "anthropic": {"configured": True},
-        "finnhub": {"configured": True},
-        "marketdata": {"configured": True},
-        "fred": {"configured": True},
-        "internal_api": {"configured": True},
-    }
-    serialized = json.dumps(report)
-    assert all(value not in serialized for value in values.values())
 
 
 def test_secret_updates_are_private_atomic_and_never_echo_values(
@@ -1090,11 +1059,9 @@ def test_real_owner_surfaces_never_return_secret_sentinels(
         "/health",
         "/ready",
         "/api/access/status",
-        "/api/settings",
         "/api/runtime-settings",
         "/api/runtime-settings/history",
         "/api/worker/status",
-        "/api/worker/actions",
         "/api/catalysts/status",
         "/api/catalysts/feed",
         "/api/catalysts/calendar",

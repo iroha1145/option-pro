@@ -188,7 +188,6 @@ def test_known_unsupported_has_zero_provider_outbound(monkeypatch):
         assert snapshot["options_status"] == "unsupported_by_provider"
         assert snapshot["retryable"] is False
         assert snapshot["ticker"] == canonical
-        assert yahoo.get_expirations(alias) == []
         assert yahoo.get_stock_iv(alias) is None
         iv_snapshot = yahoo.get_stock_iv_snapshot(alias)
         assert iv_snapshot["atm_iv"] is None
@@ -420,11 +419,7 @@ def test_time_advance_does_not_autostart_refresh(monkeypatch):
             return []
 
     monkeypatch.setattr(yahoo, "_get_ticker", lambda symbol: EmptyThenDates(symbol))
-    monkeypatch.setattr(
-        yahoo,
-        "get_settings",
-        lambda: SimpleNamespace(option_empty_discovery_seconds=2),
-    )
+    monkeypatch.setattr(yahoo, "_EXPIRATIONS_TTL_SECONDS", 2)
     first = yahoo.get_expirations_snapshot("TSLA")
     assert first["options_status"] == "empty_unconfirmed"
     assert calls == ["TSLA"]
@@ -460,11 +455,7 @@ def test_empty_list_is_recoverable_after_ttl(monkeypatch):
             return list(payload["AAPL"])
 
     monkeypatch.setattr(yahoo, "_get_ticker", lambda _symbol: FlipTicker())
-    monkeypatch.setattr(
-        yahoo,
-        "get_settings",
-        lambda: SimpleNamespace(option_empty_discovery_seconds=1),
-    )
+    monkeypatch.setattr(yahoo, "_EXPIRATIONS_TTL_SECONDS", 1)
     empty = yahoo.get_expirations_snapshot("AAPL")
     assert empty["options_status"] == "empty_unconfirmed"
     payload["AAPL"] = ["2030-12-18"]

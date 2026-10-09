@@ -138,7 +138,6 @@ def test_public_home_task_serves_earnings_calendar_actions(tmp_path) -> None:
             chart_seconds=60,
             signals_seconds=60,
             earnings_seconds=1800,
-            unusual_seconds=1800,
         ),
         builders={"earnings": builder},
         reader=reader,

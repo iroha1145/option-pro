@@ -9,6 +9,7 @@ import pytest
 
 from app.access import request_owner_access_context
 from app.api import earnings
+from app.services import earnings_enrichment
 from app.public_home_snapshot import validate_public_home_payload
 from tests.http_response_support import anonymous_get_request as _areq, response_payload as _rp
 
@@ -86,8 +87,8 @@ def test_expected_move_uses_nearest_at_the_money_real_straddle() -> None:
         ],
     }
 
-    assert earnings._expected_move_from_chain_snapshot(snapshot) == 7.5
-    assert earnings._expected_move_from_chain_snapshot(
+    assert earnings_enrichment.compute_straddle_move(snapshot)["move_pct"] == 7.5
+    assert earnings_enrichment.compute_straddle_move(
         {"underlying_price": 100, "calls": [], "puts": []}
     ) is None
 

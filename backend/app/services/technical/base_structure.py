@@ -18,6 +18,8 @@ import json
 from statistics import mean, median, pstdev
 from typing import Any, Sequence
 
+from app.services.technical.indicators import mean_true_range as _atr
+
 DETECTOR_VERSION = "us-base-structure-v2"
 
 WINDOW_GRID = (10, 15, 20, 30, 40, 60, 80)
@@ -30,18 +32,6 @@ BREAK_BUFFER_ATR = 0.10
 
 def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, value))
-
-
-def _atr(highs: Sequence[float], lows: Sequence[float], closes: Sequence[float], window: int) -> float | None:
-    n = len(closes)
-    if n < 2 or window < 1:
-        return None
-    window = min(window, n - 1)
-    trs = []
-    for i in range(n - window, n):
-        tr = max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
-        trs.append(tr)
-    return sum(trs) / len(trs) if trs else None
 
 
 def _pivots(values: Sequence[float], *, high: bool, span: int = 2) -> list[tuple[int, float]]:

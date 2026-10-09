@@ -551,10 +551,7 @@ def test_finnhub_fallback_keeps_token_out_of_url_query(monkeypatch: pytest.Monke
     captured: dict[str, object] = {}
     settings = SimpleNamespace(
         finnhub_api_key="secret-token",
-        finnhub_candle_fallback_enabled=True,
-        finnhub_candle_fallback_limit=1,
         finnhub_base_url="https://finnhub.example/api/v1",
-        request_timeout=2.0,
     )
 
     class FakeResponse:
@@ -595,10 +592,7 @@ def test_marketdata_fallback_keeps_token_out_of_url_query(monkeypatch: pytest.Mo
     captured: dict[str, object] = {}
     settings = SimpleNamespace(
         marketdata_token="secret-token",
-        marketdata_stock_candle_fallback_enabled=True,
-        marketdata_stock_candle_fallback_limit=1,
         marketdata_base_url="https://marketdata.example",
-        request_timeout=2.0,
     )
 
     class FakeResponse:
@@ -643,10 +637,7 @@ def test_marketdata_fallback_httpx_logs_omit_token(
     sentinel = "marketdata-log-sentinel"
     settings = SimpleNamespace(
         marketdata_token=sentinel,
-        marketdata_stock_candle_fallback_enabled=True,
-        marketdata_stock_candle_fallback_limit=1,
         marketdata_base_url="https://marketdata.example",
-        request_timeout=2.0,
     )
     real_client = httpx.Client
 

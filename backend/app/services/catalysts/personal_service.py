@@ -15,6 +15,7 @@ from app.personal_config import PersonalConfig, get_personal_config
 from app.services.ai_jobs import runtime as ai_runtime
 from app.services.ai_jobs.models import (
     validate_result,
+    validate_result_cached,
     validate_simplified_chinese_text,
 )
 from app.services.ai_jobs.repository import AIJobRepository
@@ -151,7 +152,6 @@ class _LocalIntelligence(Protocol):
         force: bool = False,
     ) -> dict[str, Any]: ...
     def market_focus_cycle(self, cycle_id: str) -> dict[str, Any] | None: ...
-    def cancel_market_focus_cycle(self, cycle_id: str) -> dict[str, Any] | None: ...
     def request_refresh(
         self,
         operation_type: Literal["news", "calendar", "source_health"] = "news",
@@ -743,7 +743,7 @@ class PersonalCatalystService:
         if not isinstance(validation_sources, list):
             validation_sources = []
         try:
-            return validate_result(
+            return validate_result_cached(
                 "news_impact",
                 json.dumps(
                     dict(analysis),
@@ -764,6 +764,7 @@ class PersonalCatalystService:
                     "sources": validation_sources,
                     "allowed_tickers": validation_allowed_tickers,
                 },
+                validator=validate_result,
             )
         except (KeyError, TypeError, ValueError):
             return None
@@ -1973,16 +1974,6 @@ class PersonalCatalystService:
             cycle,
             include_owner_state=include_owner_state,
         )
-
-    def cancel_market_focus_cycle(self, cycle_id: str) -> dict[str, Any] | None:
-        self._require_cache_ready()
-        try:
-            cycle = self.intelligence.cancel_market_focus_cycle(cycle_id)
-        except Exception as error:
-            if self._is_local_store_error(error):
-                raise self._cache_unavailable() from error
-            raise
-        return self._project_focus_cycle(cycle)
 
     def request_analysis(self, news_id: int, *, force: bool) -> dict[str, Any]:
         self._require_cache_ready()

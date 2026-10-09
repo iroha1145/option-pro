@@ -1,8 +1,7 @@
 """Server-only secrets that belong in ``secrets.env``.
 
-Standard library only: host-side migration tools import this list before any
-application dependency is installed. ``personal.sh`` keeps a shell copy that a
-test compares against this tuple.
+``runtime_environment`` and ``tools.personal_secrets`` read this tuple.
+``personal.sh`` keeps a shell copy that a test compares against it.
 """
 
 from __future__ import annotations

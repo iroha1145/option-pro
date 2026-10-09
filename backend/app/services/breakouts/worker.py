@@ -1,16 +1,13 @@
-"""Standalone Breakout Radar worker and command-line entry point."""
+"""Breakout Radar scan worker; the unified worker's breakout task runs it once per cycle."""
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import hashlib
 import inspect
 import json
 import logging
 import os
-import random
-import signal
 import socket
 import sqlite3
 import threading
@@ -22,9 +19,8 @@ from typing import Any, Awaitable, Callable, Mapping, Sequence
 
 from app.services.breakouts.clock import MarketClock, MarketClockSnapshot
 from app.failure_diagnostics import record_fallback_failure
-from app.services.breakouts.config import BreakoutSettings, get_breakout_settings
+from app.services.breakouts.config import BreakoutSettings
 from app.services.breakouts.errors import FAILURE_DOMAINS, BreakoutStageError
-from app.services.breakouts.health import check_breakout_health
 from app.services.breakouts.models import MarketSession, enum_value
 from app.services.breakouts.providers.base import ProviderError
 from app.services.breakouts.repository import (
@@ -131,7 +127,6 @@ class BreakoutWorker:
         owner_id: str | None = None,
         lease_ttl_seconds: float | None = None,
         maximum_loop_stall_seconds: float | None = None,
-        jitter: Callable[[float], float] | None = None,
     ) -> None:
         self.settings = settings
         self.repository = repository
@@ -159,17 +154,12 @@ class BreakoutWorker:
             raise ValueError(
                 "maximum_loop_stall_seconds cannot be shorter than the lease"
             )
-        self._jitter = jitter or (lambda bound: random.uniform(0.0, bound))
-        self._stop_requested = False
         self._owns_provider = False
         self._mode = "continuous"
         self._last_completed_scan_id: str | None = None
         self._last_completed_at: datetime | None = None
         self._wait_status = "idle"
         self._wait_details: Mapping[str, Any] | None = None
-
-    def request_stop(self) -> None:
-        self._stop_requested = True
 
     def _provider_instance(self) -> Any:
         if self.provider is None:
@@ -1077,105 +1067,6 @@ class BreakoutWorker:
             )
             await self.aclose()
 
-    async def _sleep(self, seconds: float) -> None:
-        if seconds <= 0 or self._stop_requested:
-            return
-        await _maybe_await(self._sleeper(seconds))
-
-    async def _wait_until(self, deadline: float, lease_token: int) -> None:
-        heartbeat_interval = max(1.0, self.lease_ttl_seconds / 3.0)
-        while not self._stop_requested:
-            remaining = deadline - float(self._monotonic())
-            if remaining <= 0:
-                return
-            await self._sleep(min(remaining, heartbeat_interval))
-            if self._stop_requested:
-                return
-            if not self.repository.heartbeat_lock(
-                DEFAULT_LOCK_NAME,
-                self.owner_id,
-                lease_token,
-                self.lease_ttl_seconds,
-                self.clock.now(),
-            ):
-                self._status("lease_lost", error_code="lease_lost")
-                raise LeaseLostError("worker lease expired while waiting")
-            self._status(self._wait_status, details=self._wait_details)
-
-    async def run_forever(self) -> None:
-        """Run on monotonic absolute deadlines until SIGTERM requests a stop."""
-        self._mode = "continuous"
-        if not bool(getattr(self.settings, "enabled", False)):
-            return
-        self.repository.initialize()
-        lease_token: int | None = None
-        try:
-            while not self._stop_requested and lease_token is None:
-                lease_token = self.repository.acquire_lock(
-                    DEFAULT_LOCK_NAME,
-                    self.owner_id,
-                    self.lease_ttl_seconds,
-                    self.clock.now(),
-                )
-                if lease_token is None:
-                    await self._sleep(min(5.0, self.lease_ttl_seconds / 3.0))
-            if lease_token is None:
-                return
-            self.repository.abandon_running_scans(
-                owner_id=self.owner_id,
-                lease_token=lease_token,
-                now=self.clock.now(),
-            )
-            self._status("idle")
-            deadline = float(self._monotonic())
-            consecutive_degraded = 0
-            while not self._stop_requested:
-                await self._wait_until(deadline, lease_token)
-                if self._stop_requested:
-                    break
-                market = self.clock.snapshot()
-                result = await self._run_cycle(lease_token, market)
-                if result["status"] == "degraded":
-                    consecutive_degraded += 1
-                else:
-                    consecutive_degraded = 0
-                interval = float(self.clock.interval_seconds(market, self.settings))
-                retry_after = result.get("t1_retry_after_seconds")
-                if retry_after:
-                    interval = min(interval, float(retry_after))
-                if consecutive_degraded:
-                    degraded_base = max(
-                        interval,
-                        float(
-                            getattr(
-                                self.settings,
-                                "scan_interval_closed_seconds",
-                                interval,
-                            )
-                        ),
-                    )
-                    interval = degraded_base * (
-                        2 ** min(max(consecutive_degraded - 1, 0), 3)
-                    )
-                jitter_bound = min(30.0, max(0.0, interval * 0.05))
-                jitter = min(jitter_bound, max(0.0, float(self._jitter(jitter_bound))))
-                deadline += interval + jitter
-                now_mono = float(self._monotonic())
-                while deadline <= now_mono:
-                    deadline += interval
-        finally:
-            if lease_token is not None:
-                try:
-                    self._status("stopped")
-                finally:
-                    self.repository.release_lock(
-                        DEFAULT_LOCK_NAME,
-                        self.owner_id,
-                        lease_token,
-                        self.clock.now(),
-                    )
-            await self.aclose()
-
     async def aclose(self) -> None:
         if not self._owns_provider or self.provider is None:
             return
@@ -1186,61 +1077,4 @@ class BreakoutWorker:
         self._owns_provider = False
 
 
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Breakout Radar worker")
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--once", action="store_true", help="run one scheduled scan")
-    mode.add_argument("--healthcheck", action="store_true", help="check worker liveness")
-    return parser
-
-
-async def _async_main(args: argparse.Namespace) -> int:
-    settings = get_breakout_settings()
-    if args.healthcheck:
-        health = check_breakout_health(settings)
-        print(json.dumps(health.as_dict(), allow_nan=False, separators=(",", ":")))
-        return health.exit_code
-
-    if not settings.enabled and not args.once:
-        stop = asyncio.Event()
-        loop = asyncio.get_running_loop()
-        for signum in (signal.SIGTERM, signal.SIGINT):
-            try:
-                loop.add_signal_handler(signum, stop.set)
-            except (NotImplementedError, RuntimeError):
-                pass
-        await stop.wait()
-        return 0
-
-    repository = BreakoutRepository(settings.db_path)
-    from app.services.breakouts.service import BreakoutRadarService
-
-    worker = BreakoutWorker(
-        settings,
-        repository,
-        scan_service=BreakoutRadarService(settings),
-    )
-    loop = asyncio.get_running_loop()
-    for signum in (signal.SIGTERM, signal.SIGINT):
-        try:
-            loop.add_signal_handler(signum, worker.request_stop)
-        except (NotImplementedError, RuntimeError):
-            pass
-    if args.once:
-        result = await worker.run_once()
-        print(json.dumps(result, allow_nan=False, separators=(",", ":")))
-    else:
-        await worker.run_forever()
-    return 0
-
-
-def main(argv: list[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
-    return asyncio.run(_async_main(args))
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-
-
-__all__ = ["BreakoutWorker", "main"]
+__all__ = ["BreakoutWorker"]

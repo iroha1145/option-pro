@@ -152,9 +152,6 @@ def _seed_source_legacy_jobs(
                 ),
             )
             rows.append(row)
-        connection.execute(
-            "DELETE FROM ai_job_schema WHERE version='ai-job-identities-v2'"
-        )
         connection.commit()
     return rows
 
@@ -183,6 +180,37 @@ def _completed_earnings_result() -> dict:
     }
 
 
+_ACTION_HEADERS = {"Origin": "http://localhost", "X-Optix-Action": "1"}
+
+
+def _released_aapl_snapshot(monkeypatch) -> None:
+    from app.api import earnings
+
+    async def snapshot():
+        return {
+            "data_limited": False,
+            "source_status": "active",
+            "earnings": [
+                {
+                    "ticker": "AAPL",
+                    "name": "Apple",
+                    "sector": "Technology",
+                    "earnings_date": "2026-07-23",
+                    "year": 2026,
+                    "quarter": 2,
+                    "eps_estimate": 1.4,
+                    "eps_actual": 1.6,
+                    "revenue_estimate": 90_000_000_000,
+                    "revenue_actual": 92_000_000_000,
+                    "market_cap": 3_000_000_000_000,
+                    "release_status": "released",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(earnings, "_read_current_upcoming_earnings_snapshot", snapshot)
+
+
 def test_manual_routes_fail_closed_when_only_scheduled_analysis_is_enabled(
     tmp_path,
     monkeypatch,
@@ -206,8 +234,9 @@ def test_manual_routes_fail_closed_when_only_scheduled_analysis_is_enabled(
     client = TestClient(app, base_url="http://localhost")
 
     earnings = client.post(
-        "/api/ai/jobs/earnings-impact",
-        json={"ticker": "AAPL", "name": "Apple"},
+        "/api/ai/earnings-impact/AAPL/reports/2026-07-23",
+        json={"confirm": True},
+        headers=_ACTION_HEADERS,
     )
     options = client.post(
         "/api/ai/jobs/option-alerts",
@@ -247,13 +276,15 @@ def test_earnings_manual_route_is_independent_from_catalyst_read_only_mode(
         capability_checked = True
 
     monkeypatch.setattr(ai, "_require_runtime_capability", capability)
+    _released_aapl_snapshot(monkeypatch)
     app = FastAPI()
     app.include_router(ai.router)
     client = TestClient(app, base_url="http://localhost")
 
     earnings = client.post(
-        "/api/ai/jobs/earnings-impact",
-        json={"ticker": "AAPL", "name": "Apple"},
+        "/api/ai/earnings-impact/AAPL/reports/2026-07-23",
+        json={"confirm": True},
+        headers=_ACTION_HEADERS,
     )
     options = client.post(
         "/api/ai/jobs/option-alerts",
@@ -463,84 +494,6 @@ def test_force_retry_creates_only_one_cross_source_retry_after_a_safe_failure(
     assert repeated["submission_source"] == other_source
 
 
-def test_identity_v2_restores_sources_and_seals_duplicate_unpaid_jobs(tmp_path):
-    repository = AIJobRepository(tmp_path / "ai-jobs.db")
-    seeded = _seed_source_legacy_jobs(
-        repository,
-        [
-            {"source": "manual", "created_at": "2026-07-15T00:00:00Z"},
-            {"source": "scheduled", "created_at": "2026-07-15T00:00:01Z"},
-        ],
-    )
-
-    repository.initialize()
-    manual = repository.get_job(seeded[0]["job_id"])
-    scheduled = repository.get_job(seeded[1]["job_id"])
-
-    assert manual["submission_source"] == "manual"
-    assert scheduled["submission_source"] == "scheduled"
-    assert manual["status"] == "pending"
-    assert scheduled["status"] == "cancelled"
-    assert scheduled["error_code"] == "duplicate_request_migrated"
-    owner = "identity-v2-worker"
-    assert repository.claim_due(owner, 60)["job_id"] == manual["job_id"]
-    assert repository.mark_submission_started(
-        manual["job_id"], owner, daily_limit=4, daily_budget_usd=2.0
-    ) == "started"
-    repository.fail(manual["job_id"], owner, "provider_failed")
-    assert repository.claim_due(owner, 60) is None
-
-
-@pytest.mark.parametrize(
-    "settled_spec",
-    [
-        {
-            "status": "completed",
-            "submission_started_at": "2026-07-15T00:00:00Z",
-            "openai_response_id": "resp_completed_before_pending",
-            "completed_at": "2026-07-15T00:00:01Z",
-            "budget_charge_microusd": 1_000,
-        },
-        {
-            "status": "in_progress",
-            "submission_started_at": "2026-07-15T00:00:00Z",
-            "openai_response_id": "resp_submitted_before_pending",
-            "budget_charge_microusd": 709_120,
-        },
-    ],
-)
-def test_identity_v2_seals_newer_unpaid_job_after_paid_or_settled_work(
-    tmp_path,
-    settled_spec,
-):
-    repository = AIJobRepository(tmp_path / "ai-jobs.db")
-    seeded = _seed_source_legacy_jobs(
-        repository,
-        [
-            {
-                "source": "scheduled",
-                "created_at": "2026-07-15T00:00:00Z",
-                "execution_number": 1,
-                **settled_spec,
-            },
-            {
-                "source": "manual",
-                "created_at": "2026-07-15T00:00:02Z",
-                "execution_number": 2,
-            },
-        ],
-    )
-
-    repository.initialize()
-    settled = repository.get_job(seeded[0]["job_id"])
-    duplicate = repository.get_job(seeded[1]["job_id"])
-
-    assert settled["status"] == settled_spec["status"]
-    assert settled["submission_started_at"] is not None
-    assert duplicate["status"] == "cancelled"
-    assert duplicate["error_code"] == "duplicate_request_migrated"
-
-
 def test_completed_legacy_duplicate_blocks_retry_of_older_failure(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     seeded = _seed_source_legacy_jobs(
@@ -622,46 +575,6 @@ def test_completed_history_blocks_retry_of_newer_legacy_failure(tmp_path):
     assert blocked["execution_number"] == 2
     with repository._connect() as connection:
         assert connection.execute("SELECT COUNT(*) FROM ai_jobs").fetchone()[0] == 2
-
-
-def test_safe_submitted_failure_retries_after_newer_pending_is_migrated(tmp_path):
-    repository = AIJobRepository(tmp_path / "ai-jobs.db")
-    seeded = _seed_source_legacy_jobs(
-        repository,
-        [
-            {
-                "source": "scheduled",
-                "created_at": "2026-07-15T00:00:00Z",
-                "execution_number": 1,
-                "status": "failed",
-                "error_code": "provider_failed",
-                "submission_started_at": "2026-07-15T00:00:00Z",
-                "openai_response_id": "resp_safe_failed_history",
-                "completed_at": "2026-07-15T00:00:01Z",
-                "budget_charge_microusd": 1_000,
-            },
-            {
-                "source": "manual",
-                "created_at": "2026-07-15T00:00:02Z",
-                "execution_number": 2,
-            },
-        ],
-    )
-    repository.initialize()
-    migrated = repository.get_job(seeded[1]["job_id"])
-
-    retried, created = _create_job(
-        repository,
-        ticker="AAPL",
-        source="manual",
-        force_retry=True,
-    )
-
-    assert migrated["status"] == "cancelled"
-    assert migrated["error_code"] == "duplicate_request_migrated"
-    assert created is True
-    assert retried["execution_number"] == 3
-    assert retried["retry_of_job_id"] == seeded[0]["job_id"]
 
 
 def test_unknown_legacy_execution_blocks_retry_of_newer_safe_failure(tmp_path):

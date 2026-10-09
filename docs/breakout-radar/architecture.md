@@ -45,7 +45,7 @@ Option Pro 自有行情重新验证，保存可重放的事件生命周期，并
 - app/services/breakouts/lifecycle.py：显式状态机。
 - app/services/breakouts/scoring.py：独立评分与贡献分解。
 - app/services/breakouts/repository.py：迁移、租约、事件和快照。
-- app/services/breakouts/worker.py：独立运行入口。
+- app/services/breakouts/worker.py：一次加租约的扫描，由统一后台的 breakout 任务调用 `run_once()`。
 - app/services/breakouts/adapters：行情、强势、大盘形态和规范股票池适配器。
 - app/api/breakouts.py：Pydantic 只读响应。
 - frontend/static/js/deck-app.js：夜间工作台中的突破雷达路由、只读快照、筛选、详情和个股轨迹接线。
@@ -56,12 +56,12 @@ service.py。旧模块只增加必要的窄入口。
 
 ## 冻结协议
 
-DiscoveryProvider
+以下名称描述实现职责，代码里没有对应的 Protocol 类型。
+
+发现层
 
 - scan(session, as_of, profile) 返回 DiscoverySnapshot。
 - 只发现粗候选，不确认结构、不计算最终分、不调用 LLM。
-
-以下四组名称描述实现职责，不代表额外的 Protocol 类型。
 
 价格数据适配器
 

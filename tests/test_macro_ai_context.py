@@ -246,7 +246,6 @@ def test_no_macro_job_type_or_macro_ai_route_was_added() -> None:
         "/api/macro/conditions",
         "/api/macro/conditions/history",
         "/api/macro/conditions/modules/{module_id}",
-        "/api/macro/conditions/factors/{factor_id}/history",
         "/api/macro/conditions/refresh",
     }
 

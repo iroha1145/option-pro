@@ -39,7 +39,6 @@ def isolated_demands(monkeypatch):
     completed = []
     monkeypatch.setattr(strength, "scheduled_strength_scan_parameters", parameters)
     monkeypatch.setattr(strength, "list_recent_strength_variant_parameters", lambda *args, **kwargs: [])
-    monkeypatch.setattr(strength, "a0_companion_for_admin_default", lambda *args: None)
     monkeypatch.setattr(variant_demand, "list_pending_strength_variant_demands", lambda: [])
     monkeypatch.setattr(variant_demand, "complete_strength_variant_demand",
                         lambda params, **kwargs: completed.append((params, kwargs)))

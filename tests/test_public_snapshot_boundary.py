@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime, timezone
-import time
 
 import pytest
 from fastapi import Depends, FastAPI, HTTPException
@@ -16,7 +15,7 @@ from app.access import (
     request_owner_access_context,
     require_public_read_or_owner_access,
 )
-from app.api import earnings, market, options, sectors, signals, stocks, strength
+from app.api import earnings, market, sectors, signals, stocks, strength
 from app.personal_config import AccessConfig
 from app.services import signals as signal_service
 from app.services.sector_iv_refresh import run_refresh_batch
@@ -88,8 +87,6 @@ def _clear_process_caches(monkeypatch: pytest.MonkeyPatch):
     stocks._endpoint_refresh_tasks.clear()
     stocks._endpoint_refresh_retry_after.clear()
     cache.clear()
-    sectors._cache.clear()
-    sectors._locks.clear()
     sectors._public_sector_iv_recent.clear()
     with signal_service._cache_lock:
         signal_service._cache.clear()
@@ -134,7 +131,6 @@ def test_public_cold_cache_never_calls_market_data_providers(
     monkeypatch.setattr(stocks, "_stock_overview_impl", unexpected_async("stock-overview"))
     monkeypatch.setattr(stocks, "_stock_chart_impl", unexpected_async("stock-chart"))
     monkeypatch.setattr(stocks.yf, "Ticker", unexpected("stock-search"))
-    monkeypatch.setattr(options, "_unusual_activity_impl", unexpected_async("unusual-options"))
     monkeypatch.setattr(earnings, "_build_upcoming_earnings", unexpected_async("earnings"))
     monkeypatch.setattr(market, "_build_indices", unexpected_async("market-indices"))
     monkeypatch.setattr(
@@ -159,11 +155,9 @@ def test_public_cold_cache_never_calls_market_data_providers(
                 await stocks.search_stocks("ZZZZUNLISTED")
             assert captured.value.status_code == 503
             assert captured.value.detail["code"] == "stock_directory_unavailable"
-            await _expect_unavailable(stocks.stock_signals("AAPL"))
             await _expect_unavailable(stocks.stock_logo("AAPL"))
             await _expect_unavailable(stocks.stock_overview("AAPL"))
             await _expect_unavailable(stocks.stock_chart("AAPL", "1d", "raw"))
-            await _expect_unavailable(options.unusual_activity(_request(), type="all", min_vol_oi=1.0))
             await _expect_unavailable(earnings.upcoming_earnings(_request()))
             await _expect_unavailable(market.market_indices(_request()))
             await _expect_unavailable(signals.market_signals(_request()))
@@ -257,21 +251,13 @@ def test_public_endpoints_never_read_the_owner_process_cache(
     owner's live-rebuild cache entries, and (with no published snapshot) the
     endpoints stay unavailable without ever calling a loader."""
 
-    now = time.time()
     today = earnings._market_today()
     cache.set(f"earnings:upcoming:{today.isoformat()}", {"items": ["saved"]}, 60)
     cache.set("market:indices", {"indices": ["saved"]}, 60)
-    cache.set(options._unusual_key("all", 1.0), {"items": ["saved"]}, 60)
     sector_id = next(iter(sectors.SECTORS))
-    sectors._cache[f"iv:{sector_id}"] = (
-        now + 60,
-        now,
-        {"sector_id": sector_id, "rankings": []},
-    )
 
     monkeypatch.setattr(earnings, "_build_upcoming_earnings", lambda *_args: pytest.fail("loader called"))
     monkeypatch.setattr(market, "_build_indices", lambda: pytest.fail("loader called"))
-    monkeypatch.setattr(options, "_unusual_activity_impl", lambda *_args: pytest.fail("loader called"))
     monkeypatch.setattr(sectors, "_iv_ranking_payload", lambda *_args: pytest.fail("loader called"))
     # No published public-home snapshot on disk.
     from app import public_home_snapshot as phs
@@ -296,11 +282,6 @@ def test_public_endpoints_never_read_the_owner_process_cache(
             with pytest.raises(HTTPException) as idx_exc:
                 await market.market_indices(_request())
             assert idx_exc.value.status_code == 503
-            with pytest.raises(HTTPException) as unusual_exc:
-                await options.unusual_activity(_request(), type="all", min_vol_oi=1.0)
-            assert unusual_exc.value.status_code == 503
-            # The sector IV process cache is deliberately shared: it only ever
-            # holds data that is simultaneously published to disk.
             assert (
                 await sectors.iv_ranking(sector_id, _request())
             )["sector_id"] == sector_id
@@ -372,15 +353,14 @@ def test_sector_iv_reads_persisted_strength_worker_options_without_provider_call
 
     monkeypatch.setattr(sectors, "_iv_ranking_payload", unexpected_scan)
 
-    async def scenario() -> tuple[dict, dict, dict]:
+    async def scenario() -> tuple[dict, dict]:
         with request_owner_access_context(False):
             public_payload = await sectors.iv_ranking("semiconductors", _request())
-            heatmap_payload = await sectors.heatmap("semiconductors", _request())
         with request_owner_access_context(True):
             owner_payload = await sectors.iv_ranking("software", _request())
-        return public_payload, heatmap_payload, owner_payload
+        return public_payload, owner_payload
 
-    public_payload, heatmap_payload, owner_payload = asyncio.run(scenario())
+    public_payload, owner_payload = asyncio.run(scenario())
 
     assert calls == 0
     assert public_payload["refresh"]["status"] == "queued"
@@ -401,8 +381,6 @@ def test_sector_iv_reads_persisted_strength_worker_options_without_provider_call
         0.0,
     ]
     assert public_payload["providers"] == ["Yahoo/yfinance"]
-    assert heatmap_payload["data"] == heatmap_payload["rankings"]
-    assert heatmap_payload["data"][0]["ticker"] == "NVDA"
     assert owner_payload["rankings"][0]["ticker"] == "MSFT"
     # 单个样本没有可辩护的板块内分位——绝对 IV 照常给出，分位留空。
     assert owner_payload["rankings"][0]["sector_iv_rank"] is None
@@ -585,9 +563,7 @@ def test_owner_cold_sector_scan_persists_for_public_restart_without_strength_hit
     assert json.loads(snapshot_path.read_text())["snapshot_origin"] == "worker"
     original = snapshot_path.read_bytes()
 
-    # 模拟发布重启：进程内缓存清空，Strength Top20 仍没有半导体。
-    sectors._cache.clear()
-    sectors._locks.clear()
+    # 模拟发布重启：Strength Top20 仍没有半导体。
 
     async def unexpected_live_rows(_sector_id: str) -> list[dict]:
         raise AssertionError("public restart read must not scan providers")
@@ -680,9 +656,6 @@ def test_public_cold_sector_iv_uses_yahoo_and_persists_restart_snapshot(
     assert snapshot_path.is_file()
     assert json.loads(snapshot_path.read_text())["snapshot_origin"] == "worker"
     original = snapshot_path.read_bytes()
-
-    sectors._cache.clear()
-    sectors._locks.clear()
 
     async def unexpected_live_rows(_sector_id: str) -> list[dict]:
         raise AssertionError("durable public IV snapshot must suppress a repeat scan")

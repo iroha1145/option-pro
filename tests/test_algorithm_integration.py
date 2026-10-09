@@ -270,7 +270,6 @@ def test_every_admin_default_schedules_only_current_engine(tmp_path, monkeypatch
     assert result.status == "idle"
     assert calls == [{"profile": "balanced", "horizon": "mid", "purpose": "live_eod_inference", "all_variants": True}]
     assert result.details["parameters"]["ranking_algorithm"] == EOD_LIMITED_V1
-    assert strength.a0_companion_for_admin_default() is None
 
 
 def test_saved_user_production_is_not_overwritten_by_admin_a0(

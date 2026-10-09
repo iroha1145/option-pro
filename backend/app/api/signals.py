@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 import logging
 import math
 import re
@@ -14,6 +13,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import StrictBool
 
+from app.json_validation import canonical_json_text
 from app.api.ai import (
     _create_job,
     _job_repository,
@@ -83,13 +83,7 @@ _EVIDENCE_MAX_BYTES = 52_000
 
 
 def _canonical_evidence_bytes(evidence: dict) -> bytes:
-    return json.dumps(
-        evidence,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        allow_nan=False,
-    ).encode("utf-8")
+    return canonical_json_text(evidence).encode("utf-8")
 
 
 def _signal_analysis_payload(

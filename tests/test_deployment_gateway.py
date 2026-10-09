@@ -29,7 +29,8 @@ import app.access as access_module
 from app.api import access as access_api
 from app.api import stocks
 import app.main as main
-from app.main import _GatewayMiddleware, _configured_allowed_hosts
+from app.deployment_boundary import normalize_allowed_hosts
+from app.main import _GatewayMiddleware
 from app.personal_config import AccessConfig
 
 
@@ -165,8 +166,6 @@ _SAME_ORIGIN_JSON_ONLY_OPERATIONS = {
     # and can only reach that account's rows — so they carry same-origin proof
     # without demanding owner access.
     ("POST", "/api/account/register"),
-    ("POST", "/api/account/watchlist"),
-    ("PUT", "/api/account/watchlist"),
     ("PATCH", "/api/account/watchlist"),
     ("POST", "/api/account/watchlist/removals"),
     ("POST", "/api/account/watchlist/restore"),
@@ -184,7 +183,6 @@ _SAME_ORIGIN_JSON_ONLY_OPERATIONS = {
 _SAME_ORIGIN_REQUEST_ONLY_OPERATIONS = {
     ("POST", "/api/sectors/{sector_id}/iv-refresh"),
     ("POST", "/api/account/logout"),
-    ("DELETE", "/api/account/watchlist/{ticker}"),
     ("DELETE", "/api/account/chart-drawings"),
     ("DELETE", "/api/account/chart-drawings/{drawing_id}"),
 }
@@ -1028,7 +1026,6 @@ def test_production_validation_errors_never_echo_submitted_password() -> None:
         ("GET", "/api/options/NVDA/chain", True),
         ("GET", "/api/options/NVDA/expirations", True),
         ("GET", "/api/earnings/upcoming", True),
-        ("GET", "/api/sectors/technology/heatmap", True),
         ("GET", "/api/sectors/technology/iv-ranking", True),
         ("GET", "/api/market/status", True),
         # 首页研判：读最新一份与历史对访客开放，状态与手动补发只给 Owner。
@@ -1079,7 +1076,7 @@ def test_production_validation_errors_never_echo_submitted_password() -> None:
         ("GET", "/api/ai/status", False),
         ("GET", "/api/ai/earnings-impact/AAPL", False),
         ("GET", "/api/ai/jobs/aij_" + "a" * 32, False),
-        ("POST", "/api/ai/jobs/earnings-impact", False),
+        ("POST", "/api/ai/jobs/option-alerts", False),
         ("POST", "/api/ai/earnings-impact/AAPL/reports/2026-07-23/", False),
         ("GET", "/api/runtime-settings", False),
         ("POST", "/api/stocks", False),
@@ -1124,7 +1121,7 @@ def test_visitor_action_flags_open_exactly_the_declared_posts() -> None:
     # 开关不放大其他 POST 面
     for blocked in (
         "/api/stocks/AAOI/pull/",
-        "/api/ai/jobs/earnings-impact",
+        "/api/ai/jobs/option-alerts",
         "/api/worker/actions/focus_refresh",
     ):
         assert not main._is_public_read_request(
@@ -1164,17 +1161,14 @@ def test_public_catalyst_reads_do_not_consume_the_provider_work_budget(
         ("GET", "/api/stocks/watchlist", True),
         ("GET", "/api/stocks/AAOI", True),
         ("GET", "/api/stocks/AAOI/chart", True),
-        ("GET", "/api/stocks/AAOI/signals", True),
         ("GET", "/api/options/AAOI/expirations", False),
         ("GET", "/api/options/AAOI/chain", False),
         ("GET", "/api/sectors/technology/iv-ranking", True),
-        ("GET", "/api/sectors/technology/heatmap", True),
         ("POST", "/api/sectors/semiconductors/iv-refresh", False),
         ("GET", "/api/signals/stock/AAOI", True),
         ("GET", "/api/strength/stocks/AAOI", True),
         ("GET", "/api/strength/scan", True),
         ("GET", "/api/breakouts/tickers/AAOI", True),
-        ("GET", "/api/options/unusual", True),
         ("GET", "/api/earnings/upcoming", True),
         ("GET", "/api/signals/market", True),
         ("GET", "/api/catalysts/feed", True),
@@ -1290,9 +1284,9 @@ def test_anonymous_requests_cannot_reach_any_owner_state_changing_route() -> Non
         for method, template, _route in _real_body_operations()
         if (method, template) not in _NON_OWNER_OPERATIONS
     ]
-    assert len(operations) >= 15
+    assert len(operations) >= 12
     assert ("PUT", "/api/runtime-settings") in operations
-    assert ("POST", "/api/ai/jobs/earnings-impact") in operations
+    assert ("POST", "/api/ai/jobs/option-alerts") in operations
     assert ("POST", "/api/catalysts/refresh") in operations
 
     for mode, address, expected_status, expected_error in (
@@ -1449,20 +1443,20 @@ def test_frontend_integrity_and_host_validation_remain_fail_closed(
     assert integrity["ready"] is False
     assert integrity["missing"]
 
-    assert "example.com" in _configured_allowed_hosts(
+    assert "example.com" in normalize_allowed_hosts(
         "127.0.0.1", "example.com"
     )
-    internationalized = _configured_allowed_hosts("127.0.0.1", "faß.de")
+    internationalized = normalize_allowed_hosts("127.0.0.1", "faß.de")
     assert "xn--fa-hia.de" in internationalized
     assert "fass.de" not in internationalized
-    assert "2001:db8::1" in _configured_allowed_hosts(
+    assert "2001:db8::1" in normalize_allowed_hosts(
         "127.0.0.1",
         "2001:0db8:0:0:0:0:0:1",
     )
     with pytest.raises(RuntimeError):
-        _configured_allowed_hosts("127.0.0.1", "*.example.com")
+        normalize_allowed_hosts("127.0.0.1", "*.example.com")
     with pytest.raises(RuntimeError):
-        _configured_allowed_hosts("127.0.0.1", "[[::1]]")
+        normalize_allowed_hosts("127.0.0.1", "[[::1]]")
 
 
 def test_health_probe_does_not_rehash_the_frontend_per_request(

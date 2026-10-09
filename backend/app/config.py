@@ -202,23 +202,12 @@ class Settings(BaseSettings):
     fred_api_key: SecretStr = Field(default=SecretStr(""), alias="FRED_API_KEY")
     finnhub_api_key: str = Field(default="", alias="FINNHUB_API_KEY")
     finnhub_base_url: AnyHttpUrl = Field(default="https://finnhub.io/api/v1", alias="FINNHUB_BASE_URL")
-    finnhub_candle_fallback_enabled: bool = Field(default=True, alias="FINNHUB_CANDLE_FALLBACK_ENABLED")
-    finnhub_candle_fallback_limit: int = Field(default=80, alias="FINNHUB_CANDLE_FALLBACK_LIMIT")
     quotes_enabled: bool = Field(default=_PERSONAL_CONFIG.quotes.enabled, alias="QUOTES_ENABLED")
     quotes_public_enabled: bool = Field(default=_PERSONAL_CONFIG.quotes.public_enabled, alias="QUOTES_PUBLIC_ENABLED")
     quotes_signals_enabled: bool = Field(default=_PERSONAL_CONFIG.quotes.signals_enabled, alias="QUOTES_SIGNALS_ENABLED")
     quotes_max_symbols: int = Field(default=_PERSONAL_CONFIG.quotes.max_symbols, ge=4, le=50, alias="QUOTES_MAX_SYMBOLS")
     quotes_publish_interval_ms: int = Field(default=_PERSONAL_CONFIG.quotes.publish_interval_ms, ge=100, le=1000, alias="QUOTES_PUBLISH_INTERVAL_MS")
     quotes_release_seconds: int = Field(default=_PERSONAL_CONFIG.quotes.release_seconds, ge=0, le=30, alias="QUOTES_RELEASE_SECONDS")
-    stooq_price_fallback_enabled: bool = Field(default=True, alias="STOOQ_PRICE_FALLBACK_ENABLED")
-    stooq_price_fallback_limit: int = Field(default=260, alias="STOOQ_PRICE_FALLBACK_LIMIT")
-    # Process-local Yahoo options I/O budget. Multi-worker deployments
-    # multiply this cap by the worker count.
-    yahoo_option_max_in_flight: int = Field(default=3, ge=1, le=8, alias="YAHOO_OPTION_MAX_IN_FLIGHT")
-    yahoo_option_max_queue: int = Field(default=8, ge=1, le=32, alias="YAHOO_OPTION_MAX_QUEUE")
-    yahoo_option_queue_wait_seconds: float = Field(default=8.0, ge=0.5, le=60, alias="YAHOO_OPTION_QUEUE_WAIT_SECONDS")
-    yahoo_option_call_timeout_seconds: float = Field(default=20.0, ge=2, le=60, alias="YAHOO_OPTION_CALL_TIMEOUT_SECONDS")
-    option_empty_discovery_seconds: int = Field(default=900, ge=30, le=86_400, alias="OPTION_EMPTY_DISCOVERY_SECONDS")
     massive_api_key: str = Field(default="", alias="MASSIVE_API_KEY")
     massive_base_url: str = Field(default="https://api.massive.com", alias="MASSIVE_BASE_URL")
     # FMP（Financial Modeling Prep）是可选的第二财报日历来源 + 批量市值来源。
@@ -227,9 +216,6 @@ class Settings(BaseSettings):
     fmp_base_url: AnyHttpUrl = Field(default="https://financialmodelingprep.com", alias="FMP_BASE_URL")
     marketdata_token: str = Field(default="", alias="MARKETDATA_TOKEN")
     marketdata_base_url: AnyHttpUrl = Field(default="https://api.marketdata.app", alias="MARKETDATA_BASE_URL")
-    marketdata_stock_candle_fallback_enabled: bool = Field(default=True, alias="MARKETDATA_STOCK_CANDLE_FALLBACK_ENABLED")
-    marketdata_stock_candle_fallback_limit: int = Field(default=260, alias="MARKETDATA_STOCK_CANDLE_FALLBACK_LIMIT")
-    request_timeout: float = Field(default=20.0, alias="REQUEST_TIMEOUT")
 
     model_config = SettingsConfigDict(
         env_ignore_empty=True,

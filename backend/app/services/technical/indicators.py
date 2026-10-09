@@ -24,6 +24,25 @@ def _safe(value: Any, ndigits: int = 4) -> float | None:
     return round(number, ndigits)
 
 
+def mean_true_range(
+    highs: Sequence[float],
+    lows: Sequence[float],
+    closes: Sequence[float],
+    window: int = 14,
+) -> float | None:
+    """Simple mean of the last ``window`` true ranges, fewer when history is short."""
+
+    n = len(closes)
+    if n < 2 or window < 1:
+        return None
+    window = min(window, n - 1)
+    trs = [
+        max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
+        for i in range(n - window, n)
+    ]
+    return sum(trs) / len(trs)
+
+
 def rsi14(closes: Sequence[float], period: int = 14) -> float | None:
     """Wilder RSI over the full series (seed SMA then recursive smoothing)."""
 

@@ -6,7 +6,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import closing
 from datetime import date, datetime, timezone
 import hashlib
-import json
 import math
 from pathlib import Path
 import random
@@ -19,6 +18,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 
 from app.data_paths import get_data_paths
+from app.json_validation import canonical_json_text
 from app.services import massive
 from app.services.market_calendar import is_trading_day, prior_trading_sessions
 from app.services.research_eod_v1.series import SecuritySeries
@@ -157,14 +157,7 @@ def _integer(value: Any) -> int | None:
 
 
 def _hash_json(value: Any) -> str:
-    encoded = json.dumps(
-        value,
-        ensure_ascii=False,
-        allow_nan=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+    return hashlib.sha256(canonical_json_text(value).encode("utf-8")).hexdigest()
 
 
 def _retry_delay(attempt: int, error: massive.MassiveError) -> float:

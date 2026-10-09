@@ -529,26 +529,6 @@ def market_focus_cycle(
 
 
 @router.post(
-    "/market-focus-cycles/{cycle_id}/cancel",
-    status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require_same_origin_action)],
-)
-def cancel_market_focus_cycle(
-    cycle_id: Annotated[
-        str, Path(pattern=r"^mfc_[0-9a-f]{32}$")
-    ],
-    service: PersonalCatalystService = Depends(_service),
-) -> dict:
-    try:
-        cycle = service.cancel_market_focus_cycle(cycle_id)
-    except CatalystError as error:
-        _raise_safe(error)
-    if cycle is None:
-        raise HTTPException(status_code=404, detail="market focus cycle not found")
-    return cycle
-
-
-@router.post(
     "/refresh",
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(require_same_origin_action)],
