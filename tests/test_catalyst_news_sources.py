@@ -509,6 +509,20 @@ def test_status_and_transport_failures_are_classified():
             )
         )
 
+    async def not_gzip():
+        yield b"not gzip"
+
+    def corrupt(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, headers={"Content-Encoding": "gzip"}, content=not_gzip())
+
+    with pytest.raises(SourceError, match="invalid_response"):
+        _run(
+            _with_client(
+                corrupt,
+                lambda client: fetch_url(client, "https://seekingalpha.com/a", max_bytes=1_000),
+            )
+        )
+
 
 def test_shared_client_ignores_environment_proxies_and_redirects(monkeypatch):
     monkeypatch.setenv("HTTPS_PROXY", "http://proxy.invalid:3128")

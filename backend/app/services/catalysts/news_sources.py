@@ -250,6 +250,8 @@ async def fetch_url(
                 raise SourceError("timeout") from exc
             except httpx.TransportError as exc:
                 raise SourceError("network_error") from exc
+            except httpx.DecodingError as exc:
+                raise SourceError("invalid_response") from exc
             return SourceResponse(response.status_code, response.headers, body)
         finally:
             await response.aclose()
