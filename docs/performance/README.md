@@ -19,6 +19,7 @@
 | [12-review-fixes.md](12-review-fixes.md) | 抽屉关闭 / 有界重试 / 预取 URL |
 | [13-round6-visible-i18n-earnings.md](13-round6-visible-i18n-earnings.md) | Round 6：可见分页 / 按语言词典 / 财报按需 |
 | [14-round6-review.md](14-round6-review.md) | Round 6 独立复查 |
+| [16-load-and-layout-stability-20261009.md](16-load-and-layout-stability-20261009.md) | 首屏版面稳定、分包合并、公司标志改静态图、死代码清理（2026-10-09） |
 | [artifacts/](artifacts/) | 体量可控的复测原始 JSON |
 
 对照未优化树：`$HOME/option-pro-unoptimized`（同一 SHA，detached HEAD）。
