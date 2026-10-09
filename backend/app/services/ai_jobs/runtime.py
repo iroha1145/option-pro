@@ -501,11 +501,11 @@ def schema_identity_current(
     worker deliberately applies none.
     """
     # A completed legacy result stays readable after the transport changes.
-    # Its identity is checked against that model's original resource policy.
+    # Its identity is checked against that model's original resource policy;
+    # a caller that already computed it for this model passes it in.
     current = (
-        schema_identity(job_type, model=model)
-        if model is not None
-        else current_identity if current_identity is not None
+        current_identity if current_identity is not None
+        else schema_identity(job_type, model=model) if model is not None
         else schema_identity(job_type)
     )
     if job_type == "news_impact":

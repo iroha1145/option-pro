@@ -612,3 +612,73 @@ def test_failed_reconcile_does_not_advance_the_ingest_watermark(
         assert connection.execute(
             "SELECT COUNT(*) FROM catalyst_local_news_revisions WHERE news_id=1004"
         ).fetchone()[0] == 1
+
+
+def test_reconcile_reuses_settled_projections_and_audits_across_rounds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.ai_jobs import runtime as ai_runtime
+
+    intelligence = _analyzed_store(tmp_path, monkeypatch)
+    intelligence.reconcile()
+    counts = {"public": 0, "validate": 0, "identity": 0}
+    original_public = AIJobRepository.public
+    original_validate = local_module.validate_result
+    original_identity = ai_runtime.schema_identity
+
+    def counted_public(row, *, cached=False):
+        counts["public"] += 1
+        return original_public(row, cached=cached)
+
+    def counted_validate(*args, **kwargs):
+        counts["validate"] += 1
+        return original_validate(*args, **kwargs)
+
+    def counted_identity(*args, **kwargs):
+        counts["identity"] += 1
+        return original_identity(*args, **kwargs)
+
+    monkeypatch.setattr(AIJobRepository, "public", staticmethod(counted_public))
+    monkeypatch.setattr(local_module, "validate_result", counted_validate)
+    monkeypatch.setattr(ai_runtime, "schema_identity", counted_identity)
+    for _ in range(3):
+        intelligence.reconcile()
+    # Nothing changed: no paid result is projected or validated again, and the
+    # schema identity is resolved per model, not per job.
+    assert counts["public"] == 0
+    assert counts["validate"] == 0
+    assert counts["identity"] <= 3 * 3
+
+
+def test_rejected_results_are_revalidated_once_per_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from test_catalyst_local_intelligence import _finish_job, _news_result
+
+    intelligence = _analyzed_store(tmp_path, monkeypatch)
+    job = intelligence.request_analysis(304, force=False)
+    rejected = _news_result(news_id=304, change_sequence=4, content_hash="hash-304-4")
+    rejected["title_zh"] = "English only generated title"
+    _finish_job(intelligence.ai_repository, job["job_id"], rejected)
+    intelligence.reconcile()
+    calls = 0
+    original = local_module.validate_result
+
+    def counted(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(local_module, "validate_result", counted)
+    intelligence.reconcile()
+    first_round = calls
+    intelligence.reconcile()
+    intelligence.reconcile()
+    assert calls == first_round
+    with intelligence._connect() as connection:
+        outcome = connection.execute(
+            """SELECT outcome FROM catalyst_local_analysis_result_audit
+               WHERE job_id=?""",
+            (job["job_id"],),
+        ).fetchall()
+    assert [row[0] for row in outcome] == ["rejected"]

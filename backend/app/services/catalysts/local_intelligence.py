@@ -175,6 +175,10 @@ _REVISION_QUALITY_COLUMNS = (
     ("quality_rules_version", "TEXT"),
 )
 _QUALITY_BACKFILL_BATCH = 5_000
+# reconcile re-projects the same settled jobs and re-audits the same published
+# results every sync slot; both are pure functions of their stored inputs.
+_PUBLIC_JOB_MEMO_ENTRIES = 20_000
+_NEWS_AUDIT_MEMO_ENTRIES = 50_000
 # 旧库升级时给热点条目补上计划级分数列（v6）。定义与 _SCHEMA 里的建表语句一致。
 _HOTSPOT_ITEM_SCORE_COLUMNS = (
     (
@@ -1767,6 +1771,9 @@ class LocalCatalystIntelligence:
         self._local_schema_ready = False
         self._news_retention_days = _DEFAULT_NEWS_RETENTION_DAYS
         self._quality_backfill_complete = False
+        self._public_job_memo: dict[str, dict[str, Any]] = {}
+        self._accepted_news_audits: dict[str, str] = {}
+        self._rejected_news_audits: set[str] = set()
         # (news stream reset_count, journal MAX(change_sequence)) as of the last
         # committed ingest; a cursor reset replays history and rescans it.
         self._ingest_watermark: tuple[int | None, int] | None = None
@@ -2472,16 +2479,33 @@ class LocalCatalystIntelligence:
         *,
         expected_type: Literal["news_impact", "market_focus"],
         expected_schema: tuple[str, str] | None = None,
+        identities: dict[Any, tuple[str, str]] | None = None,
     ) -> bool:
+        """``identities`` memoizes each model's schema identity within one pass."""
+
         if row is None or row.get("job_type") != expected_type:
             return False
+        model = row.get("model")
+        current_identity = (
+            expected_schema
+            if model == (self.model if expected_type == "news_impact" else self.focus_model)
+            else None
+        )
+        if current_identity is None and identities is not None:
+            if model not in identities:
+                identities[model] = (
+                    ai_runtime.schema_identity(expected_type, model=model)
+                    if model is not None
+                    else ai_runtime.schema_identity(expected_type)
+                )
+            current_identity = identities[model]
         schema_matches = ai_runtime.schema_identity_current(
             expected_type,
             row.get("prompt_version"),
             row.get("schema_version"),
             row.get("schema_sha256"),
-            current_identity=(expected_schema if row.get("model") == (self.model if expected_type == "news_impact" else self.focus_model) else None),
-            model=row.get("model"),
+            current_identity=current_identity,
+            model=model,
         )
         prompt = (
             NEWS_PROMPT_VERSION if expected_type == "news_impact" else FOCUS_PROMPT_VERSION
@@ -2493,6 +2517,25 @@ class LocalCatalystIntelligence:
             and row.get("prompt_version") in supported_prompts
             and schema_matches
         )
+
+    def _public_job(self, row: dict[str, Any]) -> dict[str, Any]:
+        """AIJobRepository.public, memoized by the row's complete content.
+
+        The projection re-validates a stored paid result (pydantic plus the
+        Chinese text checks); reconcile used to repeat it for every settled
+        job on every sync slot.
+        """
+
+        digest = hashlib.sha256(
+            json.dumps(row, sort_keys=True, default=str, ensure_ascii=False).encode("utf-8")
+        ).hexdigest()
+        cached = self._public_job_memo.get(digest)
+        if cached is None:
+            cached = AIJobRepository.public(row)
+            if len(self._public_job_memo) >= _PUBLIC_JOB_MEMO_ENTRIES:
+                self._public_job_memo.clear()
+            self._public_job_memo[digest] = cached
+        return copy.deepcopy(cached)
 
     def _identity_public_job(
         self,
@@ -2508,7 +2551,7 @@ class LocalCatalystIntelligence:
         ):
             return None
         assert row is not None
-        return AIJobRepository.public(row)
+        return self._public_job(row)
 
     def _verified_public_job(
         self,
@@ -2548,7 +2591,7 @@ class LocalCatalystIntelligence:
         ):
             return None
         try:
-            return AIJobRepository.public(row)
+            return self._public_job(row)
         except (KeyError, TypeError, ValueError):
             return None
 
@@ -2599,7 +2642,7 @@ class LocalCatalystIntelligence:
         ):
             return None
         try:
-            return AIJobRepository.public(row)
+            return self._public_job(row)
         except (KeyError, TypeError, ValueError):
             return None
 
@@ -2673,12 +2716,17 @@ class LocalCatalystIntelligence:
     ) -> set[tuple[int, int, str]]:
         current_schema = expected_schema or ai_runtime.schema_identity("news_impact", model=self.model)
         keys: set[tuple[int, int, str]] = set()
+        # The identity hash rebuilds the runtime request each time; every job
+        # of a model shares it within this pass (the policy table cannot move
+        # mid-call).
+        identities: dict[Any, tuple[str, str]] = {}
         for job in jobs:
             candidate = dict(job)
             if not self._has_current_job_identity(
                 candidate,
                 expected_type="news_impact",
                 expected_schema=current_schema,
+                identities=identities,
             ):
                 continue
             key = self._news_job_revision_key(candidate)
@@ -2871,6 +2919,7 @@ class LocalCatalystIntelligence:
                      END IS NULL"""
         ).fetchall()
         updated = False
+        identities: dict[Any, tuple[str, str]] = {}
         for link in links:
             job = jobs.get(str(link["job_id"]))
             if job is None or not ai_runtime.analysis_identity_supported(
@@ -2878,7 +2927,9 @@ class LocalCatalystIntelligence:
             ):
                 continue
             if (
-                not self._has_current_job_identity(job, expected_type="news_impact")
+                not self._has_current_job_identity(
+                    job, expected_type="news_impact", identities=identities,
+                )
                 and self._recoverable_completed_legacy_news_public_job(job) is None
             ):
                 continue
@@ -2897,7 +2948,7 @@ class LocalCatalystIntelligence:
                 context = _news_input_context(payload)
             context.update({"analysis_model": job["model"], "analysis_reasoning": job["reasoning"]})
             if job.get("status") == "completed":
-                context["analysis_sources"] = AIJobRepository.public(job).get("evidence_sources", [])
+                context["analysis_sources"] = self._public_job(job).get("evidence_sources", [])
             encoded = _json(context)
             if encoded == link["input_context_json"]:
                 continue
@@ -3310,8 +3361,8 @@ class LocalCatalystIntelligence:
             is None
         )
 
-    @staticmethod
     def _audit_news_result(
+        self,
         connection: sqlite3.Connection,
         *,
         job_id: str,
@@ -3327,6 +3378,7 @@ class LocalCatalystIntelligence:
                WHERE job_id=? AND contract_id=? AND result_sha256=?""",
             (job_id, NEWS_RESULT_CONTRACT_ID, digest),
         ).fetchone()
+        rejection_key: str | None = None
         if audited is not None:
             outcome = str(audited["outcome"])
             if outcome == "accepted":
@@ -3340,7 +3392,15 @@ class LocalCatalystIntelligence:
             # itself is immutable, but its source context can become richer
             # after a deployment. Reusing the old rejection would otherwise
             # clear a result that the current payload can validate without
-            # making another model request.
+            # making another model request. Within one process the code and
+            # this exact context cannot change, so each pair is re-run once.
+            rejection_key = hashlib.sha256(
+                "\x1f".join(
+                    (NEWS_RESULT_CONTRACT_ID, job_id, digest, _json(payload))
+                ).encode("utf-8")
+            ).hexdigest()
+            if rejection_key in self._rejected_news_audits:
+                return "rejected", False
         try:
             validate_result("news_impact", raw_result, payload)
         except (TypeError, ValueError):
@@ -3351,6 +3411,9 @@ class LocalCatalystIntelligence:
             reason = None
         if audited is not None:
             if outcome == "rejected":
+                if len(self._rejected_news_audits) >= _NEWS_AUDIT_MEMO_ENTRIES:
+                    self._rejected_news_audits.clear()
+                self._rejected_news_audits.add(str(rejection_key))
                 return "rejected", False
             updated = connection.execute(
                 """UPDATE catalyst_local_analysis_result_audit SET
@@ -3579,12 +3642,35 @@ class LocalCatalystIntelligence:
         accepted = 0
         rejected = 0
         observed_at = _iso()
+        if len(self._accepted_news_audits) >= _NEWS_AUDIT_MEMO_ENTRIES:
+            self._accepted_news_audits.clear()
         for row in rows:
             raw_result = str(row["result_json"])
+            job_id = str(row["job_id"])
+            # The result and the revision columns the validation payload is
+            # built from; an accepted audit row is never deleted, so an
+            # unchanged pair stays accepted with nothing to write.
+            fingerprint = hashlib.sha256(
+                "\x1f".join(
+                    [
+                        NEWS_RESULT_CONTRACT_ID,
+                        *(
+                            str(row[name])
+                            for name in (
+                                "result_json", "source", "raw_title", "raw_summary",
+                                "source_names_json", "source_tickers_json",
+                                "canonical_tickers_json", "article_json",
+                            )
+                        ),
+                    ]
+                ).encode("utf-8")
+            ).hexdigest()
+            if self._accepted_news_audits.get(job_id) == fingerprint:
+                continue
             payload = self._news_validation_payload(row)
             outcome, inserted = self._audit_news_result(
                 connection,
-                job_id=str(row["job_id"]),
+                job_id=job_id,
                 raw_result=raw_result,
                 payload=payload,
                 result_available_at=row["result_available_at"],
@@ -3593,6 +3679,7 @@ class LocalCatalystIntelligence:
             )
             if outcome == "accepted":
                 accepted += int(inserted)
+                self._accepted_news_audits[job_id] = fingerprint
                 continue
             prior_result = _loads(raw_result, None)
             if (

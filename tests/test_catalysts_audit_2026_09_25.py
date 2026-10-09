@@ -1096,6 +1096,9 @@ def test_reconcile_validates_only_retained_jobs_with_revisions_outside_the_lock(
             return original_public(row, cached=cached)
 
         monkeypatch.setattr(AIJobRepository, "public", staticmethod(counting_public))
+        # Earlier rounds memoized this job's projection; start cold so the
+        # recovery has to validate it, and must do so before the lock.
+        engine._public_job_memo.clear()
         outcome = engine.reconcile()
 
     assert available is True
@@ -1112,8 +1115,9 @@ def test_reconcile_validates_only_retained_jobs_with_revisions_outside_the_lock(
     recovered_checks = [
         lock_free for job_id, lock_free in validated if job_id == job["job_id"]
     ]
-    # The recovery validation runs before reconcile takes the write lock.
-    assert recovered_checks and recovered_checks[0] is True
+    # The recovery validation runs before reconcile takes the write lock, and
+    # the in-lock steps reuse it instead of validating again.
+    assert recovered_checks == [True]
 
 
 def test_reconcile_job_window_follows_the_configured_news_retention(tmp_path):
