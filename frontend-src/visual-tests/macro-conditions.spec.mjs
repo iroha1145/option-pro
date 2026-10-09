@@ -415,7 +415,7 @@ test.describe("macro conditions degraded states", () => {
     // 图表未被清空，模块行仍在，缺分模块如实说明门槛
     await expect(page.getByRole("region", { name: "宏观环境历史", exact: true })).toBeVisible();
     await expect(page.getByLabel("风险 类别")).toBeVisible();
-    await expect(page.getByText(/有效指标不足.*门槛，本类别不出分（不按 50 补齐）/)).toBeVisible();
+    await expect(page.getByText(/有效指标不足.*个，本类别不出分（不按 50 补齐）/)).toBeVisible();
     await shot(page, "macro-degraded-1440");
   });
 
