@@ -179,3 +179,28 @@ def test_s2_price_moves_and_it_outside_its_phrases_need_binding(text):
 )
 def test_s2_it_phrases_still_pass(text):
     assert _news_field(text) == text
+
+
+# --- S3. Only lower-case statistic symbols take a comparison -----------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "F>12美元后福特汽车加速上涨。",
+        "福特汽车F<10美元后买盘涌入。",
+        "试验结果P<0.001。",
+        "当x<5时信号失效。",
+    ],
+)
+def test_s3_upper_case_letters_and_other_symbols_take_no_comparison_exemption(text):
+    with pytest.raises(ValueError):
+        _news_field(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["主要终点达到统计学显著（p<0.001），共纳入n=712例患者。", "p值低于0.05。", "相关系数r=0.82。"],
+)
+def test_s3_statistic_notation_still_passes(text):
+    assert _news_field(text) == text

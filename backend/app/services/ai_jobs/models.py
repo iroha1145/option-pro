@@ -705,7 +705,9 @@ _RATE_BENCHMARK_SPREAD = re.compile(
 _LETTER_GRADE = re.compile(
     r"^(?:(?:[+＋]{1,2}|[\-－])[\u4e00-\u9fff]{0,12}?|)(?:评级|等级|评分)"
 )
-# 统计量写法「p<0.001」「n=712例」。
+# 统计量写法「p<0.001」「n=712例」「p值」，只认这些小写统计符号；大写单字母
+# 可能是股票代码（「F>12美元」的 F 是福特汽车）。
+_STATISTIC_LETTERS = frozenset("dknprt")
 _STATISTIC_COMPARISON = re.compile(r"^[ \t]*(?:<=|>=|[<>=≤≥＜＞＝])[ \t]*[0-9]")
 _NUMERIC_SUFFIX_HARD_BOUNDARIES = frozenset("；;。.!！?？%％")
 _SECURITY_REFERENCE_MARKERS = (
@@ -1613,10 +1615,7 @@ def _foreign_span_context(
             return span in {"B", "T"}
         if suffix.startswith(("分数", "值", "统计量")):
             return True
-        if (
-            _LETTER_GRADE.match(sentence[end:]) is not None
-            or _STATISTIC_COMPARISON.match(sentence[end:]) is not None
-        ):
+        if _LETTER_GRADE.match(sentence[end:]) is not None:
             return True
         if suffix.startswith(_FOREIGN_PROPER_NAME_CONTEXT_SUFFIXES) and any(
             re.search(
@@ -1628,7 +1627,7 @@ def _foreign_span_context(
             for source in source_texts
         ):
             return True
-    if len(span) == 1 and span.isascii() and span.islower() and (
+    if span in _STATISTIC_LETTERS and (
         sentence[end:].startswith(("值", "分数", "统计量"))
         or _STATISTIC_COMPARISON.match(sentence[end:]) is not None
     ):
