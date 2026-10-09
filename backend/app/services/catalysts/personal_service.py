@@ -14,9 +14,8 @@ from app.failure_diagnostics import record_fallback_failure
 from app.personal_config import PersonalConfig, get_personal_config
 from app.services.ai_jobs import runtime as ai_runtime
 from app.services.ai_jobs.models import (
-    check_stored_result,
-    has_current_result_shape,
     validate_result,
+    validate_result_cached,
     validate_simplified_chinese_text,
 )
 from app.services.ai_jobs.repository import AIJobRepository
@@ -719,7 +718,7 @@ class PersonalCatalystService:
             # that can be established without exposing that future update.
             return None, "pending"
         try:
-            return self.ai_repository.public(row, trust_current_identity=True), None
+            return self.ai_repository.public(row), None
         except (KeyError, TypeError, ValueError):
             return None, "pending"
 
@@ -743,36 +742,29 @@ class PersonalCatalystService:
         validation_sources = item.get("_validation_sources")
         if not isinstance(validation_sources, list):
             validation_sources = []
-        payload = {
-            "news_id": item.get("news_id"),
-            "change_sequence": item.get("change_sequence"),
-            "content_hash": item.get("content_hash"),
-            "source": item.get("_validation_source") or item.get("source"),
-            "title": item.get("_validation_title"),
-            "summary": item.get("_validation_summary"),
-            "article": item.get("_validation_article"),
-            "article_status": "available" if item.get("_validation_article") else None,
-            "sources": validation_sources,
-            "allowed_tickers": validation_allowed_tickers,
-        }
-        result = dict(analysis)
         try:
-            # The local layer sets _analysis_current only for a result that
-            # passed the full contract or whose exact bytes hold an accepted
-            # audit under it, so this boundary re-checks bindings, not prose.
-            if item.get("_analysis_current") is True and has_current_result_shape(
-                "news_impact", result, payload,
-            ):
-                return check_stored_result("news_impact", result, payload)
-            return validate_result(
+            return validate_result_cached(
                 "news_impact",
                 json.dumps(
-                    result,
+                    dict(analysis),
                     ensure_ascii=False,
                     separators=(",", ":"),
                     allow_nan=False,
                 ),
-                payload,
+                {
+                    "news_id": item.get("news_id"),
+                    "change_sequence": item.get("change_sequence"),
+                    "content_hash": item.get("content_hash"),
+                    "source": item.get("_validation_source")
+                    or item.get("source"),
+                    "title": item.get("_validation_title"),
+                    "summary": item.get("_validation_summary"),
+                    "article": item.get("_validation_article"),
+                    "article_status": "available" if item.get("_validation_article") else None,
+                    "sources": validation_sources,
+                    "allowed_tickers": validation_allowed_tickers,
+                },
+                validator=validate_result,
             )
         except (KeyError, TypeError, ValueError):
             return None

@@ -24,10 +24,9 @@ from app.services.model_budget import (
 )
 from app.services.ai_jobs.models import (
     AIJobPublic,
-    check_stored_result,
     earnings_report_id,
-    has_current_result_shape,
     validate_result,
+    validate_result_cached,
 )
 
 
@@ -411,17 +410,6 @@ def _settled_budget_charge_microusd(
         fallback_microusd=fallback_microusd,
         model=model,
     )
-
-
-def stored_schema_identity_current(row: Mapping[str, Any]) -> bool:
-    """Whether a job row was written under the schema identity its model has now."""
-    from app.services.ai_jobs.runtime import schema_identity
-
-    try:
-        current = schema_identity(str(row["job_type"]), model=str(row["model"]))
-    except (KeyError, TypeError, ValueError):
-        return False
-    return (row.get("schema_version"), row.get("schema_sha256")) == current
 
 
 # Owner-facing focus cycles are explicit, rate-limited actions (30s trigger
@@ -3098,19 +3086,7 @@ class AIJobRepository:
             return dict(updated)
 
     @staticmethod
-    def public(
-        row: dict[str, Any],
-        *,
-        cached: bool = False,
-        trust_current_identity: bool = False,
-    ) -> dict[str, Any]:
-        """Public job view with the stored result re-checked before it is shown.
-
-        Bulk readers may pass ``trust_current_identity``: a result stored under
-        the current schema identity was validated by its writer, so only its
-        shape and payload bindings are re-checked. Everything else, including
-        every decision path, gets the full check and hides what fails it.
-        """
+    def public(row: dict[str, Any], *, cached: bool = False) -> dict[str, Any]:
         try:
             payload = json.loads(row["payload_json"])
         except (KeyError, TypeError, json.JSONDecodeError):
@@ -3119,23 +3095,17 @@ class AIJobRepository:
         legacy_output_hidden = False
         if result is not None:
             try:
-                if (
-                    trust_current_identity
-                    and stored_schema_identity_current(row)
-                    and has_current_result_shape(str(row["job_type"]), result, payload)
-                ):
-                    result = check_stored_result(str(row["job_type"]), result, payload)
-                else:
-                    result = validate_result(
-                        str(row["job_type"]),
-                        json.dumps(
-                            result,
-                            ensure_ascii=False,
-                            separators=(",", ":"),
-                            allow_nan=False,
-                        ),
-                        payload,
-                    )
+                result = validate_result_cached(
+                    str(row["job_type"]),
+                    json.dumps(
+                        result,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                        allow_nan=False,
+                    ),
+                    payload,
+                    validator=validate_result,
+                )
             except (TypeError, ValueError) as exc:
                 # 规则收紧后旧的付费结果会被隐藏；不留记录时只能重取响应现场
                 # 复现（2026-08-13 「焦点周期没东西」就难在这里）。

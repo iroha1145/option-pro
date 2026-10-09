@@ -29,12 +29,11 @@ from app.services.ai_jobs import runtime as ai_runtime
 from app.services.ai_jobs.models import (
     validate_result,
     FOCUS_VERIFICATION_VERSION,
-    check_stored_result,
-    has_current_result_shape,
     validate_market_focus_evidence,
+    validate_result_cached,
     validate_simplified_chinese_text,
 )
-from app.services.ai_jobs.repository import AIJobRepository, stored_schema_identity_current
+from app.services.ai_jobs.repository import AIJobRepository
 from app.services.ai_jobs.focus_verification import (
     public_focus_result, public_focus_sources, supported_events,
 )
@@ -2021,11 +2020,10 @@ class LocalCatalystIntelligence:
     ) -> dict[str, Literal["accepted", "rejected", "awaiting_validation"]]:
         """Classify completed news results through a strictly read-only lookup.
 
-        A result succeeds only when its exact bytes have an accepted local
-        audit under the current contract. Rows still under the current schema
-        identity were validated when stored, so they only re-check shape and
-        bindings here; older rows must also pass the full Simplified-Chinese
-        contract. This method never initializes, reconciles, or submits work.
+        A result succeeds only when the current payload/result pair still
+        passes the Simplified-Chinese contract and the exact result bytes have
+        an accepted local audit. This method never initializes, reconciles, or
+        submits work.
         """
 
         states: dict[
@@ -2044,14 +2042,10 @@ class LocalCatalystIntelligence:
             if not isinstance(raw_result, str) or not isinstance(payload, dict):
                 states[job_id] = "rejected"
                 continue
-            stored = _loads(raw_result, None)
             try:
-                if stored_schema_identity_current(row) and has_current_result_shape(
-                    "news_impact", stored, payload,
-                ):
-                    check_stored_result("news_impact", stored, payload)
-                else:
-                    validate_result("news_impact", raw_result, payload)
+                validate_result_cached(
+                    "news_impact", raw_result, payload, validator=validate_result,
+                )
             except (TypeError, ValueError):
                 states[job_id] = "rejected"
                 continue
