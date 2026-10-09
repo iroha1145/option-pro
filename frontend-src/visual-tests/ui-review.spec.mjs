@@ -22,7 +22,7 @@ test('expanded screener cards keep trend values and actions inside the card at p
     // Check the rendered text and controls, not the CSS class chosen to fix the layout.
     const bounds = await card.evaluate((element) => {
       const box = element.getBoundingClientRect();
-      const actions = [...element.querySelectorAll('button, a')].filter((node) => /^(打开详情|相关突破)$/.test(node.textContent.trim()));
+      const actions = [...element.querySelectorAll('button, a')].filter((node) => /^(股票详情|相关突破)$/.test(node.textContent.trim()));
       const labels = [...element.querySelectorAll('span')].filter((node) => /^(低|高)\s|^区间/.test(node.textContent.trim()));
       return {
         actionCount: actions.length,

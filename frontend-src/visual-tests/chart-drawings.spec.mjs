@@ -14,7 +14,7 @@
 //   2. chartFilled() only counts painted alpha in a 200x200 corner of the
 //      price canvas — candles alone satisfy it. It proves the chart rendered,
 //      never that a drawing exists. Object-level facts are asserted against
-//      the Inspector's 「绘图对象 …」 rows, which carry stable a11y names.
+//      the Inspector's 「图形 …」 rows, which carry stable a11y names.
 import { expect, test } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -69,9 +69,9 @@ function chartTab(page, name) {
   return page.getByRole("tab", { name, exact: true });
 }
 
-/** Inspector 的对象行：aria-label 是「绘图对象 {kind}」，只认展开工作区里的那一份。 */
+/** Inspector 的对象行：aria-label 是「图形 {kind}」，只认展开工作区里的那一份。 */
 function drawingRows(page) {
-  return page.getByRole("dialog", { name: "绘图工作区" }).getByRole("button", { name: /^绘图对象 / });
+  return page.getByRole("dialog", { name: "绘图工作区" }).getByRole("button", { name: /^图形 / });
 }
 
 /** Recover the stock-level error card before a chart region can be mounted. */

@@ -22,7 +22,7 @@ async function capture(page, name, focus) {
 
 async function activeSignalCount(page) {
   const text = await page.getByRole('region', { name: '当日信号', exact: true })
-    .getByText(/^\d+\s*个活跃(?:\s|$)/).innerText();
+    .getByText(/^\d+\s*条活跃(?:\s|$)/).innerText();
   return Number(text.match(/^\d+/)?.[0]);
 }
 
