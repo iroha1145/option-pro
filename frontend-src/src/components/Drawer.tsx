@@ -78,7 +78,8 @@ export default function Drawer({ open, onClose, title, label, children, width = 
         />
         {/* 外壳 pointer-events-none：关闭动画期间不挡背板；t-modal 的缩放落在面板本身。 */}
         <div ref={panelsRef} className="pointer-events-none fixed inset-0 z-[71] flex items-center justify-center p-6">
-          <section
+          {/* 保留与手机形态相同的节点，让已登记的焦点作用域跨断点继续生效。 */}
+          <aside
             role="dialog"
             aria-modal="true"
             data-focus-overlay={overlayId}
@@ -103,7 +104,7 @@ export default function Drawer({ open, onClose, title, label, children, width = 
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
-          </section>
+          </aside>
         </div>
       </>
     );

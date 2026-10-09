@@ -70,7 +70,8 @@ export function Harness() {
       <div id="already-inert" inert><button>原有禁用区域</button></div>
       <ScanHistoryPopover history={[]} />
     </main>
-    <Drawer open={drawer} onClose={() => setDrawer(false)} title={<h2>测试详情</h2>}>
+    <Drawer open={drawer} onClose={() => setDrawer(false)} title={<h2>测试详情</h2>}
+      variant={new URLSearchParams(window.location.search).get('variant') === 'modal' ? 'modal' : 'side'}>
       <div className="flex flex-col gap-3 p-4">
         <button id="open-command" onClick={() => setPalette(true)}>抽屉内打开命令</button>
         <button onClick={() => setConfirm(true)}>打开确认</button>

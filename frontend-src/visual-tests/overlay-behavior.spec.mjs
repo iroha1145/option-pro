@@ -8,6 +8,37 @@ async function harness(page) { await page.goto('/visual-tests/support/overlay-ha
 async function openDrawer(page) { await page.locator('#drawer-trigger').click(); await expect(drawer(page)).toBeVisible(); }
 async function settled(page) { await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))); }
 
+for (const [start, resized] of [[1440, 390], [390, 1440]]) {
+  test(`news-style modal keeps keyboard and close controls across ${start} → ${resized} → ${start}px`, async ({ page }) => {
+    await page.setViewportSize({ width: start, height: 900 });
+    await page.goto('/visual-tests/support/overlay-harness.html?variant=modal');
+    await openDrawer(page);
+
+    await page.setViewportSize({ width: resized, height: 900 });
+    await settled(page);
+    await page.keyboard.press('Tab');
+    await expect.poll(() => drawer(page).evaluate((element) =>
+      !element.closest('[inert]') && element.contains(document.activeElement))).toBe(true);
+    await expect.poll(() => overflow(page)).toEqual({ value: 'hidden', priority: 'important' });
+    await drawer(page).getByRole('button', { name: '关闭面板' }).click();
+    await expect(drawer(page)).toBeHidden();
+    await expect(page.locator('#drawer-trigger')).toBeFocused();
+
+    await openDrawer(page);
+    await page.setViewportSize({ width: start, height: 900 });
+    await settled(page);
+    await page.keyboard.press('Tab');
+    await expect.poll(() => drawer(page).evaluate((element) =>
+      !element.closest('[inert]') && element.contains(document.activeElement))).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(drawer(page)).toBeHidden();
+    await expect(page.locator('#drawer-trigger')).toBeFocused();
+    await expect.poll(() => overflow(page)).toEqual({ value: '', priority: '' });
+    await expect(page.locator('#background')).not.toHaveAttribute('inert');
+    await expect(page.locator('#already-inert')).toHaveAttribute('inert', '');
+  });
+}
+
 test('stacked real dialogs preserve the original overflow and only Escape the top layer', async ({ page }) => {
   await harness(page);
   await page.evaluate(() => document.body.style.setProperty('overflow', 'scroll', 'important'));
