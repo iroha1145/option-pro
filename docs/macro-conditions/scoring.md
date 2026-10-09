@@ -212,15 +212,13 @@ MacroFit*  = 50 + (MacroFit_i - 50) · confidence_i
 
 ### 影子字段，不改任何生产分数
 
-扫描结果每行附加：`macro_fit_shadow` / `macro_fit_confidence` /
+个股概览（`GET /api/stocks/{t}`）附加：`macro_fit_shadow` / `macro_fit_confidence` /
 `macro_fit_version` / `macro_tailwind` / `macro_supporting_factors` /
-`macro_opposing_factors` / `ranking_score_macro_shadow` / `macro_technical_gap`。
+`macro_opposing_factors` / `macro_shadow_status` / `macro_snapshot_date`。
 
-`ranking_score_macro_shadow = clip(ranking_score + clip((MacroFit*-50)/50×3, -3, +3), 0, 100)`
-
-内在强度、突破质量、市场适配、风格适配、`ranking_score` 一律不动，
-默认排序仍用 `ranking_score`。附加发生在 `_sort_scored` 之后，
-避免它有机会渗进排序键。
+收盘选股（`eod-limited-v1`）的扫描行**不带**宏观字段。旧扫描器在排序后附加的
+`ranking_score_macro_shadow` 与 `macro_technical_gap` 随旧扫描器一起删除（#210），
+计算它们的 `shadow_ranking_adjustment`、`macro_technical_gap` 也已删除。
 
 ### 结构性宏观 vs 市场隐含确认
 
@@ -228,14 +226,14 @@ MacroFit*  = 50 + (MacroFit_i - 50) · confidence_i
 信用与风险模块用的 HYG、LQD、KRE、VIX、SPY/TLT、IWM/SPY 与技术市场形态
 读的是同一批价格，再算一次等于把一个信号按两个名字计两次权。
 
-`macro_technical_gap = 技术市场适配 - 结构性宏观`：
-差值大为正说明价格跑在环境前面，大为负说明宏观先行改善而价格没跟上。
-任一侧缺失时为 null，而不是 0。
+`/api/macro/conditions` 下发 `structural_score`，大盘页的「技术 × 结构性宏观」卡片
+用它和技术市场适配在前端求差：大为正说明价格跑在环境前面，大为负说明宏观先行
+改善而价格没跟上；任一侧缺失时为 null，而不是 0。
 
 ### 一次快照读，三个消费方共享（`linkage_reader.py`）
 
-选股行、板块雷达、突破列表要的是同样三件东西：已发布的宏观快照、按板块的一份
-适配分、结构性综合分。各自开一次仓库不只是重复读同一个文件，还可能**跨过一次
+个股概览、板块雷达、突破列表要的是同样两件东西：已发布的宏观快照、按板块的一份
+适配分。各自开一次仓库不只是重复读同一个文件，还可能**跨过一次
 发布** —— 同一个页面上的三块面板于是会描述两个不同的宏观环境。因此每个请求
 构造一个 `MacroFitReader`，`fit_for(sector_id)` 按板块记忆化。
 

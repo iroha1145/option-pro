@@ -159,18 +159,16 @@ Owner 手动动作现有出口：`backend/app/api/worker_actions.py`
 
 ---
 
-## 6. Secret 管理的五面镜子
+## 6. Secret 管理的四面镜子
 
 新增服务端密钥必须同步（漏一处 CI 或 CLI 就拒）：
 
 1. `personal.sh` → `select_affected_services()` 的 `case` 连续字面量
-2. `backend/app/tools/personal_secrets.py::SECRET_KEYS`
-3. `backend/app/legacy_env_adapter.py::SECRET_KEYS`
-4. `tests/test_personal_secrets.py::test_option_pro_secret_allowlist_is_exact`（exact set）
-5. `tests/test_personal_secrets.py`（shell 连续字面量断言，约 L934）
+2. `backend/app/secret_keys.py::SECRET_KEYS`（`tools/personal_secrets.py` 与 `runtime_environment.py` 都从这里导入）
+3. `tests/test_personal_secrets.py::test_option_pro_secret_allowlist_is_exact`（exact set）
+4. `tests/test_personal_secrets.py`（shell 连续字面量断言，约 L934）
 
-外加 `secrets.env.example`、`backend/app/config.py`、`backend/app/api/settings.py`
-（`settings_status()` 只返回 `{"<name>": {"configured": bool}}`，从不回值）。
+外加 `secrets.env.example` 与 `backend/app/config.py`。
 
 `setup.sh` 当前不维护 Secret 清单（只生成骨架），故不需要改动其清单。
 
@@ -209,8 +207,7 @@ backend/app/api/macro_conditions.py
 - `backend/app/config.py`：`fred_api_key`
 - `backend/app/data_paths.py`：`macro_conditions_db`
 - `backend/app/personal_config.py`：`MacroConfig` + `PersonalConfig.macro`
-- `backend/app/tools/personal_secrets.py`、`backend/app/legacy_env_adapter.py`：`FRED_API_KEY`
-- `backend/app/api/settings.py`：`fred` configured 布尔
+- `backend/app/secret_keys.py`：`FRED_API_KEY`
 - `backend/app/api/worker_actions.py`：`macro_conditions` 动作类型
 - `backend/app/worker/tasks.py`：`MacroConditionsTask` + inventory + 备份表
 - `backend/app/main.py`：宏观 GET 进公开研究读白名单 + router 注册
