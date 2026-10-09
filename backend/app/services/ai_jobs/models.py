@@ -2689,6 +2689,10 @@ def _news_identifier_translations(payload: dict) -> dict[str, str]:
 
 def _translate_news_metadata(value: str, payload: dict) -> str:
     """Translate only known input labels; never rewrite facts or output keys."""
+    # 翻译只修正中文句子里夹带的字段名；一句汉字都没有的文本（「title summary
+    # source url」）不拼成中文词串发布，原样交给中文校验拒绝。
+    if not any(_is_cjk(char) for char in value):
+        return value
     translations = _news_identifier_translations(payload)
     # Names are exact ASCII tokens, not substrings of an unknown program label.
     tokens = "|".join(sorted(map(re.escape, translations), key=len, reverse=True))

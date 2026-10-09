@@ -13,7 +13,7 @@ import pytest
 
 from app.services.ai_jobs import models, runtime
 from app.services.ai_jobs.models import validate_result
-from test_ai_analysis_fixes_20261010 import _focus_field, _luna_receipt, _news_field
+from test_ai_analysis_fixes_20261010 import _ARTICLE, _focus_field, _luna_receipt, _news_field
 from test_ai_jobs_audit_2026_09_25 import _option_alert_result
 from test_luna_news_web_fallback import payload as luna_payload
 from test_signal_context import _signal_result
@@ -309,3 +309,23 @@ def test_s4r2_fetch_failed_is_published_in_chinese():
 def test_s4r2_fetch_failed_is_translated_only_when_it_is_this_payloads_reason():
     with pytest.raises(ValueError, match="english_prose_not_allowed"):
         _news_field("正文因fetch_failed不可用。", article_status="unavailable", article_reason="timeout")
+
+
+# --- Suggestion 6. Text without Chinese is not translated into Chinese --------
+
+
+@pytest.mark.parametrize(
+    ("text", "field", "changes"),
+    [
+        ("title summary source url", "key_factors", {}),
+        ("article_status available", "summary_zh", {"article_status": "available", "article": _ARTICLE}),
+        ("article_reason http_403", "uncertainty_notes", {"article_status": "unavailable", "article_reason": "http_403"}),
+    ],
+)
+def test_s6r2_text_without_chinese_is_rejected_not_translated(text, field, changes):
+    with pytest.raises(ValueError):
+        _news_field(text, field=field, **changes)
+
+
+def test_s6r2_field_names_inside_chinese_text_are_still_translated():
+    assert _news_field("原文title与url均来自输入。") == "原文标题与网址均来自输入。"
