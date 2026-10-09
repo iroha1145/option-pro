@@ -151,7 +151,6 @@ class _LocalIntelligence(Protocol):
         force: bool = False,
     ) -> dict[str, Any]: ...
     def market_focus_cycle(self, cycle_id: str) -> dict[str, Any] | None: ...
-    def cancel_market_focus_cycle(self, cycle_id: str) -> dict[str, Any] | None: ...
     def request_refresh(
         self,
         operation_type: Literal["news", "calendar", "source_health"] = "news",
@@ -1973,16 +1972,6 @@ class PersonalCatalystService:
             cycle,
             include_owner_state=include_owner_state,
         )
-
-    def cancel_market_focus_cycle(self, cycle_id: str) -> dict[str, Any] | None:
-        self._require_cache_ready()
-        try:
-            cycle = self.intelligence.cancel_market_focus_cycle(cycle_id)
-        except Exception as error:
-            if self._is_local_store_error(error):
-                raise self._cache_unavailable() from error
-            raise
-        return self._project_focus_cycle(cycle)
 
     def request_analysis(self, news_id: int, *, force: bool) -> dict[str, Any]:
         self._require_cache_ready()

@@ -185,10 +185,6 @@ class StubPersonalService:
     def market_focus_cycle(self, cycle_id: str) -> dict[str, Any] | None:
         return self._cycle() if cycle_id == CYCLE_ID else None
 
-    def cancel_market_focus_cycle(self, cycle_id: str) -> dict[str, Any] | None:
-        self.calls.append(("cancel_focus", cycle_id))
-        return self._cycle(status="cancelled") if cycle_id == CYCLE_ID else None
-
     def request_refresh(
         self,
         operation_type: str,
@@ -502,11 +498,6 @@ def test_actions_delegate_to_personal_service_after_authentication() -> None:
         client.post(
             "/api/catalysts/market-focus-cycles",
             json={"expected_prepared_revision": 3, "force": True},
-            headers=_SAME_ORIGIN_JSON_HEADERS,
-        ),
-        client.post(
-            f"/api/catalysts/market-focus-cycles/{CYCLE_ID}/cancel",
-            json={},
             headers=_SAME_ORIGIN_JSON_HEADERS,
         ),
     )

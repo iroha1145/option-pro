@@ -1238,32 +1238,6 @@ class MacroRepository:
             output.append(item)
         return output
 
-    def factor_history(
-        self,
-        factor_id: str,
-        *,
-        start: date,
-        end: date,
-        scoring_version: str = SCORING_VERSION,
-        limit: int = 4_000,
-    ) -> list[dict[str, Any]]:
-        with self.read() as connection:
-            rows = connection.execute(
-                """SELECT snapshot_date,raw_value,signed_value,score,status,data_through,
-                          history_basis,valid_observations
-                   FROM macro_factor_snapshots
-                   WHERE factor_id=? AND scoring_version=?
-                     AND snapshot_date>=? AND snapshot_date<=?
-                   ORDER BY snapshot_date ASC LIMIT ?""",
-                (
-                    factor_id,
-                    scoring_version,
-                    start.isoformat(),
-                    end.isoformat(),
-                    max(1, min(int(limit), 4_000)),
-                ),
-            ).fetchall()
-        return [dict(row) for row in rows]
 
 
 __all__ = [

@@ -828,38 +828,6 @@ class AccountStore:
             connection.commit()
         return ordered
 
-    def add_ticker(self, user_id: str, ticker: str) -> list[str]:
-        symbol = normalize_ticker(ticker)
-        self.initialize()
-        with self._connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            rows = connection.execute(
-                """SELECT ticker, position FROM account_watchlist
-                    WHERE user_id=? ORDER BY position, ticker""",
-                (user_id,),
-            ).fetchall()
-            current = [str(row["ticker"]) for row in rows]
-            if symbol in current:
-                connection.rollback()
-                return current
-            if len(current) >= WATCHLIST_MAX_TICKERS:
-                connection.rollback()
-                raise AccountError("watchlist_full")
-            next_position = (
-                max((int(row["position"]) for row in rows), default=-1) + 1
-            )
-            connection.execute(
-                """INSERT INTO account_watchlist
-                       (user_id, ticker, position, added_at)
-                   VALUES (?,?,?,?)""",
-                (user_id, symbol, next_position, _utcnow_iso()),
-            )
-            connection.commit()
-        return [*current, symbol]
-
-    def remove_ticker(self, user_id: str, ticker: str) -> list[str]:
-        return self.edit_watchlist(user_id, add=[], remove=[ticker])
-
     def remove_ticker_with_undo(
         self, user_id: str, ticker: str,
     ) -> tuple[list[str], dict[str, Any] | None]:

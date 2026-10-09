@@ -60,7 +60,6 @@ from app.api import (
     quotes,
     runtime_settings,
     sectors,
-    settings,
     signals,
     stocks,
     strength,
@@ -333,10 +332,9 @@ _PUBLIC_READ_API_PATTERNS = tuple(
         r"^/api/stocks/[^/]+$",
         r"^/api/stocks/[^/]+/(?:signals|logo|chart|technical)$",
         r"^/api/options/[^/]+/(?:expirations|chain)$",
-        r"^/api/sectors/[^/]+/(?:iv-ranking|heatmap)$",
+        r"^/api/sectors/[^/]+/iv-ranking$",
         r"^/api/signals/stock/[^/]+$",
         r"^/api/macro/conditions/modules/[a-z_]{1,32}$",
-        r"^/api/macro/conditions/factors/[a-z0-9_]{1,64}/history$",
         r"^/api/catalysts/news/[1-9][0-9]*$",
         r"^/api/catalysts/tickers/(?!batch$)[A-Z0-9][A-Z0-9.-]{0,19}$",
         r"^/api/strength/stocks/[^/]+$",
@@ -771,7 +769,6 @@ app.include_router(access.router)
 # own cookie and can only reach that caller's rows.
 app.include_router(accounts.router)
 app.include_router(view_preferences.router)
-app.include_router(settings.router)
 
 # Docker-compose runs from /app/backend; local runs may be from repo root.
 # Allow override via FRONTEND_DIR env var for unusual deployments.

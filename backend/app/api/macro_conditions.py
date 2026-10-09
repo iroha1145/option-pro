@@ -23,7 +23,6 @@ from app.data_paths import get_data_paths
 from app.personal_config import get_personal_config
 from app.services.macro_conditions.models import MacroError
 from app.services.macro_conditions.registry import (
-    FACTORS_BY_ID,
     MODULES_BY_ID,
     SCORING_VERSION,
 )
@@ -114,31 +113,6 @@ def macro_conditions_module(module_id: str) -> dict[str, Any]:
         return _read(
             f"module:{module_id}",
             lambda: service.module_detail(module_id),
-        )
-    except MacroError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": exc.code},
-        ) from exc
-
-
-@router.get("/factors/{factor_id}/history")
-def macro_conditions_factor_history(
-    factor_id: str,
-    days: Annotated[int, Query(ge=MIN_HISTORY_DAYS, le=MAX_HISTORY_DAYS)] = (
-        DEFAULT_HISTORY_DAYS
-    ),
-) -> dict[str, Any]:
-    if factor_id not in FACTORS_BY_ID:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "macro_snapshot_unavailable", "resource": "factor"},
-        )
-    service = _service()
-    try:
-        return _read(
-            f"factor:{factor_id}:{days}",
-            lambda: service.factor_history(factor_id, days=days),
         )
     except MacroError as exc:
         raise HTTPException(

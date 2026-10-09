@@ -28,7 +28,6 @@ from app.personal_config import get_personal_config
 from app.services.ai_jobs import runtime as ai_job_runtime
 from app.services.ai_jobs.models import (
     CancelRequest,
-    EarningsImpactJobRequest,
     OptionAlertJobRequest,
     earnings_report_id,
     normalize_earnings_analysis_payload,
@@ -402,96 +401,6 @@ def _earnings_report_force_retry(row: dict | None, *, owner: bool) -> bool:
     )
 
 
-async def _normalized_earnings_submission(
-    req: EarningsImpactJobRequest,
-) -> dict:
-    raw = req.model_dump(
-        mode="json",
-        exclude={
-            "force",
-            "analysis_stage",
-            "analysis_phase",
-            "report_id",
-            "input_hash",
-        },
-    )
-    if not current_request_is_owner():
-        from app.api import earnings
-
-        snapshot = await earnings._read_current_upcoming_earnings_snapshot()
-        if (
-            not isinstance(snapshot, dict)
-            or snapshot.get("data_limited") is not False
-            or snapshot.get("source_status") != "active"
-        ):
-            raise HTTPException(
-                status_code=503,
-                detail={
-                    "code": "earnings_snapshot_unavailable",
-                    "message": "当前财报快照不可用",
-                },
-            )
-        requested_date = str(req.earnings_date or "")
-        matches = [
-            value
-            for value in list(snapshot.get("earnings") or [])
-            if (
-                isinstance(value, dict)
-                and str(value.get("ticker") or "").strip().upper() == req.ticker
-                and (
-                    not requested_date
-                    or str(value.get("earnings_date") or "") == requested_date
-                )
-            )
-        ]
-        if not matches:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "earnings_snapshot_mismatch",
-                    "message": "当前快照中没有匹配的财报",
-                },
-            )
-        source = matches[0]
-        raw = {
-            field: source.get(field)
-            for field in (
-                "ticker",
-                "name",
-                "sector",
-                "earnings_date",
-                "year",
-                "quarter",
-                "eps_estimate",
-                "eps_actual",
-                "revenue_estimate",
-                "revenue_actual",
-                "market_cap",
-                "release_status",
-            )
-        }
-    has_actual = (
-        raw.get("eps_actual") is not None
-        or raw.get("revenue_actual") is not None
-    )
-    stage: Literal["pre_release", "post_release_manual"] = (
-        "post_release_manual" if has_actual else "pre_release"
-    )
-    try:
-        return normalize_earnings_analysis_payload(
-            raw,
-            analysis_stage=stage,
-        )
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "earnings_snapshot_invalid",
-                "message": "财报快照字段不完整",
-            },
-        ) from exc
-
-
 async def _snapshot_bound_earnings_report(
     ticker: str,
     report_date: str,
@@ -631,30 +540,6 @@ async def ai_status():
     }
 
 
-@router.post("/analyze-alerts")
-async def analyze_alerts(req: AlertsRequest):
-    """Compatibility endpoint: validation remains, paid work moved to jobs."""
-
-    return JSONResponse(
-        {
-            "status": "analysis_required",
-            "message": "Create a persistent option-alerts job with POST /api/ai/jobs/option-alerts",
-        },
-        status_code=409,
-    )
-
-
-@router.get("/earnings-correlation")
-async def earnings_correlation():
-    return JSONResponse(
-        {
-            "status": "analysis_required",
-            "message": "Synchronous GET no longer creates paid analysis",
-        },
-        status_code=409,
-    )
-
-
 @router.get("/earnings-impact/{ticker}")
 async def earnings_impact(
     ticker: Annotated[Ticker, Path(description="US-listed ticker symbol")],
@@ -716,7 +601,7 @@ async def earnings_impact(
         {
             "status": "analysis_required",
             "ticker": ticker.upper(),
-            "message": "Create a persistent job with POST /api/ai/jobs/earnings-impact",
+            "message": "Request analysis with POST /api/ai/earnings-impact/{ticker}/reports/{report_date}",
         },
         status_code=409,
     )
@@ -832,40 +717,6 @@ async def trigger_earnings_report_impact(
         _public_earnings_report_status(repository, row),
         status_code=202,
         headers={"Retry-After": "2"},
-    )
-
-
-@router.post("/jobs/earnings-impact")
-async def create_earnings_impact_job(
-    request: Request,
-    req: EarningsImpactJobRequest,
-):
-    _require_earnings_manual_submission()
-    request_payload = await _normalized_earnings_submission(req)
-    _reserve_public_earnings_submission(
-        request,
-        request_payload,
-        force_retry=req.force,
-    )
-    owner = current_request_is_owner()
-    row, created = _create_job(
-        "earnings_impact",
-        request_payload,
-        force_retry=req.force,
-        priority=(
-            ai_job_runtime.EARNINGS_OWNER_PRIORITY
-            if owner
-            else ai_job_runtime.EARNINGS_VISITOR_PRIORITY
-        ),
-    )
-    payload = _job_repository().public(
-        row,
-        cached=(not created and row["status"] == "completed"),
-    )
-    return JSONResponse(
-        payload,
-        status_code=202,
-        headers={"Location": f"/api/ai/jobs/{row['job_id']}", "Retry-After": "2"},
     )
 
 
