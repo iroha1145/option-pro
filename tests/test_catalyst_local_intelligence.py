@@ -353,6 +353,7 @@ def test_v2_local_database_adds_v3_result_audit_tables_without_rewriting_history
             ).fetchall()
         }
     assert versions == [
+        ("optix-local-catalyst-store-version-v1",),
         ("optix-local-catalyst-timestamps-v1",),
         ("optix-local-catalyst-v2",),
         ("optix-local-catalyst-v7",),
@@ -431,6 +432,9 @@ def test_fresh_store_registry_matches_production(tmp_path):
         ),
         "optix-verified-focus-publication-v1": (
             "5253a22cd937b503e7906af5ab02eda64afa97dfade0e419e8bf33f4798dd139"
+        ),
+        "optix-local-catalyst-store-version-v1": (
+            "17876991946f7b58d99b25baf527dbeb8c4374945e64e9caf8556300133d8788"
         ),
     }
 

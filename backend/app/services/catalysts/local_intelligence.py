@@ -393,6 +393,67 @@ CREATE INDEX IF NOT EXISTS idx_verified_focus_revision
 _VERIFIED_FOCUS_SCHEMA_VERSION = "optix-verified-focus-publication-v1"
 _VERIFIED_FOCUS_SCHEMA_CHECKSUM = hashlib.sha256(_VERIFIED_FOCUS_SCHEMA.encode("utf-8")).hexdigest()
 
+# Writers bump one version row, so the revision cache validates with an
+# O(1) read instead of summing result lengths over the link and audit
+# tables on every request. A separate versioned script: the main local
+# schema checksum stays unchanged.
+_STORE_VERSION_SCHEMA = """
+CREATE TABLE IF NOT EXISTS catalyst_local_store_version (
+    id INTEGER PRIMARY KEY CHECK(id=1),
+    version INTEGER NOT NULL CHECK(version >= 0)
+);
+INSERT OR IGNORE INTO catalyst_local_store_version(id,version) VALUES(1,0);
+CREATE TRIGGER IF NOT EXISTS catalyst_local_store_version_revisions_insert
+AFTER INSERT ON catalyst_local_news_revisions
+BEGIN
+    UPDATE catalyst_local_store_version SET version=version+1 WHERE id=1;
+END;
+CREATE TRIGGER IF NOT EXISTS catalyst_local_store_version_revisions_update
+AFTER UPDATE ON catalyst_local_news_revisions
+BEGIN
+    UPDATE catalyst_local_store_version SET version=version+1 WHERE id=1;
+END;
+CREATE TRIGGER IF NOT EXISTS catalyst_local_store_version_revisions_delete
+AFTER DELETE ON catalyst_local_news_revisions
+BEGIN
+    UPDATE catalyst_local_store_version SET version=version+1 WHERE id=1;
+END;
+CREATE TRIGGER IF NOT EXISTS catalyst_local_store_version_links_insert
+AFTER INSERT ON catalyst_local_analysis_links
+BEGIN
+    UPDATE catalyst_local_store_version SET version=version+1 WHERE id=1;
+END;
+CREATE TRIGGER IF NOT EXISTS catalyst_local_store_version_links_update
+AFTER UPDATE ON catalyst_local_analysis_links
+BEGIN
+    UPDATE catalyst_local_store_version SET version=version+1 WHERE id=1;
+END;
+CREATE TRIGGER IF NOT EXISTS catalyst_local_store_version_links_delete
+AFTER DELETE ON catalyst_local_analysis_links
+BEGIN
+    UPDATE catalyst_local_store_version SET version=version+1 WHERE id=1;
+END;
+CREATE TRIGGER IF NOT EXISTS catalyst_local_store_version_audit_insert
+AFTER INSERT ON catalyst_local_analysis_result_audit
+BEGIN
+    UPDATE catalyst_local_store_version SET version=version+1 WHERE id=1;
+END;
+CREATE TRIGGER IF NOT EXISTS catalyst_local_store_version_audit_update
+AFTER UPDATE ON catalyst_local_analysis_result_audit
+BEGIN
+    UPDATE catalyst_local_store_version SET version=version+1 WHERE id=1;
+END;
+CREATE TRIGGER IF NOT EXISTS catalyst_local_store_version_audit_delete
+AFTER DELETE ON catalyst_local_analysis_result_audit
+BEGIN
+    UPDATE catalyst_local_store_version SET version=version+1 WHERE id=1;
+END;
+"""
+_STORE_VERSION_SCHEMA_VERSION = "optix-local-catalyst-store-version-v1"
+_STORE_VERSION_SCHEMA_CHECKSUM = hashlib.sha256(
+    _STORE_VERSION_SCHEMA.encode("utf-8")
+).hexdigest()
+
 TIMESTAMP_NORMALIZATION_VERSION = "optix-local-catalyst-timestamps-v1"
 TIMESTAMP_NORMALIZATION_CHECKSUM = hashlib.sha256(
     b"normalize local catalyst timestamps to UTC Z v1"
@@ -552,34 +613,23 @@ def _revision_cache_fresh(
 def _revision_store_cursor(connection: sqlite3.Connection) -> tuple[Any, ...]:
     """Cheap fingerprint of every table the revision view depends on.
 
-    The change/revision journals are append-only (O(1) MAX(rowid)); the
-    analysis link/audit tables stay small but see in-place result updates,
-    so their fingerprint also sums payload lengths — an in-place edit of a
-    published result (the fail-closed corruption scenarios exercised by the
-    test suite) must invalidate immediately, not after the age cap.
+    The change journal is append-only (O(1) MAX(rowid)). Triggers bump the
+    local store version on every insert, update or delete of revisions,
+    analysis links and result audits, so an in-place edit of a published
+    result (the fail-closed corruption scenarios exercised by the test suite)
+    invalidates immediately. A store created before the version table has no
+    shared cursor: every read rebuilds until the owner side initializes it.
     """
+    migrated = connection.execute(
+        """SELECT 1 FROM sqlite_master
+           WHERE type='table' AND name='catalyst_local_store_version'"""
+    ).fetchone()
+    if migrated is None:
+        return ("unversioned", uuid.uuid4().hex)
     row = connection.execute(
         """SELECT
                (SELECT MAX(rowid) FROM macrolens_etl_news_changes),
-               (SELECT MAX(rowid) FROM catalyst_local_news_revisions),
-               (SELECT MAX(article_checked_at) FROM catalyst_local_news_revisions),
-               (SELECT COUNT(*) FROM catalyst_local_analysis_links),
-               (SELECT MAX(rowid) FROM catalyst_local_analysis_links),
-               (SELECT MAX(COALESCE(result_available_at,''))
-                  FROM catalyst_local_analysis_links),
-               (SELECT MAX(COALESCE(created_at,''))
-                  FROM catalyst_local_analysis_links),
-               (SELECT TOTAL(
-                    LENGTH(COALESCE(result_json,''))
-                    + LENGTH(COALESCE(verified_at,''))
-                ) FROM catalyst_local_analysis_links),
-               (SELECT COUNT(*) FROM catalyst_local_analysis_result_audit),
-               (SELECT MAX(rowid) FROM catalyst_local_analysis_result_audit),
-               (SELECT TOTAL(
-                    LENGTH(COALESCE(result_json,''))
-                    + LENGTH(COALESCE(outcome,''))
-                    + LENGTH(COALESCE(reason,''))
-                ) FROM catalyst_local_analysis_result_audit)"""
+               (SELECT version FROM catalyst_local_store_version WHERE id=1)"""
     ).fetchone()
     return tuple(row)
 
@@ -1678,6 +1728,7 @@ class LocalCatalystIntelligence:
             connection.execute("PRAGMA synchronous=FULL")
             connection.executescript(_SCHEMA)
             connection.executescript(_VERIFIED_FOCUS_SCHEMA)
+            connection.executescript(_STORE_VERSION_SCHEMA)
             row = connection.execute(
                 "SELECT checksum FROM catalyst_local_schema WHERE version=?",
                 (SCHEMA_VERSION,),
@@ -1695,6 +1746,19 @@ class LocalCatalystIntelligence:
             connection.execute(
                 "INSERT OR IGNORE INTO catalyst_local_schema(version,checksum,applied_at) VALUES(?,?,?)",
                 (_VERIFIED_FOCUS_SCHEMA_VERSION, _VERIFIED_FOCUS_SCHEMA_CHECKSUM, _iso()),
+            )
+            store_version_schema = connection.execute(
+                "SELECT checksum FROM catalyst_local_schema WHERE version=?",
+                (_STORE_VERSION_SCHEMA_VERSION,),
+            ).fetchone()
+            if (
+                store_version_schema is not None
+                and store_version_schema["checksum"] != _STORE_VERSION_SCHEMA_CHECKSUM
+            ):
+                raise RuntimeError("local_catalyst_schema_checksum_mismatch")
+            connection.execute(
+                "INSERT OR IGNORE INTO catalyst_local_schema(version,checksum,applied_at) VALUES(?,?,?)",
+                (_STORE_VERSION_SCHEMA_VERSION, _STORE_VERSION_SCHEMA_CHECKSUM, _iso()),
             )
             self._add_missing_columns(
                 connection, "catalyst_local_hotspot_items", _HOTSPOT_ITEM_SCORE_COLUMNS,
