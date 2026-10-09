@@ -173,6 +173,7 @@ _REVISION_QUALITY_COLUMNS = (
     ("quality_reason_article", "TEXT"),
     ("quality_article_visible_at", "TEXT"),
     ("quality_rules_version", "TEXT"),
+    ("quality_article_checked_at", "TEXT"),
 )
 _QUALITY_BACKFILL_BATCH = 5_000
 # reconcile re-projects the same settled jobs and re-audits the same published
@@ -872,7 +873,10 @@ def _news_quality_reason(
     revision: Mapping[str, Any] | sqlite3.Row, *, as_of: datetime,
 ) -> str | None:
     item = revision if isinstance(revision, Mapping) else dict(revision)
-    if item.get("quality_rules_version") == NEWS_QUALITY_RULES_VERSION:
+    if (
+        item.get("quality_rules_version") == NEWS_QUALITY_RULES_VERSION
+        and item.get("quality_article_checked_at") == item.get("article_checked_at")
+    ):
         visible_at = _parse_time(item.get("quality_article_visible_at"))
         if visible_at is not None and visible_at <= as_of:
             return item.get("quality_reason_article")
@@ -887,12 +891,14 @@ def _news_quality_reason(
 
 def _quality_columns(
     revision: Mapping[str, Any] | sqlite3.Row,
-) -> tuple[str | None, str | None, str | None, str]:
+) -> tuple[str | None, str | None, str | None, str, str | None]:
     """Stored verdicts for _news_quality_reason, valid for every as_of.
 
     The article only counts once both its fetch and its check precede as_of,
     so the row keeps the verdict without it, the verdict with it, and the
-    moment it becomes visible.
+    moment it becomes visible. The article check they were computed from is
+    kept too: a build that writes articles without these columns (one rolled
+    back to) leaves them stale, and readers then recompute.
     """
 
     item = revision if isinstance(revision, Mapping) else dict(revision)
@@ -901,13 +907,17 @@ def _quality_columns(
     article = _available_article(item)
     fetched_at = _parse_time(article.get("fetched_at")) if article is not None else None
     checked_at = _parse_time(item.get("article_checked_at"))
+    checked_text = item.get("article_checked_at")
     if article is None or fetched_at is None or checked_at is None:
-        return news_quality(title, summary, None), None, None, NEWS_QUALITY_RULES_VERSION
+        return (
+            news_quality(title, summary, None), None, None, NEWS_QUALITY_RULES_VERSION, checked_text,
+        )
     return (
         news_quality(title, summary, None),
         news_quality(title, summary, article.get("text")),
         _iso(max(fetched_at, checked_at)),
         NEWS_QUALITY_RULES_VERSION,
+        checked_text,
     )
 
 
@@ -2202,8 +2212,9 @@ class LocalCatalystIntelligence:
                        source_available_at,source_tickers_json,
                        canonical_tickers_json,source_names_json,source_count,
                        ingested_at,quality_reason,quality_reason_article,
-                       quality_article_visible_at,quality_rules_version
-                   ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       quality_article_visible_at,quality_rules_version,
+                       quality_article_checked_at
+                   ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     int(row["news_id"]),
                     int(row["change_sequence"]),
@@ -5007,7 +5018,8 @@ class LocalCatalystIntelligence:
         }
 
     def _backfill_revision_quality(self) -> int:
-        """Store verdicts for rows written before the columns or under older rules.
+        """Store verdicts for rows written before the columns, under older
+        rules, or whose article another build changed without them.
 
         Computed outside any write lock; the short update skips a row whose
         article changed meanwhile (that update stores its own verdicts).
@@ -5021,6 +5033,7 @@ class LocalCatalystIntelligence:
                           raw_summary,article_json,article_checked_at
                    FROM catalyst_local_news_revisions
                    WHERE quality_rules_version IS NOT ?
+                      OR quality_article_checked_at IS NOT article_checked_at
                    LIMIT ?""",
                 (NEWS_QUALITY_RULES_VERSION, _QUALITY_BACKFILL_BATCH),
             ).fetchall()
@@ -5042,7 +5055,8 @@ class LocalCatalystIntelligence:
             changed = connection.executemany(
                 """UPDATE catalyst_local_news_revisions SET
                        quality_reason=?,quality_reason_article=?,
-                       quality_article_visible_at=?,quality_rules_version=?
+                       quality_article_visible_at=?,quality_rules_version=?,
+                       quality_article_checked_at=?
                    WHERE news_id=? AND change_sequence=? AND content_hash=?
                      AND article_checked_at IS ?""",
                 updates,
@@ -6726,7 +6740,8 @@ class LocalCatalystIntelligence:
                 connection.execute(
                     """UPDATE catalyst_local_news_revisions SET article_json=?,article_checked_at=?,
                               quality_reason=?,quality_reason_article=?,
-                              quality_article_visible_at=?,quality_rules_version=?
+                              quality_article_visible_at=?,quality_rules_version=?,
+                              quality_article_checked_at=?
                        WHERE news_id=? AND change_sequence=? AND content_hash=?""",
                     (article_json, checked_at, *quality, *identity),
                 )

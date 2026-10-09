@@ -847,3 +847,43 @@ def test_the_store_version_script_applies_all_or_nothing(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'catalyst_local_store_version_%'"
         ).fetchone()[0]
     assert triggers == 9
+
+
+def test_an_article_written_without_the_quality_columns_is_recomputed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import json
+
+    intelligence, _article_times = _quality_store(tmp_path, monkeypatch)
+    checked_at = local_module._iso(NOW - timedelta(minutes=2))
+    # A build rolled back to (it knows nothing of the quality columns) reads
+    # the dividend item's article: the body reports a buyback.
+    with intelligence._connect() as connection:
+        connection.execute(
+            """UPDATE catalyst_local_news_revisions SET article_json=?,article_checked_at=?
+               WHERE news_id=1""",
+            (
+                json.dumps({
+                    "status": "available",
+                    "text": "Acme also announced a share buyback programme.",
+                    "source_url": "https://example.test/article",
+                    "fetched_at": (NOW - timedelta(minutes=3)).isoformat(),
+                    "reason": None,
+                    "truncated": False,
+                }),
+                checked_at,
+            ),
+        )
+        connection.commit()
+    as_of = NOW + timedelta(days=1)
+    row = next(row for row in _stored_rows(intelligence) if row["news_id"] == 1)
+    assert row["quality_reason"] == "routine_dividend"
+    assert local_module._news_quality_reason(row, as_of=as_of) is None
+    assert local_module._news_quality_reason(row, as_of=as_of) == _legacy_quality(row, as_of=as_of)
+
+    intelligence._quality_backfill_complete = False
+    assert intelligence._backfill_revision_quality() == 1
+    row = next(row for row in _stored_rows(intelligence) if row["news_id"] == 1)
+    assert row["quality_article_checked_at"] == checked_at
+    assert row["quality_reason_article"] is None
+    assert local_module._news_quality_reason(row, as_of=as_of) is None
