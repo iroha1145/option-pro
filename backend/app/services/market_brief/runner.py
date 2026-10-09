@@ -50,6 +50,7 @@ class BriefRunConfig:
     daily_max_runs: int = 6
     shared_daily_budget_usd: float = 0
     shared_budget_start_at: datetime | None = None
+    shared_budget_enforce_limit: bool = True
     budget_path: Path | None = None
     model: str = "claude-opus-5-5"
     effort: str = "xhigh"
@@ -59,7 +60,7 @@ class BriefRunConfig:
     web_search_max_uses: int = 10
     web_fetch_max_uses: int = 8
     web_fetch_max_content_tokens: int = 12_000
-    code_execution_tool: bool = False
+    code_execution_tool: bool = True
     refusal_fallback: bool = False
     request_timeout_seconds: float = 1500.0
     evidence_max_bytes: int = 56_000
@@ -257,7 +258,8 @@ def _run_admitted(
     collected: dict[str, Any] = {
         "usage": {key: 0 for key in ("input_tokens", "output_tokens", "cache_creation_input_tokens",
                  "cache_creation_1h_input_tokens", "cache_creation_5m_input_tokens",
-                 "cache_read_input_tokens", "web_search_requests", "web_fetch_requests")},
+                 "cache_read_input_tokens", "web_search_requests", "web_fetch_requests",
+                 "code_execution_requests")},
         "cost_microusd": 0, "usage_complete": True, "request_rounds": (),
     }
     terminal_record: BriefRunRecord | None = None
@@ -328,6 +330,7 @@ def _run_admitted(
                 config.budget_path or store.root.parent / "ai-jobs.db",
                 config.shared_daily_budget_usd, brief_store_path=store.root,
                 accounting_start_at=config.shared_budget_start_at,
+                enforce_limit=config.shared_budget_enforce_limit,
             )
 
         def before_request(round_index: int, max_tokens: int) -> None:

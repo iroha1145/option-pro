@@ -646,7 +646,9 @@ def test_earnings_provider_schema_describes_chinese_prose_without_regex_grammar(
     assert "BDC" not in runtime._CLAUDE_EARNINGS_ABBREVIATIONS.split("、")
     assert schema == original
     news = runtime.build_runtime_request("news_impact", {}).schema
-    assert runtime.claude_output_schema("news_impact", news) == news
+    news_output = runtime.claude_output_schema("news_impact", news)
+    assert "不得照抄" in news_output["properties"]["uncertainty_notes"].pop("description")
+    assert news_output == news
 
 
 @pytest.mark.parametrize(("field", "value"), [

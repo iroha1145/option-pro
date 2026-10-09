@@ -175,27 +175,27 @@ def test_migrated_paid_pending_row_keeps_slot_and_cannot_restart(tmp_path):
         _start(repo, row, "first")
 
 
-def test_openai_remains_one_per_lane_even_when_requested_limit_is_four(tmp_path):
+def test_openai_shares_one_provider_slot_across_lanes_with_global_limit_four(tmp_path):
     repo = AIJobRepository(tmp_path / "jobs.db")
-    for index, lane in enumerate(["manual", "scheduled"]):
+    _create(repo, 0, model=LEGACY, lane="manual")
+    row = _claim(repo, "first")
+    assert _start(repo, row, "first") == "started"
+    for index, lane in enumerate(["manual", "scheduled"], 1):
         _create(repo, index, model=LEGACY, lane=lane)
-        row = _claim(repo, lane)
-        assert _start(repo, row, lane) == "started"
+        assert _claim(repo, lane) is None
         snapshot = _snapshot(repo, model=LEGACY, lane=lane)
-        assert snapshot["concurrency_limit"] == 1
+        assert snapshot["concurrency_limit"] == 4
         assert snapshot["active_jobs_count"] == 1
         assert not snapshot["concurrency_available"]
-    _create(repo, 3, model=LEGACY)
-    assert _claim(repo, "third") is None
+    assert _snapshot(repo)["concurrency_available"]
 
 
-def test_legacy_jobs_count_toward_new_claude_total(tmp_path):
+def test_legacy_openai_occupant_counts_toward_global_four(tmp_path):
     repo = AIJobRepository(tmp_path / "jobs.db")
-    for index, lane in enumerate(["manual", "scheduled"]):
-        _create(repo, index, model=LEGACY, lane=lane)
-        row = _claim(repo, lane)
-        assert _start(repo, row, lane) == "started"
-    for index in range(2):
+    _create(repo, 0, model=LEGACY, lane="manual")
+    row = _claim(repo, "legacy")
+    assert _start(repo, row, "legacy") == "started"
+    for index in range(3):
         _create(repo, index + 2, lane="scheduled")
         row = _claim(repo, f"claude-{index}")
         assert _start(repo, row, f"claude-{index}") == "started"
@@ -204,20 +204,26 @@ def test_legacy_jobs_count_toward_new_claude_total(tmp_path):
     assert _claim(repo, "fifth") is None
 
 
-def test_blocked_claude_does_not_hide_an_available_legacy_lane(tmp_path):
+def test_full_claude_global_capacity_also_blocks_openai(tmp_path):
     repo = AIJobRepository(tmp_path / "jobs.db")
+    active = []
     for index in range(4):
         _create(repo, index, lane="scheduled")
         row = _claim(repo, f"owner-{index}")
         assert _start(repo, row, f"owner-{index}") == "started"
-    _create(repo, 5, priority=100)
-    legacy = _create(repo, 6, model=LEGACY, priority=50)
+        active.append(row["job_id"])
+    legacy = _create(repo, 6, model=LEGACY, priority=100)
+    assert _claim(repo, "legacy") is None
+    # A freed global slot admits OpenAI; its earlier block does not starve it.
+    with sqlite3.connect(repo.path) as connection:
+        connection.execute("UPDATE ai_jobs SET status='completed' WHERE job_id=?", (active[0],))
     row = _claim(repo, "legacy")
     assert row["job_id"] == legacy["job_id"]
     assert _start(repo, row, "legacy") == "started"
+    assert _snapshot(repo)["active_jobs_count"] == 4
 
 
-def test_legacy_optional_arguments_keep_original_default_single_lane(tmp_path):
+def test_optional_concurrency_default_is_one_globally_across_models_and_lanes(tmp_path):
     repo = AIJobRepository(tmp_path / "jobs.db")
     _create(repo, 0, model=LEGACY)
     row = repo.claim_due("first", 600)
@@ -225,8 +231,10 @@ def test_legacy_optional_arguments_keep_original_default_single_lane(tmp_path):
     _create(repo, 1, model=LEGACY)
     assert repo.claim_due("second", 600) is None
     _create(repo, 2, model=LEGACY, lane="scheduled")
-    row = repo.claim_due("scheduled", 600)
-    assert repo.mark_submission_started(row["job_id"], "scheduled") == "started"
+    _create(repo, 3, model=CLAUDE, lane="scheduled")
+    assert repo.claim_due("scheduled", 600) is None
+    assert _snapshot(repo, limit=1)["concurrency_limit"] == 1
+    assert not _snapshot(repo, limit=1)["concurrency_available"]
 
 
 @pytest.mark.parametrize("limit", [1, 2, 3])

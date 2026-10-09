@@ -103,25 +103,25 @@ def test_haiku_saved_usage_preserves_unknown_components_and_search_counter():
 
 def test_shared_budget_first_round_block_does_not_send_network(tmp_path):
     budget = SharedModelBudget(tmp_path / "ai-jobs.db", 9.5)
-    assert budget.reserve_brief_request("prior", 1, 4_000_000)
+    assert budget.reserve_brief_request("prior", 1, 9_500_000)
     client = Client(reply(SAMPLE_RESULT))
     record, _ = run(BriefStore(tmp_path / "market-brief"), client,
                     config=BriefRunConfig(shared_daily_budget_usd=9.5, budget_path=budget.path))
     assert record.error_code == errors.DAILY_BUDGET_USD_REACHED
     assert not client.calls and record.cost_microusd == 0 and record.usage_complete
-    assert budget.snapshot()["used_microusd"] == 4_000_000
+    assert budget.snapshot()["used_microusd"] == 9_500_000
 
 
 def test_shared_budget_blocks_continuation_after_true_cost_exceeds_allowance(tmp_path):
     budget = SharedModelBudget(tmp_path / "ai-jobs.db", 9.5)
-    first = message([json_text()], stop_reason="pause_turn", message_usage=usage(input_tokens=1_700_000, output_tokens=100))
+    first = message([json_text()], stop_reason="pause_turn", message_usage=usage(input_tokens=2_500_000, output_tokens=100))
     client = Client(first, reply(SAMPLE_RESULT))
     store = BriefStore(tmp_path / "market-brief")
     record, _ = run(store, client, config=BriefRunConfig(shared_daily_budget_usd=9.5, budget_path=budget.path))
     assert len(client.calls) == 1 and record.error_code == errors.DAILY_BUDGET_USD_REACHED
-    assert record.cost_microusd == 6_802_000 and record.usage_complete
-    assert record.raw_output_text and record.usage["input_tokens"] == 1_700_000
-    assert budget.snapshot()["used_microusd"] == 6_802_000
+    assert record.cost_microusd == 10_002_000 and record.usage_complete
+    assert record.raw_output_text and record.usage["input_tokens"] == 2_500_000
+    assert budget.snapshot()["used_microusd"] == 10_002_000
     assert (store.root / "request-rounds" / record.run_id / "1.json").exists()
 
 
@@ -314,3 +314,48 @@ def test_local_processing_failure_after_paid_response_keeps_reservation(tmp_path
     assert receipt["confirmed_unbilled"] is False
     assert receipt["cost_microusd"] is None
     assert store.reconcile_request_rounds(SharedModelBudget(tmp_path / "ai-jobs.db", 9.5)) == 0
+
+
+@pytest.mark.parametrize("enforce", [True, False])
+def test_runner_starts_with_low_balance_and_rechecks_each_continuation(tmp_path, enforce):
+    budget = SharedModelBudget(tmp_path / "ai-jobs.db", 9.5, enforce_limit=enforce)
+    assert budget.reserve_brief_request("prior", 1, 9_000_000)
+    client = Client(reply("working", stop_reason="pause_turn"), reply(SAMPLE_RESULT))
+    record, _ = run(BriefStore(tmp_path / "market-brief"), client, config=BriefRunConfig(
+        shared_daily_budget_usd=9.5, shared_budget_enforce_limit=enforce, budget_path=budget.path))
+    assert record.status == "completed" and len(client.calls) == 2
+    assert len(record.request_rounds) == 2
+    assert budget.snapshot()["used_microusd"] == 9_000_000 + record.cost_microusd
+    with sqlite3.connect(budget.path) as conn:
+        holds = [row[0] for row in conn.execute("SELECT reservation_microusd FROM model_budget_brief_requests WHERE run_id=? ORDER BY round_index", (record.run_id,))]
+    assert holds[0] == (500_000 if enforce else 6_060_000)
+    assert 0 < holds[1] < holds[0] if enforce else holds[1] > 500_000
+
+
+def test_tracking_runner_continues_above_daily_reference(tmp_path):
+    budget = SharedModelBudget(tmp_path / "ai-jobs.db", 10, enforce_limit=False)
+    assert budget.reserve_brief_request("prior", 1, 11_000_000)
+    client = Client(reply("working", stop_reason="pause_turn"), reply(SAMPLE_RESULT))
+    record, _ = run(BriefStore(tmp_path / "market-brief"), client, config=BriefRunConfig(
+        shared_daily_budget_usd=10, shared_budget_enforce_limit=False, budget_path=budget.path))
+    assert record.status == "completed" and len(client.calls) == 2
+    assert budget.snapshot()["used_microusd"] == 11_000_000 + record.cost_microusd
+
+
+
+def test_tracking_mode_keeps_unknown_slot_quarantine_and_daily_run_limit(tmp_path):
+    import httpx2
+    config = BriefRunConfig(shared_daily_budget_usd=10, shared_budget_enforce_limit=False, daily_max_runs=2)
+    store = BriefStore(tmp_path / "market-brief")
+    timeout = anthropic.APITimeoutError(request=httpx2.Request("POST", "https://example.test/messages"))
+    first, _ = run(store, FakeClient([timeout]), slot="pre_open", trigger="manual", config=config)
+    assert first.error_code == errors.SUBMISSION_OUTCOME_UNKNOWN
+    assert SharedModelBudget(tmp_path / "ai-jobs.db", 10, enforce_limit=False).snapshot()["opus_unsettled_microusd"] == 6_060_000
+    repeated_client = Client(reply(SAMPLE_RESULT))
+    repeated, _ = run(store, repeated_client, slot="pre_open", trigger="manual", config=config)
+    assert repeated.error_code == errors.MARKET_BRIEF_IN_PROGRESS and not repeated_client.calls
+    other, _ = run(store, Client(reply(SAMPLE_RESULT)), slot="post_close", config=config)
+    assert other.status == "completed"
+    limited_client = Client(reply(SAMPLE_RESULT))
+    limited, _ = run(store, limited_client, slot="post_close", trigger="manual", config=config)
+    assert limited.error_code == errors.DAILY_RUN_LIMIT_REACHED and not limited_client.calls

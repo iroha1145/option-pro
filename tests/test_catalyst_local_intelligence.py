@@ -368,6 +368,7 @@ def test_v2_local_database_adds_v3_result_audit_tables_without_rewriting_history
         ("optix-local-catalyst-timestamps-v1",),
         ("optix-local-catalyst-v2",),
         ("optix-local-catalyst-v7",),
+        ("optix-verified-focus-publication-v1",),
     ]
     assert "catalyst_local_analysis_result_audit" in tables
     assert "catalyst_local_focus_result_audit" in tables

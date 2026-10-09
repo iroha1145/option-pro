@@ -85,13 +85,12 @@ def _shared_budget(now: datetime) -> dict[str, Any] | None:
     budget = SharedModelBudget(
         settings.openai_job_db_path, amount, brief_store_path=_store().root,
         accounting_start_at=getattr(settings, "model_budget_start_at", None),
+        enforce_limit=getattr(settings, "model_budget_enforce_limit", True),
     )
     budget.bootstrap_brief_history(
         now=now, unknown_reservation_microusd=reservation,
     )
-    return budget.snapshot(
-        now=now, reservation_microusd=reservation,
-    )
+    return budget.snapshot(now=now)
 
 
 def _store() -> Any:

@@ -91,6 +91,7 @@ export interface FocusCycleJob extends Omit<FixtureFocusCycleJob, 'status'> {
 
 export interface MarketFocusCycle extends FixtureFocusCycle {
   errorCode?: string | null;
+  isHistorical?: boolean;
   latestAttempt?: {
     cycleId: string;
     status: string;
@@ -343,6 +344,7 @@ function nCycleRecord(r: Rec): MarketFocusCycle {
     sampleLabel: pickN(r, 'newsCount', 'news_count') !== null ? __t('条') : __t('组事件'),
     status: pickS(r, 'status'),
     errorCode: pickS(r, 'error_code', 'errorCode'),
+    isHistorical: pickS(r, 'verification_status') === 'legacy_unverified' || pickB(r, 'is_historical') === true,
     summary: pickS(result, 'summary_zh', 'market_summary') ?? pickS(r, 'summary') ?? '',
     headline: pickS(result, 'headline_summary'),
     uncertainties: unwrap(result, 'market_uncertainties').length

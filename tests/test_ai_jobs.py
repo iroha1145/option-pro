@@ -1135,31 +1135,27 @@ def test_completed_job_replaces_reservation_with_usage_cost(tmp_path):
     assert completed["usage_total_tokens"] == 150
 
 
-def test_completed_charge_cannot_exceed_the_original_reservation(tmp_path):
+def test_completed_known_charge_exceeds_reservation_and_preserves_usage(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     job, _ = _create_earnings_job(repository)
-    owner = "settlement-cap-owner"
-    claimed = repository.claim_due(owner, 60)
-    assert claimed is not None
-    assert repository.mark_submission_started(
-        job["job_id"], owner, daily_limit=4
-    ) == "started"
+    owner = "uncapped-settlement-owner"
+    assert repository.claim_due(owner, 60)["job_id"] == job["job_id"]
+    assert repository.mark_submission_started(job["job_id"], owner, daily_limit=4) == "started"
     reservation = runtime.budget_reservation_microusd("earnings_impact", model="gpt-5.6-terra")
-    repository.complete(
-        job["job_id"],
-        owner,
-        _earnings_result(),
-        {
-            "input_tokens": 1_050_000,
-            "cached_input_tokens": 0,
-            "output_tokens": 128_000,
-            "reasoning_tokens": 128_000,
-            "total_tokens": 1_178_000,
-        },
-    )
-
+    usage = {
+        "input_tokens": 1_050_000,
+        "cached_input_tokens": 0,
+        "output_tokens": 128_000,
+        "reasoning_tokens": 128_000,
+        "total_tokens": 1_178_000,
+        "web_search_requests": 1,
+    }
+    repository.complete(job["job_id"], owner, _earnings_result(), usage)
     completed = repository.get_job(job["job_id"])
-    assert completed["budget_charge_microusd"] == reservation
+    assert completed["budget_charge_microusd"] == 9_452_500
+    assert completed["budget_charge_microusd"] > reservation
+    for field in ("input_tokens", "cached_input_tokens", "output_tokens", "reasoning_tokens", "total_tokens"):
+        assert completed["usage_" + field] == usage[field]
 
 
 @pytest.mark.parametrize(
@@ -3108,168 +3104,100 @@ def test_focus_cycle_creation_survives_a_full_bulk_queue(tmp_path):
     assert focus["status"] == "pending"
 
 
-def test_budget_snapshot_reports_the_requested_lane_slot(tmp_path):
+def test_budget_snapshot_reports_one_openai_slot_across_lanes_and_global_room(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     job, _ = _create_earnings_job(repository, submission_source="scheduled")
     owner = "snapshot-lane-owner"
-    assert repository.claim_due(owner, 60)["job_id"] == job["job_id"]
-    assert (
-        repository.mark_submission_started(job["job_id"], owner, daily_limit=4)
-        == "started"
-    )
+    assert repository.claim_due(owner, 60, max_concurrency=4)["job_id"] == job["job_id"]
+    assert repository.mark_submission_started(job["job_id"], owner, daily_limit=4, max_concurrency=4) == "started"
 
-    def slot(lane):
-        return repository.budget_snapshot(
-            daily_limit=0,
-            daily_budget_usd=0,
-            lane=lane,
-        )["concurrency_available"]
+    def snapshot(lane, model="gpt-5.6-terra"):
+        return repository.budget_snapshot(daily_limit=0, daily_budget_usd=0,
+                                          lane=lane, model=model, max_concurrency=4)
 
-    assert slot(None) is False
-    assert slot("scheduled") is False
-    assert slot("manual") is True
+    for lane in (None, "scheduled", "manual"):
+        state = snapshot(lane)
+        assert state["concurrency_available"] is False
+        assert state["active_jobs_count"] == 1 and state["concurrency_limit"] == 4
+    assert snapshot("manual", "claude-haiku-5-5")["concurrency_available"] is True
+    repository.complete(job["job_id"], owner, _earnings_result(), {
+        "input_tokens": 100, "cached_input_tokens": 0, "output_tokens": 50,
+        "reasoning_tokens": 0, "total_tokens": 150,
+    })
+    for lane in (None, "scheduled", "manual"):
+        assert snapshot(lane)["concurrency_available"] is True
 
 
-def test_manual_backlog_does_not_starve_the_scheduled_lane(tmp_path):
-    """手动道在飞时，积压的高优先级手动任务不能一直挡住后台道。"""
-
+def test_openai_backlog_does_not_starve_scheduled_claude_and_resumes_by_priority(tmp_path):
+    """OpenAI shares one slot; its backlog cannot consume Claude's remaining room."""
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     repository.initialize()
-    signal_version, signal_digest = runtime.schema_identity("signal_analysis", model="gpt-5.6-terra")
+    version, digest = runtime.schema_identity("signal_analysis", model="gpt-5.6-terra")
 
-    def manual_job(ticker: str):
-        job, _ = repository.create_job(
-            job_type="signal_analysis",
-            payload={"ticker": ticker},
-            model="gpt-5.6-terra",
-            reasoning="max",
-            execution_mode="background",
-            prompt_version="signal-analysis-zh-cn-v5",
-            schema_version=signal_version,
-            schema_sha256=signal_digest,
-            max_queued=200,
-            submission_source="manual",
-            priority=80,
+    def manual_job(ticker):
+        row, _ = repository.create_job(
+            job_type="signal_analysis", payload={"ticker": ticker},
+            model="gpt-5.6-terra", reasoning="max", execution_mode="background",
+            prompt_version="signal-analysis-zh-cn-v5", schema_version=version,
+            schema_sha256=digest, max_queued=200, submission_source="manual", priority=80,
         )
-        return job
+        return row
 
     owner = "lane-owner"
     running = manual_job("AMD")
-    assert repository.claim_due(owner, 60)["job_id"] == running["job_id"]
-    assert (
-        repository.mark_submission_started(running["job_id"], owner, daily_limit=4)
-        == "started"
+    assert repository.claim_due(owner, 60, max_concurrency=4)["job_id"] == running["job_id"]
+    assert repository.mark_submission_started(running["job_id"], owner, daily_limit=4, max_concurrency=4) == "started"
+    backlog = [manual_job(ticker) for ticker in ("NVDA", "MSFT", "META", "TSLA")]
+    scheduled, _ = _create_earnings_job(repository, submission_source="scheduled")
+    assert repository.claim_due(owner, 60, max_concurrency=4) is None
+    assert repository.get_job(scheduled["job_id"])["lease_owner"] is None
+    version, digest = runtime.schema_identity("earnings_impact", model="claude-haiku-5-5")
+    claude, _ = repository.create_job(
+        job_type="earnings_impact", payload={"ticker": "QCOM", "name": "高通"},
+        model="claude-haiku-5-5", reasoning="xhigh", execution_mode="background",
+        prompt_version="earnings-impact-v2", schema_version=version,
+        schema_sha256=digest, max_queued=200, submission_source="scheduled", priority=40,
     )
-    for ticker in ("NVDA", "MSFT", "META", "TSLA"):
-        manual_job(ticker)
-    news_version, news_digest = runtime.schema_identity("news_impact", model="gpt-5.6-terra")
-    scheduled, _ = repository.create_job(
-        job_type="news_impact",
-        payload={"ticker": "AMD", "title": "后台批任务", "allowed_tickers": ["AMD"]},
-        model="gpt-5.6-terra",
-        reasoning="max",
-        execution_mode="background",
-        prompt_version="news-impact-v1",
-        schema_version=news_version,
-        schema_sha256=news_digest,
-        max_queued=200,
-        submission_source="scheduled",
-        priority=70,
-    )
-
-    claimed = repository.claim_due(owner, 60)
-
-    assert claimed["job_id"] == scheduled["job_id"]
-    assert (
-        repository.mark_submission_started(scheduled["job_id"], owner, daily_limit=4)
-        == "started"
-    )
+    assert repository.claim_due("claude", 60, max_concurrency=4)["job_id"] == claude["job_id"]
+    assert repository.mark_submission_started(claude["job_id"], "claude", daily_limit=4, max_concurrency=4) == "started"
+    result = _large_signal_result()
+    result["asset"] = "AMD"
+    repository.complete(running["job_id"], owner, result, {
+        "input_tokens": 100, "cached_input_tokens": 0, "output_tokens": 50,
+        "reasoning_tokens": 0, "total_tokens": 150,
+    })
+    next_job = repository.claim_due(owner, 60, max_concurrency=4)
+    assert next_job["job_id"] == backlog[0]["job_id"]
+    assert repository.mark_submission_started(next_job["job_id"], owner, daily_limit=4, max_concurrency=4) == "started"
+    assert repository.get_job(scheduled["job_id"])["submission_started_at"] is None
 
 
-def test_manual_fast_lane_is_not_blocked_by_scheduled_in_flight(tmp_path):
-    """手动任务插队（用户实测反馈）：后台批任务在飞时，用户点的个股分析
-    不再等它跑完——manual/scheduled 双车道各占一个提交槽，同道内仍单飞。"""
-
-    database = tmp_path / "ai-jobs.db"
-    repository = AIJobRepository(database)
-    repository.initialize()
-    version, digest = runtime.schema_identity("news_impact", model="gpt-5.6-terra")
-    scheduled, _ = repository.create_job(
-        job_type="news_impact",
-        payload={"ticker": "NVDA", "title": "背景批任务", "allowed_tickers": ["NVDA"]},
-        model="gpt-5.6-terra",
-        reasoning="max",
-        execution_mode="background",
-        prompt_version="news-impact-v1",
-        schema_version=version,
-        schema_sha256=digest,
-        max_queued=200,
-        submission_source="scheduled",
-        priority=70,
-    )
+def test_manual_openai_waits_for_scheduled_openai_then_runs_by_priority(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    scheduled, _ = _create_earnings_job(repository, submission_source="scheduled")
     owner = "lane-owner"
-    assert repository.claim_due(owner, 60) is not None
-    assert (
-        repository.mark_submission_started(
-            scheduled["job_id"], owner, daily_limit=4
+    assert repository.claim_due(owner, 60, max_concurrency=4)["job_id"] == scheduled["job_id"]
+    assert repository.mark_submission_started(scheduled["job_id"], owner, daily_limit=4, max_concurrency=4) == "started"
+    version, digest = runtime.schema_identity("signal_analysis", model="gpt-5.6-terra")
+    queued = []
+    for ticker, lane, priority in (("AMD", "manual", 80), ("NVDA", "manual", 80), ("MSFT", "scheduled", 70)):
+        row, _ = repository.create_job(
+            job_type="signal_analysis", payload={"ticker": ticker},
+            model="gpt-5.6-terra", reasoning="max", execution_mode="background",
+            prompt_version="signal-analysis-zh-cn-v5", schema_version=version,
+            schema_sha256=digest, max_queued=200, submission_source=lane, priority=priority,
         )
-        == "started"
-    )
-
-    sig_version, sig_digest = runtime.schema_identity("signal_analysis", model="gpt-5.6-terra")
-    manual, _ = repository.create_job(
-        job_type="signal_analysis",
-        payload={"ticker": "AMD"},
-        model="gpt-5.6-terra",
-        reasoning="max",
-        execution_mode="background",
-        prompt_version="signal-analysis-zh-cn-v5",
-        schema_version=sig_version,
-        schema_sha256=sig_digest,
-        max_queued=200,
-        submission_source="manual",
-        priority=80,
-    )
-    assert repository.claim_due(owner, 60) is not None
-    # 后台道被占，交互道畅通。
-    assert (
-        repository.mark_submission_started(manual["job_id"], owner, daily_limit=4)
-        == "started"
-    )
-
-    # 交互道也严格单飞：同道第二单在槽位释放前不会被认领。
-    manual_second, _ = repository.create_job(
-        job_type="signal_analysis",
-        payload={"ticker": "NVDA"},
-        model="gpt-5.6-terra",
-        reasoning="max",
-        execution_mode="background",
-        prompt_version="signal-analysis-zh-cn-v5",
-        schema_version=sig_version,
-        schema_sha256=sig_digest,
-        max_queued=200,
-        submission_source="manual",
-        priority=80,
-    )
-    # 闸门本身的单飞见 zh_contract 的并发测试。
-    assert repository.claim_due(owner, 60) is None
-
-    scheduled_second, _ = repository.create_job(
-        job_type="news_impact",
-        payload={"ticker": "AMD", "title": "第二个背景批任务", "allowed_tickers": ["AMD"]},
-        model="gpt-5.6-terra",
-        reasoning="max",
-        execution_mode="background",
-        prompt_version="news-impact-v1",
-        schema_version=version,
-        schema_sha256=digest,
-        max_queued=200,
-        submission_source="scheduled",
-        priority=70,
-    )
-    assert repository.claim_due(owner, 60) is None
-    assert repository.get_job(manual_second["job_id"])["lease_owner"] is None
-    assert repository.get_job(scheduled_second["job_id"])["lease_owner"] is None
+        queued.append(row)
+    assert repository.claim_due(owner, 60, max_concurrency=4) is None
+    assert all(repository.get_job(row["job_id"])["lease_owner"] is None for row in queued)
+    repository.complete(scheduled["job_id"], owner, _earnings_result(), {
+        "input_tokens": 100, "cached_input_tokens": 0, "output_tokens": 50,
+        "reasoning_tokens": 0, "total_tokens": 150,
+    })
+    assert repository.claim_due(owner, 60, max_concurrency=4)["job_id"] == queued[0]["job_id"]
+    assert repository.mark_submission_started(queued[0]["job_id"], owner, daily_limit=4, max_concurrency=4) == "started"
+    assert repository.claim_due(owner, 60, max_concurrency=4) is None
+    assert all(repository.get_job(row["job_id"])["lease_owner"] is None for row in queued[1:])
 
 
 def test_active_for_ticker_sees_only_running_jobs_of_the_same_type(tmp_path):

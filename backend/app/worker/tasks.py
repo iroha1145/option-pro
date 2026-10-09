@@ -3215,6 +3215,7 @@ class MarketBriefTask:
         return self._config().to_run_config(
             shared_daily_budget_usd=daily_budget,
             shared_budget_start_at=getattr(self._settings, "model_budget_start_at", None),
+            shared_budget_enforce_limit=getattr(self._settings, "model_budget_enforce_limit", True),
             budget_path=getattr(self._settings, "openai_job_db_path", None),
         )
 
