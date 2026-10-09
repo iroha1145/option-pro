@@ -6,14 +6,19 @@ provider receipt). No test contacts a provider.
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import json
+import sqlite3
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace as NS
 
 import pytest
 
-from app.services.ai_jobs import runtime
+from app.services.ai_jobs import runtime, worker
 from app.services.ai_jobs.models import validate_result
+from app.services.ai_jobs.repository import AIJobRepository
 from test_ai_jobs_zh_contract import (
     _market_focus_payload,
     _market_focus_result,
@@ -22,6 +27,7 @@ from test_ai_jobs_zh_contract import (
 )
 from test_luna_news_web_fallback import payload as luna_payload
 from test_luna_news_web_fallback import response as luna_response
+from test_luna_news_web_fallback import settings as luna_settings
 
 
 FIXTURES = json.loads(
@@ -83,6 +89,28 @@ def _focus_field(text, field="headline_summary", **payload_changes):
         json.dumps(result, ensure_ascii=False),
         _market_focus_payload(**payload_changes),
     )[field]
+
+
+def _pending_luna_job(repo, payload, identity):
+    job, _ = repo.create_job(
+        job_type="news_impact", payload=payload, model=runtime.LUNA_MODEL, reasoning="max",
+        execution_mode="background", prompt_version=runtime.PROMPT_VERSIONS["news_impact"],
+        schema_version=identity[0], schema_sha256=identity[1], max_queued=10,
+    )
+    return job["job_id"]
+
+
+def _submit_pending(repo, monkeypatch):
+    submitted = []
+
+    async def submit(*_args, prepared, **_kwargs):
+        submitted.append(prepared.params)
+        return NS(id="resp_policy_transition", status="queued", model=runtime.LUNA_MODEL)
+
+    monkeypatch.setattr(runtime, "submit_background", submit)
+    claimed = repo.claim_due("owner", 60)
+    asyncio.run(worker.process_job(repo, luna_settings(repo.path), claimed, "owner"))
+    return submitted
 
 
 # --- A. Validator false positives -------------------------------------------
@@ -301,3 +329,107 @@ def test_grades_statistics_rate_spreads_and_generic_initialisms(text):
 def test_single_letters_and_initialisms_keep_the_security_red_line(text):
     with pytest.raises(ValueError):
         _news_field(text)
+
+
+# --- C. Limits and the identity transition they cause ------------------------
+
+
+def test_repository_defaults_track_the_shared_budget_without_blocking():
+    from app.config import Settings
+    from app.personal_config import load_personal_config
+
+    config = load_personal_config()
+    assert config.model_budget.daily_budget_usd > 0
+    assert config.model_budget.enforce_limit is False
+    assert Settings.model_fields["openai_background_poll_timeout_seconds"].default == 3600.0
+
+
+def test_token_ledger_never_blocks_under_the_tracking_budget(tmp_path):
+    repo = AIJobRepository(tmp_path / "news.db")
+    job_id = _pending_luna_job(repo, luna_payload(), runtime.LUNA_WEB_NEWS_IDENTITY)
+    assert repo.claim_due("owner", 60)["job_id"] == job_id
+    state = repo.mark_submission_started(
+        job_id, "owner",
+        daily_token_limit=102_400,
+        shared_daily_budget_usd=10.0,
+        shared_budget_enforce_limit=False,
+        max_concurrency=4,
+    )
+    assert state == "started"
+    snapshot = repo.budget_snapshot(
+        daily_limit=0, daily_budget_usd=0, daily_token_limit=102_400,
+        shared_daily_budget_usd=10.0, shared_budget_enforce_limit=False,
+        model=runtime.LUNA_MODEL, max_concurrency=4,
+    )
+    assert snapshot["token_budget_available"] is True
+    assert snapshot["budget_mode"] == "tracking"
+
+
+def test_previous_identities_stay_current_only_for_the_exact_policy(monkeypatch):
+    prompt = runtime.PROMPT_VERSIONS["news_impact"]
+    for stored in (
+        runtime.LUNA_ALWAYS_WEB_NEWS_IDENTITY,
+        runtime.LEGACY_LUNA_NEWS_IDENTITY,
+        runtime.LUNA_WEB_NEWS_IDENTITY,
+    ):
+        assert runtime.schema_identity_current("news_impact", prompt, *stored, model=runtime.LUNA_MODEL)
+    assert runtime.schema_identity_current("news_impact", prompt, *runtime.NEWS_CONTENT_SCHEMA_IDENTITY, model=runtime.OFFICIAL_OPENAI_MODEL)
+    assert runtime.schema_identity_current(
+        "earnings_impact", runtime.PROMPT_VERSIONS["earnings_impact"],
+        *runtime.LEGACY_OPENAI_EARNINGS_IDENTITY, model=runtime.OFFICIAL_OPENAI_MODEL,
+    )
+    # A Luna-only identity never makes another model's row current.
+    assert not runtime.schema_identity_current("news_impact", prompt, *runtime.LUNA_ALWAYS_WEB_NEWS_IDENTITY, model=runtime.OFFICIAL_OPENAI_MODEL)
+    assert not runtime.schema_identity_current("news_impact", prompt, *runtime.LEGACY_LUNA_NEWS_IDENTITY, model=runtime.OFFICIAL_CLAUDE_MODEL)
+
+    monkeypatch.setitem(runtime.AI_TASK_MAX_OUTPUT_TOKENS, "news_impact", 98_304)
+    for stored in (runtime.LUNA_ALWAYS_WEB_NEWS_IDENTITY, runtime.LUNA_WEB_NEWS_IDENTITY):
+        assert not runtime.schema_identity_current("news_impact", prompt, *stored, model=runtime.LUNA_MODEL)
+    assert not runtime.schema_identity_current("news_impact", prompt, *runtime.NEWS_CONTENT_SCHEMA_IDENTITY, model=runtime.OFFICIAL_OPENAI_MODEL)
+
+
+@pytest.mark.parametrize(
+    "stored_identity",
+    [runtime.LUNA_ALWAYS_WEB_NEWS_IDENTITY, runtime.LEGACY_LUNA_NEWS_IDENTITY],
+    ids=["always-web", "legacy-plain"],
+)
+def test_queued_job_from_the_previous_policy_is_submitted_under_the_new_one(
+    tmp_path, monkeypatch, stored_identity,
+):
+    repo = AIJobRepository(tmp_path / "news.db")
+    job_id = _pending_luna_job(repo, luna_payload(), stored_identity)
+    (params,) = _submit_pending(repo, monkeypatch)
+    row = repo.get_job(job_id)
+    assert row["error_code"] != "runtime_configuration_changed"
+    assert row["status"] in {"queued", "in_progress"}
+    assert row["openai_response_id"] == "resp_policy_transition"
+    assert params["max_output_tokens"] == 65_536
+    assert params["tools"][0]["type"] == "web_search"
+
+
+def test_completed_always_web_result_stays_in_the_feed_without_a_new_paid_job(tmp_path):
+    from app.services.catalysts.local_intelligence import LocalCatalystIntelligence
+    from test_catalyst_local_intelligence import _apply_news, _finish_job, _news_change, _stack
+    from test_catalyst_local_intelligence import _news_result as catalyst_news_result
+
+    etl, repo, initial = _stack(tmp_path)
+    service = LocalCatalystIntelligence(
+        initial.db_path, repo, mode="manual", canonical_tickers=("NVDA",),
+        model=runtime.LUNA_MODEL, reasoning="max",
+    )
+    service.initialize()
+    now = datetime.now(timezone.utc)
+    _apply_news(etl, [_news_change(1, 900, available_at=now - timedelta(minutes=2))], as_of=now)
+    service.reconcile()
+    job = service.request_analysis(900, force=False)
+    with sqlite3.connect(repo.path) as db:
+        db.execute(
+            "UPDATE ai_jobs SET schema_version=?,schema_sha256=? WHERE job_id=?",
+            (*runtime.LUNA_ALWAYS_WEB_NEWS_IDENTITY, job["job_id"]),
+        )
+    _finish_job(repo, job["job_id"], catalyst_news_result(news_id=900, change_sequence=1, content_hash="hash-900-1"))
+    service.reconcile()
+    assert service.feed(as_of=datetime.now(timezone.utc), limit=10)["items"][0]["analysis"] is not None
+    assert service.request_analysis(900, force=False)["job_id"] == job["job_id"]
+    with sqlite3.connect(repo.path) as db:
+        assert db.execute("SELECT count(*) FROM ai_jobs").fetchone()[0] == 1

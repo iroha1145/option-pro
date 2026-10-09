@@ -24,7 +24,12 @@ OFFICIAL_OPENAI_MODEL = "gpt-5.6-terra"
 OFFICIAL_REASONING_EFFORT = "max"
 LUNA_MODEL = "gpt-5.6-luna"
 LEGACY_LUNA_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "d0e6936d8749cc96ed7fa8b3bf07bc64bd4cc1f5fb70d18ec0b0fbe3c35576fe")
-LUNA_WEB_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "719aed2113e2b6ab0f08349c2968706147201ab24e9b8642a8b9e3014cc9ca98")
+# 2026-10-09 至 10-10：Luna 新闻一律带联网工具，输出上限 32,768。
+LUNA_ALWAYS_WEB_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "719aed2113e2b6ab0f08349c2968706147201ab24e9b8642a8b9e3014cc9ca98")
+LUNA_WEB_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "07d7629cc4ef175f208022e6574ec405618852944a661979f8a38a44dc7b1978")
+TERRA_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "e2f660481a77543a7a020798cea014e6c8b8298b78a0f89d3e7e507046fc6c2e")
+LEGACY_OPENAI_EARNINGS_IDENTITY = ("earnings_impact_zh_cn_v5", "efcf4a6d24e87c8bfcb8620183338d7ddd927a8df9290b1a8ee7f601a05e9265")
+OPENAI_EARNINGS_IDENTITY = ("earnings_impact_zh_cn_v5", "07071987fa5fc17daaa8c6b0d23cc750afb8bc096277398dca261a2c6d046742")
 SONNET_MODEL = "claude-sonnet-5-5"
 # OpenAI remains available for already-paid responses and explicit rollback.
 # New personal installations use Claude; the persisted job model chooses the
@@ -64,18 +69,18 @@ _CLAUDE_CACHE_WRITE_MICROUSD_PER_MILLION = 125_000
 _CLAUDE_ONE_HOUR_WRITE_MICROUSD_PER_MILLION = 200_000
 _CLAUDE_OUTPUT_MICROUSD_PER_MILLION = 500_000
 AI_TASK_MAX_OUTPUT_TOKENS: dict[str, int] = {
-    "earnings_impact": 32_768,
     # 思考 tokens 计入输出上限。signal_analysis 在 reasoning=max + v5 全证据
     # 包后思考量到了 27-30k（2026-08-08 生产 32,768 顶格截断，
     # provider_incomplete_max_output_tokens），答案预算只剩 ~2.5k——上限翻倍
     # 留足余量。option_alerts 同为 owner 手动型，抬到 market_focus 档做保险。
-    # 上限只影响每单预留（当日 token 账的准入）和截断风险，不影响并发：并发
-    # 由每条车道一个提交槽决定。批量型 earnings/news 暂留 32,768，是否抬高要看
-    # 生产里 provider_incomplete_max_output_tokens 的比例；改动会移动
-    # schema_identity，队列里的待处理任务会整批判 runtime_configuration_changed。
+    # 2026-10-10 新闻与财报也抬到 65,536：Luna max 档 7 天内完成任务的输出
+    # p99 12,027、最大 25,392，32,768 只剩不到 1.3 倍余量。上限只影响每单预留
+    # 与截断风险，不影响并发。改动会移动 schema_identity；上一版身份列在
+    # _IDENTITY_PREDECESSORS，队列里的待处理任务按新上限照常提交。
+    "earnings_impact": 65_536,
     "option_alerts": 49_152,
     "signal_analysis": 65_536,
-    "news_impact": 32_768,
+    "news_impact": 65_536,
     "market_focus": 49_152,
 }
 # xhigh includes thinking in the output ceiling. Keep a hard bound while
@@ -140,6 +145,15 @@ NEWS_CONTENT_SCHEMA_IDENTITY = (
     "news_impact_zh_cn_v6",
     "d0e6936d8749cc96ed7fa8b3bf07bc64bd4cc1f5fb70d18ec0b0fbe3c35576fe",
 )
+# 2026-10-10 的资源策略变化（OpenAI 新闻与财报输出上限 32,768→65,536）没有
+# 改结果结构。只按「确切的现行身份 → 上一版身份」放行：待处理任务按现行策略
+# 提交，已完成结果照常可读；策略再变时现行身份不再等于这里的键，旧任务照常判
+# runtime_configuration_changed。
+_IDENTITY_PREDECESSORS: dict[tuple[str, str], frozenset[tuple[str, str]]] = {
+    TERRA_NEWS_IDENTITY: frozenset({NEWS_CONTENT_SCHEMA_IDENTITY}),
+    LUNA_WEB_NEWS_IDENTITY: frozenset({LUNA_ALWAYS_WEB_NEWS_IDENTITY, LEGACY_LUNA_NEWS_IDENTITY}),
+    OPENAI_EARNINGS_IDENTITY: frozenset({LEGACY_OPENAI_EARNINGS_IDENTITY}),
+}
 # Failures a scheduler may retry on its own, at most SCHEDULED_MAX_ATTEMPTS
 # executions per item. Anything else (schema or binding failures, oversized
 # input) would fail the same way again and only spend more tokens.
@@ -471,18 +485,21 @@ def news_schema_identity_matches(
     *,
     current_identity: tuple[str, str] | None = None,
 ) -> bool:
-    """Permit only the known v6 -> body-context prompt transition.
+    """Permit only the known v6 -> body-context prompt transition and the
+    exact predecessor identities listed in _IDENTITY_PREDECESSORS.
 
-    The result schema and resource policy did not change. A later policy or
-    schema change must still invalidate pending jobs, including legacy ones.
+    The v6 transition changed neither the result schema nor the resource
+    policy. A later policy or schema change must still invalidate pending
+    jobs, including legacy ones.
     """
     current = current_identity or schema_identity("news_impact")
     stored = (schema_version, schema_sha256)
-    return stored == current or (
+    if (
         prompt_version == "news-impact-zh-cn-v6"
         and stored == LEGACY_NEWS_V6_SCHEMA_IDENTITY
-        and current == NEWS_CONTENT_SCHEMA_IDENTITY
-    )
+    ):
+        stored = NEWS_CONTENT_SCHEMA_IDENTITY
+    return stored == current or stored in _IDENTITY_PREDECESSORS.get(current, ())
 
 
 def schema_identity_current(
@@ -508,14 +525,12 @@ def schema_identity_current(
         else schema_identity(job_type, model=model) if model is not None
         else schema_identity(job_type)
     )
+    stored = (schema_version, schema_sha256)
     if job_type == "news_impact":
-        if (model == LUNA_MODEL and current == LUNA_WEB_NEWS_IDENTITY
-                and (schema_version, schema_sha256) == LEGACY_LUNA_NEWS_IDENTITY):
-            return True
         return news_schema_identity_matches(
             prompt_version, schema_version, schema_sha256, current_identity=current,
         )
-    return (schema_version, schema_sha256) == current
+    return stored == current or stored in _IDENTITY_PREDECESSORS.get(current, ())
 
 
 def model_identity_for_job(settings: Any, job_type: str) -> tuple[str, str]:

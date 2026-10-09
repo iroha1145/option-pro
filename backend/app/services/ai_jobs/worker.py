@@ -762,12 +762,15 @@ async def process_job(
         current_identity = runtime.schema_identity(
             job["job_type"], model=str(settings.openai_model),
         )
+        # The job's own model decides which predecessor identities stay
+        # current, so a resource-policy change does not void its queue.
         schema_matches = runtime.schema_identity_current(
             job["job_type"],
             job.get("prompt_version"),
             job["schema_version"],
             job["schema_sha256"],
             current_identity=current_identity,
+            model=str(job["model"]),
         )
         if (
             job["model"] != settings.openai_model
