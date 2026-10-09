@@ -482,3 +482,62 @@ def test_a_failing_probe_skips_its_reading_without_stopping_the_worker(
 
     assert runs == [[], ["calendar_refresh"]]
     assert recorded and set(recorded) == {"worker_wake_probe:RuntimeError"}
+
+
+def test_a_request_queued_during_the_first_round_wakes_the_loop_right_after_it(
+    tmp_path: Path,
+) -> None:
+    repository = _CountingStateRepository(tmp_path / "state.db")
+    probe = {"value": ("queue", 0)}
+    release_first_round = asyncio.Event()
+    runs = 0
+    reads_at: dict[str, int] = {}
+
+    async def run() -> TaskResult:
+        nonlocal runs
+        runs += 1
+        if runs == 1:
+            # The startup round (a sync slot) is still running when the owner
+            # queues a refresh.
+            await release_first_round.wait()
+            reads_at["first_round_end"] = repository.demand_reads
+        else:
+            reads_at.setdefault("second_round_start", repository.demand_reads)
+        return TaskResult(status="idle")
+
+    async def scenario() -> None:
+        supervisor = _supervisor(
+            tmp_path,
+            repository,
+            (TaskSpec("catalyst_like", run, 120, wake_probe=lambda: probe["value"]),),
+        )
+        running = asyncio.create_task(supervisor.run_forever())
+        await _until(lambda: runs == 1 and repository.demand_reads >= 3)
+        probe["value"] = ("queue", 1)
+        reads = repository.demand_reads
+        await _until(lambda: repository.demand_reads >= reads + 3)
+        release_first_round.set()
+        await _until(lambda: runs == 2)
+        supervisor.request_stop()
+        await asyncio.wait_for(running, timeout=5)
+
+    asyncio.run(scenario())
+
+    # Picked up within a watcher poll or two of the round ending (0.5s each in
+    # production), not at the next 120s slot.
+    assert reads_at["second_round_start"] - reads_at["first_round_end"] <= 2
+
+
+def test_a_reading_started_before_the_round_is_not_kept_as_the_baseline() -> None:
+    from app.worker.runtime import _TaskDemand
+
+    demand = _TaskDemand()
+    assert demand.observe_probe(("queue", 0), 1.0) is False
+    demand.round_started_at = 5.0
+    # Started before the round, finished after a request was queued: dropped.
+    assert demand.observe_probe(("queue", 1), 4.0) is False
+    assert demand.wake_at(6.0) is None
+    # The next reading still sees the request as new demand.
+    assert demand.observe_probe(("queue", 1), 5.5) is True
+    assert demand.wake_at(6.0) == 6.0
+    assert demand.observe_probe(("queue", 1), 6.0) is False

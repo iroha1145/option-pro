@@ -141,12 +141,25 @@ class _TaskDemand:
     action_ready_at: float | None = None
     actions_observed_at: float = -math.inf
     claimed_at: float = -math.inf
-    # Probes start after the loop's first round, which creates the stores
-    # they read.
-    probe_armed: bool = False
     probe_value: Any = _UNOBSERVED
     probe_changed_at: float | None = None
     round_started_at: float = -math.inf
+
+    def observe_probe(self, value: Hashable, observed_at: float) -> bool:
+        """Record one probe reading; True when it shows new demand.
+
+        A reading that started before the current round began is dropped,
+        not kept as the baseline: it may show work queued after the round's
+        own check, and the next reading must still see that as a change.
+        """
+
+        if observed_at < self.round_started_at:
+            return False
+        changed = self.probe_value is not _UNOBSERVED and value != self.probe_value
+        if changed:
+            self.probe_changed_at = observed_at
+        self.probe_value = value
+        return changed
 
     def wake_at(self, now: float) -> float | None:
         if (
@@ -993,21 +1006,24 @@ class WorkerSupervisor:
                 record_fallback_failure("worker_wake_probe", error)
         return delays, values
 
-    async def _watch_demand(self) -> None:
-        """Poll queued owner actions and wake probes for every task loop."""
+    async def _watch_demand(self, first_reading: asyncio.Event) -> None:
+        """Poll queued owner actions and wake probes for every task loop.
+
+        ``first_reading`` is set once the probes have a baseline (or the
+        watcher ended): loops start only then, so a request queued during a
+        loop's first round is a change, not part of the baseline.
+        """
 
         loop = asyncio.get_running_loop()
         enabled = {task.name for task in self.tasks if task.enabled}
+        probes = {
+            task.name: task.wake_probe
+            for task in self.tasks
+            if task.name in enabled and task.wake_probe is not None
+        }
         try:
             while not self.stop.is_set():
                 observed_at = loop.time()
-                probes = {
-                    task.name: task.wake_probe
-                    for task in self.tasks
-                    if task.name in enabled
-                    and task.wake_probe is not None
-                    and self._demand[task.name].probe_armed
-                }
                 delays, values = await asyncio.to_thread(self._observe_demand, probes)
                 for name in enabled:
                     demand = self._demand[name]
@@ -1019,17 +1035,11 @@ class WorkerSupervisor:
                         )
                         demand.actions_observed_at = observed_at
                         woken = delay is not None
-                    if name in values:
-                        value = values[name]
-                        if (
-                            demand.probe_value is not _UNOBSERVED
-                            and value != demand.probe_value
-                        ):
-                            demand.probe_changed_at = observed_at
-                            woken = True
-                        demand.probe_value = value
+                    if name in values and demand.observe_probe(values[name], observed_at):
+                        woken = True
                     if woken:
                         demand.signal.set()
+                first_reading.set()
                 try:
                     await asyncio.wait_for(
                         self.stop.wait(),
@@ -1038,6 +1048,7 @@ class WorkerSupervisor:
                 except asyncio.TimeoutError:
                     continue
         finally:
+            first_reading.set()
             for demand in self._demand.values():
                 demand.signal.set()
 
@@ -1132,7 +1143,6 @@ class WorkerSupervisor:
                 if self.stop.is_set():
                     return
                 result = await self._execute(task)
-                self._demand[task.name].probe_armed = True
                 delay = float(result["next_delay_seconds"])
                 if result["error_code"] in _STATE_ERROR_CODES:
                     if not await self._pause_after_state_error(result):
@@ -1336,10 +1346,12 @@ class WorkerSupervisor:
                         "error_code": None,
                         "next_delay_seconds": task.interval_seconds,
                     }
+                first_reading = asyncio.Event()
                 watcher = asyncio.create_task(
-                    self._watch_demand(),
+                    self._watch_demand(first_reading),
                     name="worker-demand-watcher",
                 )
+                await first_reading.wait()
                 loops = {
                     task: asyncio.create_task(
                         self._task_loop(task),
