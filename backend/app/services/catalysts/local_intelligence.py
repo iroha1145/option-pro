@@ -2162,6 +2162,7 @@ class LocalCatalystIntelligence:
         job_ids: Iterable[str] | None = None,
         news_ids: Iterable[int] | None = None,
         created_since: datetime | None = None,
+        input_only: bool = False,
     ) -> dict[str, dict[str, Any]]:
         """Read current Catalyst AI rows before taking the Catalyst write lock.
 
@@ -2169,6 +2170,8 @@ class LocalCatalystIntelligence:
         AI store's own clock because that clock stamps ``created_at``.
         """
 
+        if input_only and job_ids is None:
+            raise ValueError("input_only requires explicit job_ids")
         if job_ids is not None and news_ids is not None:
             raise ValueError("job_ids and news_ids are mutually exclusive")
         if created_since is not None and (
@@ -2217,13 +2220,16 @@ class LocalCatalystIntelligence:
                     () if created_since is None else (_iso(created_since),),
                 ).fetchall()
             elif requested_ids is not None:
+                # Fixed private projection: coverage reads never load provider
+                # receipts or result bodies for the whole recent-cycle window.
+                columns = "j.job_id,j.job_type,j.status,j.payload_json" if input_only else "j.*"
                 rows = []
                 for offset in range(0, len(requested_ids), 500):
                     chunk = requested_ids[offset : offset + 500]
                     placeholders = ",".join("?" for _item in chunk)
                     rows.extend(
                         connection.execute(
-                            f"""SELECT j.*,COALESCE(
+                            f"""SELECT {columns},COALESCE(
                                         s.submission_source,'manual'
                                     ) AS submission_source
                                 FROM ai_jobs j
@@ -2273,9 +2279,9 @@ class LocalCatalystIntelligence:
     ) -> tuple[dict[str, dict[str, Any]], bool]:
         """Degrade an unreadable AI store to "no job state" for read paths.
 
-        News ingestion, hotspot planning and published-result reads never
-        depend on the AI store; only linking, publishing and job-state
-        projection pause while it is unavailable.
+        News ingestion and hotspot planning do not depend on the AI store.
+        Linking, publication and job-state projection pause while unavailable;
+        verified hotspot reads fail closed without their paid input/receipt.
         """
 
         try:
@@ -3649,11 +3655,9 @@ class LocalCatalystIntelligence:
             published += 1
         return published
 
-    def _publish_verified_focus(
-        self, connection: sqlite3.Connection, *, cycle: sqlite3.Row,
-        job: dict[str, Any], payload: dict[str, Any], completed_at: str,
-    ) -> dict[str, Any]:
-        """Write the supported projection in the cycle's publication transaction."""
+    @staticmethod
+    def _verified_focus_paid_result(job: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+        """Validate the saved paid receipt without publishing or changing it."""
         result = validate_result("market_focus", str(job.get("result_json") or ""), payload)
         receipt = _loads(job.get("provider_result_json"), None)
         if not isinstance(receipt, dict):
@@ -3670,18 +3674,32 @@ class LocalCatalystIntelligence:
         validate_market_focus_evidence(paid_result, payload, evidence)
         if paid_result != result:
             raise ValueError("market_focus_verification_receipt_mismatch")
-        _revision, prepared_items = self._hotspots_for_revision(int(cycle["prepared_revision"]), limit=100)
+        return result
+
+    @staticmethod
+    def _verified_hotspot_items(result: dict[str, Any], prepared_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         prepared = {(item["event_group_id"], item["event_group_version"]): item for item in prepared_items}
         items = []
         for event in supported_events(result):
             original = prepared.get((event["event_group_id"], event["event_group_version"]))
             if original is None:
-                # Calendar evidence contributes to the cycle but is not a news hotspot.
-                continue
+                continue  # Calendar evidence is not a news hotspot.
             item = {key: value for key, value in original.items() if not key.startswith("_")}
             item.update({"representative_title": event["title_zh"], "summary_zh": event["summary_zh"],
-                         "status": "verified", "verification_status": "verified"})
+                         "status": "verified", "verification_status": "verified",
+                         "event_input_hash": original["_event_input_hash"]})
             items.append(item)
+        return items
+
+    def _publish_verified_focus(
+        self, connection: sqlite3.Connection, *, cycle: sqlite3.Row,
+        job: dict[str, Any], payload: dict[str, Any], completed_at: str,
+    ) -> dict[str, Any]:
+        """Write the supported projection in the cycle's publication transaction."""
+        result = self._verified_focus_paid_result(job, payload)
+        evidence = _loads(job.get("provider_result_json"), {})["tool_evidence"]
+        _revision, prepared_items = self._hotspots_for_revision(int(cycle["prepared_revision"]), limit=100)
+        items = self._verified_hotspot_items(result, prepared_items)
         digest = hashlib.sha256(_json(result).encode("utf-8")).hexdigest()
         existing = connection.execute(
             "SELECT input_hash,result_sha256 FROM catalyst_local_verified_focus_publications WHERE cycle_id=? AND job_id=?",
@@ -5558,34 +5576,212 @@ class LocalCatalystIntelligence:
             "warnings": [],
         }
 
+    @staticmethod
+    def _hotspot_revision_bindings(connection: sqlite3.Connection, revision: int) -> dict[tuple[str, int], str]:
+        """Check the immutable group hashes against their original revision hash."""
+        row = connection.execute(
+            "SELECT input_hash,item_count FROM catalyst_local_hotspot_revisions WHERE prepared_revision=?", (revision,),
+        ).fetchone()
+        groups = connection.execute(
+            """SELECT g.event_group_id,g.event_group_version,g.input_hash
+               FROM catalyst_local_hotspot_items i JOIN catalyst_local_event_groups g
+                 ON g.event_group_id=i.event_group_id AND g.event_group_version=i.event_group_version
+               WHERE i.prepared_revision=? ORDER BY g.hot_score DESC,g.event_group_id""", (revision,),
+        ).fetchall()
+        identities = [(g["event_group_id"], g["event_group_version"], g["input_hash"]) for g in groups]
+        if row is None or len(groups) != row["item_count"] or _sha(identities) != row["input_hash"]:
+            return {}
+        return {(event_id, version): digest for event_id, version, digest in identities}
+
+    @staticmethod
+    def _focus_input_is_intact(cycle: Mapping[str, Any], job: dict[str, Any] | None) -> bool:
+        """Trust coverage only after the saved input matches its paid job and hash."""
+        payload = _loads(cycle["payload_json"], None)
+        if (not isinstance(payload, dict) or job is None
+                or job.get("job_type") != "market_focus" or job.get("status") != "completed"
+                or payload != _loads(job.get("payload_json"), None)
+                or payload.get("cycle_id") != cycle["cycle_id"]
+                or payload.get("input_hash") != cycle["input_hash"]
+                or payload.get("prepared_revision") != cycle["prepared_revision"]
+                or payload.get("as_of") != cycle["snapshot_as_of"]):
+            return False
+        document = {key: payload[key] for key in (
+            "input_schema_version", "prepared_revision", "events", "verification_version", "macro_conditions",
+        ) if key in payload}
+        return _sha(document) == cycle["input_hash"]
+
     def hotspots(self, *, limit: int, now: datetime | None = None) -> dict[str, Any]:
         if not self.focus_verification_enabled:
             return self._prepared_hotspots(limit=limit, now=now)
         observed = now or _utc_now()
+        cutoff, floor = _iso(observed), _iso(observed - timedelta(hours=72))
         with self._connect() as connection:
             revision = connection.execute(
                 "SELECT * FROM catalyst_local_hotspot_revisions WHERE prepared_at<=? ORDER BY prepared_revision DESC LIMIT 1",
-                (_iso(observed),),
+                (cutoff,),
             ).fetchone()
-            publication = None
+            publications = []
+            current_bindings = {}
+            trusted_coverage: set[str] = set()
             if revision is not None:
-                # Choose by input snapshot, not completion order: a slow older
-                # response cannot undo a newer rejection. No cross-revision reuse.
-                publication = connection.execute(
-                    """SELECT p.*,c.result_json AS bound_result_json FROM catalyst_local_verified_focus_publications p
-                       JOIN catalyst_local_focus_cycles c ON c.cycle_id=p.cycle_id AND c.job_id=p.job_id AND c.input_hash=p.input_hash
-                       WHERE p.prepared_revision=? AND p.published_at<=?
-                         AND c.status='completed' AND c.result_json IS NOT NULL
-                       ORDER BY p.snapshot_as_of DESC,c.created_at DESC,p.cycle_id DESC LIMIT 1""",
-                    (revision["prepared_revision"], _iso(observed)),
-                ).fetchone()
-        if publication is not None:
-            bound_result = _loads(publication["bound_result_json"], None)
-            if not isinstance(bound_result, dict) or hashlib.sha256(_json(bound_result).encode("utf-8")).hexdigest() != publication["result_sha256"]:
-                publication = None
-        items = _loads(publication["hotspot_items_json"], []) if publication is not None else []
+                current_bindings = self._hotspot_revision_bindings(connection, revision["prepared_revision"])
+                recent_cycles = connection.execute(
+                    """SELECT cycle_id,job_id,input_hash,prepared_revision,snapshot_as_of,payload_json
+                       FROM catalyst_local_focus_cycles INDEXED BY idx_local_focus_latest
+                       WHERE created_at>=? AND created_at<=? AND snapshot_as_of<=?
+                         AND completed_at<=? AND status='completed'""", (floor, cutoff, cutoff, cutoff),
+                ).fetchall()
+                inputs, _ = self._ai_job_snapshot_or_empty(
+                    "verified_hotspot_inputs", job_ids={row["job_id"] for row in recent_cycles}, input_only=True,
+                ) if recent_cycles else ({}, True)
+                trusted_coverage = {
+                    row["cycle_id"] for row in recent_cycles
+                    if self._focus_input_is_intact(row, inputs.get(row["job_id"]))
+                }
+                # This lookup does no hashing. Each cycle input is checked once
+                # above, before the query combines it with up to 100 candidates.
+                connection.create_function("focus_input_intact", 1, lambda cycle_id: int(cycle_id in trusted_coverage), deterministic=True)
+                # Start with the bounded current news window, not all historical
+                # publications. Rank by original input coverage, before checking
+                # results: a corrupt newer rejection must occupy its event slot
+                # rather than disappearing and reviving an older positive.
+                publications = connection.execute(
+                    """WITH candidates AS (
+                           SELECT i.event_group_id,i.event_group_version,i.ordinal
+                           FROM catalyst_local_hotspot_items i JOIN catalyst_local_event_groups g
+                             ON g.event_group_id=i.event_group_id AND g.event_group_version=i.event_group_version
+                           WHERE i.prepared_revision=? AND g.available_at<=?
+                             AND g.last_published_at>=?
+                           ORDER BY i.ordinal LIMIT 100
+                       ), ranked AS (
+                           SELECT p.*,c.cycle_id AS covered_cycle_id,
+                                  c.payload_json AS bound_payload_json,c.result_json AS bound_result_json,
+                                  c.job_id AS bound_job_id,c.input_hash AS bound_input_hash,
+                                  c.prepared_revision AS bound_prepared_revision,c.snapshot_as_of AS bound_snapshot_as_of,
+                                  n.event_group_id AS candidate_id,n.event_group_version AS candidate_version,n.ordinal,
+                                  ROW_NUMBER() OVER (PARTITION BY n.event_group_id ORDER BY
+                                      c.snapshot_as_of DESC,c.created_at DESC,c.cycle_id DESC) AS newest
+                           FROM catalyst_local_focus_cycles c INDEXED BY idx_local_focus_latest
+                           LEFT JOIN catalyst_local_verified_focus_publications p ON p.cycle_id=c.cycle_id
+                           CROSS JOIN candidates n
+                           WHERE c.created_at>=? AND c.created_at<=? AND c.snapshot_as_of<=?
+                             AND (p.published_at IS NULL OR p.published_at<=?)
+                             AND c.completed_at<=? AND c.status='completed'
+                             AND (NOT focus_input_intact(c.cycle_id) OR json_extract(
+                                 CASE WHEN json_valid(c.payload_json) THEN c.payload_json ELSE '{}' END,
+                                 '$.verification_version')=?)
+                             AND (
+                                 NOT focus_input_intact(c.cycle_id)
+                                 OR EXISTS (
+                                     SELECT 1 FROM json_each(
+                                         CASE WHEN json_valid(c.payload_json) THEN c.payload_json ELSE '{}' END,
+                                         '$.events') input_event
+                                     WHERE json_extract(CASE WHEN input_event.type='object' THEN input_event.value ELSE '{}' END,
+                                                        '$.event_group_id')=n.event_group_id
+                                       AND json_extract(CASE WHEN input_event.type='object' THEN input_event.value ELSE '{}' END,
+                                                        '$.event_group_version')=n.event_group_version
+                                 )
+                             )
+                       ) SELECT * FROM ranked WHERE newest=1 ORDER BY ordinal""",
+                    (revision["prepared_revision"], cutoff, floor, floor, cutoff, cutoff, cutoff, cutoff, FOCUS_VERIFICATION_VERSION),
+                ).fetchall()
+        jobs, _available = self._ai_job_snapshot_or_empty(
+            "verified_hotspot_receipts", job_ids={
+                p["bound_job_id"] for p in publications if p["covered_cycle_id"] in trusted_coverage
+            },
+        ) if publications else ({}, True)
+        checked: dict[str, tuple[dict, dict, dict] | None] = {}
+        original_revisions: dict[int, tuple[dict, list]] = {}
+        items = []
+        for publication in publications:
+            cycle_id = publication["covered_cycle_id"]
+            if cycle_id not in checked:
+                checked[cycle_id] = None
+                job = jobs.get(publication["bound_job_id"])
+                payload = _loads(publication["bound_payload_json"], None)
+                bound = _loads(publication["bound_result_json"], None)
+                try:
+                    if (not isinstance(payload, dict) or not isinstance(bound, dict)
+                            or publication["cycle_id"] != cycle_id
+                            or publication["job_id"] != publication["bound_job_id"]
+                            or publication["input_hash"] != publication["bound_input_hash"]
+                            or publication["prepared_revision"] != publication["bound_prepared_revision"]
+                            or publication["snapshot_as_of"] != publication["bound_snapshot_as_of"]
+                            or not self._has_current_job_identity(job, expected_type="market_focus")
+                            or job["status"] != "completed" or self._job_payload(job) != payload
+                            or payload.get("cycle_id") != cycle_id
+                            or payload.get("input_hash") != publication["input_hash"]
+                            or payload.get("as_of") != publication["snapshot_as_of"]
+                            or payload.get("prepared_revision") != publication["prepared_revision"]
+                            or payload.get("verification_version") != FOCUS_VERIFICATION_VERSION
+                            or hashlib.sha256(_json(bound).encode("utf-8")).hexdigest() != publication["result_sha256"]):
+                        continue
+                    input_document = {key: payload[key] for key in (
+                        "input_schema_version", "prepared_revision", "events", "verification_version", "macro_conditions",
+                    ) if key in payload}
+                    if _sha(input_document) != payload["input_hash"]:
+                        continue
+                    result = self._verified_focus_paid_result(job, payload)
+                    if result != bound:
+                        continue
+                    original_revision = publication["prepared_revision"]
+                    if original_revision not in original_revisions:
+                        with self._connect() as connection:
+                            bindings = self._hotspot_revision_bindings(connection, original_revision)
+                        _, prepared = self._hotspots_for_revision(original_revision, limit=100)
+                        original_revisions[original_revision] = (bindings, prepared)
+                    bindings, prepared = original_revisions[original_revision]
+                    expected = self._verified_hotspot_items(result, prepared)
+                    stored = _loads(publication["hotspot_items_json"], None)
+                    # Older legitimate publications predate the derived hash
+                    # field; their original revision still proves that binding.
+                    if not isinstance(stored, list) or len(stored) != len(expected):
+                        continue
+                    expected = [dict(item) for item in expected]
+                    for old, actual in zip(stored, expected):
+                        if isinstance(old, dict) and "event_input_hash" not in old:
+                            actual.pop("event_input_hash", None)
+                    if stored != expected:
+                        continue
+                    payload_events = {e["event_group_id"]: e for e in payload["events"]}
+                    from app.services.ai_jobs.claude_provider import _public_source_url
+
+                    valid_originals = {}
+                    for original in prepared:
+                        event_id = original["event_group_id"]
+                        source = original["_verification_source"]
+                        input_event = payload_events.get(event_id, {})
+                        input_source = input_event.get("source_snapshot", {})
+                        if (input_event.get("event_group_version") == original["event_group_version"]
+                                and input_source.get("source_url") == _public_source_url(source.get("source_url"))
+                                and input_source.get("raw_title") == str(source.get("raw_title") or "")[:300]
+                                and all(input_source.get(key) == source.get(key) for key in (
+                                    "news_id", "change_sequence", "content_hash",
+                                ))):
+                            valid_originals[(event_id, original["event_group_version"])] = original
+                    checked[cycle_id] = (bindings, valid_originals, {
+                        "verdicts": {e["event_group_id"]: e for e in result["event_verifications"]},
+                        "items": {e["event_group_id"]: e for e in stored},
+                        "verified_at": job.get("completed_at"),
+                    })
+                except (KeyError, TypeError, ValueError):
+                    continue
+            accepted = checked[cycle_id]
+            key = (publication["candidate_id"], publication["candidate_version"])
+            if accepted is None:
+                continue
+            bindings, originals, projection = accepted
+            verdict = projection["verdicts"].get(key[0], {})
+            if (key not in originals or key not in current_bindings
+                    or bindings.get(key) != current_bindings[key]
+                    or verdict.get("event_group_version") != key[1] or verdict.get("verdict") != "supported"):
+                continue
+            item = projection["items"].get(key[0])
+            if item is not None:
+                items.append({**item, "verified_at": projection["verified_at"],
+                              "verification_as_of": publication["snapshot_as_of"]})
         return {
-            "status": "active" if items else "empty", "as_of": _iso(observed),
+            "status": "active" if items else "empty", "as_of": cutoff,
             "data_through": revision["data_through"] if revision else None,
             "items": items[:min(100, max(1, limit))], "warnings": [],
         }
@@ -5674,6 +5870,7 @@ class LocalCatalystIntelligence:
                 "prepared_revision": int(row["prepared_revision"]),
                 "event_group_id": str(row["event_group_id"]),
                 "event_group_version": int(row["event_group_version"]),
+                "_event_input_hash": str(row["input_hash"]),
                 "gate_version": SCHEMA_VERSION,
                 "hot_score": float(
                     plan_value(row, "plan_hot_score", "hot_score")

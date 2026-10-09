@@ -961,6 +961,7 @@ export interface TrustedStockImpact {
 }
 
 export interface NewsImpactResult {
+  insufficientContext?: boolean;
   classification: NewsClassification;
   confidence: number; // 0–1（· 非胜率）
   headlineSummary: string;
@@ -992,6 +993,7 @@ export interface CatalystNewsItem {
 }
 
 export interface HotspotGroup {
+  verifiedAt?: string | null;
   hotspotId: string;
   theme: string;
   keywords: string[];

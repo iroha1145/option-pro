@@ -2728,6 +2728,15 @@ _VERIFIED_FOCUS_METADATA = re.compile(
 _VERIFIED_FOCUS_BANDWIDTH = re.compile(
     r"(?<![A-Za-z0-9_.])(?P<quantity>[0-9]+(?:\.[0-9]+)?)[ \t]*Gbps(?![A-Za-z0-9_])"
 )
+_VERIFIED_FOCUS_FREQUENCY = re.compile(
+    r"(?<![A-Za-z0-9_.])(?P<quantity>[0-9]+(?:\.[0-9]+)?)[ \t]*(?P<unit>Hz|kHz|MHz|GHz|THz)(?![A-Za-z0-9_])"
+)
+_VERIFIED_FOCUS_FREQUENCY_UNITS = {
+    "Hz": "赫兹", "kHz": "千赫", "MHz": "兆赫", "GHz": "吉赫", "THz": "太赫",
+}
+_VERIFIED_FOCUS_TMUS_NAME = re.compile(
+    r"(?<![A-Za-z0-9_])T-Mobile US(?![A-Za-z0-9_])(?P<binding> ?(?:（TMUS）|\(TMUS\)))?"
+)
 _VERIFIED_FOCUS_COMPANY_HEADING = re.compile(
     r"(?P<boundary>^|[。！？!?；;\n])(?P<space>[ \t]*)\((?P<ordinal>[1-9])\)(?=公司类事件[：:])"
 )
@@ -2765,6 +2774,13 @@ def _translate_verified_focus_prose(value: str) -> str:
         value,
     )
     original = value
+    value = _VERIFIED_FOCUS_FREQUENCY.sub(
+        lambda match: match.group(0) if protected(original, match.start(), match.end()) else (
+            match.group("quantity") + _VERIFIED_FOCUS_FREQUENCY_UNITS[match.group("unit")]
+        ),
+        value,
+    )
+    original = value
     # Only the observed company-event heading grammar, not parenthesized
     # numeric company names or security codes such as (700)公司.
     value = _VERIFIED_FOCUS_COMPANY_HEADING.sub(
@@ -2777,24 +2793,47 @@ def _translate_verified_focus_prose(value: str) -> str:
     return value
 
 
+def _translate_verified_focus_tmus_name(value: str, *, assessment: bool = False) -> str:
+    """The caller requires input-allowed TMUS; global prose also needs (TMUS)."""
+    def replace(match: re.Match) -> str:
+        if not match.group("binding") and (
+            not assessment or value[match.end():].lstrip().startswith(("（", "("))
+        ):
+            return match.group(0)
+        if any(url.start() <= match.start() < url.end() for url in _VERIFIED_FOCUS_URL.finditer(value)):
+            return match.group(0)
+        prefix = _normalize_security_reference_phrase(value[:match.start()])
+        suffix = _normalize_security_reference_phrase(value[match.end():])
+        if re.search(r"(?:代码|编号)(?:为|是)?$", prefix) or suffix.startswith(("代码", "编号")):
+            return match.group(0)
+        return "TMUS"
+    return _VERIFIED_FOCUS_TMUS_NAME.sub(replace, value)
+
+
 class VerifiedMarketFocusResult(MarketFocusResult):
     event_verifications: list[FocusEventVerification] = Field(max_length=200)
 
     @model_validator(mode="before")
     @classmethod
-    def translate_known_prose(cls, value: Any) -> Any:
+    def translate_known_prose(cls, value: Any, info: ValidationInfo) -> Any:
         if not isinstance(value, dict):
             return value
 
-        def translate_fields(item: dict, text_fields: tuple[str, ...], list_fields: tuple[str, ...]) -> dict:
+        allowed_codes = (info.context or {}).get("allowed_codes", ()) if info else ()
+
+        def translate_fields(item: dict, text_fields: tuple[str, ...], list_fields: tuple[str, ...], *, tmus_assessment: bool = False) -> dict:
+            def translate(text: str) -> str:
+                text = _translate_verified_focus_prose(text)
+                return _translate_verified_focus_tmus_name(text, assessment=tmus_assessment) if "TMUS" in allowed_codes else text
+
             translated = dict(item)
             for name in text_fields:
                 if isinstance(translated.get(name), str):
-                    translated[name] = _translate_verified_focus_prose(translated[name])
+                    translated[name] = translate(translated[name])
             for name in list_fields:
                 if isinstance(translated.get(name), list):
                     translated[name] = [
-                        _translate_verified_focus_prose(text) if isinstance(text, str) else text
+                        translate(text) if isinstance(text, str) else text
                         for text in translated[name]
                     ]
             return translated
@@ -2810,7 +2849,10 @@ class VerifiedMarketFocusResult(MarketFocusResult):
         ):
             if isinstance(result.get(name), list):
                 result[name] = [
-                    translate_fields(item, text_fields, list_fields) if isinstance(item, dict) else item
+                    translate_fields(
+                        item, text_fields, list_fields,
+                        tmus_assessment=(name == "focus_ticker_assessments" and item.get("ticker") == "TMUS" and "TMUS" in allowed_codes),
+                    ) if isinstance(item, dict) else item
                     for item in result[name]
                 ]
         return result

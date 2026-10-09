@@ -13,7 +13,7 @@ from app.services.ai_jobs.repository import AIJobRepository
 from app.services.catalysts import local_intelligence as local_module
 from app.services.catalysts.local_intelligence import LocalCatalystIntelligence
 from app.services.catalysts.personal_service import PersonalCatalystService
-from test_catalyst_local_intelligence import _apply_news, _news_change, _stack
+from test_catalyst_local_intelligence import _apply_news, _delete_change, _news_change, _stack
 from test_verified_focus_contract import verified_payload_result
 
 
@@ -166,7 +166,7 @@ def test_missing_tool_receipt_cannot_publish_even_if_job_was_marked_complete(ver
     assert json.loads(ai.get_job(cycle["job_id"])["result_json"]) == raw
 
 
-def test_new_revision_cannot_reuse_previously_verified_hotspot(verified_stack):
+def test_changed_event_cannot_reuse_support_but_unchanged_event_remains(verified_stack):
     etl, ai, intelligence, revision, clock = verified_stack
     cycle = intelligence.request_market_focus_cycle(expected_prepared_revision=revision)
     complete_verified(ai, cycle, verdicts=["supported"])
@@ -177,7 +177,11 @@ def test_new_revision_cannot_reuse_previously_verified_hotspot(verified_stack):
                                   title="Nvidia cancels Blackwell platform launch", sources=("Reuters", "Bloomberg"))], as_of=clock[0])
     new_revision = intelligence.reconcile()["prepared_revision"]
     assert new_revision > revision
-    assert intelligence.hotspots(limit=20)["items"] == []
+    # The changed news cannot inherit its old verdict; the other original
+    # event still has the exact same version and remains independently valid.
+    remaining = intelligence.hotspots(limit=20)["items"]
+    assert [item["representative_news_id"] for item in remaining] == [12]
+    assert remaining[0]["prepared_revision"] == revision
 
 
 def test_newer_rejection_withdraws_previous_support_and_keeps_history(verified_stack):
@@ -509,3 +513,311 @@ def test_injected_route_fallback_preserves_explicit_models_and_rejects_bad_effor
     service.ai_settings.openai_market_focus_reasoning = "max"
     with pytest.raises(ValueError, match="runtime_configuration_invalid"):
         service._analysis_identity("market_focus")
+
+
+def add_unrelated_news(etl, intelligence, clock):
+    clock[0] += timedelta(minutes=2)
+    change = _news_change(3, 13, available_at=clock[0] - timedelta(seconds=5),
+                          title="Court opens separate investigation into energy pricing", sources=("Reuters", "Bloomberg"))
+    change["news"]["url"] = "https://www.reuters.com/news/13"
+    _apply_news(etl, [change], as_of=clock[0])
+    return intelligence.reconcile()["prepared_revision"]
+
+
+def test_unrelated_revision_preserves_paid_event_identity_and_original_verification_time(verified_stack):
+    etl, ai, intelligence, revision, clock = verified_stack
+    cycle = intelligence.request_market_focus_cycle(expected_prepared_revision=revision)
+    complete_verified(ai, cycle, verdicts=["supported"])
+    intelligence.reconcile()
+    before = intelligence.hotspots(limit=20)["items"]
+    saved_job = copy.deepcopy(ai.get_job(cycle["job_id"]))
+    assert len(before) == 2
+    current = add_unrelated_news(etl, intelligence, clock)
+    assert current > revision
+    assert len(intelligence._prepared_hotspots(limit=20)["items"]) == 3
+    after = intelligence.hotspots(limit=20)["items"]
+    assert {item["event_group_id"]: item for item in after} == {item["event_group_id"]: item for item in before}
+    assert {item["verified_at"] for item in after} == {saved_job["completed_at"]}
+    assert {item["verification_as_of"] for item in after} == {json.loads(saved_job["payload_json"])["as_of"]}
+    assert ai.get_job(cycle["job_id"]) == saved_job
+
+
+def test_older_cycle_finishing_after_unrelated_revision_still_publishes_its_current_events(verified_stack):
+    etl, ai, intelligence, revision, clock = verified_stack
+    cycle = intelligence.request_market_focus_cycle(expected_prepared_revision=revision)
+    current = add_unrelated_news(etl, intelligence, clock)
+    assert current > revision
+    complete_verified(ai, cycle, verdicts=["supported"])
+    intelligence.reconcile()
+    assert {item["representative_news_id"] for item in intelligence.hotspots(limit=20)["items"]} == {11, 12}
+
+
+@pytest.mark.parametrize("negative", ["contradicted", "unverifiable"])
+def test_cross_revision_new_negative_withdraws_support_even_if_old_publication_arrives_late(verified_stack, negative):
+    etl, ai, intelligence, revision, clock = verified_stack
+    old = intelligence.request_market_focus_cycle(expected_prepared_revision=revision)
+    complete_verified(ai, old, verdicts=["supported"])
+    intelligence.reconcile()
+    before = clock[0]
+    current = add_unrelated_news(etl, intelligence, clock)
+    new = intelligence.request_market_focus_cycle(expected_prepared_revision=current)
+    complete_verified(ai, new, verdicts=[negative])
+    intelligence.reconcile()
+    assert intelligence.hotspots(limit=20)["items"] == []
+    assert len(intelligence.hotspots(limit=20, now=before)["items"]) == 2
+    clock[0] += timedelta(minutes=1)
+    with intelligence._connect() as connection:
+        connection.execute("UPDATE catalyst_local_verified_focus_publications SET published_at=? WHERE cycle_id=?",
+                           (local_module._iso(clock[0]), old["cycle_id"]))
+        connection.commit()
+    assert intelligence.hotspots(limit=20)["items"] == []
+
+
+def test_same_id_new_version_never_inherits_old_paid_support(verified_stack):
+    etl, ai, intelligence, revision, clock = verified_stack
+    cycle = intelligence.request_market_focus_cycle(expected_prepared_revision=revision)
+    complete_verified(ai, cycle, verdicts=["supported"])
+    intelligence.reconcile()
+    original = next(item for item in intelligence.hotspots(limit=20)["items"] if item["representative_news_id"] == 11)
+    clock[0] += timedelta(minutes=2)
+    change = _news_change(3, 11, available_at=clock[0] - timedelta(seconds=5),
+                          title="Nvidia launches Blackwell chip platform", summary="Updated timing and source details", sources=("Reuters", "Bloomberg"))
+    _apply_news(etl, [change], as_of=clock[0])
+    intelligence.reconcile()
+    current = next(item for item in intelligence._prepared_hotspots(limit=20)["items"] if item["representative_news_id"] == 11)
+    assert current["event_group_id"] == original["event_group_id"]
+    assert current["event_group_version"] > original["event_group_version"]
+    assert [item["representative_news_id"] for item in intelligence.hotspots(limit=20)["items"]] == [12]
+
+
+@pytest.mark.parametrize("removed", ["deleted", "outside_window"])
+def test_removed_current_event_never_uses_historical_support(verified_stack, removed):
+    etl, ai, intelligence, revision, clock = verified_stack
+    cycle = intelligence.request_market_focus_cycle(expected_prepared_revision=revision)
+    complete_verified(ai, cycle, verdicts=["supported"])
+    intelligence.reconcile()
+    if removed == "deleted":
+        clock[0] += timedelta(minutes=2)
+        _apply_news(etl, [_delete_change(3, 11, available_at=clock[0])], as_of=clock[0])
+    else:
+        clock[0] += timedelta(hours=73)
+    intelligence.reconcile()
+    actual = {item["representative_news_id"] for item in intelligence.hotspots(limit=20)["items"]}
+    assert actual == ({12} if removed == "deleted" else set())
+
+
+@pytest.mark.parametrize("mutation", ["event_hash", "projection_summary", "bound_summary", "receipt", "cycle_input", "source_snapshot"])
+def test_publication_reuse_rejects_changed_hash_projection_or_paid_binding(verified_stack, mutation):
+    etl, ai, intelligence, revision, clock = verified_stack
+    cycle = intelligence.request_market_focus_cycle(expected_prepared_revision=revision)
+    complete_verified(ai, cycle, verdicts=["supported"])
+    intelligence.reconcile()
+    add_unrelated_news(etl, intelligence, clock)
+    assert len(intelligence.hotspots(limit=20)["items"]) == 2
+    if mutation == "receipt":
+        job = ai.get_job(cycle["job_id"])
+        receipt = json.loads(job["provider_result_json"])
+        receipt["id"] = "msg_unrelated_paid_response"
+        with ai._connect() as connection:
+            connection.execute("UPDATE ai_jobs SET provider_result_json=? WHERE job_id=?", (json.dumps(receipt), cycle["job_id"]))
+            connection.commit()
+    else:
+        with intelligence._connect() as connection:
+            if mutation == "event_hash":
+                connection.execute("UPDATE catalyst_local_event_groups SET input_hash=? WHERE representative_news_id=11", ("f" * 64,))
+            elif mutation == "projection_summary":
+                row = connection.execute("SELECT hotspot_items_json FROM catalyst_local_verified_focus_publications WHERE cycle_id=?", (cycle["cycle_id"],)).fetchone()
+                items = json.loads(row[0]); items[0]["summary_zh"] = "这是未付费核实的新摘要。"
+                connection.execute("UPDATE catalyst_local_verified_focus_publications SET hotspot_items_json=? WHERE cycle_id=?", (json.dumps(items), cycle["cycle_id"]))
+            elif mutation == "bound_summary":
+                row = connection.execute("SELECT result_json FROM catalyst_local_focus_cycles WHERE cycle_id=?", (cycle["cycle_id"],)).fetchone()
+                result = json.loads(row[0]); result["event_verifications"][0]["summary_zh"] = "这是未付费核实的新摘要。"
+                connection.execute("UPDATE catalyst_local_focus_cycles SET result_json=? WHERE cycle_id=?", (json.dumps(result), cycle["cycle_id"]))
+                connection.execute("UPDATE catalyst_local_verified_focus_publications SET result_sha256=? WHERE cycle_id=?", (local_module._sha(result), cycle["cycle_id"]))
+            else:
+                row = connection.execute("SELECT payload_json FROM catalyst_local_focus_cycles WHERE cycle_id=?", (cycle["cycle_id"],)).fetchone()
+                payload = json.loads(row[0])
+                if mutation == "cycle_input": payload["input_hash"] = "e" * 64
+                else: payload["events"][0]["source_snapshot"]["news_id"] = 999
+                connection.execute("UPDATE catalyst_local_focus_cycles SET payload_json=? WHERE cycle_id=?", (json.dumps(payload), cycle["cycle_id"]))
+            connection.commit()
+    assert intelligence.hotspots(limit=20)["items"] == []
+
+
+def test_legacy_projection_without_derived_hash_is_still_bound_to_original_revision(verified_stack):
+    etl, ai, intelligence, revision, clock = verified_stack
+    cycle = intelligence.request_market_focus_cycle(expected_prepared_revision=revision)
+    complete_verified(ai, cycle, verdicts=["supported"])
+    intelligence.reconcile()
+    with intelligence._connect() as connection:
+        row = connection.execute("SELECT hotspot_items_json FROM catalyst_local_verified_focus_publications WHERE cycle_id=?", (cycle["cycle_id"],)).fetchone()
+        items = json.loads(row[0])
+        for item in items: item.pop("event_input_hash")
+        connection.execute("UPDATE catalyst_local_verified_focus_publications SET hotspot_items_json=? WHERE cycle_id=?", (json.dumps(items), cycle["cycle_id"]))
+        connection.commit()
+    add_unrelated_news(etl, intelligence, clock)
+    assert len(intelligence.hotspots(limit=20)["items"]) == 2
+
+
+def test_receipt_reads_and_validation_are_deduplicated_per_cycle(verified_stack, monkeypatch):
+    _, ai, intelligence, revision, _ = verified_stack
+    cycle = intelligence.request_market_focus_cycle(expected_prepared_revision=revision)
+    complete_verified(ai, cycle, verdicts=["supported"])
+    intelligence.reconcile()
+    reads, validations = [], []
+    original_read = intelligence._ai_job_snapshot
+    original_validate = intelligence._verified_focus_paid_result
+    def read(**kwargs):
+        reads.append(kwargs)
+        return original_read(**kwargs)
+    def validate(job, payload):
+        validations.append(job["job_id"])
+        return original_validate(job, payload)
+    monkeypatch.setattr(intelligence, "_ai_job_snapshot", read)
+    monkeypatch.setattr(intelligence, "_verified_focus_paid_result", validate)
+    assert len(intelligence.hotspots(limit=20)["items"]) == 2
+    assert len(reads) == 2
+    assert reads[0]["input_only"] is True
+    assert set(reads[0]["job_ids"]) == {cycle["job_id"]}
+    assert not reads[1].get("input_only", False)
+    assert set(reads[1]["job_ids"]) == {cycle["job_id"]}
+    assert validations == [cycle["job_id"]]
+
+
+def test_newer_cycle_without_an_event_does_not_withdraw_that_events_paid_support(verified_stack, monkeypatch):
+    etl, ai, intelligence, revision, clock = verified_stack
+    old = intelligence.request_market_focus_cycle(expected_prepared_revision=revision)
+    complete_verified(ai, old, verdicts=["supported"])
+    intelligence.reconcile()
+    current = add_unrelated_news(etl, intelligence, clock)
+    # Model inputs are bounded to the leading twenty events. Simulate a newer
+    # cycle selecting only the unrelated candidate, keeping the full revision.
+    original = intelligence._hotspots_for_revision
+    def selected(revision, *, limit):
+        row, items = original(revision, limit=limit)
+        return row, [item for item in items if item["representative_news_id"] == 13]
+    with monkeypatch.context() as patch:
+        patch.setattr(intelligence, "_hotspots_for_revision", selected)
+        new = intelligence.request_market_focus_cycle(expected_prepared_revision=current)
+    complete_verified(ai, new, verdicts=["supported"])
+    intelligence.reconcile()
+    assert {item["representative_news_id"] for item in intelligence.hotspots(limit=20)["items"]} == {11, 12, 13}
+
+
+@pytest.mark.parametrize("mutation", [
+    "empty_verdicts", "missing_verdict", "verdict_identity", "malformed_result", "null_result", "empty_result",
+    "result_sha", "publication_input_hash", "cycle_input_hash", "publication_job", "cycle_job", "malformed_payload",
+    "publication_revision", "publication_snapshot", "missing_publication",
+    "missing_input_event", "missing_verification_version",
+])
+def test_damaged_latest_covered_rejection_never_revives_older_support(verified_stack, mutation):
+    etl, ai, intelligence, revision, clock = verified_stack
+    older = intelligence.request_market_focus_cycle(expected_prepared_revision=revision)
+    complete_verified(ai, older, verdicts=["supported"])
+    intelligence.reconcile()
+    before_newer = clock[0]
+    assert len(intelligence.hotspots(limit=20)["items"]) == 2
+    current = add_unrelated_news(etl, intelligence, clock)
+    newer = intelligence.request_market_focus_cycle(expected_prepared_revision=current)
+    complete_verified(ai, newer, verdicts=["contradicted"])
+    intelligence.reconcile()
+    assert intelligence.hotspots(limit=20)["items"] == []
+    original_job = copy.deepcopy(ai.get_job(newer["job_id"]))
+    with intelligence._connect() as connection:
+        row = connection.execute("SELECT result_json FROM catalyst_local_focus_cycles WHERE cycle_id=?", (newer["cycle_id"],)).fetchone()
+        result = json.loads(row[0])
+        if mutation in {"empty_verdicts", "missing_verdict", "verdict_identity"}:
+            if mutation == "empty_verdicts": result["event_verifications"] = []
+            elif mutation == "missing_verdict":
+                # Drop an event with a prior positive, not only the new event.
+                old_id = json.loads(ai.get_job(older["job_id"])["payload_json"])["events"][0]["event_group_id"]
+                result["event_verifications"] = [event for event in result["event_verifications"] if event["event_group_id"] != old_id]
+            else:
+                for event in result["event_verifications"]: event["event_group_id"] = "evt_wrong_identity"
+            connection.execute("UPDATE catalyst_local_focus_cycles SET result_json=? WHERE cycle_id=?", (json.dumps(result), newer["cycle_id"]))
+        elif mutation in {"malformed_result", "null_result", "empty_result"}:
+            damaged = {"malformed_result": "{broken", "null_result": None, "empty_result": "{}"}[mutation]
+            connection.execute("UPDATE catalyst_local_focus_cycles SET result_json=? WHERE cycle_id=?", (damaged, newer["cycle_id"]))
+        elif mutation == "result_sha":
+            connection.execute("UPDATE catalyst_local_verified_focus_publications SET result_sha256=? WHERE cycle_id=?", ("d" * 64, newer["cycle_id"]))
+        elif mutation == "publication_input_hash":
+            connection.execute("UPDATE catalyst_local_verified_focus_publications SET input_hash=? WHERE cycle_id=?", ("e" * 64, newer["cycle_id"]))
+        elif mutation == "cycle_input_hash":
+            connection.execute("UPDATE catalyst_local_focus_cycles SET input_hash=? WHERE cycle_id=?", ("e" * 64, newer["cycle_id"]))
+        elif mutation == "publication_revision":
+            connection.execute("UPDATE catalyst_local_verified_focus_publications SET prepared_revision=? WHERE cycle_id=?", (999999, newer["cycle_id"]))
+        elif mutation == "publication_snapshot":
+            connection.execute("UPDATE catalyst_local_verified_focus_publications SET snapshot_as_of=? WHERE cycle_id=?", (local_module._iso(before_newer - timedelta(hours=1)), newer["cycle_id"]))
+        elif mutation == "missing_publication":
+            connection.execute("DELETE FROM catalyst_local_verified_focus_publications WHERE cycle_id=?", (newer["cycle_id"],))
+        elif mutation == "publication_job":
+            connection.execute("UPDATE catalyst_local_verified_focus_publications SET job_id=? WHERE cycle_id=?", (older["job_id"], newer["cycle_id"]))
+        elif mutation == "cycle_job":
+            connection.execute("UPDATE catalyst_local_focus_cycles SET job_id=? WHERE cycle_id=?", ("aij_wrong_binding", newer["cycle_id"]))
+        elif mutation in {"missing_input_event", "missing_verification_version"}:
+            payload = json.loads(original_job["payload_json"])
+            if mutation == "missing_input_event":
+                old_id = json.loads(ai.get_job(older["job_id"])["payload_json"])["events"][0]["event_group_id"]
+                payload["events"] = [event for event in payload["events"] if event["event_group_id"] != old_id]
+            else:
+                payload.pop("verification_version")
+            connection.execute("UPDATE catalyst_local_focus_cycles SET payload_json=? WHERE cycle_id=?", (json.dumps(payload), newer["cycle_id"]))
+        else:
+            connection.execute("UPDATE catalyst_local_focus_cycles SET payload_json=? WHERE cycle_id=?", ("{broken", newer["cycle_id"]))
+        connection.commit()
+    assert intelligence.hotspots(limit=20)["items"] == []
+    # Point-in-time reads before the newer cycle still see its genuine predecessor.
+    assert len(intelligence.hotspots(limit=20, now=before_newer)["items"]) == 2
+    assert ai.get_job(newer["job_id"]) == original_job
+
+
+@pytest.mark.parametrize("state", ["queued", "in_progress"])
+def test_ordinary_unfinished_newer_cycle_does_not_hide_verified_events(verified_stack, state):
+    _, ai, intelligence, revision, clock = verified_stack
+    older = intelligence.request_market_focus_cycle(expected_prepared_revision=revision)
+    complete_verified(ai, older, verdicts=["supported"])
+    intelligence.reconcile()
+    before = intelligence.hotspots(limit=20)["items"]
+    clock[0] += timedelta(minutes=2)
+    newer = intelligence.request_market_focus_cycle(expected_prepared_revision=revision, force=True)
+    if state == "in_progress":
+        claimed = ai.claim_due("new-focus", lease_seconds=60)
+        assert claimed["job_id"] == newer["job_id"]
+        assert ai.mark_submission_started(newer["job_id"], "new-focus", daily_limit=4) == "started"
+        intelligence.reconcile()
+    assert intelligence.hotspots(limit=20)["items"] == before
+
+
+def test_coverage_reads_only_inputs_and_hashes_each_recent_cycle_once(verified_stack, monkeypatch):
+    _, ai, intelligence, revision, clock = verified_stack
+    first = intelligence.request_market_focus_cycle(expected_prepared_revision=revision)
+    complete_verified(ai, first, verdicts=["supported"])
+    intelligence.reconcile()
+    clock[0] += timedelta(minutes=2)
+    second = intelligence.request_market_focus_cycle(expected_prepared_revision=revision, force=True)
+    complete_verified(ai, second, verdicts=["supported"])
+    intelligence.reconcile()
+    checked, snapshots = [], []
+    original_check = intelligence._focus_input_is_intact
+    original_snapshot = intelligence._ai_job_snapshot
+    def check(cycle, job):
+        checked.append(cycle["cycle_id"])
+        return original_check(cycle, job)
+    def snapshot(**kwargs):
+        result = original_snapshot(**kwargs)
+        snapshots.append((kwargs, result))
+        return result
+    monkeypatch.setattr(intelligence, "_focus_input_is_intact", check)
+    monkeypatch.setattr(intelligence, "_ai_job_snapshot", snapshot)
+    assert len(intelligence.hotspots(limit=20)["items"]) == 2
+    assert sorted(checked) == sorted([first["cycle_id"], second["cycle_id"]])
+    assert len(snapshots) == 2
+    light_args, light = snapshots[0]
+    assert light_args["input_only"] is True
+    assert set(light) == {first["job_id"], second["job_id"]}
+    for item in light.values():
+        assert set(item) == {"job_id", "job_type", "status", "payload_json", "submission_source"}
+    full_args, full = snapshots[1]
+    assert not full_args.get("input_only", False)
+    assert set(full) == {second["job_id"]}
+    assert "provider_result_json" in full[second["job_id"]]

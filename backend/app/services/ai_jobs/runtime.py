@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
+from urllib.parse import urlsplit
 
 from app.services.ai_jobs.models import (
     RESULT_VALIDATION_CONTRACT_VERSION,
@@ -1134,6 +1136,7 @@ async def submit_background(
 async def retrieve(settings: Any, response_id: str) -> Any:
     return await _client(settings).responses.retrieve(
         response_id,
+        include=["web_search_call.action.sources"],
         timeout=settings.openai_control_timeout_seconds,
     )
 
@@ -1247,6 +1250,165 @@ def _provider_field(value: Any, key: str, default: Any = None) -> Any:
     return value.get(key, default) if isinstance(value, dict) else getattr(value, key, default)
 
 
+# Only an explicit provider tracking pair is ignored for citation matching.
+# Business query parameters, paths, fragments, hosts and schemes stay exact.
+_OPENAI_CITATION_TRACKING = {"utm_source=openai"}
+_MARKDOWN_SOURCE_LINK = re.compile(
+    r"\[(?P<label>[^\[\]\r\n]+)\]\((?P<url>https?://[^\s()<>\[\]]+)\)"
+)
+_PAREN_SOURCE_LINK = re.compile(
+    r"(?P<open>[（(])" + _MARKDOWN_SOURCE_LINK.pattern + r"(?P<close>[）)])"
+)
+_NEWS_NARRATIVE_FIELDS = (
+    "title_zh",
+    "summary_zh",
+    "headline_summary",
+    "causal_summary",
+)
+_NEWS_NARRATIVE_LISTS = ("key_factors", "uncertainty_notes", "affected_sectors")
+
+
+def _citation_url_key(url: Any) -> str | None:
+    from app.services.ai_jobs.repository import _public_evidence_url
+
+    if not _public_evidence_url(url):
+        return None
+    before_fragment, fragment_mark, fragment = url.partition("#")
+    base, query_mark, query = before_fragment.partition("?")
+    parts = query.split("&")
+    if not query_mark or not any(part in _OPENAI_CITATION_TRACKING for part in parts):
+        return url
+    retained = [part for part in parts if part not in _OPENAI_CITATION_TRACKING]
+    return (
+        base + ("?" + "&".join(retained) if retained else "") + fragment_mark + fragment
+    )
+
+
+def _news_narrative_strings(data: Any) -> list[str]:
+    if not isinstance(data, dict):
+        return []
+    strings = [
+        data[name] for name in _NEWS_NARRATIVE_FIELDS if isinstance(data.get(name), str)
+    ]
+    for name in _NEWS_NARRATIVE_LISTS:
+        if isinstance(data.get(name), list):
+            strings.extend(item for item in data[name] if isinstance(item, str))
+    for name in ("affected_stocks", "affected_commodities"):
+        if isinstance(data.get(name), list):
+            strings.extend(
+                item["reason"]
+                for item in data[name]
+                if isinstance(item, dict) and isinstance(item.get("reason"), str)
+            )
+    return strings
+
+
+def _text_citation_keys(text: str) -> set[str]:
+    try:
+        data = json.loads(text)
+    except (TypeError, ValueError):
+        return set()
+    return {
+        key
+        for value in _news_narrative_strings(data)
+        for match in _MARKDOWN_SOURCE_LINK.finditer(value)
+        if (key := _citation_url_key(match.group("url"))) is not None
+    }
+
+
+def _trusted_receipt_citation_keys(receipt: dict[str, Any]) -> set[str]:
+    # Saved evidence must still be bound to a successful provider tool record.
+    # Generated prose and annotations can prioritize sources, never add them.
+    successful = [
+        source
+        for call in receipt.get("openai_web_calls", [])
+        if isinstance(call, dict)
+        and call.get("status") == "completed"
+        and call.get("action") in {"search", "open_page", "find_in_page"}
+        for source in call.get("sources", [])
+    ]
+    keys = set()
+    for source in receipt.get("evidence_sources", []):
+        if not isinstance(source, dict) or source not in successful:
+            raise ValueError("ai_job_provider_sources_invalid")
+        key = _citation_url_key(source.get("url"))
+        if key is None:
+            raise ValueError("ai_job_provider_sources_invalid")
+        keys.add(key)
+    return keys
+
+
+def _normalize_luna_news_citations(
+    output_text: str,
+    payload: dict[str, Any],
+    trusted_keys: set[str],
+) -> str:
+    from app.json_validation import reject_duplicate_json_keys, reject_non_finite_json
+
+    data = json.loads(
+        output_text,
+        object_pairs_hook=reject_duplicate_json_keys,
+        parse_constant=reject_non_finite_json,
+    )
+    if not isinstance(data, dict):
+        return output_text
+
+    def narrative(value: Any) -> Any:
+        if not isinstance(value, str):
+            return value
+
+        def standalone(match: re.Match[str]) -> str:
+            url = match.group("url")
+            bound = _citation_url_key(url) in trusted_keys
+            paired = (match.group("open"), match.group("close")) in {
+                ("(", ")"),
+                ("（", "）"),
+            }
+            domain_label = (
+                match.group("label").strip().casefold()
+                == (urlsplit(url).hostname or "").casefold()
+            )
+            return "" if bound and paired and domain_label else match.group(0)
+
+        def link(match: re.Match[str]) -> str:
+            return (
+                match.group("label")
+                if _citation_url_key(match.group("url")) in trusted_keys
+                else match.group(0)
+            )
+
+        normalized = _MARKDOWN_SOURCE_LINK.sub(
+            link, _PAREN_SOURCE_LINK.sub(standalone, value)
+        )
+        if re.search(r"https?://", normalized, re.IGNORECASE):
+            # Leave unknown and unsupported URLs in the original receipt and
+            # reject this result; never erase unverified evidence to pass Chinese.
+            raise ValueError("ai_news_unbound_or_unhandled_url")
+        if (
+            payload.get("article_status") == "unavailable"
+            and payload.get("article_reason") == "http_403"
+        ):
+            normalized = re.sub(
+                r"(?<![A-Za-z0-9_])HTTP 403(?![A-Za-z0-9_])",
+                "访问被拒绝（状态码403）",
+                normalized,
+            )
+        return normalized
+
+    for name in _NEWS_NARRATIVE_FIELDS:
+        if name in data:
+            data[name] = narrative(data[name])
+    for name in _NEWS_NARRATIVE_LISTS:
+        if isinstance(data.get(name), list):
+            data[name] = [narrative(item) for item in data[name]]
+    for name in ("affected_stocks", "affected_commodities"):
+        if isinstance(data.get(name), list):
+            for item in data[name]:
+                if isinstance(item, dict) and "reason" in item:
+                    item["reason"] = narrative(item["reason"])
+    return json.dumps(data, ensure_ascii=False, allow_nan=False)
+
+
 def openai_receipt(response: Any) -> dict[str, Any]:
     """Capture provider tool evidence, never URLs invented in generated prose."""
     from app.services.ai_jobs.repository import _public_evidence_url
@@ -1282,9 +1444,14 @@ def openai_receipt(response: Any) -> dict[str, Any]:
                 if not any(old["url"] == url for old in sources):
                     sources.append(entry)
         calls.append({"id": str(_provider_field(item, "id") or ""), "action": kind, "status": status, "sources": found[:50]})
-    # Prioritize provider citations among URLs actually returned by successful
-    # tools. An annotation alone never authenticates an invented URL.
-    sources.sort(key=lambda source: source["url"] not in citation_urls)
+    # Prioritize cited prose, then annotations, within successful tool sources.
+    # Neither generated text nor an annotation can authenticate another URL.
+    cited_text = _text_citation_keys(getattr(response, "output_text", "") or "")
+    cited_annotations = {key for url in citation_urls if (key := _citation_url_key(url)) is not None}
+    sources.sort(key=lambda source: (
+        _citation_url_key(source["url"]) not in cited_text,
+        _citation_url_key(source["url"]) not in cited_annotations,
+    ))
     sources = sources[:10]
     return {
         "provider": "openai", "model": str(getattr(response, "model", "")),
@@ -1308,7 +1475,12 @@ def receipt_result(receipt: dict[str, Any], job_type: str, payload: dict[str, An
                     causal_summary="缺少可核验资料，暂不判断市场影响。", key_factors=[],
                     uncertainty_notes=["原始正文不可用，联网搜索未取得可核验来源。"], insufficient_context=True)
         return validate_result(job_type, json.dumps(data, ensure_ascii=False), payload)
-    result = validate_result(job_type, receipt["output_text"], payload)
+    output_text = receipt["output_text"]
+    if (receipt["provider"] == "openai" and receipt["model"] == LUNA_MODEL
+            and job_type == "news_impact" and receipt.get("evidence_sources")):
+        trusted_keys = _trusted_receipt_citation_keys(receipt)
+        output_text = _normalize_luna_news_citations(output_text, payload, trusted_keys)
+    result = validate_result(job_type, output_text, payload)
     if (receipt["provider"] == "openai" and job_type == "news_impact"
             and not payload.get("article") and receipt.get("evidence_sources")):
         note = "原始正文未取得；分析采用另行联网检索的来源，请查阅来源链接。"

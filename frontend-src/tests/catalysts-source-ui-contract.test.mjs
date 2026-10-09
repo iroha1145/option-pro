@@ -384,3 +384,46 @@ test('owner status preserves shared USD snapshot while visitor status discards m
     } else assert.equal(result.analysisBudget, null);
   }
 });
+
+
+test('热点核验时间保留原事件时间，不以新整理时间代替', async () => {
+  const verifiedAt = '2026-10-09T07:59:20Z';
+  const preparedAt = '2026-10-09T08:28:38Z';
+  const loaded = loadCatalystsModule({
+    '/catalysts/hotspots?limit=8': { items: [
+      { event_group_id: 'same-event', hot_score: 70, representative_title: '已核实事件', prepared_at: preparedAt, verified_at: verifiedAt },
+      { event_group_id: 'legacy-event', hot_score: 65, representative_title: '历史事件', prepared_at: preparedAt },
+    ] },
+  });
+  const items = await loaded.exports.catalystsContract.hotspots();
+  assert.equal(items[0].verifiedAt, verifiedAt);
+  assert.equal(items[0].updatedAt, preparedAt);
+  assert.equal(items[1].verifiedAt, null);
+
+  const module = { exports: {} };
+  const jsx = (type, props) => ({ type, props });
+  const compiled = ts.transpileModule(fs.readFileSync(path.join(sourceRoot, 'components/catalysts/HotspotsStrip.tsx'), 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText;
+  vm.runInNewContext(compiled, {
+    module, exports: module.exports,
+    require(id) {
+      if (id === 'react/jsx-runtime') return { jsx, jsxs: jsx };
+      if (id === 'framer-motion') return { motion: { button: 'button' } };
+      if (id === '../../i18n/core.ts') return { t: stubT };
+      if (id === '@/lib/format') return { fmtRelative: (value) => `relative:${value}` };
+      return {};
+    },
+  });
+  const times = (node) => Array.isArray(node) ? node.flatMap(times)
+    : node?.props ? [...(node.type === 'time' ? [node] : []), ...times(node.props.children)] : [];
+  for (const item of items) {
+    const tree = module.exports.HotspotCard({ h: item, index: 0, onOpen() {} });
+    const rendered = times(tree);
+    assert.equal(rendered.length, item.verifiedAt ? 1 : 0);
+    if (item.verifiedAt) {
+      assert.equal(rendered[0].props.dateTime, verifiedAt);
+      assert.equal(rendered[0].props.children, `核验于 relative:${verifiedAt}`);
+    }
+  }
+});

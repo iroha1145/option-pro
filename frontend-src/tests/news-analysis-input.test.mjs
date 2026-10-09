@@ -83,7 +83,7 @@ function renderDrawer(seed) {
       if (id === './analysisErrorText') return errorText;
       if (id === './bits') return Object.fromEntries([
         'AnalysisStatusChip', 'ClassificationChip', 'ConfidenceLabel', 'ImpactValue', 'Led', 'StaleChip', 'TickerChip',
-      ].map((name) => [name, passthrough]));
+      ].map((name) => [name, Object.assign((props) => passthrough(name, props), { componentName: name })]));
       if (id === './ConfirmDialog') return { default: passthrough };
       if (id === '../../api/aiBudget.ts') return aiBudget;
     if (id === '../../api/evidenceSources.ts') return evidenceSources;
@@ -162,4 +162,69 @@ test('抽屉只给已完成分析标注输入依据，保留原始公司名，�
   assert.doesNotMatch(pendingText, /仅基于标题和摘要分析/);
   const failedText = texts(renderDrawer({ ...article, analysisStatus: 'failed', analysis: null }));
   assert.doesNotMatch(failedText, /基于新闻正文|基于正文节选/);
+});
+
+function nodes(node, predicate, output = []) {
+  if (Array.isArray(node)) node.forEach((child) => nodes(child, predicate, output));
+  else if (node?.props) {
+    if (predicate(node)) output.push(node);
+    nodes(node.props.children, predicate, output);
+  }
+  return output;
+}
+
+test('资料不足结果保留说明和原始数值，但详情不展示方向、置信度或个股评分', async () => {
+  for (const insufficient of [true, false]) {
+    const item = await mappedNews({ ...base, analysis: { ...base.analysis,
+      insufficient_context: insufficient, confidence: 70,
+      causal_summary: '正文不足说明',
+      trusted_stock_impacts: [{ ticker: 'TEST', impact_score: 20, mechanism: 'test' }],
+    } });
+    assert.equal(item.analysis.insufficientContext, insufficient);
+    assert.equal(item.analysis.confidence, 0.7);
+    assert.equal(item.analysis.trustedStockImpacts.length, 1);
+    const tree = renderDrawer(item);
+    const component = (name) => nodes(tree, (node) => node.type?.componentName === name);
+    assert.equal(component('ClassificationChip').length, insufficient ? 0 : 1);
+    assert.equal(component('ConfidenceLabel').length, insufficient ? 0 : 1);
+    assert.equal(nodes(tree, (node) => node.type?.name === 'StockImpactCard').length, insufficient ? 0 : 1);
+    assert.equal(component('AnalysisStatusChip')[0].props.status, insufficient ? 'insufficient_context' : 'completed');
+    assert.ok(texts(tree).includes('正文不足说明'));
+    assert.equal(texts(tree).includes('资料不足，暂不判断方向与置信度'), insufficient);
+    assert.ok(!texts(tree).includes('信息不足 · 未调用模型'));
+  }
+});
+
+function renderRow(item) {
+  const module = { exports: {} };
+  const passthrough = (type, props) => ({ type, props });
+  vm.runInNewContext(compile('components/catalysts/FeedPanel.tsx', true), {
+    module, exports: module.exports,
+    require(id) {
+      if (id === 'react/jsx-runtime') return { jsx: passthrough, jsxs: passthrough, Fragment: 'fragment' };
+      if (id === 'framer-motion') return { motion: { article: 'article' } };
+      if (id === '@/hooks/useShell') return { useShell: () => ({ openTicker() {} }) };
+      if (id === '@/lib/utils') return { cn: (...v) => v.filter(Boolean).join(' ') };
+      if (id === '@/lib/format') return { fmtRelative: () => 'time' };
+      if (id === '@/lib/scoreHints') return { SCORE_HINTS: { newsAssessment: 'hint' } };
+      if (id === '../../i18n/core.ts') return { t: (value) => value };
+      if (id === './bits') return Object.fromEntries(['AnalysisStatusChip', 'ClassificationChip', 'ConfidenceLabel', 'ImpactValue', 'TickerChip'].map(name => [name, name]));
+      return {};
+    },
+  });
+  return module.exports.NewsRow({ item, index: 0, animate: false, onOpen() {} });
+}
+
+test('新闻列表隐藏资料不足结果的分类、置信度和方向评分，正常结果仍显示', async () => {
+  for (const insufficient of [true, false]) {
+    const item = await mappedNews({ ...base, analysis: { ...base.analysis,
+      insufficient_context: insufficient,
+      trusted_stock_impacts: [{ ticker: 'TEST', impact_score: 20 }],
+    } });
+    const tree = renderRow(item);
+    for (const name of ['ClassificationChip', 'ConfidenceLabel', 'ImpactValue']) {
+      assert.equal(nodes(tree, (node) => node.type === name).length, insufficient ? 0 : 1);
+    }
+    assert.equal(nodes(tree, (node) => node.type === 'AnalysisStatusChip')[0].props.status, insufficient ? 'insufficient_context' : 'completed');
+  }
 });
