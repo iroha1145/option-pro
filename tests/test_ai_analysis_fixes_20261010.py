@@ -155,12 +155,11 @@ def test_domain_label_must_name_the_linked_site():
     assert result["summary_zh"] == "暂停期限延长至2027年1月31日。"
     assert result["causal_summary"] == "监管命令要求整改。可能限制新单销售。"
     # A label that is not the linked site is reduced to its text and is not a
-    # retrieved site, so it stays; the language gate then judges it as usual
-    # (here a compact gloss right after Chinese text).
+    # retrieved site, so it stays; a host name is never a term gloss, so the
+    # language gate rejects it.
     mislabeled = _luna_receipt([url], key_factors=[f"命令已披露（[ec.gov]({url})）"])
-    assert runtime.receipt_result(mislabeled, "news_impact", luna_payload())["key_factors"] == [
-        "命令已披露（ec.gov）"
-    ]
+    with pytest.raises(ValueError, match="english_prose_not_allowed"):
+        runtime.receipt_result(mislabeled, "news_impact", luna_payload())
 
 
 def test_bare_trusted_url_in_brackets_is_a_citation_but_unbound_url_still_rejects():

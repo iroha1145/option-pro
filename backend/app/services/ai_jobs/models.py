@@ -649,6 +649,9 @@ _SECURITY_PRICE_MOVEMENTS = (
     "收涨",
     "收跌",
 )
+# 主机名或网址路径不是术语注释：「（sec.gov）」「（www.nvidia.com/zh-cn）」是来源
+# 标注，未经联网来源核对就不能借注释位发布。
+_HOSTNAME_SHAPE = re.compile(r"\.[A-Za-z]{2,}|/")
 # IT 也是股票代码（高德纳），只有这些搭配才是信息技术的意思（「企业IT服务」）。
 _IT_CONTEXT_SUFFIXES = ("服务", "支出", "行业", "系统", "板块", "部门")
 _STOCK_PRICE_SUFFIX = re.compile(
@@ -1535,12 +1538,15 @@ def _is_cjk_gloss_annotation(
     - 括号内只有该片段本身（左括号紧贴、右括号紧随），括号前一字符是中文；
     - 片段紧凑（≤24、无空白）且含小写字母或数字，或长度 ≥6；
     - 1–5 位全大写的代码形状**不进此通道**——未绑定证券代码不得借括号
-      漂白，仍走代码绑定规则；prose word 同样拒绝。
+      漂白，仍走代码绑定规则；prose word 同样拒绝；
+    - 主机名与网址路径（_HOSTNAME_SHAPE）也不进此通道。
     """
 
     if not 1 < len(span) <= 24 or any(char.isspace() for char in span):
         return False
     if not any(char.isalpha() for char in span):
+        return False
+    if _HOSTNAME_SHAPE.search(span) is not None:
         return False
     if span.isupper() and len(span) <= 5:
         return False

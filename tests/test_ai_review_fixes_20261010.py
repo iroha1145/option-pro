@@ -158,9 +158,12 @@ def test_b3_words_outside_the_payload_vocabulary_are_still_rejected(text, change
     "text",
     ["开发者转向（node.js）生态。", "监管文件见（sec.gov/news.html）。"],
 )
-def test_bracketed_text_that_is_not_a_retrieved_site_is_not_deleted(text):
-    assert _news_field(text) == text
-    assert _focus_field(text, field="summary_zh") == text
+def test_bracketed_hosts_that_are_not_retrieved_sites_are_rejected_not_deleted(text):
+    # Second review (N2): a host name or URL path is not a term gloss.
+    with pytest.raises(ValueError):
+        _news_field(text)
+    with pytest.raises(ValueError):
+        _focus_field(text, field="summary_zh")
 
 
 # --- S2. IT means information technology only in its own phrases -------------

@@ -11,10 +11,11 @@ import json
 
 import pytest
 
-from app.services.ai_jobs import models
+from app.services.ai_jobs import models, runtime
 from app.services.ai_jobs.models import validate_result
-from test_ai_analysis_fixes_20261010 import _focus_field, _news_field
+from test_ai_analysis_fixes_20261010 import _focus_field, _luna_receipt, _news_field
 from test_ai_jobs_audit_2026_09_25 import _option_alert_result
+from test_luna_news_web_fallback import payload as luna_payload
 from test_signal_context import _signal_result
 
 
@@ -134,3 +135,47 @@ def test_n1_no_whitelisted_name_is_rejected_for_a_common_movement_word():
 def test_n1_unbound_codes_stay_rejected(text):
     with pytest.raises(ValueError):
         _news_field(text)
+
+
+# --- N2. A host name in brackets is a citation, not a term gloss --------------
+
+_BRACKETED_HOSTS = (
+    "公司提交了文件（sec.gov）。",
+    "公司提交了文件（www.sec.gov）。",
+    "据路透社（reuters.com）报道，公司提交了文件。",
+    "电视台（cnbc.com）称公司将裁员。",
+    "公司公布融资安排（globenewswire.com）。",
+    "公司公布融资安排（sec.gov/news.html）。",
+)
+
+
+@pytest.mark.parametrize("text", _BRACKETED_HOSTS)
+def test_n2_bracketed_host_names_are_not_published(text):
+    with pytest.raises(ValueError):
+        _news_field(text)
+    with pytest.raises(ValueError):
+        _focus_field(text, field="summary_zh")
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["据路透社（reuters.com）报道，英伟达发布新芯片。", "英伟达发布新芯片（www.nvidia.com/zh-cn）。"],
+)
+def test_n2_luna_hosts_other_than_a_retrieved_bare_domain_are_rejected(text):
+    retrieved = ["https://www.nvidia.com/en-us/about-nvidia/"]
+    with pytest.raises(ValueError):
+        runtime.receipt_result(_luna_receipt(retrieved, summary_zh=text), "news_impact", luna_payload())
+
+
+def test_n2_a_retrieved_bare_domain_is_still_removed():
+    receipt = _luna_receipt(["https://www.nvidia.com/en-us/about-nvidia/"], summary_zh="英伟达发布新芯片（nvidia.com）。")
+    assert runtime.receipt_result(receipt, "news_impact", luna_payload())["summary_zh"] == "英伟达发布新芯片。"
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["价格出现上冲回落（Upthrust）形态。", "公司首席执行官（CEO）辞职。", "电动垂直起降飞行器（eVTOL）获批。"],
+)
+def test_n2_term_glosses_still_publish(text):
+    assert _news_field(text) == text
+    assert _focus_field(text, field="summary_zh") == text
