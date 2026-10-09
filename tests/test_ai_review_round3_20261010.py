@@ -53,3 +53,48 @@ def test_m1_market_overview_counts_after_hong_kong_stocks_publish(text):
 @pytest.mark.parametrize("text", ["港股1810小米集团盘中走高。", "腾讯港股代码为0700。"])
 def test_m1_hong_kong_codes_still_need_binding(text):
     _reject_both(text, match="unbound_numeric_security_code")
+
+
+# --- Suggestion 1. Country suffixes, case-insensitive suffixes, www. hosts ----
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "据港交所（hkexnews.hk）披露，公司配售新股。",
+        "公司公布融资安排（info.gov.hk）。",
+        "墨西哥媒体报道（eleconomista.com.mx）。",
+        "韩联社报道（yna.co.kr）。",
+        "欧洲媒体报道（politico.eu）。",
+        "瑞士媒体报道（nzz.ch）。",
+        "新西兰媒体报道（rnz.co.nz）。",
+        "新加坡媒体报道（straitstimes.com.sg）。",
+        "路透社报道（Reuters.COM）。",
+        "监管文件见（WWW.SEC.GOV）。",
+        "监管文件见（Sec.Gov）。",
+    ],
+)
+def test_r3s1_country_and_upper_case_hosts_are_not_published(text):
+    _reject_both(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "开发者转向（node.js）生态。",
+        "前端框架（Vue.js）更新。",
+        "框架基于（ASP.NET）。",
+        "网络协议（TCP/IP）。",
+        "聊天机器人公司（Character.AI）获融资。",
+        "深度学习课程（Fast.ai）走红。",
+        "项目主页（GitHub.io）上线。",
+        "说明文档（README.md）更新。",
+        "部署脚本（deploy.sh）调整。",
+        "类型声明（index.ts）补齐。",
+        "入口文件（main.go）重写。",
+        "核心库（lib.rs）发布。",
+        "脚本（train.py）开源。",
+    ],
+)
+def test_r3s1_technical_and_product_suffixes_stay_glosses(text):
+    _publish_both(text)

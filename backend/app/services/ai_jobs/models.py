@@ -655,17 +655,23 @@ _SECURITY_PRICE_MOVEMENTS = (
     "收跌",
 )
 # 括号里的主机名不是术语注释：「（sec.gov）」「（www.nvidia.com/zh-cn）」
-# 「（GlobeNewswire.com）」是来源标注，未经联网来源核对就不能借注释位发布。
-# 只认以 www. 开头、或最后一段是下列小写顶级域名的主机（可带路径）；
-# 「（node.js）」「（Character.AI）」这类技术名、公司名照旧算注释。
+# 「（GlobeNewswire.com）」「（info.gov.hk）」是来源标注，未经联网来源核对就
+# 不能借注释位发布。只认以 www. 开头、或最后一段是下列顶级域名的主机，不区分
+# 大小写，可带路径；co.uk、com.hk 这类多段后缀按最后一段判。js、py、md、sh、
+# ts、go、rs、ai、io 这类同时是技术或产品后缀的不在表里，「（node.js）」
+# 「（Character.AI）」照旧算注释。
 _HOST_TOP_LEVEL_DOMAINS = (
-    "com", "net", "org", "gov", "edu", "io", "co", "xyz", "cn", "jp", "uk", "de",
-    "fr", "ca", "au", "info", "biz", "news", "app", "tv", "me", "us", "ai", "ly", "it",
+    "com", "net", "org", "gov", "edu", "info", "biz", "news", "app", "xyz", "tv", "me",
+    "ly", "us", "uk", "eu", "cn", "hk", "tw", "jp", "kr", "sg", "in", "id", "my", "th",
+    "vn", "ph", "au", "nz", "ca", "mx", "br", "ar", "cl", "co", "de", "fr", "it", "es",
+    "nl", "be", "at", "ch", "se", "no", "fi", "dk", "ie", "pt", "gr", "cz", "hu", "pl",
+    "ru", "tr", "il", "ae", "sa", "za",
 )
 _BRACKETED_HOSTNAME = re.compile(
     r"(?:www\.[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*"
     rf"|[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.(?:{'|'.join(_HOST_TOP_LEVEL_DOMAINS)}))"
-    r"(?:/\S*)?"
+    r"(?:/\S*)?",
+    re.IGNORECASE,
 )
 # IT 也是股票代码（高德纳），只有这些搭配才是信息技术的意思（「企业IT服务」）。
 _IT_CONTEXT_SUFFIXES = (
@@ -1208,6 +1214,10 @@ def _is_contextual_initialism(
     if _OPAQUE_INITIALISM.fullmatch(span) is None:
         return False
     if not any(char.isascii() and char.isalpha() for char in span):
+        return False
+    # 「（WWW.SEC.GOV）」是主机名，不是缩写。全大写、不带 www. 的「ASP.NET」
+    # 照旧按缩写放行。
+    if span.casefold().startswith("www."):
         return False
     prose_tokens = re.findall(r"[A-Z]+", span)
     if any(
