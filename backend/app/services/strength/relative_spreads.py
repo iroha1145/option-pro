@@ -302,7 +302,7 @@ def compute_spread_matrix(index_data: dict[str, pd.DataFrame]) -> dict[str, Any]
             warnings.append(f"{item.get('name')}偏弱，强势未充分扩散")
     soxx = spreads.get("soxx_xlk", {})
     if soxx.get("status") == "active" and float(soxx["score"]) >= 70:
-        warnings.append("SOXX/XLK走强，半导体相对科技板块领先")
+        warnings.append("SOXX/XLK走强，半导体相对科技行业领先")
     hyg = spreads.get("hyg_ief", {})
     if hyg.get("status") == "active" and float(hyg["score"]) < 42:
         warnings.append("HYG/IEF偏弱，信用风险偏好不足")

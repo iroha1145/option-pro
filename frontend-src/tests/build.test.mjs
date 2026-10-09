@@ -184,7 +184,7 @@ test('failed focus attempt keeps the latest successful result visible and retrya
   assert.match(apiSource, /useSuccessfulFallback/);
   assert.match(apiSource, /latest_successful_cycle/);
   assert.match(apiSource, /normalized\.latestAttempt/);
-  assert.match(cardSource, /最近一次更新失败，当前展示上次成功结果/);
+  assert.match(cardSource, /更新失败，显示上次成功的结果/);
   assert.match(cardSource, /triggerFocusCycle\(failedCycleId\)/);
   assert.match(cardSource, /重试分析/);
 });

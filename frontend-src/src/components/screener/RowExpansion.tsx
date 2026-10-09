@@ -71,7 +71,7 @@ const closesCache = new Map<string, Promise<number[] | null>>();
 function dailyChartError(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.bizCode === 'public_snapshot_unavailable') {
-      return t('公开快照暂无该股票的日线图 · 可手动获取');
+      return t('暂无该股票的日线图 · 可手动获取');
     }
     return error.message;
   }
@@ -268,7 +268,7 @@ export default function RowExpansion({ row, layout = 'table', dollarVolume, sign
               </p>
             )}
             {!row.dollarLiquidityVerified && (
-              <p className="text-micro text-ink-400">{t('成交额口径未核实，不能当作已通过流动性门')}</p>
+              <p className="text-micro text-ink-400">{t('成交额口径未核实，不能当作已通过流动性门槛')}</p>
             )}
           </div>
         )}
@@ -297,7 +297,7 @@ export default function RowExpansion({ row, layout = 'table', dollarVolume, sign
             className="control-button"
           >
             <Icon name="arrow-up-right" size={13} />
-            {t('打开详情')}
+            {t('股票详情')}
           </button>
           <Link
             to="/breakouts"

@@ -85,7 +85,7 @@ test('new quote price with missing or inconsistent previous-close change shows u
 
 test('quote tooltip uses New York midnight without 24:00 and omits invalid times', () => {
   quote = { ...snapshot, freshness: 'live', subscription_status: 'live', trade_at: '2026-09-05T04:00:00Z' };
-  assert.match(render(live.QuoteIndicator, {}), /报价时间 00:00:00（纽约）/);
+  assert.match(render(live.QuoteIndicator, {}), /报价时间 00:00:00（纽约时间）/);
   quote = { ...quote, trade_at: 'not-a-date' };
   assert.doesNotMatch(render(live.QuoteIndicator, {}), /报价时间/);
 });

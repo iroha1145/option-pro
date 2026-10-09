@@ -78,7 +78,7 @@ test('不会因为 children 引用变化陷入无限重渲染', async () => {
 test('热点带用上了这个组件', async () => {
   const strip = await source('components/catalysts/HotspotsStrip.tsx');
   assert.match(strip, /<HorizontalScroller/);
-  assert.match(strip, /label=\{__t\("热点主题带，可横向滚动"\)\}/);
+  assert.match(strip, /label=\{__t\("市场热点，可横向滚动"\)\}/);
   // 原来那层裸的 overflow-x-auto 不该再留着
   assert.doesNotMatch(strip, /className="-mx-4 mt-4 overflow-x-auto/);
 });

@@ -178,7 +178,7 @@ test('a confirmed capability shutdown still closes the analysis confirmation', a
   assert.equal(h.access().aiEnabled, false);
   assert.equal(h.access().aiAvailable, false);
   assert.equal(JSON.stringify(card.read()).includes('为 {ticker} 生成本次财报分析。'), false);
-  assert.ok(JSON.stringify(card.read()).includes('AI 分析未启用'));
+  assert.ok(JSON.stringify(card.read()).includes('AI 分析已关闭'));
 });
 
 test('a late capability result cannot overwrite a newer visitor identity', async t => {

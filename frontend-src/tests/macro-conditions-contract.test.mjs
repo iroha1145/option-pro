@@ -529,7 +529,7 @@ test('the source note states the real sources', async () => {
     '联储理事会',
     '芝加哥联储',
     'Cboe',
-    'Option Pro 当前股票日线数据源',
+    'Optix Pro 当前股票日线数据源',
   ]) {
     assert.ok(text.includes(phrase), `source note must mention ${phrase}`);
   }

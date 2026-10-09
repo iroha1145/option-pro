@@ -552,7 +552,7 @@ test('FE-3 budget_blocked 在条目层与任务层同一口径：失败带原因
   });
   h.render({ newsId: '9600' });
   await settle();
-  assert.match(textOf(h.tree()), /今天的 AI 用量已用完，这次没有执行分析/);
+  assert.match(textOf(h.tree()), /今天的 AI 分析额度已用完，这次没有执行分析/);
   assert.ok(findButton(h.tree(), '重试分析'));
   assert.equal(findButton(h.tree(), '生成分析'), null, '不带 force 只会拿回同一条受限任务');
   h.unmount();
@@ -669,7 +669,7 @@ test('1-E 运行中的任务请求取消：显示「取消中」，不再给取�
   assert.match(textOf(tree), /取消中/);
   assert.equal(findButton(tree, '取消分析'), null);
   const stepper = findNode(tree, (node) => typeof node.type === 'function' && node.type.name === 'JobStepper');
-  assert.match(textOf(stepper.type(stepper.props)), /已请求取消，等待服务端确认/);
+  assert.match(textOf(stepper.type(stepper.props)), /已请求取消，等待确认/);
   assert.ok(h.toasts.some((row) => row[1] === '已请求取消'));
   h.unmount();
 });
@@ -759,7 +759,7 @@ test('原因码文案：审计点名的码都有可读说法，未知码与排�
   assert.equal(analysisErrorText.newsAnalysisFailureText(null), '这次分析没有完成，可以重试');
   assert.deepEqual(analysisErrorText.focusCycleOutcome('cancelled', 'x'), { title: '热点分析已取消', reason: '可以重新分析' });
   assert.equal(analysisErrorText.focusCycleOutcome('budget_blocked', null).title, '热点分析没有执行');
-  assert.equal(analysisErrorText.focusCycleOutcome('failed', 'focus_prepare_expired').reason, '热点准备已过期，请重新分析');
+  assert.equal(analysisErrorText.focusCycleOutcome('failed', 'focus_prepare_expired').reason, '热点已过期，请重新分析');
 });
 
 /* ---------------- 焦点周期卡（真实 usePolling + remoteState） ---------------- */
@@ -929,7 +929,7 @@ test('FE-6 页面加载时已有周期在跑：低频跟踪 latest、禁用触�
 
 test('FE-5 焦点周期终态按原因提示：预算受限与取消不再一律「计算失败」', async () => {
   for (const [final, kind, title, reason] of [
-    [focusJob({ status: 'budget_blocked', errorCode: 'daily_token_limit_reached' }), 'error', '热点分析没有执行', '今天的 AI 用量已用完，这次没有执行分析'],
+    [focusJob({ status: 'budget_blocked', errorCode: 'daily_token_limit_reached' }), 'error', '热点分析没有执行', '今天的 AI 分析额度已用完，这次没有执行分析'],
     [focusJob({ status: 'cancelled' }), 'info', '热点分析已取消', '可以重新分析'],
     [focusJob({ status: 'failed', errorCode: 'market_focus_payload_mismatch' }), 'error', '热点分析失败', '热点数据已更新，请重新分析'],
   ]) {
@@ -953,7 +953,7 @@ test('FE-5 徽标与说明：预算受限显示中文，失败尝试写明原因
   await settle();
   const text = textOf(h.tree());
   assert.match(text, /额度已用完/);
-  assert.match(text, /今天的 AI 用量已用完，这次没有执行分析/);
+  assert.match(text, /今天的 AI 分析额度已用完，这次没有执行分析/);
   assert.doesNotMatch(text, /budget_blocked/);
   assert.match(textOf(triggerButton(h.tree())), /重试分析/);
   h.unmount();
@@ -965,7 +965,7 @@ test('FE-5 徽标与说明：预算受限显示中文，失败尝试写明原因
   });
   h2.mount();
   await settle();
-  assert.match(textOf(h2.tree()), /最近一次更新已取消，当前展示上次成功结果/);
+  assert.match(textOf(h2.tree()), /更新已取消，显示上次成功的结果/);
   h2.unmount();
 });
 
@@ -984,7 +984,7 @@ test('FE-7 刷新失败保留旧数据并给出说明与重试；没有旧数据
   await settle();
   let text = textOf(h.tree());
   assert.match(text, /主导事件/, '旧数据继续显示');
-  assert.match(text, /最新状态读取失败，显示上次结果/);
+  assert.match(text, /最新状态读取失败，显示上次成功的结果/);
   assert.doesNotMatch(text, /暂无热点分析/);
   const retry = findButton(h.tree(), '重试');
   assert.ok(retry);
@@ -1316,7 +1316,7 @@ test('1-H 翻页结果被刷新后的缓存拒收：提示列表已更新；后�
   h.setFeed(() => page.promise);
   h.render({});
   await settle();
-  findButton(h.tree(), '查看更多').props.onClick();
+  findButton(h.tree(), '加载更多').props.onClick();
   await settle();
   h.setNow(2_000);
   h.cache.invalidate();
@@ -1330,11 +1330,11 @@ test('1-H 翻页结果被刷新后的缓存拒收：提示列表已更新；后�
   const reload = deferred();
   const refreshing = h.cache.ensure('feed:a', h.policy, () => reload.promise, true);
   await settle();
-  assert.equal(findButton(h.tree(), '查看更多').props.disabled, true);
+  assert.equal(findButton(h.tree(), '加载更多').props.disabled, true);
   reload.resolve(snapshotOf([feedItem('A', 'completed')], 'c2'));
   await refreshing;
   await settle();
-  assert.equal(findButton(h.tree(), '查看更多').props.disabled, false);
+  assert.equal(findButton(h.tree(), '加载更多').props.disabled, false);
   h.unmount();
 });
 
@@ -1600,7 +1600,7 @@ test('4-D 卸载后在途读取回来：不回调父组件，也不弹提示', a
 test('4-F 财报提交 429 按业务码区分文案', async () => {
   for (const [bizCode, title] of [
     ['ai_job_queue_full', 'AI 任务队列已满'],
-    ['earnings_analysis_rate_limited', '财报分析触发过于频繁'],
+    ['earnings_analysis_rate_limited', '财报分析提交过于频繁'],
     ['rate_limited', '请求过于频繁'],
   ]) {
     const h = impactHarness({

@@ -46,7 +46,7 @@ def signals_payload() -> dict[str, Any]:
     return {
         "signals": {
             "rsp_spy_5d": {"value": -0.8123, "label": "等权重/SPY 5日相对强弱%", "top_score": 40, "bottom_score": 30},
-            "sectors_above_50dma": {"value": 54.5454, "label": "板块ETF在50日线上方%", "top_score": 50, "bottom_score": 20},
+            "sectors_above_50dma": {"value": 54.5454, "label": "行业ETF在50日线上方%", "top_score": 50, "bottom_score": 20},
             "vix": {"value": 16.2, "label": "VIX", "top_score": 30, "bottom_score": 20},
             "_breadth_coverage": {"available": 11, "expected": 11, "ratio": 1.0, "above_count": 6},
             "_source_status": {"value": "active", "label": "板块广度数据完整"},
@@ -73,7 +73,7 @@ def context_payload() -> dict[str, Any]:
             "spy_above_sma200": True,
             "vix": 16.2,
             "breadth": {"sectors_above_50dma": 54.5, "rsp_spy_20d": -1.2},
-            "warnings": ["市场宽度偏弱"],
+            "warnings": ["市场广度偏弱"],
             "rules": ["internal"],
         },
         "sectors": [],

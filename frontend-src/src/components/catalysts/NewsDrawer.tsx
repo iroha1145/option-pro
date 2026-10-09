@@ -70,7 +70,7 @@ function StockImpactCard({ imp, index }: { imp: TrustedStockImpact; index: numbe
 /* ---------------- 服务端任务进度 ---------------- */
 function JobStepper({ job }: { job: NewsAnalysisJob }) {
   const label = job.cancelRequested
-    ? __t('已请求取消，等待服务端确认')
+    ? __t('已请求取消，等待确认')
     : job.status === 'queued' ? __t('任务排队中') : __t('模型分析中');
   return (
     <div className="rounded-sm border border-line bg-card px-3 py-2.5">
@@ -297,7 +297,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
       } catch (error) {
         if (error instanceof ReadAttemptAborted || !request.isAlive()) return;
         if (keepSeed) setDetailNotice(__t('详情更新失败'));
-        else setLoadError(__t('暂时打不开这条新闻的详情'));
+        else setLoadError(__t('暂时读不到这条新闻的详情'));
       } finally {
         request.cancel();
       }
@@ -527,7 +527,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
         };
         // 列表按新闻编号回写；抽屉只在仍停在这条新闻时才接收结果（审计 1-B）。
         onUpdate(nextItem);
-        if (settled) toast.info(__t('这条新闻已有任务结果'), __t('需要重新分析，请点击分析区的按钮'));
+        if (settled) toast.info(__t('这条新闻已有任务结果'), __t('需要重新分析，请点击「重新分析」'));
         else toast.info(__t('分析任务已提交'), force ? __t('重新分析') : __t('可在本页查看进度'));
         if (openNewsRef.current !== forNews) return;
         invalidateDetailRead();
@@ -590,7 +590,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
           onUpdate(cancelledItem);
         }
       } else if (next.cancelRequested) {
-        toast.info(__t('已请求取消'), __t('模型已在处理，等服务端确认后停止'));
+        toast.info(__t('已请求取消'), __t('模型已在处理，确认后停止'));
       }
     } catch (e) {
       toast.error(__t('取消失败'), e instanceof Error ? e.message : undefined);
@@ -770,7 +770,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
                       : __t('基于新闻正文分析')
                     : __t('仅基于标题和摘要分析')}
                   {item.analysisInput?.basis === 'title_summary' && item.analysisInput.articleStatus === 'unavailable'
-                    ? <span className="ml-1">{__t('未能取得正文')}</span>
+                    ? <span className="ml-1">{__t('未能获取正文')}</span>
                     : null}
                 </p>
                 <div className="flex flex-wrap items-center gap-2.5">
@@ -801,7 +801,6 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
               <div className="mt-4 rounded-md bg-warn-50 p-4 text-center">
                 <Icon name="doc-quote" size={22} className="mx-auto text-warn-700" />
                 <p className="mt-2 text-body-s font-medium text-ink-800">{__t('信息不足 · 未调用模型')}</p>
-                <p className="mt-1 text-micro text-ink-400">{__t('这条新闻信息量不足，未做 AI 分析')}</p>
               </div>
             )}
 

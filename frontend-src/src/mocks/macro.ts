@@ -245,7 +245,7 @@ export function getMacroConditions(): MacroConditionsResponse {
     structuralModules: [...STRUCTURAL_MOCK_MODULES],
     drivers: buildDrivers(),
     warnings: [MOCK_REASON],
-    sources: ['合成 mock 数据 · 不是真实来源'],
+    sources: ['合成示例数据 · 非真实来源'],
   };
 }
 

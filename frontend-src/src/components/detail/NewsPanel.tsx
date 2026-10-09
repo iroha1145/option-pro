@@ -56,8 +56,8 @@ function StockNewsPanel({ ticker }: { ticker: string }) {
       <EmptyState
         variant="error"
         icon="doc-quote"
-        title={t('新闻数据读取失败')}
-        description={t('是读取失败，不代表该股近期没有新闻')}
+        title={t('消息数据读取失败')}
+        description={t('只是读取失败，不代表该股近期没有消息')}
         action={
           <button
             onClick={() => newsQ.refresh()}
@@ -98,8 +98,8 @@ function StockNewsPanel({ ticker }: { ticker: string }) {
       {items.length === 0 ? (
         <EmptyState
           image="/empty-news.svg"
-          title={t("72 小时内无相关新闻")}
-          description={t("有相关新闻时会在此显示")}
+          title={t("近 72 小时无相关消息")}
+          description={t("有相关消息时会在此显示")}
           action={
             <Link
               to={`/catalysts?ticker=${encodeURIComponent(ticker)}`}

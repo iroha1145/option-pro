@@ -36,11 +36,11 @@ const ANALYSIS_REASON_CN: Record<string, { label: string; tone: 'muted' | 'down'
   read_only_mode: { label: t('只读模式'), tone: 'muted' },
   manual_analysis_disabled: { label: t('手动分析已关闭'), tone: 'muted' },
   worker_unavailable: { label: t('后台服务暂不可用'), tone: 'down' },
-  daily_token_limit: { label: t('今日分析用量已达上限'), tone: 'warn' },
+  daily_token_limit: { label: t('今日分析额度已用完'), tone: 'warn' },
   daily_budget_usd_reached: { label: t('共享日预算不足'), tone: 'warn' },
   /* 这是上次请求的结果，并非实时余额；充值后的手动请求可以确认恢复。 */
-  provider_credit_exhausted: { label: t('分析服务余额不足，充值后重试'), tone: 'down' },
-  analysis_in_progress: { label: t('分析任务进行中'), tone: 'warn' },
+  provider_credit_exhausted: { label: t('模型服务余额不足，充值后可重试'), tone: 'down' },
+  analysis_in_progress: { label: t('分析任务处理中'), tone: 'warn' },
   cooldown_active: { label: t('冷却中'), tone: 'warn' },
   catalyst_disabled: { label: t('新闻模块未启用'), tone: 'down' },
 };
@@ -207,7 +207,7 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
               <span className="whitespace-nowrap">{t('已分析')} <span className="text-ink-600">{newsQ.data.analyzed}</span> {t('条')}</span>
               {newsQ.data.pending > 0 && (
                 <span className="whitespace-nowrap">
-                  {t('待中文')} <span className="text-ink-600">{newsQ.data.pending}</span>
+                  {t('待生成中文')} <span className="text-ink-600">{newsQ.data.pending}</span>
                 </span>
               )}
             </p>

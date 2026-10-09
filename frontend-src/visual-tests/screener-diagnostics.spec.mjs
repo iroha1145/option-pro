@@ -83,7 +83,7 @@ for (const width of [1440, 390, 320]) {
     await expect(panel.getByText('实际波动幅度：5.50%')).toBeVisible();
     await expect(panel.getByText('波动门槛：3.50%')).toBeVisible();
     await expect(panel.getByText('代理值达到数值门槛，资格未认证', { exact: false })).toBeVisible();
-    await expect(panel.getByText('最终评分条件（当前轨道）', { exact: true })).toBeVisible();
+    await expect(panel.getByText('最终评分条件（当前模式）', { exact: true })).toBeVisible();
     await expect(panel.getByText('分数贡献：60.00')).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
     expect(requests).toBe(1);
@@ -115,10 +115,10 @@ test('changing profile revokes an older lookup and errors remain distinct from e
   await expect(panel.getByRole('button', { name: '查询诊断', exact: true })).toBeEnabled();
   await panel.getByLabel('证券代码').fill('UNKNOWN');
   await panel.getByRole('button', { name: '查询诊断', exact: true }).click();
-  await expect(panel.getByRole('alert')).toHaveText('该代码不在本批次证券目录中。');
+  await expect(panel.getByRole('alert')).toHaveText('该代码不在本轮扫描的证券目录中。');
   await panel.getByLabel('证券代码').fill('UNAVAILABLE');
   await panel.getByRole('button', { name: '查询诊断', exact: true }).click();
-  await expect(panel.getByRole('alert')).toHaveText('本批次诊断尚未完成，请等待扫描结束后重试。');
+  await expect(panel.getByRole('alert')).toHaveText('本轮诊断尚未完成，请等扫描结束后重试。');
 });
 
 test('a diagnostic 429 names the wait from Retry-After without showing an empty result', async ({ page }) => {
@@ -155,7 +155,7 @@ test('case-distinct provider symbols are queried separately and never routed to 
   await panel.getByLabel('证券代码').fill('BCpC');
   await panel.getByRole('button', { name: '查询诊断', exact: true }).click();
   await expect(panel.locator('strong').filter({ hasText: /^BCpC$/ })).toBeVisible();
-  await expect(panel.getByText('本批次范围外', { exact: true })).toBeVisible();
+  await expect(panel.getByText('本轮扫描范围外', { exact: true })).toBeVisible();
   await expect(panel.getByRole('button', { name: '查看股票详情' })).toHaveCount(0);
   await panel.getByLabel('证券代码').fill('bcpc');
   await panel.getByRole('button', { name: '查询诊断', exact: true }).click();

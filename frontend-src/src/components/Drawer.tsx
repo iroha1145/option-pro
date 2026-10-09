@@ -101,7 +101,7 @@ export default function Drawer({ open, onClose, title, label, children, width = 
               type="button"
               onClick={onClose}
               className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-sm p-1.5 text-ink-400 transition-[transform,color,background-color] duration-fast hover:bg-paper-2 hover:text-ink-600 active:scale-95"
-              aria-label={t('关闭抽屉')}
+              aria-label={t('关闭面板')}
             >
               <Icon name="x" size={16} />
             </button>

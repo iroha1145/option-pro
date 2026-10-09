@@ -57,8 +57,8 @@ function searchErrorText(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code === 429) {
       return error.retryAfter
-        ? t('搜索请求较多，请 {n} 秒后重试', { n: Math.ceil(error.retryAfter) })
-        : __t('搜索请求较多，请稍后重试');
+        ? t('搜索太频繁，请 {n} 秒后重试', { n: Math.ceil(error.retryAfter) })
+        : __t('搜索太频繁，请稍后重试');
     }
     if (error.code === 401) return __t('登录已过期，请重新登录');
     if (error.code === 503) return __t('股票搜索暂不可用，请稍后重试');

@@ -229,7 +229,7 @@ test('F02 mobile 390 shows scan date on cards after refresh', async ({ page, req
 
 for (const [locale, heading] of [
   ['zh', '条件选股'],
-  ['en', 'Screener'],
+  ['en', 'Stock screener'],
   ['ja', 'スクリーナー'],
 ]) {
   for (const [width, height] of [

@@ -113,7 +113,7 @@ export default function IndexCards({
           <EmptyState
             image="/empty-chart.svg"
             title={t('暂无指数行情')}
-            description={t('暂未取得指数行情，请稍后重试')}
+            description={t('暂未获取到指数行情，请稍后重试')}
             action={retry}
           />
         </div>

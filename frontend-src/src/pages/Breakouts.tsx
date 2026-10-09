@@ -455,7 +455,7 @@ export default function Breakouts() {
     try {
       await runtimeApi.workerAction('breakout_refresh');
       if (!scanMounted.current) return;
-      toast.success(__t('扫描请求已受理'), __t('完成后自动更新'));
+      toast.success(__t('扫描已提交'), __t('完成后自动刷新'));
       statusQ.refresh();
       later(() => {
         statusQ.refresh();
@@ -463,7 +463,7 @@ export default function Breakouts() {
         eventsQ.refresh();
       }, 10_000);
     } catch {
-      if (scanMounted.current) toast.error(__t('触发失败'), __t('扫描请求未被受理，请稍后重试'));
+      if (scanMounted.current) toast.error(__t('扫描未能启动'), __t('扫描未能提交，请稍后重试'));
     } finally {
       if (scanMounted.current) later(() => setScanning(false), 700);
     }
@@ -605,7 +605,7 @@ export default function Breakouts() {
             <button
               onClick={onRefreshSnapshot}
               disabled={scanning}
-              title={__t("立即触发一次突破扫描")}
+              title={__t("立即进行一次突破扫描")}
               className="control-button"
             >
               <BusyIcon busy={scanning} size={14} tone="brand" />
@@ -694,7 +694,7 @@ export default function Breakouts() {
         <div className="radar-section-heading mb-4 flex items-end justify-between pb-1">
           <h2 className="text-h2 text-ink-900">{__t('当日信号')}</h2>
           <p className="text-caption text-ink-400 tnum">
-            {current.length} {__t('个活跃')}{onlyWatch ? __t(' · 只看关注') : ''}
+            {current.length} {__t('条活跃')}{onlyWatch ? __t(' · 只看关注') : ''}
           </p>
         </div>
         {currentQ.loading ? (

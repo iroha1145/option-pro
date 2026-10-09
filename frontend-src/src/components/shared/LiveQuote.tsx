@@ -28,7 +28,7 @@ export function QuoteIndicator({ symbol, className, usingFallback = false, fallb
   return (
     <span
       className={cn('text-micro font-normal text-ink-400', className)}
-      title={[detail, stamp && t('报价时间 {time}（纽约）', { time: stamp }), day && t('报价日期 {date}', { date: day }), !usingFallback && quote?.source, !usingFallback && quote?.previous_close != null && quote.previous_close > 0 && t('昨收 ${price}', { price: fmtPrice(quote.previous_close) })].filter(Boolean).join(' · ')}
+      title={[detail, stamp && t('报价时间 {time}（纽约时间）', { time: stamp }), day && t('报价日期 {date}', { date: day }), !usingFallback && quote?.source, !usingFallback && quote?.previous_close != null && quote.previous_close > 0 && t('昨收 ${price}', { price: fmtPrice(quote.previous_close) })].filter(Boolean).join(' · ')}
     >
       {label}
       {/* 日期整体换行，不在连字符处断开 */}

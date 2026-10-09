@@ -5,12 +5,12 @@
 import type { Dict } from './types';
 
 export const HINTS: Dict = {
-  '趋势因子：衡量价格方向与均线结构。': ['Trend factor: measures price direction and moving-average structure.', 'トレンド要因：価格方向と移動平均の構造を測ります。'],
-  '动量因子：按当前周期衡量收益变化。': ['Momentum factor: measures return changes over the selected timeframe.', 'モメンタム要因：選択した期間のリターン変化を測ります。'],
-  '结构因子：观察高低点与价格形态是否相互支持。': ['Structure factor: checks whether highs, lows, and price patterns support one another.', '構造要因：高値・安値と価格パターンが整合しているかを確認します。'],
-  '突破因子：衡量突破确认与首日跟进情况。': ['Breakout factor: measures breakout confirmation and first-day follow-through.', 'ブレイクアウト要因：ブレイクの確認と初日の追随を測ります。'],
-  '回踩因子：衡量趋势内的回撤位置与承接情况。': ['Pullback factor: measures retracement location and support within the trend.', '押し目要因：トレンド内の下落位置と支えを測ります。'],
-  '量能因子：使用日线成交量；成交额资格未核实时只进入观察。': ['Volume factor: uses daily volume; names with unverified dollar-volume eligibility remain on watch.', '出来高要因：日足の出来高を使い、売買代金の適格性が未確認の銘柄は観察扱いになります。'],
+  '趋势因子：衡量价格方向与均线结构。': ['Trend factor: measures price direction and moving-average structure.', 'トレンドファクター：価格方向と移動平均の構造を測ります。'],
+  '动量因子：按当前周期衡量收益变化。': ['Momentum factor: measures return changes over the selected timeframe.', 'モメンタムファクター：選択した期間のリターン変化を測ります。'],
+  '结构因子：观察高低点与价格形态是否相互支持。': ['Structure factor: checks whether highs, lows, and price patterns support one another.', '構造ファクター：高値・安値と価格パターンが整合しているかを確認します。'],
+  '突破因子：衡量突破确认与首日跟进情况。': ['Breakout factor: measures breakout confirmation and first-day follow-through.', 'ブレイクアウトファクター：ブレイクの確認と初日の追随を測ります。'],
+  '回踩因子：衡量趋势内的回撤位置与承接情况。': ['Pullback factor: measures retracement location and support within the trend.', '押し目ファクター：トレンド内の下落位置と支えを測ります。'],
+  '量能因子：使用日线成交量；成交额资格未核实时只进入观察。': ['Volume factor: uses daily volume; names with unverified dollar-volume eligibility remain on watch.', '出来高ファクター：日足の出来高を使い、売買代金の適格性が未確認の銘柄は観察扱いになります。'],
   "缺失项不计入评分，其余项重新分配权重；数据越少，置信度越低。": ["Missing components are excluded and the remaining weights are rescaled. Less data means lower confidence.", "欠測項目を除き、残りの項目で重みを調整します。データが少ないほど信頼度は下がります。"],
 
   '趋势 T': ['Trend T', 'トレンド T'],
@@ -47,22 +47,22 @@ export const HINTS: Dict = {
     '基礎スコア = 過去最高値からの距離 40% + 20日リターン 40% + プライスアクションの構造 20%。そこに出来高と値動きの整合性で補正を加えます（買い集めは加点、ダマシのリスクは減点）。追随のない「真空上昇」は65点、売り抜けの疑いが未確認の場合は55点を上限とします。',
   ],
 
-  '价格行为分（0–100）': ['Price-action score (0–100)', 'プライスアクション・スコア（0–100）'],
+  '价格行为分（0–100）': ['Price-action score (0–100)', 'プライスアクションスコア（0–100）'],
   '纯 K 线结构打分（不含量能）：以确认摆动点判定 HH/HL 或 LH/LL 结构——上升结构锚定 82、低点抬升筑底 62、区间 50、下降结构 24；吞没/锤子线/射击之星等形态在锚点上 ±6 微调。': [
     'Scores candlestick structure alone, with no volume input: confirmed swing points classify the structure as HH/HL or LH/LL — an uptrend structure anchors at 82, a higher-low base at 62, a range at 50, and a downtrend structure at 24. Patterns such as engulfing, hammer, and shooting star adjust the anchor by ±6.',
-    '出来高を含めず、ローソク足の構造のみで採点します。確定したスイングポイントから HH/HL または LH/LL の構造を判定し、上昇構造は82、安値切り上げの底固めは62、レンジは50、下降構造は24をアンカーとします。つつみ足・ハンマー・シューティングスターなどのパターンでアンカーを±6調整します。',
+    '出来高を含めず、ローソク足の構造のみで採点します。確定したスイングポイントから HH/HL または LH/LL の構造を判定し、上昇構造は82、安値切り上げの底固めは62、レンジは50、下降構造は24をアンカーとします。包み足・ハンマー・流れ星などのパターンでアンカーを±6調整します。',
   ],
 
   '置信度（0–100%）': ['Confidence (0–100%)', '信頼度（0–100%）'],
   "表示评分所需数据的完整程度，按配置权重计算。指标或历史数据缺失时会降低。": ["Data completeness, measured against the configured scoring weights. Missing indicators or history lower this value.", "設定された採点の重みに対するデータの充足度です。指標や過去データが欠けると低下します。"],
 
   '市场环境分（0–100）': ['Market environment score (0–100)', '市場環境スコア（0–100）'],
-  '选股页的市场环境分是另一种算法：六项按权重合成并扣风险罚分。': ["The screener's market regime score is calculated differently: the six items are weighted and risk penalties are deducted.", "スクリーナーの地合いスコアは別の計算です：6項目を加重合成し、リスク減点を差し引きます。"],
-  '六项走势评分的算术平均，每项各占六分之一，不加权、不扣罚分。趋势偏向按它判断：≥60 偏多、≤40 偏空，中间为中性。': ["The simple average of the six trend scores, each weighted one sixth, with no weighting or penalties. The trend bias uses it: ≥60 bullish, ≤40 bearish, neutral in between.", "6つの地合いスコアの単純平均で、各項目は6分の1ずつ、加重も減点もしません。トレンドの傾きはこの値で判定します：60以上は強気、40以下は弱気、その間は中立。"],
-  '六项均分（0–100）': ["Six-item average (0–100)", "6項目の平均（0–100）"],
-  '六项加权：指数走势 30% + 动量 20% + 宽度 20% + 量能 10% + 攻防价差 10% + 风险偏好 10%，再减去风险罚分×0.35。≥75 强风险偏好、≥60 温和偏强、≥40 中性震荡、<40 弱势高风险；核心数据缺失时不出正式分。': [
-    'Six weighted dimensions: index trend 30% + momentum 20% + breadth 20% + volume 10% + offense/defense spread 10% + risk appetite 10%, minus the risk penalty × 0.35. 75 or above is strongly risk-on, 60 or above mildly positive, 40 or above neutral and choppy, and below 40 weak with high risk. No official score is published while core data is missing.',
-    '6つの軸を加重します：指数トレンド 30% + モメンタム 20% + 市場の広がり 20% + 出来高 10% + 攻守スプレッド 10% + リスク選好 10%。そこからリスク・ペナルティ×0.35 を差し引きます。75以上は強いリスクオン、60以上はやや強気、40以上は中立のもみ合い、40未満は弱くリスクの高い状態です。中核データが欠けている間は正式なスコアを出しません。',
+  '选股页的市场环境分是另一种算法：六项按权重合成并扣风险罚分。': ["The screener's market environment score is calculated differently: the six items are weighted and risk penalties are deducted.", "スクリーナーの市場環境スコアは別の計算です：6項目を加重合成し、リスク減点を差し引きます。"],
+  '六项走势评分的算术平均，每项各占六分之一，不加权、不扣罚分。趋势偏向按它判断：≥60 偏多、≤40 偏空，中间为中性。': ["The simple average of the six trend scores, each counting for one sixth, with no penalties. The trend bias uses it: ≥60 bullish, ≤40 bearish, neutral in between.", "6つの地合いスコアの単純平均で、各項目は6分の1ずつ、加重も減点もしません。トレンドの傾きはこの値で判定します：60以上は強気、40以下は弱気、その間は中立。"],
+  '六项均分（0–100）': ["Six-item average (0–100)", "6項目平均（0–100）"],
+  '六项加权：指数走势 30% + 动量 20% + 广度 20% + 量能 10% + 攻防价差 10% + 风险偏好 10%，再减去风险罚分×0.35。≥75 强风险偏好、≥60 温和偏强、≥40 中性震荡、<40 弱势高风险；核心数据缺失时不出正式分。': [
+    'Six weighted items: index trend 30% + momentum 20% + breadth 20% + volume 10% + offense/defense spread 10% + risk appetite 10%, minus the risk penalty × 0.35. 75 or above is strongly risk-on, 60 or above mildly positive, 40 or above neutral and choppy, and below 40 weak with high risk. No official score is published while core data is missing.',
+    '6項目を加重します：指数トレンド 30% + モメンタム 20% + 市場の広がり 20% + 出来高 10% + 攻守スプレッド 10% + リスク選好 10%。そこからリスク・ペナルティ×0.35 を差し引きます。75以上は強いリスクオン、60以上はやや強気、40以上は中立のもみ合い、40未満は弱くリスクの高い状態です。中核データが欠けている間は正式なスコアを出しません。',
   ],
   '该分同时驱动选股权重的动态调节（如弱市自动降低突破类信号权重）。': [
     'This score also drives dynamic screener weighting — in a weak market, for example, breakout-type signals are automatically given less weight.',
@@ -72,7 +72,7 @@ export const HINTS: Dict = {
   '指数走势（0–100）': ['Index trend (0–100)', '指数トレンド（0–100）'],
   '七个结构性事实的加权是非题：SPY 站上 50/200 日线（各 20%）、QQQ 站上 50/200 日线（各 15%）、IWM 与 RSP 站上 50 日线（各 10%）、SPY 200 日线斜率向上（10%）。是=100、否=0。': [
     'Seven structural yes/no facts, weighted: SPY above its 50- and 200-day MA (20% each), QQQ above its 50- and 200-day MA (15% each), IWM and RSP above their 50-day MA (10% each), and an upward-sloping SPY 200-day MA (10%). Yes = 100, no = 0.',
-    '7つの構造的な事実を Yes/No で加重します：SPY が50日線・200日線の上（各20%）、QQQ が50日線・200日線の上（各15%）、IWM と RSP が50日線の上（各10%）、SPY の200日線の傾きが上向き（10%）。Yes=100、No=0 です。',
+    '7つの構造的な事実を二択で加重します：SPY が50日線・200日線の上（各20%）、QQQ が50日線・200日線の上（各15%）、IWM と RSP が50日線の上（各10%）、SPY の200日線の傾きが上向き（10%）。該当=100、非該当=0 です。',
   ],
 
   '市场动量（0–100）': ['Market momentum (0–100)', '市場モメンタム（0–100）'],
@@ -81,7 +81,7 @@ export const HINTS: Dict = {
     '20日騰落率を加重してマッピングします：SPY 35%、QQQ 30%、IWM 15%。さらに QQQ−SPY と RSP−SPY の20日相対差を各10%加えます。50が中立です。',
   ],
 
-  '市场宽度（0–100）': ['Market breadth (0–100)', '市場の広がり（0–100）'],
+  '市场广度（0–100）': ['Market breadth (0–100)', '市場の広がり（0–100）'],
   '11 个行业 ETF 中站上 50 日线的比例 40%、站上 200 日线的比例 25%，加 RSP−SPY 20%、IWM−SPY 15% 的 20 日相对差。衡量上涨是否由少数权重股撑起。': [
     'The share of the 11 sector ETFs above their 50-day MA 40% and above their 200-day MA 25%, plus the 20-day relative spreads RSP−SPY 20% and IWM−SPY 15%. It gauges whether a rally is being carried by only a handful of heavyweights.',
     '11本のセクター ETF のうち50日線を上回る比率 40%、200日線を上回る比率 25%、さらに RSP−SPY 20%、IWM−SPY 15% の20日相対差を加えます。上昇が少数の大型株だけで支えられていないかを測ります。',
@@ -108,27 +108,27 @@ export const HINTS: Dict = {
   '基底质量（0–100）': ['Base quality (0–100)', 'ベースの質（0–100）'],
   '突破前的基底打分：紧致度 25%、构筑时长 15%、阻力触碰质量 15%、量能收缩 15%、ATR 收缩 10%、支撑完好 10%、相对强度结构 10%。基底越规整、越「收敛」分越高。': [
     'Scores the base built before the breakout: tightness 25%, duration 15%, quality of the resistance touches 15%, volume contraction 15%, ATR contraction 10%, intact support 10%, relative-strength structure 10%. The cleaner and more tightly coiled the base, the higher the score.',
-    'ブレイクアウト前のベースを採点します：タイトさ 25%、形成期間 15%、抵抗線へのタッチの質 15%、出来高の収縮 15%、ATR の収縮 10%、サポートの健全性 10%、相対強度の構造 10%。ベースが整い、収縮しているほど高スコアになります。',
+    'ブレイクアウト前のベースを採点します：タイトさ 25%、形成期間 15%、レジスタンスへのタッチの質 15%、出来高の収縮 15%、ATR の収縮 10%、サポートの健全性 10%、相対強度の構造 10%。ベースが整い、収縮しているほど高スコアになります。',
   ],
 
   '突破确认（0–100）': ['Breakout confirmation (0–100)', 'ブレイクアウト確認（0–100）'],
-  '突破当下的确认依据：收盘越过阻力区质量 20%、分时相对量能 20%、收盘位置 15%、站稳时长 15%、K 线实体 10%、上影线 10%、相对强度确认 10%。区间保持度可 ±4 分微调。': ['The evidence confirming the breakout itself: quality of the close above the resistance zone 20%, intraday relative volume 20%, closing position 15%, time held above the level 15%, candle body 10%, upper wick 10%, relative-strength confirmation 10%. Range retention can adjust the result by ±4 points.', 'ブレイクアウトそのものを裏付ける証拠：抵抗帯を上抜けた終値の質 20%、日中の相対出来高 20%、終値の位置 15%、上抜けを維持した時間 15%、ローソク足の実体 10%、上ヒゲ 10%、相対強度の確認 10%。レンジの維持度で±4点の微調整が入ります。'],
+  '突破当下的确认依据：收盘越过阻力区质量 20%、分时相对量能 20%、收盘位置 15%、站稳时长 15%、K 线实体 10%、上影线 10%、相对强度确认 10%。区间保持度可 ±4 分微调。': ['The evidence confirming the breakout itself: quality of the close above the resistance zone 20%, intraday relative volume 20%, closing position 15%, time held above the level 15%, candle body 10%, upper wick 10%, relative-strength confirmation 10%. Range retention can adjust the result by ±4 points.', 'ブレイクアウトそのものを裏付ける根拠：レジスタンス帯を上抜けた終値の質 20%、日中の相対出来高 20%、終値の位置 15%、上抜けを維持した時間 15%、ローソク足の実体 10%、上ヒゲ 10%、相対強度の確認 10%。レンジの維持度で±4点の微調整が入ります。'],
 
-  '数据可信度（0–100）': ['Data reliability (0–100)', 'データの信頼性（0–100）'],
-  '衡量这条信号背后的数据完整度：基底/确认/流动性三族的数据覆盖率均值，再与市场形态置信度按 3:1 合成；缺市场形态时整体打 85 折。它不评价股票好坏，只评价依据是否齐全。': ['Measures how complete the data behind this signal is: the mean data coverage of the base, confirmation, and liquidity families, blended 3:1 with market-regime confidence. When the market regime is missing, the whole score is scaled to 85%. It does not judge the stock — only whether the evidence is complete.', 'このシグナルの裏側にあるデータの完全性を測ります：ベース・確認・流動性の3ファミリーのデータカバレッジの平均を取り、市場レジームの信頼度と3:1で合成します。市場レジームが欠ける場合は全体を85%に縮めます。銘柄の良し悪しではなく、証拠が揃っているかだけを評価します。'],
+  '数据可信度（0–100）': ['Data confidence (0–100)', 'データ信頼度（0–100）'],
+  '衡量这条信号背后的数据完整度：基底/确认/流动性三族的数据覆盖率均值，再与走势评分置信度按 3:1 合成；缺走势评分时整体打 85 折。它不评价股票好坏，只评价依据是否齐全。': ['Measures how complete the data behind this signal is: the mean data coverage of the base, confirmation, and liquidity families, blended 3:1 with trend-score confidence. When trend scores are missing, the whole score is scaled to 85%. It does not judge the stock — only whether the evidence is complete.', 'このシグナルの裏側にあるデータの完全性を測ります：ベース・確認・流動性の3ファミリーのデータカバレッジの平均を取り、地合いスコアの信頼度と3:1で合成します。地合いスコアが欠ける場合は全体を85%に縮めます。銘柄の良し悪しではなく、根拠が揃っているかだけを評価します。'],
 
   '追高风险（0–100，越高越危险）': ['Chase risk (0–100, higher is riskier)', '高値追いリスク（0–100、高いほど危険）'],
   '与其他分数方向相反：距突破价位的涨幅 30%、距 VWAP 20%、跳空/ATR 15%、上影线 15%、短线加速 10%、流动性风险 10%。超过 50 的部分会按 25% 直接从优先级分里扣除。': ['This score runs in the opposite direction from the others: gain from the pivot price 30%, distance from VWAP 20%, gap/ATR 15%, upper wick 15%, short-term acceleration 10%, liquidity risk 10%. Whatever exceeds 50 is deducted from the priority score at 25%.', '他のスコアとは向きが逆です：ピボット価格からの上昇率 30%、VWAP との乖離 20%、ギャップ/ATR 15%、上ヒゲ 15%、短期の加速 10%、流動性リスク 10%。50を超えた分は25%換算で優先度スコアから直接差し引かれます。'],
 
   '优先级分（0–100）': ['Priority score (0–100)', '優先度スコア（0–100）'],
-  '排序用总分：突破质量 35% + 个股强度 25% + 市场契合 15% + 行业契合 10% + 数据可信度 10% + 事件时效 5%，再减去追高罚分（0.25 × max(追高风险−50, 0)）。': ['The total used for ranking: breakout quality 35% + stock strength 25% + market fit 15% + sector fit 10% + data reliability 10% + event freshness 5%, minus the chase penalty (0.25 × max(chase risk − 50, 0)).', '並び替えに使う総合スコア：ブレイクアウトの質 35% + 個別銘柄の強度 25% + 市場適合度 15% + セクター適合度 10% + データの信頼性 10% + イベントの新しさ 5%。そこから高値追いペナルティ（0.25 × max(高値追いリスク−50, 0)）を差し引きます。'],
+  '排序用总分：突破质量 35% + 个股评分 25% + 市场契合 15% + 行业契合 10% + 数据可信度 10% + 事件时效 5%，再减去追高罚分（0.25 × max(追高风险−50, 0)）。': ['The total used for ranking: breakout quality 35% + stock score 25% + market fit 15% + sector fit 10% + data confidence 10% + event freshness 5%, minus the chase penalty (0.25 × max(chase risk − 50, 0)).', '並び替えに使う総合スコア：ブレイクアウトの質 35% + 個別銘柄のスコア 25% + 市場適合度 15% + セクター適合度 10% + データ信頼度 10% + イベントの新しさ 5%。そこから高値追いペナルティ（0.25 × max(高値追いリスク−50, 0)）を差し引きます。'],
 
   '突破质量 · 综合（0–100）': ['Breakout quality · composite (0–100)', 'ブレイクアウトの質 · 総合（0–100）'],
   '基底质量 45% + 突破确认 45% + 流动性质量 10% 的加权合成。': ['A weighted blend of base quality 45% + breakout confirmation 45% + liquidity quality 10%.', 'ベースの質 45% + ブレイクアウト確認 45% + 流動性の質 10% を加重合成したものです。'],
 
   '流动性质量（0–100）': ['Liquidity quality (0–100)', '流動性の質（0–100）'],
   '20 日均成交额 25%、当日成交额 20%、成交额分位 15%、点差 10%、盘中数据完整度 10%、市值 10%、资产类型 10%。低流动性标的即使形态好也会被压低。': [
-    '20-day average turnover 25%, same-day turnover 20%, turnover percentile 15%, spread 10%, intraday data completeness 10%, market cap 10%, asset type 10%. Illiquid names are marked down even when the setup looks good.',
+    '20-day average dollar volume 25%, same-day dollar volume 20%, dollar-volume percentile 15%, spread 10%, intraday data completeness 10%, market cap 10%, asset type 10%. Illiquid names are marked down even when the setup looks good.',
     '20日平均売買代金 25%、当日の売買代金 20%、売買代金のパーセンタイル 15%、スプレッド 10%、日中データの完全性 10%、時価総額 10%、資産タイプ 10%。流動性の低い銘柄は形が良くてもスコアを下げます。',
   ],
 
@@ -136,7 +136,7 @@ export const HINTS: Dict = {
   '与选股页同一套个股评分（六族加权），只用该股价格/量能与对 SPY 的相对表现。': ["The same stock score used on the Screener page (six weighted families), based only on the stock’s price and volume plus its performance relative to SPY.", "スクリーナーページと同じ個別銘柄スコア（6ファミリーの加重）です。その銘柄の価格・出来高と SPY に対する相対パフォーマンスのみを使います。"],
 
   '顶部分 / 底部分（各 0–100）': ['Top score / bottom score (0–100 each)', '天井スコア / 底スコア（各0–100）'],
-  '每个指标独立输出两个证据分：「顶部分」= 该指标支持“过热/接近顶部”的证据强度；「底部分」= 支持“超卖/接近底部”的证据强度。二者互不排斥——例如放量对顶和底都是信号，宽度极弱既提示风险也提示接近底部。': [
+  '每个指标独立输出两个证据分：「顶部分」= 该指标支持「过热/接近顶部」的证据强度；「底部分」= 支持「超卖/接近底部」的证据强度。二者互不排斥——例如放量对顶和底都是信号，广度极弱既提示风险也提示接近底部。': [
     'Every indicator emits two independent evidence scores. The top score is how strongly that indicator supports "overheated / near a top"; the bottom score is how strongly it supports "oversold / near a bottom". The two are not mutually exclusive — a volume surge, for instance, is a signal at tops and bottoms alike, and very weak breadth flags risk while also hinting that a bottom is near.',
     '各指標は2つの証拠スコアを独立に出します。「天井スコア」はその指標が「過熱・天井圏」を支持する強さ、「底スコア」は「売られ過ぎ・底値圏」を支持する強さです。両者は排他ではありません。たとえば出来高の急増は天井でも底でもシグナルになり、市場の広がりが極端に弱い状態はリスクを示すと同時に底が近いことも示唆します。',
   ],
@@ -150,7 +150,7 @@ export const HINTS: Dict = {
 
   '影响分（−5 ～ +5）': ['Impact score (−5 to +5)', 'インパクトスコア（−5 〜 +5）'],
   "模型判断新闻对个股的影响，显示为 −5～+5：正值偏利多，负值偏利空，绝对值越大，判断的影响越强。分数不表示股价涨跌幅。": ["The model rates a news item’s impact on a stock from −5 to +5. Positive is bullish, negative is bearish; a larger absolute value means a stronger assessed impact. The score is not a price-change percentage.", "ニュースが銘柄に与える影響をモデルが−5〜+5で評価します。プラスは好材料、マイナスは悪材料で、絶対値が大きいほど影響が強いという判断です。株価の騰落率を表すものではありません。"],
-  "模型对本次判断的把握程度，范围 0–100。信息较少或含糊时，置信度通常较低。": ["The model’s confidence in this assessment, from 0 to 100. Sparse or ambiguous information usually lowers confidence.", "今回の判断に対するモデルの確信度を0〜100で示します。情報が少ない場合や曖昧な場合は、通常低くなります。"],
+  "模型对本次判断的把握程度，范围 0–100。信息较少或含糊时，置信度通常较低。": ["The model’s confidence in this assessment, from 0 to 100. Sparse or ambiguous information usually lowers confidence.", "今回の判断に対するモデルの信頼度を0〜100で示します。情報が少ない場合や曖昧な場合は、通常低くなります。"],
 
   '净影响（−5 ～ +5）': ['Net impact (−5 to +5)', 'ネット・インパクト（−5 〜 +5）'],
   '把窗口内该股全部已分析新闻的影响分聚合成一个净方向：正=利多证据占优，负=利空占优。它衡量新闻面的倾向强度，与股价涨跌幅无关。': [
@@ -158,17 +158,17 @@ export const HINTS: Dict = {
     '対象期間内に分析済みのニュースのインパクトスコアを集約し、1つのネット方向にまとめます。プラスは好材料の証拠が優勢、マイナスは悪材料が優勢です。ニュースフローの傾きの強さを示すもので、株価の騰落率とは無関係です。',
   ],
 
-  '趋势偏向分（0–100）': ['Trend bias score (0–100)', 'トレンド・バイアス・スコア（0–100）'],
+  '趋势偏向分（0–100）': ['Trend bias score (0–100)', 'トレンドバイアススコア（0–100）'],
   '三个指标的偏离合成：相对 SPY 强度×2、MACD 柱×100、(RSI−50)×0.4，求和后加在 50 上（缺项时按剩余项重新归一，至少 2 项才出分）。≥58 判偏多、≤42 判偏空，中间为中性。': [
     'Blends the deviations of three indicators: relative strength versus SPY × 2, the MACD histogram × 100, and (RSI − 50) × 0.4, summed and added to 50. Missing inputs are renormalized across the rest, and at least two are required before a score is produced. 58 or above reads bullish, 42 or below bearish, and anything between is neutral.',
     '3つの指標の偏差を合成します：SPY に対する相対強度×2、MACD ヒストグラム×100、(RSI−50)×0.4 を合計し、50に加算します（欠けた項目は残りで再正規化し、最低2項目そろわないとスコアを出しません）。58以上を強気、42以下を弱気、その間を中立と判定します。',
   ],
 
-  '顶部风险分（0–100）': ['Topping-risk score (0–100)', '天井リスク・スコア（0–100）'],
-  "综合六类顶部信号：价格过热、市场宽度背离、期权情绪、波动变化、利率压力和信用风险。低于 20 表示顶部证据少，40 以上开始增多，60 以上较强，80 以上反映明显过热。": ["Combines six groups of topping signals: price overheating, breadth divergence, options sentiment, volatility shifts, rate pressure and credit risk. Below 20 means little evidence; evidence builds at 40 or higher, is strong at 60 or higher, and suggests marked overheating at 80 or higher.", "価格の過熱、騰落の広がりの乖離、オプション心理、変動率の変化、金利圧力、信用リスクの6分類を集計します。20未満は天井を示す材料が少なく、40以上で増加、60以上で強まり、80以上は顕著な過熱を示します。"],
+  '顶部风险分（0–100）': ['Topping-risk score (0–100)', '天井リスクスコア（0–100）'],
+  "综合六类顶部信号：价格过热、市场广度背离、期权情绪、波动变化、利率压力和信用风险。低于 20 表示顶部证据少，40 以上开始增多，60 以上较强，80 以上反映明显过热。": ["Combines six groups of topping signals: price overheating, breadth divergence, options sentiment, volatility shifts, rate pressure and credit risk. Below 20 means little evidence; evidence builds at 40 or higher, is strong at 60 or higher, and suggests marked overheating at 80 or higher.", "価格の過熱、騰落の広がりの乖離、オプション心理、変動率の変化、金利圧力、信用リスクの6分類を集計します。20未満は天井を示す材料が少なく、40以上で増加、60以上で強まり、80以上は顕著な過熱を示します。"],
 
   '底部修复分（0–100）': ['Bottom-formation score (0–100)', '底打ちスコア（0–100）'],
-  "综合恐慌缓解、技术指标回升、市场宽度修复和波动回落等底部信号。低于 20 表示底部证据少，40 以上开始增多，60 以上较强，80 以上反映恐慌已明显释放。分数表示证据强度，底部是否形成仍需观察价格。": ["Combines bottoming signals such as easing panic, improving technical indicators, recovering breadth and falling volatility. Below 20 means little evidence; evidence builds at 40 or higher, is strong at 60 or higher, and indicates substantial panic unwinding at 80 or higher. The score measures evidence strength; price action still needs to confirm a bottom.", "パニックの緩和、テクニカル指標の改善、上昇銘柄の広がり、変動率の低下などを集計します。20未満は底を示す材料が少なく、40以上で増加、60以上で強まり、80以上はパニックの大幅な解消を示します。材料の強さを表すスコアであり、底の形成は値動きで確認する必要があります。"],
+  "综合恐慌缓解、技术指标回升、市场广度修复和波动回落等底部信号。低于 20 表示底部证据少，40 以上开始增多，60 以上较强，80 以上反映恐慌已明显释放。分数表示证据强度，底部是否形成仍需观察价格。": ["Combines bottoming signals such as easing panic, improving technical indicators, recovering breadth and falling volatility. Below 20 means little evidence; evidence builds at 40 or higher, is strong at 60 or higher, and indicates substantial panic unwinding at 80 or higher. The score measures evidence strength; price action still needs to confirm a bottom.", "パニックの緩和、テクニカル指標の改善、上昇銘柄の広がり、変動率の低下などを集計します。20未満は底を示す材料が少なく、40以上で増加、60以上で強まり、80以上はパニックの大幅な解消を示します。材料の強さを表すスコアであり、底の形成は値動きで確認する必要があります。"],
 
   '数据质量（0–100%）': ['Data quality (0–100%)', 'データ品質（0–100%）'],
   "数据质量 = 有读数的信号占比 × 模型覆盖率。未接入的分类和缺失数据不补分。数值越低，当前分析使用的数据越不完整。": ["Data quality = the share of signals with readings × model coverage. Unavailable categories and missing data receive no substitute score. A lower value means the analysis uses less complete data.", "データ品質＝値のあるシグナルの割合×モデルのカバー率。未対応の分類や欠測データには代わりの点数を入れません。値が低いほど、分析に使うデータが不完全です。"],
@@ -178,10 +178,9 @@ export const HINTS: Dict = {
   '四因子子分（0–100）': ['Four-factor sub-scores (0–100)', '4ファクターのサブスコア（0–100）'],
   '把该股全部信号按 趋势 / 动量 / 量能 / 波动 四组分别聚合出的 0–100 分，用于看偏向分的构成来源。各组内同样只聚合有真实读数的指标。': [
     "Aggregates all of the stock's signals into four groups — trend, momentum, volume, and volatility — each on a 0–100 scale, so you can see where the bias score comes from. Within each group, only indicators with real values are aggregated.",
-    'その銘柄の全シグナルを トレンド / モメンタム / 出来高 / ボラティリティ の4グループに分けて0–100で集約し、バイアス・スコアの構成要因を確認できるようにしたものです。各グループ内でも、実データのある指標のみを集約します。',
+    'その銘柄の全シグナルを トレンド / モメンタム / 出来高 / ボラティリティ の4グループに分けて0–100で集約し、バイアススコアの構成要因を確認できるようにしたものです。各グループ内でも、実データのある指標のみを集約します。',
   ],
 
-  '平均强度（0–100）': ['Average strength (0–100)', '平均強度（0–100）'],
 
   '行业内 IV 分位（0–100）': ['IV percentile within the sector (0–100)', 'セクター内 IV パーセンタイル（0–100）'],
   '该股平值期权隐含波动率（ATM IV）在本行业成分股中的百分位：100 = 行业内 IV 最高。它比较的是同行业内的相对贵贱，不是该股自己的历史高低位。': [
@@ -242,7 +241,7 @@ export const HINTS: Dict = {
     'Growth outperforming the broad market (a positive value) counts as top-crowding evidence at ×8; the reverse counts as bottom evidence.',
     'グロースが市場全体より強い（プラス値）場合は×8で天井の過密証拠、逆の場合は底証拠として計上します。',
   ],
-  '行业宽度': ['Sector breadth', 'セクターの広がり'],
+  '行业广度': ['Sector breadth', 'セクターの広がり'],
   '站上 50 日线的行业比例。低于 45% 计顶部风险，高于 85% 计过热；低于 55% 同时累积底部证据。': [
     'The share of sectors above their 50-day MA. Below 45% counts as topping risk and above 85% as overheating; below 55% also accumulates bottom evidence.',
     '50日線を上回るセクターの比率です。45%未満は天井リスク、85%超は過熱として計上し、55%未満では同時に底証拠も積み上げます。',
@@ -283,7 +282,7 @@ export const HINTS: Dict = {
     'データが欠けている、または古くなったファクターは中立の50点として扱わず、ウェイトから外して残りを再正規化し、信頼度を引き下げます。有効なファクターが閾値を下回るモジュールはスコアを出しません。',
   ],
   "分数表示当前读数在过去 5 年中的相对位置。": ["The score shows where the current reading sits within the past 5 years.", "現在の値が過去5年間のどの位置にあるかを示すスコアです。"],
-  '宏观环境综合分（0–100 分）': ['Macro composite score (0–100)', 'マクロ環境総合スコア（0–100点）'],
+  '宏观环境综合分（0–100 分）': ['Macro conditions composite score (0–100)', 'マクロ環境総合スコア（0–100点）'],
   '综合分 = 7 个模块中有效模块分数的等权均值，至少 5 个模块有效才出正式分。分数越高表示当前金融环境相对过去 5 年更支持风险资产，不代表市场一定上涨。': [
     'Composite = the equal-weighted average of whichever of the 7 modules are valid; at least 5 modules must be valid before an official score is published. A higher score means current financial conditions are more supportive of risk assets relative to the past five years — it does not mean the market will necessarily rise.',
     '総合スコア = 7モジュールのうち有効なモジュールスコアの均等加重平均です。正式なスコアを出すには最低5モジュールが有効である必要があります。スコアが高いほど、過去5年と比べて現在の金融環境がリスク資産に追い風であることを意味しますが、相場が必ず上昇するという意味ではありません。',
@@ -293,7 +292,7 @@ export const HINTS: Dict = {
     'Confidence = the share of the 7 modules that are valid × the average factor-coverage rate within those modules. It measures data coverage, not accuracy.',
     '信頼度 = 7モジュールのうち有効なモジュールの比率 × それらのモジュール内部のファクターのカバレッジ率の平均です。これはデータのカバレッジを表すもので、精度ではありません。',
   ],
-  '环境标签': ['Regime label', '環境ラベル'],
+  '环境标签': ['Conditions label', '環境ラベル'],
   '按综合分切分：<30 明显收紧 · 30–45 偏紧 · 45–55 中性 · 55–70 偏松 · ≥70 明显宽松。标签只描述相对历史的环境松紧。': [
     'Bucketed by the composite score: below 30 "Clearly tight", 30–45 "Somewhat tight", 45–55 "Neutral", 55–70 "Somewhat loose", 70 and above "Clearly loose". The label only describes conditions relative to history, not a forecast.',
     '総合スコアで区分します：30未満は「明確に引き締め的」、30〜45は「やや引き締め的」、45〜55は「中立」、55〜70は「やや緩和的」、70以上は「明確に緩和的」。このラベルは過去と比べた環境の緩さ・引き締まりを説明するものです。',
@@ -386,7 +385,7 @@ export const HINTS: Dict = {
   '商业票据−国库券利差（0–100 分）': ['CP−T-bill spread (0–100)', 'CP−Tビル・スプレッド（0–100点）'],
   '3 个月金融商业票据利率减 3 个月国库券贴现率，单位百分点。评分只取正值部分：正利差扩大代表短期信用融资变贵。界面同时显示带符号原值。': [
     'The 3-month financial commercial paper rate minus the 3-month T-bill discount rate, in percentage points. Only the positive part is scored: a widening positive spread means short-term credit funding is getting more expensive. The interface also shows the signed raw value.',
-    '3ヶ月物金融 CP レートから3ヶ月物Tビル（米財務省短期証券）の割引率を差し引いたもので、単位はパーセンテージポイントです。プラスの部分のみをスコア化し、正のスプレッド拡大は短期信用の調達コスト上昇を示します。画面には符号付きの原数値も表示します。',
+    '3か月物金融 CP レートから3か月物Tビル（米財務省短期証券）の割引率を差し引いたもので、単位はパーセンテージポイントです。プラスの部分のみをスコア化し、正のスプレッド拡大は短期信用の調達コスト上昇を示します。画面には符号付きの原数値も表示します。',
   ],
   '融资分化度（21 日）（0–100 分）': ['Funding dispersion (21-day) (0–100)', 'ファンディング分断度（21日）（0–100点）'],
   '每日先算五个带符号融资价差的总体标准差（至少 4 个价差可用才计算），再取最近 21 个有效值的均值，单位百分点。数值越低表示各融资市场越同步。': [
@@ -455,7 +454,7 @@ export const HINTS: Dict = {
   'VIX 期限结构（0–100 分）': ['VIX term structure (0–100)', 'VIX期間構造（0–100点）'],
   'VIX 除以 3 个月 VIX（VXV）。VXV 小于或等于零时视为缺失。比值越低（曲线越正向）表示近端压力越小。': [
     'VIX divided by the 3-month VIX (VXV). Treated as missing when VXV is zero or negative. A lower ratio (a more upward-sloping curve) means less near-term stress.',
-    'VIX を3ヶ月 VIX（VXV）で割った値です。VXV がゼロ以下の場合は欠損として扱います。比率が低い（カーブが期先高＝コンタンゴ気味）ほど、近い将来のストレスが小さいことを示します。',
+    'VIX を3か月 VIX（VXV）で割った値です。VXV がゼロ以下の場合は欠損として扱います。比率が低い（カーブが期先高＝コンタンゴ気味）ほど、近い将来のストレスが小さいことを示します。',
   ],
   '风险资产相对避险资产（0–100 分）': ['Risk assets vs. safe havens (0–100)', 'リスク資産の対安全資産相対強度（0–100点）'],
   'SPY 相对 TLT 的 63 交易日对数收益差×100，单位百分点。数值越高代表资金更偏好风险资产。': [
@@ -495,14 +494,14 @@ export const HINTS: Dict = {
 
   /* ── 焦点周期逐股评估（偏向 + 置信合并说明，main #84 引入） ── */
   '偏向与置信（AI 判断）': ['Bias & confidence (AI judgment)', 'バイアスと信頼度（AI 判断）'],
-  "偏向表示模型对该股的方向判断（−5～+5）：正值偏利多，负值偏利空，绝对值越大，判断的影响越强。置信度表示模型对本次判断的把握程度（0–100）。": ["Bias is the model’s directional assessment for the stock (−5 to +5): positive is bullish, negative is bearish, and a larger absolute value means a stronger assessed impact. Confidence is its certainty in this assessment (0–100).", "方向性はモデルによる銘柄の評価（−5〜+5）です。プラスは好材料、マイナスは悪材料で、絶対値が大きいほど影響が強いという判断です。確信度は今回の判断に対するモデルの確かさ（0〜100）を示します。"],
-  "偏向不表示股价涨跌幅；置信度是模型自评，不是胜率。": ["Bias is not a price-change percentage. Confidence is the model’s own assessment, not a win rate.", "方向性は株価の騰落率を表しません。確信度はモデル自身の評価であり、勝率ではありません。"],
+  "偏向表示模型对该股的方向判断（−5～+5）：正值偏利多，负值偏利空，绝对值越大，判断的影响越强。置信度表示模型对本次判断的把握程度（0–100）。": ["Bias is the model’s directional assessment for the stock (−5 to +5): positive is bullish, negative is bearish, and a larger absolute value means a stronger assessed impact. Confidence is its certainty in this assessment (0–100).", "バイアスはモデルによる銘柄の評価（−5〜+5）です。プラスは好材料、マイナスは悪材料で、絶対値が大きいほど影響が強いという判断です。信頼度は今回の判断に対するモデルの確かさ（0〜100）を示します。"],
+  "偏向不表示股价涨跌幅；置信度是模型自评，不是胜率。": ["Bias is not a price-change percentage. Confidence is the model’s own assessment, not a win rate.", "バイアスは株価の騰落率を表しません。信頼度はモデル自身の評価であり、勝率ではありません。"],
 
   /* ── 新闻流逐条评估（置信 + 影响合并说明，「· 非胜率」「· 非收益」后缀收进 ⓘ） ── */
   '置信与影响（AI 判断）': ['Confidence & impact (AI judgment)', '信頼度とインパクト（AI 判断）'],
-  "置信度表示模型对本次判断的把握程度（0–100）。影响分表示模型判断的新闻影响（−5～+5）：正值偏利多，负值偏利空，绝对值越大，判断的影响越强。": ["Confidence is the model’s certainty in this assessment (0–100). Impact is its assessment of the news (−5 to +5): positive is bullish, negative is bearish, and a larger absolute value means a stronger assessed impact.", "確信度は今回の判断に対するモデルの確かさ（0〜100）です。影響スコアはニュースへの評価（−5〜+5）で、プラスは好材料、マイナスは悪材料、絶対値が大きいほど影響が強いという判断です。"],
-  "置信度是模型自评，不是胜率；影响分不表示股价涨跌幅。": ["Confidence is the model’s own assessment, not a win rate. Impact is not a price-change percentage.", "確信度はモデル自身の評価であり、勝率ではありません。影響スコアは株価の騰落率を表しません。"],
-  "置信度是模型的自评，不是胜率。": ["Confidence is the model’s own assessment, not a win rate.", "確信度はモデル自身の評価であり、勝率ではありません。"],
+  "置信度表示模型对本次判断的把握程度（0–100）。影响分表示模型判断的新闻影响（−5～+5）：正值偏利多，负值偏利空，绝对值越大，判断的影响越强。": ["Confidence is the model’s certainty in this assessment (0–100). Impact is its assessment of the news (−5 to +5): positive is bullish, negative is bearish, and a larger absolute value means a stronger assessed impact.", "信頼度は今回の判断に対するモデルの確かさ（0〜100）です。インパクトスコアはニュースへの評価（−5〜+5）で、プラスは好材料、マイナスは悪材料、絶対値が大きいほど影響が強いという判断です。"],
+  "置信度是模型自评，不是胜率；影响分不表示股价涨跌幅。": ["Confidence is the model’s own assessment, not a win rate. Impact is not a price-change percentage.", "信頼度はモデル自身の評価であり、勝率ではありません。インパクトスコアは株価の騰落率を表しません。"],
+  "置信度是模型的自评，不是胜率。": ["Confidence is the model’s own assessment, not a win rate.", "信頼度はモデル自身の評価であり、勝率ではありません。"],
 
   /* ── 首页「市场综合研判」证据充分度（schema.py Sufficiency） ── */
   '证据充分度（AI 判断）': ['Evidence sufficiency (AI judgment)', '根拠の充足度（AI 判断）'],
@@ -511,6 +510,6 @@ export const HINTS: Dict = {
   '构成：真空型收缩 +12（收盘位置与能量潮偏多时降为 +8）/ 空头吸收 +10 / 吸收未确认 +3 / 多头吸收 −3；「未收缩且低量大涨」+6、「低量真空移动」+4 可叠加。该点数会从选股评分的突破维度中直接扣除。': ['Composition: vacuum contraction +12 (reduced to +8 when the close location and On-Balance Volume lean bullish) / bearish absorption +10 / unconfirmed absorption +3 / bullish absorption −3; "no contraction but a low-volume surge" +6 and "low-volume vacuum move" +4 can stack. The points are subtracted directly from the breakout dimension of the screener score.', '構成：真空収縮+12（終値位置とオンバランスボリュームが強気寄りなら+8に軽減）／売り方吸収+10／吸収未確認+3／買い方吸収−3。「未収縮での薄商い急騰」+6、「薄商いの真空的な値動き」+4が重なることがあります。このポイントはスクリーニングスコアのブレイク次元からそのまま減点されます。'],
   '取值：多头吸收 +12 / 吸收未确认 +3 / 平衡收缩 +2 / 真空型收缩 −6（内部偏多）或 −10 / 空头吸收 −8。该修正直接加进选股评分的突破维度。': ["Values: bullish absorption +12 / unconfirmed absorption +3 / balanced contraction +2 / vacuum contraction −6 (with bullish internals) or −10 / bearish absorption −8. The adjustment is added directly to the screener score's breakout dimension.", '値：買い方吸収+12／吸収未確認+3／均衡収縮+2／真空収縮−6（内部が強気寄りの場合）または−10／売り方吸収−8。この補正はスクリーニングスコアのブレイク次元に直接加算されます。'],
   '结构状态定基准（上升 82 / 仅高点抬升 66 / 仅低点抬升 62 / 区间震荡 50 / 高点压低 38 / 下降 24），K线形态各 ±6（合计封顶 ±10），假跌破收回 +8 / 假突破回落 −8。此分以 20% 权重进入选股评分的突破维度。': ["The structural state sets the anchor (uptrend 82 / higher highs only 66 / higher lows only 62 / range 50 / lower highs 38 / downtrend 24); candlestick patterns add ±6 each (±10 combined cap), failed breakdown +8 / failed breakout −8. The score enters the screener score's breakout dimension with a 20% weight.", '構造状態が基準点を決め（上昇82／高値切り上げのみ66／安値切り上げのみ62／レンジ50／高値切り下げ38／下降24）、ローソク足形状が各±6（合計上限±10）、ダマシの下抜け回復+8／ダマシの上抜け反落−8。このスコアはスクリーニングスコアのブレイク次元に20%のウェイトで入ります。'],
-  '选股评分的趋势维度含同口径的稳定项（权重 5%，波动越小越加分）；此处读数仅展示。': ["The screener score's trend dimension contains a stability term of the same definition (5% weight; lower volatility earns more). The reading here is display-only.", "スクリーニングスコアのトレンド次元には同じ定義の安定項が含まれます（ウェイト5%、ボラが小さいほど加点）。ここの読み値は表示専用です。"],
+  '选股评分的趋势维度含同口径的稳定项（权重 5%，波动越小越加分）；此处读数仅展示。': ["The screener score's trend dimension contains a stability term of the same definition (5% weight; lower volatility earns more). The reading here is display-only.", "スクリーニングスコアのトレンド次元には同じ定義の安定項が含まれます（ウェイト5%、ボラティリティが小さいほど加点）。ここの読み値は表示専用です。"],
   '进入选股评分时按折线映射：RSI≈68 附近得分最高（88 分），过弱与过热都降分——「强而未极端」才加分。': ["When it enters the screener score it is mapped by a piecewise curve: RSI≈68 scores highest (88); both washed-out and overheated readings lose points — \"strong but not extreme\" is what earns credit.", "スクリーニングスコアへは折れ線マッピングで反映します。RSI≈68付近が最高（88点）で、弱すぎも過熱もどちらも減点——「強いが極端でない」状態だけが加点されます。"],
 };

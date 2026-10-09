@@ -81,7 +81,7 @@ for (const remount of [false, true]) {
     await expect(page.locator('[data-eps-chart]')).toBeVisible();
     await expect(page.locator('[data-eps-chart-error]')).toHaveCount(0);
     await expect(all).toHaveAttribute('aria-selected', 'true');
-    await expect(page.locator('[aria-label="财报主体"]')).toBeVisible();
+    await expect(page.locator('[aria-label="财报内容"]')).toBeVisible();
     expect(chartRequests).toHaveLength(3);
     expect(chartRequests.every((row) => new URL(row.url).searchParams.get('eps') === '1')).toBe(true);
     expect(new URL(chartRequests[2].url).searchParams.get('recover')).toBe('2');
@@ -112,7 +112,7 @@ for (const remount of [false, true]) {
     await expect(page.locator('[data-eps-chart]')).toBeVisible();
     await expect(page.locator('[data-eps-chart-error]')).toHaveCount(0);
     await expect(all).toHaveAttribute('aria-selected', 'true');
-    await expect(page.locator('[aria-label="财报主体"]')).toBeVisible();
+    await expect(page.locator('[aria-label="财报内容"]')).toBeVisible();
     expect(chartRequests).toHaveLength(4);
     expect(errors).toEqual([]);
   });

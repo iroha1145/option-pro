@@ -39,7 +39,7 @@ function progressHeadline(progress: NewsAnalysisProgress): string {
   if (progress.status === 'completed') return t('最近一批任务已结束');
   if (progress.currentIndex !== null) {
     return progress.currentPhase === 'provider_queued'
-      ? t('第 {index} / {total} 条已提交，等待供应方执行', { index: progress.currentIndex, total: progress.total })
+      ? t('第 {index} / {total} 条已提交，等待模型服务执行', { index: progress.currentIndex, total: progress.total })
       : t('正在处理第 {index} / {total} 条', { index: progress.currentIndex, total: progress.total });
   }
   if (progress.inProgress > 1) return t('{n} 条任务正在处理', { n: progress.inProgress });
@@ -190,7 +190,7 @@ function OwnerAnalysisProgressCard() {
           </span>
         )}
         {progressQ.error && (
-          <span className="text-warn-700">{t('最新状态读取失败，显示上次结果')}</span>
+          <span className="text-warn-700">{t('最新状态读取失败，显示上次成功的结果')}</span>
         )}
       </div>
     </motion.section>

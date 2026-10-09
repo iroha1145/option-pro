@@ -96,7 +96,7 @@ test('期权链保留真实来源并按 Retry-After 冷却重试', async () => {
   assert.match(panel, /shownChain\.asOf \? t\(' · 数据获取于 \{time\}', \{ time: fmtRelative\(shownChain\.asOf\) \}\)/);
   assert.match(panel, /providerError\?\.retryAfter/);
   assert.match(panel, /disabled=\{retrySeconds > 0 \|\| retrying\}/);
-  assert.match(panel, /期权数据暂时获取不到/);
+  assert.match(panel, /期权数据暂时读不到/);
   assert.doesNotMatch(panel, /yfinance|Massive Stocks Starter/);
   assert.match(panel, /isDeclaredUnsupported\(ticker\)/);
   assert.match(panel, /function LiveOptionsPanel/);

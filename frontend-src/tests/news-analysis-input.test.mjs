@@ -140,7 +140,7 @@ test('抽屉只给已完成分析标注输入依据，保留原始公司名，�
     basis: 'title_summary', article_status: 'unavailable', reason: 'http_403', body_characters: 0, truncated: false,
   } });
   const unavailableText = texts(renderDrawer(unavailable));
-  assert.match(unavailableText, /仅基于标题和摘要分析.*未能取得正文/);
+  assert.match(unavailableText, /仅基于标题和摘要分析.*未能获取正文/);
   assert.doesNotMatch(unavailableText, /http_403/);
 
   const legacyText = texts(renderDrawer(await mappedNews(base)));

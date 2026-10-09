@@ -151,7 +151,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
                           {ev.actual !== null ? (
                             <SoftBadge tone="brand">{ev.actual}</SoftBadge>
                           ) : (ev.releaseStatus === 'awaiting_source' || Date.parse(ev.scheduledAt) <= q.now.getTime()) ? (
-                            <SoftBadge tone="warn">{__t('尚未取得公布值')}</SoftBadge>
+                            <SoftBadge tone="warn">{__t('尚未获取公布值')}</SoftBadge>
                           ) : (
                             <span className="text-ink-400">{__t('等待公布')}</span>
                           )}

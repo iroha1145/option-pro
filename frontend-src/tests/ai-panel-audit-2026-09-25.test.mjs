@@ -284,8 +284,8 @@ test('错误码共用表覆盖任务书清单与 worker 会写入的其余失败
     assert.notEqual(text, fallback, `${code} 缺专门文案`);
     assert.doesNotMatch(text, /[a-z]+_[a-z_]+/, `${code} 的文案混入了原始码：${text}`);
   }
-  assert.equal(normalize.aiJobErrorMessage('provider_credit_exhausted'), 'AI 供应商余额耗尽，需充值');
-  assert.match(normalize.aiJobErrorMessage('legacy_output_hidden'), /旧结果不符合当前的校验规则/);
+  assert.equal(normalize.aiJobErrorMessage('provider_credit_exhausted'), '模型服务余额不足，需充值');
+  assert.match(normalize.aiJobErrorMessage('legacy_output_hidden'), /旧版分析结果已不再展示/);
 });
 
 test('英日界面给出译文，英文里没有中文，后端中文原文不外露', () => {
@@ -295,16 +295,16 @@ test('英日界面给出译文，英文里没有中文，后端中文原文不�
       const text = normalize.aiJobErrorMessage(code);
       assert.doesNotMatch(text, CJK, `${code}: ${text}`);
     }
-    assert.equal(normalize.aiJobErrorMessage('provider_credit_exhausted'), 'The AI provider is out of credit. Top up to continue.');
+    assert.equal(normalize.aiJobErrorMessage('provider_credit_exhausted'), 'The model service is out of credit. Top up to continue.');
     assert.equal(
       normalize.aiJobCreateErrorMessage(new ApiError(409, '技术信号已过期，请先手动拉取最新行情后再分析', { bizCode: 'stale_signal_evidence' })),
-      'The technical signals are out of date. Pull the latest market data first, then analyze.',
+      'The technical signals are out of date. Fetch the latest market data first, then analyze.',
     );
-    assert.equal(normalize.aiJobCreateErrorMessage(new ApiError(400, '某个中文原因')), 'Job creation failed');
+    assert.equal(normalize.aiJobCreateErrorMessage(new ApiError(400, '某个中文原因')), 'Task creation failed');
     assert.equal(normalize.aiJobCreateErrorMessage(new ApiError(400, 'Plain English detail')), 'Plain English detail');
     setLocale('ja');
     assert.equal(normalize.aiJobErrorMessage('schema_validation_failed'), '分析結果が形式チェックを通りませんでした。再試行してください。');
-    assert.equal(normalize.aiJobCreateErrorMessage(new ApiError(400, '某个中文原因')), 'ジョブの作成に失敗しました');
+    assert.equal(normalize.aiJobCreateErrorMessage(new ApiError(400, '某个中文原因')), 'タスクの作成に失敗しました');
     // 本地已翻译的日文提示也有汉字，但带假名，不能被当成后端中文换掉
     const timeout = t('请求超时，请重试');
     assert.match(timeout, /[\u3040-\u30ff]/);
@@ -319,7 +319,7 @@ test('创建失败文案：队列满、手动分析关闭、证据陈旧、只�
   assert.equal(message(new ApiError(429, 'Too Many Requests', { bizCode: 'ai_job_queue_full', retryAfter: 60 })), '分析队列已满，请约 60 秒后再试');
   assert.equal(message(new ApiError(429, 'Too Many Requests', { bizCode: 'ai_job_queue_full' })), '分析队列已满，请稍后再试');
   assert.equal(message(new ApiError(429, 'Too many requests; try again in 7s', { bizCode: 'rate_limited', retryAfter: 7 })), '请求过于频繁，请约 7 秒后再试');
-  assert.equal(message(new ApiError(409, '手动分析已关闭', { bizCode: 'manual_analysis_disabled' })), '手动分析功能当前未启用');
+  assert.equal(message(new ApiError(409, '手动分析已关闭', { bizCode: 'manual_analysis_disabled' })), '手动分析已关闭');
   assert.equal(message(new ApiError(409, '技术信号已过期', { bizCode: 'stale_signal_evidence' })), '技术信号已过期，请先手动获取最新行情再分析');
   assert.equal(message(new ApiError(409, '当前为只读模式', { bizCode: 'read_only_mode' })), '当前为只读模式，不能发起分析');
   assert.equal(message(new ApiError(503, 'Persistent AI analysis is not available', { bizCode: 'not_configured' })), 'AI 分析服务尚未就绪，暂时不能发起分析');
@@ -333,7 +333,7 @@ test('推迟原因只在任务仍排队时显示；只有失败才翻译错误�
   assert.equal(queued.status, 'queued');
   assert.equal(normalize.aiJobDeferralMessage(queued), '同时进行的分析较多，稍后自动开始');
   assert.equal(normalize.aiJobDeferralMessage({ status: 'queued', error: 'analysis_cooldown_active' }), '上一次分析刚结束，冷却后自动开始');
-  assert.equal(normalize.aiJobDeferralMessage({ status: 'queued', error: 'provider_credit_exhausted_hold' }), 'AI 供应商余额耗尽，充值后自动继续');
+  assert.equal(normalize.aiJobDeferralMessage({ status: 'queued', error: 'provider_credit_exhausted_hold' }), '模型服务余额不足，充值后自动继续');
   assert.equal(normalize.aiJobDeferralMessage({ status: 'queued', error: 'provider_poll_deferred' }), null);
   const running = normalize.normalizeAiJob({ job_id: 'job-1', status: 'in_progress', error_code: 'global_concurrency_limit' });
   assert.equal(normalize.aiJobDeferralMessage(running), null, '开始处理后留下的是旧码');
@@ -341,9 +341,9 @@ test('推迟原因只在任务仍排队时显示；只有失败才翻译错误�
   assert.equal(normalize.aiJobBlockedMessage(cancelled), null);
   const budget = normalize.normalizeAiJob({ job_id: 'job-1', status: 'budget_blocked', error_code: 'daily_token_limit_reached' });
   assert.equal(budget.status, 'failed');
-  assert.equal(normalize.aiJobBlockedMessage(budget), '今日 Token 额度已用完，额度重置后再试');
+  assert.equal(normalize.aiJobBlockedMessage(budget), '今日分析额度已用完，额度重置后再试');
   const credit = normalize.normalizeAiJob({ job_id: 'job-1', status: 'failed', error_code: 'provider_credit_exhausted' });
-  assert.equal(normalize.aiJobBlockedMessage(credit), 'AI 供应商余额耗尽，需充值');
+  assert.equal(normalize.aiJobBlockedMessage(credit), '模型服务余额不足，需充值');
   const schema = normalize.normalizeAiJob({ job_id: 'job-1', status: 'failed', error_code: 'schema_validation_failed' });
   assert.equal(normalize.aiJobBlockedMessage(schema), null, '能重试的失败保留「重试」');
   const unconfigured = normalize.normalizeAiJob({ job_id: 'job-1', status: 'failed', error_code: 'ai_not_configured' });
@@ -452,7 +452,7 @@ for (const [name, render] of [['个股 AI 卡片', renderSignalCard], ['期权�
 
   test(`${name}：失败按共用表说明原因，取消与旧结果隐藏各有说法`, () => {
     const credit = render({ job: { id: 'job-1', status: 'failed', progress: null, error: 'provider_credit_exhausted' } });
-    assert.match(credit.text, /AI 供应商余额耗尽，需充值/);
+    assert.match(credit.text, /模型服务余额不足，需充值/);
     assert.ok(credit.buttons.some((b) => b.label === '关闭'), '重试也会被挡下时按钮写「关闭」');
     const schema = render({ job: { id: 'job-1', status: 'failed', progress: null, error: 'schema_validation_failed' } });
     assert.match(schema.text, /分析结果未通过格式检查，请重试/);
@@ -461,7 +461,7 @@ for (const [name, render] of [['个股 AI 卡片', renderSignalCard], ['期权�
     assert.match(cancelled.text, /任务已取消/);
     assert.doesNotMatch(cancelled.text, /同时进行的分析/, '取消状态的残留码不当失败原因');
     const legacy = render({ job: { id: 'job-1', status: 'succeeded', progress: null, error: 'legacy_output_hidden' } });
-    assert.match(legacy.text, /旧结果不符合当前的校验规则/);
+    assert.match(legacy.text, /旧版分析结果已不再展示/);
   });
 }
 

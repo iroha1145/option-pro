@@ -402,7 +402,7 @@ export default function Earnings() {
             : aiEnabled
               ? t('AI 分析暂不可用')
               : isOwner
-                ? t('AI 分析未开启')
+                ? t('AI 分析已关闭')
                 : t('单股分析可用')
         }
       >
@@ -426,7 +426,7 @@ export default function Earnings() {
           <>
             <span className="size-2 rounded-full bg-ink-300" aria-hidden="true" />
             <AnalysisIcon size={15} />
-            <span>{aiPending ? t('AI 确认中') : isOwner ? t('AI 未开启') : t('单股分析可用')}</span>
+            <span>{aiPending ? t('AI 确认中') : isOwner ? t('AI 已关闭') : t('单股分析可用')}</span>
           </>
         )}
       </SoftBadge>
@@ -580,7 +580,7 @@ export default function Earnings() {
           完整桌面表有 7 个数据列，7/5 分栏会在 2xl 表格断点把 AI 操作列裁掉。 */}
       <div
         className="mt-6 grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-12"
-        aria-label={t("财报主体")}
+        aria-label={t("财报内容")}
         {...pageRegionProps(
           'earnings',
           loading

@@ -20,9 +20,9 @@ const IMPORT_ERROR: Record<string, string> = {
   invalid_json: t('导入失败：JSON 无效'),
   too_many: t('导入失败：数量过多'),
   too_large: t('导入失败：数据无效'),
-  illegal_text: t('导入失败：文字不合法'),
+  illegal_text: t('导入失败：文字无效'),
   id_conflict: t('导入失败：编号冲突'),
-  invalid_boolean: t('导入失败：布尔字段无效'),
+  invalid_boolean: t('导入失败：数据无效'),
   invalid_drawing: t('导入失败：数据无效'),
   corrupt: t('导入失败：数据无效'),
   unsupported_version: t('导入失败：数据无效'),
@@ -94,7 +94,7 @@ export default function DrawingInspector({
     <div className="flex flex-col gap-3 text-caption text-ink-600">
       <p className="text-micro font-medium text-ink-500">{t('图形列表')}</p>
       {listed.length === 0 ? (
-        <p className="text-micro text-ink-400">{t('当前没有手绘图形')}</p>
+        <p className="text-micro text-ink-400">{t('暂无手绘图形')}</p>
       ) : (
         <ul className="flex flex-col gap-1" aria-label={t('图形列表')}>
           {listed.map((item) => {
@@ -103,7 +103,7 @@ export default function DrawingInspector({
               <li key={item.id} className="flex items-center gap-1">
                 <button
                   type="button"
-                  aria-label={t('绘图对象 {name}', { name: KIND_LABEL[item.kind] })}
+                  aria-label={t('图形 {name}', { name: KIND_LABEL[item.kind] })}
                   aria-pressed={drawing?.id === item.id}
                   onClick={() => onSelect?.(item.id)}
                   className={cn(
@@ -221,7 +221,7 @@ export default function DrawingInspector({
           )}
           {drawing.kind === 'text' && (
             <label className="flex flex-col gap-1 text-micro">
-              <span>{t('文字注释')}</span>
+              <span>{t('文字批注')}</span>
               <textarea
                 maxLength={240}
                 value={drawing.text ?? ''}

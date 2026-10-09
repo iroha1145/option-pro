@@ -448,7 +448,7 @@ def _rules_for_score(
         }
     if breadth_score < 45:
         rules["breakout_weight_multiplier"] *= .85
-        warnings.append("市场宽度偏弱，突破型信号已降权")
+        warnings.append("市场广度偏弱，突破型信号已降权")
     if risk_penalty >= 10:
         rules["option_heat_weight_multiplier"] *= .85
         warnings.append("波动或信用压力偏高，期权热度已降权")

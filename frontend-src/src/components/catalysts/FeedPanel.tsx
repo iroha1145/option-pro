@@ -343,7 +343,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
                 className="control-button"
               >
                 {loadingMore && <Spinner size={14} tone="muted" />}
-                {__t('查看更多')}
+                {__t('加载更多')}
               </button>
             ) : (
               <p className="text-micro text-ink-400">{__t('已加载全部')} {items.length} {__t('条')}</p>

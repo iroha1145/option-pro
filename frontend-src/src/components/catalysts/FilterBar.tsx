@@ -140,8 +140,8 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
 
         <Segmented
           options={[
-            { value: '6', label: t('6 时') },
-            { value: '24', label: t('24 时') },
+            { value: '6', label: t('6 小时') },
+            { value: '24', label: t('24 小时') },
             { value: '72', label: t('3 天') },
             { value: '168', label: t('7 天') },
           ]}

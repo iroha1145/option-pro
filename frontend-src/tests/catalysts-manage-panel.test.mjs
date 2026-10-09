@@ -222,12 +222,12 @@ test('更新数据按钮：提示用不带「更新」的模板，整个面板�
   h.unmount();
 });
 
-test('请求被拒绝：提示「未受理」并释放忙碌槽', async () => {
+test('请求被拒绝：提示「未能提交」并释放忙碌槽', async () => {
   const h = harness({ workerAction: () => { throw new Error('冷却中'); } });
   await settle();
   findButton(h.read(), '突破雷达').props.onClick();
   await settle();
-  assert.deepEqual(Array.from(h.toasts.at(-1)).slice(0, 2), ['error', '突破雷达未受理']);
+  assert.deepEqual(Array.from(h.toasts.at(-1)).slice(0, 2), ['error', '突破雷达未能提交']);
   assert.equal(findButton(h.read(), '突破雷达').props.disabled, false);
   h.unmount();
 });

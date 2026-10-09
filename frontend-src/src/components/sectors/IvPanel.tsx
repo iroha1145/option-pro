@@ -174,7 +174,7 @@ export default function IvPanel({
             title={error.code === 503 ? t('IV 排名暂不可用') : t('IV 排名加载失败')}
             description={
               error.code === 503
-                ? `${t('期权数据暂时获取不到')}${retrySeconds > 0 ? t(' · {n} 秒后可重试', { n: retrySeconds }) : ''}`
+                ? `${t('期权数据暂时读不到')}${retrySeconds > 0 ? t(' · {n} 秒后可重试', { n: retrySeconds }) : ''}`
                 : error.message
             }
             action={

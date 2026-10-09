@@ -562,7 +562,7 @@ def compute_market_signals() -> dict:
         if valid_sector_frames and sector_coverage >= _MIN_SECTOR_BREADTH_COVERAGE:
             above_count = sum(1 for frame in valid_sector_frames if _is_above_sma_frame(frame, 50))
             breadth_value = above_count / len(valid_sector_frames) * 100
-        add("sectors_above_50dma", breadth_value, "板块ETF在50日线上方%")
+        add("sectors_above_50dma", breadth_value, "行业ETF在50日线上方%")
         signals["_breadth_coverage"] = {
             "available": len(valid_sector_frames),
             "expected": len(SECTOR_ETFS),

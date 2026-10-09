@@ -165,13 +165,13 @@ test('schema.py 的每个枚举值都有中文标签，归一器原样保留、�
 test('失败原因码：任务列出的码给短句，errors.py 与 POST /runs 的拒绝码全部覆盖，其余显示原码', () => {
   const expected = {
     provider_auth_failed: '密钥无效',
-    provider_rate_limited: '供应商限流',
-    provider_server_error: '供应商故障',
+    provider_rate_limited: '模型服务繁忙',
+    provider_server_error: '模型服务故障',
     provider_unavailable: '无法连接',
     provider_usage_incomplete: '模型用量未完整确认，请勿重复提交',
     submission_outcome_unknown: '提交结果和费用尚未确认，请勿重复提交',
     provider_stream_incomplete: '模型回复未完整结束，未生成研判',
-    provider_invalid_tool_response: '工具返回结果不完整或格式有误，未生成研判',
+    provider_invalid_tool_response: '模型返回的内容不完整或格式有误，未生成研判',
     market_brief_in_progress: '研判正在生成，请等待结果',
     provider_refusal: '模型拒绝了本次请求',
     output_truncated: '输出被截断',

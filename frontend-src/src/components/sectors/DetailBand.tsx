@@ -71,7 +71,7 @@ export default function DetailBand({
             to={`/screener?sector=${encodeURIComponent(sector.id)}`}
             className="flex items-center gap-1 text-caption text-brand-600 transition-colors duration-fast hover:text-brand-500"
           >
-            {t('查看选股')}
+            {t('查看条件选股')}
             <Icon name="arrow-up-right" size={12} />
           </Link>
         </div>
@@ -181,7 +181,7 @@ export default function DetailBand({
             </div>
             {sector.tickers.length === 0 ? (
               <p className="mt-3 text-body-s text-ink-400">
-                {t('暂未取得该行业的成分股。')}
+                {t('暂未获取到该行业的成分股。')}
               </p>
             ) : (
               <>

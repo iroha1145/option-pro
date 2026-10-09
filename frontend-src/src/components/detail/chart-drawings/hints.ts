@@ -68,7 +68,7 @@ export const LAYER_HINTS: Record<string, ScoreHint> = {
   auto_patterns: {
     title: t('趋势线与形态'),
     body: t('根据已确认的高低点绘制趋势线、通道、三角形和楔形；触碰次数和间隔达到要求后才显示。'),
-    note: t('几何质量表示形状的吻合程度，不代表涨跌概率。'),
+    note: t('吻合度表示形状与标准形态的接近程度，不代表涨跌概率。'),
   },
   candles: {
     title: t('K线形态'),

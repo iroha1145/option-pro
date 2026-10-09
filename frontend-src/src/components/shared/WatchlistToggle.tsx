@@ -58,7 +58,7 @@ export default function WatchlistToggle({ ticker }: { ticker: string }) {
       b={<Spinner size={13} tone="brand" />}
     />
     <TextSwap swapKey={personal.loading ? 'loading' : personal.error ? 'error' : selected ? 'in' : 'out'}>
-      {personal.loading ? t('正在读取关注…') : personal.error ? t('重新读取') : selected ? t('已关注') : t('加入关注')}
+      {personal.loading ? t('正在读取关注…') : personal.error ? t('重试') : selected ? t('已关注') : t('加入关注')}
     </TextSwap>
   </button>;
 }

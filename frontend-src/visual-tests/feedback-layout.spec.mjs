@@ -83,7 +83,7 @@ for (const width of [390, 1440]) {
       await noPageOverflow(page);
       await history.click();
 
-      const hotspot = page.getByRole('region', { name: '热点主题带', exact: true })
+      const hotspot = page.getByRole('region', { name: '市场热点', exact: true })
         .getByRole('button', { name: /查看代表新闻/ }).first();
       await hotspot.focus();
       await page.keyboard.press('Enter');

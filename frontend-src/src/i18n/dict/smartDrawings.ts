@@ -38,6 +38,6 @@ export const SMART_DRAWINGS: Dict = {
   ],
   "水平通道": [
     "Sideways channel",
-    "横ばいチャネル"
+    "水平チャネル"
   ]
 };

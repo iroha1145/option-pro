@@ -168,13 +168,13 @@ export default function HistoryRail({
           <EmptyState
             image="/empty-radar.svg"
             title={t("没有符合条件的历史事件")}
-            description={t("可放宽筛选条件，或等待下一轮扫描。")}
+            description={t("放宽筛选条件，或等待下一轮扫描")}
             action={
               <button
                 onClick={onRetry}
                 className="btn-primary"
               >
-                {t('重新读取')}
+                {t('重试')}
               </button>
             }
           />

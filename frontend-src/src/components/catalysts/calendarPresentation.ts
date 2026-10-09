@@ -49,7 +49,7 @@ export function calendarCopy(locale: string = getLocale()) {
     more: 'ほかのイベント', high: '高', medium: '中', low: '低', holiday: '休場', limited: '読み込み済みの直近240件を表示' };
   if (locale.startsWith('zh')) return { ...en, title: '经济日历', today: '今日', next: '即将公布',
     all: '完整日历', local: '本地时间', empty: '当前范围暂无经济事件', forecast: '预期', previous: '前值', actual: '实际',
-    pending: '等待公布', delayed: '尚未取得公布值', checked: '最后核验', checking: '正在检查更新', cached: '显示已保存的数据',
+    pending: '等待公布', delayed: '尚未获取公布值', checked: '最后核验', checking: '正在检查更新', cached: '显示已保存的数据',
     failed: '更新失败，保留上次数据', retry: '重试', more: '更多事件', high: '高', medium: '中', low: '低', holiday: '假期',
     limited: '保留最近加载的 240 条新闻' };
   return en;

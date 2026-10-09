@@ -101,7 +101,7 @@ export default function ChainBrowser({ chain }: { chain: OptionChain }) {
           </button>
         </li>)}
       </ul> : <p className="px-4 py-4 text-caption text-ink-500">{t('当前到期日暂无异动合约。')}</p>}
-      <p className="border-t border-line px-4 py-2.5 text-micro leading-relaxed text-ink-500">{t('按成交量、持仓量和估算金额筛选。看涨、看跌表示合约类型。')}</p>
+      <p className="border-t border-line px-4 py-2.5 text-micro leading-relaxed text-ink-500">{t('按成交量、持仓量和估算金额筛选。')}</p>
     </section>
 
     {selected && <div ref={detailRef} tabIndex={-1} className="scroll-mt-24" onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); closeDetail(); } }}><ContractDetail contract={selected} onClose={closeDetail} /></div>}

@@ -684,7 +684,7 @@ export default function Watchlist() {
       />
 
       {/* B1 概览统计条 */}
-      <section className="mt-6" aria-label={t("市场概览")}>
+      <section className="mt-6" aria-label={t("市场信号")}>
         {statsLoading ? (
           /* 占位必须和真实内容占同样的空间（骨架与真实内容高度差曾造成 CLS 0.200），
              所以用与下方 motion.div 完全相同的栅格类。 */

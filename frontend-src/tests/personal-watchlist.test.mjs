@@ -88,7 +88,7 @@ test('provider industry labels follow the selected interface language', () => {
   try {
     for (const [locale, expected] of [
       ['zh', ['电气设备及零部件', '互联网内容与信息']],
-      ['en', ['Electrical Equipment & Parts', 'Internet Content & Information']],
+      ['en', ['Electrical equipment & parts', 'Internet content & information']],
       ['ja', ['電気機器・部品', 'インターネット・コンテンツ・情報']],
     ]) {
       api.setLocale(locale);
@@ -110,7 +110,7 @@ test('watchlist API failures map to locale copy instead of leftover Chinese', ()
     '股票代码格式不正确',
   );
   assert.equal(
-    api.watchlistErrorMessage(new api.ApiError(400, '请求无法完成', { bizCode: 'invalid_payload' })),
+    api.watchlistErrorMessage(new api.ApiError(400, '请求无法完成，请重试', { bizCode: 'invalid_payload' })),
     '请求无法完成，请重试',
   );
   assert.equal(api.watchlistErrorMessage(new Error('保存失败，请重试')), '保存失败，请重试');

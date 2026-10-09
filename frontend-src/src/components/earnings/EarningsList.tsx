@@ -108,7 +108,7 @@ function expectedMoveMissingCopy(status: string | null | undefined): { label: st
     case 'not_permitted':
       return {
         label: t('暂无数据'),
-        title: t('当前没有可用的期权数据来源。'),
+        title: t('暂无可用的期权数据来源。'),
       };
     case 'provider_error':
       return {
@@ -118,7 +118,7 @@ function expectedMoveMissingCopy(status: string | null | undefined): { label: st
     default:
       return {
         label: t('数据暂不可用'),
-        title: t('暂时无法取得预期波动数据。'),
+        title: t('暂时无法获取预期波动数据。'),
       };
   }
 }
@@ -301,7 +301,6 @@ export default function EarningsList({
           /* 默认列表覆盖的是「近 3 天到未来 30 天」滚动窗口（审计 2.3.4）：
              写「本周清淡 · 跳到下周看看」会让用户以为还有下周数据没查。 */
           title={filteredByDay ? t('当日无财报') : t('未来 30 天暂无财报')}
-          description={filteredByDay ? t('当日没有财报安排，可查看其他日期。') : t('未来 30 天没有已安排的财报，稍后再来看看。')}
           action={
             onNextWeek ? (
               <button

@@ -101,14 +101,14 @@ function FactorDetails({ path, sources }: {
     <section className="mt-4 border-t border-line pt-4">
       <h5 className="text-body-s font-medium text-ink-800">{t('因子与分数构成')}</h5>
       {Object.keys(scoreGate).length > 0 && <div className="mt-3 rounded-md border border-line bg-paper-2 p-3 text-micro text-ink-600">
-        <h6 className="font-medium text-ink-800">{t('最终评分条件（当前轨道）')}</h6>
+        <h6 className="font-medium text-ink-800">{t('最终评分条件（当前模式）')}</h6>
         <div className="mt-1 grid gap-x-4 gap-y-1 sm:grid-cols-2">
           <span>{t('因子覆盖率')}{t('：')}{diagnosticPercent(scoreGate.coverage_ratio)} / {t('最低要求')} {diagnosticPercent(scoreGate.coverage_min)} · {gateText(scoreGate.coverage_passed)}</span>
           <span>{t('最低分')}{t('：')}{diagnosticNumber(scoreGate.score_floor)} · {gateText(scoreGate.score_floor_passed)}</span>
           <span>{t('必需因子')}{t('：')}{gateText(scoreGate.required_factors_passed)}</span>
         </div>
       </div>}
-      {Object.keys(scoreGate).length === 0 && <p className="mt-2 text-micro text-ink-500">{t('本路径缺少当前轨道评分门数据，不能判断是否达到最低要求。')}</p>}
+      {Object.keys(scoreGate).length === 0 && <p className="mt-2 text-micro text-ink-500">{t('本路径缺少当前评分模式的门槛数据，不能判断是否达到最低要求。')}</p>}
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         {DIAGNOSTIC_FACTORS.map((factor) => (
           <div key={factor} className="min-w-0 rounded-md border border-line bg-paper-2 p-3">
@@ -118,11 +118,11 @@ function FactorDetails({ path, sources }: {
             </div>
             <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-micro text-ink-500">
               <span>{t('配置权重')}{t('：')}{diagnosticPercent(configured[factor])}</span>
-              <span>{t('轨道权重')}{t('：')}{diagnosticPercent(track[factor])}</span>
+              <span>{t('模式权重')}{t('：')}{diagnosticPercent(track[factor])}</span>
               <span>{t('有效权重')}{t('：')}{diagnosticPercent(effective[factor])}</span>
               <span>{t('分数贡献')}{t('：')}{diagnosticNumber(components[factor], 2)}</span>
             </div>
-            {factor === 'G' && (path.track === 'PRICE_ONLY_DIAGNOSTIC' || path.track === 'D_MARKET_RESIDUAL_DIAGNOSTIC') && <p className="mt-1 text-micro text-ink-500">{t('当前诊断轨道禁用行业因子，不把缺失的行业数据当作零分。')}</p>}
+            {factor === 'G' && (path.track === 'PRICE_ONLY_DIAGNOSTIC' || path.track === 'D_MARKET_RESIDUAL_DIAGNOSTIC') && <p className="mt-1 text-micro text-ink-500">{t('当前评分模式不使用行业因子，不把缺失的行业数据当作零分。')}</p>}
           </div>
         ))}
       </div>
@@ -161,7 +161,7 @@ function PathCard({ path, sources }: {
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-micro text-ink-500">
           <span>{t('主题代码')}{t('：')}{textValue(path.theme_id ?? path.sector_context)}</span>
           <span>{t('家族代码')}{t('：')}{textValue(path.algorithm_id)}</span>
-          <span>{t('评分轨道')}{t('：')}{diagnosticTrack(path.track)}</span>
+          <span>{t('评分模式')}{t('：')}{diagnosticTrack(path.track)}</span>
           <span>{t('证券类型')}{t('：')}{path.stock_or_etf_track === 'etf' ? t('基金') : path.stock_or_etf_track === 'stock' ? t('股票') : textValue(path.stock_or_etf_track)}</span>
           <span>{t('价格')}{t('：')}{money(path.price, 2)}</span>
         </div>
@@ -185,12 +185,12 @@ function PathCard({ path, sources }: {
         </div>
         <div>
           <h5 className="font-medium text-ink-800">{t('资格与成交额')}</h5>
-          <p className="mt-1 text-micro text-ink-500">{t('20 日平均成交额')}{t('：')}{money(path.adv20)} · {t('成交额数据可作参考，但代理口径尚未认证，不代表已通过流动性门。')}</p>
+          <p className="mt-1 text-micro text-ink-500">{t('20 日平均成交额')}{t('：')}{money(path.adv20)} · {t('成交额数据可作参考，但代理口径尚未认证，不能视为已通过流动性门槛。')}</p>
           <p className="mt-1 text-micro text-ink-500">{t('成交额资格')}{t('：')}{verifiedText(flags.dollar_liquidity_verified)} · {t('成交量时段')}{t('：')}{verifiedText(flags.volume_session_verified)}</p>
           {Object.keys(gates).length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">
             {Object.entries(gates).filter(([key]) => key !== 'score' && key !== 'coverage').map(([key, value]) => <span key={key} className="rounded border border-line px-2 py-1 text-micro text-ink-500">{gateNames[key] ?? t('其他条件')}: {key === 'adv20' && value === true && flags.dollar_liquidity_verified !== true ? t('代理值达到数值门槛，资格未认证') : gateText(value)}</span>)}
           </div>}
-          {path.gate_results_source === 'upstream_full_model' && <p className="mt-1 text-micro text-ink-500">{t('原始模型的形态门仅供参考；最终评分门以上方当前轨道结果为准。')}</p>}
+          {path.gate_results_source === 'upstream_full_model' && <p className="mt-1 text-micro text-ink-500">{t('原始模型的形态门只作对照；最终评分以上方当前模式的结果为准。')}</p>}
         </div>
         <FactorDetails path={path} sources={sources} />
       </div>
@@ -246,8 +246,8 @@ export default function SecurityDiagnostics({ profile, timeframe, publicationKey
     }).catch((error: unknown) => {
       if (seq.current !== requestSeq) return;
       let message = t('读取失败，请稍后重试。');
-      if (error instanceof ApiError && error.code === 404) message = t('该代码不在本批次证券目录中。');
-      else if (error instanceof ApiError && error.code === 503) message = t('本批次诊断尚未完成，请等待扫描结束后重试。');
+      if (error instanceof ApiError && error.code === 404) message = t('该代码不在本轮扫描的证券目录中。');
+      else if (error instanceof ApiError && error.code === 503) message = t('本轮诊断尚未完成，请等扫描结束后重试。');
       else if (error instanceof ApiError && error.code === 409) message = t('该代码对应多个不同证券，无法唯一识别。');
       else if (error instanceof ApiError && error.code === 429) {
         message = typeof error.retryAfter === 'number' && Number.isFinite(error.retryAfter) && error.retryAfter > 0
@@ -294,7 +294,7 @@ export default function SecurityDiagnostics({ profile, timeframe, publicationKey
           <button type="submit" disabled={loading} aria-busy={loading} className="btn-primary"><TextSwap swapKey={loading ? 'busy' : 'idle'}>{loading ? t('查询中') : t('查询诊断')}</TextSwap></button>
         </form>
       </div>
-      {loading && <p className="mt-4 text-body-s text-ink-500" role="status">{t('正在读取本批次诊断…')}</p>}
+      {loading && <p className="mt-4 text-body-s text-ink-500" role="status">{t('正在读取本轮诊断…')}</p>}
       {shownError && <p className="mt-4 rounded-md border border-line bg-paper-2 p-3 text-body-s text-ink-700" role="alert">{shownError}</p>}
       {shown && <div className="mt-5 space-y-4">
         <div className="rounded-md border border-line bg-paper-2 p-3 sm:p-4">
@@ -319,12 +319,12 @@ export default function SecurityDiagnostics({ profile, timeframe, publicationKey
             <span className="break-all sm:col-span-2">{t('来源标识')}{t('：')}{textValue(shown.source_hash)}</span>
           </div>
           {shown.coverage && <p className="mt-2 text-micro text-ink-500">{t('目录覆盖状态')}{t('：')}{diagnosticCoverageStatus(shown.coverage.status)}</p>}
-          {shown._stale && <p className="mt-2 text-body-s text-ink-700">{t('当前不是最新收盘批次，请核对截止日期。')}</p>}
+          {shown._stale && <p className="mt-2 text-body-s text-ink-700">{t('当前不是最新一轮收盘数据，请核对数据截至日期。')}</p>}
         </div>
         <div>
           <h4 className="text-body-s font-medium text-ink-800">{t('完整评分路径')} <span className="tnum">{paths.length}</span></h4>
           {paths.length ? <div className="mt-3 space-y-2">{paths.map((path, index) => <PathCard key={pathKey(path, index)} path={path} sources={sources} />)}</div>
-            : <p className="mt-3 rounded-md border border-line p-3 text-body-s text-ink-500">{t('本批次没有这只证券的评分路径，请核对目录状态和数据截止日。')}</p>}
+            : <p className="mt-3 rounded-md border border-line p-3 text-body-s text-ink-500">{t('本轮扫描没有这只证券的评分路径，请核对目录状态和数据截至交易日。')}</p>}
         </div>
       </div>}
     </section>

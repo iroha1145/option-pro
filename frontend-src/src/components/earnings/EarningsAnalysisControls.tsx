@@ -135,7 +135,7 @@ export default function EarningsAnalysisControls({
       });
       setDoc(next);
       setError(null);
-      toast.success(nextEnabled ? t('每日财报分析已开启') : t('每日财报分析已关闭'), t('自动分析未来 5 天内的财报'));
+      toast.success(nextEnabled ? t('每日自动分析已开启') : t('每日自动分析已关闭'), t('自动分析未来 5 天内的财报'));
     } catch (cause) {
       if (cause instanceof ApiError && cause.code === 409) {
         toast.error(t('设置已更新，请重试'), t('已重新读取最新设置'));

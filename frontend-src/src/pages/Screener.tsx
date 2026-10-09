@@ -740,7 +740,7 @@ export default function Screener() {
       universeQ.refresh();
       marketQ.refresh();
     } catch (e) {
-      toast.error(__t('触发失败'), e instanceof ApiError ? e.message : __t('扫描服务暂不可用'));
+      toast.error(__t('扫描未能启动'), e instanceof ApiError ? e.message : __t('扫描服务暂不可用'));
     } finally {
       strengthRefreshInFlight.current = false;
       setRefreshingStrength(false);

@@ -120,7 +120,7 @@ function MobileDockContent({ onHeightChange }: MobileDockProps) {
           {...routeIntentHandlers(item.path)}
         >
           <Icon name={item.icon} size={19} className={cn('shrink-0', active ? 'text-brand-600' : 'text-ink-400')} />
-          <span className={cn('w-full px-1 text-center text-micro leading-tight [overflow-wrap:anywhere]', active ? 'font-medium text-brand-600' : 'text-ink-400')}>{item.label}</span>
+          <span className={cn('w-full text-center text-micro leading-tight [overflow-wrap:anywhere]', active ? 'font-medium text-brand-600' : 'text-ink-400')}>{item.label}</span>
         </Link>
       </div>
     );
@@ -149,7 +149,7 @@ function MobileDockContent({ onHeightChange }: MobileDockProps) {
               aria-current={moreActive ? 'page' : undefined}
             >
               <Icon name="menu" size={19} className={cn('shrink-0', moreActive ? 'text-brand-600' : 'text-ink-400')} />
-              <span className={cn('w-full px-1 text-center text-micro leading-tight [overflow-wrap:anywhere]', moreActive ? 'font-medium text-brand-600' : 'text-ink-400')}>{t('更多')}</span>
+              <span className={cn('w-full text-center text-micro leading-tight [overflow-wrap:anywhere]', moreActive ? 'font-medium text-brand-600' : 'text-ink-400')}>{t('更多')}</span>
             </button>
           </div>
         </motion.div>

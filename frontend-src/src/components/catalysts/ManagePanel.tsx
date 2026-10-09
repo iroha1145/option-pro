@@ -176,7 +176,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
           }
         }
       } catch (e) {
-        toast.error(__t('{label}未受理', { label }), errText(e));
+        toast.error(__t('{label}未能提交', { label }), errText(e));
       } finally {
         if (busyRef.current === `r-${op}`) {
           busyRef.current = null;
@@ -208,7 +208,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
           },
         );
       } catch (e) {
-        toast.error(__t('{label}未受理', { label }), errText(e));
+        toast.error(__t('{label}未能提交', { label }), errText(e));
       } finally {
         if (busyRef.current === `w-${action}`) {
           busyRef.current = null;
@@ -303,7 +303,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
           <span className="hidden items-center gap-1.5 tnum text-micro text-ink-400 sm:flex">
             {/* worker 健康是静态状态，不脉冲 */}
             <Led tone={worker.healthy ? 'ok' : 'danger'} className="size-1.5" />
-            worker {worker.healthy ? __t('正常') : worker.status}
+            {__t('后台任务')} {worker.healthy ? __t('正常') : worker.status}
           </span>
         )}
       </div>
@@ -361,7 +361,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
                 />
               </div>
               <p className="text-micro text-ink-400">
-                {__t('雷达默认排序只影响未指定排序或选择跟随默认的请求。')}
+                {__t('雷达默认排序只在页面未指定排序、或选了「跟随默认」时生效。')}
               </p>
               <div className="flex items-center justify-end gap-2 pt-1">
                 <button

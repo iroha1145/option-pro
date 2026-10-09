@@ -67,7 +67,7 @@ export default function SignalList({
         <div className="flex flex-col items-center rounded-md border border-line bg-card-warm px-4 py-8 text-center">
           <Icon name="doc-quote" size={26} className="text-ink-300" />
           <p className="mt-3 text-body-s font-medium text-ink-600">{t('信号数据读取失败')}</p>
-          <p className="mt-1 text-caption text-ink-400">{t('是读取失败，不代表该股没有信号')}</p>
+          <p className="mt-1 text-caption text-ink-400">{t('只是读取失败，不代表该股没有信号')}</p>
           <button
             onClick={() => {
               signalsQ.refresh();

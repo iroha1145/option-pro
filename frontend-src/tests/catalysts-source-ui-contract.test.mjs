@@ -164,7 +164,7 @@ test('采集状态只接受后端明确的启用与成功字段', async () => {
   assert.equal(status.streams[1].ok, true);
   assert.deepEqual(
     Array.from(status.streams, (stream) => stream.name),
-    ['新闻获取流', '经济日历流'],
+    ['新闻获取', '经济日历获取'],
   );
   assert.deepEqual(loaded.calls, ['/catalysts/status']);
 });
@@ -187,7 +187,7 @@ test('数据源卡映射真实近24小时条数与新鲜度滞后', async () => 
   const sources = await loaded.exports.catalystsContract.sources();
 
   assert.equal(sources.length, 1);
-  assert.equal(sources[0].source, '新闻获取流');
+  assert.equal(sources[0].source, '新闻获取');
   assert.equal(sources[0].itemsToday, 17);
   assert.equal(sources[0].latencyMs, 90_000);
 
@@ -318,7 +318,7 @@ test('经济日历保留真实实际值，并按日期与时间稳定排序', as
   );
   assert.match(panel, /sort\(\(\[left\], \[right\]\) => left\.localeCompare\(right\)\)/);
   assert.match(panel, /Date\.parse\(left\.scheduledAt\) - Date\.parse\(right\.scheduledAt\)/);
-  assert.equal(panel.includes('尚未取得公布值'), true);
+  assert.equal(panel.includes('尚未获取公布值'), true);
   assert.equal(panel.includes('等待公布'), true);
 });
 

@@ -81,7 +81,7 @@ async function waitDrawingToolbar(page) {
     const rateLimit = stockRateLimits.get(page);
     if (rateLimit?.retryAt != null && Date.now() >= rateLimit.retryAt) {
       const retry = page.getByRole("heading", { name: "请求过于频繁", exact: true })
-        .locator("..").getByRole("button", { name: "重新读取", exact: true });
+        .locator("..").getByRole("button", { name: "重试", exact: true });
       if (await retry.isVisible().catch(() => false)) {
         rateLimit.retryAt = Date.now() + 5_000;
         await retry.click({ timeout: 1_000 }).catch(() => {});
@@ -179,7 +179,7 @@ async function clearTouchedDrawings(page) {
 async function expectDrawingCount(page, n) {
   await expandChart(page);
   if (n === 0) {
-    await expect(page.getByText("当前没有手绘图形").first()).toBeVisible();
+    await expect(page.getByText("暂无手绘图形").first()).toBeVisible();
   }
   await expect(drawingRows(page)).toHaveCount(n);
 }
@@ -564,7 +564,7 @@ test("failed save then retry keeps the local edit", async ({ page }) => {
   await expect(retry).toBeVisible({ timeout: 15_000 });
   await retry.click();
   await expect(drawingRows(page)).toHaveCount(1);
-  await expect(page.getByText("当前没有手绘图形").first()).toBeHidden();
+  await expect(page.getByText("暂无手绘图形").first()).toBeHidden();
 });
 
 test("rapid same-id revision stays serial from the inspector", async ({ page }) => {
@@ -750,7 +750,7 @@ test("clear all removes every drawing in the scope", async ({ page }) => {
   await toolButton(page, "清空手绘").first().click();
   await toolButton(page, "确认清空").first().click();
   await expect(drawingRows(page)).toHaveCount(0);
-  await expect(page.getByText("当前没有手绘图形").first()).toBeVisible();
+  await expect(page.getByText("暂无手绘图形").first()).toBeVisible();
 });
 
 test("auto patterns render from a real technical payload", async ({ page }) => {
