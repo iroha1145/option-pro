@@ -20,6 +20,7 @@ import type {
   CatalystStreamHealth,
   EconomicEvent,
   FocusCycleJob as FixtureFocusCycleJob,
+  FocusEventVerification,
   HotspotGroup,
   HotspotsStatusDetail,
   MarketFocusCycle as FixtureFocusCycle,
@@ -319,6 +320,17 @@ function nFocusJob(
   };
 }
 
+/** 模型写的字符串数组（板块、风险）：去掉空项与首尾空白，不翻译。 */
+function textList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((x): x is string => typeof x === 'string').map((x) => x.trim()).filter(Boolean)
+    : [];
+}
+
+function nFocusVerdict(value: unknown): FocusEventVerification['verdict'] | null {
+  return value === 'supported' || value === 'contradicted' || value === 'unverifiable' ? value : null;
+}
+
 function nCycleRecord(r: Rec): MarketFocusCycle {
   const result = asRec(r.result);
   const legacyStage = pickN(r, 'stage');
@@ -342,6 +354,20 @@ function nCycleRecord(r: Rec): MarketFocusCycle {
     isHistorical: pickS(r, 'verification_status') === 'legacy_unverified' || pickB(r, 'is_historical') === true,
     summary: pickS(result, 'summary_zh', 'market_summary') ?? pickS(r, 'summary') ?? '',
     headline: pickS(result, 'headline_summary'),
+    /* 三段长文本都带上，去重交给卡片（focusText）：生产上它们常常一字不差。 */
+    marketSummary: pickS(result, 'market_summary'),
+    dominantEvents: unwrap(result, 'dominant_events').map(asRec).flatMap((event) => {
+      const summary = pickS(event, 'summary', 'summary_zh')?.trim();
+      return summary
+        ? [{ eventGroupId: pickS(event, 'event_group_id') ?? '', summary, affectedSectors: textList(event.affected_sectors) }]
+        : [];
+    }),
+    /* 公开结果目前不带核实记录；有记录（含未来的 owner 视图）时卡片才显示核实徽标。 */
+    eventVerifications: unwrap(result, 'event_verifications').map(asRec).flatMap((entry) => {
+      const eventGroupId = pickS(entry, 'event_group_id');
+      const verdict = nFocusVerdict(entry.verdict);
+      return eventGroupId && verdict ? [{ eventGroupId, verdict }] : [];
+    }),
     uncertainties: unwrap(result, 'market_uncertainties').length
       ? (result.market_uncertainties as unknown[]).filter((x): x is string => typeof x === 'string')
       : undefined,
@@ -376,6 +402,7 @@ function nCycleRecord(r: Rec): MarketFocusCycle {
             : null,
         insufficientEvidence: insufficient,
         note: pickS(a, 'summary', 'summary_zh', 'note', 'note_zh') ?? '',
+        risks: textList(a.risks),
       };
     }),
   };

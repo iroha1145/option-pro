@@ -21,6 +21,7 @@ import * as boundedReadRetry from '../src/lib/boundedReadRetry.ts';
 import * as live from '../src/api/live.ts';
 import * as focusCycleRequest from '../src/components/catalysts/focusCycleRequest.ts';
 import * as analysisErrorText from '../src/components/catalysts/analysisErrorText.ts';
+import * as focusText from '../src/components/catalysts/focusText.ts';
 import * as feedSnapshot from '../src/components/catalysts/feedSnapshot.ts';
 import * as feedPatches from '../src/components/catalysts/feedPatches.ts';
 import * as filters from '../src/components/catalysts/filters.ts';
@@ -832,6 +833,9 @@ function focusHarness({ latest, previous, trigger, poll }) {
     './analysisErrorText': analysisErrorText,
     './bits': { ImpactValue: 'ImpactValue', Led: 'Led' },
     './ConfirmDialog': { default: 'ConfirmDialog' },
+    /* 正文部件各自带展开状态与测量，桩成元素类型；拆条去重用真实实现，好断言喂给部件的内容。 */
+    './FocusDigest': { FocusLead: 'FocusLead', FocusEventList: 'FocusEventList', FocusAssessmentNote: 'FocusAssessmentNote' },
+    './focusText': focusText,
     '../../api/aiBudget.ts': aiBudget,
     '../../api/evidenceSources.ts': evidenceSources,
     '../../i18n/core.ts': i18n,
@@ -1749,6 +1753,65 @@ test('focus normalization keeps saved result sources when the newer attempt fail
   }) });
   const result = await api.catalystsContract.latestFocusCycle();
   assert.equal(result.evidenceSources[0].url, 'https://old.example/');
+});
+
+test('focus normalization keeps dominant events, verdicts, market summary and risks', async () => {
+  const events = ['（一）公司类事件：甲公司宣布收购。推断：影响有限。', '（二）宏观类事件：通胀回落。需注意：数据可能修正。'];
+  const joined = events.join('\n');
+  const { api } = loadCatalystApi({ get: () => ({
+    cycle: { cycle_id: 'verified', status: 'completed', verification_status: 'verified', result: {
+      title_zh: '市场热点分析', headline_summary: joined, summary_zh: joined, market_summary: joined,
+      dominant_events: [
+        { event_group_id: 'evt_a', summary: events[0], affected_sectors: ['半导体', ' ', 7, '数据中心'] },
+        { event_group_id: 'evt_b', summary: events[1], affected_sectors: [] },
+        { event_group_id: 'evt_empty', summary: '   ', affected_sectors: ['能源'] },
+        null,
+      ],
+      event_verifications: [
+        { event_group_id: 'evt_a', verdict: 'supported' },
+        { event_group_id: 'evt_b', verdict: 'guess' },
+        { verdict: 'contradicted' },
+      ],
+      focus_ticker_assessments: [{ ticker: 'NVDA', catalyst_bias: 40, confidence: 70, horizon: 'days', summary: '订单能见度延长', risks: ['估值偏高', '', 3], insufficient_evidence: false }],
+    } },
+  }) });
+  const result = await api.catalystsContract.latestFocusCycle();
+  assert.equal(result.marketSummary, joined);
+  assert.deepEqual(JSON.parse(JSON.stringify(result.dominantEvents)), [
+    { eventGroupId: 'evt_a', summary: events[0], affectedSectors: ['半导体', '数据中心'] },
+    { eventGroupId: 'evt_b', summary: events[1], affectedSectors: [] },
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(result.eventVerifications)), [{ eventGroupId: 'evt_a', verdict: 'supported' }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(result.assessments[0].risks)), ['估值偏高']);
+});
+
+test('focus card hands deduplicated events to the digest parts instead of printing the summary twice', async () => {
+  const events = Array.from({ length: 10 }, (_, i) => `（${i + 1}）第${i + 1}家公司宣布交易。已证实：公告一致。推断：影响有限。`);
+  const joined = events.join('\n');
+  const h = focusHarness({
+    latest: () => cycle({
+      dominantEvent: '市场热点分析', headline: joined, summary: joined, marketSummary: joined,
+      dominantEvents: events.slice(0, 8).map((summary, i) => ({ eventGroupId: `evt_${i}`, summary, affectedSectors: ['半导体'] })),
+      eventVerifications: [{ eventGroupId: 'evt_0', verdict: 'contradicted' }],
+      assessments: [{ ticker: 'NVDA', name: '', direction: 'bullish', catalystBias: 2, confidence: 0.7, horizon: 'days', insufficientEvidence: false, note: '订单能见度延长', risks: ['估值偏高'] }],
+    }),
+    trigger: () => focusJob(),
+    poll: () => focusJob(),
+  });
+  h.mount();
+  await settle();
+  const tree = h.tree();
+  assert.equal(findNode(tree, (node) => node.type === 'FocusLead'), null, '总摘要全部是事件拼成的，不再另出导语');
+  const list = findNode(tree, (node) => node.type === 'FocusEventList');
+  assert.equal(list.props.events.length, 8);
+  assert.equal(list.props.extraEvents.length, 2);
+  assert.equal(list.props.events[0].verdict, 'contradicted');
+  assert.doesNotMatch(textOf(tree), /第1家公司宣布交易/, '长文本不再整段堆在卡片里');
+  const note = findNode(tree, (node) => node.type === 'FocusAssessmentNote');
+  assert.equal(note.props.note, '订单能见度延长');
+  assert.deepEqual(note.props.risks, ['估值偏高']);
+  assert.match(textOf(tree), /逐股评估/);
+  h.unmount();
 });
 
 test('unknown news submission does not offer forced retry', async () => {

@@ -91,6 +91,12 @@ export const CATALYSTS: Dict = {
   '· 生成': ['· generated', '· 生成'],
   '· 样本': ['· sample', '· サンプル'],
   '置信': ['Confidence', '信頼度'],
+  /* 热点追踪正文（FocusDigest.tsx）：主导事件、核实结论、折叠的其余事件 */
+  '主导事件': ['Key events', '主要イベント'],
+  '已证实': ['Confirmed', '裏付けあり'],
+  '有矛盾': ['Contradicted', '矛盾あり'],
+  '无法核实': ['Unverifiable', '確認できず'],
+  '另有 {n} 条事件': ['{n} more event||{n} more events', 'ほか {n} 件のイベント'],
   '完成后自动刷新': ["Refreshes automatically when done", '完了後に自動で再読み込みされます'],
   '稍后刷新页面可继续查看结果': [
     'Refresh the page later to see the result',
