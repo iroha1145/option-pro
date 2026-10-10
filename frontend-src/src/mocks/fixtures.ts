@@ -440,7 +440,7 @@ export function getStockSignals(ticker: string): Signal[] {
   return makeSignals(new Rng(61200 + i * 41));
 }
 
-/* ---------------- 详情抽屉扩展（stock-detail 代理；契约对齐 §stocks/signals） ---------------- */
+/* ---------------- 详情抽屉扩展（mock 信号池；页面读 /api/signals/stock/{t}） ---------------- */
 
 /** 代码池内是否存在该标的（mock 下用于 404 判定） */
 export function hasTicker(ticker: string): boolean {

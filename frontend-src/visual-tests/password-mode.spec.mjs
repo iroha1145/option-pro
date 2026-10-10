@@ -77,13 +77,11 @@ function responseFor(pathname) {
     };
   }
   if (pathname === "/api/earnings/upcoming") return { earnings: [] };
-  if (pathname === "/api/options/unusual") return { results: [], attempted: 0, as_of: NOW };
   // 新 Watchlist 页额外轮询的两个公共只读端点（旧 spec 无；形状按契约信封给最小值）
   if (pathname === "/api/signals/market") return { by_type: [], total_today: 0 };
   if (pathname === "/api/strength/market") return {};
   if (pathname === "/api/stocks/NVDA") return { ticker: "NVDA", price: 142.35, change_percent: 0.85, volume: 48_000_000, market_cap: 3_500_000_000_000 };
   if (pathname === "/api/stocks/NVDA/chart") return { bars: [{ t: NOW, o: 140, h: 143, l: 139, c: 142.35, v: 48_000_000 }], as_of: NOW, last_bar_at: NOW, exchange_timezone: "America/New_York" };
-  if (pathname === "/api/stocks/NVDA/signals") return { signals: [] };
   if (pathname === "/api/ai/status") {
     return {
       enabled: true,
@@ -201,7 +199,6 @@ function responseFor(pathname) {
       tasks: ["focus_refresh", "strength_refresh", "breakout_refresh", "macro_conditions", "retention"].map(task_name => ({ task_name, enabled: true })),
     };
   }
-  if (pathname === "/api/worker/actions") return { items: [] };
   return {};
 }
 
