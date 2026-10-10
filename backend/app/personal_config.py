@@ -29,6 +29,10 @@ HOURLY_ANALYSIS_TIMES_ET = tuple(f"{hour:02d}:00" for hour in range(24))
 #: a literal so the config layer never imports the services layer; the two are
 #: asserted equal in tests.
 MACRO_SCORING_VERSION = "optix-macro-score-v1"
+#: Mirror of the largest ``app.services.ai_jobs.runtime.token_reservation`` over
+#: every job type and job model (a Luna news task without an article body).
+#: Kept as a literal for the same reason; the two are asserted equal in tests.
+LARGEST_TASK_TOKEN_RESERVATION = 1_050_000
 _PRIVATE_NETWORK_ENVELOPES = tuple(
     ipaddress.ip_network(value)
     for value in (
@@ -531,6 +535,24 @@ class PersonalConfig(StrictConfigModel):
     macro: MacroConfig = Field(default_factory=MacroConfig)
     market_brief: MarketBriefConfig = Field(default_factory=MarketBriefConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
+
+    @model_validator(mode="after")
+    def token_limit_admits_the_largest_task(self) -> "PersonalConfig":
+        # Without a shared dollar budget the daily token limit gates every
+        # submission; a limit below one task's reservation would mark every
+        # such task budget_blocked the moment it is submitted.
+        if (
+            self.model_budget.daily_budget_usd == 0
+            and self.ai.daily_token_limit < LARGEST_TASK_TOKEN_RESERVATION
+        ):
+            raise ValueError(
+                f"ai.daily_token_limit {self.ai.daily_token_limit} is below the largest "
+                f"single-task token reservation {LARGEST_TASK_TOKEN_RESERVATION}: with "
+                "model_budget.daily_budget_usd = 0 such tasks are budget_blocked on "
+                "every submission; raise the limit to at least "
+                f"{LARGEST_TASK_TOKEN_RESERVATION} or set a shared budget"
+            )
+        return self
 
     @property
     def catalyst_sync_enabled(self) -> bool:

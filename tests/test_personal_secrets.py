@@ -19,6 +19,11 @@ from app.access import owner_password_hash_is_valid
 from app.tools import personal_secrets
 from app import runtime_environment
 
+# spawn 子进程要重新导入 app，CI runner 多条流水线并发时常超过 5 秒；
+# 等待放宽到 60 秒，子进程等开始信号也有上限，父进程断言失败时不再留下孤儿进程把步骤挂到超时。
+_SPAWN_READY_TIMEOUT = 60.0
+_SPAWN_START_TIMEOUT = 120.0
+
 
 def _set_stdin(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
     monkeypatch.setattr(personal_secrets.sys, "stdin", io.StringIO(value + "\n"))
@@ -54,7 +59,9 @@ def _process_secret_mutation(
     results,
 ) -> None:
     ready.set()
-    start.wait()
+    if not start.wait(timeout=_SPAWN_START_TIMEOUT):
+        done.set()
+        return
     try:
         personal_secrets._mutate_secret(Path(path_text), key, value)
     except BaseException as exc:
@@ -198,8 +205,10 @@ def test_secret_cross_process_lock_blocks_until_the_full_transaction_finishes(
 
     with personal_secrets._exclusive_secret_lock(path):
         process.start()
-        assert ready.wait(timeout=5)
-        start.set()
+        try:
+            assert ready.wait(timeout=_SPAWN_READY_TIMEOUT)
+        finally:
+            start.set()
         time.sleep(0.25)
         assert done.is_set() is False
         assert process.is_alive()
@@ -238,24 +247,31 @@ def test_concurrent_set_and_remove_preserve_every_independent_update(
     processes = []
     ready_events = []
     done_events = []
-    for key, value in operations:
-        ready = context.Event()
-        done = context.Event()
-        process = context.Process(
-            target=_process_secret_mutation,
-            args=(str(path), key, value, start, ready, done, results),
-        )
-        process.start()
-        processes.append(process)
-        ready_events.append(ready)
-        done_events.append(done)
-    assert all(event.wait(timeout=5) for event in ready_events)
-    start.set()
-    assert all(event.wait(timeout=10) for event in done_events)
-    for process in processes:
-        process.join(timeout=5)
-        assert process.exitcode == 0
-    outcomes = [results.get(timeout=2) for _ in operations]
+    try:
+        for key, value in operations:
+            ready = context.Event()
+            done = context.Event()
+            process = context.Process(
+                target=_process_secret_mutation,
+                args=(str(path), key, value, start, ready, done, results),
+            )
+            process.start()
+            processes.append(process)
+            ready_events.append(ready)
+            done_events.append(done)
+        assert all(event.wait(timeout=_SPAWN_READY_TIMEOUT) for event in ready_events)
+        start.set()
+        assert all(event.wait(timeout=30) for event in done_events)
+        for process in processes:
+            process.join(timeout=10)
+            assert process.exitcode == 0
+        outcomes = [results.get(timeout=2) for _ in operations]
+    finally:
+        start.set()
+        for process in processes:
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=5)
     assert all(outcome[0] is True for outcome in outcomes), outcomes
 
     values = dotenv_values(path)

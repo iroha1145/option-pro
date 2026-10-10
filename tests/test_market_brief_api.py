@@ -78,7 +78,10 @@ HISTORY = [
 
 
 class FakeStore:
-    def __init__(self, latest: dict, *, runs_today: int = 0) -> None:
+    def __init__(self, latest: dict, *, runs_today: int = 0, root: Path | None = None) -> None:
+        # The default personal config tracks the shared model budget, which
+        # reads the brief run directory.
+        self.root = root
         self.latest = latest
         self.runs_today = runs_today
         self.latest_calls: list[dict] = []
@@ -132,8 +135,8 @@ def _login(client: TestClient) -> None:
 
 
 @pytest.fixture
-def store(monkeypatch: pytest.MonkeyPatch) -> FakeStore:
-    fake = FakeStore(SAMPLE)
+def store(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FakeStore:
+    fake = FakeStore(SAMPLE, root=tmp_path / "market-brief")
     monkeypatch.setattr(market_brief_api, "_store", lambda: fake)
     monkeypatch.setattr(market_brief_api, "_key_configured", lambda: True)
     monkeypatch.setattr(
@@ -396,6 +399,10 @@ def test_owner_status_reports_schedule_queue_and_daily_runs(store: FakeStore) ->
         response = client.get("/api/market-brief/status")
     assert response.status_code == 200
     payload = response.json()
+    # The repository default tracks the shared model budget without enforcing it.
+    shared_budget = payload.pop("shared_budget")
+    assert shared_budget["budget_mode"] == "tracking"
+    assert shared_budget["budget_enforced"] is False
     assert payload == {
         "enabled": True,
         "configured": True,
@@ -417,7 +424,6 @@ def test_owner_status_reports_schedule_queue_and_daily_runs(store: FakeStore) ->
         "cooldown_seconds": 600.0,
         "daily_runs": 2,
         "daily_max_runs": 6,
-        "shared_budget": None,
     }
     # 次数口径是 UTC 日历日。
     assert store.runs_on_days[-1] == datetime.now(timezone.utc).date()

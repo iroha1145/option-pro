@@ -1187,10 +1187,13 @@ def test_common_simplified_finance_vocabulary_is_not_flagged_traditional():
             ),
         ),
         (
+            # 2026-10-10 output ceiling 65,536 (a resource policy change, not
+            # a validator change); the previous d0e6936d identity stays
+            # current through runtime._IDENTITY_PREDECESSORS.
             "news_impact",
             (
                 "news_impact_zh_cn_v6",
-                "d0e6936d8749cc96ed7fa8b3bf07bc64bd4cc1f5fb70d18ec0b0fbe3c35576fe",
+                "e2f660481a77543a7a020798cea014e6c8b8298b78a0f89d3e7e507046fc6c2e",
             ),
         ),
         (

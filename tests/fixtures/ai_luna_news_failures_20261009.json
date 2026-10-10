@@ -1,0 +1,2613 @@
+{
+ "luna_news": [
+  {
+   "job_id": "aij_207cf6755a114686bac8a6d219427013",
+   "model": "gpt-5.6-luna",
+   "payload": {
+    "allowed_tickers": [],
+    "analysis_revision": 1,
+    "article_reason": "http_403",
+    "article_status": "unavailable",
+    "change_sequence": 205688,
+    "content_hash": "f1f18ac99c977ef97eb0259936549f2d62a94b08e07341ca19786d639bfc3368",
+    "fetched_at": "2026-10-09T12:41:20.546679Z",
+    "news_id": 194518,
+    "published_at": "2026-10-09T12:38:34Z",
+    "source": "seekingalpha/breaking",
+    "source_count": 1,
+    "source_ticker_hints": [
+     "PRU"
+    ],
+    "sources": [
+     "seekingalpha/breaking"
+    ],
+    "summary": "[PRU]",
+    "title": "Prudential still sees ~$1B impact on pretax adjusted operating income from POJ suspension",
+    "url": "https://seekingalpha.com/news/4651723-prudential-still-sees-1b-impact-on-pretax-adjusted-operating-income-from-poj-suspension?feed_item_type=news"
+   },
+   "production_error": "Value error, english_prose_not_allowed: 'sec.gov'",
+   "prompt_version": "news-impact-zh-cn-v7",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://seekingalpha.com/news/4651723-prudential-still-sees-1b-impact-on-pretax-adjusted-operating-income-from-poj-suspension"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/1137774/000119312526418407/d11107dex991.htm"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://arxiv.org/abs/1304.0490"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.tradingview.com/news/seekingalpha%3A5ee5d7fb9094b%3A0-prudential-still-sees-1b-impact-on-pretax-adjusted-operating-income-from-poj-suspension/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://earningscalls.dev/transcripts/prudential-financial-inc_pru_earnings_call_transcript_2026-10-09"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://ainvestor.biz/stock/PRU"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://s203.q4cdn.com/245412310/files/doc_events/2026/04/508_2026_Prudential-of-Japan-Update-Call-Transcript_04212026_Final.pdf"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/1137774/000113777426000176/pru-20260630.htm"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://finance.yahoo.com/markets/stocks/articles/prudential-sees-1-3b-hit-140202466.html"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://investor.prudential.com/financials/sec-filings/content/0001193125-26-166839/0001193125-26-166839.pdf"
+     }
+    ],
+    "id": "resp_0786efbf346f1088006ac92300552887d1a0880401e0f0e0f4",
+    "model": "gpt-5.6-luna",
+    "openai_web_calls": [
+     {
+      "action": "search",
+      "id": "ws_0786efbf346f1088006ac92304264c87d1a424bc6176a066ac",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://arxiv.org/abs/1304.0490"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/news/4651723-prudential-still-sees-1b-impact-on-pretax-adjusted-operating-income-from-poj-suspension"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.tradingview.com/news/seekingalpha%3A5ee5d7fb9094b%3A0-prudential-still-sees-1b-impact-on-pretax-adjusted-operating-income-from-poj-suspension/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1137774/000119312526418407/d11107dex991.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://earningscalls.dev/transcripts/prudential-financial-inc_pru_earnings_call_transcript_2026-10-09"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://ainvestor.biz/stock/PRU"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://s203.q4cdn.com/245412310/files/doc_events/2026/04/508_2026_Prudential-of-Japan-Update-Call-Transcript_04212026_Final.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1137774/000113777426000176/pru-20260630.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://finance.yahoo.com/markets/stocks/articles/prudential-sees-1-3b-hit-140202466.html"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://investor.prudential.com/financials/sec-filings/content/0001193125-26-166839/0001193125-26-166839.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1137774/000113777426000170/exhibit991-2q26earningspre.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://investor.prudential.com/financials/sec-filings/content/0001137774-26-000170/0001137774-26-000170.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://investor.prudential.com/financials/sec-filings/content/0001137774-26-000170/exhibit991-2q26earningspre.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://investor.prudential.com/financials/sec-filings/content/0001137774-26-000170/exhibit992-2q26qfs.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://s203.q4cdn.com/245412310/files/doc_financials/2026/q1/1Q26-Earnings-Call-Presentation.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://investor.prudential.com/news/news-details/2026/Prudential-of-Japan-Extends-Voluntary-Sales-Suspension-by-an-Additional-180-Days/default.aspx"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://investor.prudential.com/financials/sec-filings/content/0001137774-26-000012/exhibit991-4q25earningspre.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/HollowPointTrading/comments/1x1q6ia/intuit_operating_income_rose_but_the_tax_line/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/HollowPointTrading/comments/1x1p1n1/aon_a_weaker_quarter_a_stronger_first_half_cash/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/japanfintech/comments/1tweckp/prudential_life_japan_net_income_halves_amid/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/HollowPointTrading/comments/1x0ypwy/rlis_october_earnings_test_look_inside_the/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/TradeVerseNetwork/comments/1wy74ln/premarket_movers_mon_oct_5_2026_sources_checked/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/SECWatch/comments/1qdwne5/prudential_financial_pru_flags_q4_income_below/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/CFP/comments/1fzu2pp"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/edgar_news/comments/1oftxe1"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/SECFilingsAI/comments/1okcc9d"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/edgar_news/comments/1oftwuu"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/SECFilingsAI/comments/1ml6cmd"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/SECFilingsAI/comments/1mefp9y"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "open_page",
+      "id": "ws_0786efbf346f1088006ac92308091087d1bb5dd938401d4c31",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://www.sec.gov/Archives/edgar/data/1137774/000119312526418407/d11107dex991.htm"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "search",
+      "id": "ws_0786efbf346f1088006ac923091b2087d19fcee71466c3700c",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://investor.prudential.com/financials/quarterly-results"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1137774/000119312504206214/dex990.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/96021/000009602126000039/a2026syyars.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/108516/000119312526348735/2026_annual_report.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1534504/000119312526394108/0001193125-26-394108-index.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/895419/000089541926000068/a2026annualreport.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/87347/000119312526315068/d122193dex99.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1377936/000121390026107199/0001213900-26-107199-index.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1009001/000119312526326768/d125942dex992.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/765880/000162828026052608/ex99106302026.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://investor.prudential.com/financials/sec-filings/content/0001137774-26-000170/exhibit991-2q26earningspre.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1819848/000181984826000315/joby-2026xars.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://investor.prudential.com/news/detail/105/prudential-financial-inc-announces-full-year-and-fourth-quarter-2025-results"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/2125567/000121390026078382/0001213900-26-078382-index.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1378140/000149315226046028/0001493152-26-046028-index.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/19617/000162828026023927/annualreport-2025.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/868675/000110465926088973/tu-20260630xex99d2.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/821189/000082118926000147/0000821189-26-000147-index.htm"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "open_page",
+      "id": "ws_0786efbf346f1088006ac9230cc3e887d1b1fd023192f75633",
+      "sources": [],
+      "status": "searching"
+     }
+    ],
+    "output_text": "{\"overall_sentiment\":-68,\"affected_commodities\":[],\"affected_sectors\":[\"日本人寿保险\",\"保险与金融服务\"],\"confidence\":78,\"headline_summary\":\"保德信金融仍预计，保德信日本（POJ）暂停新业务销售将在2026年至2027年合计拖累税前调整后营业收入约10亿美元；同日监管披露显示，POJ暂停招揽新业务的期限延长至2027年1月31日。([seekingalpha.com](https://seekingalpha.com/news/4651723-prudential-still-sees-1b-impact-on-pretax-adjusted-operating-income-from-poj-suspension?utm_source=openai))\",\"causal_summary\":\"事实：日本金融厅将POJ不得招揽新业务的暂停期限延长至2027年1月31日，并对直布罗陀人寿的生活顾问渠道实施截至同日的部分业务暂停，同时要求相关日本业务提交整改计划。([sec.gov](https://www.sec.gov/Archives/edgar/data/1137774/000119312526418407/d11107dex991.htm)) 可能传导：暂停期延长会限制新单销售，并可能增加整改、客户服务及业务维持成本，从而压低保德信金融2026年至2027年的税前调整后营业收入。行业层面主要体现为单一大型寿险集团的监管与运营风险，暂不足以推断整个保险行业出现同等幅度的盈利冲击。\",\"insufficient_context\":true,\"classification\":\"bearish\",\"affected_stocks\":[],\"market_relevance\":68,\"uncertainty_notes\":[\"未能取得输入链接的原始正文；输入资料标注原文因HTTP 403不可用，因此未声称读过该文章全文。\",\"已通过美国证券交易委员会同日监管披露核验到同一事件，包括POJ暂停期限延长、直布罗陀人寿部分渠道暂停及整改命令。([sec.gov](https://www.sec.gov/Archives/edgar/data/1137774/000119312526418407/d11107dex991.htm))\",\"约10亿美元的影响金额来自输入标题及同日检索到的新闻摘要；已取得的监管披露正文主要确认监管措施，未展示该金额的完整年度拆分，也无法据此确认是否包含直布罗陀人寿部分影响。([seekingalpha.com](https://seekingalpha.com/news/4651723-prudential-still-sees-1b-impact-on-pretax-adjusted-operating-income-from-poj-suspension?utm_source=openai))\"],\"content_hash\":\"f1f18ac99c977ef97eb0259936549f2d62a94b08e07341ca19786d639bfc3368\",\"key_factors\":[\"POJ暂停招揽新业务的期限延长至2027年1月31日。([sec.gov](https://www.sec.gov/Archives/edgar/data/1137774/000119312526418407/d11107dex991.htm))\",\"直布罗陀人寿的生活顾问渠道也受到截至2027年1月31日的部分业务暂停影响。([sec.gov](https://www.sec.gov/Archives/edgar/data/1137774/000119312526418407/d11107dex991.htm))\",\"输入标题称，暂停事项对2026年至2027年税前调整后营业收入的累计影响约为10亿美元；该金额的完整计算口径尚未从输入文章正文中核实。([seekingalpha.com](https://seekingalpha.com/news/4651723-prudential-still-sees-1b-impact-on-pretax-adjusted-operating-income-from-poj-suspension?utm_source=openai))\"],\"news_id\":194518,\"summary_zh\":\"新闻标题称，保德信金融仍预计，保德信日本（POJ）暂停新业务销售将使2026年至2027年的税前调整后营业收入减少约10亿美元。由于输入文章返回HTTP 403未取得正文；同日监管披露确认，POJ暂停期限延长至2027年1月31日。\",\"change_sequence\":205688,\"output_language\":\"zh-CN\",\"title_zh\":\"保德信金融仍预计，POJ暂停将拖累税前调整后营业收入约10亿美元\"}",
+    "provider": "openai",
+    "stop_reason": "completed",
+    "terminal_error": null,
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": null,
+     "cached_input_tokens": 5711,
+     "code_execution_requests": 0,
+     "input_tokens": 25597,
+     "output_tokens": 4898,
+     "reasoning_tokens": 4260,
+     "total_tokens": 30495,
+     "web_fetch_requests": null,
+     "web_search_requests": null
+    }
+   },
+   "schema_version": "news_impact_zh_cn_v6"
+  },
+  {
+   "job_id": "aij_dab5eee7274f4e7a9d37caa29401d88f",
+   "model": "gpt-5.6-luna",
+   "payload": {
+    "allowed_tickers": [
+     "PNC"
+    ],
+    "analysis_revision": 1,
+    "article_reason": "http_403",
+    "article_status": "unavailable",
+    "change_sequence": 205687,
+    "content_hash": "45106e368428bfe9585262e99da4ce42d129afb309a869781e824dd2c4cf2503",
+    "fetched_at": "2026-10-09T12:41:20.546679Z",
+    "news_id": 194517,
+    "published_at": "2026-10-09T12:39:35Z",
+    "source": "seekingalpha/breaking",
+    "source_count": 1,
+    "source_ticker_hints": [
+     "PNC"
+    ],
+    "sources": [
+     "seekingalpha/breaking"
+    ],
+    "summary": "[PNC]",
+    "title": "PNC Financial to redeem all $1.25B of fixed-to-floating-rate senior notes",
+    "url": "https://seekingalpha.com/news/4651725-pnc-financial-to-redeem-all-125b-of-fixed-to-floating-rate-senior-notes?feed_item_type=news"
+   },
+   "production_error": "Value error, english_prose_not_allowed: 'SOFR'",
+   "prompt_version": "news-impact-zh-cn-v7",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://pnc.mediaroom.com/2026-10-09-PNC-Announces-Redemption-of-6-615-Fixed-Rate-Floating-Rate-Senior-Notes-Due-October-20%2C-2027"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/713676/000162828023034514/pncfsg-fwp101723.htm"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/35527/000003552725000083/fitb-12312024x10xkannualre.pdf"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.tradingview.com/news/seekingalpha%3A586b14a33094b%3A0-pnc-financial-to-redeem-all-1-25b-of-fixed-to-floating-rate-senior-notes/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/713676/000162828026036970/pncfsg-pricingtermsheetx52.htm"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/713676/000071367626000042/exhibit43-3nc2fxdxtoxflrfo.htm"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/713676/000162828026063770/pnc-20260929.htm"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/713676/000071367626000042/pnc-20260520.htm"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/713676/000162828026053170/pnc-20260630.htm"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/713676/000162828026048500/pncfsg-pricingtermsheetx71.htm"
+     }
+    ],
+    "id": "resp_0eddafb3971655f7006ac922b798d887d1aa29f32d4ac9c0dc",
+    "model": "gpt-5.6-luna",
+    "openai_web_calls": [
+     {
+      "action": "search",
+      "id": "ws_0eddafb3971655f7006ac922bc172487d1adaa264f801c52fd",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/35527/000003552725000083/fitb-12312024x10xkannualre.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.tradingview.com/news/seekingalpha%3A586b14a33094b%3A0-pnc-financial-to-redeem-all-1-25b-of-fixed-to-floating-rate-senior-notes/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/713676/000162828026036970/pncfsg-pricingtermsheetx52.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/713676/000071367626000042/exhibit43-3nc2fxdxtoxflrfo.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/713676/000162828026063770/pnc-20260929.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/713676/000071367626000042/pnc-20260520.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/713676/000162828026053170/pnc-20260630.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/713676/000162828026048500/pncfsg-pricingtermsheetx71.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/713676/000162828026037096/pncfsg-dualxtranche3nc2sen.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.secinfo.com/d1HM3n.N1477.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1747079/000174707926000030/a2025balyannualreport_ars.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/713676/000162828026048384/pncfsg-3xtrancheseniorx11n.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/35527/000003552726000129/fitb-12312025x10xkxfinalnoa.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/713676/000071367624000030/pnc2023annualreport.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/713676/000071367626000038/pnc-20260331.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/35527/000003552724000105/annualreportfitb2023.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1645590/000164559026000021/fy25arsfiling.pdf"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "search",
+      "id": "ws_0eddafb3971655f7006ac922beb0bc87d1a0cfa96e2bf2ad46",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://investor.pnc.com/sec-filings/all-sec-filings/content/0000713676-23-000079/0000713676-23-000079.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://pnc.mediaroom.com/2026-10-09-PNC-Announces-Redemption-of-6-615-Fixed-Rate-Floating-Rate-Senior-Notes-Due-October-20%2C-2027"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/713676/000162828023034514/pncfsg-fwp101723.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://investor.pnc.com/sec-filings/all-sec-filings/content/0000713676-23-000075/0000713676-23-000075.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/713676/000071367626000042/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/713676/000162828026063770/pnc-20260929.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/713676/000071367623000075/exhibit43-globalnote1.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/713676/000071367626000020/a2025ex4-11xdescriptionofs.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/713676/000162828026063770/0001628280-26-063770-index.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://in.marketscreener.com/news/the-pnc-financial-services-group-inc-announces-redemption-of-6-615-fixed-rate-floating-rate-senio-ce785ddcd880fe27"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/713676/000162828026048244/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/713676/000162828026037096/pncfsg-dualxtranche3nc2sen.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://investor.pnc.com/sec-filings/all-sec-filings/content/0001628280-23-034557/0001628280-23-034557.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://stockanalysis.com/stocks/pnc/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/713676/000162828026036970/pncfsg-pricingtermsheetx52.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://investor.pnc.com/sec-filings/all-sec-filings/content/0001628280-23-034514/0001628280-23-034514.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.kgibank.com.tw/zh-tw/-/media/files/kgib/foreign-bond/bd311_-2.pdf"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "open_page",
+      "id": "ws_0eddafb3971655f7006ac922c7454087d1aa927eae99f0dfb4",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://www.sec.gov/Archives/edgar/data/713676/000071367623000075/exhibit43-globalnote1.htm"
+       }
+      ],
+      "status": "completed"
+     }
+    ],
+    "output_text": "{\"overall_sentiment\":3,\"affected_commodities\":[],\"affected_sectors\":[\"银行\",\"金融服务\"],\"confidence\":91,\"headline_summary\":\"2026年10月9日，PNC金融服务集团宣布将于2026年10月20日按本金金额的100%加应计未付利息，赎回全部12.5亿美元、票面利率为6.615%、原定于2027年10月20日到期的固定转浮动利率高级票据；赎回日后停止计息。([pnc.mediaroom.com](https://pnc.mediaroom.com/2026-10-09-PNC-Announces-Redemption-of-6-615-Fixed-Rate-Floating-Rate-Senior-Notes-Due-October-20%2C-2027))\",\"causal_summary\":\"事实：该交易属于在既定可赎回日进行的债务管理操作，公告未披露替代融资安排。可能传导：若新融资或内部资金成本低于被赎回票据的融资成本，未来利息负担和再融资压力可能下降；反之，若以更高成本债务或大量现金替代，净影响可能有限甚至偏负。由于该票据原本即可于2026年10月20日按面值赎回，事件的新增信息含量和短期市场影响预计有限，不能仅凭公告确认实际节省金额。([pnc.mediaroom.com](https://pnc.mediaroom.com/2026-10-09-PNC-Announces-Redemption-of-6-615-Fixed-Rate-Floating-Rate-Senior-Notes-Due-October-20%2C-2027))\",\"insufficient_context\":false,\"classification\":\"neutral\",\"affected_stocks\":[{\"impact_score\":5,\"mechanism\":\"direct_company\",\"ticker\":\"PNC\",\"confidence\":90,\"horizon\":\"days\",\"company\":\"PNC金融服务集团\",\"reason\":\"提前赎回票面利率为6.615%的债务，可能改善负债成本或期限管理；但公告未说明资金来源、替代融资成本及对流动性的影响，且此次赎回发生在原合同约定的可按面值赎回日，股东层面的新增影响预计有限。([pnc.mediaroom.com](https://pnc.mediaroom.com/2026-10-09-PNC-Announces-Redemption-of-6-615-Fixed-Rate-Floating-Rate-Senior-Notes-Due-October-20%2C-2027))\"}],\"market_relevance\":22,\"uncertainty_notes\":[\"输入article因HTTP 403不可用，未取得输入新闻链接正文；已另行检索并核验PNC金融服务集团2026年10月9日公司新闻稿，以下分析不声称读过输入链接正文。([pnc.mediaroom.com](https://pnc.mediaroom.com/2026-10-09-PNC-Announces-Redemption-of-6-615-Fixed-Rate-Floating-Rate-Senior-Notes-Due-October-20%2C-2027))\",\"发行条款显示，该票据在2026年10月20日可按面值赎回；若不赎回，原条款将于该日后进入复合SOFR加1.730%的浮动利率阶段。因此，赎回后的实际融资成本、现金使用情况及资本影响仍未确定。([sec.gov](https://www.sec.gov/Archives/edgar/data/713676/000162828023034514/pncfsg-fwp101723.htm))\",\"检索到的公司新闻稿与输入标题对应同一事件，但未披露赎回资金来源、是否由新债替换，以及对资本充足率、流动性或净利息支出的量化影响。\"],\"content_hash\":\"45106e368428bfe9585262e99da4ce42d129afb309a869781e824dd2c4cf2503\",\"key_factors\":[\"2026年10月9日宣布，2026年10月20日赎回全部12.5亿美元、票面利率为6.615%的固定转浮动利率高级票据；原定到期日为2027年10月20日。([pnc.mediaroom.com](https://pnc.mediaroom.com/2026-10-09-PNC-Announces-Redemption-of-6-615-Fixed-Rate-Floating-Rate-Senior-Notes-Due-October-20%2C-2027))\",\"赎回价格为本金金额的100%加截至2026年10月20日的应计未付利息，赎回日后停止计息。([pnc.mediaroom.com](https://pnc.mediaroom.com/2026-10-09-PNC-Announces-Redemption-of-6-615-Fixed-Rate-Floating-Rate-Senior-Notes-Due-October-20%2C-2027))\",\"原发行条款规定2026年10月20日为按面值可赎回日；若继续存续，随后利率将转为复合SOFR加1.730%。([sec.gov](https://www.sec.gov/Archives/edgar/data/713676/000162828023034514/pncfsg-fwp101723.htm))\",\"新闻稿未披露赎回资金来源、是否同步发行替代债务，以及对流动性、资本或净利息支出的量化影响。([pnc.mediaroom.com](https://pnc.mediaroom.com/2026-10-09-PNC-Announces-Redemption-of-6-615-Fixed-Rate-Floating-Rate-Senior-Notes-Due-October-20%2C-2027))\"],\"news_id\":194517,\"summary_zh\":\"2026年10月9日，PNC金融服务集团宣布将于2026年10月20日按本金金额的100%加应计未付利息，赎回全部12.5亿美元的6.615%固定转浮动利率高级票据。该票据原定于2027年10月20日到期，赎回日后停止计息。输入article因HTTP 403不可用，相关事实由公司同日新闻稿及原发行条款另行核验。([pnc.mediaroom.com](https://pnc.mediaroom.com/2026-10-09-PNC-Announces-Redemption-of-6-615-Fixed-Rate-Floating-Rate-Senior-Notes-Due-October-20%2C-2027))\",\"change_sequence\":205687,\"output_language\":\"zh-CN\",\"title_zh\":\"PNC金融服务集团将赎回全部12.5亿美元固定转浮动利率高级票据\"}",
+    "provider": "openai",
+    "stop_reason": "completed",
+    "terminal_error": null,
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": null,
+     "cached_input_tokens": 5711,
+     "code_execution_requests": 0,
+     "input_tokens": 31852,
+     "output_tokens": 8259,
+     "reasoning_tokens": 7104,
+     "total_tokens": 40111,
+     "web_fetch_requests": 1,
+     "web_search_requests": 2
+    }
+   },
+   "schema_version": "news_impact_zh_cn_v6"
+  },
+  {
+   "job_id": "aij_050b0e36a3b44580ad3a821b74c5d00b",
+   "model": "gpt-5.6-luna",
+   "payload": {
+    "allowed_tickers": [],
+    "analysis_revision": 1,
+    "article_reason": "http_403",
+    "article_status": "unavailable",
+    "change_sequence": 205712,
+    "content_hash": "b77d990da78e008154102b0089d0e18d1fb0930ca6b36790b1cfedc90ac8d9dc",
+    "fetched_at": "2026-10-09T12:55:01.091848Z",
+    "news_id": 194536,
+    "published_at": "2026-10-09T12:40:00Z",
+    "source": "finnhub/BusinessWire",
+    "source_count": 1,
+    "source_ticker_hints": [],
+    "sources": [
+     "finnhub/BusinessWire"
+    ],
+    "summary": "DUBLÍN--(BUSINESS WIRE)--AvaTrade, uno de los principales brókeres de trading online del mundo, ha anunciado hoy que ha alcanzado un acuerdo para adquirir la mayor parte del negocio de FXCM Group, una de las marcas con mayor trayectoria a escala mundial en el trading de divisas y contratos por diferencias (CFD). Fundada en 1999, FXCM fue pionera en el trading de divisas para inversores minoristas y ha construido una base de clientes fieles en todo el mundo durante más de dos décadas. «Nuestra a",
+    "title": "AvaTrade acuerda adquirir la mayor parte del negocio de FXCM y refuerza su posición entre los principales grupos mundiales de trading multiactivo",
+    "url": "http://www.businesswire.com/news/home/20261009420199/es/?feedref=JjAwJuNHiystnCoBq_hl-Rc4vIAVcHHkbDcwJimU8QtrtlakeQ9hNboBqTAWIjTge3KWq9s9jif-UkBjBsFRyYAbRTSLTc1mgvhPlnaBA55M-oupQnbXnhKsYk8RmHF_kAy2gZikaX3QWV6xOvgFlA%3D%3D"
+   },
+   "production_error": "Value error, english_prose_not_allowed: 'businesswire.com'",
+   "prompt_version": "news-impact-zh-cn-v7",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://financefeeds.com/avatrade-agrees-to-acquire-majority-of-fxcm-as-jefferies-exits-brokerage-business/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_fetch",
+      "url": "https://www.businesswire.com/news/home/20261009205647/it/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.reddit.com/r/cryptoinvestor/comments/1wlfwuj/qu%C3%A9_plataformas_ofrecen_trading_de_materias/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.ansa.it/sito/notizie/economia/business_wire/2026/10/09/avatrade-raggiunge-un-accordo-per-acquisire-la-maggior-parte-delle-attivita-di-fxcm_2cab74ca-d0bf-4575-bedd-2bdd18ba7f59.html"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://es.finance.yahoo.com/noticias/avatrade-acuerda-adquirir-negocio-fxcm-124000798.html"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://finance.yahoo.com/markets/currencies/articles/avatrade-acquire-majority-fxcm-business-102900066.html"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.ainalemirate.com/2026/10/09/avatrade-%D8%AA%D8%B3%D8%AA%D8%AD%D9%88%D8%B0-%D8%B9%D9%84%D9%89-%D8%AD%D8%B5%D8%A9-%D8%A7%D9%84%D8%A3%D8%BA%D9%84%D8%A8%D9%8A%D8%A9-%D9%85%D9%86-%D8%A3%D8%B9%D9%85%D8%A7%D9%84-fxcm-%D9%84%D8%AA%D8%B9/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.wallstreetes.com/news/la-compra-de-fxcm-por-avatrade-cierra-la-era-de-jefferies"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://de.finance.yahoo.com/nachrichten/avatrade-vereinbart-%C3%BCbernahme-gro%C3%9Fteils-fxcm-124000264.html"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.gate.com/ar/news/detail/avatrade-acquires-majority-of-fxcms-business-and-brand-on-october-9-24853319"
+     }
+    ],
+    "id": "resp_0a80993f43664bbc006ac921e934d887d1a1cf862f551107ba",
+    "model": "gpt-5.6-luna",
+    "openai_web_calls": [
+     {
+      "action": "search",
+      "id": "ws_0a80993f43664bbc006ac921ecee9c87d191e577e505f353d8",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/cryptoinvestor/comments/1wlfwuj/qu%C3%A9_plataformas_ofrecen_trading_de_materias/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.ansa.it/sito/notizie/economia/business_wire/2026/10/09/avatrade-raggiunge-un-accordo-per-acquisire-la-maggior-parte-delle-attivita-di-fxcm_2cab74ca-d0bf-4575-bedd-2bdd18ba7f59.html"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://es.finance.yahoo.com/noticias/avatrade-acuerda-adquirir-negocio-fxcm-124000798.html"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://finance.yahoo.com/markets/currencies/articles/avatrade-acquire-majority-fxcm-business-102900066.html"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.ainalemirate.com/2026/10/09/avatrade-%D8%AA%D8%B3%D8%AA%D8%AD%D9%88%D8%B0-%D8%B9%D9%84%D9%89-%D8%AD%D8%B5%D8%A9-%D8%A7%D9%84%D8%A3%D8%BA%D9%84%D8%A8%D9%8A%D8%A9-%D9%85%D9%86-%D8%A3%D8%B9%D9%85%D8%A7%D9%84-fxcm-%D9%84%D8%AA%D8%B9/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.wallstreetes.com/news/la-compra-de-fxcm-por-avatrade-cierra-la-era-de-jefferies"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://financefeeds.com/avatrade-agrees-to-acquire-majority-of-fxcm-as-jefferies-exits-brokerage-business/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://de.finance.yahoo.com/nachrichten/avatrade-vereinbart-%C3%BCbernahme-gro%C3%9Fteils-fxcm-124000264.html"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.gate.com/ar/news/detail/avatrade-acquires-majority-of-fxcms-business-and-brand-on-october-9-24853319"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.gate.com/fr/news/detail/EURCHF%2Favatrade-acquires-majority-of-fxcm-as-jefferies-exits-brokerage-24853356"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.tradeinformer.com/?s=Plus500"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.gate.com/id/news/detail/EURCHF%2Favatrade-acquires-majority-of-fxcm-as-jefferies-exits-brokerage-24853356"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.gate.com/ru/news/detail/EURCHF/avatrade-acquires-majority-of-fxcm-as-jefferies-exits-brokerage-24853356"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.avatrade.es/wp-content/uploads/2017/08/New-TCs-BVI-Spanish-PDF-Version.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://avatrade-afectados.es/cnmv.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://futures.avatrade.com/wp-content/uploads/2025/09/tc-futures-en.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.avatrade.cl/wp-content/uploads/2017/08/New-TCs-EU-Spanish-PDF-Version.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://es.wikipedia.org/wiki/AvaTrade"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/vprr/1300/13002650.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/MexicoBursatil/comments/1wnd4et/entend%C3%AD_tarde_la_diferencia_entre_comprar_una/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/CryptoFutures/comments/1vqt7u7/removed/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/FTMO_Forex_Trading/comments/1wldgde/qu%C3%A9_plataformas_permiten_operar_con_m%C3%BAltiples/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/CryptoFutures/comments/1wb0ros/qu%C3%A9_tipo_de_cuenta_de_br%C3%B3ker_recomiendan_para/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://en.wikipedia.org/wiki/FXCM"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "open_page",
+      "id": "ws_0a80993f43664bbc006ac9220a3b4487d1b3169ad435031355",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://financefeeds.com/avatrade-agrees-to-acquire-majority-of-fxcm-as-jefferies-exits-brokerage-business/"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "open_page",
+      "id": "ws_0a80993f43664bbc006ac9220c24ac87d1a7407bf65c670554",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://www.businesswire.com/news/home/20261009205647/it/"
+       }
+      ],
+      "status": "completed"
+     }
+    ],
+    "output_text": "{\"overall_sentiment\":5,\"affected_commodities\":[],\"affected_sectors\":[\"在线交易经纪\",\"零售外汇与CFD交易\",\"金融科技与多资产交易平台\"],\"confidence\":82,\"headline_summary\":\"2026年10月9日，AvaTrade宣布已达成协议，收购FXCM集团大部分业务及品牌，并拟将其纳入AvaTrade集团，以扩大多资产在线交易业务。([businesswire.com](https://www.businesswire.com/news/home/20261009205647/it/))\",\"causal_summary\":\"事实：协议涉及FXCM集团大部分业务及品牌，相关FXCM客户将可接入AvaTrade的交易平台、人工智能工具和多资产产品。可能传导：若交易完成，AvaTrade可能扩大客户基础、品牌覆盖和多资产经纪能力，并推动零售外汇与CFD经纪领域进一步整合；这是基于交易结构的行业推断，不是公告已确认的财务结果。由于交易价格、具体纳入实体和完成时间未明确，暂无法量化对收入、利润或上市公司股票的影响。([businesswire.com](https://www.businesswire.com/news/home/20261009205647/it/))\",\"insufficient_context\":true,\"classification\":\"neutral\",\"affected_stocks\":[],\"market_relevance\":20,\"uncertainty_notes\":[\"输入article因HTTP 403不可用，未取得输入链接的原始正文；另行检索到的是同一事件的商业资讯社意大利语稿件及转载页面，因此不能声称已读到输入链接全文。([businesswire.com](https://www.businesswire.com/news/home/20261009205647/it/))\",\"另行检索的行业媒体指出，财务条款、具体纳入实体和完成时间未披露；商业资讯社稿件也未列出这些细节，因此交易规模、监管安排、客户迁移和财务影响仍不确定。([financefeeds.com](https://financefeeds.com/avatrade-agrees-to-acquire-majority-of-fxcm-as-jefferies-exits-brokerage-business/))\",\"允许股票代码列表为空，因此不映射受影响股票代码，也不列示个股影响。\",\"行业传导判断仅基于已披露的收购范围和产品整合方向，不代表公告确认的业绩变化。\"],\"content_hash\":\"b77d990da78e008154102b0089d0e18d1fb0930ca6b36790b1cfedc90ac8d9dc\",\"key_factors\":[\"交易阶段：已达成收购协议，尚非已完成交割。\",\"交易范围：FXCM集团大部分业务及品牌；公告未进一步列明全部法律实体或资产范围。([businesswire.com](https://www.businesswire.com/news/home/20261009205647/it/))\",\"运营协同：相关FXCM客户可接入AvaTrade交易平台、人工智能工具和多资产产品。([businesswire.com](https://www.businesswire.com/news/home/20261009205647/it/))\",\"行业属性：事件直接涉及在线交易经纪、零售外汇、CFD及多资产交易平台。([businesswire.com](https://www.businesswire.com/news/home/20261009205647/it/))\",\"披露缺口：交易价格、具体纳入实体和完成时间未明确。([financefeeds.com](https://financefeeds.com/avatrade-agrees-to-acquire-majority-of-fxcm-as-jefferies-exits-brokerage-business/))\"],\"news_id\":194536,\"summary_zh\":\"都柏林，2026年10月9日——AvaTrade宣布达成协议，收购FXCM集团大部分业务及其品牌，并将其纳入AvaTrade集团全球架构；相关FXCM客户将可使用AvaTrade的交易平台、人工智能工具和多资产产品。FXCM成立于1999年，长期服务于零售外汇和CFD交易。([businesswire.com](https://www.businesswire.com/news/home/20261009205647/it/))\",\"change_sequence\":205712,\"output_language\":\"zh-CN\",\"title_zh\":\"AvaTrade同意收购FXCM集团大部分业务，巩固其全球多资产交易集团地位\"}",
+    "provider": "openai",
+    "stop_reason": "completed",
+    "terminal_error": null,
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": null,
+     "cached_input_tokens": 5711,
+     "code_execution_requests": 0,
+     "input_tokens": 32020,
+     "output_tokens": 7921,
+     "reasoning_tokens": 7051,
+     "total_tokens": 39941,
+     "web_fetch_requests": 2,
+     "web_search_requests": 1
+    }
+   },
+   "schema_version": "news_impact_zh_cn_v6"
+  },
+  {
+   "job_id": "aij_3d9e7ef9140343d088f05bc9ad30772a",
+   "model": "gpt-5.6-luna",
+   "payload": {
+    "allowed_tickers": [],
+    "analysis_revision": 1,
+    "article_reason": "no_matching_article_body",
+    "article_status": "unavailable",
+    "change_sequence": 205707,
+    "content_hash": "1d0c2cd1640529b8a5e3c0296c496c4c8fa24e020964ce6427d314e096ba5e0c",
+    "fetched_at": "2026-10-09T12:50:39.590055Z",
+    "news_id": 194531,
+    "published_at": "2026-10-09T12:46:00Z",
+    "source": "globenewswire/public_companies",
+    "source_count": 1,
+    "source_ticker_hints": [
+     "SSEA"
+    ],
+    "sources": [
+     "globenewswire/public_companies"
+    ],
+    "summary": "STARRY SEA ACQUISITION CORP (NASDAQ: SSEA) (the “Company”), a blank check company, today announced that its previously announced Extraordinary General Meeting in lieu of an annual general meeting of shareholders (the “Extraordinary General Meeting”) will be postponed from 10:00 a.m. Eastern Time on October 9, 2026 to 9:00 a.m. Eastern Time, on October 19, 2026 to provide the Company with additional time to engage with shareholders.",
+    "title": "STARRY SEA ACQUISITION CORP Announces Postponement of the Extraordinary General Meeting in Lieu of an Annual General Meeting to October 19, 2026 and Extension of Redemption Request Deadline",
+    "url": "https://www.globenewswire.com/news-release/2026/10/09/3378089/0/en/starry-sea-acquisition-corp-announces-postponement-of-the-extraordinary-general-meeting-in-lieu-of-an-annual-general-meeting-to-october-19-2026-and-extension-of-redemption-request-.html"
+   },
+   "production_error": "Value error, english_prose_not_allowed: 'globenewswire.com'",
+   "prompt_version": "news-impact-zh-cn-v7",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "联网核验来源",
+      "type": "web_fetch",
+      "url": "https://www.globenewswire.com/news-release/2026/10/09/3378089/0/en/starry-sea-acquisition-corp-announces-postponement-of-the-extraordinary-general-meeting-in-lieu-of-an-annual-general-meeting-to-october-19-2026-and-extension-of-redemption-request-.html"
+     }
+    ],
+    "id": "resp_0a871c022a29fd8b006ac920c24b5887d1bb6db88dcd475d9d",
+    "model": "gpt-5.6-luna",
+    "openai_web_calls": [
+     {
+      "action": "open_page",
+      "id": "ws_0a871c022a29fd8b006ac920c5121487d1935a964420f6ce35",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://www.globenewswire.com/news-release/2026/10/09/3378089/0/en/starry-sea-acquisition-corp-announces-postponement-of-the-extraordinary-general-meeting-in-lieu-of-an-annual-general-meeting-to-october-19-2026-and-extension-of-redemption-request-.html"
+       }
+      ],
+      "status": "completed"
+     }
+    ],
+    "output_text": "{\"overall_sentiment\":-10,\"affected_commodities\":[],\"affected_sectors\":[\"特殊目的收购公司\"],\"confidence\":90,\"headline_summary\":\"星辰海收购公司将原定于2026年10月9日举行的临时股东大会延期至2026年10月19日，并将赎回申请截止时间延至2026年10月15日；公司称此举是为了争取更多时间与股东沟通。([globenewswire.com](https://www.globenewswire.com/news-release/2026/10/09/3378089/0/en/starry-sea-acquisition-corp-announces-postponement-of-the-extraordinary-general-meeting-in-lieu-of-an-annual-general-meeting-to-october-19-2026-and-extension-of-redemption-request-.html))\",\"causal_summary\":\"已确认事实是会议时间和赎回申请截止时间均被推迟，会议地点、登记日及议案保持不变。可能的传导关系是，公司仍需争取股东支持，延期也为股东评估是否赎回提供了更长时间窗口；但新闻稿未披露投票意向、赎回规模或初始业务合并最终能否完成，因此无法据此确定市场影响方向或幅度。([globenewswire.com](https://www.globenewswire.com/news-release/2026/10/09/3378089/0/en/starry-sea-acquisition-corp-announces-postponement-of-the-extraordinary-general-meeting-in-lieu-of-an-annual-general-meeting-to-october-19-2026-and-extension-of-redemption-request-.html))\",\"insufficient_context\":false,\"classification\":\"neutral\",\"affected_stocks\":[],\"market_relevance\":25,\"uncertainty_notes\":[\"输入数据标注article_status为unavailable，未能取得输入article正文；以下事实来自对输入URL对应的环球通讯社原始新闻稿的另行检索，不代表已取得输入article正文。([globenewswire.com](https://www.globenewswire.com/news-release/2026/10/09/3378089/0/en/starry-sea-acquisition-corp-announces-postponement-of-the-extraordinary-general-meeting-in-lieu-of-an-annual-general-meeting-to-october-19-2026-and-extension-of-redemption-request-.html))\",\"新闻稿未披露股东投票结果、赎回申请数量、初始业务合并延期后的最终可行性或财务影响，因此无法进一步量化市场影响。([globenewswire.com](https://www.globenewswire.com/news-release/2026/10/09/3378089/0/en/starry-sea-acquisition-corp-announces-postponement-of-the-extraordinary-general-meeting-in-lieu-of-an-annual-general-meeting-to-october-19-2026-and-extension-of-redemption-request-.html))\",\"输入allowed_tickers为空，因此未输出个股影响；未将来源中的代码提示转为受影响股票。\"],\"content_hash\":\"1d0c2cd1640529b8a5e3c0296c496c4c8fa24e020964ce6427d314e096ba5e0c\",\"key_factors\":[\"会议由2026年10月9日美国东部时间10:00改至2026年10月19日美国东部时间9:00举行。([globenewswire.com](https://www.globenewswire.com/news-release/2026/10/09/3378089/0/en/starry-sea-acquisition-corp-announces-postponement-of-the-extraordinary-general-meeting-in-lieu-of-an-annual-general-meeting-to-october-19-2026-and-extension-of-redemption-request-.html))\",\"赎回申请截止时间由2026年10月7日17:00延至2026年10月15日17:00；已提交申请的股东可在新截止时间前撤回，之后撤回需获得公司同意。([globenewswire.com](https://www.globenewswire.com/news-release/2026/10/09/3378089/0/en/starry-sea-acquisition-corp-announces-postponement-of-the-extraordinary-general-meeting-in-lieu-of-an-annual-general-meeting-to-october-19-2026-and-extension-of-redemption-request-.html))\",\"会议地点、登记日2026年9月16日及拟审议议案保持不变。([globenewswire.com](https://www.globenewswire.com/news-release/2026/10/09/3378089/0/en/starry-sea-acquisition-corp-announces-postponement-of-the-extraordinary-general-meeting-in-lieu-of-an-annual-general-meeting-to-october-19-2026-and-extension-of-redemption-request-.html))\",\"议案包括允许公司延长完成初始业务合并的期限，公司称延期是为了获得更多时间与股东沟通。([globenewswire.com](https://www.globenewswire.com/news-release/2026/10/09/3378089/0/en/starry-sea-acquisition-corp-announces-postponement-of-the-extraordinary-general-meeting-in-lieu-of-an-annual-general-meeting-to-october-19-2026-and-extension-of-redemption-request-.html))\"],\"news_id\":194531,\"summary_zh\":\"这家特殊目的收购公司宣布，原定于2026年10月9日美国东部时间10:00举行的代替年度股东大会的临时股东大会，将改至2026年10月19日美国东部时间9:00举行，理由是需要更多时间与股东沟通。会议地点、登记日2026年9月16日及议案不变；赎回申请截止时间从2026年10月7日17:00延至2026年10月15日17:00。议案包括允许公司延长完成初始业务合并的期限。([globenewswire.com](https://www.globenewswire.com/news-release/2026/10/09/3378089/0/en/starry-sea-acquisition-corp-announces-postponement-of-the-extraordinary-general-meeting-in-lieu-of-an-annual-general-meeting-to-october-19-2026-and-extension-of-redemption-request-.html))\",\"change_sequence\":205707,\"output_language\":\"zh-CN\",\"title_zh\":\"星辰海收购公司宣布将临时股东大会延期至2026年10月19日，并延长赎回申请截止时间\"}",
+    "provider": "openai",
+    "stop_reason": "completed",
+    "terminal_error": null,
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": null,
+     "cached_input_tokens": 5711,
+     "code_execution_requests": 0,
+     "input_tokens": 9468,
+     "output_tokens": 4686,
+     "reasoning_tokens": 3813,
+     "total_tokens": 14154,
+     "web_fetch_requests": 1,
+     "web_search_requests": 0
+    }
+   },
+   "schema_version": "news_impact_zh_cn_v6"
+  },
+  {
+   "job_id": "aij_5ae986c7e03740b8b8f7245e333def46",
+   "model": "gpt-5.6-luna",
+   "payload": {
+    "allowed_tickers": [],
+    "analysis_revision": 1,
+    "article_reason": "http_403",
+    "article_status": "unavailable",
+    "change_sequence": 205710,
+    "content_hash": "26cbe9d605c328b32a77eacc78dd66711fb65834db1590eaa663e752aea3bb6e",
+    "fetched_at": "2026-10-09T12:51:53.090514Z",
+    "news_id": 194534,
+    "published_at": "2026-10-09T12:46:35Z",
+    "source": "seekingalpha/breaking",
+    "source_count": 1,
+    "source_ticker_hints": [
+     "GTN"
+    ],
+    "sources": [
+     "seekingalpha/breaking"
+    ],
+    "summary": "[GTN]",
+    "title": "Gray Media announces $150M debt redemption, and $75M loan increase",
+    "url": "https://seekingalpha.com/news/4651735-gray-media-announces-150m-debt-redemption-75m-loan-increase?feed_item_type=news"
+   },
+   "production_error": "Value error, english_prose_not_allowed: 'globenewswire.com'",
+   "prompt_version": "news-impact-zh-cn-v7",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.globenewswire.com/de/news-release/2026/10/09/3378073/0/en/gray-announces-75-million-incremental-term-loan-and-redemption-of-150-million-of-2029-notes.html"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.reddit.com/r/SPACs/comments/187dce4"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://graymedia.com/about/terms-of-use/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://static.seekingalpha.com/uploads/sa_presentations/319/97319/original.pdf"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://static.seekingalpha.com/uploads/sa_presentations/175/100175/original.pdf"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://graymedia.com/investor-relations/presentations/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://static.seekingalpha.com/uploads/sa_presentations/326/102326/original.pdf"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://graymedia.com/investor-relations/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://static.seekingalpha.com/uploads/sa_presentations/655/123655/original.pdf"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://static.seekingalpha.com/uploads/sa_presentations/191/99191/original.pdf"
+     }
+    ],
+    "id": "resp_019e7107d3643b1e006ac9207b1f7487d1b90512cd17ebb76d",
+    "model": "gpt-5.6-luna",
+    "openai_web_calls": [
+     {
+      "action": "search",
+      "id": "ws_019e7107d3643b1e006ac9207ddd1087d18f87129c60091c61",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/SPACs/comments/187dce4"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.globenewswire.com/de/news-release/2026/10/09/3378073/0/en/gray-announces-75-million-incremental-term-loan-and-redemption-of-150-million-of-2029-notes.html"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://graymedia.com/about/terms-of-use/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://static.seekingalpha.com/uploads/sa_presentations/319/97319/original.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://static.seekingalpha.com/uploads/sa_presentations/175/100175/original.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://graymedia.com/investor-relations/presentations/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://static.seekingalpha.com/uploads/sa_presentations/326/102326/original.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://graymedia.com/investor-relations/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://static.seekingalpha.com/uploads/sa_presentations/655/123655/original.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://static.seekingalpha.com/uploads/sa_presentations/191/99191/original.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://graymedia.com/investor-relations/investor-calls/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://static.seekingalpha.com/uploads/sa_presentations/214/123214/original.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/market-news?source=partner_investingcom"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/market-news?source=feed_symbol_MGIH"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://graymedia.com/investor-relations/proxy-statements/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.tradingview.com/news/seekingalpha%3A75453de7e094b%3A0-gray-media-announces-150m-debt-redemption-and-75m-loan-increase/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://graymedia.com/investor-relations/sec-filings/?group=Current+Reports"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/latest-articles?source=bnet"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://finance.yahoo.com/markets/stocks/articles/gray-media-boosts-term-loan-131742372.html"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://en.wikipedia.org/wiki/Gray_Media"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://arxiv.org/abs/2608.00631"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://en.wikipedia.org/wiki/Private_credit"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/EverHint/comments/1x1cxro/global_business_news_october_08_2026_evening/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://en.wikipedia.org/wiki/Merger_of_Nexstar_Media_Group_and_Tegna_Inc."
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://arxiv.org/abs/2405.13296"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/SPACs/comments/1llnepc"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/EverHint/comments/1wje817/business_news_hints_september_17_2026_after_hours/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/EverHint/comments/1wd3d8g/business_and_company_news_september_10_2026/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://arxiv.org/abs/1506.02431"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/SPACs/comments/1fspkg8"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/MVIS/comments/1g4xn45"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/ValueInvesting/comments/1fz1eld"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/SPACs/comments/17lxqsn"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/SPACs/comments/1obb8fk"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/SPACs/comments/1fy1nzj"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/SPACs/comments/16foht2"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "open_page",
+      "id": "ws_019e7107d3643b1e006ac92082792c87d1850e750c49fee0d8",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://graymedia.com/investor-relations/sec-filings/?group=Current+Reports"
+       }
+      ],
+      "status": "completed"
+     }
+    ],
+    "output_text": "{\"overall_sentiment\":0,\"affected_commodities\":[],\"affected_sectors\":[],\"confidence\":86,\"headline_summary\":\"这是一次以新增定期贷款和现金偿还部分高息票据的债务结构调整，可能降低相关票据本金和部分到期压力，但并非经营增长公告。([globenewswire.com](https://www.globenewswire.com/de/news-release/2026/10/09/3378073/0/en/gray-announces-75-million-incremental-term-loan-and-redemption-of-150-million-of-2029-notes.html))\",\"causal_summary\":\"事实：格雷媒体拟新增7500万美元定期贷款，并以新增贷款净额和现金赎回1.5亿美元、票面利率10.5%的2029年到期高级担保票据；赎回价为本金的105.25%另加应计未付利息，且以新增贷款融资完成为条件。可能传导：就这两项披露的本金变动而言，新增贷款对应的本金少于拟赎回票据本金约7500万美元，可能减少相关债务本金并将部分2029年到期压力延后至2030年；若新贷款利率低于10.5%，还可能降低相关利息负担。未确定事项：新闻稿未披露新贷款利率、费用及最终完成情况，现金支出和赎回溢价也可能削弱收益，因此对股东价值和股价的方向不能确定。([globenewswire.com](https://www.globenewswire.com/de/news-release/2026/10/09/3378073/0/en/gray-announces-75-million-incremental-term-loan-and-redemption-of-150-million-of-2029-notes.html))\",\"insufficient_context\":false,\"classification\":\"neutral\",\"affected_stocks\":[],\"market_relevance\":34,\"uncertainty_notes\":[\"输入新闻正文因HTTP 403不可用；本次未取得输入链接的原始正文，事实核验依赖2026年10月9日另行检索到的格雷媒体新闻稿。([globenewswire.com](https://www.globenewswire.com/de/news-release/2026/10/09/3378073/0/en/gray-announces-75-million-incremental-term-loan-and-redemption-of-150-million-of-2029-notes.html))\",\"新增贷款融资和票据赎回在所检索新闻稿中仍属于计划事项，尚未确认已经完成；新闻稿未披露新增贷款利率、全部费用及现金使用规模，因此实际利息节省和最终杠杆变化不确定。([globenewswire.com](https://www.globenewswire.com/de/news-release/2026/10/09/3378073/0/en/gray-announces-75-million-incremental-term-loan-and-redemption-of-150-million-of-2029-notes.html))\",\"输入的允许股票代码列表为空，因此未输出受影响股票条目；本事件未提供足以支持行业级传导的事实，受影响行业字段保持为空。\"],\"content_hash\":\"26cbe9d605c328b32a77eacc78dd66711fb65834db1590eaa663e752aea3bb6e\",\"key_factors\":[\"拟新增7500万美元定期贷款，使该贷款本金由6亿美元增至6.75亿美元；到期日为2030年7月15日。([globenewswire.com](https://www.globenewswire.com/de/news-release/2026/10/09/3378073/0/en/gray-announces-75-million-incremental-term-loan-and-redemption-of-150-million-of-2029-notes.html))\",\"拟赎回1.5亿美元、票面利率10.5%、2029年到期的高级担保票据，赎回价为本金的105.25%加应计未付利息。([globenewswire.com](https://www.globenewswire.com/de/news-release/2026/10/09/3378073/0/en/gray-announces-75-million-incremental-term-loan-and-redemption-of-150-million-of-2029-notes.html))\",\"计划赎回日期为2026年10月19日，但取决于新增贷款完成融资。([globenewswire.com](https://www.globenewswire.com/de/news-release/2026/10/09/3378073/0/en/gray-announces-75-million-incremental-term-loan-and-redemption-of-150-million-of-2029-notes.html))\",\"交易完成后，格雷媒体预计仍有2亿美元2029年票据和6.75亿美元定期贷款。([globenewswire.com](https://www.globenewswire.com/de/news-release/2026/10/09/3378073/0/en/gray-announces-75-million-incremental-term-loan-and-redemption-of-150-million-of-2029-notes.html))\"],\"news_id\":194534,\"summary_zh\":\"格雷媒体表示，已修订信贷协议，将一笔原为6亿美元、2030年7月15日到期的定期贷款增加7500万美元。新增贷款净额与现金预计将用于赎回1.5亿美元、票面利率10.5%的2029年到期高级担保票据并支付相关费用；赎回计划于2026年10月19日进行，但以新增贷款完成融资为条件。交易完成后，公司预计仍有2亿美元2029年票据和6.75亿美元该定期贷款。([globenewswire.com](https://www.globenewswire.com/de/news-release/2026/10/09/3378073/0/en/gray-announces-75-million-incremental-term-loan-and-redemption-of-150-million-of-2029-notes.html))\",\"change_sequence\":205710,\"output_language\":\"zh-CN\",\"title_zh\":\"格雷媒体宣布拟赎回1.5亿美元2029年到期票据，并增加7500万美元定期贷款\"}",
+    "provider": "openai",
+    "stop_reason": "completed",
+    "terminal_error": null,
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": null,
+     "cached_input_tokens": 5711,
+     "code_execution_requests": 0,
+     "input_tokens": 22736,
+     "output_tokens": 7535,
+     "reasoning_tokens": 6594,
+     "total_tokens": 30271,
+     "web_fetch_requests": 1,
+     "web_search_requests": 1
+    }
+   },
+   "schema_version": "news_impact_zh_cn_v6"
+  },
+  {
+   "job_id": "aij_48efe9f51435419da4713cdc82e987e0",
+   "model": "gpt-5.6-luna",
+   "payload": {
+    "allowed_tickers": [],
+    "analysis_revision": 1,
+    "article_reason": "http_403",
+    "article_status": "unavailable",
+    "change_sequence": 205709,
+    "content_hash": "339e6bec7bc147631d328d6954597f0d6eb9c11456b84d8d8dc3482a3e998cd2",
+    "fetched_at": "2026-10-09T12:51:53.090514Z",
+    "news_id": 194533,
+    "published_at": "2026-10-09T12:48:48Z",
+    "source": "seekingalpha/breaking",
+    "source_count": 1,
+    "source_ticker_hints": [
+     "USO"
+    ],
+    "sources": [
+     "seekingalpha/breaking"
+    ],
+    "summary": "[CO1:COM, CL1:COM, USO]",
+    "title": "Pantheon sees September CPI rising 0.6% as gasoline prices jump",
+    "url": "https://seekingalpha.com/news/4651736-pantheon-sees-september-cpi-rising-06-as-gasoline-prices-jump?feed_item_type=news"
+   },
+   "production_error": "Value error, english_prose_not_allowed: 'CPI'",
+   "prompt_version": "news-impact-zh-cn-v7",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://seekingalpha.com/news/4651736-pantheon-sees-september-cpi-rising-06-as-gasoline-prices-jump"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.tradingview.com/news/seekingalpha%3Afa18cdfb2094b%3A0-pantheon-sees-september-cpi-rising-0-6-as-gasoline-prices-jump/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://en.wikipedia.org/wiki/2021%E2%80%932023_inflation_surge"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://seekingalpha.com/market-news/us-economy/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://seekingalpha.com/market-outlook/us-economy?source=feed"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://seekingalpha.com/market-outlook/us-economy?source=article_sb_popula"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://seekingalpha.com/market-news"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://seekingalpha.com/market-outlook/us-economy?source=email"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://seekingalpha.com/market-outlook/us-economy?source=email_the_macro_view"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://seekingalpha.com/market-outlook/us-economy?source=sabrient"
+     }
+    ],
+    "id": "resp_0c4159191fff182e006ac920374ccc87d18401bd4686affe88",
+    "model": "gpt-5.6-luna",
+    "openai_web_calls": [
+     {
+      "action": "search",
+      "id": "ws_0c4159191fff182e006ac9203bfda887d1ae6f386a36cf61c2",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://en.wikipedia.org/wiki/2021%E2%80%932023_inflation_surge"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/news/4651736-pantheon-sees-september-cpi-rising-06-as-gasoline-prices-jump"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.tradingview.com/news/seekingalpha%3Afa18cdfb2094b%3A0-pantheon-sees-september-cpi-rising-0-6-as-gasoline-prices-jump/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/market-news/us-economy/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/market-outlook/us-economy?source=feed"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/market-outlook/us-economy?source=article_sb_popula"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/market-news"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/market-outlook/us-economy?source=email"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/market-outlook/us-economy?source=email_the_macro_view"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/market-outlook/us-economy?source=sabrient"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/article/4726157-wall-street-breakfast-disinflation-stalling"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://static.seekingalpha.com/uploads/sa_presentations/211/130211/original.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/market-news?source=feed_symbol_rcl"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/market-news?source=partner_thestreet"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://static.seekingalpha.com/uploads/sa_presentations/623/71623/original.pdf"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "open_page",
+      "id": "ws_0c4159191fff182e006ac920406cfc87d18ce3a11ed455d55c",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://www.tradingview.com/news/seekingalpha%3Afa18cdfb2094b%3A0-pantheon-sees-september-cpi-rising-0-6-as-gasoline-prices-jump/"
+       }
+      ],
+      "status": "completed"
+     }
+    ],
+    "output_text": "{\"overall_sentiment\":-8,\"affected_commodities\":[{\"impact_score\":48,\"name\":\"汽油\",\"reason\":\"报道直接转述潘森宏观经济学的预测：美国汽油价格可能接近上涨10%，并为总体CPI贡献约0.4个百分点；这是通胀预测中的价格偏强信号，不是已公布的现货或期货价格变动。([seekingalpha.com](https://seekingalpha.com/news/4651736-pantheon-sees-september-cpi-rising-06-as-gasoline-prices-jump))\"}],\"affected_sectors\":[\"能源\",\"运输\",\"利率敏感行业\"],\"confidence\":73,\"headline_summary\":\"这是一则美国通胀数据的前瞻性预测：潘森宏观经济学预计美国9月总体CPI环比上涨0.6%，主要由汽油价格接近10%的上涨推动；核心CPI预计仅上涨0.2%。该机构认为，整体通胀与核心通胀的分化可能使美联储在10月28日会议上不再收紧政策。([seekingalpha.com](https://seekingalpha.com/news/4651736-pantheon-sees-september-cpi-rising-06-as-gasoline-prices-jump))\",\"causal_summary\":\"可能传导：如果实际总体CPI接近该预测、而核心CPI仍然温和，市场可能将其视为能源驱动的阶段性通胀冲击，而不是广泛的核心通胀加速，从而减轻立即收紧政策的压力。汽油成本上升可能改善能源价格相关主体的收入环境，但会增加运输及燃料成本敏感行业的成本压力；若通胀预期或利率波动上升，也可能压制利率敏感行业。上述均为条件性传导关系，并非已确认的市场反应。([seekingalpha.com](https://seekingalpha.com/news/4651736-pantheon-sees-september-cpi-rising-06-as-gasoline-prices-jump))\",\"insufficient_context\":true,\"classification\":\"neutral\",\"affected_stocks\":[],\"market_relevance\":58,\"uncertainty_notes\":[\"输入article因HTTP 403不可用；本次另行检索核验了同名来源页面及转载页面的可见内容，但未能取得输入链接的完整原始正文，不能据此声称已读全文。([seekingalpha.com](https://seekingalpha.com/news/4651736-pantheon-sees-september-cpi-rising-06-as-gasoline-prices-jump))\",\"报道内容是潘森宏观经济学对美国9月CPI的预测，不是美国官方已经发布的实际数据；0.6%的总体CPI和0.2%的核心CPI仍需等待官方数据核验。([seekingalpha.com](https://seekingalpha.com/news/4651736-pantheon-sees-september-cpi-rising-06-as-gasoline-prices-jump))\",\"输入allowed_tickers为空，因此不输出个股影响；输入中的来源代码提示不作为允许股票代码使用。\",\"总体CPI与核心CPI的实际差异、随后公布的美联储表态以及汽油价格冲击的持续时间，均可能改变上述行业传导关系。\"],\"content_hash\":\"339e6bec7bc147631d328d6954597f0d6eb9c11456b84d8d8dc3482a3e998cd2\",\"key_factors\":[\"潘森宏观经济学预计美国9月总体CPI环比上涨0.6%，核心CPI环比上涨0.2%。([seekingalpha.com](https://seekingalpha.com/news/4651736-pantheon-sees-september-cpi-rising-06-as-gasoline-prices-jump))\",\"该机构预计汽油价格接近上涨10%，对总体CPI贡献约0.4个百分点。([seekingalpha.com](https://seekingalpha.com/news/4651736-pantheon-sees-september-cpi-rising-06-as-gasoline-prices-jump))\",\"来源将总体通胀走高归因于能源价格，而不是核心通胀同步大幅上升。([seekingalpha.com](https://seekingalpha.com/news/4651736-pantheon-sees-september-cpi-rising-06-as-gasoline-prices-jump))\",\"潘森宏观经济学认为，整体通胀与核心通胀的分化可能使美联储在10月28日会议上不再收紧政策。([seekingalpha.com](https://seekingalpha.com/news/4651736-pantheon-sees-september-cpi-rising-06-as-gasoline-prices-jump))\",\"报道还称，能源冲击向核心商品价格的传导可能存在约六个月滞后。([tradingview.com](https://www.tradingview.com/news/seekingalpha%3Afa18cdfb2094b%3A0-pantheon-sees-september-cpi-rising-0-6-as-gasoline-prices-jump/))\"],\"news_id\":194533,\"summary_zh\":\"2026年10月9日的报道转述潘森宏观经济学预测：美国9月总体CPI可能环比上涨0.6%，主要原因是汽油价格接近上涨10%；核心CPI可能仅上涨0.2%。该机构预计，核心通胀相对温和可能使美联储在10月28日会议上暂不再次收紧政策。([seekingalpha.com](https://seekingalpha.com/news/4651736-pantheon-sees-september-cpi-rising-06-as-gasoline-prices-jump))\",\"change_sequence\":205709,\"output_language\":\"zh-CN\",\"title_zh\":\"潘森宏观经济学预计：汽油价格跳涨将推动美国9月CPI上涨0.6%\"}",
+    "provider": "openai",
+    "stop_reason": "completed",
+    "terminal_error": null,
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": null,
+     "cached_input_tokens": 5711,
+     "code_execution_requests": 0,
+     "input_tokens": 21417,
+     "output_tokens": 6533,
+     "reasoning_tokens": 5432,
+     "total_tokens": 27950,
+     "web_fetch_requests": 1,
+     "web_search_requests": 1
+    }
+   },
+   "schema_version": "news_impact_zh_cn_v6"
+  },
+  {
+   "job_id": "aij_4057b48cf85841cc92be0c95b14e1043",
+   "model": "gpt-5.6-luna",
+   "payload": {
+    "allowed_tickers": [],
+    "analysis_revision": 1,
+    "article_reason": "http_403",
+    "article_status": "unavailable",
+    "change_sequence": 205715,
+    "content_hash": "01eb098f8fe9df2a231c380f1a794783d4dfd656b9674f73a9c812e37d770129",
+    "fetched_at": "2026-10-09T12:56:58.427290Z",
+    "news_id": 194538,
+    "published_at": "2026-10-09T12:53:46Z",
+    "source": "seekingalpha/breaking",
+    "source_count": 1,
+    "source_ticker_hints": [
+     "VCIG"
+    ],
+    "sources": [
+     "seekingalpha/breaking"
+    ],
+    "summary": "[VCIG]",
+    "title": "VCI Global outlines $125M equity deal; shares sink 15% pre-market",
+    "url": "https://seekingalpha.com/news/4651730-vci-global-outlines-125m-equity-deal-shares-sink-15-pre-market?feed_item_type=news"
+   },
+   "production_error": "Value error, english_prose_not_allowed: 'tradingview.com'",
+   "prompt_version": "news-impact-zh-cn-v7",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.tradingview.com/news/seekingalpha%3Ac045e36f3094b%3A0-vci-global-outlines-125m-equity-deal-shares-sink-15-pre-market/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.globenewswire.com/de/news-release/2026/10/09/3378037/0/en/vci-global-clarifies-structure-of-us-125-million-standby-equity-purchase-facility-emphasizes-flexible-capital-strategy.html"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.reddit.com/r/Wiseek/comments/1wu6ro8/vcig_vci_global_signs_125m_eloc_and_17m_secured/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.stocktitan.net/overview/VCIG/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/1930510/000121390026104630/ea0306911-f1_vciglobal.htm"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.streetinsider.com/Corporate%2BNews/VCI%2BGlobal%2Bclarifies%2Bits%2B%24125M%2Bequity%2Bpurchase%2Bfacility%2Bterms/27169372.html"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/1930510/000121390026104630/ea030691101ex10-12.htm"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.formds.com/issuers/vci-global-ltd"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://traderslink.pro/news/VCIG/vcig-clarifies-125m-standby-equity-line-no-draws-or-shares-issued-yet-2026-10-09"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.stocktitan.net/news/VCIG/vci-global-clarifies-structure-of-us-125-million-standby-equity-dxsskmi4zt2p.html"
+     }
+    ],
+    "id": "resp_05fbf34bb011ee04006ac91fab91b887d18ec3a1571b326fa7",
+    "model": "gpt-5.6-luna",
+    "openai_web_calls": [
+     {
+      "action": "search",
+      "id": "ws_05fbf34bb011ee04006ac91faf235487d1b309388a7d8e6db6",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/Wiseek/comments/1wu6ro8/vcig_vci_global_signs_125m_eloc_and_17m_secured/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.tradingview.com/news/seekingalpha%3Ac045e36f3094b%3A0-vci-global-outlines-125m-equity-deal-shares-sink-15-pre-market/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.stocktitan.net/overview/VCIG/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1930510/000121390026104630/ea0306911-f1_vciglobal.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.streetinsider.com/Corporate%2BNews/VCI%2BGlobal%2Bclarifies%2Bits%2B%24125M%2Bequity%2Bpurchase%2Bfacility%2Bterms/27169372.html"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1930510/000121390026104630/ea030691101ex10-12.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.formds.com/issuers/vci-global-ltd"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://traderslink.pro/news/VCIG/vcig-clarifies-125m-standby-equity-line-no-draws-or-shares-issued-yet-2026-10-09"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.stocktitan.net/news/VCIG/vci-global-clarifies-structure-of-us-125-million-standby-equity-dxsskmi4zt2p.html"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/9631/000119312523283720/d509992dex991.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.krugmaninsights.com/deals/ecm/vci-global-limited-ecm-2026"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1930510/000121390026092120/0001213900-26-092120-index-headers.html"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://app.edgar.tools/news/8ef03f544e278e77"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1930510/000121390026093161/0001213900-26-093161-index.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1527166/000152716626000009/cg2025123110k.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1770561/000110465925037452/tm2512565d1_ars.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/0001034670/000119312526058188/alv_ars_2025.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1858681/000119312526177352/d113856dars.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/file/34-104355"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/Wiseek/comments/1wtkg9l/vcig_vci_global_registers_1116m_shares_for_125m/"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "search",
+      "id": "ws_05fbf34bb011ee04006ac91fb4515c87d19a516d2d1c534f0f",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://mx.advfn.com/p.php?btn=&last_ts=1790899199&old_sources=RN&old_symbol=&p_count=0&p_n=6&p_ts=1790802122&pid=news&symbol=BOV%5ENTCOP180W2"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.globenewswire.com/de/news-release/2026/10/09/3378037/0/en/vci-global-clarifies-structure-of-us-125-million-standby-equity-purchase-facility-emphasizes-flexible-capital-strategy.html"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.finanznachrichten.de/nachrichten-2026-10/69799515-vci-global-limited-vci-global-clarifies-structure-of-us-dollar-125-million-standby-equity-purchase-facility-emphasizes-flexible-capital-strategy-399.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://stockanalysis.com/news/press-releases/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.quantisnow.com/news?ticker=HLLY"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.quantisnow.com/news?ticker=DOMO"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.aktiencheck.de/news/Ausland-VCI_Global_Clarifies_Structure_of_US_125_Million_Standby_Equity_Purchase_Facility_Emphasizes_Flexible_Capital_Strategy-20159419"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://mx.advfn.com/p.php?btn=&last_ts=1791590399&old_sources=RN&old_symbol=&p_count=0&p_n=4&p_ts=1791547740&pid=news&symbol=BOV%5EITUBG320W4"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://mx.advfn.com/p.php?btn=&last_ts=1791590399&old_sources=RN&old_symbol=&p_count=6&p_n=5&p_ts=1791547200&pid=news&symbol=BOV%5EITUBG320W4"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://jp.advfn.com/p.php?btn=&last_ts=1791590399&old_sources=RN&old_symbol=&p_count=0&p_n=8&p_ts=1791547536&pid=news&symbol=BOV%5EECORL219"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://mx.advfn.com/p.php?btn=&last_ts=1791590399&old_sources=RN&old_symbol=&p_count=0&p_n=4&p_ts=1791547260&pid=news&symbol=BOV%5ECIELC720"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://instanews-production.up.railway.app/?lang=en"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "open_page",
+      "id": "ws_05fbf34bb011ee04006ac91ff272d487d192a2e46ff7fa1709",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://www.sec.gov/Archives/edgar/data/1930510/000121390026104630/ea0306911-f1_vciglobal.htm"
+       }
+      ],
+      "status": "completed"
+     }
+    ],
+    "output_text": "{\"overall_sentiment\":-62,\"affected_commodities\":[],\"affected_sectors\":[\"人工智能基础设施\",\"可再生能源\"],\"confidence\":88,\"headline_summary\":\"VCI全球说明，1.25亿美元安排是与哈德逊环球创投签订的、期限36个月的备用股权购买额度，并非立即发行或出售1.25亿美元普通股；截至2026年10月9日尚未提款或发行普通股。转载报道显示，股价盘前跌逾15%。 ([globenewswire.com](https://www.globenewswire.com/de/news-release/2026/10/09/3378037/0/en/vci-global-clarifies-structure-of-us-125-million-standby-equity-purchase-facility-emphasizes-flexible-capital-strategy.html))\",\"causal_summary\":\"已确认事实：额度上限为1.25亿美元，可在36个月内按需提款，且截至2026年10月9日未发生提款或发行。可能的负面传导是，未来提款若伴随发行普通股，市场可能计入潜在稀释和新增供给压力；可能的正面传导是，公司可获得分阶段融资来源，并计划考虑人工智能基础设施、平台及可再生能源项目。由于提款、发行价格、股份数量和资金用途均未确定，实际稀释和项目收益尚未落地；盘前跌幅只能说明短线市场反应，不能证明持续影响。 ([globenewswire.com](https://www.globenewswire.com/de/news-release/2026/10/09/3378037/0/en/vci-global-clarifies-structure-of-us-125-million-standby-equity-purchase-facility-emphasizes-flexible-capital-strategy.html))\",\"insufficient_context\":false,\"classification\":\"bearish\",\"affected_stocks\":[],\"market_relevance\":38,\"uncertainty_notes\":[\"输入新闻正文因HTTP 403不可用，未取得输入链接正文；本次核验使用同日公司新闻稿确认融资结构和日期，并使用转载报道核对盘前跌幅，不能声称已经读到输入文章全文。 ([globenewswire.com](https://www.globenewswire.com/de/news-release/2026/10/09/3378037/0/en/vci-global-clarifies-structure-of-us-125-million-standby-equity-purchase-facility-emphasizes-flexible-capital-strategy.html))\",\"截至2026年10月9日，公司未提款、未发行普通股；未来是否提款、发行数量、发行价格和实际用途均未知，因此不能量化稀释幅度或持续股价影响。 ([globenewswire.com](https://www.globenewswire.com/de/news-release/2026/10/09/3378037/0/en/vci-global-clarifies-structure-of-us-125-million-standby-equity-purchase-facility-emphasizes-flexible-capital-strategy.html))\",\"输入的允许股票代码列表为空，因此按约束不列出受影响股票，也不输出未经允许的股票代码。\"],\"content_hash\":\"01eb098f8fe9df2a231c380f1a794783d4dfd656b9674f73a9c812e37d770129\",\"key_factors\":[\"公司将1.25亿美元表述为融资额度上限，而不是一次性发行或出售金额；安排期限为36个月。 ([globenewswire.com](https://www.globenewswire.com/de/news-release/2026/10/09/3378037/0/en/vci-global-clarifies-structure-of-us-125-million-standby-equity-purchase-facility-emphasizes-flexible-capital-strategy.html))\",\"截至2026年10月9日没有提款，也没有依据该安排发行普通股，当前稀释尚未发生。 ([globenewswire.com](https://www.globenewswire.com/de/news-release/2026/10/09/3378037/0/en/vci-global-clarifies-structure-of-us-125-million-standby-equity-purchase-facility-emphasizes-flexible-capital-strategy.html))\",\"未来提款并发行普通股可能稀释现有股东，且资金获取受协议条款、监管要求和市场条件约束。 ([globenewswire.com](https://www.globenewswire.com/de/news-release/2026/10/09/3378037/0/en/vci-global-clarifies-structure-of-us-125-million-standby-equity-purchase-facility-emphasizes-flexible-capital-strategy.html))\",\"公司称潜在资金可能用于人工智能基础设施、人工智能平台、大语言模型部署和可再生能源项目，但这些用途仍取决于后续业务需要与投资机会。 ([globenewswire.com](https://www.globenewswire.com/de/news-release/2026/10/09/3378037/0/en/vci-global-clarifies-structure-of-us-125-million-standby-equity-purchase-facility-emphasizes-flexible-capital-strategy.html))\",\"同日转载报道显示股价盘前跌逾15%，但该价格反应来自二手新闻页面，不能单独证明后续走势。 ([tradingview.com](https://www.tradingview.com/news/seekingalpha%3Ac045e36f3094b%3A0-vci-global-outlines-125m-equity-deal-shares-sink-15-pre-market/))\"],\"news_id\":194538,\"summary_zh\":\"VCI全球表示，与哈德逊环球创投达成的1.25亿美元安排属于可在36个月内按需使用的备用股权购买额度，并非立即出售股票。截至2026年10月9日，公司尚未提款或发行普通股；未来提款可能带来股东稀释，潜在资金用途包括人工智能基础设施、人工智能平台和可再生能源项目。转载报道显示股价盘前跌逾15%。 ([globenewswire.com](https://www.globenewswire.com/de/news-release/2026/10/09/3378037/0/en/vci-global-clarifies-structure-of-us-125-million-standby-equity-purchase-facility-emphasizes-flexible-capital-strategy.html))\",\"change_sequence\":205715,\"output_language\":\"zh-CN\",\"title_zh\":\"VCI全球概述1.25亿美元股权融资安排；股价盘前下跌15% ([tradingview.com](https://www.tradingview.com/news/seekingalpha%3Ac045e36f3094b%3A0-vci-global-outlines-125m-equity-deal-shares-sink-15-pre-market/))\"}",
+    "provider": "openai",
+    "stop_reason": "completed",
+    "terminal_error": null,
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": null,
+     "cached_input_tokens": 5711,
+     "code_execution_requests": 0,
+     "input_tokens": 38913,
+     "output_tokens": 10129,
+     "reasoning_tokens": 9159,
+     "total_tokens": 49042,
+     "web_fetch_requests": 1,
+     "web_search_requests": 2
+    }
+   },
+   "schema_version": "news_impact_zh_cn_v6"
+  },
+  {
+   "job_id": "aij_5452468c6328424fa28ad4c3ca386a9b",
+   "model": "gpt-5.6-luna",
+   "payload": {
+    "allowed_tickers": [],
+    "analysis_revision": 1,
+    "article_reason": "http_403",
+    "article_status": "unavailable",
+    "change_sequence": 205718,
+    "content_hash": "f605e9a6466313434ab43a90c643c8942f0e75a005740729ce5f715fbb107f55",
+    "fetched_at": "2026-10-09T13:02:12.199920Z",
+    "news_id": 194540,
+    "published_at": "2026-10-09T12:55:29Z",
+    "source": "seekingalpha/breaking",
+    "source_count": 1,
+    "source_ticker_hints": [
+     "XMAX"
+    ],
+    "sources": [
+     "seekingalpha/breaking"
+    ],
+    "summary": "[XMAX]",
+    "title": "XMax (XMAX) to acquire Hexa Creation, expanding AI infrastructure strategy",
+    "url": "https://seekingalpha.com/news/4651738-xmax-xmax-to-acquire-hexa-creation-expanding-ai-infrastructure-strategy?feed_item_type=news"
+   },
+   "production_error": "Value error, english_prose_not_allowed: 'globenewswire.com'",
+   "prompt_version": "news-impact-zh-cn-v7",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.globenewswire.com/fr/news-release/2026/10/09/3378050/37029/en/xmax-to-acquire-hexa-creation-developer-of-1200v-vertical-gan-power-semiconductor-technology.html"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://seekingalpha.com/market-news?source=feed_f"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://static.seekingalpha.com/uploads/sa_presentations/253/116253/original.pdf"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://seekingalpha.com/?feed_item_type=news"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://seekingalpha.com/latest-articles?source=yahoo"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://static.seekingalpha.com/uploads/sa_presentations/908/76908/original.pdf"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://seekingalpha.com/latest-articles?source=d_email"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://seekingalpha.com/latest-articles?source=read_now"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://seekingalpha.com/latest-articles?source=article_sb_popular"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://seekingalpha.com/latest-articles?source=front_page_most_popular_articles"
+     }
+    ],
+    "id": "resp_0987489822d5d73f006ac91f5d2e5887d184dc08ecac4dd246",
+    "model": "gpt-5.6-luna",
+    "openai_web_calls": [
+     {
+      "action": "search",
+      "id": "ws_0987489822d5d73f006ac91f6116a887d1a5546170a5c488be",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/market-news?source=feed_f"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.globenewswire.com/fr/news-release/2026/10/09/3378050/37029/en/xmax-to-acquire-hexa-creation-developer-of-1200v-vertical-gan-power-semiconductor-technology.html"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://static.seekingalpha.com/uploads/sa_presentations/253/116253/original.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/?feed_item_type=news"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/latest-articles?source=yahoo"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://static.seekingalpha.com/uploads/sa_presentations/908/76908/original.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/latest-articles?source=d_email"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/latest-articles?source=read_now"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/latest-articles?source=article_sb_popular"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/latest-articles?source=front_page_most_popular_articles"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://static.seekingalpha.com/uploads/sa_presentations/5/72005/original.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/latest-articles?source=email_rt_article"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/latest-articles?source=otcmarkets"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/latest-articles?source=feed_all_articles"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://static.seekingalpha.com/uploads/sa_presentations/536/57536/original.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://static.seekingalpha.com/uploads/sa_presentations/545/114545/original.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/latest-articles?source=fee"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://static.seekingalpha.com/uploads/sa_presentations/915/98915/original.pdf"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "open_page",
+      "id": "ws_0987489822d5d73f006ac91f668cb487d1a0d3bcec67a680b0",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://www.globenewswire.com/fr/news-release/2026/10/09/3378050/37029/en/xmax-to-acquire-hexa-creation-developer-of-1200v-vertical-gan-power-semiconductor-technology.html"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "search",
+      "id": "ws_0987489822d5d73f006ac91f76ee3887d1be800d9e624d3d8c",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/2030954/000149315226042053/formars.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1866226/000121390026108232/0001213900-26-108232-index.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1473334/000149315226019358/form8-k.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1473334/000149315226042760/form8-k.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1069183/000119312526395997/0001193125-26-395997-index.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1473334/000149315226015718/form8-k.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/2150707/000119312526400886/0001193125-26-400886-index.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1473334/000149315226037394/form8-k.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1473334/000149315226032173/form8-k.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1866226/000121390026101116/0001213900-26-101116-index.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1563665/000143774926030244/0001437749-26-030244-index.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1473334/000149315226032343/form8-k.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/1473334/000149315226032855/0001493152-26-032855-index-headers.html"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/63814/000090042104000003/maxxam_8k-02202004.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/63814/000090042104000032/maxxam_8k-09142004.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sec.gov/Archives/edgar/data/880266/000092189525001891/ex991to13da2514210002_070125.pdf"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "search",
+      "id": "ws_0987489822d5d73f006ac91f7a4e5887d1b97117a8bd4fb191",
+      "sources": [],
+      "status": "searching"
+     }
+    ],
+    "output_text": "{\"overall_sentiment\":18,\"affected_commodities\":[],\"affected_sectors\":[\"人工智能基础设施\",\"功率半导体\",\"氮化镓功率器件\",\"数据中心电力基础设施\"],\"confidence\":82,\"headline_summary\":\"XMax于2026年10月9日宣布签署最终股份购买协议，拟收购Hexa Creation全部已发行及流通股份；Hexa Creation聚焦用于人工智能数据中心电力基础设施及其他高压应用的1200伏垂直氮化镓功率半导体，交易实质条款尚待同日监管申报披露。([globenewswire.com](https://www.globenewswire.com/fr/news-release/2026/10/09/3378050/37029/en/xmax-to-acquire-hexa-creation-developer-of-1200v-vertical-gan-power-semiconductor-technology.html))\",\"causal_summary\":\"事实层面：公司表示该交易将使其进入高压功率半导体领域，并与现有人工智能软件、平台及GPU服务战略形成衔接。可能传导：若相关技术后续完成商业化并获得数据中心等客户采用，可能提升市场对人工智能基础设施和功率半导体布局的关注；但目前缺少收购对价、支付安排、交割条件、财务贡献及商业化时间表，因此暂不足以确认盈利或行业竞争格局将发生实质变化。([globenewswire.com](https://www.globenewswire.com/fr/news-release/2026/10/09/3378050/37029/en/xmax-to-acquire-hexa-creation-developer-of-1200v-vertical-gan-power-semiconductor-technology.html))\",\"insufficient_context\":true,\"classification\":\"neutral\",\"affected_stocks\":[],\"market_relevance\":38,\"uncertainty_notes\":[\"输入article因HTTP 403不可用，未能取得输入链接正文；本次依据另行检索到的、由XMax发布并经环球通讯社刊载的2026年10月9日公司新闻稿核验同一事件，不能声称读过输入链接全文。([globenewswire.com](https://www.globenewswire.com/fr/news-release/2026/10/09/3378050/37029/en/xmax-to-acquire-hexa-creation-developer-of-1200v-vertical-gan-power-semiconductor-technology.html))\",\"公司新闻稿称交易具体条款将在同日提交的8-K表格中披露；当前缺少收购对价、融资或支付安排、交割条件、财务影响和Hexa Creation现有商业化进度。([globenewswire.com](https://www.globenewswire.com/fr/news-release/2026/10/09/3378050/37029/en/xmax-to-acquire-hexa-creation-developer-of-1200v-vertical-gan-power-semiconductor-technology.html))\",\"输入允许股票列表为空，因此未列出任何受影响股票；行业影响仅依据新闻稿明示的人工智能数据中心电力基础设施、功率半导体和氮化镓应用方向，属于有限的主题层面传导判断。\"],\"content_hash\":\"f605e9a6466313434ab43a90c643c8942f0e75a005740729ce5f715fbb107f55\",\"key_factors\":[\"拟收购Hexa Creation全部已发行及流通股份。([globenewswire.com](https://www.globenewswire.com/fr/news-release/2026/10/09/3378050/37029/en/xmax-to-acquire-hexa-creation-developer-of-1200v-vertical-gan-power-semiconductor-technology.html))\",\"目标技术为面向高压、高功率应用的1200伏垂直氮化镓功率半导体。([globenewswire.com](https://www.globenewswire.com/fr/news-release/2026/10/09/3378050/37029/en/xmax-to-acquire-hexa-creation-developer-of-1200v-vertical-gan-power-semiconductor-technology.html))\",\"应用方向包括人工智能数据中心电力基础设施，以及电动汽车、储能和超快充电等高压市场。([globenewswire.com](https://www.globenewswire.com/fr/news-release/2026/10/09/3378050/37029/en/xmax-to-acquire-hexa-creation-developer-of-1200v-vertical-gan-power-semiconductor-technology.html))\",\"交易具体财务条款尚未在已核验新闻稿中披露。([globenewswire.com](https://www.globenewswire.com/fr/news-release/2026/10/09/3378050/37029/en/xmax-to-acquire-hexa-creation-developer-of-1200v-vertical-gan-power-semiconductor-technology.html))\"],\"news_id\":194540,\"summary_zh\":\"输入摘要仅为代码标记，未提供实质事件信息。经另行检索同日公司新闻稿核验：XMax宣布签署最终股份购买协议，拟收购Hexa Creation全部已发行及流通股份，切入面向人工智能数据中心电力基础设施的1200伏垂直氮化镓功率半导体技术；交易具体条款将通过同日提交的监管文件披露。([globenewswire.com](https://www.globenewswire.com/fr/news-release/2026/10/09/3378050/37029/en/xmax-to-acquire-hexa-creation-developer-of-1200v-vertical-gan-power-semiconductor-technology.html))\",\"change_sequence\":205718,\"output_language\":\"zh-CN\",\"title_zh\":\"XMax将收购Hexa Creation，拓展人工智能基础设施战略\"}",
+    "provider": "openai",
+    "stop_reason": "completed",
+    "terminal_error": null,
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": null,
+     "cached_input_tokens": 5711,
+     "code_execution_requests": 0,
+     "input_tokens": 26588,
+     "output_tokens": 6344,
+     "reasoning_tokens": 5506,
+     "total_tokens": 32932,
+     "web_fetch_requests": null,
+     "web_search_requests": null
+    }
+   },
+   "schema_version": "news_impact_zh_cn_v6"
+  },
+  {
+   "job_id": "aij_ec479b3dc43e4a1badff121948d77308",
+   "model": "gpt-5.6-luna",
+   "payload": {
+    "allowed_tickers": [],
+    "analysis_revision": 1,
+    "article_reason": "paywall",
+    "article_status": "unavailable",
+    "change_sequence": 205749,
+    "content_hash": "d7afc2bba7425de6bbc9281dbff40a5eba89b13b1fcf308995ac609669b663ce",
+    "fetched_at": "2026-10-09T13:21:21.958603Z",
+    "news_id": 194569,
+    "published_at": "2026-10-09T13:01:32Z",
+    "source": "finnhub/CNBC",
+    "source_count": 1,
+    "source_ticker_hints": [],
+    "sources": [
+     "finnhub/CNBC"
+    ],
+    "summary": "Stocks are bouncing this morning after yesterday's sharp tech-driven selloff.",
+    "title": "Jim Cramer's top 10 things to watch in the stock market Friday",
+    "url": "https://www.cnbc.com/investingclub/2026/10/09/jim-cramers-top-10-things-to-watch-in-the-stock-market-friday.html"
+   },
+   "production_error": "Value error, english_prose_not_allowed: 'cnbc.com'",
+   "prompt_version": "news-impact-zh-cn-v7",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.cnbc.com/?msockid=1afbb9b74e9160b30b77afe94ff16159"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://ems.eduwisland.edu.my/market-insights/cnbc-stock-market-today.php"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://allmind.ai/news/fedc3eeffda0b5f0342d6e73127a751fcf20fe84552230779f7a68be47de7d60"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.cnbc.com/quotes/GOOGL?msockid=1ea92b7b50746da606a63d2551f96cc8"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://allmind.ai/news/eb0508e912ab0c16ab90fb31ad4d3fb27d51cb584be5efa4c2aff012fe398bad"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://groups.google.com/g/worldnewsandmedia/c/3Gf-LkSa1-Q"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://allmind.ai/news/532366b9e3e600c26c8fab35d06b564f0f5fd0fa90d41f2975d81f1c7f457bc9"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.brutalist.report/source/CNBC?before=2026-05-16&limit=25"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.portfoliomanager.co.uk/article/jim-cramer-s-top-10-things-to-watch-in-the-stock-market-friday"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.cnbc.com/latest/?msockid=1733aab28248689c32e6bcd383a2694d"
+     }
+    ],
+    "id": "resp_08894b92ca4c12b1006ac91f0eaf5087d1a95e9557cbd9ace5",
+    "model": "gpt-5.6-luna",
+    "openai_web_calls": [
+     {
+      "action": "search",
+      "id": "ws_08894b92ca4c12b1006ac91f11bcd487d18a2af662da99bba6",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://ems.eduwisland.edu.my/market-insights/cnbc-stock-market-today.php"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://allmind.ai/news/fedc3eeffda0b5f0342d6e73127a751fcf20fe84552230779f7a68be47de7d60"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.cnbc.com/quotes/GOOGL?msockid=1ea92b7b50746da606a63d2551f96cc8"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://allmind.ai/news/eb0508e912ab0c16ab90fb31ad4d3fb27d51cb584be5efa4c2aff012fe398bad"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://groups.google.com/g/worldnewsandmedia/c/3Gf-LkSa1-Q"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://allmind.ai/news/532366b9e3e600c26c8fab35d06b564f0f5fd0fa90d41f2975d81f1c7f457bc9"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.brutalist.report/source/CNBC?before=2026-05-16&limit=25"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.portfoliomanager.co.uk/article/jim-cramer-s-top-10-things-to-watch-in-the-stock-market-friday"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.cnbc.com/latest/?msockid=1733aab28248689c32e6bcd383a2694d"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://sallas2.com/article/jim-cramer-s-top-10-things-to-watch-in-the-stock-market-friday-cnbc"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.cnbc.com/?msockid=1afbb9b74e9160b30b77afe94ff16159"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.cnbc.com/quotes/NVDA?msockid=0654ad42986d6f5c31dfbb0a998e6e42"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.cnbc.com/?msockid=07b605b2fc7f6ffe1e0713d3fdfe6ede"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.youtube.com/watch?v=JYpZsTAnM9c"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://tmng-al.uspto.gov/resting2/api/casedoc/cms/case/99443021/office-action/OfficeAction8312399.pdf"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "open_page",
+      "id": "ws_08894b92ca4c12b1006ac91f145af887d1b732658fb1054bdf",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://allmind.ai/news/fedc3eeffda0b5f0342d6e73127a751fcf20fe84552230779f7a68be47de7d60"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "search",
+      "id": "ws_08894b92ca4c12b1006ac91f15c8c887d1bff599c54a74ed2a",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/EverHint/comments/1wnfb7g/stock_market_news_september_22_2026_morning/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://brutalist.report/source/CNBC?before=2026-10-03"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.brutalist.report/source/CNBC?before=2026-05-16&limit=25"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://brutalist.report/source/CNBC?before=2026-10-03&limit=25"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.brutalist.report/topic/business?before=2026-09-29"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.brutalist.report/topic/business?before=2023-09-07"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.brutalist.report/topic/business?before=2026-06-05&limit=50"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://brutalist.report/topic/business?before=2026-09-26"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://wallstreetpit.com/tape/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://brutalist.report/topic/business?before=2026-09-12&limit=50"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.brutalist.report/topic/business?before=2026-02-05"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://brutalist.report/topic/business?before=2026-09-19&limit=50"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.brutalist.report/?before=2026-10-08"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/wallstreet/comments/1uivtcp/market_structure_is_quietly_resetting_after_the/"
+       }
+      ],
+      "status": "completed"
+     }
+    ],
+    "output_text": "{\"overall_sentiment\":5,\"affected_commodities\":[],\"affected_sectors\":[],\"confidence\":32,\"headline_summary\":\"标题称，吉姆·克莱默列出周五股市需关注的十大事项；目前可见摘要仅说明，前一交易日科技股主导的急跌后，股市在周五早盘反弹。\",\"causal_summary\":\"已核验的输入事实只支持“前一交易日科技股主导的抛售后出现早盘反弹”这一市场情绪变化。由于原始付费正文未取得，无法确认十大事项、具体驱动因素或任何公司与行业之间的传导关系，因此不作个股或行业归因。\",\"insufficient_context\":true,\"classification\":\"neutral\",\"affected_stocks\":[],\"market_relevance\":18,\"uncertainty_notes\":[\"输入文章因付费墙不可用；已检索来源页面，但抓取未能取得原始正文，搜索结果仅能核对该标题在相关页面出现，不能证明文章内的具体十项内容。 ([cnbc.com](https://www.cnbc.com/?msockid=1afbb9b74e9160b30b77afe94ff16159&utm_source=openai))\",\"本条新闻标注日期为2026年10月9日；另行检索到的同标题其他日期文章不视为同一事件，未并入分析。\",\"由于未能取得可核验的原始正文，且输入未提供可用股票代码，不推断受影响股票、行业或商品。\"],\"content_hash\":\"d7afc2bba7425de6bbc9281dbff40a5eba89b13b1fcf308995ac609669b663ce\",\"key_factors\":[\"前一交易日科技股主导的急跌\",\"周五早盘股市反弹\",\"原始正文受付费墙限制，具体观察事项无法核验\"],\"news_id\":194569,\"summary_zh\":\"前一交易日科技股主导市场急跌后，股市今早反弹。\",\"change_sequence\":205749,\"output_language\":\"zh-CN\",\"title_zh\":\"吉姆·克莱默周五股市需关注的十大事项\"}",
+    "provider": "openai",
+    "stop_reason": "completed",
+    "terminal_error": null,
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": null,
+     "cached_input_tokens": 5711,
+     "code_execution_requests": 0,
+     "input_tokens": 26052,
+     "output_tokens": 4839,
+     "reasoning_tokens": 4357,
+     "total_tokens": 30891,
+     "web_fetch_requests": 1,
+     "web_search_requests": 2
+    }
+   },
+   "schema_version": "news_impact_zh_cn_v6"
+  },
+  {
+   "job_id": "aij_552dfd49bafc4cc7b3ff3b43063e0bff",
+   "model": "gpt-5.6-luna",
+   "payload": {
+    "allowed_tickers": [
+     "AMGN"
+    ],
+    "analysis_revision": 1,
+    "article_reason": "http_403",
+    "article_status": "unavailable",
+    "change_sequence": 205745,
+    "content_hash": "a73cf933d9aa6cbc865627e779604926e8f8f54835b1cd60e8f9910c9e0c960d",
+    "fetched_at": "2026-10-09T13:12:49.350863Z",
+    "news_id": 194565,
+    "published_at": "2026-10-09T13:05:42Z",
+    "source": "seekingalpha/breaking",
+    "source_count": 1,
+    "source_ticker_hints": [
+     "XLV",
+     "VHT",
+     "IHI",
+     "IXJ",
+     "IYH",
+     "FHLC",
+     "FXH",
+     "AMGN",
+     "CVS",
+     "A",
+     "DGX",
+     "THC",
+     "MMSI",
+     "TFX",
+     "RGEN",
+     "CORT",
+     "ICUI",
+     "HAE",
+     "EHC",
+     "MTD",
+     "ENSG",
+     "GMED",
+     "IQV",
+     "IRTC",
+     "ARQT",
+     "AVAH",
+     "BTSG"
+    ],
+    "sources": [
+     "seekingalpha/breaking"
+    ],
+    "summary": "[XLV, VHT, IHI, IXJ, IYH, FHLC]",
+    "title": "These healthcare stocks have the highest EPS revision grade ahead of Q3 results",
+    "url": "https://seekingalpha.com/news/4651695-these-healthcare-stocks-have-the-highest-eps-revision-grade-ahead-of-q3-results?feed_item_type=news"
+   },
+   "production_error": "Value error, english_prose_not_allowed: 'A'",
+   "prompt_version": "news-impact-zh-cn-v7",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://seekingalpha.com/news/4651695-these-healthcare-stocks-have-the-highest-eps-revision-grade-ahead-of-q3-results"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.tradingview.com/news/seekingalpha%3Aef55b3453094b%3A0-these-healthcare-stocks-have-the-highest-eps-revision-grade-ahead-of-q3-results/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.shropshire.gov.uk/media/5421/payments-february-2013.pdf"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://chartexchange.com/symbol/nasdaq-amgn/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/4651695/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://news2.gorich.com.tw/news?key=&n=67663478"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.delf.net/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://seekingalpha.com/news/4599642-medical-device-and-healthcare-services-stocks-lead-sectors-eps-revision-rankings"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://seekingalpha.com/news/4600132-digital-realty-weyerhaeuser-iron-mountain-among-top-reit-eps-revision-names"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.registrucentras.lt/jar/infleid/download.do?oid=176862"
+     }
+    ],
+    "id": "resp_081e56b1ee358374006ac91ead2e0c87d1a4e13ba477481a15",
+    "model": "gpt-5.6-luna",
+    "openai_web_calls": [
+     {
+      "action": "search",
+      "id": "ws_081e56b1ee358374006ac91eb0266087d18c12ec34b891959d",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.shropshire.gov.uk/media/5421/payments-february-2013.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/news/4651695-these-healthcare-stocks-have-the-highest-eps-revision-grade-ahead-of-q3-results"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.tradingview.com/news/seekingalpha%3Aef55b3453094b%3A0-these-healthcare-stocks-have-the-highest-eps-revision-grade-ahead-of-q3-results/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://chartexchange.com/symbol/nasdaq-amgn/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/4651695/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://news2.gorich.com.tw/news?key=&n=67663478"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.delf.net/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/news/4599642-medical-device-and-healthcare-services-stocks-lead-sectors-eps-revision-rankings"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/news/4600132-digital-realty-weyerhaeuser-iron-mountain-among-top-reit-eps-revision-names"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.registrucentras.lt/jar/infleid/download.do?oid=176862"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://doc.statbel.fgov.be/publications/A000.01/A000.01N_Stat_studie_1993_096.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://server-shop.ua/assets/images/resources/12438/hewlett-packard-enterprise-p07203-421-sales-guide.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://device.report/m/14e578970ed13818f869e02cc1004387b1e2ef4c891f14d5679f12da74b49cc5.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://seekingalpha.com/news/4599279-adm-darling-ingredients-unfi-among-top-staples-stocks-by-eps-revisions"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://doc.statbel.fgov.be/publications/A000.01/A000.01F_Etude_stat_1993_095.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.eleman.net/is-ilani/sef-garson-i4651695"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://aerobasegroup.com/part-number/4651695_01-241-2179"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.internationalcorp.org/mar-vel-international-inc"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "open_page",
+      "id": "ws_081e56b1ee358374006ac91eb2b4d887d1a7f65e75cc723c5e",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://www.tradingview.com/news/seekingalpha%3Aef55b3453094b%3A0-these-healthcare-stocks-have-the-highest-eps-revision-grade-ahead-of-q3-results/"
+       }
+      ],
+      "status": "completed"
+     }
+    ],
+    "output_text": "{\"overall_sentiment\":25,\"affected_commodities\":[],\"affected_sectors\":[\"医疗保健\",\"生物科技\",\"制药\"],\"confidence\":84,\"headline_summary\":\"新闻称，第三季度业绩公布前，20家医疗保健公司获A+每股收益修正量化评级；安进位列其中。([seekingalpha.com](https://seekingalpha.com/news/4651695-these-healthcare-stocks-have-the-highest-eps-revision-grade-ahead-of-q3-results))\",\"causal_summary\":\"潜在传导关系是：分析师盈利预期的正向修正可能提升市场对安进第三季度业绩预期的关注度，并对生物科技和制药板块形成轻度正面情绪映射。但该报道只是横截面量化筛选，没有披露安进具体的盈利预测修正幅度、业绩数字或公司指引，因此传导强度有限。([tradingview.com](https://www.tradingview.com/news/seekingalpha%3Aef55b3453094b%3A0-these-healthcare-stocks-have-the-highest-eps-revision-grade-ahead-of-q3-results/))\",\"insufficient_context\":true,\"classification\":\"bullish\",\"affected_stocks\":[{\"impact_score\":34,\"mechanism\":\"direct_company\",\"ticker\":\"AMGN\",\"confidence\":86,\"horizon\":\"weeks\",\"company\":\"安进\",\"reason\":\"安进被明确列入20家A+每股收益修正量化评级公司名单，构成轻度正面的盈利预期信号；但新闻未提供新的公司经营数据、正式公告或业绩结果，因此直接影响有限。([tradingview.com](https://www.tradingview.com/news/seekingalpha%3Aef55b3453094b%3A0-these-healthcare-stocks-have-the-highest-eps-revision-grade-ahead-of-q3-results/))\"}],\"market_relevance\":30,\"uncertainty_notes\":[\"输入article因HTTP 403不可用，未能取得输入所指向页面的完整原始正文；以上事实依据为对同一标题页面及转载内容的另行检索，不能视为已读取输入article全文。([seekingalpha.com](https://seekingalpha.com/news/4651695-these-healthcare-stocks-have-the-highest-eps-revision-grade-ahead-of-q3-results))\",\"报道仅说明安进获得A+每股收益修正量化评级，未披露具体修正幅度、分析师覆盖变化、第三季度业绩数字或公司指引，因此公司层面的影响评估有限。([tradingview.com](https://www.tradingview.com/news/seekingalpha%3Aef55b3453094b%3A0-these-healthcare-stocks-have-the-highest-eps-revision-grade-ahead-of-q3-results/))\",\"A+评级反映分析师盈利估计的正向变化，不等于安进已经公布业绩超预期或基本面已经改善。([tradingview.com](https://www.tradingview.com/news/seekingalpha%3Aef55b3453094b%3A0-these-healthcare-stocks-have-the-highest-eps-revision-grade-ahead-of-q3-results/))\"],\"content_hash\":\"a73cf933d9aa6cbc865627e779604926e8f8f54835b1cd60e8f9910c9e0c960d\",\"key_factors\":[\"报道针对2026年第三季度业绩季临近阶段的医疗保健股进行筛选。([seekingalpha.com](https://seekingalpha.com/news/4651695-these-healthcare-stocks-have-the-highest-eps-revision-grade-ahead-of-q3-results))\",\"名单包含20家公司，全部获得A+每股收益修正量化评级。([seekingalpha.com](https://seekingalpha.com/news/4651695-these-healthcare-stocks-have-the-highest-eps-revision-grade-ahead-of-q3-results))\",\"安进在名单中并获得A+评级。([tradingview.com](https://www.tradingview.com/news/seekingalpha%3Aef55b3453094b%3A0-these-healthcare-stocks-have-the-highest-eps-revision-grade-ahead-of-q3-results/))\",\"该评级基于分析师盈利估计变化，不能替代公司正式业绩或指引。([tradingview.com](https://www.tradingview.com/news/seekingalpha%3Aef55b3453094b%3A0-these-healthcare-stocks-have-the-highest-eps-revision-grade-ahead-of-q3-results/))\",\"输入正文不可用，事件细节由同一标题页面及转载内容进行核验。([seekingalpha.com](https://seekingalpha.com/news/4651695-these-healthcare-stocks-have-the-highest-eps-revision-grade-ahead-of-q3-results))\"],\"news_id\":194565,\"summary_zh\":\"另行检索到的同一事件内容显示，2026年第三季度业绩季临近时，医疗保健领域有20家公司被列入A+每股收益修正量化评级名单，安进是其中之一。该信息表达的是分析师盈利预期偏正面的修正，并未披露安进的具体修正幅度、业绩结果或公司指引。([seekingalpha.com](https://seekingalpha.com/news/4651695-these-healthcare-stocks-have-the-highest-eps-revision-grade-ahead-of-q3-results))\",\"change_sequence\":205745,\"output_language\":\"zh-CN\",\"title_zh\":\"这些医疗保健股在第三季度业绩公布前拥有最高的每股收益修正评级\"}",
+    "provider": "openai",
+    "stop_reason": "completed",
+    "terminal_error": null,
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": null,
+     "cached_input_tokens": 5711,
+     "code_execution_requests": 0,
+     "input_tokens": 21346,
+     "output_tokens": 5058,
+     "reasoning_tokens": 4135,
+     "total_tokens": 26404,
+     "web_fetch_requests": 1,
+     "web_search_requests": 1
+    }
+   },
+   "schema_version": "news_impact_zh_cn_v6"
+  }
+ ],
+ "source": "production ai_jobs failed rows, 2026-10-09 (Luna news_impact schema_validation_failed); payload and stored provider receipt copied verbatim"
+}

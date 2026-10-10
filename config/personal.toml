@@ -15,7 +15,8 @@ catalyst_mode = "scheduled"
 [ai]
 model = "claude-haiku-5-5"
 reasoning = "xhigh"
-# 新闻只翻译和分析已有材料；热点由 Sonnet 联网核验后发布。
+# 新闻按已抓到的正文分析，只有没拿到正文时 Luna 才联网查原始报道；
+# 热点由 Sonnet 联网核验后发布。
 news_model = "gpt-5.6-luna"
 news_reasoning = "max"
 market_focus_model = "claude-sonnet-5-5"
@@ -23,15 +24,19 @@ market_focus_reasoning = "xhigh"
 max_concurrency = 4
 daily_max_jobs = 0
 daily_budget_usd = 0.0
+# 日词元额度只在 model_budget.daily_budget_usd = 0 时拦截：用满后当天新任务记
+# budget_blocked，次日（UTC）由调度重试。取值 102400 至 100000000；0 不是
+# 「不限」，配置校验会直接拒绝。这时额度还不能低于单条任务的最大词元预留
+# 1050000（缺正文的 Luna 新闻），否则配置校验报错。
 daily_token_limit = 10000000
 execution_mode = "background"
 
 [model_budget]
-# 所有模型共用每日应用预算；正值启用后，日词元数只作统计。
-# 0 保持旧配置的词元额度。每日 UTC 00:00（东京 09:00）重置。
-daily_budget_usd = 0.0
+# 所有模型共用每日应用预算；正值启用后，日词元数只作统计、不再拦截。
+# 0 退回上面的日词元额度。每日 UTC 00:00（东京 09:00）重置。
+daily_budget_usd = 10.0
 # false 仅统计费用，超过参考金额仍继续；true 保留金额准入限制。
-enforce_limit = true
+enforce_limit = false
 # 可选起算时刻，须带时区。之前的费用保留记录但不占新额度。
 # accounting_start_at = "2026-10-08T00:00:00Z"
 

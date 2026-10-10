@@ -114,8 +114,11 @@ class Settings(BaseSettings):
         default=_PERSONAL_CONFIG.ai.execution_mode,
         alias="OPENAI_EXECUTION_MODE",
     )
+    # 一单付费分析从提交起最长等多久：OpenAI 后台响应到点会被取消，Claude 流到点
+    # 记成结果未知，两种都让已付费的工作作废。2026-10-10 新闻与财报输出上限翻倍
+    # 到 65,536，最慢一次生成的耗时随之变长，默认从 30 分钟放宽到 1 小时。
     openai_background_poll_timeout_seconds: float = Field(
-        default=1800.0,
+        default=3600.0,
         ge=60.0,
         le=86400.0,
         alias="OPENAI_BACKGROUND_POLL_TIMEOUT_SECONDS",

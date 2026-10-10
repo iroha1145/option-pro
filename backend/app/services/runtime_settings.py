@@ -31,6 +31,7 @@ from pydantic_core import PydanticCustomError
 from app.data_paths import get_data_paths
 from app.personal_config import (
     HOURLY_ANALYSIS_TIMES_ET,
+    LARGEST_TASK_TOKEN_RESERVATION,
     PersonalConfig,
     get_personal_config,
 )
@@ -232,6 +233,14 @@ class RuntimeSettingsValidationError(RuntimeSettingsError):
     pass
 
 
+class RuntimeSettingsTokenLimitError(RuntimeSettingsValidationError):
+    """A token-only budget would block the largest task on every submission."""
+
+    def __init__(self) -> None:
+        super().__init__("daily token limit is below the largest task reservation")
+        self.minimum = LARGEST_TASK_TOKEN_RESERVATION
+
+
 class RuntimeSettingsVersionConflict(RuntimeSettingsError):
     def __init__(self, current_version: int) -> None:
         super().__init__("runtime settings version conflict")
@@ -284,15 +293,28 @@ class RuntimeSettingsStore:
         defaults: RuntimeSettings | None = None,
         backup_keep: int = 7,
         clock: Callable[[], datetime] | None = None,
+        shared_daily_budget_usd: float | None = None,
     ) -> None:
         if not 1 <= backup_keep <= 100:
             raise ValueError("backup_keep must be between 1 and 100")
+        # The personal configuration's model_budget.daily_budget_usd. At zero
+        # the daily token limit gates submissions, so a write may not lower it
+        # below the largest single-task reservation (the same rule
+        # PersonalConfig enforces for personal.toml).
+        self.shared_daily_budget_usd = shared_daily_budget_usd
         self.path = path.expanduser().resolve()
         self.backup_dir = self.path.parent / f".{self.path.name}.backups"
         self.lock_path = self.path.parent / f".{self.path.name}.lock"
         self.defaults = defaults or RuntimeSettings()
         self.backup_keep = backup_keep
         self._clock = clock or (lambda: datetime.now(timezone.utc))
+
+    def _check_token_limit(self, settings: RuntimeSettings) -> None:
+        if (
+            self.shared_daily_budget_usd == 0
+            and settings.ai.daily_token_limit < LARGEST_TASK_TOKEN_RESERVATION
+        ):
+            raise RuntimeSettingsTokenLimitError()
 
     def _now(self) -> datetime:
         value = self._clock()
@@ -533,6 +555,7 @@ class RuntimeSettingsStore:
                 raise RuntimeSettingsValidationError("runtime settings patch is invalid") from exc
             if settings == current.settings:
                 return current
+            self._check_token_limit(settings)
 
             updated = RuntimeSettingsDocument(
                 version=current.version + 1,
@@ -563,6 +586,7 @@ class RuntimeSettingsStore:
             target = self._read_document(target_path)
             if target.version != target_version:
                 raise RuntimeSettingsStorageError("runtime settings backup version mismatch")
+            self._check_token_limit(target.settings)
 
             restored = RuntimeSettingsDocument(
                 version=current.version + 1,
@@ -582,6 +606,7 @@ def get_runtime_settings_store() -> RuntimeSettingsStore:
         get_data_paths().runtime_settings,
         defaults=runtime_settings_from_personal_config(config),
         backup_keep=config.storage.backup_keep,
+        shared_daily_budget_usd=config.model_budget.daily_budget_usd,
     )
 
 

@@ -2193,7 +2193,8 @@ def test_runtime_uses_fixed_model_reasoning_background_and_per_task_limits(tmp_p
         assert params["store"] is True
         assert params["max_output_tokens"] == expected_tokens
         assert params["text"]["format"]["strict"] is True
-    assert runtime.max_output_tokens_for("news_impact", model="gpt-5.6-terra") == 32_768
+    assert runtime.max_output_tokens_for("news_impact", model="gpt-5.6-terra") == 65_536
+    assert runtime.max_output_tokens_for("earnings_impact", model="gpt-5.6-terra") == 65_536
     assert runtime.max_output_tokens_for("market_focus", model="gpt-5.6-terra") == 49_152
 
 

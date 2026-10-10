@@ -207,10 +207,13 @@ def test_citations_require_matching_successful_tool_sources():
         AIJobRepository._provider_receipt_json(receipt)
 
 
-def test_available_body_keeps_search_optional(tmp_path):
+def test_available_body_never_searches(tmp_path):
     data = payload()
     data.update(article_status="available", article={"status": "available", "text": "英伟达公布新芯片。", "source_url": data["source_url"],
                 "fetched_at": "2026-10-09T00:00:00Z", "truncated": False})
     params = runtime._create_params(settings(tmp_path / "x"), "news_impact", data)
-    assert "tool_choice" not in params
-    assert params["tools"][0]["type"] == "web_search"
+    for key in ("tools", "tool_choice", "max_tool_calls", "include"):
+        assert key not in params
+    assert "不浏览网页" in params["instructions"] and "联网搜索" not in params["instructions"]
+    assert runtime.max_tool_calls_for("news_impact", model=runtime.LUNA_MODEL, payload=data) == 0
+    assert runtime.schema_identity("news_impact", model=runtime.LUNA_MODEL, payload=data) == runtime.LUNA_ARTICLE_NEWS_IDENTITY

@@ -309,7 +309,9 @@ def test_previous_prompt_remains_readable_without_refetch_or_repayment(story):
 
 def test_legacy_news_contract_exception_is_exact_and_keeps_policy_guard(monkeypatch):
     current = runtime.schema_identity("news_impact", model="gpt-5.6-terra")
-    assert current == runtime.NEWS_CONTENT_SCHEMA_IDENTITY
+    assert current == runtime.TERRA_NEWS_IDENTITY
+    # v6 -> body context -> 2026-10-10 output ceiling: each step is exact.
+    assert runtime.news_schema_identity_matches("news-impact-zh-cn-v7", *runtime.NEWS_CONTENT_SCHEMA_IDENTITY, current_identity=current)
     assert runtime.news_schema_identity_matches("news-impact-zh-cn-v6", *runtime.LEGACY_NEWS_V6_SCHEMA_IDENTITY, current_identity=current)
     assert not runtime.news_schema_identity_matches("news-impact-zh-cn-v7", *runtime.LEGACY_NEWS_V6_SCHEMA_IDENTITY, current_identity=current)
     monkeypatch.setattr(runtime, "schema_identity", lambda _job: ("news_impact_zh_cn_v6", "another-policy"))

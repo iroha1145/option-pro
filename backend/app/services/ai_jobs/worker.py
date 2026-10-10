@@ -10,7 +10,11 @@ from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
 from typing import Any
 
-from app.execution_limits import BREAKOUT_TASK_TIMEOUT_SECONDS
+from app.execution_limits import (
+    AI_JOBS_SUPERVISOR_MARGIN_SECONDS,
+    AI_JOBS_TASK_TIMEOUT_SECONDS,
+    BREAKOUT_TASK_TIMEOUT_SECONDS,
+)
 from app.failure_diagnostics import record_fallback_failure
 from app.services.ai_jobs import runtime
 from app.services.ai_jobs.models import InvalidJobPayloadError
@@ -67,6 +71,15 @@ async def _finish_claude_receipt(
     await _with_storage_retry(repository.complete, job["job_id"], owner, result, usage)
 
 
+def _paid_stream_seconds(settings: Any) -> float:
+    """The paid wait limit, kept inside the worker supervisor's pass timeout."""
+
+    return min(
+        float(settings.openai_background_poll_timeout_seconds),
+        AI_JOBS_TASK_TIMEOUT_SECONDS - AI_JOBS_SUPERVISOR_MARGIN_SECONDS,
+    )
+
+
 async def _stream_claude_with_controls(
     repository: AIJobRepository,
     settings: Any,
@@ -99,7 +112,7 @@ async def _stream_claude_with_controls(
         else stream_message(prepared, on_message_start=started)
     )
     operation = asyncio.create_task(invocation)
-    deadline = time.monotonic() + float(settings.openai_background_poll_timeout_seconds)
+    deadline = time.monotonic() + _paid_stream_seconds(settings)
     try:
         while True:
             remaining = deadline - time.monotonic()
@@ -759,8 +772,12 @@ async def process_job(
         except ValueError:
             repository.fail(job["job_id"], owner, "runtime_configuration_changed")
             return
+        payload = json.loads(job["payload_json"])
+        # The task's own variant (a Luna news task with an article body never
+        # searches) and the job's own model decide whether its stored identity
+        # is still current, including the listed predecessor identities.
         current_identity = runtime.schema_identity(
-            job["job_type"], model=str(settings.openai_model),
+            job["job_type"], model=str(settings.openai_model), payload=payload,
         )
         schema_matches = runtime.schema_identity_current(
             job["job_type"],
@@ -768,6 +785,7 @@ async def process_job(
             job["schema_version"],
             job["schema_sha256"],
             current_identity=current_identity,
+            model=str(job["model"]),
         )
         if (
             job["model"] != settings.openai_model
@@ -784,7 +802,6 @@ async def process_job(
             return
 
         require_live_lease()
-        payload = json.loads(job["payload_json"])
         prepare = runtime.prepare_claude if claude_job else runtime.prepare_background
         prepared = prepare(settings, job["job_type"], payload)
         require_live_lease()

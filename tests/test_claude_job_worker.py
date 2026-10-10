@@ -474,8 +474,9 @@ def test_claude_prompt_json_changes_only_earnings_identity_and_keeps_prepare_pol
     expected = {
         ("earnings_impact", "claude-haiku-5-5"): "90a0d7b406e0e84af3d618e715fe071404f26fe8a004cfcf5b6450ccd8407e8b",
         ("news_impact", "claude-haiku-5-5"): "68b3095ba0f47e559a5a7edd3daf6b091350546961ce398368684143bbb76a4a",
-        ("earnings_impact", "gpt-5.6-terra"): "efcf4a6d24e87c8bfcb8620183338d7ddd927a8df9290b1a8ee7f601a05e9265",
-        ("news_impact", "gpt-5.6-terra"): "d0e6936d8749cc96ed7fa8b3bf07bc64bd4cc1f5fb70d18ec0b0fbe3c35576fe",
+        # 2026-10-10 output ceiling 65,536 for OpenAI news and earnings.
+        ("earnings_impact", "gpt-5.6-terra"): "07071987fa5fc17daaa8c6b0d23cc750afb8bc096277398dca261a2c6d046742",
+        ("news_impact", "gpt-5.6-terra"): "e2f660481a77543a7a020798cea014e6c8b8298b78a0f89d3e7e507046fc6c2e",
     }
     for (job_type, model), digest in expected.items():
         identity = runtime.schema_identity(job_type, model=model)
@@ -484,6 +485,14 @@ def test_claude_prompt_json_changes_only_earnings_identity_and_keeps_prepare_pol
         else:
             assert identity[1] == digest
         assert runtime.schema_identity_current(job_type, runtime.PROMPT_VERSIONS[job_type], *identity, model=model)
+    for job_type, previous in (
+        ("earnings_impact", "efcf4a6d24e87c8bfcb8620183338d7ddd927a8df9290b1a8ee7f601a05e9265"),
+        ("news_impact", "d0e6936d8749cc96ed7fa8b3bf07bc64bd4cc1f5fb70d18ec0b0fbe3c35576fe"),
+    ):
+        version = runtime.schema_identity(job_type, model="gpt-5.6-terra")[0]
+        assert runtime.schema_identity_current(
+            job_type, runtime.PROMPT_VERSIONS[job_type], version, previous, model="gpt-5.6-terra",
+        )
     prepared = runtime.prepare_claude(settings(tmp_path / "jobs.db"), "earnings_impact", {
         "ticker": "PENG", "name": "PENG", "analysis_stage": "post_release_final",
         "eps_actual": 1.0, "eps_estimate": 0.7844,

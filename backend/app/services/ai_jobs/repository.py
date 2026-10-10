@@ -308,16 +308,26 @@ def _parse_time(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
-def _task_budget_reservation_microusd(job_type: str, *, model: str | None = None) -> int:
+def _task_budget_reservation_microusd(
+    job_type: str,
+    *,
+    model: str | None = None,
+    payload: Mapping[str, Any] | None = None,
+) -> int:
     from app.services.ai_jobs.runtime import budget_reservation_microusd
 
-    return budget_reservation_microusd(job_type, model=model)
+    return budget_reservation_microusd(job_type, model=model, payload=payload)
 
 
-def _task_token_reservation(job_type: str, *, model: str | None = None) -> int:
+def _task_token_reservation(
+    job_type: str,
+    *,
+    model: str | None = None,
+    payload: Mapping[str, Any] | None = None,
+) -> int:
     from app.services.ai_jobs.runtime import token_reservation
 
-    return token_reservation(job_type, model=model)
+    return token_reservation(job_type, model=model, payload=payload)
 
 
 def _minimum_task_token_reservation(*, model: str | None = None) -> int:
@@ -1437,6 +1447,71 @@ class AIJobRepository:
         )
         return hashlib.sha256(envelope.encode("utf-8")).hexdigest()
 
+    @staticmethod
+    def _recoverable_receipt_filter(
+        since: datetime, job_types: Iterable[str],
+    ) -> tuple[str, tuple[Any, ...]]:
+        types = sorted({str(job_type) for job_type in job_types})
+        codes = sorted(RECOVERABLE_FAILURE_CODES)
+        type_filter = (
+            f" AND job_type IN ({','.join('?' for _ in types)})" if types else ""
+        )
+        return (
+            f"""status='failed'
+                AND error_code IN ({','.join('?' for _ in codes)})
+                AND result_json IS NULL
+                AND provider_result_json IS NOT NULL
+                AND updated_at>=?{type_filter}""",
+            (
+                *codes,
+                since.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+                *types,
+            ),
+        )
+
+    def recoverable_receipt_failures(
+        self,
+        *,
+        since: datetime,
+        job_types: Iterable[str] = (),
+        limit: int = 2000,
+    ) -> list[str]:
+        """Failed jobs whose paid provider receipt is stored locally, oldest first.
+
+        Rows without a stored receipt are left out: reusing them would need a
+        provider retrieve, so they are recovered one id at a time instead.
+        """
+
+        if not 1 <= int(limit) <= 100_000:
+            raise ValueError("recovery_limit_invalid")
+        self.ensure_initialized()
+        condition, parameters = self._recoverable_receipt_filter(since, job_types)
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""SELECT job_id FROM ai_jobs WHERE {condition}
+                    ORDER BY updated_at,job_id LIMIT ?""",
+                (*parameters, int(limit)),
+            ).fetchall()
+        return [str(row["job_id"]) for row in rows]
+
+    def recoverable_receipt_failure_counts(
+        self,
+        *,
+        since: datetime,
+        job_types: Iterable[str] = (),
+    ) -> dict[str, int]:
+        """How many rows recoverable_receipt_failures could select, per job type."""
+
+        self.ensure_initialized()
+        condition, parameters = self._recoverable_receipt_filter(since, job_types)
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""SELECT job_type,COUNT(*) AS jobs FROM ai_jobs WHERE {condition}
+                    GROUP BY job_type ORDER BY job_type""",
+                parameters,
+            ).fetchall()
+        return {str(row["job_type"]): int(row["jobs"]) for row in rows}
+
     def get_job(self, job_id: str) -> dict[str, Any] | None:
         self.ensure_initialized()
         with self._connect() as connection:
@@ -2209,6 +2284,7 @@ class AIJobRepository:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 """SELECT j.job_type,j.model,j.status,j.lease_owner,j.submission_started_at,
+                          j.payload_json,
                           COALESCE(s.submission_source,'scheduled') AS lane
                    FROM ai_jobs AS j
                    LEFT JOIN ai_job_sources AS s ON s.job_id=j.job_id
@@ -2224,11 +2300,14 @@ class AIJobRepository:
                 connection.rollback()
                 raise RuntimeError("ai_job_not_submittable")
             lane = str(row["lane"])
+            # The task's own reservation: a Luna news task with an article body
+            # reserves no search calls.
+            task_payload = json.loads(str(row["payload_json"]))
             reservation_microusd = _task_budget_reservation_microusd(
-                str(row["job_type"]), model=str(row["model"])
+                str(row["job_type"]), model=str(row["model"]), payload=task_payload,
             )
             token_reservation = _task_token_reservation(
-                str(row["job_type"]), model=str(row["model"])
+                str(row["job_type"]), model=str(row["model"]), payload=task_payload,
             )
             block = self._lane_submission_block(
                 connection,

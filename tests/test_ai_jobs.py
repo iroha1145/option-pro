@@ -1718,12 +1718,12 @@ def test_paid_schema_failure_can_be_recovered_without_changing_usage(tmp_path):
 def test_owner_manual_output_caps_leave_reasoning_headroom():
     # 2026-08-08 生产：signal_analysis reasoning=max 思考 27-30k，32,768 顶格
     # 截断（provider_incomplete_max_output_tokens）。思考 tokens 计入输出上
-    # 限，owner 手动型任务必须给 max 档留成倍余量；批量型暂保持原值（上限只
-    # 影响预留与截断，不影响并发，见 runtime 注释）。
+    # 限，owner 手动型任务必须给 max 档留成倍余量；2026-10-10 批量型新闻与
+    # 财报也抬到 65,536（上限只影响预留与截断，不影响并发，见 runtime 注释）。
     assert runtime.max_output_tokens_for("signal_analysis", model="gpt-5.6-terra") == 65_536
     assert runtime.max_output_tokens_for("option_alerts", model="gpt-5.6-terra") == 49_152
-    assert runtime.max_output_tokens_for("earnings_impact", model="gpt-5.6-terra") == 32_768
-    assert runtime.max_output_tokens_for("news_impact", model="gpt-5.6-terra") == 32_768
+    assert runtime.max_output_tokens_for("earnings_impact", model="gpt-5.6-terra") == 65_536
+    assert runtime.max_output_tokens_for("news_impact", model="gpt-5.6-terra") == 65_536
 
 
 def test_failure_detail_is_persisted_exposed_and_cleared_by_recovery(tmp_path):
@@ -1953,7 +1953,10 @@ def test_recovery_tool_is_dry_run_by_default_and_never_resubmits(
     monkeypatch.setattr(runtime, "retrieve", retrieve)
 
     validated = asyncio.run(recovery_tool.recover([row["job_id"]], apply=False))
-    assert validated == [{"job_id": row["job_id"], "status": "validated"}]
+    assert [(item["job_id"], item["status"]) for item in validated] == [
+        (row["job_id"], "validated")
+    ]
+    assert validated[0]["narrative"]["summary"] == _earnings_result()["summary"]
     assert repository.get_job(row["job_id"])["status"] == "failed"
 
     recovered = asyncio.run(recovery_tool.recover([row["job_id"]], apply=True))

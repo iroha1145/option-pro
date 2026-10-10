@@ -319,8 +319,11 @@ _ALLOWED_CURRENCY_CODES = frozenset(
         "XAU",
     }
 )
+# 已认可产品线加版本号，可带型号档位：「iPhone 18 Pro」「iPhone 18 Pro Max」
+# （2026-10-09 Luna 被拒 2 次；机型名不在输入文本里时源绑定帮不上）。
 _VERSIONED_PRODUCT = re.compile(
     r"(?P<base>[A-Za-z]+)[ -]?(?P<version>\d+(?:\.\d+)*)"
+    r"(?:[ -](?:Pro|Max|Plus|Ultra|Mini|Air|SE|Ti))*"
 )
 _ALLOWED_VERSIONED_PRODUCT_BASES = frozenset(
     {
@@ -397,9 +400,17 @@ _MARKET_TERM_ABBREVIATIONS = frozenset(
         "YTD",
     }
 )
-# 指数代码后接涨跌描述的是指数本身（「标普500指数（SPX）下跌」），不是个股
-# 行情；只有「股价」「股票」这类证券名词仍要求代码绑定。
-_MARKET_INDEX_CODES = frozenset({"DXY", "NDX", "SPX", "VIX"})
+# 指数代码与宏观统计缩写后接涨跌，描述的是指数或指标本身（「标普500指数
+# （SPX）下跌」「美国9月CPI上涨0.6%」），不是个股行情；只有「股价」「股票」
+# 这类证券名词仍要求代码绑定。WTI、ADP、LNG 同时是股票代码，不在其中。
+# 基准利率名同理：「复合SOFR加1.730%」「SOFR上涨5个基点」说的是利率本身。
+# 其他缩写后接「+3.5%」「减2%」是涨跌（「盘前TSLA +3.5%」），照旧要求代码绑定。
+_RATE_BENCHMARK_NAMES = frozenset(
+    {"ESTR", "EURIBOR", "HIBOR", "LIBOR", "SHIBOR", "SOFR", "SONIA", "TONA"}
+)
+_SELF_DESCRIBING_CODES = frozenset(
+    {"CPI", "DXY", "GDP", "ISM", "JOLTS", "NDX", "NFP", "PCE", "PMI", "PPI", "SPX", "VIX"}
+) | _RATE_BENCHMARK_NAMES
 # SEC 文件编号。_FOREIGN_SPAN 从字母起算，「10-K」只切出单个字母「K」。
 _SEC_FORM_DESIGNATIONS = ("10-K", "10-Q", "8-K")
 _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
@@ -541,6 +552,9 @@ _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
         "Temu",
         "TeraWulf",
         "TikTok",
+        # 2026-10-10：通用技术缩写（「输入URL」）。证券语境仍走
+        # _approved_span_requires_ticker_binding 后检。
+        "URL",
         "Varonis",
         "VIX",
         # signal_analysis 契约的 key_levels.vwap_levels 字段就要求模型讨论
@@ -564,7 +578,7 @@ _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
         "macOS",
         "scikit-learn",
     }
-) | _MARKET_TERM_ABBREVIATIONS
+) | _MARKET_TERM_ABBREVIATIONS | _RATE_BENCHMARK_NAMES
 _CROSS_SENTENCE_SECURITY_ISSUERS = frozenset(
     {
         "Adobe",
@@ -640,6 +654,30 @@ _SECURITY_PRICE_MOVEMENTS = (
     "收涨",
     "收跌",
 )
+# 括号里的主机名不是术语注释：「（sec.gov）」「（www.nvidia.com/zh-cn）」
+# 「（GlobeNewswire.com）」「（info.gov.hk）」是来源标注，未经联网来源核对就
+# 不能借注释位发布。只认以 www. 开头、或最后一段是下列顶级域名的主机，不区分
+# 大小写，可带路径；co.uk、com.hk 这类多段后缀按最后一段判。js、py、md、sh、
+# ts、go、rs、ai、io 这类同时是技术或产品后缀的不在表里，「（node.js）」
+# 「（Character.AI）」照旧算注释。
+_HOST_TOP_LEVEL_DOMAINS = (
+    "com", "net", "org", "gov", "edu", "info", "biz", "news", "app", "xyz", "tv", "me",
+    "ly", "us", "uk", "eu", "cn", "hk", "tw", "jp", "kr", "sg", "in", "id", "my", "th",
+    "vn", "ph", "au", "nz", "ca", "mx", "br", "ar", "cl", "co", "de", "fr", "it", "es",
+    "nl", "be", "at", "ch", "se", "no", "fi", "dk", "ie", "pt", "gr", "cz", "hu", "pl",
+    "ru", "tr", "il", "ae", "sa", "za",
+)
+_BRACKETED_HOSTNAME = re.compile(
+    r"(?:www\.[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*"
+    rf"|[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.(?:{'|'.join(_HOST_TOP_LEVEL_DOMAINS)}))"
+    r"(?:/\S*)?",
+    re.IGNORECASE,
+)
+# IT 也是股票代码（高德纳），只有这些搭配才是信息技术的意思（「企业IT服务」）。
+_IT_CONTEXT_SUFFIXES = (
+    "服务", "支出", "行业", "系统", "板块", "部门",
+    "基础设施", "预算", "投入", "架构", "运维", "人员", "资产", "解决方案",
+)
 _STOCK_PRICE_SUFFIX = re.compile(
     r"^(?:的)?(?:当前|最新|今日|昨日|本周|盘前|盘后)?股价"
 )
@@ -652,6 +690,46 @@ _SECURITY_REFERENCE_PREFIX = re.compile(
     r"股票|普通股|股份|个股|证券)(?:为|是)?$"
 )
 _NUMERIC_CONTEXT_BOUNDARIES = frozenset("，,；;。.!！?？%％、")
+# 数字后接「量级加币种或股」（「发现矿业股份5000万美元」「300万股」，2026-10-09
+# 热点周期被拒），或直接接币种、百分号（「500美元」「股份5%」）时是数量，不是
+# 证券代码。量级后面不是计量单位就不算（「600309 万华化学」「300014亿纬锂能」），
+# 「股」后接东、本、权、份、票、价时也不是单位。
+_CURRENCY_UNITS = r"美元|美分|港元|港币|欧元|日元|英镑|人民币|元"
+_MAGNITUDE_UNIT = rf"[万亿千百]+[ \t]*(?:{_CURRENCY_UNITS}|股(?![东本权份票价]))"
+_NUMERIC_QUANTITY_SUFFIX = re.compile(
+    rf"^[ \t]*(?:{_MAGNITUDE_UNIT}|(?:{_CURRENCY_UNITS})|[%％])"
+)
+_MAGNITUDE_QUANTITY_SUFFIX = re.compile(rf"^[ \t]*{_MAGNITUDE_UNIT}")
+# 这些词后面的数字一般是证券代码，数量写法不豁免（「股票600519万股」）；
+# 0 开头的五位数（港股代码）在更前面就已判定。例外：「股票」后接「量级加股或
+# 币种」、数字又不是六位数时是数量（「回购股票1000万股」「发行股票2亿股」）。
+_NUMERIC_CODE_ONLY_PREFIX = re.compile(r"(?:代码|编号|股票|港股|个股)(?:为|是)?$")
+# 「港股9888百度集团」：港股代码多为四五位。只对四五位数这样判定，「港股10月
+# 以来」「港股3只科技股」里的月份、只数不受影响。
+_HONG_KONG_CODE_PREFIX = re.compile(r"港股(?:代码|编号)?(?:为|是)?$")
+# 数字后接量词、点位、量级或币种时说的是市场概况（「港股2600家上市公司」
+# 「港股1500只个股下跌」「港股26000点附近震荡」「港股5000亿成交」），不是代码。
+_HONG_KONG_COUNT_SUFFIX = re.compile(
+    r"^[ \t]*(?:只|家|个|名|点|余|多|亿|万|年|月|日|%|％|港元|美元)"
+)
+# 分号隔开的是另一个分句：「流通股份；Hexa Creation聚焦……」里的「股份」不指向
+# 分号后的名称。逗号仍连着同一分句，照旧计入证券语境。
+_CLAUSE_BREAKS = frozenset("；;")
+# 信用或量化评级的字母等级：「A+评级」「获A+每股收益修正量化评级」。
+_LETTER_GRADE = re.compile(
+    r"^(?:(?:[+＋]{1,2}|[\-－])[\u4e00-\u9fff]{0,12}?|)(?:评级|等级|评分)"
+)
+# 统计量写法「p<0.001」「n=712例」「p值」，只认这些小写统计符号；大写单字母
+# 可能是股票代码（「F>12美元」的 F 是福特汽车）。
+_STATISTIC_LETTERS = frozenset("dknprt")
+_STATISTIC_COMPARISON = re.compile(r"^[ \t]*(?:<=|>=|[<>=≤≥＜＞＝])[ \t]*[0-9]")
+# 大写的 P、N 也常这样写（「P<0.001」「N=712例」），只在比较号后接数字、
+# 数字后不接币种时算统计写法：「P<10美元」里的 P 仍可能是股票代码。
+_UPPERCASE_STATISTIC_LETTERS = frozenset("NP")
+_STATISTIC_COMPARISON_VALUE = re.compile(
+    r"^[ \t]*(?:<=|>=|[<>=≤≥＜＞＝])[ \t]*(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)"
+)
+_CURRENCY_AMOUNT_TAIL = re.compile(rf"^[ \t]*[万亿千百]*[ \t]*(?:{_CURRENCY_UNITS})")
 _NUMERIC_SUFFIX_HARD_BOUNDARIES = frozenset("；;。.!！?？%％")
 _SECURITY_REFERENCE_MARKERS = (
     "股价",
@@ -1137,6 +1215,10 @@ def _is_contextual_initialism(
         return False
     if not any(char.isascii() and char.isalpha() for char in span):
         return False
+    # 「（WWW.SEC.GOV）」是主机名，不是缩写。全大写、不带 www. 的「ASP.NET」
+    # 照旧按缩写放行。
+    if span.casefold().startswith("www."):
+        return False
     prose_tokens = re.findall(r"[A-Z]+", span)
     if any(
         token.casefold() in _ENGLISH_PROSE_WORDS
@@ -1184,6 +1266,9 @@ def _approved_span_requires_ticker_binding(
         before_index >= 0
         and _is_security_reference_separator(sentence[before_index])
     ):
+        if sentence[before_index] in _CLAUSE_BREAKS:
+            before_index = -1
+            break
         before_index -= 1
     prefix = sentence[: before_index + 1]
 
@@ -1450,14 +1535,14 @@ def _is_sec_form_designation(sentence: str, *, end: int) -> bool:
     return False
 
 
-def _index_code_names_the_index(
+def _code_names_the_statistic(
     span: str,
     *,
     sentence: str,
     start: int,
     end: int,
 ) -> bool:
-    if span not in _MARKET_INDEX_CODES:
+    if span not in _SELF_DESCRIBING_CODES:
         return False
     prefix = _normalize_security_reference_phrase(sentence[:start])
     if _SECURITY_REFERENCE_PREFIX.search(prefix) is not None:
@@ -1465,6 +1550,9 @@ def _index_code_names_the_index(
     suffix = _normalize_security_reference_phrase(sentence[end:]).removeprefix(
         "的"
     )
+    # 「CPI公司」「SOFR集团」指的是公司，不是指标。
+    if suffix.startswith(_SECURITY_COMPANY_BRIDGES):
+        return False
     return (
         _STOCK_PRICE_SUFFIX.match(suffix) is None
         and _SECURITY_NOUN_SUFFIX.match(suffix) is None
@@ -1485,12 +1573,15 @@ def _is_cjk_gloss_annotation(
     - 括号内只有该片段本身（左括号紧贴、右括号紧随），括号前一字符是中文；
     - 片段紧凑（≤24、无空白）且含小写字母或数字，或长度 ≥6；
     - 1–5 位全大写的代码形状**不进此通道**——未绑定证券代码不得借括号
-      漂白，仍走代码绑定规则；prose word 同样拒绝。
+      漂白，仍走代码绑定规则；prose word 同样拒绝；
+    - 主机名（可带路径，_BRACKETED_HOSTNAME）也不进此通道。
     """
 
     if not 1 < len(span) <= 24 or any(char.isspace() for char in span):
         return False
     if not any(char.isalpha() for char in span):
+        return False
+    if _BRACKETED_HOSTNAME.fullmatch(span) is not None:
         return False
     if span.isupper() and len(span) <= 5:
         return False
@@ -1529,6 +1620,14 @@ def _foreign_span_context(
 ) -> bool:
     if _is_copied_source_headline_fragment(span, source_texts):
         return False
+    if (
+        span == "IT"
+        and sentence[end:].lstrip(" \t").startswith(_IT_CONTEXT_SUFFIXES)
+        and not _approved_span_requires_ticker_binding(
+            span, sentence=sentence, start=start, end=end,
+        )
+    ):
+        return True
     if len(span) == 1 and span.isascii() and span.isupper():
         if _is_sec_form_designation(sentence, end=end):
             return True
@@ -1543,6 +1642,12 @@ def _foreign_span_context(
             return span in {"B", "T"}
         if suffix.startswith(("分数", "值", "统计量")):
             return True
+        if _LETTER_GRADE.match(sentence[end:]) is not None:
+            return True
+        if span in _UPPERCASE_STATISTIC_LETTERS:
+            value = _STATISTIC_COMPARISON_VALUE.match(sentence[end:])
+            if value is not None and _CURRENCY_AMOUNT_TAIL.match(sentence[end + value.end():]) is None:
+                return True
         if suffix.startswith(_FOREIGN_PROPER_NAME_CONTEXT_SUFFIXES) and any(
             re.search(
                 rf"(?<![A-Za-z0-9]){re.escape(span)}(?![A-Za-z0-9])",
@@ -1553,6 +1658,11 @@ def _foreign_span_context(
             for source in source_texts
         ):
             return True
+    if span in _STATISTIC_LETTERS and (
+        sentence[end:].startswith(("值", "分数", "统计量"))
+        or _STATISTIC_COMPARISON.match(sentence[end:]) is not None
+    ):
+        return True
     if _COMPACT_DIGIT_LETTER_IDENTIFIER.fullmatch(span) is not None:
         if _approved_span_requires_ticker_binding(
             span,
@@ -1582,6 +1692,11 @@ def _foreign_span_context(
             sentence=sentence,
             start=start,
             end=end,
+        ) and not _code_names_the_statistic(
+            span,
+            sentence=sentence,
+            start=start,
+            end=end,
         ):
             suffix = _strip_security_reference_separators(sentence[end:])
             return (
@@ -1606,7 +1721,7 @@ def _foreign_span_context(
             sentence=sentence,
             start=start,
             end=end,
-        ) and not _index_code_names_the_index(
+        ) and not _code_names_the_statistic(
             span,
             sentence=sentence,
             start=start,
@@ -1819,6 +1934,24 @@ def _numeric_code_is_in_security_context(
     )
     if len(span) == 4 and suffix.startswith(("年", "年度", "财年")):
         return False
+    if (
+        _NUMERIC_QUANTITY_SUFFIX.match(sentence[end:]) is not None
+        and _NUMERIC_CODE_ONLY_PREFIX.search(prefix) is None
+    ):
+        return False
+    if (
+        len(span) != 6
+        and prefix.endswith("股票")
+        and _MAGNITUDE_QUANTITY_SUFFIX.match(sentence[end:]) is not None
+    ):
+        return False
+    if (
+        len(span) in (4, 5)
+        and _HONG_KONG_CODE_PREFIX.search(prefix) is not None
+        and _NUMERIC_QUANTITY_SUFFIX.match(sentence[end:]) is None
+        and _HONG_KONG_COUNT_SUFFIX.match(sentence[end:]) is None
+    ):
+        return True
     return (
         _SECURITY_REFERENCE_PREFIX.search(prefix) is not None
         or suffix.startswith(_SECURITY_CODE_SUFFIXES)
@@ -1933,10 +2066,13 @@ def validate_simplified_chinese_text(
     cjk_count = sum(1 for char in scan_text if _is_cjk(char))
     if cjk_count == 0:
         raise ValueError("simplified_chinese_text_required")
-    context_codes = (
-        info.context.get("allowed_codes", ())
+    context = (
+        info.context
         if info is not None and isinstance(info.context, dict)
-        else allowed_codes
+        else None
+    )
+    context_codes = (
+        context.get("allowed_codes", ()) if context is not None else allowed_codes
     )
     normalized_codes = frozenset(
         str(code).strip().upper()
@@ -1944,15 +2080,14 @@ def validate_simplified_chinese_text(
         if isinstance(code, str) and str(code).strip()
     )
     context_source_texts = (
-        info.context.get("source_texts", ())
-        if info is not None and isinstance(info.context, dict)
-        else source_texts
+        context.get("source_texts", ()) if context is not None else source_texts
     )
     source_texts = tuple(
         source
         for source in context_source_texts
         if isinstance(source, str) and source
     )
+    news_payload = context.get("news_payload") if context is not None else None
     latin_count = sum(
         1 for char in scan_text if char.isascii() and char.isalpha()
     )
@@ -2001,10 +2136,6 @@ def validate_simplified_chinese_text(
                 source_texts=source_texts,
             ):
                 continue
-            news_payload = (
-                info.context.get("news_payload")
-                if info is not None and isinstance(info.context, dict) else None
-            )
             if isinstance(news_payload, dict) and _news_source_bound_name(
                 match.group(0), sentence, match.start(), match.end(), news_payload,
             ):
@@ -2501,13 +2632,94 @@ class NewsCommodityImpact(StrictModel):
     reason: ZhBoundedText
 
 
+_HTTP_STATUS_LABELS = {
+    "401": "未获授权",
+    "403": "访问被拒绝",
+    "404": "页面不存在",
+    "410": "页面已移除",
+    "429": "请求过于频繁",
+}
+
+
+def _http_status_label(code: str) -> str:
+    return _HTTP_STATUS_LABELS.get(code) or (
+        "服务器错误" if code.startswith("5") else "访问失败"
+    )
+
+
+# 新闻任务自己的字段名与状态值在发布文本里的中文说法。只替换与本条载荷字段名、
+# 正文字段名、结果字段名或抓取状态值逐字相同的词；其他英文照旧交给中文校验。
+_NEWS_FIELD_LABELS = {
+    "article": "新闻正文",
+    "article_status": "正文状态",
+    "article_reason": "正文缺失原因",
+    "text": "正文",
+    "source": "来源",
+    "sources": "来源",
+    "source_url": "来源网址",
+    "url": "网址",
+    "title": "标题",
+    "summary": "摘要",
+    "allowed_tickers": "允许股票代码名单",
+    "affected_stocks": "受影响个股",
+    "confidence": "置信度",
+    "classification": "判断类别",
+    "insufficient_context": "证据不足",
+}
+_NEWS_STATUS_LABELS = {
+    "available": "可用",
+    "unavailable": "不可用",
+    "not_requested": "未请求",
+    "truncated": "已截断",
+    "timeout": "超时",
+    "paywall": "付费墙",
+    "challenge_page": "访问验证页",
+    "dns_error": "域名解析失败",
+    "unsafe_url": "网址不安全",
+    "unsafe_address": "地址不安全",
+    "unsafe_request": "请求不安全",
+    "unsupported_encoding": "编码不支持",
+    "unsupported_content_type": "内容类型不支持",
+    "response_too_large": "响应过大",
+    "incomplete_response": "响应不完整",
+    "no_matching_article_body": "未找到匹配正文",
+    "publisher_url_unavailable": "发布方网址不可用",
+    "redirect_limit": "重定向次数超限",
+    "fetch_failed": "抓取失败",
+}
+
+
+def _news_identifier_translations(payload: dict) -> dict[str, str]:
+    article = payload.get("article")
+    article = article if isinstance(article, dict) else {}
+    fields = {
+        *payload, *article, "article", "article_status", "article_reason",
+        *NewsImpactResult.model_fields,
+    }
+    translations = {
+        name: label for name, label in _NEWS_FIELD_LABELS.items() if name in fields
+    }
+    statuses = {
+        payload.get("article_status"), payload.get("article_reason"), article.get("status"),
+    }
+    if article or payload.get("truncated_fields"):
+        statuses.add("truncated")
+    translations.update(
+        {value: label for value, label in _NEWS_STATUS_LABELS.items() if value in statuses}
+    )
+    reason = re.fullmatch(r"http_([1-5][0-9]{2})", str(payload.get("article_reason") or ""))
+    if reason is not None:
+        translations[reason.group(0)] = f"状态码{reason.group(1)}"
+    return translations
+
+
 def _translate_news_metadata(value: str, payload: dict) -> str:
     """Translate only known input labels; never rewrite facts or output keys."""
-    translations = {"allowed_tickers": "允许股票代码名单", "affected_stocks": "受影响个股"}
-    if payload.get("article_status") == "unavailable":
-        translations.update({"article_status": "正文状态", "unavailable": "不可用", "article": "新闻正文"})
-        if payload.get("article_reason") == "no_matching_article_body":
-            translations.update({"article_reason": "正文缺失原因", "no_matching_article_body": "未找到匹配正文"})
+    # 翻译只修正中文句子里夹带的字段名；一句汉字都没有的文本（「title summary
+    # source url」）不拼成中文词串发布，原样交给中文校验拒绝。
+    if not any(_is_cjk(char) for char in value):
+        return value
+    translations = _news_identifier_translations(payload)
     # Names are exact ASCII tokens, not substrings of an unknown program label.
     tokens = "|".join(sorted(map(re.escape, translations), key=len, reverse=True))
     pattern = re.compile(r"(?<![A-Za-z0-9_])(" + tokens + r")(?![A-Za-z0-9_])")
@@ -2520,6 +2732,17 @@ def _translate_news_metadata(value: str, payload: dict) -> str:
         return translations[match.group(0)]
     value = pattern.sub(replace, value)
     value = re.sub(r"((?:商业|业务)发展公司)[（(]BDC[）)]", r"\1", value)
+    # 只翻译与本条输入抓取失败一致的状态码：正文因 http_401 不可用时「HTTP 401」
+    # 是事实复述，状态码对不上（或输入没有失败记录）时原样留给校验器拒绝。
+    status = re.fullmatch(r"http_([1-5][0-9]{2})", str(payload.get("article_reason") or ""))
+    if payload.get("article_status") == "unavailable" and status is not None:
+        code = status.group(1)
+        value = re.sub(
+            rf"(?<![A-Za-z0-9_])HTTP[ \t]*(?:状态码)?[ \t]*{code}(?![0-9])",
+            f"{_http_status_label(code)}（状态码{code}）",
+            value,
+            flags=re.IGNORECASE,
+        )
     sources = _validation_source_texts("news_impact", payload)
     if any(re.search(r"\bSarbanes[-– ]Oxley\b", source, re.I) for source in sources):
         def translate_regulation(match: re.Match[str]) -> str:
@@ -2567,6 +2790,14 @@ class NewsImpactResult(SimplifiedChineseResult):
                 result[name] = [
                     _translate_news_metadata(item, payload)
                     if isinstance(item, str) else item
+                    for item in result[name]
+                ]
+        for name in ("affected_stocks", "affected_commodities"):
+            if isinstance(result.get(name), list):
+                result[name] = [
+                    {**item, "reason": _translate_news_metadata(item["reason"], payload)}
+                    if isinstance(item, dict) and isinstance(item.get("reason"), str)
+                    else item
                     for item in result[name]
                 ]
         return result

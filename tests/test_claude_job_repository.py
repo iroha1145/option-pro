@@ -18,11 +18,11 @@ LEGACY = "gpt-5.6-terra"
 def accounting(monkeypatch):
     calls = []
 
-    def reserve(job_type, *, model=None):
+    def reserve(job_type, *, model=None, payload=None):
         calls.append(("reserve", model))
         return 900 if model == CLAUDE else 1800
 
-    def tokens(job_type, *, model=None):
+    def tokens(job_type, *, model=None, payload=None):
         calls.append(("tokens", model))
         return 1000 if model == CLAUDE else 2000
 
