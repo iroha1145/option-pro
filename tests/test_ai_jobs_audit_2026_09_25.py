@@ -1069,18 +1069,21 @@ def test_standard_market_terms_pass_the_chinese_validator(text):
 @pytest.mark.parametrize(
     ("text", "codes"),
     [
-        ("Delta股价上涨。", ("AMD",)),
-        ("Call股价上涨。", ("AMD",)),
         ("股票代码IV走强。", ("AMD",)),
         ("标普500指数（SPX）股价上涨。", ("AMD",)),
         ("英伟达（NVDA）股价上涨。", ("AAPL",)),
-        ("特斯拉（Tesla）股价上涨。", ("TSLA",)),
         ("SPY走弱，大盘承压。", ("AMD",)),
     ],
 )
 def test_security_context_still_requires_ticker_binding(text, codes):
     with pytest.raises(ValueError, match="english_prose_not_allowed"):
         validate_simplified_chinese_text(text, None, allowed_codes=codes)
+
+
+@pytest.mark.parametrize("text", ["Delta股价上涨。", "Call股价上涨。", "特斯拉（Tesla）股价上涨。"])
+def test_names_in_stock_context_are_terms_after_round_three(text):
+    # 2026-10-10 第三轮：Delta、Call、Tesla 不是代码样词元，接股价不要求绑定（原先在上面的清单里）。
+    assert validate_simplified_chinese_text(text, None, allowed_codes=("AMD",)) == text
 
 
 def test_prose_rejection_names_the_rejected_fragment():
