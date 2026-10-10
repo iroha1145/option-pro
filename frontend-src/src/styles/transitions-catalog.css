@@ -148,28 +148,8 @@
   color: var(--tabs-text-active);
 }
 
-/* The pill: width + transform are written inline by JS so
-   the transition tweens between the previous and next
-   measured positions. */
-.t-tabs-pill {
-  position: absolute;
-  top: 3px;
-  left: 0;
-  height: 30px;
-  width: 0;
-  background: var(--tabs-pill-bg);
-  border-radius: 48px;
-  transform: translateX(0);
-  transition:
-    transform var(--tabs-dur) var(--tabs-ease),
-    width     var(--tabs-dur) var(--tabs-ease);
-  will-change: transform, width;
-  z-index: 0;
-  pointer-events: none;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .t-tabs-pill, .t-tab { transition: none !important; }
+  .t-tab { transition: none !important; }
 }
 
 /* —— 14-skeleton-reveal.md —— */
@@ -207,13 +187,6 @@
 .t-skel.is-revealed .t-skel-content {
   opacity: 1;
   filter: blur(0);
-}
-/* Snap-back when replaying: kill transitions so the reverse
-   (revealed → skeleton) is instant. Drop `.is-resetting`
-   after a forced reflow and the next reveal animates again. */
-.t-skel.is-resetting .t-skel-skeleton,
-.t-skel.is-resetting .t-skel-content {
-  transition: none !important;
 }
 
 /* Pulse: place the animation on the bar/avatar children, not
@@ -389,7 +362,6 @@
   --tabs-text-muted: var(--ink-400);
   --tabs-text-active: var(--ink-800);
   --tabs-bar-bg: var(--card-warm);
-  --tabs-pill-bg: var(--card);
   --tt-bg: var(--card);
   --tt-fg: var(--ink-700);
 }
@@ -449,9 +421,8 @@
 }
 
 /* Paper Terminal geometry for catalog tabs：r-md 语言 + 旧 Segmented 的 30px
-   总高（catalog demo 是 48px 药丸 / 36px 高）。只改条与标签：滑块换成了
-   framer 的 GlidePill（自带白底胶囊几何），.t-tabs-pill 在本仓已无人渲染，
-   给它留一份适配就是没人看得见的死样式。 */
+   总高（catalog demo 是 48px 药丸 / 36px 高）。只改条与标签：滑块是
+   framer 的 GlidePill（自带白底胶囊几何）。 */
 .t-tabs {
   gap: 2px;
   padding: 2px;
@@ -816,8 +787,6 @@
   animation: t-matrix-pulse var(--matrix-cycle) var(--matrix-ease) infinite;
   animation-delay: calc(var(--d, 0) * 1ms);
 }
-/* Hole positions (rounded variants) render nothing. */
-.t-matrix i.is-gap { visibility: hidden; animation: none; }
 @keyframes t-matrix-pulse {
   0%, 45%, 100% { background-color: var(--matrix-base); }
   15%           { background-color: var(--matrix-active); }

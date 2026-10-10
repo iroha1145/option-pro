@@ -169,7 +169,7 @@ test('each catalog snippet keeps prefers-reduced-motion', async () => {
     '.t-panel-slide',
     '.t-modal',
     '.t-dropdown',
-    '.t-tabs-pill',
+    '.t-tab',
     '.t-skel-skeleton',
     '.t-tt',
     '.t-acc-panel',
