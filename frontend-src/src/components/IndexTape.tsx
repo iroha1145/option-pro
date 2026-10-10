@@ -20,7 +20,8 @@ import { t } from '../i18n/core.ts';
 
 function TapeItem({ q, flash, onOpen }: { q: IndexQuote; flash: 'up' | 'down' | null; onOpen: (code: string) => void }) {
   /* 平盘用中性色，不画成上涨（审计 P2-8 同一口径）。 */
-  const tone = q.changePct === null ? 'unknown' : q.changePct > 0 ? 'up' : q.changePct < 0 ? 'down' : 'flat';
+  const pctText = q.changePct === null ? null : fmtPct(q.changePct);
+  const tone = q.changePct === null ? 'unknown' : q.changePct > 0 ? 'up' : q.changePct < 0 && pctText !== '+0.00%' ? 'down' : 'flat';
   return (
     <button
       type="button"
@@ -45,7 +46,7 @@ function TapeItem({ q, flash, onOpen }: { q: IndexQuote; flash: 'up' | 'down' | 
           tone === 'up' ? 'text-up-700' : tone === 'down' ? 'text-down-700' : 'text-ink-500',
         )}
       >
-        {tone === 'flat' ? '0.00%' : fmtPct(q.changePct)}
+        {tone === 'flat' ? '0.00%' : pctText ?? '—'}
       </span>
     </button>
   );

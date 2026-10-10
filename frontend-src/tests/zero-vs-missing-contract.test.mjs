@@ -361,12 +361,12 @@ test('ChangeBadge 与指数跑马灯都有中性平盘态', async () => {
   const reading = await source('components/market/SignalsReading.tsx');
 
   assert.doesNotMatch(codeOf(badge), /value >= 0/);
-  assert.match(badge, /value > 0 \? 'up' : value < 0 \? 'down' : 'flat'/);
+  assert.match(badge, /value > 0 \? 'up' : value < 0 && percentText !== '\+0\.00%' \? 'down' : 'flat'/);
   assert.match(badge, /持平/);
   assert.match(badge, /name=\{[\s\S]{0,160}'minus'/);
 
   assert.doesNotMatch(codeOf(tape), /q\.changePct >= 0/);
-  assert.match(tape, /q\.changePct > 0 \? 'up' : q\.changePct < 0 \? 'down' : 'flat'/);
+  assert.match(tape, /q\.changePct > 0 \? 'up' : q\.changePct < 0 && pctText !== '\+0\.00%' \? 'down' : 'flat'/);
 
   assert.doesNotMatch(codeOf(reading), /q\.changePct >= 0/);
   assert.match(reading, /usIndices\.filter\(\(q\) => q\.changePct !== null && q\.changePct > 0\)/);

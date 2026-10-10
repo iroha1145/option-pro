@@ -170,6 +170,18 @@ test('missing and nonfinite financial values remain distinct from real zero', ()
   assert.equal(fmtCompact(-2_500_000_000), '-2.50B');
   assert.equal(fmtSigned(-12), '−12.00');
   assert.equal(fmtPct(1.5), '+1.50%');
+  assert.equal(fmtPct(-0.004), '+0.00%');
+  assert.equal(fmtPct(-0.0001), '+0.00%');
+  assert.equal(fmtPct(0), '+0.00%');
+  assert.equal(fmtPct(-0), '+0.00%');
+  assert.equal(fmtPct(-0.005), '−0.01%');
+  assert.equal(fmtPct(-1.235), '−1.24%');
+  assert.equal(fmtCompact(999_950), '1.0M');
+  assert.equal(fmtCompact(-999_950), '-1.0M');
+  assert.equal(fmtCompact(999_949), '999.9K');
+  assert.equal(fmtCompact(999_950_000), '1.00B');
+  assert.equal(fmtCompact(999_995_000_000), '1.00T');
+  assert.equal(fmtCompact(999_995_000_000_000), '1000.00T');
   assert.doesNotThrow(() => fmtPrice(1.23, -1));
   assert.doesNotThrow(() => fmtPct(1.23, Infinity));
 });
