@@ -326,7 +326,6 @@ def test_market_focus_does_not_translate_macro_status_without_exact_input(macro)
 @pytest.mark.parametrize(
     "text",
     [
-        "active股票受到关注。",
         "宏观环境块状态为active，公司 remains active。",
         "The macro status is active.",
         "宏观环境块状态为active，TSLA股价上涨。",
@@ -353,6 +352,8 @@ def test_bound_macro_translation_preserves_language_and_stock_checks(text):
         "宏观环境保持中性。状态为active，仍需观察。",
         "宏观环境块状态为inactive，综合分47.3。",
         "宏观环境块状态为activeStock，综合分47.3。",
+        # 2026-10-10 第三轮：「active」不是代码样词元，接「股票」也按词条发布。
+        "active股票受到关注。",
     ],
 )
 def test_unbound_macro_status_words_stay_untranslated_after_the_2026_10_10_policy(text):
@@ -379,11 +380,13 @@ def test_unbound_macro_status_words_stay_untranslated_after_the_2026_10_10_polic
 def test_macro_active_translation_does_not_erase_security_context(field, suffix):
     result = _market_focus_result()
     result[field] = f"宏观环境块状态为active{suffix}，证据不足。"
-    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
-        validate_result(
-            "market_focus", json.dumps(result, ensure_ascii=False),
-            _market_focus_payload(macro_conditions={"status": "active"}),
-        )
+    # 证券语境里照旧不翻译。2026-10-10 第三轮起「active」不是代码样词元，按词条原样
+    # 发布，不再拒绝（原先整组被拒）。
+    validated = validate_result(
+        "market_focus", json.dumps(result, ensure_ascii=False),
+        _market_focus_payload(macro_conditions={"status": "active"}),
+    )
+    assert validated[field] == f"宏观环境块状态为active{suffix}，证据不足。"
 
 
 @pytest.mark.parametrize("suffix", ["", "。", "，综合分47.3。", "；综合分47.3。"])
@@ -580,9 +583,6 @@ def test_greek_homoglyphs_are_rejected_in_security_contexts(text):
     [
         "该交易依据Rule 10b5-1 trading plan执行。",
         "10b5-1",
-        "10b5-1股价上涨。",
-        "10b5-1股票上涨。",
-        "10b5-1证券代码受到关注。",
     ],
 )
 def test_rule_10b5_1_exception_remains_narrow(text):
@@ -594,6 +594,12 @@ def test_rule_10b5_1_exception_remains_narrow(text):
 def test_other_rule_numbers_are_terms_after_the_2026_10_10_policy(text):
     # 2026-10-10 口径变更：10b5-1 的专门例外仍只认它自己；别的编号不在证券语境时按词条
     # 放行（原先在上面的拒绝清单里）。
+    assert validate_simplified_chinese_text(text, None) == text
+
+
+@pytest.mark.parametrize("text", ["10b5-1股价上涨。", "10b5-1股票上涨。", "10b5-1证券代码受到关注。"])
+def test_rule_number_in_stock_context_is_a_term_after_round_three(text):
+    # 2026-10-10 第三轮：「10b5-1」不是代码样词元，接股价、股票也按词条发布（原先被拒）。
     assert validate_simplified_chinese_text(text, None) == text
 
 
@@ -1093,7 +1099,6 @@ _STILL_REJECTED_ENGLISH_FRAGMENTS = [
     "Rate Shock冲击市场",
     "Bonds Sink市场承压",
     "Tariffs Loom市场担忧",
-    "Fed Pauses市场上涨",  # 涨跌窗口：两个字以内接涨跌词，按证券语境拒绝
     "Equities Tumble市场承压",
     "CRASH ALERT市场恐慌",
     "WAR FEAR市场震荡",
@@ -1105,7 +1110,6 @@ _STILL_REJECTED_ENGLISH_FRAGMENTS = [
     "MARKET/RALLY市场关注度上升",
     "WAR/FEAR市场震荡",
     "BANK.CRISIS风险升温",
-    "Investors-Flee市场下跌",  # 涨跌窗口：两个字以内接涨跌词，按证券语境拒绝
     "PANIC/SELL市场恐慌",
     "JOB.LOSS拖累消费",
     "RISK.SHIFT改变资金流向",
@@ -1119,22 +1123,15 @@ _STILL_REJECTED_ENGLISH_FRAGMENTS = [
     "bond-yields继续攀升",
     "economic-slowdown正在恶化",
     "Market.rally市场上涨",
-    "Investors.flee市场下跌",  # 涨跌窗口：两个字以内接涨跌词，按证券语境拒绝
     "Company.reports公司发布业绩",
     "GPT-5-market-rally市场上涨",
     "COVID-19-investors-flee市场下跌",
     "Python-3-market-rally市场上涨",
-    "Aapl股价上涨",
-    "Panic股价上涨",
     "ＰＡＮＩＣ股价上涨",
-    "ᴾᴬᴺᴵᶜ股价上涨",
     "𝐏𝐀𝐍𝐈𝐂股价上涨",
     "Ｍａｒｋｅｔｓ ｒａｌｌｙ市场上涨",
     "𝐌𝐚𝐫𝐤𝐞𝐭𝐬 𝐫𝐚𝐥𝐥𝐲市场上涨",
     "ＭＡＲＫＥＴ／ＲＡＬＬＹ市场上涨",  # 涨跌窗口：两个字以内接涨跌词，按证券语境拒绝
-    "NvDa股价上涨",
-    "PaNic股价上涨",
-    "PANic股价上涨",
     "ⓅⒶⓃⒾⒸ股价上涨",
     "РЫНОК РАСТЕТ市场上涨",
     "マーケット上昇，市场上涨",
@@ -1148,6 +1145,16 @@ _STILL_REJECTED_ENGLISH_FRAGMENTS = [
 # 口径变更（2026-10-10，用户决定）：专名、术语和单个英文词元保留原文，不在证券
 # 语境时不再按英文散文拒绝。这些原先都在上面的拒绝清单里。
 _TERM_FRAGMENTS_NOW_PUBLISHED = [
+    # 2026-10-10 第三轮：不是代码样词元（1 到 5 位大写），接股价、涨跌也按词条发布。
+    "Fed Pauses市场上涨",
+    "Investors-Flee市场下跌",
+    "Investors.flee市场下跌",
+    "Aapl股价上涨",
+    "Panic股价上涨",
+    "ᴾᴬᴺᴵᶜ股价上涨",
+    "NvDa股价上涨",
+    "PaNic股价上涨",
+    "PANic股价上涨",
     "Breaking 苹果公司发布新品",
     "Breaking苹果公司发布新品",
     "Update 苹果公司发布新品",
@@ -1240,6 +1247,8 @@ def test_chinese_text_rejects_english_fragments(mixed_prose):
 
 @pytest.mark.parametrize("term_text", _TERM_FRAGMENTS_NOW_PUBLISHED)
 def test_term_fragments_are_published_after_the_2026_10_10_policy(term_text):
+    from app.services.ai_jobs.models import _normalize_compatibility_alphanumerics
+
     result = _news_result()
     result["title_zh"] = term_text
     validated = validate_result(
@@ -1247,7 +1256,8 @@ def test_term_fragments_are_published_after_the_2026_10_10_policy(term_text):
         json.dumps(result, ensure_ascii=False),
         _news_payload(),
     )
-    assert validated["title_zh"] == term_text
+    # Styled letters (「ᴾᴬᴺᴵᶜ」) are published in their plain form.
+    assert validated["title_zh"] == _normalize_compatibility_alphanumerics(term_text)
 
 
 def test_chinese_text_allows_multiple_tickers_and_a_short_proper_name():
@@ -1553,12 +1563,14 @@ def test_source_binding_does_not_bind_a_company_name_to_an_unrelated_ticker():
     payload["title"] = "Apple outlook improves"
     payload["allowed_tickers"] = ["NVDA"]
 
-    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
-        validate_result(
-            "news_impact",
-            json.dumps(result, ensure_ascii=False),
-            payload,
-        )
+    # 2026-10-10 第三轮：「Apple」不是代码样词元，接股票、涨跌不要求绑定，也就谈不上绑错
+    # 代码（原先被拒）。
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+    assert validated["headline_summary"] == "Apple股票上涨受到市场关注"
 
 
 @pytest.mark.parametrize(
@@ -1576,12 +1588,13 @@ def test_source_binding_does_not_cross_into_another_noun_phrase(source_title):
     payload["title"] = source_title
     payload["allowed_tickers"] = ["NVDA"]
 
-    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
-        validate_result(
-            "news_impact",
-            json.dumps(result, ensure_ascii=False),
-            payload,
-        )
+    # 2026-10-10 第三轮：名称不要求绑定，来源怎么写都按词条发布（原先被拒）。
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+    assert validated["headline_summary"] == "Apple股票上涨受到市场关注"
 
 
 @pytest.mark.parametrize(
@@ -1698,12 +1711,13 @@ def test_source_binding_does_not_guess_a_nearby_ticker_for_a_company_name():
     payload["allowed_tickers"] = ["NVDA"]
     payload["source_ticker_hints"] = ["SPCX"]
 
-    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
-        validate_result(
-            "news_impact",
-            json.dumps(result, ensure_ascii=False),
-            payload,
-        )
+    # 2026-10-10 第三轮：「SpaceX」不是代码样词元，不要求绑定，也不去猜附近的代码（原先被拒）。
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+    assert validated["headline_summary"] == "SpaceX股票估值受到市场关注"
 
 
 @pytest.mark.parametrize("source_ticker_hint", ["CAT", "ON", "00700"])
@@ -1916,21 +1930,24 @@ def test_all_caps_name_is_a_term_after_the_2026_10_10_policy():
         "Microsoft。股票受到市场关注",
     ],
 )
-def test_news_result_rejects_stock_context_for_an_unbound_approved_brand(
+def test_news_result_publishes_an_unbound_brand_in_stock_context(
     unbound_reference,
 ):
+    # 2026-10-10 第三轮：证券语境的绑定只针对 1 到 5 位大写的代码样词元。品牌名（Apple、
+    # Microsoft、6 个字母的 NVIDIA）紧挨股价、股票，或写在「股票代码」后面，都按
+    # 词条发布；跨句的「Apple。股票…」同理（原先整组被拒）。
     result = _news_result()
     result["affected_stocks"] = []
     result["headline_summary"] = unbound_reference
     payload = _news_payload()
     payload["allowed_tickers"] = []
 
-    with pytest.raises(ValidationError):
-        validate_result(
-            "news_impact",
-            json.dumps(result, ensure_ascii=False),
-            payload,
-        )
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+    assert validated["headline_summary"] == unbound_reference.strip()
 
 
 @pytest.mark.parametrize(
@@ -1988,20 +2005,21 @@ def test_news_result_rejects_stock_context_for_an_unbound_approved_brand(
         "Microsoft。股票受到市场关注",
     ],
 )
-def test_market_focus_rejects_stock_context_for_an_unbound_approved_brand(
+def test_market_focus_publishes_an_unbound_brand_in_stock_context(
     unbound_reference,
 ):
+    # 2026-10-10 第三轮：同上，热点与新闻共用规则（原先整组被拒）。
     result = _market_focus_result()
     result["focus_ticker_assessments"] = []
     result["headline_summary"] = unbound_reference
     payload = _market_focus_payload(allowed_tickers=[])
 
-    with pytest.raises(ValidationError):
-        validate_result(
-            "market_focus",
-            json.dumps(result, ensure_ascii=False),
-            payload,
-        )
+    validated = validate_result(
+        "market_focus",
+        json.dumps(result, ensure_ascii=False),
+        payload,
+    )
+    assert validated["headline_summary"] == unbound_reference.strip()
 
 
 @pytest.mark.parametrize(
@@ -2883,12 +2901,14 @@ def test_zh_prose_allows_cjk_gloss_annotation():
     assert validate_simplified_chinese_text(biosim, None) == biosim
 
 
-def test_zh_prose_gloss_does_not_launder_ticker_shaped_codes():
-    """1–5 位全大写代码形状不得借括号漂白：仍走代码绑定规则。"""
+def test_zh_prose_gloss_keeps_a_ticker_alias_outside_stock_context():
+    """2026-10-10 第三轮（用户口径）：「公司名（代码）」里的代码不要求绑定（原先被拒）；
+    在股价、涨跌等证券语境里照旧要求绑定。"""
     text = "市场关注英伟达（NVDA）财报表现。"
-    with pytest.raises(ValueError, match="english_prose_not_allowed"):
-        validate_simplified_chinese_text(text, None)
+    assert validate_simplified_chinese_text(text, None) == text
     assert validate_simplified_chinese_text(text, None, allowed_codes=("NVDA",)) == text
+    with pytest.raises(ValueError, match="english_prose_not_allowed"):
+        validate_simplified_chinese_text("英伟达（NVDA）股价上涨。", None)
 
 
 def test_zh_prose_still_rejects_english_clause_in_parentheses():

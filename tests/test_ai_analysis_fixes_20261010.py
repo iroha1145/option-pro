@@ -144,7 +144,7 @@ def _luna_receipt(urls, **fields):
     ))
 
 
-def test_domain_label_must_name_the_linked_site():
+def test_bracketed_markdown_citations_are_stripped_whatever_their_label():
     url = "https://www.sec.gov/Archives/edgar/data/1137774/d11107dex991.htm"
     receipt = _luna_receipt(
         [url],
@@ -154,15 +154,13 @@ def test_domain_label_must_name_the_linked_site():
     result = runtime.receipt_result(receipt, "news_impact", luna_payload())
     assert result["summary_zh"] == "暂停期限延长至2027年1月31日。"
     assert result["causal_summary"] == "监管命令要求整改。可能限制新单销售。"
-    # A label that is not the linked site is reduced to its text and is not a
-    # retrieved site, so it stays; a host name is never a term gloss, so the
-    # language gate rejects it.
+    # 2026-10-10 第三轮：括号里的 Markdown 引用不论标签和链接是否对得上都整段剥掉（原先标签
+    # 对不上链接时留下「（ec.gov）」被拒）。
     mislabeled = _luna_receipt([url], key_factors=[f"命令已披露（[ec.gov]({url})）"])
-    with pytest.raises(ValueError, match="english_prose_not_allowed"):
-        runtime.receipt_result(mislabeled, "news_impact", luna_payload())
+    assert runtime.receipt_result(mislabeled, "news_impact", luna_payload())["key_factors"] == ["命令已披露"]
 
 
-def test_bare_trusted_url_in_brackets_is_a_citation_but_unbound_url_still_rejects():
+def test_bare_urls_in_brackets_are_stripped_whether_or_not_retrieved():
     url = "https://www.sec.gov/Archives/edgar/data/1/a.htm"
 
     def receipt_for(text):
@@ -175,11 +173,11 @@ def test_bare_trusted_url_in_brackets_is_a_citation_but_unbound_url_still_reject
 
     result = runtime.receipt_result(receipt_for(f"公司提交了整改计划（{url}）。"), "news_impact", luna_payload())
     assert result["summary_zh"] == "公司提交了整改计划。"
-    with pytest.raises(ValueError, match="ai_news_unbound_or_unhandled_url"):
-        runtime.receipt_result(
-            receipt_for("公司提交了整改计划（https://www.sec.gov/other.htm）。"),
-            "news_impact", luna_payload(),
-        )
+    # 2026-10-10 第三轮：没有联网取回过的网址也剥掉，不再拒绝。
+    assert runtime.receipt_result(
+        receipt_for("公司提交了整改计划（https://www.sec.gov/other.htm）。"),
+        "news_impact", luna_payload(),
+    )["summary_zh"] == "公司提交了整改计划。"
 
 
 _RETRIEVED = [
@@ -313,9 +311,12 @@ def test_semicolon_ends_the_security_prefix_for_a_source_bound_name():
     title = "XMax (XMAX) to acquire Hexa Creation, expanding AI infrastructure strategy"
     text = "拟收购Hexa Creation全部已发行及流通股份；Hexa Creation聚焦功率半导体。"
     assert _news_field(text, field="headline_summary", title=title) == text
-    for rejected in ("股票；TSLA上涨", "股票代码；TSLA", "流通股份，Hexa Creation股价上涨"):
-        with pytest.raises(ValueError):
-            _news_field(rejected, title=title)
+    with pytest.raises(ValueError):
+        _news_field("股票；TSLA上涨", title=title)
+    # 2026-10-10 第三轮：分号后的「TSLA」没有证券标记；「Hexa Creation」不是代码样词元，接
+    # 股价也按词条发布（原先这两句在拒绝清单里）。
+    for published in ("股票代码；TSLA", "流通股份，Hexa Creation股价上涨"):
+        assert _news_field(published, title=title) == published
 
 
 def test_macro_statistic_movement_names_the_statistic_not_a_stock():
