@@ -43,7 +43,8 @@ LUNA_SUMMARY_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "b13ab0647d03e8cf295f15691
 LUNA_NEWS_MODES = ("search", "article", "summary")
 # 联网任务的内置工具调用（搜索、打开网页、页内查找）合计上限。
 LUNA_MAX_TOOL_CALLS = 1
-# 缺正文时，来源摘要去掉 HTML 标签与所有空白后至少这么多个字符，就只按摘要分析。
+# 缺正文时，来源摘要去掉 HTML 标签、连续空白合并成一个空格、去掉首尾空白后至少
+# 这么多个字符，就只按摘要分析。口径与取证时按原始长度统计的一致。
 NEWS_SUMMARY_AS_BODY_MIN_CHARS = 300
 TERRA_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "e2f660481a77543a7a020798cea014e6c8b8298b78a0f89d3e7e507046fc6c2e")
 LEGACY_OPENAI_EARNINGS_IDENTITY = ("earnings_impact_zh_cn_v5", "efcf4a6d24e87c8bfcb8620183338d7ddd927a8df9290b1a8ee7f601a05e9265")
@@ -306,17 +307,17 @@ _HTML_TAG = re.compile(r"<[^>]*>")
 def news_summary_sufficient(payload: Mapping[str, Any]) -> bool:
     """Whether the feed summary alone carries enough text to analyze.
 
-    Counts the characters left after removing HTML tags, decoding entities and
-    dropping every whitespace character. The article status and its reason do
-    not matter: any task without a body qualifies once its summary is long
-    enough.
+    Counts the characters left after removing HTML tags, decoding entities,
+    collapsing each run of whitespace into one space and trimming both ends.
+    The article status and its reason do not matter: any task without a body
+    qualifies once its summary is long enough.
     """
 
     summary = payload.get("summary")
     if not isinstance(summary, str):
         return False
     text = html.unescape(_HTML_TAG.sub(" ", summary))
-    return len("".join(text.split())) >= NEWS_SUMMARY_AS_BODY_MIN_CHARS
+    return len(" ".join(text.split())) >= NEWS_SUMMARY_AS_BODY_MIN_CHARS
 
 
 def luna_news_mode(

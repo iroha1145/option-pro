@@ -100,10 +100,13 @@ def sent_payload(params: dict) -> dict:
 # --- 1. A long summary stands in for the missing body -----------------------
 
 
-def test_summary_length_counts_visible_text_only():
+def test_summary_length_collapses_whitespace_and_drops_html():
     assert runtime.NEWS_SUMMARY_AS_BODY_MIN_CHARS == 300
-    padded = "<p>" + " \n\t".join("x" * 299) + "</p>&nbsp;"
-    assert len(padded) > 1_000
+    # Each run of whitespace counts as one space; the ends do not count.
+    assert runtime.news_summary_sufficient({"summary": "x" * 150 + " \n\n\t  " + "y" * 149})
+    assert not runtime.news_summary_sufficient({"summary": "x" * 150 + " \n\n\t  " + "y" * 148})
+    padded = "<p>\n\n   " + "x" * 299 + "   \n</p>&nbsp;\t"
+    assert len(padded) > 300
     assert not runtime.news_summary_sufficient({"summary": padded})
     assert runtime.news_summary_sufficient({"summary": "<b>" + "x" * 300 + "</b>"})
     # Entities decode to one character each.

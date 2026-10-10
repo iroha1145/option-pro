@@ -15,8 +15,8 @@ catalyst_mode = "scheduled"
 [ai]
 model = "claude-haiku-5-5"
 reasoning = "xhigh"
-# 新闻按已抓到的正文分析；没拿到正文时，来源摘要够长（去掉 HTML 与空白后至少
-# 300 字符）就只按摘要分析，摘要也不够时 Luna 才联网查原始报道（最多 1 次）；
+# 新闻按已抓到的正文分析；没拿到正文时，来源摘要够长（去掉 HTML、连续空白合并
+# 后至少 300 字符）就只按摘要分析，摘要也不够时 Luna 才联网查原始报道（最多 1 次）；
 # 热点由 Sonnet 联网核验后发布。
 news_model = "gpt-5.6-luna"
 # GPT 模型的推理档位可选 max、xhigh、high：max 最贵，xhigh、high 依次更省。
