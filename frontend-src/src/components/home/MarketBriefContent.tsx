@@ -1,5 +1,5 @@
 /**
- * 「市场综合研判」正文：覆盖条 → 一句话结论 → 四段（xl 两列）→ 复盘与外部来源（可折叠）→ 口径说明。
+ * 「市场报告」正文：覆盖条 → 一句话结论 → 四段（xl 两列）→ 复盘与外部来源（可折叠）→ 口径说明。
  * 模型写的正文原样显示、不经 t()；缺字段显「—」。
  */
 import { useId, useState, type ReactNode } from 'react';
@@ -275,7 +275,7 @@ export default function MarketBriefContent({ brief, year }: { brief: MarketBrief
       {(result.prior_review || brief.externalSources.length > 0) && (
         <div className="mt-6">
           {result.prior_review && (
-            <Disclosure label={t('上一份研判的复盘')}>
+            <Disclosure label={t('上一份报告的复盘')}>
               <p className="break-words text-body-s text-ink-600">{result.prior_review}</p>
             </Disclosure>
           )}

@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils';
 import type { FocusEventView, FocusLeadView, FocusPoint, FocusVerdict } from './focusText';
 import { t } from '../../i18n/core.ts';
 
-/* 核实结论按含义着色（同市场综合研判的判断标签）：支持用 ok、反证用 danger、无法判断用中性；
+/* 核实结论按含义着色（同市场报告的判断标签）：支持用 ok、反证用 danger、无法判断用中性；
    再配一个图标，和同一行的灰色板块芯片区分开。 */
 const VERDICT: Record<FocusVerdict, { label: string; tone: BadgeTone; icon: 'check' | 'x' | 'minus' }> = {
   supported: { label: t('已证实'), tone: 'ok', icon: 'check' },
@@ -175,12 +175,12 @@ function EventItem({ event, index, fadeIn }: { event: FocusEventView; index: num
                 </SoftBadge>
               ))}
               {!open && event.hiddenSectors.length > 0 && (
-                <SoftBadge className={cn(SECTOR_CHIP, 'max-sm:hidden')} title={event.hiddenSectors.join('、')}>
+                <SoftBadge className={cn(SECTOR_CHIP, 'max-sm:hidden')} title={event.hiddenSectors.join(t('、'))}>
                   +{event.hiddenSectors.length}
                 </SoftBadge>
               )}
               {!open && narrowHidden.length > 0 && (
-                <SoftBadge className={cn(SECTOR_CHIP, 'sm:hidden')} title={narrowHidden.join('、')}>
+                <SoftBadge className={cn(SECTOR_CHIP, 'sm:hidden')} title={narrowHidden.join(t('、'))}>
                   +{narrowHidden.length}
                 </SoftBadge>
               )}

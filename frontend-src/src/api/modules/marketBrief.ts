@@ -1,5 +1,5 @@
 /**
- * 首页「市场综合研判」域（market_brief）
+ * 首页「市场报告」域（market_brief）
  * GET  /api/market-brief/latest  匿名可读：status="ok" 带 brief；status="missing" 时 brief 为 null，
  *                                仍给 latest_attempt 与 next_slot（样例 tests/fixtures/market_brief_sample.json）
  * POST /api/market-brief/runs    Owner：body {slot?: pre_open|post_close}。新排队 202；已在跑、同一分钟

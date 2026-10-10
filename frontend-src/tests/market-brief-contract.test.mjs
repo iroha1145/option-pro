@@ -1,4 +1,4 @@
-// 首页「市场综合研判」前端契约（node --experimental-strip-types --test）
+// 首页「市场报告」前端契约（node --experimental-strip-types --test）
 //
 // 覆盖：Home.tsx 挂载位置与读注册表配置；schema.py 每个枚举值都有中文标签、归一器原样保留
 // （直接读 schema.py 的 Literal 定义，不在测试里另抄一份清单）；失败原因码对齐 errors.py 与
@@ -66,7 +66,7 @@ function schemaLiterals() {
   return out;
 }
 
-test('Home 在指数带之后、行2 之前挂市场综合研判卡', () => {
+test('Home 在指数带之后、行2 之前挂市场报告卡', () => {
   const home = read('pages/Home.tsx');
   const indexBand = home.indexOf("aria-label={t('市场指数')}");
   const card = home.indexOf('<MarketBriefCard className="mt-6 md:mt-8" />');
@@ -170,15 +170,15 @@ test('失败原因码：任务列出的码给短句，errors.py 与 POST /runs �
     provider_unavailable: '无法连接',
     provider_usage_incomplete: '模型用量未完整确认，请勿重复提交',
     submission_outcome_unknown: '提交结果和费用尚未确认，请勿重复提交',
-    provider_stream_incomplete: '模型回复未完整结束，未生成研判',
-    provider_invalid_tool_response: '模型返回的内容不完整或格式有误，未生成研判',
-    market_brief_in_progress: '研判正在生成，请等待结果',
+    provider_stream_incomplete: '模型回复未完整结束，未生成报告',
+    provider_invalid_tool_response: '模型返回的内容不完整或格式有误，未生成报告',
+    market_brief_in_progress: '报告正在生成，请等待结果',
     provider_refusal: '模型拒绝了本次请求',
     output_truncated: '输出被截断',
     output_not_json: '输出格式错误',
     schema_validation_failed: '输出未通过校验',
     evidence_unavailable: '证据不足未生成',
-    budget_exceeded: '本次研判的输出用量已达上限',
+    budget_exceeded: '本次报告的输出用量已达上限',
     daily_budget_usd_reached: '共享模型日预算不足，东京 09:00 重置后再试',
     daily_run_limit_reached: '今日次数已用完',
   };
@@ -345,7 +345,7 @@ test('POST /runs 的受理结果：新排队与已在跑都跟进，冷却中不
   assert.deepEqual(reply({ status: 'running', reason: 'already_running', error_code: 'market_brief_in_progress' }), {
     follow: true,
     refresh: false,
-    title: '研判正在生成',
+    title: '报告正在生成',
     description: '完成后自动显示',
   });
   assert.deepEqual(reply({ status: 'completed', reason: 'cooldown', error_code: 'market_brief_cooldown', cooldown_until: '2026-10-09T13:04:10Z' }), {
@@ -367,7 +367,7 @@ test('卡片：Owner 用 .btn-ai 并在途 aria-busy，访客有登录提示，�
   assert.match(card, /t\('登录后可手动生成'\)/);
   assert.match(card, /className="control-button"/);
   assert.match(card, /<StaleStrip onRetry=\{retry\}/);
-  assert.match(card, /aria-label=\{t\('市场综合研判'\)\}/);
+  assert.match(card, /aria-label=\{t\('市场报告'\)\}/);
   assert.match(content, /className="data-coverage-strip/);
   assert.match(content, /InfoHint hint=\{SCORE_HINTS\.marketBriefSufficiency\}/);
   assert.match(content, /target="_blank"\s+rel="noreferrer"/);
@@ -390,10 +390,10 @@ test('卡片可收起：标题行的「收起 / 展开」管住整块正文，�
   const end = card.indexOf('</CollapsePresence>');
   assert.ok(start > 0 && end > start, '正文要包在 appear={false} 的 CollapsePresence 里');
   const inner = card.slice(start, end);
-  for (const piece of ["t('模型正在生成研判", '<StatusNotice', '<StaleStrip', '{body}']) {
+  for (const piece of ["t('模型正在生成报告", '<StatusNotice', '<StaleStrip', '{body}']) {
     assert.ok(inner.includes(piece), `${piece} 应随正文一起收起`);
   }
-  assert.ok(card.indexOf("t('市场综合研判')}</h2>") < start, '标题行不随正文收起');
+  assert.ok(card.indexOf("t('市场报告')}</h2>") < start, '标题行不随正文收起');
   // 读写本机存储都要兜住异常：隐私模式下 localStorage 访问会抛错
   assert.match(card, /function readCollapsed\(\): boolean \{[\s\S]{0,200}try \{[\s\S]{0,120}\} catch \{/);
   assert.match(card, /function persistCollapsed\(collapsed: boolean\): void \{[\s\S]{0,300}try \{[\s\S]{0,200}\} catch \{/);

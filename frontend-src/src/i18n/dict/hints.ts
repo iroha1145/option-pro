@@ -497,7 +497,7 @@ export const HINTS: Dict = {
   "置信度是模型自评，不是胜率；影响分不表示股价涨跌幅。": ["Confidence is the model’s own assessment, not a win rate. Impact is not a price-change percentage.", "信頼度はモデル自身の評価であり、勝率ではありません。インパクトスコアは株価の騰落率を表しません。"],
   "置信度是模型的自评，不是胜率。": ["Confidence is the model’s own assessment, not a win rate.", "信頼度はモデル自身の評価であり、勝率ではありません。"],
 
-  /* ── 首页「市场综合研判」证据充分度（schema.py Sufficiency） ── */
+  /* ── 首页「市场报告」证据充分度（schema.py Sufficiency） ── */
   '证据充分度（AI 判断）': ['Evidence sufficiency (AI judgment)', '根拠の充足度（AI 判断）'],
   "模型判断本次证据够不够支撑结论，分低、中、高三档。这次缺了哪些数据，见卡片上方的覆盖条。": ["The model’s judgment of whether this run’s evidence is enough to support its conclusion, in three levels: low, medium and high. Data missing from this run is listed in the coverage line at the top of the card.", "今回の根拠が結論を支えるのに十分かについての、モデルによる3段階の判断（低・中・高）です。今回欠けていたデータは、カード上部のカバレッジ欄に表示されます。"],
   "它说明证据是否够用，不是上涨概率。": ["It says whether the evidence is sufficient; it is not a probability that the market will rise.", "根拠が足りているかを示すもので、上昇確率ではありません。"],

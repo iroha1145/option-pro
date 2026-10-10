@@ -246,7 +246,7 @@ export const SCORE_HINTS = {
     note: t('偏向不表示股价涨跌幅；置信度是模型自评，不是胜率。'),
   },
   /**
-   * 首页「市场综合研判」的证据充分度：模型输出的三档（schema.py 的 Sufficiency，
+   * 首页「市场报告」的证据充分度：模型输出的三档（schema.py 的 Sufficiency，
    * 注释原文「证据是否充分，不是概率」）。覆盖范围另由程序写在覆盖条里。
    */
   marketBriefSufficiency: {
