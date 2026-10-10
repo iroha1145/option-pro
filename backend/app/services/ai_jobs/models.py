@@ -413,6 +413,13 @@ _SELF_DESCRIBING_CODES = frozenset(
 ) | _RATE_BENCHMARK_NAMES
 # SEC 文件编号。_FOREIGN_SPAN 从字母起算，「10-K」只切出单个字母「K」。
 _SEC_FORM_DESIGNATIONS = ("10-K", "10-Q", "8-K")
+# 频率数量（2026-10-10 生产取证：找回试运行里 MHz 被拒 7 次）。只认紧跟在数字
+# 后面的 MHz、GHz（「600 MHz」「600MHz」「3.5GHz」），边界与经核验热点的单位
+# 翻译 _VERIFIED_FOCUS_FREQUENCY 相同。不带数字的「频率MHz」、紧挨代码、编号、
+# 公司等标签的「公司800MHz」以及证券语境照旧被拒，这些也是那段翻译不改写的写法。
+_FREQUENCY_QUANTITY = re.compile(
+    r"(?<![A-Za-z0-9_.])[0-9]+(?:\.[0-9]+)?[ \t]*(?:MHz|GHz)(?![A-Za-z0-9_])"
+)
 _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
     {
         "5G",
@@ -555,6 +562,20 @@ _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
         # 2026-10-10：通用技术缩写（「输入URL」）。证券语境仍走
         # _approved_span_requires_ticker_binding 后检。
         "URL",
+        # 2026-10-10 生产取证：PR #237 部署后 Luna 仍因「加州HMO合同」被拒；
+        # 找回工具对 10-03 起失败任务的试运行里，CNBC 7 次，SUV 3 次，REIT 2 次，
+        # ESG、FCC、NBC、LSEG 各 1–2 次。PPO 是与 HMO 并列的医保计划类型，一并
+        # 加入。证券语境同样走 _approved_span_requires_ticker_binding 后检
+        # （「ESG股价」仍要求绑定）。频率单位不在名单里，见 _FREQUENCY_QUANTITY。
+        "CNBC",
+        "ESG",
+        "FCC",
+        "HMO",
+        "LSEG",
+        "NBC",
+        "PPO",
+        "REIT",
+        "SUV",
         "Varonis",
         "VIX",
         # signal_analysis 契约的 key_levels.vwap_levels 字段就要求模型讨论
@@ -678,6 +699,14 @@ _IT_CONTEXT_SUFFIXES = (
     "服务", "支出", "行业", "系统", "板块", "部门",
     "基础设施", "预算", "投入", "架构", "运维", "人员", "资产", "解决方案",
 )
+# 罗马数字序号（2026-10-10 生产取证，找回试运行里 III 被拒 5 次）。III 也是
+# 股票代码，所以不进名单，只在这些位置放行：前面紧挨「第」，后面紧跟期、级、
+# 类、代（「第III期」「III期临床试验」「II类医疗器械」），或用斜杠、连字符接在
+# 数字后面（「1/II期」）。证券语境仍要求绑定。IV 另在名单里（隐含波动率），
+# 这条规则不改变它的结果。
+_ROMAN_NUMERAL_ORDINALS = frozenset({"II", "III", "IV"})
+_ROMAN_NUMERAL_ORDINAL_SUFFIXES = ("期", "级", "类", "代")
+_ROMAN_NUMERAL_AFTER_NUMBER = re.compile(r"[0-9][/-]$")
 _STOCK_PRICE_SUFFIX = re.compile(
     r"^(?:的)?(?:当前|最新|今日|昨日|本周|盘前|盘后)?股价"
 )
@@ -719,6 +748,15 @@ _CLAUSE_BREAKS = frozenset("；;")
 _LETTER_GRADE = re.compile(
     r"^(?:(?:[+＋]{1,2}|[\-－])[\u4e00-\u9fff]{0,12}?|)(?:评级|等级|评分)"
 )
+# 单个大写字母紧跟这些分类名词时是标签（2026-10-10 生产取证：「处方药D部分」
+# 被拒；同类还有「V型反转」「A级」「B组」「C区」）。名词必须紧挨字母，中间只许
+# 空格：「福特汽车（F），部分分析师」里隔着标点的「部分」是另一个词。「轮」
+# 「类」沿用原来的判断，「股」仍只认 A、B、H。
+_LETTER_LABEL_NOUNS = ("部分", "型", "级", "组", "区")
+# 规则条款编号里括号中的小写字母：「规则5550(a)(2)」「规则10b5-1(c)」
+# （2026-10-10 生产取证，Luna 被拒片段 'a'）。只认 ASCII 括号里的单个小写
+# 字母，左括号前紧挨数字或上一个括号组，或右括号后紧跟下一个条款括号组。
+_RULE_CLAUSE_NEXT_GROUP = re.compile(r"\([0-9A-Za-z]{1,4}\)")
 # 统计量写法「p<0.001」「n=712例」「p值」，只认这些小写统计符号；大写单字母
 # 可能是股票代码（「F>12美元」的 F 是福特汽车）。
 _STATISTIC_LETTERS = frozenset("dknprt")
@@ -1559,6 +1597,50 @@ def _code_names_the_statistic(
     )
 
 
+def _next_to_code_or_company_label(text: str, start: int, end: int) -> bool:
+    # Bare code/company labels are not all security phrases recognized by
+    # the general language gate.
+    prefix = _normalize_security_reference_phrase(text[:start])
+    suffix = _normalize_security_reference_phrase(text[end:])
+    return bool(
+        re.search(r"(?:代码|编号|公司|集团|企业|股价)(?:为|是)?$", prefix)
+        or suffix.startswith(("代码", "编号", "公司", "集团", "企业"))
+    )
+
+
+def _is_frequency_quantity(span: str, *, sentence: str, start: int, end: int) -> bool:
+    if span.lstrip("0123456789") not in ("MHz", "GHz"):
+        return False
+    quantity = next(
+        (
+            match
+            for match in _FREQUENCY_QUANTITY.finditer(sentence)
+            if match.start() <= start and match.end() == end
+        ),
+        None,
+    )
+    return (
+        quantity is not None
+        and not _next_to_code_or_company_label(sentence, quantity.start(), end)
+        and not _approved_span_requires_ticker_binding(
+            quantity.group(0), sentence=sentence, start=quantity.start(), end=end,
+        )
+    )
+
+
+def _is_rule_clause_letter(span: str, *, sentence: str, start: int, end: int) -> bool:
+    if len(span) != 1 or not "a" <= span <= "z":
+        return False
+    if start < 1 or sentence[start - 1] != "(" or sentence[end : end + 1] != ")":
+        return False
+    before = sentence[start - 2] if start >= 2 else ""
+    return (
+        "0" <= before <= "9"
+        or before == ")"
+        or _RULE_CLAUSE_NEXT_GROUP.match(sentence, end + 1) is not None
+    )
+
+
 def _is_cjk_gloss_annotation(
     span: str,
     *,
@@ -1628,6 +1710,20 @@ def _foreign_span_context(
         )
     ):
         return True
+    if (
+        span in _ROMAN_NUMERAL_ORDINALS
+        and (
+            sentence[:start].rstrip(" \t").endswith("第")
+            or sentence[end:].lstrip(" \t").startswith(
+                _ROMAN_NUMERAL_ORDINAL_SUFFIXES
+            )
+            or _ROMAN_NUMERAL_AFTER_NUMBER.search(sentence[:start]) is not None
+        )
+        and not _approved_span_requires_ticker_binding(
+            span, sentence=sentence, start=start, end=end,
+        )
+    ):
+        return True
     if len(span) == 1 and span.isascii() and span.isupper():
         if _is_sec_form_designation(sentence, end=end):
             return True
@@ -1637,6 +1733,12 @@ def _foreign_span_context(
         if suffix.startswith("股"):
             return span in {"A", "B", "H"} or span in allowed_codes
         if suffix.startswith(("轮", "类")):
+            return True
+        if sentence[end:].lstrip(" \t").startswith(
+            _LETTER_LABEL_NOUNS
+        ) and not _approved_span_requires_ticker_binding(
+            span, sentence=sentence, start=start, end=end,
+        ):
             return True
         if suffix.startswith("细胞"):
             return span in {"B", "T"}
@@ -1662,6 +1764,10 @@ def _foreign_span_context(
         sentence[end:].startswith(("值", "分数", "统计量"))
         or _STATISTIC_COMPARISON.match(sentence[end:]) is not None
     ):
+        return True
+    if _is_rule_clause_letter(span, sentence=sentence, start=start, end=end):
+        return True
+    if _is_frequency_quantity(span, sentence=sentence, start=start, end=end):
         return True
     if _COMPACT_DIGIT_LETTER_IDENTIFIER.fullmatch(span) is not None:
         if _approved_span_requires_ticker_binding(
@@ -2982,14 +3088,8 @@ def _translate_verified_focus_prose(value: str) -> str:
             text[start:end], sentence=text, start=start, end=end,
         ):
             return True
-        prefix = _normalize_security_reference_phrase(text[:start])
-        suffix = _normalize_security_reference_phrase(text[end:])
-        # Bare code/company labels are not all security phrases recognized by
-        # the general language gate. Do not turn their foreign names Chinese.
-        return bool(
-            re.search(r"(?:代码|编号|公司|集团|企业|股价)(?:为|是)?$", prefix)
-            or suffix.startswith(("代码", "编号", "公司", "集团", "企业"))
-        )
+        # Do not turn foreign names next to a code or company label Chinese.
+        return _next_to_code_or_company_label(text, start, end)
 
     translations = {"as_of": "分析截止时点", "catalyst_bias": "催化因素倾向评分"}
     original = value
