@@ -29,6 +29,7 @@ import { usePolling } from '@/hooks/usePolling';
 import { useToast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
 import MarketBriefContent from './MarketBriefContent';
+import { useMarketBriefPreview } from './marketBriefPreview';
 import {
   attemptErrorText,
   attemptFailureText,
@@ -109,7 +110,7 @@ export default function MarketBriefCard({ className }: { className?: string }) {
   const bodyId = useId();
   const submittingRef = useRef(false);
 
-  const data = latestQ.data;
+  const data = useMarketBriefPreview(latestQ.data);
   const brief = data?.brief ?? null;
 
   /* 手动生成有了结果（新研判，或新的失败记录）就停止跟进。读数一到就在同次渲染里

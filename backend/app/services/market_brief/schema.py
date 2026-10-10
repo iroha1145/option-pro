@@ -99,7 +99,7 @@ class MarketBriefResult(_Strict):
     """模型输出的完整研判。字段顺序即前端展示顺序。"""
 
     output_language: Literal["zh-CN"] = Field(description="固定为 zh-CN")
-    headline: ZhLine = Field(description="一句话市场结论：说清状态、主导因素和把握程度")
+    headline: ZhLine = Field(description="市场结论：说清状态与主要驱动，通常25—45字；必要差异和限制可在硬上限内补充，措辞与证据强弱相称，证据充分度由单独字段呈现")
     regime: Regime = Field(description="市场状态标签：broad_advance 普涨、narrow_leadership 少数权重股领涨、rotation 板块轮动、risk_off 避险、mixed 信号混杂、uncertain 证据不足以判断")
     evidence_sufficiency: Sufficiency = Field(description="证据是否充分：low、medium、high；它不是上涨或下跌的概率")
     internals: InternalsSection = Field(description="大盘与市场内部结构")

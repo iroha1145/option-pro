@@ -75,6 +75,7 @@ export const DETAIL: Dict = {
   '无法确认模型服务是否收到分析请求，已停止重复提交，请先核对原任务状态': ['It is unclear whether the model service received the request, so repeat submissions are blocked. Check the original task\'s status first.', 'モデルサービスが分析リクエストを受信したか確認できません。重複送信を停止しています。元のタスクの状態を先に確認してください。'],
   '模型返回的内容未通过检查，分析已停止': ['The model\'s response failed validation. Analysis has stopped.', 'モデルの返却内容が検証を通りませんでした。分析を停止しました。'],
   '信息来源': ['Sources', '出典'],
+  '信息来源 · {n} 条': ['Sources · {n}', '出典 · {n}件'],
   '分析内容过长，没有生成完整，请重试': ['The analysis was too long and got cut off. Try again.', '分析が長すぎて途中で切れました。再試行してください。'],
   '模型服务余额不足，需充值': ['The model service is out of credit. Top up to continue.', 'モデルサービスの残高が不足しています。チャージが必要です。'],
   '模型服务没有返回完整结果，请重试': ['The model service returned an incomplete result. Try again.', 'モデルサービスから完全な結果が返りませんでした。再試行してください。'],
