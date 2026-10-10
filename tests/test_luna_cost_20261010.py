@@ -164,8 +164,8 @@ def test_summary_tasks_have_their_own_identity_and_keep_the_queue_current():
     assert summary == runtime.LUNA_SUMMARY_NEWS_IDENTITY
     assert runtime.schema_identity("news_impact", model=model, payload=luna_payload()) == runtime.LUNA_WEB_NEWS_IDENTITY
     assert runtime.schema_identity("news_impact", model=model, payload=article_payload()) == runtime.LUNA_ARTICLE_NEWS_IDENTITY
-    # The body variant did not move; the searching one did (one tool call).
-    assert runtime.LUNA_ARTICLE_NEWS_IDENTITY[1].startswith("e64f4252")
+    # The local v5 validation upgrade keeps the exact v4 body identity readable.
+    assert ("news_impact_zh_cn_v6", "e64f425270938c5aed9f470d1cb59d34f4d4da99e941d6063f805bc8c61c7ca3") in runtime._IDENTITY_PREDECESSORS[runtime.LUNA_ARTICLE_NEWS_IDENTITY]
     assert runtime.LUNA_THREE_CALL_WEB_NEWS_IDENTITY[1].startswith("cda8f76d")
     assert len({
         runtime.LUNA_WEB_NEWS_IDENTITY, runtime.LUNA_ARTICLE_NEWS_IDENTITY,
@@ -189,6 +189,7 @@ def test_summary_tasks_have_their_own_identity_and_keep_the_queue_current():
         runtime.LUNA_THREE_CALL_WEB_NEWS_IDENTITY,
         runtime.LUNA_ALWAYS_WEB_NEWS_IDENTITY,
         runtime.LEGACY_LUNA_NEWS_IDENTITY,
+        ("news_impact_zh_cn_v6", "b13ab0647d03e8cf295f15691f793532a4617724549dddfab8f158ec80bee796"),
     }
     assert runtime.LUNA_THREE_CALL_WEB_NEWS_IDENTITY in runtime._IDENTITY_PREDECESSORS[runtime.LUNA_WEB_NEWS_IDENTITY]
     # A Luna identity never makes another model's row current.

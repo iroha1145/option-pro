@@ -55,13 +55,13 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
             )}
           </div>
         </div>
-        <div className="ml-auto text-right">
+        {isNum(detail?.strengthScore) && <div className="ml-auto text-right">
           <p className="eyebrow">
             {__t('评分')}
             <InfoHint hint={SCORE_HINTS.strengthComposite} side="bottom" align="end" size={12} className="ml-1" />
           </p>
-          <StrengthBar score={detail?.strengthScore ?? Number.NaN} width={72} className="mt-1.5" />
-        </div>
+          <StrengthBar score={detail.strengthScore} width={72} className="mt-1.5" />
+        </div>}
       </div>
 
       {/* 2026-10-09 Arc 改版（行情终端式页头）：左边大号价格 + 涨跌 + 比较基准，右边一组小指标

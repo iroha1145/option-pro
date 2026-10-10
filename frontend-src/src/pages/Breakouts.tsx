@@ -1,3 +1,4 @@
+import { fmtScanCountdown } from '@/lib/format';
 import { invalidateQueryPaths } from '@/api/queryRegistry';
 import { quoteStore } from '@/lib/liveQuotes';
 import { useQuoteSymbols, useRadarVersion, useRadarUpdates } from '@/hooks/useLiveQuote';
@@ -133,10 +134,7 @@ const WORKER_STATE_SAMPLES = ['—', __t('正常'), __t('异常'), __t('状态�
 
 function NextScanCountdown({ nextSessionAt }: { nextSessionAt: string | null }) {
   const now = useNow(nextSessionAt ? 1000 : 0);
-  const ms = nextSessionAt ? Math.max(0, new Date(nextSessionAt).getTime() - now) : Number.NaN;
-  const countdown = Number.isFinite(ms)
-    ? `${String(Math.floor(ms / 60_000)).padStart(2, '0')}:${String(Math.floor((ms % 60_000) / 1000)).padStart(2, '0')}`
-    : '—';
+  const countdown = fmtScanCountdown(nextSessionAt, now);
   return (
     <span className="tnum">
       {__t('下次扫描')} <span className="inline-block min-w-[5ch] text-brand-600">{countdown}</span>

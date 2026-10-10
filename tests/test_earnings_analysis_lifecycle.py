@@ -349,7 +349,7 @@ def test_retention_deletes_only_strictly_older_terminal_rows_and_sources(
 ) -> None:
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     now = datetime(2026, 8, 22, 12, tzinfo=timezone.utc)
-    cutoff = now - timedelta(days=30)
+    cutoff = now - timedelta(days=10)
 
     old, _ = _create(repository, _final_payload("AAPL"))
     claimed = repository.claim_due("old-final", 60)

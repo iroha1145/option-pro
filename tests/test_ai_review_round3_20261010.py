@@ -1,7 +1,7 @@
 """Counterexamples from the last review of the 2026-10-10 AI fixes (head 0b7b68fa).
 
-The cases named as counterexamples fail on 0b7b68fa and pass now; the
-positive and red-line cases pass on both.
+The original samples stay exercised under v5. Ordinary market counts and
+prose codes publish; explicit Hong Kong code labels still require binding.
 """
 
 from __future__ import annotations
@@ -51,8 +51,15 @@ def test_m1_market_overview_counts_after_hong_kong_stocks_publish(text):
 
 
 @pytest.mark.parametrize("text", ["港股1810小米集团盘中走高。", "腾讯港股代码为0700。"])
-def test_m1_hong_kong_codes_still_need_binding(text):
-    _reject_both(text, match="unbound_numeric_security_code")
+def test_m1_explicit_hong_kong_code_labels_require_binding(text):
+    if "代码" in text:
+        with pytest.raises(ValueError, match="unbound_numeric_security_code"):
+            _news_field(text)
+        with pytest.raises(ValueError, match="unbound_numeric_security_code"):
+            _focus_field(text, field="summary_zh")
+    else:
+        assert _news_field(text) == text
+        assert _focus_field(text, field="summary_zh") == text
 
 
 # --- Suggestion 1. Country suffixes, case-insensitive suffixes, www. hosts ----
@@ -161,3 +168,14 @@ def test_r3s2_limits_that_admit_one_task_or_a_shared_budget_are_saved(monkeypatc
     response = _write_token_limit(client, 1, limit)
     assert response.status_code == 200
     assert store.read().settings.ai.daily_token_limit == limit
+
+
+@pytest.mark.parametrize(("text", "code"), [
+    ("港股代码1810小米集团走强。", "1810"),
+    ("腾讯港股代码为0700。", "0700"),
+    ("港股编号为09888百度集团受到关注。", "09888"),
+])
+def test_explicit_hong_kong_code_or_number_label_requires_and_accepts_matching_binding(text, code):
+    _reject_both(text, match="unbound_numeric_security_code")
+    assert _news_field(text, allowed_tickers=["NVDA", code]) == text
+    assert _focus_field(text, field="summary_zh", allowed_tickers=["NVDA", code]) == text

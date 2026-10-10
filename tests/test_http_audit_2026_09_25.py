@@ -890,7 +890,6 @@ def test_earnings_single_ticker_failures_are_recorded(monkeypatch):
         raise RuntimeError("yahoo defect")
 
     monkeypatch.setattr(earnings, "_fetch_finnhub_earnings", no_rows)
-    monkeypatch.setattr(earnings.earnings_enrichment, "fetch_fmp_calendar", no_rows)
     monkeypatch.setattr(earnings.yf, "Ticker", yahoo_defect)
 
     with pytest.raises(HTTPException) as caught:

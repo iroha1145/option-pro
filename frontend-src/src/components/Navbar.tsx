@@ -220,6 +220,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
           ) : (
             <Link
               to="/login"
+              state={{ from: location.pathname + location.search + location.hash }}
               {...routeIntentHandlers('/login')}
               className="touch-target header-action"
             >

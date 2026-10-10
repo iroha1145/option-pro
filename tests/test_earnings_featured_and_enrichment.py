@@ -1,9 +1,8 @@
-"""财报页升级的行为契约：重点公司、双日历、市值解析与预期波动 provider 链。
+"""财报页升级的行为契约：重点公司、市值解析与预期波动 provider 链。
 
 对应任务清单：
 - #1 市值 ≥ 门槛进入重点；#2 市值 unknown ≠ small；#3 公共池仍进入重点；
-- #5 预期波动缺失不影响资格；#6 FMP 未配置/失败时 Finnhub 主路不变；
-- #7 双日历重复记录稳定去重；#8 日期冲突不静默合并；
+- #5 预期波动缺失不影响资格；Finnhub 主日历与 Yahoo 补充。
 - #14 访客读取不触发供应商；#15 Owner 手动刷新受权限保护；
 - provider 链优先级、宽价差/last-price 拒绝、市值缓存与快照校验器。
 """
@@ -31,24 +30,6 @@ def _finnhub_success(rows: list[dict[str, object]]) -> dict[str, object]:
         configured=True,
         succeeded=True,
     )
-
-
-def _fmp_success(rows: list[dict[str, object]]) -> dict[str, object]:
-    return {
-        "rows": rows,
-        "configured": True,
-        "succeeded": True,
-        "error": None,
-    }
-
-
-def _fmp_absent() -> dict[str, object]:
-    return {
-        "rows": [],
-        "configured": False,
-        "succeeded": False,
-        "error": "not_configured",
-    }
 
 
 def _calendar_row(
@@ -103,32 +84,20 @@ def isolated_build(monkeypatch: pytest.MonkeyPatch, tmp_path):
     def build(
         *,
         finnhub_rows: list[dict[str, object]] | None = None,
-        fmp_result: dict[str, object] | None = None,
         profiles: dict[str, dict[str, object]] | None = None,
         threshold: float | None = None,
     ) -> dict[str, object]:
         async def finnhub(_today: date) -> dict[str, object]:
             return _finnhub_success(list(finnhub_rows or []))
 
-        async def fmp(_today: date, **_kwargs) -> dict[str, object]:
-            return dict(fmp_result) if fmp_result is not None else _fmp_absent()
+        from app.services import massive
 
-        async def fmp_profiles(tickers: list[str]) -> dict[str, object]:
-            available = {
-                ticker: profile
-                for ticker, profile in (profiles or {}).items()
-                if ticker in tickers
-            }
-            return {
-                "configured": bool(profiles),
-                "succeeded": bool(profiles),
-                "error": None if profiles else "not_configured",
-                "profiles": available,
-            }
+        def profile(ticker: str) -> dict[str, object]:
+            return dict((profiles or {}).get(ticker) or {})
 
+        monkeypatch.setattr(massive, "configured", lambda: bool(profiles))
+        monkeypatch.setattr(massive, "reference_ticker_detail", profile)
         monkeypatch.setattr(earnings, "_fetch_finnhub_earnings", finnhub)
-        monkeypatch.setattr(enrich, "fetch_fmp_calendar", fmp)
-        monkeypatch.setattr(enrich, "fetch_fmp_profiles", fmp_profiles)
         if threshold is not None:
             config = earnings.get_personal_config()
             monkeypatch.setattr(
@@ -151,7 +120,7 @@ def test_market_cap_above_threshold_marks_public_featured(isolated_build) -> Non
     )
     row = payload["earnings"][0]
     assert row["market_cap"] == 25_000_000_000.0
-    assert row["market_cap_source"] == "fmp_profile"
+    assert row["market_cap_source"] == "massive_reference"
     assert row["market_cap_status"] == "active"
     assert row["public_featured"] is True
     assert row["featured_reasons"] == ["market_cap"]
@@ -217,182 +186,77 @@ def test_missing_expected_move_does_not_affect_featured(isolated_build) -> None:
     assert row["public_featured"] is True
 
 
-# ── #6：FMP 未配置/失败时 Finnhub 主路不变 ───────────────────
-
-
-def test_finnhub_calendar_is_unchanged_without_fmp(isolated_build) -> None:
-    rows = [_calendar_row("AAOI"), _calendar_row("SOLO", days=8)]
-    without_fmp = isolated_build(finnhub_rows=rows, fmp_result=_fmp_absent())
-    failed_fmp = isolated_build(
-        finnhub_rows=rows,
-        fmp_result={
-            "rows": [],
-            "configured": True,
-            "succeeded": False,
-            "error": "timeout",
-        },
-    )
-    for payload in (without_fmp, failed_fmp):
-        assert [r["ticker"] for r in payload["earnings"]] == ["AAOI", "SOLO"]
-        assert payload["providers"] == ["Finnhub"]
-        assert payload["data_limited"] is False
-        assert all(
-            r["calendar_sources"] == ["finnhub_calendar"]
-            and r["calendar_date_status"] == "single_source"
-            for r in payload["earnings"]
-        )
-
-
-# ── #7 / #8：双日历去重与日期冲突 ────────────────────────────
-
-
-def test_duplicate_calendar_rows_deduplicate_and_confirm(isolated_build) -> None:
-    payload = isolated_build(
-        finnhub_rows=[_calendar_row("BOTH")],
-        fmp_result=_fmp_success([_calendar_row("BOTH", eps_estimate=1.4)]),
-    )
-    rows = [r for r in payload["earnings"] if r["ticker"] == "BOTH"]
-    assert len(rows) == 1, "同一公司同一日期必须稳定去重成一行"
-    row = rows[0]
-    assert sorted(row["calendar_sources"]) == ["finnhub_calendar", "fmp_calendar"]
-    assert row["calendar_date_status"] == "confirmed"
-    assert row["calendar_conflict"] is None
-    # 主源（Finnhub）的预期值保留，不被次源覆盖
-    assert row["eps_estimate"] == 1.2
-    assert row["estimate_source"] == "finnhub_calendar"
-
-
-def test_calendar_date_conflict_is_recorded_not_silently_merged(
-    isolated_build,
-) -> None:
-    payload = isolated_build(
-        finnhub_rows=[_calendar_row("CLASH", days=5)],
-        fmp_result=_fmp_success([_calendar_row("CLASH", days=7)]),
-    )
-    row = next(r for r in payload["earnings"] if r["ticker"] == "CLASH")
-    # 主源日期保留
-    assert row["earnings_date"] == (TODAY + timedelta(days=5)).isoformat()
-    assert row["calendar_date_status"] == "conflict"
-    assert row["calendar_conflict"] == {
-        "fmp_calendar": (TODAY + timedelta(days=7)).isoformat()
-    }
-    # 冲突行仍通过公开快照校验（冲突是一等公民，不是坏数据）
-    assert validate_public_home_payload("earnings", payload) is not None
-
-
-def test_fmp_only_company_joins_the_calendar(isolated_build) -> None:
-    payload = isolated_build(
-        finnhub_rows=[_calendar_row("FINN")],
-        fmp_result=_fmp_success([_calendar_row("FMPO", days=6)]),
-    )
-    tickers = [r["ticker"] for r in payload["earnings"]]
-    assert "FMPO" in tickers
-    row = next(r for r in payload["earnings"] if r["ticker"] == "FMPO")
-    assert row["earnings_date_source"] == "fmp_calendar"
-    assert row["calendar_sources"] == ["fmp_calendar"]
-    assert set(payload["providers"]) == {"Finnhub", "FMP"}
-
-
 # ── 市值缓存与来源优先级 ─────────────────────────────────────
 
 
-def test_market_cap_cache_roundtrip_and_fresh_hit(tmp_path) -> None:
+@pytest.mark.parametrize("source", ["massive_reference", "fmp_profile"])
+def test_market_cap_cache_roundtrip_and_fresh_hit(tmp_path, monkeypatch, source) -> None:
+    from app.services import massive
+
+    def unexpected_detail(_ticker):
+        raise AssertionError("fresh cache must not query a provider")
+
+    monkeypatch.setattr(massive, "configured", lambda: True)
+    monkeypatch.setattr(massive, "reference_ticker_detail", unexpected_detail)
     path = tmp_path / "caps.json"
     now_iso = datetime.now(timezone.utc).isoformat()
     enrich.store_market_cap_cache(
-        {"CACHED": {"market_cap": 9e9, "source": "fmp_profile", "as_of": now_iso}},
+        {"CACHED": {"market_cap": 9e9, "source": source, "as_of": now_iso}},
         path,
     )
     loaded = enrich.load_market_cap_cache(path)
     assert loaded["CACHED"]["market_cap"] == 9e9
 
-    async def unexpected_profiles(_tickers):
-        raise AssertionError("fresh cache hit must not call FMP")
 
     resolved = asyncio.run(
         _resolve_with(
             [{"ticker": "CACHED", "market_cap": None, "days_until": 3}],
             path,
-            unexpected_profiles,
         )
     )
     assert resolved["CACHED"]["market_cap"] == 9e9
     assert resolved["CACHED"]["status"] == "cached"
 
 
-async def _resolve_with(rows, path, profiles_fn):
-    import unittest.mock as mock
+async def _resolve_with(rows, path):
 
-    with mock.patch.object(enrich, "fetch_fmp_profiles", profiles_fn):
-        return await enrich.resolve_market_caps(
-            rows,
-            cache_days=3,
-            cache_path=path,
-        )
+    return await enrich.resolve_market_caps(
+        rows,
+        cache_days=3,
+        cache_path=path,
+    )
 
 
-def test_stale_cache_is_used_as_cached_when_providers_fail(tmp_path) -> None:
+def test_stale_cache_is_used_as_cached_when_providers_fail(tmp_path, monkeypatch) -> None:
+    from app.services import massive
+
+    calls = []
+
+    def failing_detail(ticker):
+        calls.append(ticker)
+        raise massive.MassiveError("provider unavailable", code="request_error")
+
+    monkeypatch.setattr(massive, "configured", lambda: True)
+    monkeypatch.setattr(massive, "reference_ticker_detail", failing_detail)
     path = tmp_path / "caps.json"
     old_iso = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
     enrich.store_market_cap_cache(
-        {"OLD": {"market_cap": 5e9, "source": "fmp_profile", "as_of": old_iso}},
+        {"OLD": {"market_cap": 5e9, "source": "massive_reference", "as_of": old_iso}},
         path,
     )
 
-    async def failing_profiles(_tickers):
-        return {
-            "configured": True,
-            "succeeded": False,
-            "error": "timeout",
-            "profiles": {},
-        }
 
     resolved = asyncio.run(
         _resolve_with(
             [{"ticker": "OLD", "market_cap": None, "days_until": 2}],
             path,
-            failing_profiles,
         )
     )
     # 过期缓存好过没有：值可用但状态与 as_of 明确可识别为旧
     assert resolved["OLD"]["market_cap"] == 5e9
     assert resolved["OLD"]["status"] == "cached"
     assert resolved["OLD"]["as_of"] == old_iso
-
-
-def test_fmp_calendar_keeps_reported_zero_eps_and_revenue(monkeypatch) -> None:
-    import httpx
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            json=[
-                {
-                    "symbol": "ZERO",
-                    "date": (TODAY + timedelta(days=1)).isoformat(),
-                    "eps": 0.0,
-                    "epsEstimated": 0.05,
-                    "revenue": 0,
-                    "revenueEstimated": 1_000_000,
-                }
-            ],
-        )
-
-    real_client = httpx.AsyncClient
-    monkeypatch.setattr(enrich, "_fmp_api_token", lambda: "fmp-test-token")
-    monkeypatch.setattr(
-        enrich.httpx,
-        "AsyncClient",
-        lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs),
-    )
-
-    result = asyncio.run(
-        enrich.fetch_fmp_calendar(TODAY, lookback_days=2, lookahead_days=5)
-    )
-
-    row = result["rows"][0]
-    assert row["eps_actual"] == 0.0
-    assert row["revenue_actual"] == 0.0
+    assert calls == ["OLD"]
 
 
 def test_massive_market_cap_fallback_stops_after_a_rate_limit(
@@ -406,8 +270,6 @@ def test_massive_market_cap_fallback_stops_after_a_rate_limit(
         calls.append(ticker)
         raise massive.MassiveError("rate limited", code="rate_limited", status=429)
 
-    async def no_profiles(_tickers):
-        return {"configured": False, "succeeded": False, "error": None, "profiles": {}}
 
     monkeypatch.setattr(massive, "configured", lambda: True)
     monkeypatch.setattr(massive, "reference_ticker_detail", rejected)
@@ -416,7 +278,7 @@ def test_massive_market_cap_fallback_stops_after_a_rate_limit(
         for index in range(5)
     ]
 
-    resolved = asyncio.run(_resolve_with(rows, tmp_path / "caps.json", no_profiles))
+    resolved = asyncio.run(_resolve_with(rows, tmp_path / "caps.json"))
 
     assert calls == ["T0"]
     assert {entry["status"] for entry in resolved.values()} == {"unavailable"}
@@ -433,8 +295,6 @@ def test_massive_market_cap_fallback_serves_todays_reports_first(
         calls.append(ticker)
         return {"market_cap": 5e9, "name": ticker}
 
-    async def no_profiles(_tickers):
-        return {"configured": False, "succeeded": False, "error": None, "profiles": {}}
 
     monkeypatch.setattr(massive, "configured", lambda: True)
     monkeypatch.setattr(massive, "reference_ticker_detail", detail)
@@ -444,15 +304,12 @@ def test_massive_market_cap_fallback_serves_todays_reports_first(
     ]
 
     async def resolve():
-        import unittest.mock as mock
-
-        with mock.patch.object(enrich, "fetch_fmp_profiles", no_profiles):
-            return await enrich.resolve_market_caps(
-                rows,
-                cache_days=3,
-                massive_detail_budget=1,
-                cache_path=tmp_path / "caps.json",
-            )
+        return await enrich.resolve_market_caps(
+            rows,
+            cache_days=3,
+            massive_detail_budget=1,
+            cache_path=tmp_path / "caps.json",
+        )
 
     resolved = asyncio.run(resolve())
 
@@ -475,8 +332,6 @@ def test_massive_market_cap_fallback_orders_today_future_then_released(
         calls.append(ticker)
         return {"market_cap": 5e9, "name": ticker}
 
-    async def no_profiles(_tickers):
-        return {"configured": False, "succeeded": False, "error": None, "profiles": {}}
 
     monkeypatch.setattr(massive, "configured", lambda: True)
     monkeypatch.setattr(massive, "reference_ticker_detail", detail)
@@ -490,15 +345,12 @@ def test_massive_market_cap_fallback_orders_today_future_then_released(
     ]
 
     async def resolve(budget: int):
-        import unittest.mock as mock
-
-        with mock.patch.object(enrich, "fetch_fmp_profiles", no_profiles):
-            return await enrich.resolve_market_caps(
-                rows,
-                cache_days=3,
-                massive_detail_budget=budget,
-                cache_path=tmp_path / "caps.json",
-            )
+        return await enrich.resolve_market_caps(
+            rows,
+            cache_days=3,
+            massive_detail_budget=budget,
+            cache_path=tmp_path / "caps.json",
+        )
 
     resolved = asyncio.run(resolve(5))
 
@@ -520,8 +372,6 @@ def test_massive_market_cap_fallback_budget_favors_today_and_near_future(
         calls.append(ticker)
         return {"market_cap": 5e9, "name": ticker}
 
-    async def no_profiles(_tickers):
-        return {"configured": False, "succeeded": False, "error": None, "profiles": {}}
 
     monkeypatch.setattr(massive, "configured", lambda: True)
     monkeypatch.setattr(massive, "reference_ticker_detail", detail)
@@ -534,15 +384,12 @@ def test_massive_market_cap_fallback_budget_favors_today_and_near_future(
     ]
 
     async def resolve():
-        import unittest.mock as mock
-
-        with mock.patch.object(enrich, "fetch_fmp_profiles", no_profiles):
-            return await enrich.resolve_market_caps(
-                rows,
-                cache_days=3,
-                massive_detail_budget=3,
-                cache_path=tmp_path / "caps.json",
-            )
+        return await enrich.resolve_market_caps(
+            rows,
+            cache_days=3,
+            massive_detail_budget=3,
+            cache_path=tmp_path / "caps.json",
+        )
 
     resolved = asyncio.run(resolve())
 
@@ -563,11 +410,9 @@ def test_market_cap_cache_write_failure_records_diagnostic_and_does_not_raise(
 
     monkeypatch.setattr(enrich, "store_market_cap_cache", failing_store)
 
-    async def no_profiles(_tickers):
-        return {"configured": False, "succeeded": False, "error": None, "profiles": {}}
 
     rows = [{"ticker": "NEWCAP", "market_cap": 1.5e9, "days_until": 1}]
-    resolved = asyncio.run(_resolve_with(rows, tmp_path / "caps.json", no_profiles))
+    resolved = asyncio.run(_resolve_with(rows, tmp_path / "caps.json"))
 
     # 写失败不能影响本次已经解析出来的结果。
     assert resolved["NEWCAP"]["market_cap"] == 1.5e9
@@ -580,9 +425,9 @@ def test_market_cap_cache_write_failure_records_diagnostic_and_does_not_raise(
 # ── 报告期记忆：跨日历来源稳定 report_id（AI-29） ────────────
 
 
-def test_stabilize_report_periods_backfills_fmp_only_rows_later(tmp_path) -> None:
+def test_stabilize_report_periods_backfills_missing_periods_later(tmp_path) -> None:
     """先有一行给出真实 (year, quarter)（比如 Finnhub），记住；后面同一
-    ticker+日期只剩 FMP-only 行（year/quarter 为 None）时用记忆补齐，
+    ticker+日期只剩缺少期次的行（year/quarter 为 None）时用记忆补齐，
     report_id 才能跨来源切换保持稳定。"""
 
     path = tmp_path / "periods.json"
@@ -593,12 +438,12 @@ def test_stabilize_report_periods_backfills_fmp_only_rows_later(tmp_path) -> Non
     assert known[0]["year"] == 2026
     assert known[0]["quarter"] == 4
 
-    fmp_only = [
+    missing_periods = [
         {"ticker": "AAPL", "earnings_date": "2026-10-30", "year": None, "quarter": None},
     ]
-    enrich.stabilize_report_periods(fmp_only, path=path, today=date(2026, 9, 26))
-    assert fmp_only[0]["year"] == 2026
-    assert fmp_only[0]["quarter"] == 4
+    enrich.stabilize_report_periods(missing_periods, path=path, today=date(2026, 9, 26))
+    assert missing_periods[0]["year"] == 2026
+    assert missing_periods[0]["quarter"] == 4
 
 
 def test_stabilize_report_periods_never_overwrites_a_rows_own_value(tmp_path) -> None:
@@ -619,15 +464,15 @@ def test_stabilize_report_periods_never_overwrites_a_rows_own_value(tmp_path) ->
     enrich.stabilize_report_periods([own_value], path=path)
     assert own_value["quarter"] == 4
 
-    # 记忆随最新的已知值更新，后续 FMP-only 行补的是 4 不是 1。
-    fmp_only = {
+    # 记忆随最新的已知值更新，后续缺少期次的行补的是 4 不是 1。
+    missing_periods = {
         "ticker": "MSFT",
         "earnings_date": "2026-10-28",
         "year": None,
         "quarter": None,
     }
-    enrich.stabilize_report_periods([fmp_only], path=path)
-    assert fmp_only["quarter"] == 4
+    enrich.stabilize_report_periods([missing_periods], path=path)
+    assert missing_periods["quarter"] == 4
 
 
 def test_stabilize_report_periods_skips_a_row_that_conflicts_with_memory(

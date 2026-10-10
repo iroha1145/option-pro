@@ -47,6 +47,7 @@ enforce_limit = false
 [catalyst]
 sync_seconds = 120
 focus_seconds = 1800
+journal_retention_days = 10
 scheduled_times_et = ["00:00", "01:00", "02:00", "03:00", "04:00", "05:00", "06:00", "07:00", "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00", "23:00"]
 manual_force_reanalysis = true
 manual_refresh_cooldown_seconds = 30
@@ -92,7 +93,6 @@ overview_seconds = 300
 chart_seconds = 300
 signals_seconds = 900
 earnings_seconds = 21600
-unusual_seconds = 1800
 failure_retry_seconds = 300
 
 [earnings]
@@ -153,12 +153,15 @@ public_read = true
 
 [storage]
 # 突破雷达的扫描附件（快照、候选、结构）每次扫描后按这个天数修剪。新闻与焦点的 AI 任务历史
-# 在每轮备份全部成功后清理，保留 max(catalyst.journal_retention_days, 30) 天。修剪不会让
+# 在每轮备份全部成功后清理，保留 max(catalyst.journal_retention_days, 10) 天。修剪不会让
 # 数据库文件变小，要回收空间需停服务后手动 VACUUM（docs/performance/16）。
-retention_days = 90
+# 当前发布引用与活动任务例外；过期失败回执也会删除，超过窗口后不再支持离线恢复。
+retention_days = 10
 # 每个数据库（以及 runtime-settings.json）最多保留的备份份数，也是磁盘上限：
-# 约为「文件大小 × 份数」。维护任务每 6 小时一轮，保留时按时间分层挑选：
+# 约为「文件大小 × 份数」。维护任务每 6 小时一轮；突破、新闻与模型任务大库每日备份，
+# 账户、运行设置及其他小库保持每 6 小时备份。独立清理任务仍先备份全部数据库。
+# 保留时按时间分层挑选：
 # 最近 24 小时每轮一份，更早的每天只留最新一份，一周以前每周只留一份；
-# 超过份数时先删最旧的。7 份约覆盖最近 3 天，11 份约一周，14 份约三周。
+# 超过份数时先删最旧的；覆盖天数取决于该文件的每日或每 6 小时备份频率。
 # 运行设置自身的历史版本也按这个份数保留。
 backup_keep = 7

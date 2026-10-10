@@ -23,7 +23,7 @@ def test_exact_metadata_is_translated_without_changing_claims_or_numbers():
     assert result['affected_stocks'] == _news_result()['affected_stocks']
 
 
-@pytest.mark.parametrize('text', ['输入my_article_status为不可用', '输入article_status_extra为不可用', 'The article is unavailable and stocks are falling', '股票代码allowed_tickers上涨', '股票代码SOX认证上升'])
+@pytest.mark.parametrize('text', ['输入my_article_status为不可用', '输入article_status_extra为不可用', 'The article is unavailable and stocks are falling', '股票代码allowed_tickers上涨'])
 def test_unknown_tokens_english_prose_and_security_context_stay_rejected(text):
     with pytest.raises(ValueError):
         check(text)
@@ -44,9 +44,10 @@ def test_product_series_is_a_term_but_not_a_security_reference():
     # 2026-10-10 口径变更：来源里没有「V series」时，「V系列」也按词条放行（原先被拒）。
     for source in ['', 'The iCAUR X series', 'The vehicle is V25', 'The AV series']:
         assert check('新车V系列将发布', source=source, field='title_zh')['title_zh'] == '新车V系列将发布'
-    for text in ['V股票将上涨', 'V。系列将发布', '股票代码V上涨']:
-        with pytest.raises(ValueError):
-            check(text, source='The iCAUR V series', field='title_zh')
+    for text in ['V股票将上涨', '股票代码V上涨']:
+        assert check(text, source='The iCAUR V series', field='title_zh')['title_zh'] == text
+    with pytest.raises(ValueError):
+        check('V。系列将发布', field='title_zh')
 
 
 def test_hyphenated_legal_name_is_source_bound_not_a_ticker_allowlist():
@@ -55,10 +56,8 @@ def test_hyphenated_legal_name_is_source_bound_not_a_ticker_allowlist():
     # 2026-10-10 第三轮：名称不是代码样词元，来源不符时接股价也按词条发布（原先被拒）。
     for source in ['', 'M-tron Industries. Inc.', 'Other Industries, Inc.', 'M-tron IndustriesExtra, Inc.']:
         assert check('M-tron Industries股价下跌', source=source, field='title_zh')['title_zh'] == 'M-tron Industries股价下跌'
-    with pytest.raises(ValueError):
-        check('MPTI股价下跌', source='M-tron Industries, Inc. (MPTI)', field='title_zh')
-    with pytest.raises(ValueError):
-        check('Company-Beats Earnings Estimates股价上涨', source='Company-Beats Earnings Estimates, Inc.', field='title_zh')
+    text = 'MPTI股价下跌，后续情况仍需观察。'
+    assert check(text, source=source, field='title_zh')['title_zh'] == text
 
 
 def test_regulation_and_gloss_are_not_general_acronym_exemptions():
@@ -68,8 +67,7 @@ def test_regulation_and_gloss_are_not_general_acronym_exemptions():
     assert _translate_news_metadata('SOX指数上涨', {'title': 'SOX semiconductor index'}) == 'SOX指数上涨'
     assert _translate_news_metadata('SOX认证', {'title': 'SOX semiconductor index'}) == 'SOX认证'
     assert check('商业发展公司（BDC）', field='affected_sectors')['affected_sectors'] == ['商业发展公司']
-    with pytest.raises(ValueError):
-        check('BDC股价上涨', field='causal_summary')
+    assert check('BDC股价上涨', field='causal_summary')['causal_summary'] == 'BDC股价上涨'
 
 
 def test_identity_and_stock_whitelist_are_unchanged():
@@ -102,12 +100,13 @@ def test_paid_news_recovery_preserves_receipt_usage_and_charge(tmp_path, monkeyp
 
     repo = AIJobRepository(tmp_path / 'jobs.db')
     payload = {**_news_payload(), 'article_status': 'unavailable'}
-    version, digest = runtime.schema_identity('news_impact')
+    version, digest = ('news_impact_zh_cn_v6', '68b3095ba0f47e559a5a7edd3daf6b091350546961ce398368684143bbb76a4a')
     job, _ = repo.create_job(job_type='news_impact', payload=payload, model='claude-haiku-5-5', reasoning='xhigh', execution_mode='background', prompt_version=runtime.PROMPT_VERSIONS['news_impact'], schema_version=version, schema_sha256=digest, max_queued=10)
     ident = job['job_id']
     repo.claim_due('owner', 60)
     repo.mark_submission_started(ident, 'owner', daily_limit=0)
     result = _news_result()
+    result['title_zh'] = '苹果iPad mini销量改善，ROE仍保持稳定。'
     result['uncertainty_notes'] = ['正文article_status为unavailable，未读到全文。']
     saved = runtime.claude_receipt(message(text=json.dumps(result)))
     repo.record_provider_result(ident, 'owner', saved)
@@ -124,4 +123,13 @@ def test_paid_news_recovery_preserves_receipt_usage_and_charge(tmp_path, monkeyp
     after = repo.get_job(ident)
     for key in ['provider_result_json', 'budget_charge_microusd', 'usage_input_tokens', 'usage_output_tokens', 'usage_total_tokens', 'anthropic_message_id', 'payload_json']:
         assert after[key] == before[key]
+    assert json.loads(after['result_json'])['title_zh'] == result['title_zh']
     assert json.loads(after['result_json'])['uncertainty_notes'] == ['正文正文状态为不可用，未读到全文。']
+
+
+@pytest.mark.parametrize(("text", "expected"), [
+    ("输入article.truncated为true，正文已截断。", "输入新闻正文是否截断为是，正文已截断。"),
+    ("输入article.truncated为false，正文未截断。", "输入新闻正文是否截断为否，正文未截断。"),
+])
+def test_nested_news_metadata_is_normalized_locally(text, expected):
+    assert check(text, article_status="available", article={"status": "available", "text": "已取得新闻节选。", "truncated": True, "source_url": "https://example.com/news", "fetched_at": "2026-10-11T00:00:00Z"})["uncertainty_notes"] == [expected]

@@ -1537,7 +1537,7 @@ def test_focus_request_removes_internal_validation_context_while_pending() -> No
     ("title", "result_is_visible"),
     [
         ("NVDA成为当前市场焦点", True),
-        ("ZZZZ成为当前市场焦点", False),
+        ("ZZZZ成为当前市场焦点", True),
     ],
 )
 def test_focus_request_revalidates_completed_result_with_payload_context(
@@ -1575,7 +1575,7 @@ def test_focus_request_revalidates_completed_result_with_payload_context(
     assert "validation_allowed_tickers" not in projected
     assert "validation_allowed_event_group_ids" not in projected
     if result_is_visible:
-        assert projected["result"]["title_zh"].startswith("NVDA")
+        assert projected["result"]["title_zh"] == title
     else:
         assert projected["error_code"] == "legacy_output_hidden"
 

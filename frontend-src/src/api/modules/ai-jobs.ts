@@ -1,4 +1,4 @@
-/** AI 任务域：POST /api/ai/jobs/* · GET /api/ai/jobs/{id} · POST /cancel */
+/** AI 任务域：POST /api/ai/jobs/option-alerts · GET /api/ai/jobs/{id} · POST /cancel */
 import { ApiError, get, idFromLocation, mockOr, postCreate, post } from '../client';
 import { normalizeAiJob } from '../aiJobNormalize';
 import * as fx2 from '@/mocks/fixtures2';

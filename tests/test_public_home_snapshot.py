@@ -220,22 +220,6 @@ def _payload(resource: str, now: float, *, price: float = 100.0) -> dict:
             "ema20": [],
             "sma50": [],
         }
-    if resource == "focus_signals":
-        return {
-            "ticker": "NVDA",
-            "price": price,
-            "price_provider": "Massive",
-            "score": 60,
-            "overall": "bullish",
-            "signals": {
-                "rsi": {"value": 50.0, "signal": "neutral", "label": "RSI(14)"},
-                "macd": {"value": 0.1, "signal": "bullish", "label": "MACD"},
-                "ema20": {"value": 99.0, "signal": "above", "label": "EMA(20)"},
-                "sma50": {"value": 98.0, "signal": "above", "label": "SMA(50)"},
-                "volume": {"value": 1.0, "signal": "normal", "label": "Volume"},
-            },
-            "tags": ["TREND"],
-        }
     if resource == "market_signals":
         return {
             "signals": {
@@ -354,51 +338,6 @@ def _payload(resource: str, now: float, *, price: float = 100.0) -> dict:
             "data_limited": False,
             "source_status": "active",
             "providers": ["Yahoo Finance"],
-            "as_of": _iso(now),
-        }
-    if resource == "unusual":
-        return {
-            "results": [
-                {
-                    "ticker": "NVDA",
-                    "contract_ticker": "NVDA270101C00100000",
-                    "contract_type": "call",
-                    "type": "call",
-                    "strike": 100.0,
-                    "expiration": "2027-01-01",
-                    "volume": 200,
-                    "open_interest": 100,
-                    "oi": 100,
-                    "vol_oi_ratio": 2.0,
-                    "vol_oi": 2.0,
-                    "premium": 20_000.0,
-                    "premium_basis": "last_price",
-                    "premium_kind": "estimated_notional",
-                    "last_price": 1.0,
-                    "implied_volatility": 0.5,
-                    "underlying_price": price,
-                    "in_the_money": False,
-                    "moneyness": "atm",
-                    "direction": None,
-                    "direction_confidence": 0,
-                    "direction_status": "unavailable_without_trade_side",
-                    "signal": "unknown",
-                    "inferred_direction": "unknown",
-                    "direction_deprecated": True,
-                }
-            ],
-            "data_limited": False,
-            "source_status": "active",
-            "attempted": 1,
-            "succeeded": 1,
-            "planned_tickers": 1,
-            "successful_tickers": 1,
-            "failed_symbols": [],
-            "partial_symbols": [],
-            "expiration_window": "nearest_2",
-            "result_limit": 50,
-            "premium_kind": "estimated_notional",
-            "contract_multiplier": 100,
             "as_of": _iso(now),
         }
     raise AssertionError(resource)
@@ -574,7 +513,6 @@ def test_snapshot_rejects_future_saved_at(tmp_path: Path) -> None:
         ("focus_chart", "last_bar_at"),
         ("earnings", "as_of"),
         ("earnings", "observed_at"),
-        ("unusual", "as_of"),
     ),
 )
 def test_snapshot_rejects_payload_clock_far_after_saved_at(
@@ -629,11 +567,6 @@ def test_snapshot_enforces_payload_size_shape_and_field_whitelists() -> None:
 
     with pytest.raises(ValueError, match="invalid public home payload"):
         validate_public_home_payload("focus_chart", {})
-
-    unusual = _payload("unusual", now)
-    unusual["results"][0]["provider_token"] = "hidden"
-    with pytest.raises(ValueError, match="invalid public home payload"):
-        validate_public_home_payload("unusual", unusual)
 
 
 def test_earnings_snapshot_accepts_finnhub_actuals_and_real_expected_move() -> None:
@@ -1869,95 +1802,6 @@ def test_frontend_default_focus_contract_matches_worker_snapshot() -> None:
     }
 
 
-_RETIRED_RESOURCES = ("focus_signals", "unusual")
-
-
-@pytest.mark.parametrize("expired", [False, True], ids=["fresh", "expired"])
-def test_retired_entries_stay_inert_until_the_next_publish_drops_them(
-    tmp_path: Path,
-    expired: bool,
-) -> None:
-    """Production snapshots still hold focus_signals and unusual entries.
-
-    The worker no longer refreshes them, so they age past max_age. Until their
-    names leave PUBLIC_HOME_RESOURCE_SPECS, the document must keep parsing,
-    every live resource must stay readable, the worker must not report
-    degraded, and the next publish drops the retired entries.
-    """
-
-    now = _regular_time()
-    path = tmp_path / "public-home-snapshot-v1.json"
-    entries = _entries(now)
-    for resource in _RETIRED_RESOURCES:
-        saved_at = (
-            now - PUBLIC_HOME_RESOURCE_SPECS[resource].max_age - 1
-            if expired
-            else now
-        )
-        entries[resource] = create_public_home_entry(
-            resource,
-            _payload(resource, saved_at),
-            saved_at=saved_at,
-            parameters=public_home_resource_parameters(resource, now=now),
-        )
-    write_public_home_snapshot(path, entries, now=now)
-    _seed_watchlist(path, now)
-
-    loaded = read_public_home_entries(path, now=now)
-    assert set(loaded) == {*PUBLIC_HOME_RESOURCE_ORDER, "cta_trend", *_RETIRED_RESOURCES}
-    for resource in PUBLIC_HOME_RESOURCE_ORDER:
-        assert read_public_home_resource(
-            resource,
-            parameters=public_home_resource_parameters(resource, now=now),
-            path=path,
-            now=now,
-        ) is not None, resource
-    for resource in _RETIRED_RESOURCES:
-        served = read_public_home_resource(
-            resource,
-            parameters=public_home_resource_parameters(resource, now=now),
-            path=path,
-            now=now,
-        )
-        assert (served is None) is expired, resource
-
-    current = [now]
-    calls: list[str] = []
-
-    def builder(resource: str):
-        async def run(_parameters: dict) -> dict:
-            calls.append(resource)
-            return _payload(resource, current[0], price=150.0)
-
-        return run
-
-    task = PublicHomeTask(
-        _task_config(),
-        builders={
-            resource: builder(resource)
-            for resource in ("watchlist", *PUBLIC_HOME_RESOURCE_ORDER, "cta_trend")
-        },
-        snapshot_path=path,
-        clock=lambda: current[0],
-    )
-    idle = asyncio.run(task())
-    assert idle.status == "idle"
-    assert calls == []
-    assert idle.details["unavailable"] == []
-    assert not set(_RETIRED_RESOURCES) & set(idle.details["available"])
-
-    # indices/focus_overview/focus_chart (300s) fall due and get published.
-    current[0] += 301
-    published = asyncio.run(task())
-    assert published.status == "idle"
-    assert "indices" in published.details["refreshed"]
-    assert not set(_RETIRED_RESOURCES) & set(calls)
-    on_disk = json.loads(path.read_text(encoding="utf-8"))["resources"]
-    assert on_disk["indices"]["payload"]["indices"][0]["price"] == 150.0
-    assert not set(_RETIRED_RESOURCES) & set(on_disk)
-    assert set(on_disk) >= {*PUBLIC_HOME_RESOURCE_ORDER, "cta_trend"}
-
-
 def test_release_gate_blocks_on_missing_but_not_on_stale(tmp_path, monkeypatch):
     """A weekend-stale entry must not stall a rollout; a broken one must.
 
@@ -2049,26 +1893,6 @@ def test_release_gate_blocks_on_missing_but_not_on_stale(tmp_path, monkeypatch):
     assert report["ready"] is True, report
     assert report["missing"] == []
     assert report["stale"] == []
-
-    # Retired entries still sitting in the production file, long expired, are
-    # not part of the gate.
-    def _with_retired(built):
-        for resource in ("focus_signals", "unusual"):
-            spec = PUBLIC_HOME_RESOURCE_SPECS[resource]
-            built[resource] = {
-                "schema": spec.schema,
-                "max_age": spec.max_age,
-                "parameters": public_home_resource_parameters(resource, now=now),
-                "saved_at": now - spec.max_age - 60,
-                "payload": {},
-            }
-
-    state["entries"] = _entries(_with_retired)
-    report = gate.release_data_report(now=now)
-    assert report["ready"] is True, report
-    assert report["missing"] == []
-    assert report["stale"] == []
-    assert not {"focus_signals", "unusual"} & set(report["available"])
 
     # Aged past its window -> reported as stale, still ready.
     state["entries"] = _entries(
@@ -2168,7 +1992,6 @@ def test_declared_field_sets_match_the_fixture_payloads() -> None:
     from app.public_home_snapshot import (
         _CHART_FIELDS,
         _OVERVIEW_FIELDS,
-        _SIGNALS_FIELDS,
     )
 
     now = time.time()
@@ -2182,16 +2005,10 @@ def test_declared_field_sets_match_the_fixture_payloads() -> None:
         f"Fixture only: {sorted(set(_payload('focus_chart', now)) - set(_CHART_FIELDS))}. "
         f"Field set only: {sorted(set(_CHART_FIELDS) - set(_payload('focus_chart', now)))}."
     )
-    assert set(_payload("focus_signals", now)) == set(_SIGNALS_FIELDS), (
-        "_SIGNALS_FIELDS and the signals fixture disagree. "
-        f"Fixture only: {sorted(set(_payload('focus_signals', now)) - set(_SIGNALS_FIELDS))}. "
-        f"Field set only: {sorted(set(_SIGNALS_FIELDS) - set(_payload('focus_signals', now)))}."
-    )
-
-    # The provider-attribution change touched three payloads and no validator.
+    # The current per-ticker payloads retain their provider attribution.
     # Every per-ticker resource carries the attribution, so assert that rather
-    # than trusting the next reader to remember which three they were.
-    for resource in ("focus_overview", "focus_chart", "focus_signals"):
+    # than trusting the next reader to remember which resources need it.
+    for resource in ("focus_overview", "focus_chart"):
         assert "price_provider" in _payload(resource, now), (
             f"{resource} lost its price attribution; if that is deliberate, "
             "drop it from the field set in the same change."

@@ -3537,7 +3537,11 @@ def test_default_task_inventory_and_maintenance_backup(
         worker_tasks.AI_HISTORY_MIN_RETAIN_DAYS,
     )
     result = asyncio.run(maintenance_spec.runner())
-    assert result.status == "idle"
+    # These inventory fixtures contain only `sample`, not Catalyst tables.
+    # Backups succeed, but the real cleanup must report its missing-table failure.
+    assert result.status == "degraded"
+    assert result.error_code == "ai_history_retention_failed"
+    assert result.details["ai_history"]["status"] == "failed"
     assert set(result.details["backed_up"]) == {
         "optix",
         "catalyst-cache",

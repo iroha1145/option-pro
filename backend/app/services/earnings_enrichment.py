@@ -1,9 +1,8 @@
-"""财报页增强：批量市值、第二日历来源（FMP）与预期波动 provider 链。
+"""财报页增强：市值缓存与预期波动来源。
 
 设计边界（与 docs/personal-edition 的访客只读模型一致）：
 - 一切外呼只发生在 Worker/Owner 的日历构建里；普通页面读取只消费快照。
-- FMP 未配置时所有路径干净短路，不影响启动与刷新（Finnhub 仍是主源）。
-- 市值走批量接口 + 持久缓存（慢变量，低频刷新）；禁止逐家公司请求资料。
+- 市值优先复用已有资料和持久缓存，仅为少量缺失项查询 Massive。
 - 预期波动按 provider 优先级取第一个成功值（Massive Options → MarketData →
   Yahoo/yfinance），不把多个来源盲目平均；每个值保留 provider、expiration、
   observed_at、underlying、method 与失败原因。
@@ -33,13 +32,9 @@ from app.services.quote_quality import quality_mid
 # ── 常量 ─────────────────────────────────────────────────────
 
 _SYMBOL_RE = re.compile(r"^[A-Z][A-Z0-9.-]{0,11}$")
-_FMP_CALENDAR_PATH = "/api/v3/earning_calendar"
-_FMP_PROFILE_PATH = "/api/v3/profile"
-_FMP_PROFILE_BATCH = 50
-_FMP_PROFILE_MAX_BATCHES = 30
-_FMP_TIMEOUT_SECONDS = 20.0
 
 MARKET_CAP_CACHE_FILENAME = "earnings-market-caps-v1.json"
+# fmp_profile is a historical saved value, never produced by the current worker.
 _MARKET_CAP_SOURCES = ("yahoo_info", "fmp_profile", "massive_reference")
 _MASSIVE_DETAIL_BUDGET = 40
 
@@ -66,120 +61,6 @@ def _positive(value: Any) -> float | None:
     return number if number is not None and number > 0 else None
 
 
-# ── FMP：第二财报日历来源 ────────────────────────────────────
-
-
-def _fmp_api_token() -> str:
-    return str(get_settings().fmp_api_key or "").strip()
-
-
-def _fmp_result(
-    *,
-    rows: list[dict[str, Any]] | None = None,
-    configured: bool,
-    succeeded: bool,
-    error: str | None = None,
-) -> dict[str, Any]:
-    return {
-        "rows": list(rows or []),
-        "configured": configured,
-        "succeeded": succeeded,
-        "error": error,
-    }
-
-
-def _fmp_error_code(exc: Exception) -> str:
-    if isinstance(exc, httpx.TimeoutException):
-        return "timeout"
-    if isinstance(exc, httpx.HTTPStatusError):
-        status = exc.response.status_code
-        if status in {401, 403}:
-            return "unauthorized"
-        if status == 429:
-            return "rate_limited"
-        return "http_error"
-    if isinstance(exc, httpx.HTTPError):
-        return "request_error"
-    return "protocol_error"
-
-
-async def fetch_fmp_calendar(
-    today: date,
-    *,
-    lookback_days: int,
-    lookahead_days: int,
-) -> dict[str, Any]:
-    """拉取 FMP 财报日历窗口；返回归一化行（与 Finnhub 行同形状）。"""
-
-    settings = get_settings()
-    token = _fmp_api_token()
-    if not token:
-        return _fmp_result(configured=False, succeeded=False, error="not_configured")
-    start = today - timedelta(days=lookback_days)
-    end = today + timedelta(days=lookahead_days)
-    try:
-        async with httpx.AsyncClient(timeout=_FMP_TIMEOUT_SECONDS) as client:
-            response = await client.get(
-                f"{str(settings.fmp_base_url).rstrip('/')}{_FMP_CALENDAR_PATH}",
-                params={
-                    "from": start.isoformat(),
-                    "to": end.isoformat(),
-                    "apikey": token,
-                },
-            )
-            response.raise_for_status()
-            payload = response.json()
-    except Exception as exc:  # noqa: BLE001 - mapped to explicit status below
-        return _fmp_result(
-            configured=True,
-            succeeded=False,
-            error=_fmp_error_code(exc),
-        )
-    if not isinstance(payload, list):
-        return _fmp_result(configured=True, succeeded=False, error="protocol_error")
-
-    rows: list[dict[str, Any]] = []
-    for value in payload:
-        if not isinstance(value, dict):
-            continue
-        ticker = str(value.get("symbol") or "").strip().upper()
-        report_date = _coerce_date(value.get("date"))
-        if _SYMBOL_RE.fullmatch(ticker) is None or report_date is None:
-            continue
-        days_until = (report_date - today).days
-        if not -lookback_days <= days_until <= lookahead_days:
-            continue
-        timing_raw = str(value.get("time") or "").strip().lower()
-        rows.append(
-            {
-                "ticker": ticker,
-                "earnings_date": report_date.isoformat(),
-                "days_until": days_until,
-                "timing": timing_raw if timing_raw in {"bmo", "amc"} else None,
-                "eps_estimate": _finite(value.get("epsEstimated")),
-                "eps_actual": _finite(_first_present(value, "eps", "epsActual")),
-                "revenue_estimate": _finite(value.get("revenueEstimated")),
-                "revenue_actual": _finite(
-                    _first_present(value, "revenue", "revenueActual")
-                ),
-                "quarter": None,
-                "year": None,
-            }
-        )
-    if not rows:
-        return _fmp_result(configured=True, succeeded=False, error="no_valid_rows")
-    return _fmp_result(rows=rows, configured=True, succeeded=True)
-
-
-def _first_present(value: Mapping[str, Any], *keys: str) -> Any:
-    """First field that is present and not null; a reported 0 is a value."""
-
-    for key in keys:
-        if value.get(key) is not None:
-            return value[key]
-    return None
-
-
 def _coerce_date(value: Any) -> date | None:
     if isinstance(value, date) and not isinstance(value, datetime):
         return value
@@ -194,60 +75,6 @@ def _coerce_date(value: Any) -> date | None:
         except ValueError:
             return None
     return None
-
-
-async def fetch_fmp_profiles(tickers: list[str]) -> dict[str, Any]:
-    """批量公司资料（mktCap/companyName/sector），50 家一批、批数有硬上限。"""
-
-    settings = get_settings()
-    token = _fmp_api_token()
-    if not token:
-        return {
-            "configured": False,
-            "succeeded": False,
-            "error": "not_configured",
-            "profiles": {},
-        }
-    wanted = [t for t in dict.fromkeys(tickers) if _SYMBOL_RE.fullmatch(t)]
-    batches = [
-        wanted[offset : offset + _FMP_PROFILE_BATCH]
-        for offset in range(0, len(wanted), _FMP_PROFILE_BATCH)
-    ][:_FMP_PROFILE_MAX_BATCHES]
-    profiles: dict[str, dict[str, Any]] = {}
-    errors: list[str] = []
-    async with httpx.AsyncClient(timeout=_FMP_TIMEOUT_SECONDS) as client:
-        for batch in batches:
-            try:
-                response = await client.get(
-                    f"{str(settings.fmp_base_url).rstrip('/')}{_FMP_PROFILE_PATH}/"
-                    + ",".join(batch),
-                    params={"apikey": token},
-                )
-                response.raise_for_status()
-                payload = response.json()
-            except Exception as exc:  # noqa: BLE001
-                errors.append(_fmp_error_code(exc))
-                continue
-            if not isinstance(payload, list):
-                errors.append("protocol_error")
-                continue
-            for value in payload:
-                if not isinstance(value, dict):
-                    continue
-                ticker = str(value.get("symbol") or "").strip().upper()
-                if _SYMBOL_RE.fullmatch(ticker) is None:
-                    continue
-                profiles[ticker] = {
-                    "market_cap": _positive(value.get("mktCap")),
-                    "name": str(value.get("companyName") or "").strip() or None,
-                    "sector": str(value.get("sector") or "").strip() or None,
-                }
-    return {
-        "configured": True,
-        "succeeded": not errors and bool(batches),
-        "error": errors[0] if errors else None,
-        "profiles": profiles,
-    }
 
 
 def _load_cache_entries(target: Path) -> dict[Any, Any]:
@@ -355,7 +182,7 @@ async def resolve_market_caps(
     massive_detail_budget: int = _MASSIVE_DETAIL_BUDGET,
     cache_path: Path | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """为窗口内的行解析市值：行内已有值 → 持久缓存 → FMP 批量 → Massive 兜底。
+    """为窗口内的行解析市值：行内已有值 → 持久缓存 → Massive 有限补缺。
 
     返回 {ticker: {market_cap, source, as_of, status}}；status ∈
     {"active","cached","unavailable"}。market_cap 缺失一律 unavailable（unknown），
@@ -394,28 +221,6 @@ async def resolve_market_caps(
             resolved[ticker] = {**cached, "status": "cached"}
             continue
         missing.append(ticker)
-
-    if missing:
-        fmp = await fetch_fmp_profiles(missing)
-        for ticker, profile in fmp.get("profiles", {}).items():
-            market_cap = _positive(profile.get("market_cap"))
-            if market_cap is None:
-                continue
-            resolved[ticker] = {
-                "market_cap": market_cap,
-                "source": "fmp_profile",
-                "as_of": now_iso,
-                "status": "active",
-                "name": profile.get("name"),
-                "sector": profile.get("sector"),
-            }
-            cache[ticker] = {
-                "market_cap": market_cap,
-                "source": "fmp_profile",
-                "as_of": now_iso,
-            }
-            cache_dirty = True
-        missing = [t for t in missing if t not in resolved]
 
     if missing and massive_detail_budget > 0:
         from app.services import massive
@@ -484,25 +289,17 @@ async def resolve_market_caps(
         try:
             store_market_cap_cache(cache, cache_path)
         except OSError as exc:
-            # A lost write only means the next build re-resolves from FMP/
-            # Massive; it must never turn into a request failure.
+            # A lost write means the next build re-resolves from Massive;
+            # it must never turn into a request failure.
             record_fallback_failure("earnings_market_cap_cache_write", exc)
     return resolved
 
 
 # ── 报告期记忆：跨日历来源稳定 report_id（AI-29） ────────────
 #
-# fetch_fmp_calendar 的行永远把 quarter/year 置 None（FMP 的日历端点确实不
-# 给这两个字段）。ai_jobs/models.py 的 earnings_report_id 把它们拼进 key
-# （earnings:{ticker}:{date}:{year|na}:{q|qna}），所以同一份财报若这次只有
-# FMP 覆盖（year/quarter 为 None）、下次 Finnhub 也覆盖了（year/quarter 有
-# 值），report_id 会变——预发布分析可能因此重复付费一次，终版分析也可能因
-# report_id 对不上而找不到预发布记录去对比。
-#
-# 这里只做「记忆」，不做「推导」：只记录曾经真实出现过的 (year, quarter)
-# （目前只有 Finnhub 会给），绝不用日历日期反推季度——公司财年起止各不相
-# 同，反推值会和 Finnhub 自己的编号打架，还会让 api/earnings.py 的
-# _same_earnings_report 把同一份财报误判成 conflict。
+# 同一报告在日历来源切换时可能暂缺财年、季度，沿用此前已知的期次。
+
+
 def _coerce_report_period(value: Any) -> int | None:
     return value if type(value) is int else None
 

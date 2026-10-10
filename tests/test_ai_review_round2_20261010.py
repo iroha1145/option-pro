@@ -1,8 +1,8 @@
 """Counterexamples from the second review of the 2026-10-10 AI fixes (head 414be099).
 
-Every case here was checked against 414be099: the cases named as
-counterexamples fail there and pass now; the positive and red-line cases
-pass on both.
+These historical examples remain exercised under the v5 text policy.
+Prose does not guess ticker identity; explicit numeric code labels, whole-text
+language checks and structured bindings retain their checks.
 """
 
 from __future__ import annotations
@@ -134,9 +134,8 @@ def test_n1_no_whitelisted_name_is_rejected_for_a_common_movement_word():
     "text",
     ["高德纳（IT）暴跌20%。", "IT大涨后回落。", "股票代码IT服务。", "股票600519大涨。", "盘前TSLA上涨3%。"],
 )
-def test_n1_unbound_codes_stay_rejected(text):
-    with pytest.raises(ValueError):
-        _news_field(text)
+def test_n1_prose_codes_without_structured_binding_are_published(text):
+    assert _news_field(text) == text
 
 
 # --- N2. A host name in brackets is a citation, not a term gloss --------------
@@ -227,9 +226,8 @@ def test_s7_benchmark_rates_take_the_original_movement_words(job_type, text):
         "盘前TSLA +3.5%，市场情绪回暖。",
     ],
 )
-def test_s7_security_context_still_needs_binding(text):
-    with pytest.raises(ValueError):
-        _news_field(text)
+def test_s7_prose_financial_terms_are_published(text):
+    assert _news_field(text) == text
 
 
 # --- Suggestion 1. Upper-case P and N statistics ------------------------------
@@ -248,9 +246,8 @@ def test_s1r2_upper_case_p_and_n_statistics_publish(text):
     "text",
     ["P<10美元后买盘涌入。", "N>5万美元时触发止损。", "F>12美元后福特汽车加速上涨。"],
 )
-def test_s1r2_a_letter_compared_with_a_price_still_needs_binding(text):
-    with pytest.raises(ValueError):
-        _news_field(text)
+def test_s1r2_prose_letters_next_to_prices_are_published(text):
+    assert _news_field(text) == text
 
 
 # --- Suggestion 2. Share counts after 股票 ------------------------------------
@@ -269,20 +266,23 @@ def test_s2r2_share_counts_after_the_word_stock_publish(text):
     "text",
     ["股票600519万股成交。", "关注股票000002万科的走势。", "股票300014亿纬锂能大涨。", "股票600519上涨。"],
 )
-def test_s2r2_code_shaped_numbers_after_the_word_stock_still_need_binding(text):
-    with pytest.raises(ValueError, match="unbound_numeric_security_code"):
-        _news_field(text)
+def test_s2r2_numbers_after_stock_without_explicit_code_label_are_published(text):
+    assert _news_field(text) == text
 
 
 # --- Suggestion 5. Four-digit Hong Kong codes ---------------------------------
 
 
 @pytest.mark.parametrize("text", ["港股9888百度集团盘中走高。", "港股代码1810小米集团走强。"])
-def test_s5r2_four_digit_hong_kong_codes_need_binding(text):
-    with pytest.raises(ValueError, match="unbound_numeric_security_code"):
-        _news_field(text)
-    with pytest.raises(ValueError, match="unbound_numeric_security_code"):
-        _focus_field(text, field="summary_zh")
+def test_s5r2_only_explicit_hong_kong_code_labels_need_binding(text):
+    if "代码" in text:
+        with pytest.raises(ValueError, match="unbound_numeric_security_code"):
+            _news_field(text)
+        with pytest.raises(ValueError, match="unbound_numeric_security_code"):
+            _focus_field(text, field="summary_zh")
+    else:
+        assert _news_field(text) == text
+        assert _focus_field(text, field="summary_zh") == text
 
 
 @pytest.mark.parametrize(
@@ -314,9 +314,8 @@ def test_s3r2_more_it_phrases_publish(text):
 
 
 @pytest.mark.parametrize("text", ["股票代码IT基础设施。", "IT股价上涨。", "高德纳（IT）暴跌20%。"])
-def test_s3r2_it_in_security_context_still_needs_binding(text):
-    with pytest.raises(ValueError):
-        _news_field(text)
+def test_s3r2_it_in_prose_does_not_guess_structured_identity(text):
+    assert _news_field(text) == text
 
 
 # --- Suggestion 4. The fetch_failed reason is translated ----------------------

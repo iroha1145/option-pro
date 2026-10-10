@@ -33,7 +33,9 @@ def test_repository_personal_config_freezes_paid_runtime() -> None:
     assert config.public_home.chart_seconds == 300
     assert config.public_home.signals_seconds == 900
     assert config.public_home.earnings_seconds == 21_600
-    assert config.public_home.unusual_seconds == 1800
+    assert not hasattr(config.public_home, "unusual_seconds")
+    assert config.catalyst.journal_retention_days == 10
+    assert config.storage.retention_days == 10
 
 
 def test_repository_collects_news_locally_with_the_default_source_schedule() -> None:

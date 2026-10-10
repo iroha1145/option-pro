@@ -1,14 +1,9 @@
 """Chinese-text policy change of 2026-10-10: Latin terms stay, English prose goes.
 
-The user decided that narrative fields must still be Chinese, but proper
-names and technical terms may keep their Latin spelling. english_prose_not_allowed
-now rejects English prose only. A fragment no other rule accepts is published as
-a term when it is a single token, or a name of at most five words that are each
-capitalised, all caps, a number or a connector -- unless it is prose, a JSON
-literal, a field name, a URL or host name, or sits in a security context.
-
-The positive cases are production samples from the recovery dry runs. The red
-lines are the ones the policy keeps unchanged.
+The v5 policy keeps the existing whole-text and sentence language ratios,
+but stops guessing stock identity from Latin words in Chinese prose. These
+production examples exercise that change while raw fields, host names,
+explicit numeric code labels and structured identity remain checked.
 """
 
 from __future__ import annotations
@@ -89,32 +84,26 @@ def test_earnings_results_share_the_term_rule():
 # --- English prose and other non-terms are still rejected ---------------------
 
 
-@pytest.mark.parametrize(
-    "text",
-    [
-        # Two or more ordinary English words.
-        "公司称the company reported strong results。",
-        "市场（investors flee quickly）持续下跌。",
-        "Apple Beats Estimates，市场持续关注。",
-        # The same prose joined into one token.
-        "market-rally带动指数。",
-        # More than five words.
-        "Bank of New York Mellon Trust Company发布公告。",
-        # Bare JSON literals.
-        "uncertainty为true。",
-        "该字段为false。",
-        "数据为null。",
-        # Field names, URLs and host names.
-        "输入my_article_status为不可用。",
-        "详见https://foo.io/bar。",
-        "公司公布融资安排（GlobeNewswire.com）。",
-        # A term still has to sit in a Chinese sentence.
-        "Polymesh。网络完成升级。",
-    ],
-)
-def test_prose_literals_field_names_and_hosts_are_rejected(text):
-    with pytest.raises(ValueError, match="english_prose_not_allowed"):
-        _news_field(text)
+@pytest.mark.parametrize(("text", "published"), [
+    ("公司称the company reported strong results。", None),
+    ("市场（investors flee quickly）持续下跌。", "市场（investors flee quickly）持续下跌。"),
+    ("Apple Beats Estimates，市场持续关注。", "Apple Beats Estimates，市场持续关注。"),
+    ("market-rally带动指数。", "market-rally带动指数。"),
+    ("Bank of New York Mellon Trust Company发布公告。", None),
+    ("uncertainty为true。", "uncertainty为是。"),
+    ("该字段为false。", "该字段为否。"),
+    ("数据为null。", "数据为null。"),
+    ("输入my_article_status为不可用。", None),
+    ("详见https://foo.io/bar。", None),
+    ("公司公布融资安排（GlobeNewswire.com）。", None),
+    ("Polymesh。网络完成升级。", None),
+])
+def test_terms_are_published_but_english_dominance_raw_fields_and_hosts_are_rejected(text, published):
+    if published is None:
+        with pytest.raises(ValueError, match="english_prose_not_allowed"):
+            _news_field(text)
+    else:
+        assert _news_field(text) == published
 
 
 def test_english_prose_is_not_translated_word_by_word_into_a_term():
@@ -149,9 +138,8 @@ def test_english_prose_is_not_translated_word_by_word_into_a_term():
         "T-Mobile US此前下跌约5.4%。",
     ],
 )
-def test_security_context_still_requires_binding(text):
-    with pytest.raises(ValueError, match="english_prose_not_allowed"):
-        _news_field(text)
+def test_prose_security_context_does_not_guess_structured_identity(text):
+    assert _news_field(text) == text
 
 
 @pytest.mark.parametrize(
@@ -162,9 +150,8 @@ def test_security_context_still_requires_binding(text):
         "risk-off情绪升温。",
     ],
 )
-def test_known_costs_of_the_prose_rule_are_still_rejected(text):
-    with pytest.raises(ValueError, match="english_prose_not_allowed"):
-        _news_field(text)
+def test_multiword_drug_and_market_terms_are_published(text):
+    assert _news_field(text) == text
 
 
 @pytest.mark.parametrize(
@@ -191,9 +178,10 @@ def test_bound_code_still_publishes():
     assert _news_field(text, allowed_tickers=["NVDA", "TSLA"]) == text
 
 
-def test_numeric_security_codes_still_require_binding():
+def test_explicit_numeric_security_codes_still_require_binding():
+    assert _news_field("股票600519上涨。") == "股票600519上涨。"
     with pytest.raises(ValueError, match="unbound_numeric_security_code"):
-        _news_field("股票600519上涨。")
+        _news_field("股票代码600519上涨。")
 
 
 def test_placeholders_and_other_scripts_are_unchanged():
@@ -208,3 +196,14 @@ def test_news_identity_still_has_to_match():
     result["news_id"] += 1
     with pytest.raises(ValueError, match="news_identity_mismatch"):
         validate_result("news_impact", json.dumps(result, ensure_ascii=False), _news_payload())
+
+
+@pytest.mark.parametrize("text", [
+    "The company reported stronger revenue and raised its earnings outlook.",
+    "INVESTORS ARE WATCHING DEMAND AND PRICING AFTER THE PRODUCT LAUNCH.",
+])
+def test_complete_english_output_is_still_rejected(text):
+    with pytest.raises(ValueError, match="simplified_chinese_text_required"):
+        _news_field(text)
+    with pytest.raises(ValueError, match="simplified_chinese_text_required"):
+        _focus_field(text, field="summary_zh")

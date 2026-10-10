@@ -71,7 +71,7 @@ function mapChartEx(body: unknown, ticker: string, range: ChartRange): StockChar
 /**
  * /strength/stocks/{t} 信封 {as_of, row:{…扫描行…}} → 基础行情 StockDetail。
  * 仅填契约真实字段：价/涨跌（change 由 change_pct 反推真实算术）/板块/强度分/
- * 市值+PE（finnhub_metrics，市值单位为百万美元）/20 日均量；其余如实留空（UI 显「—」）。
+ * 市值+PE（finnhub_metrics，市值单位为百万美元）；其余如实留空（UI 显「—」）。
  */
 function strengthRowToDetail(env: Rec): StockDetail | null {
   const row = asRec(env.row);
@@ -99,8 +99,8 @@ function strengthRowToDetail(env: Rec): StockDetail | null {
     high: null,
     low: null,
     prevClose,
-    volume: null, // 契约仅有 20 日均量，无当日成交量——不冒充
-    avgVolume: pickN(row, 'avg_volume_20d'),
+    volume: null,
+    avgVolume: null,
     marketCap: marketCapM !== null ? marketCapM * 1e6 : null,
     pe: pickN(fin, 'pe_ttm'),
     ivPercentile: null,
@@ -209,7 +209,6 @@ export function getDetail(ticker: string, force = false): Promise<StockDetail> {
           ...detail,
           sector: detail.sector || strength?.sector || '',
           strengthScore: finite(strength?.strengthScore) ? strength.strengthScore : detail.strengthScore,
-          avgVolume: finite(detail.avgVolume) ? detail.avgVolume : strength?.avgVolume ?? detail.avgVolume,
           marketCap: finite(detail.marketCap) ? detail.marketCap : strength?.marketCap ?? detail.marketCap,
           pe: detail.pe ?? strength?.pe ?? null,
           snapshotScope: 'full' as const,

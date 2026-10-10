@@ -881,7 +881,7 @@ async def upcoming_earnings(request: Request):
 def _queue_earnings_calendar_refresh() -> dict[str, Any]:
     """password 模式手动刷新：入队 Worker 动作，HTTP 请求内零上游工作。
 
-    审计 P2-04：按钮时长曾完全由上游决定（Finnhub/FMP/Yahoo/市值/期权增强
+    审计 P2-04：按钮时长曾完全由上游决定（Finnhub/Yahoo/市值/期权增强
     全在请求内跑）。入队后由 public_home 任务重建并发布快照；同分钟重复
     点击/动作已在跑一律按 queued 返回，前端以快照 as_of 是否翻新收尾——
     上游失败时 worker 侧完整性闸保留上一份完整日历，跟进窗口超时提示。
@@ -1015,16 +1015,6 @@ async def refresh_upcoming_earnings():
 async def _build_upcoming_earnings(today: date):
     sem = asyncio.Semaphore(8)
     finnhub_task = asyncio.create_task(_fetch_finnhub_earnings(today))
-    # FMP 是可选的第二日历来源：未配置时立即以 not_configured 短路，
-    # 不产生任何请求，也不会影响 Finnhub 主路径。
-    fmp_task = asyncio.create_task(
-        earnings_enrichment.fetch_fmp_calendar(
-            today,
-            lookback_days=RECENT_EARNINGS_LOOKBACK_DAYS,
-            lookahead_days=FINNHUB_EARNINGS_LOOKAHEAD_DAYS,
-        )
-    )
-
     async def fetch_one(ticker: str):
         def _work():
             try:
@@ -1158,20 +1148,12 @@ async def _build_upcoming_earnings(today: date):
 
     results = await asyncio.gather(*[fetch_one(t) for t in EARNINGS_TICKERS], return_exceptions=True)
     finnhub_result = await finnhub_task
-    fmp_result = await fmp_task
     finnhub_rows = (
         list(finnhub_result.get("rows") or [])
         if isinstance(finnhub_result, Mapping)
         else []
     )
     finnhub_selected = _select_finnhub_rows(finnhub_rows, today)
-    fmp_rows = (
-        list(fmp_result.get("rows") or [])
-        if isinstance(fmp_result, Mapping)
-        else []
-    )
-    # FMP 行与 Finnhub 行同形状，复用同一套「近发布优先/最近未来」选择规则。
-    fmp_selected = _select_finnhub_rows(fmp_rows, today)
     completed = [r for r in results if isinstance(r, dict)]
     succeeded = [r for r in completed if r.get("ok")]
     failed_symbols = [
@@ -1180,10 +1162,9 @@ async def _build_upcoming_earnings(today: date):
         if (
             (not isinstance(result, dict) or not result.get("ok"))
             and ticker not in finnhub_selected
-            and ticker not in fmp_selected
         )
     ]
-    if not succeeded and not finnhub_selected and not fmp_selected:
+    if not succeeded and not finnhub_selected:
         raise HTTPException(status_code=503, detail="Earnings data is currently unavailable")
     earnings_by_ticker = {
         str(result["data"].get("ticker")): dict(result["data"])
@@ -1247,79 +1228,11 @@ async def _build_upcoming_earnings(today: date):
                     inherited_sources[field] = "finnhub_calendar"
         _set_estimate_sources(earnings_by_ticker[ticker], inherited_sources)
 
-    # ── FMP 合并：交叉验证既有行的日期，补充 Finnhub 没覆盖的公司 ──
-    for ticker, fmp_row in fmp_selected.items():
-        existing = earnings_by_ticker.get(ticker)
-        fmp_date = str(fmp_row.get("earnings_date") or "")
-        if existing is not None:
-            sources = list(existing.get("calendar_sources") or [])
-            if "fmp_calendar" not in sources:
-                sources.append("fmp_calendar")
-            existing["calendar_sources"] = sources
-            same_report = _same_earnings_report(existing, fmp_row)
-            if same_report:
-                existing["calendar_date_status"] = "confirmed"
-                existing["calendar_conflict"] = None
-            else:
-                # 日期或已知财年、季度冲突必须可识别：主源期次保留，
-                # 次源日期原样记录，绝不静默合并成一条无法追踪的记录。
-                existing["calendar_date_status"] = "conflict"
-                existing["calendar_conflict"] = {
-                    "fmp_calendar": (
-                        {
-                            "earnings_date": fmp_date,
-                            "quarter": fmp_row.get("quarter"),
-                            "year": fmp_row.get("year"),
-                        }
-                        if fmp_date == existing.get("earnings_date")
-                        else fmp_date
-                    )
-                }
-            # Confirmation and estimate merging must use the same report identity.
-            if same_report:
-                estimate_sources = _estimate_sources(existing)
-                for field in ("eps_estimate", "revenue_estimate"):
-                    if existing.get(field) is None and fmp_row.get(field) is not None:
-                        existing[field] = fmp_row[field]
-                        estimate_sources[field] = "fmp_calendar"
-                _set_estimate_sources(existing, estimate_sources)
-            continue
-        release_status = (
-            "released"
-            if fmp_row.get("eps_actual") is not None
-            or fmp_row.get("revenue_actual") is not None
-            else "reported_pending_actual"
-            if int(fmp_row.get("days_until") or 0) < 0
-            else "scheduled"
-        )
-        earnings_by_ticker[ticker] = {
-            **fmp_row,
-            "ticker": ticker,
-            "name": ticker,
-            "market_cap": None,
-            "sector": "",
-            "earnings_date_source": "fmp_calendar",
-            "estimate_source": (
-                "fmp_calendar"
-                if fmp_row.get("eps_estimate") is not None
-                or fmp_row.get("revenue_estimate") is not None
-                else None
-            ),
-            "actual_source": (
-                "fmp_calendar" if release_status == "released" else None
-            ),
-            "release_status": release_status,
-            "source_status": "active",
-            "observed_at": observed_at,
-            "calendar_sources": ["fmp_calendar"],
-            "calendar_date_status": "single_source",
-            "calendar_conflict": None,
-        }
     earnings = list(earnings_by_ticker.values())
-    # FMP 行常缺 year/quarter；用同一报告已知的期次回填，report_id 才不会随来源切换漂移。
+    # 复用同一报告已知的期次，避免报告编号随来源切换漂移。
     earnings_enrichment.stabilize_report_periods(earnings, today=today)
 
-    # ── 市值：批量 + 持久缓存（Worker 低频刷新；绝不逐家请求资料） ──
+    # ── 市值：行内资料与持久缓存优先，仅为少量缺失项查询 Massive ──
     config = get_personal_config()
     market_caps = await earnings_enrichment.resolve_market_caps(
         earnings,
@@ -1429,7 +1342,7 @@ async def _build_upcoming_earnings(today: date):
     )
     earnings = earnings[:MAX_EARNINGS_OUTPUT_ROWS]
     attempted_symbols = (
-        set(EARNINGS_TICKERS).union(finnhub_selected).union(fmp_selected)
+        set(EARNINGS_TICKERS).union(finnhub_selected)
     )
     finnhub_contributed = any(
         item.get("earnings_date_source") == "finnhub_calendar"
@@ -1440,17 +1353,11 @@ async def _build_upcoming_earnings(today: date):
         or bool({"calendar", "earnings_dates"}.intersection(_estimate_sources(item).values()))
         for item in earnings
     )
-    fmp_contributed = any(
-        item.get("earnings_date_source") == "fmp_calendar"
-        or "fmp_calendar" in _estimate_sources(item).values()
-        for item in earnings
-    )
     providers = [
         name
         for name, contributed in (
             ("Finnhub", finnhub_contributed),
             ("Yahoo Finance", yahoo_contributed),
-            ("FMP", fmp_contributed),
         )
         if contributed
     ]
@@ -1460,16 +1367,8 @@ async def _build_upcoming_earnings(today: date):
         or not finnhub_result.get("succeeded")
         or finnhub_result.get("truncated")
     )
-    fmp_complete = bool(
-        isinstance(fmp_result, Mapping)
-        and fmp_result.get("configured")
-        and fmp_result.get("succeeded")
-    )
-    # Finnhub is the primary full-market source for the visible -3..+30 day
-    # window; FMP is an optional second full-market calendar. Coverage is
-    # limited only when neither full-market source completed. Yahoo is a
-    # curated 180-day enrichment and never downgrades the calendar.
-    data_limited = finnhub_limited and not fmp_complete
+    # Finnhub supplies the full-market window; Yahoo enriches the curated pool.
+    data_limited = finnhub_limited
     return _sanitize({
         "earnings": earnings,
         "attempted": len(attempted_symbols),

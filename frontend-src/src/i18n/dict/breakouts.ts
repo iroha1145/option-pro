@@ -2,6 +2,8 @@
 import type { Dict } from './types';
 
 export const BREAKOUTS: Dict = {
+  '{days} 天 {hours} 小时': ['{days}d {hours}h', '{days}日 {hours}時間'],
+  '{hours} 小时 {minutes} 分钟': ['{hours}h {minutes}m', '{hours}時間 {minutes}分'],
   /* ---- LeadBigCard.tsx 风险提醒原因码 ---- */
   '盘前跳空，待盘中确认': ['Pre-market gap, awaiting regular-session confirmation', 'プレマーケットのギャップ、通常取引での確認待ち'],
   '无有效整理平台': ['No valid base', '有効なベースなし'],

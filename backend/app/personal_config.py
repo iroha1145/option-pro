@@ -244,7 +244,7 @@ class CatalystConfig(StrictConfigModel):
     focus_seconds: int = Field(default=1800, ge=300, le=86_400)
     # 变更日志整条目保留期。下限 8 天必须大于公共 feed 窗口上限 7 天：
     # 保留期内的条目全量保留（含旧变更），窗口读与 cursor 分页语义不受修剪影响。
-    journal_retention_days: int = Field(default=30, ge=8, le=3650)
+    journal_retention_days: int = Field(default=10, ge=8, le=3650)
     manual_force_reanalysis: Literal[True] = True
     manual_refresh_cooldown_seconds: int = Field(default=30, ge=0, le=3600)
     scheduled_times_et: list[str] = Field(
@@ -303,9 +303,6 @@ class PublicHomeConfig(StrictConfigModel):
     chart_seconds: int = Field(default=300, ge=300, le=86_400)
     signals_seconds: int = Field(default=900, ge=900, le=86_400)
     earnings_seconds: int = Field(default=21_600, ge=21_600, le=172_800)
-    # 不再读取。生产 personal.toml 仍有这一行，模型是 extra="forbid"，
-    # 删掉字段会让配置加载失败。
-    unusual_seconds: int = Field(default=1800, ge=1800, le=86_400)
     # CTA 趋势资金估算：日频模型，盘中 30 分钟一算足够（末根未收盘只做
     # 暂定标记，正式仓位要等收盘后的下一轮刷新）。
     cta_seconds: int = Field(default=1800, ge=900, le=86_400)
@@ -531,7 +528,7 @@ class MarketBriefConfig(StrictConfigModel):
 
 
 class StorageConfig(StrictConfigModel):
-    retention_days: int = Field(default=90, ge=1, le=3650)
+    retention_days: int = Field(default=10, ge=1, le=3650)
     backup_keep: int = Field(default=7, ge=1, le=100)
 
 

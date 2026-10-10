@@ -1075,9 +1075,8 @@ def test_standard_market_terms_pass_the_chinese_validator(text):
         ("SPY走弱，大盘承压。", ("AMD",)),
     ],
 )
-def test_security_context_still_requires_ticker_binding(text, codes):
-    with pytest.raises(ValueError, match="english_prose_not_allowed"):
-        validate_simplified_chinese_text(text, None, allowed_codes=codes)
+def test_prose_security_context_no_longer_guesses_structured_ticker_identity(text, codes):
+    assert validate_simplified_chinese_text(text, None, allowed_codes=codes) == text
 
 
 @pytest.mark.parametrize("text", ["Delta股价上涨。", "Call股价上涨。", "特斯拉（Tesla）股价上涨。"])
@@ -1095,12 +1094,12 @@ def test_prose_rejection_names_the_rejected_fragment():
         validate_simplified_chinese_text("公司称the company reported strong results。", None)
     with pytest.raises(
         ValidationError,
-        match=r"english_prose_not_allowed: 'Apple Beats Estimates'",
+        match=r"english_prose_not_allowed: 'Apple Beats Estimates and Reports Strong Revenue Growth'",
     ):
         validate_result(
             "earnings_impact",
             json.dumps(
-                {**_earnings_result(), "summary": "市场消息：Apple Beats Estimates"},
+                {**_earnings_result(), "summary": "市场消息：Apple Beats Estimates and Reports Strong Revenue Growth"},
                 ensure_ascii=False,
             ),
             {"ticker": "AAPL"},
@@ -1218,7 +1217,9 @@ def test_validator_changes_keep_queued_task_identities(job_type, identity):
     """The whitelist lives in the validator, not the prompt: pending jobs of
     the other four types must not flip to runtime_configuration_changed."""
 
-    assert runtime.schema_identity(job_type, model="gpt-5.6-terra") == identity
+    assert runtime.schema_identity_current(
+        job_type, runtime.PROMPT_VERSIONS[job_type], *identity, model="gpt-5.6-terra",
+    )
 
 
 # --- AI-7: earnings impact binds its inputs and accepts short lists

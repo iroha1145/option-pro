@@ -155,7 +155,7 @@ _HOTSPOT_PRUNE_BATCH_REVISIONS = 50
 # reconcile 只读新闻保留期内创建的 news/focus 任务：更早的任务所指的修订已随
 # 日志修剪，读进来只会每 120 秒把整段历史重校验一遍。保留期以 prune_journal
 # 收到的实际配置为准，首轮修剪前按配置默认值；余量吸收 web 与 worker 的时钟差。
-_DEFAULT_NEWS_RETENTION_DAYS = 30
+_DEFAULT_NEWS_RETENTION_DAYS = 10
 _AI_JOB_SNAPSHOT_MARGIN = timedelta(days=1)
 # 新闻付费载荷的字节预算。上游 summary 最长 20 万字符、source_tickers 最多
 # 500 项，原样入队会超过 ai_jobs 的入队上限：create_job 与 runtime 提交同一
@@ -1992,8 +1992,9 @@ class LocalCatalystIntelligence:
               窗口永不可见——生产初始回填里 83% 的条目属于此类）。
           存活条目的旧变更原样保留，窗口读与 cursor 分页的点时语义不受影响
           （保留期下限 8 天 > 公共窗口上限 7 天）。
-        - result_audit 与 tombstones 有意保留：前者是付费结果的不可变审计
-          副本（result_json 全文在审计行里另存一份），后者承担防复活语义。
+        - 全文审计随最后一个引用和活动任务退出后按保留期整组删除；
+          tombstones 继续保留，承担防复活语义。
+        - 焦点保留最新周期、最近两条成功结果与活动任务，其余按保留期删除。
         - 同步游标在 macrolens_etl_state，不读表内容；修订缓存指纹里
           changes/revisions 走 MAX(rowid)（修剪老行不改变），links 走计数——
           有删除的那次运行会使缓存失效一次（v5 后重建 <1s），此后不再扰动。
@@ -2016,6 +2017,9 @@ class LocalCatalystIntelligence:
         cutoff = _iso(anchor - timedelta(days=days))
         quiet = _iso(anchor - timedelta(hours=_JOURNAL_PRUNE_QUIET_HOURS))
         totals = {
+            "pruned_focus_cycles": 0,
+            "pruned_analysis_audits": 0,
+            "pruned_focus_audits": 0,
             "pruned_items": 0,
             "pruned_changes": 0,
             "pruned_revisions": 0,
@@ -2025,12 +2029,63 @@ class LocalCatalystIntelligence:
             "pruned_hotspot_items": 0,
             "pruned_event_groups": 0,
         }
+        # Read active task identities before taking the local write lock. An
+        # unreadable task store aborts pruning, rather than deleting live inputs.
+        active_jobs: list[tuple[str, int | None]] = []
+        job_path = Path(self.ai_repository.path)
+        if job_path.is_file():
+            with sqlite3.connect(f"{job_path.resolve().as_uri()}?mode=ro", uri=True) as jobs:
+                marks = ",".join("?" for _ in ai_job_store._TERMINAL)
+                active_jobs = [(row[0], row[1]) for row in jobs.execute(
+                    f"SELECT job_id,json_extract(payload_json,'$.news_id') FROM ai_jobs WHERE status NOT IN ({marks})",
+                    tuple(ai_job_store._TERMINAL),
+                )]
         with self._connect() as connection:
+            connection.execute("CREATE TEMP TABLE retention_active(job_id TEXT PRIMARY KEY,news_id INTEGER)")
+            connection.executemany("INSERT INTO retention_active VALUES(?,?)", active_jobs)
+            connection.commit()
+            # Ten days bounds history; the current publication and previous
+            # successful comparison remain usable through a quiet news period.
+            while True:
+                connection.execute("BEGIN IMMEDIATE")
+                cycles = [row[0] for row in connection.execute(
+                    """SELECT cycle_id FROM catalyst_local_focus_cycles
+                       WHERE created_at<? AND COALESCE(completed_at,updated_at,created_at)<?
+                         AND status IN ('completed','failed','cancelled','insufficient_context','budget_blocked')
+                         AND job_id NOT IN (SELECT job_id FROM retention_active)
+                         AND cycle_id NOT IN (
+                             SELECT cycle_id FROM catalyst_local_focus_cycles
+                             ORDER BY COALESCE(NULLIF(snapshot_as_of,''),created_at) DESC,created_at DESC,cycle_id DESC LIMIT 1)
+                         AND cycle_id NOT IN (
+                             SELECT cycle_id FROM catalyst_local_focus_cycles
+                             WHERE status='completed' AND result_json IS NOT NULL
+                             ORDER BY COALESCE(NULLIF(snapshot_as_of,''),created_at) DESC,created_at DESC,cycle_id DESC LIMIT 2)
+                       LIMIT ?""", (cutoff, cutoff, _JOURNAL_PRUNE_BATCH_ITEMS))]
+                if not cycles:
+                    connection.commit()
+                    break
+                marks = ",".join("?" for _ in cycles)
+                totals["pruned_focus_cycles"] += connection.execute(
+                    f"DELETE FROM catalyst_local_focus_cycles WHERE cycle_id IN ({marks})", cycles).rowcount
+                connection.commit()
+            connection.execute("CREATE TEMP TABLE retention_focus_news(news_id INTEGER PRIMARY KEY)")
+            connection.execute(
+                """INSERT OR IGNORE INTO retention_focus_news
+                   SELECT g.representative_news_id FROM catalyst_local_hotspot_items i
+                   JOIN catalyst_local_event_groups g USING(event_group_id,event_group_version)
+                   WHERE i.ordinal<=100 AND i.prepared_revision IN (
+                       SELECT prepared_revision FROM catalyst_local_focus_cycles
+                       UNION SELECT MAX(prepared_revision) FROM catalyst_local_hotspot_revisions)
+                """)
+            connection.commit()
             while True:
                 ids = [
                     row["news_id"]
                     for row in connection.execute(
                         """SELECT ch.news_id FROM macrolens_etl_news_changes ch
+                           WHERE ch.news_id NOT IN (SELECT news_id FROM retention_active WHERE news_id IS NOT NULL)
+                             AND ch.news_id NOT IN (SELECT news_id FROM retention_focus_news)
+                             AND NOT EXISTS (SELECT 1 FROM catalyst_local_analysis_links l JOIN retention_active a ON a.job_id=l.job_id WHERE l.news_id=ch.news_id)
                            GROUP BY ch.news_id
                            HAVING MAX(ch.available_at)<?
                               AND (
@@ -2083,6 +2138,26 @@ class LocalCatalystIntelligence:
                 (cutoff,),
             ).rowcount
             connection.commit()
+            # Delete whole job audit groups only after their newest decision is
+            # expired and no live projection/task needs them. Keeping all outcomes
+            # together prevents an older acceptance resurfacing after a rejection.
+            for table, reference, counter in (
+                ("catalyst_local_analysis_result_audit", "catalyst_local_analysis_links", "pruned_analysis_audits"),
+                ("catalyst_local_focus_result_audit", "catalyst_local_focus_cycles", "pruned_focus_audits"),
+            ):
+                while True:
+                    expired = [row[0] for row in connection.execute(
+                        f"""SELECT job_id FROM {table}
+                            WHERE job_id NOT IN (SELECT job_id FROM {reference})
+                              AND job_id NOT IN (SELECT job_id FROM retention_active)
+                            GROUP BY job_id HAVING MAX(observed_at)<? LIMIT ?""",
+                        (cutoff, _JOURNAL_PRUNE_BATCH_ITEMS))]
+                    if not expired:
+                        break
+                    marks = ",".join("?" for _ in expired)
+                    totals[counter] += connection.execute(
+                        f"DELETE FROM {table} WHERE job_id IN ({marks})", expired).rowcount
+                    connection.commit()
             # ---- 热点世系：引用保留（focus/最新）+ 48h 缓冲，其余整版删。 ----
             lineage_cutoff = _iso(
                 anchor - timedelta(hours=_HOTSPOT_LINEAGE_KEEP_HOURS)
@@ -6128,6 +6203,8 @@ class LocalCatalystIntelligence:
             if revision is not None
             else []
         )
+        if revision is not None:
+            original_revisions[revision["prepared_revision"]] = (current_bindings, current_rows)
         current_by_id = {row["event_group_id"]: row for row in current_rows}
         items = []
         rejected: set[str] = set()

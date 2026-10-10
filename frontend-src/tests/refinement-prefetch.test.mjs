@@ -106,6 +106,7 @@ test('idle shell preloads wait for identity, honor save-data, and share the two-
       if (id === 'react') return react.React;
       if (id === 'react/jsx-runtime') return { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) };
       if (id === 'react-router') return { useLocation: () => ({ pathname: '/' }), useNavigate: () => () => {}, useNavigationType: () => 'POP', Outlet: 'Outlet' };
+      if (id === '@/hooks/useToast') return { useToast: () => ({ success() {} }) };
       if (id === '@/hooks/useAccess') return { useAccess: () => ({ role: 'visitor', username: null, hasConfirmedIdentity: identity }) };
       if (id === '@/hooks/useShell') return { ShellContext: { Provider: 'Provider' } };
       if (id === '@/lib/afterLoadIdle') return { afterLoadIdle: (run) => { idle = run; return () => { idle = null; }; } };
