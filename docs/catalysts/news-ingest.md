@@ -82,6 +82,7 @@ calendar = { enabled = true, interval_seconds = 600 }
 ```
 
 - 间隔范围是 60 到 86400 秒；只写 `enabled = false` 时沿用默认间隔。
+- `[catalyst] scheduled_skip_template_commentary = true`（默认）让定时分析跳过 Zacks 的模板稿：标题是行情回顾、排名榜单、博客摘要等套话，或者链接的查询参数里带 `yseop_template`。新闻列表把它们标为 `skipped`，不计入「待生成中文」。改 false 并重启即回到全部分析；站长手动点分析不受影响。规则表在 `backend/app/services/catalysts/template_commentary.py`，说明见 `docs/audits/ai-analysis-fixes-20261010.md` 的「成本控制（2026-10-10）」。
 - 服务器上的 `personal.toml` 没有这些行时，按上面的默认值运行，也就是直接使用本地采集。
 - 密钥只用已有的 `MASSIVE_API_KEY` 与 `FINNHUB_API_KEY`（`secrets.env`），本路线不需要新密钥。
 

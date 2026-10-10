@@ -125,17 +125,20 @@ def test_a_stale_snapshot_is_labelled_stale_in_the_block(tmp_path) -> None:
 
 
 def test_the_focus_prompt_and_input_schema_versions_are_bumped() -> None:
-    assert local_module.FOCUS_PROMPT_VERSION == "market-focus-zh-cn-v6"
+    assert local_module.FOCUS_PROMPT_VERSION == "market-focus-zh-cn-v7"
     assert local_module.FOCUS_INPUT_SCHEMA_VERSION == "market-focus-input-v2"
     assert local_module.FOCUS_PROMPT_FAMILY_RE.fullmatch(
         local_module.FOCUS_PROMPT_VERSION
     )
 
 
-def test_the_output_schema_name_is_unchanged_so_old_results_stay_readable() -> None:
+def test_the_output_schema_name_stays_in_the_readable_family() -> None:
+    # 2026-10-10 v6 收紧了新输出的长度；v5 的确切身份列为前驱，旧结果照常可读
+    # （见 test_market_focus_concise_20261010.py）。
     schema_name, _digest = ai_runtime.schema_identity("market_focus")
-    assert schema_name == "market_focus_zh_cn_v5"
+    assert schema_name == "market_focus_zh_cn_v6"
     assert local_module.FOCUS_SCHEMA_FAMILY_RE.fullmatch(schema_name)
+    assert local_module.FOCUS_SCHEMA_FAMILY_RE.fullmatch("market_focus_zh_cn_v5")
 
 
 def test_the_prompt_cache_key_changed_with_the_macro_discipline() -> None:

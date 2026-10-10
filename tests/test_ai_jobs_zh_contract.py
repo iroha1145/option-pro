@@ -270,7 +270,7 @@ def test_market_focus_prompt_explains_cross_field_evidence_semantics():
         _market_focus_payload(),
     )
 
-    assert request.schema_name == "market_focus_zh_cn_v5"
+    assert request.schema_name == "market_focus_zh_cn_v6"
     assert "insufficient_evidence为true时，catalyst_bias必须为null" in (
         request.instructions
     )
@@ -2188,7 +2188,8 @@ def test_six_digit_security_code_is_allowed_when_bound(title):
     [
         ("news_id", 2),
         ("change_sequence", 8),
-        ("content_hash", "different-content"),
+        # content_hash is taken from the payload since 2026-10-10, see
+        # test_news_identity_hash_20261010.py.
     ],
 )
 def test_news_result_is_bound_to_the_exact_local_revision(field, value):

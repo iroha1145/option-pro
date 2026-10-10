@@ -65,9 +65,15 @@ _RESERVATION_HOLDING_ERRORS = frozenset(
     {"submission_outcome_unknown", "provider_poll_timeout"}
 )
 # 已拿到 response id、本地却没能落下结果的失败：恢复工具可以重新取回付费
-# 结果而不重新提交。
+# 结果而不重新提交。news_identity_mismatch 自 2026-10-10 起也在内：此前只因
+# 模型抄错 content_hash 被拒的回执，按现行规则重验即可落库。
 RECOVERABLE_FAILURE_CODES = frozenset(
-    {"schema_validation_failed", "provider_unavailable", "local_storage_error"}
+    {
+        "schema_validation_failed",
+        "provider_unavailable",
+        "local_storage_error",
+        "news_identity_mismatch",
+    }
 )
 _SCHEDULED_HISTORY_JOB_TYPES = ("news_impact", "market_focus")
 _TERMINAL = {
@@ -2964,6 +2970,7 @@ class AIJobRepository:
             payload = json.loads(str(current["payload_json"]))
         except (KeyError, TypeError, json.JSONDecodeError) as exc:
             raise RuntimeError("ai_job_recovery_payload_invalid") from exc
+        # Recovery applies the same limits as the original completion did.
         validated = validate_result(
             str(current["job_type"]),
             json.dumps(
@@ -2973,6 +2980,7 @@ class AIJobRepository:
                 allow_nan=False,
             ),
             payload,
+            schema_version=current.get("schema_version"),
         )
         if claude_result or current.get("provider_result_json"):
             receipt = self.get_provider_result(job_id)
@@ -3492,7 +3500,10 @@ class AIJobRepository:
                         raise ValueError("market_focus_tool_receipt_missing")
                     tool_evidence = validated_receipt.get("tool_evidence", [])
                     validate_market_focus_evidence(result, payload_source, tool_evidence)
-                    payload["result"] = public_focus_result(result)
+                    payload["result"] = public_focus_result(
+                        result, schema_version=row.get("schema_version"),
+                        verified_at=row.get("completed_at"),
+                    )
                     payload["evidence_sources"] = public_focus_sources(result, tool_evidence)
                 except (KeyError, TypeError, ValueError) as exc:
                     record_fallback_failure("ai_job_focus_evidence_hidden", exc)

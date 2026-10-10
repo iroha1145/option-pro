@@ -378,6 +378,6 @@ def test_luna_search_reservation_uses_the_published_context_window():
     assert runtime.token_reservation("news_impact", model=model, payload=searching) == 1_050_000
     assert runtime.token_reservation("news_impact", model=model, payload=with_article) == 139_264
     # Over 272K input takes the long-context rates: 984,464 x $0.50/M input,
-    # 65,536 x $1.80/M output, plus three searches at $0.01.
-    assert runtime.budget_reservation_microusd("news_impact", model=model, payload=searching) == 640_197
+    # 65,536 x $1.80/M output, plus one search at $0.01.
+    assert runtime.budget_reservation_microusd("news_impact", model=model, payload=searching) == 620_197
     assert runtime.budget_reservation_microusd("news_impact", model=model, payload=with_article) == 97_076

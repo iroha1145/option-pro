@@ -3276,6 +3276,72 @@ class VerifiedMarketFocusResult(MarketFocusResult):
         return result
 
 
+# 热点分析的新输出（2026-10-10 起的 schema 版本）按字段分工收紧长度。提示词给的
+# 目标长度约为这里的一半，上限留出余量，只拦明显失控的输出。读取历史结果仍用上面
+# 的宽松模型：生产上已完成的周期按旧上限写入，换成新上限会把它们整轮隐藏。
+MARKET_FOCUS_SCHEMA_NAME = "market_focus_zh_cn_v6"
+VERIFIED_MARKET_FOCUS_SCHEMA_NAME = "market_focus_verified_zh_cn_v2"
+CONCISE_FOCUS_SCHEMA_VERSIONS = frozenset({
+    MARKET_FOCUS_SCHEMA_NAME, VERIFIED_MARKET_FOCUS_SCHEMA_NAME,
+})
+FOCUS_TEXT_LIMITS = {
+    "title": 60,  # 目标 30 字：本轮主线，或单个事件的标题
+    "headline": 240,  # 目标 120 字：一两句导语
+    "summary": 1200,  # 目标 500 字：市场层面的结论与限制
+    "market": 800,  # 目标 300 字：输入市场状态与事件的关系
+    "event_summary": 400,  # 目标 220 字：标题句、事实句、推断句
+    "assessment_summary": 320,  # 目标 160 字
+    "risk": 80,  # 目标 40 字
+    "uncertainty": 120,  # 目标 60 字
+}
+
+
+def _focus_text(limit: int) -> Any:
+    return Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=1, max_length=limit),
+        AfterValidator(validate_simplified_chinese_text),
+    ]
+
+
+ZhFocusTitle = _focus_text(FOCUS_TEXT_LIMITS["title"])
+ZhFocusHeadline = _focus_text(FOCUS_TEXT_LIMITS["headline"])
+ZhFocusSummary = _focus_text(FOCUS_TEXT_LIMITS["summary"])
+ZhFocusMarketSummary = _focus_text(FOCUS_TEXT_LIMITS["market"])
+ZhFocusEventSummary = _focus_text(FOCUS_TEXT_LIMITS["event_summary"])
+ZhFocusAssessmentSummary = _focus_text(FOCUS_TEXT_LIMITS["assessment_summary"])
+ZhFocusRisk = _focus_text(FOCUS_TEXT_LIMITS["risk"])
+ZhFocusUncertainty = _focus_text(FOCUS_TEXT_LIMITS["uncertainty"])
+
+
+class ConciseMarketFocusTickerAssessment(MarketFocusTickerAssessment):
+    summary: ZhFocusAssessmentSummary
+    risks: list[ZhFocusRisk] = Field(max_length=8)
+
+
+class ConciseMarketFocusDominantEvent(MarketFocusDominantEvent):
+    summary: ZhFocusEventSummary
+
+
+class ConciseMarketFocusResult(MarketFocusResult):
+    title_zh: ZhFocusTitle
+    summary_zh: ZhFocusSummary
+    headline_summary: ZhFocusHeadline
+    market_summary: ZhFocusMarketSummary
+    dominant_events: list[ConciseMarketFocusDominantEvent] = Field(max_length=8)
+    market_uncertainties: list[ZhFocusUncertainty] = Field(max_length=20)
+    focus_ticker_assessments: list[ConciseMarketFocusTickerAssessment] = Field(max_length=20)
+
+
+class ConciseFocusEventVerification(FocusEventVerification):
+    title_zh: ZhFocusTitle
+    summary_zh: ZhFocusEventSummary
+
+
+class ConciseVerifiedMarketFocusResult(ConciseMarketFocusResult, VerifiedMarketFocusResult):
+    event_verifications: list[ConciseFocusEventVerification] = Field(max_length=200)
+
+
 def validate_market_focus_evidence(
     result: dict, payload: dict, tool_evidence: list[dict] | None,
 ) -> None:
@@ -3368,7 +3434,13 @@ class CancelRequest(StrictModel):
 
 def result_model_for(
     job_type: str, *, payload: dict | None = None, model: str | None = None,
+    concise: bool = False,
 ) -> type[BaseModel]:
+    """``concise`` selects the tightened market focus contract for new output.
+
+    Requests always carry it; completion checks it only for jobs created under
+    CONCISE_FOCUS_SCHEMA_VERSIONS. Reads keep the lenient historical models.
+    """
     if job_type == "earnings_impact":
         return EarningsImpactResult
     if job_type == "option_alerts":
@@ -3381,8 +3453,8 @@ def result_model_for(
         if (payload or {}).get("verification_version") == FOCUS_VERIFICATION_VERSION or (
             payload is None and isinstance(model, str) and "sonnet" in model
         ):
-            return VerifiedMarketFocusResult
-        return MarketFocusResult
+            return ConciseVerifiedMarketFocusResult if concise else VerifiedMarketFocusResult
+        return ConciseMarketFocusResult if concise else MarketFocusResult
     raise ValueError("unsupported_job_type")
 
 
@@ -3591,8 +3663,18 @@ def _validation_source_texts(job_type: str, payload: dict) -> tuple[str, ...]:
 _SIGNAL_BENCHMARK_CODES = ("SPY", "QQQ", "IWM", "RSP", "HYG", "TLT")
 
 
-def validate_result(job_type: str, raw_json: str, payload: dict) -> dict:
-    model = result_model_for(job_type, payload=payload)
+def validate_result(
+    job_type: str, raw_json: str, payload: dict, *, schema_version: Any = None,
+) -> dict:
+    """``schema_version`` is the job's own; pass it only when accepting new output."""
+    model = result_model_for(
+        job_type, payload=payload,
+        concise=(
+            job_type == "market_focus"
+            and isinstance(schema_version, str)
+            and schema_version in CONCISE_FOCUS_SCHEMA_VERSIONS
+        ),
+    )
     if job_type in {"news_impact", "market_focus"}:
         raw_allowed_codes = list(payload.get("allowed_tickers") or [])
     elif job_type == "signal_analysis":
@@ -3660,12 +3742,16 @@ def validate_result(job_type: str, raw_json: str, payload: dict) -> dict:
             raise ValueError("signal_ticker_mismatch")
     elif job_type == "news_impact":
         validate_job_payload(job_type, payload)
+        # 身份只比对 news_id 与 change_sequence。content_hash 是 64 位十六进制
+        # 摘要，模型照抄时会漏位、多位或改错一位（2026-10-03 起 Luna 约 13 条
+        # 新闻因此失败，抄错的都只有这一项），所以结果一律改用载荷里的值。
+        # 提示词仍要求原样复制：改提示词会移动任务身份，这里只是不再校验。
         if (
             data["news_id"] != payload["news_id"]
             or data["change_sequence"] != payload["change_sequence"]
-            or data["content_hash"] != str(payload["content_hash"]).strip()
         ):
             raise ValueError("news_identity_mismatch")
+        data["content_hash"] = str(payload["content_hash"]).strip()
         allowed_tickers = {
             str(ticker).strip().upper() for ticker in payload["allowed_tickers"]
         }

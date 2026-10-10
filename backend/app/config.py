@@ -17,7 +17,7 @@ from pydantic import (
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.data_paths import explicit_data_path, get_data_paths
-from app.personal_config import get_personal_config
+from app.personal_config import get_personal_config, reasoning_supported
 from app.runtime_environment import load_runtime_environment
 
 
@@ -52,12 +52,12 @@ class Settings(BaseSettings):
         default=_PERSONAL_CONFIG.ai.model,
         alias="OPENAI_MODEL",
     )
-    openai_reasoning: Literal["xhigh", "max"] = Field(
+    openai_reasoning: Literal["xhigh", "max", "high"] = Field(
         default=_PERSONAL_CONFIG.ai.reasoning,
         alias="OPENAI_REASONING",
     )
     openai_news_model: Literal["gpt-5.6-luna", "gpt-5.6-terra", "claude-haiku-5-5"] | None = Field(default=_PERSONAL_CONFIG.ai.news_model, alias="OPENAI_NEWS_MODEL")
-    openai_news_reasoning: Literal["max", "xhigh"] | None = Field(default=_PERSONAL_CONFIG.ai.news_reasoning, alias="OPENAI_NEWS_REASONING")
+    openai_news_reasoning: Literal["max", "xhigh", "high"] | None = Field(default=_PERSONAL_CONFIG.ai.news_reasoning, alias="OPENAI_NEWS_REASONING")
     openai_market_focus_model: Literal["claude-sonnet-5-5", "claude-haiku-5-5"] | None = Field(default=_PERSONAL_CONFIG.ai.market_focus_model, alias="OPENAI_MARKET_FOCUS_MODEL")
     openai_market_focus_reasoning: Literal["xhigh"] | None = Field(default=_PERSONAL_CONFIG.ai.market_focus_reasoning, alias="OPENAI_MARKET_FOCUS_REASONING")
     openai_timeout_seconds: float = Field(
@@ -398,17 +398,14 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_openai_runtime(self) -> "Settings":
-        expected_reasoning = "xhigh" if self.openai_model.startswith("claude-") else "max"
-        if self.openai_reasoning != expected_reasoning:
+        if not reasoning_supported(self.openai_model, self.openai_reasoning):
             raise ValueError("AI model and reasoning must use a supported pair")
-        selected = self.openai_news_model or self.openai_model
-        effort = self.openai_news_reasoning
-        if effort is not None and effort != ("xhigh" if selected.startswith("claude-") else "max"):
-            raise ValueError("AI task model and reasoning must use a supported pair")
-        selected = self.openai_market_focus_model or self.openai_model
-        effort = self.openai_market_focus_reasoning
-        if effort is not None and effort != ("xhigh" if selected.startswith("claude-") else "max"):
-            raise ValueError("AI task model and reasoning must use a supported pair")
+        for selected, effort in (
+            (self.openai_news_model or self.openai_model, self.openai_news_reasoning),
+            (self.openai_market_focus_model or self.openai_model, self.openai_market_focus_reasoning),
+        ):
+            if effort is not None and not reasoning_supported(selected, effort):
+                raise ValueError("AI task model and reasoning must use a supported pair")
         if self.openai_model == "gpt-5.6-terra" and self.openai_max_concurrency != 1:
             raise ValueError("legacy OpenAI configuration supports concurrency 1 only")
         if self.allow_custom_openai_base_url:

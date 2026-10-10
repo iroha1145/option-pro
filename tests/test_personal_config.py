@@ -131,7 +131,7 @@ def test_market_brief_config_rejects_drift(overrides: dict) -> None:
 @pytest.mark.parametrize(
     ("field", "value"),
     [
-        ("model", "gpt-5.6-luna"),
+        ("model", "gpt-5.6-nova"),
         ("reasoning", "high"),
         ("max_concurrency", 5),
         ("execution_mode", "worker_sync"),
@@ -166,7 +166,7 @@ def test_old_personal_ai_configuration_remains_readable_without_rewriting(tmp_pa
 
 @pytest.mark.parametrize(
     ("model", "reasoning"),
-    [("claude-haiku-5-5", "max"), ("gpt-5.6-terra", "xhigh")],
+    [("claude-haiku-5-5", "max"), ("claude-haiku-5-5", "high")],
 )
 def test_personal_ai_rejects_mixed_provider_reasoning(model, reasoning) -> None:
     with pytest.raises(ValidationError):

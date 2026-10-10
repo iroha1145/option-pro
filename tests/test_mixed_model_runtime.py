@@ -65,7 +65,7 @@ def test_luna_submission_keeps_selected_identity_and_requires_missing_body_searc
         'type':'web_search','search_context_size':'low','external_web_access':True,
     }]
     assert params['tool_choice'] == 'required'
-    assert params['max_tool_calls'] == 3
+    assert params['max_tool_calls'] == 1
     assert params['include'] == ['web_search_call.action.sources']
 
 

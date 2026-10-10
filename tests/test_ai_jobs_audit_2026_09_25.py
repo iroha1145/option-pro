@@ -1204,10 +1204,12 @@ def test_common_simplified_finance_vocabulary_is_not_flagged_traditional():
             ),
         ),
         (
+            # 2026-10-10 热点 v7 收紧新输出长度（提示词与结构都变了）；上一版
+            # 6c3d008c 身份经 runtime._IDENTITY_PREDECESSORS 仍算现行。
             "market_focus",
             (
-                "market_focus_zh_cn_v5",
-                "6c3d008c66678f7729b5f69afcaa011597376fc7025431e2fd8a1afd67509d39",
+                "market_focus_zh_cn_v6",
+                "6fefeec2b2b09a751e0c341911741a503d1a507385d611c4afa689a4cf405cd3",
             ),
         ),
     ],

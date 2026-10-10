@@ -22,9 +22,10 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Revalidate already-paid provider results that failed only a "
-            "local step: the schema contract, or a local write recorded as "
-            "provider_unavailable/local_storage_error after the provider "
-            "accepted the job. No new model request is submitted."
+            "local step: the schema contract, a news identity check, or a "
+            "local write recorded as provider_unavailable/local_storage_error "
+            "after the provider accepted the job. No new model request is "
+            "submitted."
         )
     )
     parser.add_argument(
