@@ -49,7 +49,7 @@ export function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: numb
         </p>
       ) : (
         <p className="mt-1 flex h-5 items-center">
-          <SoftBadge>{__t('未核验')}</SoftBadge>
+          <SoftBadge title={__t('依据代表新闻的分析，尚未经过多来源核验')}>{__t('未核验')}</SoftBadge>
         </p>
       )}
       <div className="mt-3 flex flex-wrap items-center gap-1.5">

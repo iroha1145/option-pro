@@ -1,7 +1,7 @@
 /** calendar 面板：经济日历（impact 分级色条 + impact_zh + forecast/previous/actual，按日期分组） */
 import { useMemo } from 'react';
 import { useCalendarResource } from './useCalendarResource';
-import { flatCountry, localDay } from './calendarPresentation';
+import { calendarCopy, flatCountry, localDay } from './calendarPresentation';
 import CatalystCacheStatus from './CatalystCacheStatus';
 import { cacheStatusProps } from './cacheStatusProps';
 import type { EconomicEvent } from './api';
@@ -31,7 +31,7 @@ function ImpactChip({ ev }: { ev: EconomicEvent }) {
           ))}
         </span>
       )}
-      {ev.impactZh}
+      {calendarCopy()[ev.impact] ?? ev.impactZh}
     </SoftBadge>
   );
 }

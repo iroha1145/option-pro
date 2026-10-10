@@ -123,7 +123,7 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
             <p className="mt-1 flex flex-wrap items-center gap-x-2.5 text-micro text-ink-400 tnum">
               <span>{t('最近获取')} {fmtRelative(s.lastCrawlAt)}</span>
               {s.collecting && s.intervalMinutes != null && (
-                <span className="whitespace-nowrap">{t('· 每')} {s.intervalMinutes} {t('分钟')}</span>
+                <span className="whitespace-nowrap">{' · '}{t('每 {n} 分钟', { n: s.intervalMinutes })}</span>
               )}
               {s.streams?.map((st) => (
                 <SoftBadge key={st.name} tone={st.ok ? 'ok' : 'danger'} className="whitespace-normal [overflow-wrap:anywhere]">
@@ -147,7 +147,7 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
                 <span>{t('正在整理热点…')}</span>
               </SoftBadge>
               {hs.etaSeconds != null && (
-                <span className="text-micro text-ink-400 tnum">{t('预计')} {hs.etaSeconds}s</span>
+                <span className="text-micro text-ink-400 tnum">{t('预计 {n}s', { n: hs.etaSeconds })}</span>
               )}
             </div>
           ) : (
@@ -156,10 +156,10 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
                 <Led tone={hs?.scanning ? 'brand' : 'muted'} pulse={!!hs?.scanning} />
                 <span>{hs?.scanning ? t('已就绪') : t('已暂停')}</span>
               </SoftBadge>
-              <span className="whitespace-nowrap text-caption text-ink-600 tnum">{hs?.groupCount ?? 0} {t('个热点')}</span>
+              <span className="whitespace-nowrap text-caption text-ink-600 tnum">{t('{n} 个热点', { n: hs?.groupCount ?? 0 })}</span>
             </div>
           )}
-          {hs && <p className="mt-1 text-micro text-ink-400 tnum">{t('更新')} {fmtRelative(hs.updatedAt)}</p>}
+          {hs && <p className="mt-1 text-micro text-ink-400 tnum">{t('更新 {time}', { time: fmtRelative(hs.updatedAt) })}</p>}
         </HeroCell>
 
         <HeroCell label={t("分析服务")} contentClass="min-h-[48px]">

@@ -1,5 +1,5 @@
 /**
- * 首页「市场综合研判」：每个交易日开盘前、收盘后各一份，由 Claude 生成（后端 market_brief）。
+ * 首页「市场报告」：每个交易日开盘前、收盘后各一份，由 Claude 生成（后端 market_brief）。
  *
  * 60 秒读一次 latest。Owner 可以手动生成：提交后每 20 秒跟进一次，出现新研判或新的失败
  * 记录就停，最长 25 分钟。状态：首次加载骨架；读不到且没有旧数据 → 错误与重试；还没有
@@ -125,8 +125,8 @@ export default function MarketBriefCard({ className }: { className?: string }) {
 
   useEffect(() => {
     if (!outcome) return;
-    if (outcome.kind === 'ready') toast.success(t('新研判已生成'));
-    else toast.error(t('研判生成失败'), outcome.reason ?? undefined);
+    if (outcome.kind === 'ready') toast.success(t('新报告已生成'));
+    else toast.error(t('报告生成失败'), outcome.reason ?? undefined);
   }, [outcome, toast]);
 
   /* 跟进期间每 20 秒硬失效再强制读：注册表的 60 秒新鲜窗口和浏览器 HTTP 缓存都会让
@@ -137,7 +137,7 @@ export default function MarketBriefCard({ className }: { className?: string }) {
     const timer = window.setInterval(() => {
       if (Date.now() - follow.since >= FOLLOW_TIMEOUT_MS) {
         setFollow(null);
-        toast.info(t('研判仍在生成'), t('完成后自动显示'));
+        toast.info(t('报告仍在生成'), t('完成后自动显示'));
         return;
       }
       if (document.visibilityState !== 'visible') return;
@@ -214,7 +214,7 @@ export default function MarketBriefCard({ className }: { className?: string }) {
   } else if (!brief) {
     body = (
       <EmptyState
-        title={t('首份研判尚未生成')}
+        title={t('首份报告尚未生成')}
         description={nextSlotText(data?.nextSlot ?? null, year) ?? undefined}
       />
     );
@@ -223,13 +223,13 @@ export default function MarketBriefCard({ className }: { className?: string }) {
   }
 
   return (
-    <section aria-label={t('市场综合研判')} className={cn('card-surface p-4 sm:p-5 lg:p-6', className)}>
+    <section aria-label={t('市场报告')} className={cn('card-surface p-4 sm:p-5 lg:p-6', className)}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-ai-50 text-ai-600" aria-hidden="true">
             <AnalysisIcon size={17} />
           </span>
-          <h2 className="text-h3 text-ink-900">{t('市场综合研判')}</h2>
+          <h2 className="text-h3 text-ink-900">{t('市场报告')}</h2>
           {brief && (
             <SoftBadge tone="ai">{t('{model} 生成', { model: brief.model.label ?? brief.model.id ?? 'AI' })}</SoftBadge>
           )}
@@ -291,7 +291,7 @@ export default function MarketBriefCard({ className }: { className?: string }) {
           {busy && (
             <p role="status" className="mt-3 flex items-center gap-1.5 text-caption text-ink-500">
               <span className="size-1.5 shrink-0 animate-led-pulse rounded-full bg-ai-600" aria-hidden="true" />
-              <ThinkingLabel>{t('模型正在生成研判，通常需要几分钟')}</ThinkingLabel>
+              <ThinkingLabel>{t('模型正在生成报告，通常需要几分钟')}</ThinkingLabel>
             </p>
           )}
           {failed && <StatusNotice className="mt-4">{attemptFailureText(failed, year)}</StatusNotice>}
@@ -305,7 +305,7 @@ export default function MarketBriefCard({ className }: { className?: string }) {
 
       <ConfirmDialog
         open={confirmOpen}
-        title={t('现在生成一份市场综合研判？')}
+        title={t('现在生成一份市场报告？')}
         description={t('模型会读取当前的行情、广度、宏观、行业、新闻与日历证据重新成文，通常需要几分钟，会消耗模型用量并计入每日次数。')}
         confirmLabel={t('开始生成')}
         onConfirm={() => void start()}

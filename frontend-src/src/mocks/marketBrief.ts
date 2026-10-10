@@ -1,5 +1,5 @@
 /**
- * 首页「市场综合研判」演示数据：GET /api/market-brief/latest 的完整响应（snake_case 原样），
+ * 首页「市场报告」演示数据：GET /api/market-brief/latest 的完整响应（snake_case 原样），
  * 与 tests/fixtures/market_brief_sample.json 是同一份样例（market-brief-mock-contract 测试逐字段比对），
  * 由 api/modules/marketBrief.ts 的 mapLatest 归一。
  *

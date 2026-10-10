@@ -1,4 +1,4 @@
-// 「市场综合研判」mock 与归一器契约（node --experimental-strip-types --test）
+// 「市场报告」mock 与归一器契约（node --experimental-strip-types --test）
 //
 // 覆盖：mocks/marketBrief.ts 与 tests/fixtures/market_brief_sample.json（三方共用的接口样例）逐字段
 // 一致、能通过 mapLatest；live 路径读注册表、还没有研判时的 missing 响应；脏数据的防御性归一
