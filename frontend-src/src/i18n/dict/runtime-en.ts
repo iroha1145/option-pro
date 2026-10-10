@@ -2104,6 +2104,7 @@ export const EN: Record<string, string> = {
   "无法确认模型服务是否收到分析请求，已停止重复提交，请先核对原任务状态": "It is unclear whether the model service received the request, so repeat submissions are blocked. Check the original task's status first.",
   "模型返回的内容未通过检查，分析已停止": "The model's response failed validation. Analysis has stopped.",
   "信息来源": "Sources",
+  "信息来源 · {n} 条": "Sources · {n}",
   "分析内容过长，没有生成完整，请重试": "The analysis was too long and got cut off. Try again.",
   "模型服务余额不足，需充值": "The model service is out of credit. Top up to continue.",
   "模型服务没有返回完整结果，请重试": "The model service returned an incomplete result. Try again.",

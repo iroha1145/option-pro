@@ -1,4 +1,4 @@
-import AnalysisSources from '@/components/shared/AnalysisSources';
+import CollapsibleAnalysisSources from '@/components/shared/CollapsibleAnalysisSources';
 import AnalysisIcon from '@/components/shared/AnalysisIcon';
 import SoftBadge from '@/components/shared/SoftBadge';
 import StatusNotice from '@/components/shared/StatusNotice';
@@ -235,7 +235,7 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
       <p className="mt-4 break-all text-micro leading-5 text-ink-400 tnum">
         {cycle.cycleId} · {cycle.trigger === 'manual' ? t('手动触发') : t('定时生成')}{cycle.model.trim() ? ` · ${aiModelLabel(cycle.model, cycle.reasoning)}` : ''}
       </p>
-      <AnalysisSources sources={cycle.evidenceSources} />
+      <CollapsibleAnalysisSources sources={cycle.evidenceSources} />
     </div>
   );
 }

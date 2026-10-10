@@ -52,7 +52,6 @@ export default function MarketBriefModelOutput({ brief, children }: {
   useColorMode();
   const [params, setParams] = useSearchParams();
   const archive = useMarketBriefArchiveSelection();
-  const themeCss = reportThemeCss();
   // A local mock preview is explicitly requested by the URL. Never substitute it in live mode.
   const preview = import.meta.env.DEV && isMock
     && params.get('report') === 'openui';
@@ -62,6 +61,8 @@ export default function MarketBriefModelOutput({ brief, children }: {
   );
 
   if (!content) return children;
+  // 只在预览时读主题样式；生产里卡片每次渲染都走上面的 return，不碰 getComputedStyle。
+  const themeCss = reportThemeCss();
   return (
     <>
       {archive && (
