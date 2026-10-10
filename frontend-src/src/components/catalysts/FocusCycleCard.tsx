@@ -166,8 +166,9 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
               <StageStepper stage={cycle.stage} />
             </div>
           )}
-          {view.lead && <FocusLead key={cycle.cycleId} lead={view.lead} compact={compact} />}
-          <FocusEventList key={cycle.cycleId} events={view.events} extraEvents={view.extraEvents} compact={compact} />
+          {/* 换了一轮分析就重新挂载：展开状态归零，截断重新测量。 */}
+          {view.lead && <FocusLead key={`${cycle.cycleId}:lead`} lead={view.lead} compact={compact} />}
+          <FocusEventList key={`${cycle.cycleId}:events`} events={view.events} extraEvents={view.extraEvents} compact={compact} />
         </div>}
         {hasAssessments && <section
           aria-label={t('逐股评估')}
