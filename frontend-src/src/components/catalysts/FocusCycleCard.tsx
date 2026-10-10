@@ -15,6 +15,8 @@ import type { FocusCycleJob, MarketFocusCycle, NewsClassification } from './api'
 import { focusCycleOutcome } from './analysisErrorText';
 import { ImpactValue, Led } from './bits';
 import ConfirmDialog from './ConfirmDialog';
+import { FocusAssessmentNote, FocusEventList, FocusLead } from './FocusDigest';
+import { buildFocusView } from './focusText';
 import { SkeletonBlock, SkeletonText } from '@/components/shared/Skeleton';
 import InfoHint from '@/components/shared/InfoHint';
 import Icon from '@/components/icons';
@@ -124,6 +126,9 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
   const attempt = cycle.latestAttempt
     ? focusCycleOutcome(cycle.latestAttempt.status, cycle.latestAttempt.errorCode)
     : null;
+  const view = buildFocusView(cycle);
+  const hasBody = (!compact && cycle.stage !== null) || view.lead !== null || view.events.length > 0 || view.extraEvents.length > 0;
+  const hasAssessments = cycle.assessments.length > 0;
   return (
     <div>
       {cycle.latestAttempt && attempt && (
@@ -152,35 +157,21 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
         {t('启动')} {fmtCycleDate(cycle.startedAt, false)} {t('· 生成')} {fmtCycleDate(cycle.generatedAt, true)} {t('· 样本')} {cycle.newsCount}{' '}
         {cycle.sampleLabel ?? t('条')}
       </p>
-      <div className={cn('mt-5 grid min-w-0 gap-5', !compact && cycle.assessments.length > 0 && 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-6')}>
-        <div className="min-w-0">
+      {/* 导语与主导事件在左、逐股评估在右（宽屏）；手机上依次是导语、事件、评估。
+         三段长文本与事件摘要的去重规则见 focusText.ts。 */}
+      {(hasBody || hasAssessments) && <div className={cn('mt-5 grid min-w-0 gap-5', !compact && hasBody && hasAssessments && 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-6')}>
+        {hasBody && <div className="min-w-0 space-y-5">
           {!compact && cycle.stage !== null && (
-            <div className="mb-4 rounded-lg bg-paper-2 px-4 py-3">
+            <div className="rounded-lg bg-paper-2 px-4 py-3">
               <StageStepper stage={cycle.stage} />
             </div>
           )}
-          {cycle.headline && <p className="mb-3 text-body-s font-medium leading-6 text-ink-800">{cycle.headline}</p>}
-          <p className={cn('text-ink-600', compact ? 'text-caption leading-6' : 'text-body-s leading-7')}>
-            {cycle.summary}
-          </p>
-          {!!cycle.uncertainties?.length && (
-            <ul className="mt-4 space-y-2 border-t border-line pt-3">
-              {cycle.uncertainties.slice(0, 4).map((u, i) => (
-                <li key={i} className="flex items-start gap-2 text-caption leading-5 text-ink-500">
-                  <Icon name="flag" size={12} className="mt-1 shrink-0 text-warn-700" />
-                  <span>{u}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="mt-4 break-all text-micro leading-5 text-ink-400 tnum">
-            {cycle.cycleId} · {cycle.trigger === 'manual' ? t('手动触发') : t('定时生成')}{cycle.model.trim() ? ` · ${aiModelLabel(cycle.model, cycle.reasoning)}` : ''}
-          </p>
-          <AnalysisSources sources={cycle.evidenceSources} />
-        </div>
-        {cycle.assessments.length > 0 && <section
+          {view.lead && <FocusLead key={cycle.cycleId} lead={view.lead} compact={compact} />}
+          <FocusEventList key={cycle.cycleId} events={view.events} extraEvents={view.extraEvents} compact={compact} />
+        </div>}
+        {hasAssessments && <section
           aria-label={t('逐股评估')}
-          className={cn('min-w-0 border-t border-line pt-4', !compact && 'lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0')}
+          className={cn('min-w-0 border-t border-line pt-4', !compact && hasBody && 'lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0')}
         >
           <h4 className="mb-3 text-caption font-medium text-ink-900">{t('逐股评估')}</h4>
           <div className="divide-y divide-line">
@@ -222,18 +213,28 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
                       </SoftBadge>
                     )}
                   </span>
-                  <span
-                    className="min-w-0 break-words text-caption leading-5 text-ink-500"
-                    title={a.note}
-                  >
-                    {a.note}
-                  </span>
+                  {/* 说明收起时两行，展开看全文与风险。 */}
+                  <FocusAssessmentNote key={cycle.cycleId} note={a.note} risks={a.risks ?? []} />
                 </motion.div>
               );
             })}
           </div>
         </section>}
-      </div>
+      </div>}
+      {!!cycle.uncertainties?.length && (
+        <ul className="mt-5 space-y-2 border-t border-line pt-3">
+          {cycle.uncertainties.slice(0, 4).map((u, i) => (
+            <li key={i} className="flex items-start gap-2 text-caption leading-5 text-ink-500">
+              <Icon name="flag" size={12} className="mt-1 shrink-0 text-warn-700" />
+              <span>{u}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-4 break-all text-micro leading-5 text-ink-400 tnum">
+        {cycle.cycleId} · {cycle.trigger === 'manual' ? t('手动触发') : t('定时生成')}{cycle.model.trim() ? ` · ${aiModelLabel(cycle.model, cycle.reasoning)}` : ''}
+      </p>
+      <AnalysisSources sources={cycle.evidenceSources} />
     </div>
   );
 }

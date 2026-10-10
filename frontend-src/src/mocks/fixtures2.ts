@@ -1087,6 +1087,21 @@ export interface FocusCycleStockAssessment {
   horizon: 'intraday' | 'days' | 'weeks' | 'uncertain' | null;
   insufficientEvidence: boolean;
   note: string;
+  /** 模型列出的风险（后端 risks[]）；卡片展开后显示。 */
+  risks?: string[];
+}
+
+/** 主导事件（后端 dominant_events[]）。summary 是模型写的长文本，卡片按 focusText 的规则拆条。 */
+export interface FocusDominantEvent {
+  eventGroupId: string;
+  summary: string;
+  affectedSectors: string[];
+}
+
+/** 事件核实结论（后端 event_verifications[]）。生产的公开结果目前不带这一项，有才显示徽标。 */
+export interface FocusEventVerification {
+  eventGroupId: string;
+  verdict: 'supported' | 'contradicted' | 'unverifiable';
 }
 
 export interface MarketFocusCycle {
@@ -1105,6 +1120,10 @@ export interface MarketFocusCycle {
   assessments: FocusCycleStockAssessment[];
   /** live 扩展：一句话结论 / 不确定性列表 / 样本单位（条 news vs 组事件）/ 周期状态 */
   headline?: string | null;
+  /** 后端 market_summary；生产上常与 summary、headline 完全相同，卡片去重后只显示一份。 */
+  marketSummary?: string | null;
+  dominantEvents?: FocusDominantEvent[];
+  eventVerifications?: FocusEventVerification[];
   uncertainties?: string[];
   sampleLabel?: string;
   status?: string | null;
@@ -1706,41 +1725,97 @@ export function getCatalystsSources(): SourceHealth[] {
 }
 
 /* ---------------- 市场焦点周期 ---------------- */
+/* 照生产的公开结果造：headline_summary、summary_zh、market_summary 三段一字不差，都是全部已核实
+   事件摘要用换行拼起来的（约 2300 字，带「（一）（二）」分条和「已证实：」「推断：」「需注意：」标签）；
+   dominant_events 只取前 8 条，后 4 条只出现在总摘要里。生产的公开结果不带 event_verifications，
+   这里给前 8 条配了三种核实结论，好在演示里看到徽标。 */
+const FOCUS_EVENT_TEXTS = [
+  '（一）公司类事件：英伟达据报计划投资一家专注推理芯片的初创公司，以推动其互连技术与更多芯片设计兼容，此前同类安排涉及两家网络芯片公司与一家云厂商。已证实：两家科技媒体援引知情人士的报道存在，双方均未公开确认，金额与结构都没有披露。推断：若交易落地，互连生态有望进一步扩大，对短期业绩影响有限。需注意：个别转载给出的投资金额没有其他来源佐证，本次未采信。市场把它看作生态绑定，而不是单纯的财务投资。',
+  '（二）市场结构：多位策略师指出，标普500前五大成分股的合计市值已与指数中最小的四百余家公司相当，集中度处于历史高位，前五大公司的盈利占比也明显上升。已证实：相关说法被多家媒体转述，原始图表本次未能直接取得。含义：指数表现对少数超大市值公司高度敏感，属于风险背景，不是新的公司级催化。需注意：不同来源的统计口径略有差异，最新数字以指数公司月报为准。若前五大公司同时回调，市值加权指数的跌幅会明显大于等权指数。',
+  '（三）宏观类事件：一家大型投行的策略师在周度报告中把即将到来的中期选举列为至明年市场波动的主要来源，并给出两院归属不同情形下的涨跌情景，幅度都在一成左右。推断：情景依赖选举结果与预测市场概率，不是确定性预测；若出现分裂结果，利率与美元的波动可能先于股市放大。需注意：报告原文需要订阅，本次依据为媒体转述，具体概率假设没有公开。上一次中期选举前后，波动率指数在投票前两周明显抬升。',
+  '（四）公司类事件：一家加拿大矿业公司签署出售两处物业的最终协议，总对价5500万美元，其中现金500万美元，其余以买方股票支付，股份有法定持有期；另一项贷款转让安排带来1350万美元。已证实：公司新闻稿与两家媒体一致。推断：新增资金主要用于勘探，公司对铜、金价格的敏感度不变。需注意：交易尚需交易所批准，个别转载称交易“已完成”，与公告不符。公司股价在公告后小幅上涨，成交量是平时的两倍。',
+  '（五）公司类事件：一家生物科技公司公布关键3期试验的新增分析，难治性高血压患者在12周时有46%达到收缩压低于130 mmHg的指南目标，超过三分之二的患者收缩压下降至少10 mmHg。已证实：公司新闻稿与投资者关系页面一致。推断：数据强化了产品的差异化，但属于既有试验的补充分析，不是新的关键读数。需注意：睡眠呼吸暂停适应症的次要终点没有改善，监管时间表也没有变化。公司计划在明年上半年提交上市申请。',
+  '（六）行业类事件：多家云厂商上调全年资本开支指引，合计增幅约一成，主要投向AI数据中心、网络与电力设施，其中电力与冷却的占比首次被单独列出。已证实：三家公司的财报电话会纪要均提到上调。推断：算力、光模块与电力设备的订单能见度延长；1. 短期利好设备供应链；2. 中期要看折旧压力对利润率的影响。需注意：部分指引以区间给出，上限能否兑现仍不确定。电力设备公司的订单交付周期已经拉长到一年以上。',
+  '（七）公司类事件：一家眼科器械公司公布4期随机对照试验的顶线结果，共入组149只眼，联合白内障手术组3个月时日间眼压较基线平均下降11.1 mmHg，对照组为7.4 mmHg，差值3.6 mmHg。已证实：公司公告与行业媒体一致，差异的p值小于0.0001，3个月内没有相关的严重不良事件。推断：有助于扩大手术适应症的商业覆盖。需注意：长期数据与医保覆盖仍需观察。公司计划在明年的学术会议上公布完整数据。',
+  '（八）事件汇总：本周例行股息事项集中，一家连锁咖啡公司把季度股息上调至0.63美元（此前0.62美元），一家大型药企宣布每股0.43美元股息；一家存储芯片公司的除息日为10月14日，两家医疗公司的除息日均为10月15日，派息日为11月16日。已证实：各公司公告一致。含义：均为例行股息，没有新的基本面催化。咖啡公司的上调另有其公告转载佐证，登记日为11月13日。',
+  '（九）公司类事件：一家卫星通信公司宣布收购一批中频段频谱，交易需要监管批准，目标是补齐手机直连业务的室内覆盖，并计划两年内开始商用。已证实：公司公告与多家媒体一致。推断：传统电信运营商面临新的竞争预期，盘前相关股票普遍走弱，跌幅在5%到8%之间。需注意：交易金额没有经过双方确认，媒体给出的数字差异较大。盘后部分跌幅收窄，成交量明显放大。',
+  '（十）政策类事件：欧盟贸易官员表示，与中方就电动车出口安排达成初步共识，中方将在四年内削减部分混合动力车出口，并加快稀土出口许可、扩大部分欧盟商品的市场准入。推断：短期缓和贸易摩擦，汽车与稀土相关公司的情绪改善，但安排尚需欧盟批准，具体机制没有公布。需注意：说法主要来自欧方，“减半”是相对预测增量而言，而不是当前出货量。欧盟领导人下周将讨论这项安排。',
+  '（十一）行业类事件：一家投资研究机构汇总称，大型科技公司明年资本开支合计预计超过7000亿美元，主要用于AI芯片、数据中心与网络，并列出了几家公司的预测区间。已证实：文章与预测数字存在。需注意：输入摘要中“自由现金流整体走弱”的说法，没有在原文中找到直接支持，不作为已证实内容；该文属于对已有预测的汇总评论，不是新的公司公告。文章还称宽基指数约三成五的权重集中在这几家公司。',
+  '（十二）公司类事件：一家消费电子公司据报削减部分高端新机型的零部件订单，盘前股价下跌约2.6%，同一供应链上的两家零部件公司跟跌。需注意：订单报道的原始出处本次未能独立取得，供应链说法相互矛盾。推断：若属实，下游零部件供应商的季度指引可能承压；若不属实，跌幅有望在财报前收复。公司没有回应置评请求，下周将公布季度业绩。',
+];
+const FOCUS_EVENT_SECTORS = [
+  ['AI芯片', '半导体', '数据中心'],
+  ['宽基指数ETF', '大型科技股'],
+  ['宽基指数ETF', '美国国债', '美元', 'AI基础设施'],
+  ['黄金与矿业'],
+  ['生物医药', '心血管药物'],
+  ['AI基础设施', '半导体设备', '光通信', '电力设备', '数据中心'],
+  ['医疗器械', '眼科'],
+  ['餐饮消费', '制药', '医疗器械', '半导体'],
+];
+const FOCUS_EVENT_VERDICTS: FocusEventVerification['verdict'][] = [
+  'unverifiable', 'supported', 'supported', 'contradicted', 'supported', 'supported', 'supported', 'supported',
+];
+
 function buildCycle(seedNum: number, trigger: MarketFocusCycle['trigger'], generatedAt: Date, idSuffix: string): MarketFocusCycle {
   const r = new Rng(seedNum);
   /* 最后一只故意是「证据不足」：那是后端真会出现的一种状态（catalyst_bias 为 null），
      UI 必须显「证据不足」而不是 0.00，mock 里留一个样本守住这条路径。 */
   const assessments: FocusCycleStockAssessment[] = [
-    { ticker: 'NVDA', name: __t('英伟达'), direction: 'bullish', catalystBias: round2(r.float(2.4, 4.2)), confidence: 0.82, horizon: 'days', insufficientEvidence: false, note: '算力订单能见度延长，焦点周期核心受益标的' },
-    { ticker: 'TSM', name: __t('台积电'), direction: 'bullish', catalystBias: round2(r.float(1.2, 2.4)), confidence: 0.74, horizon: 'weeks', insufficientEvidence: false, note: '先进制程产能利用率维持满载，定价权稳固' },
-    { ticker: 'AMD', name: __t('超威半导体'), direction: 'bullish', catalystBias: round2(r.float(0.8, 1.8)), confidence: 0.61, horizon: 'days', insufficientEvidence: false, note: '加速卡份额提升预期，跟随主线但弹性次之' },
-    { ticker: 'INTC', name: __t('英特尔'), direction: 'bearish', catalystBias: -round2(r.float(0.6, 1.4)), confidence: 0.55, horizon: 'weeks', insufficientEvidence: false, note: '资本开支主线之外，相对资金吸引力下降' },
-    { ticker: 'SMCI', name: __t('超微电脑'), direction: 'neutral', catalystBias: null, confidence: 0.3, horizon: 'uncertain', insufficientEvidence: true, note: '出货节奏与毛利率信号混杂，证据不足以给出偏向' },
+    { ticker: 'NVDA', name: __t('英伟达'), direction: 'bullish', catalystBias: round2(r.float(2.4, 4.2)), confidence: 0.82, horizon: 'days', insufficientEvidence: false, note: '推理芯片生态投资与云厂商资本开支上修同时指向算力订单能见度延长；但投资报道尚未获双方确认，偏向主要来自资本开支这条已证实的线索，而不是投资传闻本身。', risks: ['投资报道最终被证伪', '云厂商资本开支指引的上限落空', '估值已反映较多乐观预期'] },
+    { ticker: 'TSM', name: __t('台积电'), direction: 'bullish', catalystBias: round2(r.float(1.2, 2.4)), confidence: 0.74, horizon: 'weeks', insufficientEvidence: false, note: '先进制程与先进封装的产能利用率维持高位，云厂商资本开支上修对订单是直接利好；新增信息没有改变对其定价能力的判断。', risks: ['海外工厂爬坡成本高于预期', '出口限制范围扩大'] },
+    { ticker: 'AMD', name: __t('超威半导体'), direction: 'bullish', catalystBias: round2(r.float(0.8, 1.8)), confidence: 0.61, horizon: 'days', insufficientEvidence: false, note: '加速卡份额提升预期跟随主线，但弹性次于龙头；本轮没有公司级新事件，偏向全部来自行业资本开支的外溢。', risks: ['新品出货节奏低于预期'] },
+    { ticker: 'INTC', name: __t('英特尔'), direction: 'bearish', catalystBias: -round2(r.float(0.6, 1.4)), confidence: 0.55, horizon: 'weeks', insufficientEvidence: false, note: '资本开支主线之外，相对资金吸引力下降；代工业务的客户进展本轮没有新的可核实信息。', risks: ['代工大客户公告可能扭转判断'] },
+    { ticker: 'SMCI', name: __t('超微电脑'), direction: 'neutral', catalystBias: null, confidence: 0.3, horizon: 'uncertain', insufficientEvidence: true, note: '出货节奏与毛利率信号混杂，证据不足以给出偏向', risks: [] },
   ];
+  const summary = FOCUS_EVENT_TEXTS.join('\n');
   return {
     cycleId: `fc-${idSuffix}`,
-    dominantEvent: '财报季 · 科技资本开支验证',
-    stage: 3,
+    dominantEvent: '市场热点分析',
+    stage: null,
     startedAt: new Date(Date.now() - 19 * 86_400_000).toISOString(),
     generatedAt: generatedAt.toISOString(),
     trigger,
-    model: 'optix-focus-v1',
-    newsCount: 42,
-    summary:
-      '本轮焦点周期由 hyperscaler 资本开支指引上修点燃，半导体设备与先进封装轮动走强，资金沿「算力—散热—电力」链条扩散。当前处于主升阶段：龙头财报兑现与订单能见度相互强化，但拥挤度同步抬升。周期后续的关键观察点在于下批云厂商指引是否继续上修——若证伪，主升将快速切换为退潮；若证实，主线有望向二线供应链外延。',
+    model: 'claude-sonnet-5-5',
+    reasoning: 'xhigh',
+    evidenceSources: [
+      { title: '云厂商财报电话会纪要汇总', url: 'https://example.com/earnings/capex-guidance', type: 'web_search' },
+      { title: '眼科器械4期试验顶线结果公告', url: 'https://example.com/press/phase-4-topline', type: 'web_fetch' },
+      { title: '矿业公司物业出售最终协议', url: 'https://example.com/press/property-sale', type: 'web_fetch' },
+    ],
+    newsCount: 20,
+    sampleLabel: __t('组事件'),
+    summary,
+    headline: summary,
+    marketSummary: summary,
+    dominantEvents: FOCUS_EVENT_TEXTS.slice(0, 8).map((text, index) => ({
+      eventGroupId: `evt_mock_${index + 1}`,
+      summary: text,
+      affectedSectors: FOCUS_EVENT_SECTORS[index],
+    })),
+    eventVerifications: FOCUS_EVENT_VERDICTS.map((verdict, index) => ({ eventGroupId: `evt_mock_${index + 1}`, verdict })),
+    uncertainties: [],
     assessments,
   };
 }
 
 let latestCycle: MarketFocusCycle = buildCycle(808081, 'scheduled', new Date(Date.now() - 2 * 3600_000), 'latest');
+/* 上一轮是只有整段正文、没有主导事件的旧形状：卡片退回「导语 + 展开」。 */
+const PREVIOUS_SUMMARY =
+  '（一）萌芽：CPI 连续两个月低于预期，利率敏感资产率先走强。已证实：两个月的核心通胀数据均低于市场一致预期。（二）主升：长端利率下行带动成长股估值修复，小盘股与地产链弹性最大。推断：资金集中在久期最长的资产上，拥挤度随之抬升。（三）退潮：联储会议表述偏鹰、非农数据超预期之后，交易拥挤度快速出清。需注意：本轮持续性高度依赖数据验证节奏，下一轮同类交易要先看就业数据。';
 const previousCycle: MarketFocusCycle = {
   ...buildCycle(707071, 'scheduled', new Date(Date.now() - 13 * 86_400_000), 'prev'),
   dominantEvent: '降息交易回摆',
   stage: 4,
   startedAt: new Date(Date.now() - 41 * 86_400_000).toISOString(),
   newsCount: 35,
-  summary:
-    '上一轮焦点周期围绕降息路径展开：CPI 回落确认后利率敏感资产持续占优，直至 FOMC 鹰派表述令交易拥挤度出清。周期完整走过「萌芽—发酵—主升—退潮」四阶段，最终在非农数据超预期后退潮。本轮经验显示，宏观周期的持续性高度依赖数据验证节奏。',
+  sampleLabel: undefined,
+  headline: '降息交易随通胀数据回落而起，在就业数据超预期后退潮，完整走过一轮。',
+  summary: PREVIOUS_SUMMARY,
+  marketSummary: PREVIOUS_SUMMARY,
+  dominantEvents: [],
+  eventVerifications: [],
+  evidenceSources: [],
 };
 
 export function getLatestFocusCycle(): MarketFocusCycle {
