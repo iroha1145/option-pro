@@ -445,7 +445,6 @@ def _request_screener_resolution(
         admin_default=admin_default["screener_ranking_algorithm"],
         timeframe=timeframe,
         profile=profile,
-        explicit_request=requested not in (None, "", "follow_default", "default"),
         timeframe_omitted=timeframe_omitted,
     )
 
