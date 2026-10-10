@@ -95,25 +95,26 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
 
 ## Luna 联网门控
 
-- 判定：`runtime.task_uses_web_search`。只有新闻任务、模型是 Luna、载荷里没有正文文本时联网；其他模型和任务类型的 OpenAI 请求一律不带工具。
-- 缺正文：带 web_search，`tool_choice=required`，最多 3 次；有正文：请求里不带 tools、tool_choice、max_tool_calls、include，提示词写明只按正文分析、不联网。两种都要求自然语言字段不附网址、Markdown 链接或括号域名，不照抄字段名。
+- 判定：`runtime.task_uses_web_search`。只有新闻任务、模型是 Luna、载荷里没有正文文本时联网；其他模型和任务类型的 OpenAI 请求一律不带工具。文末「成本控制（2026-10-10）」之后，缺正文但来源摘要够长的任务也不联网。
+- 缺正文：带 web_search，`tool_choice=required`，最多 1 次（成本控制前是 3 次）；有正文：请求里不带 tools、tool_choice、max_tool_calls、include，提示词写明只按正文分析、不联网。两种都要求自然语言字段不附网址、Markdown 链接或括号域名，不照抄字段名。
 - 有没有正文只按一条规则判断（`runtime.news_article_available`：正文文本去掉空白后不为空）。请求是否联网、Claude 是否带工具、发布时是否补「原始正文未取得」的提示，都用这一条。
-- 身份：现行 Luna 新闻身份分两种，缺正文 `cda8f76d…`（`LUNA_WEB_NEWS_IDENTITY`），有正文 `e64f4252…`（`LUNA_ARTICLE_NEWS_IDENTITY`），新建任务按载荷选。读取与提交时两个变体都算当前，因为调用方只拿得到模型的默认变体。缺正文身份在审查前是 `e46819f9…`，它只出现在本 PR 分支上，origin/main 里没有，没有部署过，所以不列进上一版名单。
+- 身份：现行 Luna 新闻身份分两种，缺正文 `cda8f76d…`（当时的 `LUNA_WEB_NEWS_IDENTITY`，成本控制后改名为 `LUNA_THREE_CALL_WEB_NEWS_IDENTITY`），有正文 `e64f4252…`（`LUNA_ARTICLE_NEWS_IDENTITY`），新建任务按载荷选。读取与提交时两个变体都算当前，因为调用方只拿得到模型的默认变体。缺正文身份在审查前是 `e46819f9…`，它只出现在本 PR 分支上，origin/main 里没有，没有部署过，所以不列进上一版名单。成本控制之后身份分三种，`cda8f76d…` 成为上一版，见文末。
 - 输入上界：联网请求读进来的搜索内容没有公开的数字上限，只能按模型的上下文窗口算。2026-10-10 核对 OpenAI 的模型页（https://developers.openai.com/api/docs/models/gpt-5.6-luna），Luna 的上下文窗口是 1,050,000，最大输出 128,000，与 Terra 相同。缺正文任务的输入上界是 1,050,000 减去输出上限 65,536，即 984,464。审查前代码把 Luna 的窗口写成 128,000（其实是最大输出），上界只有 62,464。
-- 预留：提交时按任务自己的载荷计算。缺正文任务预留 1,050,000 词元、640,197 微美元（输入超过 272K 按长上下文价：984,464 词元 × 每百万 0.50 美元，加 65,536 词元 × 每百万 1.80 美元，加 3 次搜索各 0.01 美元）。有正文任务预留 139,264 词元、97,076 微美元，不预留搜索费。代码里的 Luna 单价与模型页一致：输入每百万 0.20 美元，按写缓存价的 1.25 倍计为 0.25，长上下文翻倍；输出每百万 1.20 美元，长上下文 1.5 倍。
-- 当日词元账：尚未结算的行按不带载荷的口径计入，Luna 新闻一律按缺正文的 1,050,000。缺正文任务记得准确；有正文任务在途时每条多记 910,736。这本账只在 `model_budget.daily_budget_usd = 0`（只用日词元额度拦截）时影响准入，多记的方向是保守的；仓库默认与生产都用只统计的共享预算，它不拦任务。审查给的处理是只改文档，代码没动。
+- 预留：提交时按任务自己的载荷计算。缺正文任务预留 1,050,000 词元、620,197 微美元（输入超过 272K 按长上下文价：984,464 词元 × 每百万 0.50 美元，加 65,536 词元 × 每百万 1.80 美元，加 1 次搜索 0.01 美元；成本控制前按 3 次搜索算，是 640,197）。有正文任务、以及成本控制后只按摘要分析的任务，预留 139,264 词元、97,076 微美元，不预留搜索费。代码里的 Luna 单价与模型页一致：输入每百万 0.20 美元，按写缓存价的 1.25 倍计为 0.25，长上下文翻倍；输出每百万 1.20 美元，长上下文 1.5 倍。
+- 当日词元账：尚未结算的行按不带载荷的口径计入，Luna 新闻一律按缺正文的 1,050,000。联网任务记得准确；有正文或只按摘要分析的任务在途时每条多记 910,736。这本账只在 `model_budget.daily_budget_usd = 0`（只用日词元额度拦截）时影响准入，多记的方向是保守的；仓库默认与生产都用只统计的共享预算，它不拦任务。审查给的处理是只改文档，代码没动。
 
 ### 旧任务的判定规则
 
-一个任务存的身份算当前，当且仅当：等于现行身份（Luna 两个变体任一），或者是 `runtime._IDENTITY_PREDECESSORS` 里登记的、某个现行身份的确切上一版：
+一个任务存的身份算当前，当且仅当：等于现行身份（Luna 的现行变体任一），或者是 `runtime._IDENTITY_PREDECESSORS` 里登记的、某个现行身份的确切上一版。下表是成本控制（2026-10-10）之后的名单：
 
 | 现行身份 | 放行的上一版 |
 | --- | --- |
-| Luna 缺正文 `cda8f76d…`、Luna 有正文 `e64f4252…` | `719aed21…`（10-09 起一律联网，32,768）、`d0e6936d…`（更早的不联网版） |
+| Luna 联网 `135ee2bf…`、Luna 只按摘要 `b13ab064…` | `cda8f76d…`（#237 的缺正文身份，联网最多 3 次）、`719aed21…`（10-09 起一律联网，32,768）、`d0e6936d…`（更早的不联网版） |
+| Luna 有正文 `e64f4252…` | `719aed21…`、`d0e6936d…` |
 | Terra 新闻 `e2f66048…` | `d0e6936d…`；v6 提示词的 `e35f6bc0…` 先按原有规则映射到 `d0e6936d…` |
 | OpenAI 财报 `07071987…` | `efcf4a6d…` |
 
-- `719aed21…` 同时是两个现行变体的上一版，这是有意的：生产上这一版的任务不分有无正文，它们已付费的结果照常可读，队列里的这类任务按载荷走现行策略（有正文不联网，缺正文联网）。
+- `719aed21…` 同时是 Luna 各现行变体的上一版，这是有意的：生产上这一版的任务不分有无正文，它们已付费的结果照常可读，队列里的这类任务按载荷走现行策略（有正文不联网，缺正文联网）。
 - 名单只按确切哈希放行。以后输出上限、提示词或结构再变，现行身份不再是名单里的键，旧任务照常判 `runtime_configuration_changed`（测试把上限改成 98,304 验证）。
 - worker 提交前用任务自己的模型与载荷判定，通过后按现行策略构造请求：队列里的旧任务有正文就不带工具，缺正文就联网，输出上限都是 65,536。
 - 已完成的旧身份结果在新闻列表里照常展示，也不会因此再建付费任务（测试覆盖）。
@@ -124,7 +125,7 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
 | 项 | 原值 | 新值 | 为什么安全 |
 | --- | --- | --- | --- |
 | OpenAI 新闻、财报输出上限 | 32,768 | 65,536 | 思考词元计入上限；生产最大 25,392，原上限只剩不到 1.3 倍余量。Luna 官方输出上限 128,000、上下文 1,050,000。上限只影响预留与截断，不影响并发。 |
-| 单任务预留（Luna 新闻） | 93,130 微美元 | 缺正文 640,197（含搜索 30,000）；有正文 97,076 | 结算时按实际用量改写；并发 4 时同时占用最多约 2.6 美元，仓库默认的共享预算只统计、不拦截。词元预留：缺正文 1,050,000（按上下文窗口，见「Luna 联网门控」），有正文 139,264。 |
+| 单任务预留（Luna 新闻） | 93,130 微美元 | 联网 620,197（含搜索 10,000；成本控制前 640,197，含 30,000）；有正文与只按摘要 97,076 | 结算时按实际用量改写；并发 4 时同时占用最多约 2.5 美元，仓库默认的共享预算只统计、不拦截。词元预留：缺正文 1,050,000（按上下文窗口，见「Luna 联网门控」），有正文 139,264。 |
 | ai_jobs 一整轮的任务超时（worker 监督器用 `asyncio.wait_for` 包住整轮） | 2,000 秒 | 3,900 秒（`execution_limits.AI_JOBS_TASK_TIMEOUT_SECONDS`） | 必须盖过付费等待时限。否则 Claude 流（Sonnet 热点、Haiku 财报）超过 2,000 秒时整轮被取消：任务记 `submission_outcome_unknown`，已付费结果作废、预留不释放，同轮其他槽位一起被取消。 |
 | Claude 流的截止 | 付费等待时限 | 付费等待时限与「任务超时减 300 秒余量」取较小者 | 即使等待时限被调到最大，流也先于监督器结束，只让这一条任务单独记失败。 |
 | 付费分析最长等待 `openai_background_poll_timeout_seconds` | 1,800 秒 | 3,600 秒 | 到点会取消 OpenAI 后台响应、把 Claude 流（含 Sonnet 热点）记成结果未知，已付费的工作作废。最坏情况是一个卡住的响应多占一个并发槽半小时。 |
@@ -524,3 +525,143 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
 - 单个普通英文词（「Breaking」「reports」「Investors」）和只含一个标题词的两词标题（「Crypto Crash」）会原样发布。要拦它们需要一份常用英文词表，本次没有加。
 - 两字窗口之外的涨跌说法（「收于250美元」「股价随后走低」）不另作判断。
 - 部署后要跑一次找回试运行（「部署后操作」第 2 步），看第二轮剩下的失败里有多少转为 validated。
+
+## 成本控制（2026-10-10）
+
+分支 `claude/luna-cost-2026-10-10`，基于 main 的 `77013b02`。目的是降低 GPT-5.6 Luna 新闻分析的花费。前三条规则是用户定的；第四条（推理档位）原以为只改服务器配置，实际要改代码，一起放进这个分支。
+
+### 取证（只读，2026-10-10）
+
+- 00:00–08:00Z 共 344 条 Luna 新闻任务。没拿到正文的 280 条用了 698 万输入词元，平均每条约 2.5 万，联网检索的结果全部进了上下文；有正文的 64 条只用了 20 万，每条约 3 千。
+- 280 条里有 167 条联网，共 221 次。
+- 没拿到正文的原因：未找到匹配正文（`no_matching_article_body`）203 条，其中 Zacks 173 条；`http_403` 35 条；`http_401` 18 条；`publisher_url_unavailable` 16 条；`paywall` 5 条。同事的 PR #243 查明，Zacks 文章页对服务器和本机都返回因佩瓦（Imperva）的机器人验证页，40 次全部复现，正文拿不到；#243 把这类原因改记为 `challenge_page`。所以 Zacks 的新闻只能靠来源摘要。
+- 这些任务的来源摘要中位数 395 字符，281 条里 187 条不少于 300 字符（按原始长度）。40 条 Zacks 样本的摘要中位数约 430 字符。
+- Zacks 自 10-08 以来 579 条标题里有大量模板稿，同一来源也有真新闻。
+
+### 规则一：摘要够长就只按摘要分析
+
+- 判定：`runtime.news_summary_sufficient`。载荷里没有正文，来源摘要去掉 HTML 标签、还原 HTML 实体、删掉所有空白字符后至少 300 个字符（常量 `NEWS_SUMMARY_AS_BODY_MIN_CHARS`）。摘要就是载荷的 `summary` 字段，由 `local_intelligence._news_request_source_fields` 从新闻的 `raw_summary` 组装。
+- 不看正文缺失的原因码。`no_matching_article_body`、`challenge_page`、`http_403`、`http_401`、`publisher_url_unavailable`、`paywall` 都一样处理。`challenge_page` 来自尚未合并的 #243，本分支不依赖它的代码，只在测试里当普通字符串用。
+- 请求：不带 tools、tool_choice、max_tool_calls、include。提示词写明「以下输入中的summary是来源提供的摘要，没有全文；只分析标题与摘要内容，不联网，不要臆测全文」。
+- 载荷不改：`article_status` 仍是 `unavailable`，`article_reason` 仍是原来的原因码，读接口的 `analysis_input.basis` 仍是 `title_summary`。界面上不会显示成抓到了正文。
+- 预留：和有正文的任务用同一套算法，139,264 词元、97,076 微美元，不预留搜索费。
+- 回执：原来 Luna 缺正文的任务只要没有联网来源，就把模型结果换成固定的「新闻资料不足」。只按摘要分析的任务本来就不联网，照这条规则会全部作废，所以改成只对联网任务这样做：按现行规则属于联网任务，或者回执里记有联网调用。部署前已经带工具发出、没找到来源的任务，结果照旧换成「新闻资料不足」。
+- 范围：只改 Luna。Claude 新闻任务的工具策略没变，缺正文时照旧提供工具。
+
+### 规则二：联网最多 1 次
+
+- 缺正文、摘要又不够长的任务照旧联网，`tool_choice=required`。`max_tool_calls` 从 3 改成 1（常量 `LUNA_MAX_TOOL_CALLS`）。这个上限是内置工具调用的合计，搜索、打开网页、页内查找各算一次。
+- 提示词随之改为「只能调用一次，用这一次搜索原始事件」，原来的「优先打开原文」改成「优先采用原文、公司公告或监管来源」。
+- 预留：词元仍按上下文窗口算 1,050,000，因为搜索内容没有公开的上限，次数少了也证明不了输入变小。金额从 640,197 微美元降到 620,197，少的是两次搜索费。并发 4 时同时占用的上限从约 2.6 美元降到约 2.5 美元。
+
+### 规则三：定时分析跳过 Zacks 模板稿
+
+规则表在 `backend/app/services/catalysts/template_commentary.py`，只对来源名含 Zacks 的条目生效（看 `source` 字段，例如 `massive/Zacks Investment Research`）。满足下面任一条就是模板稿，原因码 `template_commentary`。比对不分大小写，也不看标点：直撇号和弯撇号（' 与 ’）、有没有问号、连字符，以及后缀前面用的是冒号、竖线还是两边带空格的破折号，都不影响结果。
+
+- 标题最后一段等于下面 18 个后缀之一。最后一段指最后一个冒号、竖线或两边带空格的破折号之后的部分；前一句以问号或感叹号结束时，也从那里断开，例如「Is It Time to Buy? Here's Why」。
+  What You Should Know；Here's Why；What Investors Need to Know；Some Information for Investors；Should You Buy?；Facts to Know Before Betting on It；Important Facts to Note；Wall Street Expects Earnings Growth；Here is What You Should Know；What Does It Mean for the Stock?；Key Facts；Some Facts Worth Knowing；Key Insights；Here is What You Need to Know；What to Know Ahead of Next Week's Release；Which Stock Is the Better Value Option?；What You Need to Know；Some Facts to Consider。
+- 标题符合下面 10 个模板之一，「…」是公司、榜单或日期：… Outpaced the Stock Market Today；… Dips More Than Broader Market；Investors Heavily Search …；… is a Top-Ranked Value Stock 或 Growth Stock；… Shows Fast-paced Momentum；Best … Stocks to Buy for …；The Zacks Analyst Blog Highlights …；Should … ETF … Be on Your Investing Radar?；Bull of the Day 或 Bear of the Day …；What Makes … a New Buy Stock。「… Earnings Expected to Grow: Should You Buy?」由后缀「Should You Buy?」覆盖。
+- 链接的查询参数里含 `yseop_template`（Zacks 用 Yseop 自动生成的稿件，40 条样本里有 12 条），不管标题是什么。
+
+各处的处理：
+
+- 定时分析：`_scheduled_news_candidates` 在探测正文之前就把模板稿去掉，它们不占候选名额，也不花抓正文的时间。热点代表新闻是模板稿时，不进候选，也不算「等待分析的热点新闻」，市场焦点周期不再等它。焦点周期本来只用已发布的新闻，模板稿不会进周期的输入。
+- 手动分析：站长点「分析」照常建任务，开关只管定时分析。
+- 读接口：没有任务、也没有结果的模板稿，`analysis_status` 是 `skipped`，另带 `analysis_skip_reason: "template_commentary"`，访客和站长看到的一样。已经有任务的（部署前排进队列的，或站长手动点的）照常显示任务状态。
+  - 新闻流和批量接口的 `summary.pending` 不计它们。前端「待生成中文」读的就是这个数。
+  - 个人版投影的 `hidden_unanalyzed` 不计它们。列表为空时，前端在这个数大于 0 时显示「已收录，等待中文内容」。
+  - 按 `analysis_status=not_requested` 筛选（前端的「未分析」）不返回它们，要单独看可以筛 `analysis_status=skipped`。前端把不认识的状态按「未分析」显示，所以前端没改。
+  - 访客读取共用一份条目缓存，键是数据库和时间窗；条目状态又取决于开关，所以缓存的条目另外记下开关值，值不同就不复用。
+  - 热点条带的投影没改（`_prepared_hotspots`、`_project_hotspot_rows` 和 `personal_service._project_hotspots` 不在本次范围）。没有中文标题的条目本来就进不了条带。
+- 开关：`config/personal.toml` 的 `[catalyst] scheduled_skip_template_commentary = true`，默认开。改成 false 并重启，就回到全部分析，读接口也不再标 skipped。服务器上的 personal.toml 没有这一行时按默认开启运行。
+
+### 规则四：推理档位
+
+- GPT 模型（Luna、Terra）的 `reasoning` 和 `news_reasoning` 现在可以配 max、xhigh、high。max 最贵，xhigh、high 依次更省。Claude 模型仍然只能配 xhigh。`market_focus_reasoning` 的可选值没改，只有 xhigh，热点现在用的是 Claude。
+- 依据：OpenAI 的 Python 客户端（openai 2.45.0）的推理档位类型 `ReasoningEffort` 接受 none、minimal、low、medium、high、xhigh、max；2026-10-10 核对 gpt-5.6-luna 和 gpt-5.6-terra 的模型页，写的是「Reasoning.effort supports: none, low, medium (default), high, xhigh, and max」。只放开了 max 下面的两档，medium 及以下没有放，因为没评估过它们的分析质量。
+- 代码：配置层是 `personal_config.reasoning_supported` 和镜像常量 `OPENAI_REASONING_EFFORTS`，`app/config.py` 的运行设置用同一个判断；运行时是 `runtime.analysis_identity_supported` 和常量 `runtime.OPENAI_REASONING_EFFORTS`，测试核对两者一致。请求里的 `reasoning: {"effort": …}` 照旧透传。
+- 改档位以后会怎样：结构身份不含推理档位，它只看提示词、结构、输入输出上限、工具调用上限和是否联网，所以改档位不会改身份。作废靠的是 worker 提交前的另一道检查：任务存的推理档位和当前配置不同（`worker.py` 里的 `job["reasoning"] != settings.openai_reasoning`），记 `runtime_configuration_changed`。这时任务还没发给供应商，不花钱。这个错误码在定时重试名单里，调度会在下一个小时用新档位重建，每次作废占用这条新闻 3 次定时尝试中的 1 次。手动点出来的待处理任务也会作废，需要再点一次。已经发给供应商的任务不再比对档位，照常取回结果。已完成的 max 结果照常显示，也不会重新付费，因为 `(gpt-5.6-luna, max)` 仍在支持的组合里。
+- 回退：把 `news_reasoning` 改回 "max" 并重启。
+
+### 结构身份
+
+| 形态 | 身份 | 变化 |
+| --- | --- | --- |
+| 联网：缺正文、摘要不够长 | `135ee2bf…`（`LUNA_WEB_NEWS_IDENTITY`） | 换了：工具调用上限 3 改 1，提示词跟着改 |
+| 有正文 | `e64f4252…`（`LUNA_ARTICLE_NEWS_IDENTITY`） | 没变 |
+| 只按摘要 | `b13ab064…`（`LUNA_SUMMARY_NEWS_IDENTITY`） | 新增 |
+
+- 为什么新增一种、而不是并入「有正文」：两者提示词不同（只按摘要的任务不能说「已提供正文」），身份必然不同。要并入，就得改有正文的提示词，让有正文的任务也换身份，没有好处。
+- 上一版名单：联网与只按摘要两种身份都放行 `cda8f76d…`（#237 的缺正文身份，联网最多 3 次，常量改名为 `LUNA_THREE_CALL_WEB_NEWS_IDENTITY`），以及原有的 `719aed21…`、`d0e6936d…`。队列里 `cda8f76d…` 的任务都没有正文，按载荷会落到联网或只按摘要之一，所以两种都要放行；提交时按现行规则构造请求，摘要够长的不联网，不够的联网 1 次。有正文身份的名单没变。
+- 读取和提交时，Luna 三种现行形态都算当前（`LUNA_NEWS_MODES`）。读取方只拿得到模型的默认身份（联网那种），所以已完成的只按摘要任务也要靠这一条才算当前。
+- 名单仍只按确切哈希放行：输出上限再变时，三种身份和 `cda8f76d…` 都会作废（测试把上限改成 98,304 验证）。
+- Terra、Haiku、Sonnet 和财报的身份没变。逐个模型、逐个任务类型、有无正文和长摘要的载荷都和 origin/main 对比过，只有 Luna 新闻的两个身份变了。
+
+### 预期节省
+
+按上面 8 小时的取证数字粗估，部署后要用下面的 SQL 核对。
+
+- 规则三：Zacks 缺正文的任务 173 条。只按列出的 18 个后缀，Zacks 标题里约 29%（168/579）命中；加上其他模板和 yseop 链接，估计 30% 到 45% 的 Zacks 任务不再分析，约 52 到 78 条。这些任务的输入、输出和搜索费全部省掉。
+- 规则一：摘要不少于 300 字符的有 187/281（按原始长度）。本规则按删掉空白后的字符数算，门槛相当于原始长度 350 左右（英文摘要删空白约短 15%），实际命中会少一些；Zacks 摘要中位数约 430，多数仍会命中。扣掉规则三去掉的，估计约 110 到 135 条从联网改为只按摘要，每条输入从约 2.5 万降到几千，也不再有搜索费。
+- 规则二：剩下约 90 条联网任务。取证里联网的任务平均每条联网 1.3 次（221/167）；固定样本（`tests/fixtures/ai_luna_news_failures_20261009.json` 的 10 条回执）里每多一次工具调用，输入大约多 1 万词元，样本少，只能看量级。上限改成 1 次后，估计每条少约 1 万。
+- 合计：缺正文任务的输入从 698 万词元降到约 150 万到 270 万，降 60% 到 80%；搜索从 221 次（2.21 美元）降到最多约 90 次。按每条缺正文任务约 0.02 美元（未缓存输入约 1.9 万词元按每百万 0.25 美元、缓存读取约 0.6 万词元、输出约 6.5 千词元按每百万 1.20 美元、平均 0.8 次搜索）算，280 条约 5.8 美元；三条规则估计每 8 小时省 2.9 到 3.8 美元，每天约 9 到 11 美元，约为缺正文任务花费的一半到三分之二。
+- 规则四（服务器改成 xhigh 后）减少的推理输出没有估算。固定样本里推理词元占输出的八到九成。
+
+部署后核对（只读 SQL，`:deployed` 填部署时刻）：
+
+```sql
+-- 部署后新建的 Luna 新闻：三种形态的条数、搜索次数、平均输入
+SELECT CASE schema_sha256
+         WHEN '135ee2bf6c3460581e209ae15caf8c6a1479362d0290d3e86bfff1a1a84fa1fc' THEN 'search'
+         WHEN 'e64f425270938c5aed9f470d1cb59d34f4d4da99e941d6063f805bc8c61c7ca3' THEN 'article'
+         WHEN 'b13ab0647d03e8cf295f15691f793532a4617724549dddfab8f158ec80bee796' THEN 'summary'
+         ELSE 'other' END AS mode,
+       COUNT(*) AS jobs,
+       SUM(COALESCE(json_extract(provider_result_json, '$.usage.web_search_requests'), 0)) AS searches,
+       CAST(AVG(usage_input_tokens) AS INTEGER) AS avg_input,
+       CAST(AVG(usage_output_tokens) AS INTEGER) AS avg_output
+FROM ai_jobs
+WHERE model = 'gpt-5.6-luna' AND job_type = 'news_impact' AND created_at >= :deployed
+GROUP BY 1;
+
+-- 部署后定时建的 Zacks 任务：应只剩真新闻，抽查标题
+SELECT json_extract(payload_json, '$.title') FROM ai_jobs
+WHERE job_type = 'news_impact' AND submission_source = 'scheduled'
+  AND created_at >= :deployed AND json_extract(payload_json, '$.source') LIKE '%Zacks%'
+ORDER BY created_at DESC LIMIT 50;
+
+-- 只按摘要的任务被判「资料不足」的比例
+SELECT SUM(json_extract(result_json, '$.insufficient_context') = 1), COUNT(*)
+FROM ai_jobs
+WHERE schema_sha256 = 'b13ab0647d03e8cf295f15691f793532a4617724549dddfab8f158ec80bee796'
+  AND status = 'completed' AND created_at >= :deployed;
+
+-- 应为 0（只改代码、不改推理档位时）：部署后因策略变化作废的任务
+SELECT COUNT(*) FROM ai_jobs
+WHERE error_code = 'runtime_configuration_changed' AND updated_at >= :deployed;
+```
+
+最后一条在服务器把 `news_reasoning` 改成 xhigh 之后会不为 0：当时排队、还没提交的 Luna 新闻任务都会作废，这是预期的，它们没花钱，下一小时会按新档位重建。
+
+### 回退
+
+- 规则三：`[catalyst] scheduled_skip_template_commentary = false`，重启 worker 和后端。
+- 规则四：`[ai] news_reasoning = "max"`，重启。
+- 规则一、二没有开关，回退要还原代码。还原后，部署期间按新身份建的待处理任务会判 `runtime_configuration_changed`（没花钱，调度重建）；已完成的结果在旧代码里读不到当前身份，但发布的结果按载荷校验，照常显示。
+
+### 检查记录
+
+- 新测试 `tests/test_luna_cost_20261010.py` 104 项，全部通过。
+- 变异实验 17 个，每次只撤掉一处改动，都被指定的测试抓住：回执按正文判断、关闭摘要形态、空白计入字数、工具上限改回 3、上一版名单去掉 `cda8f76d…`、只按摘要不算现行形态、候选不过滤模板稿、模板代表新闻挡住焦点周期、读接口不标 skipped、待生成计数算上 skipped、缓存不看开关、隐藏计数算上 skipped、站长投影把 skipped 改回 not_requested、忽略 yseop 链接、去掉 Zacks 来源限制、worker 不传开关、GPT 只允许 max。
+- 改了 7 个既有测试文件里写死旧规则的断言：工具调用上限 3 改 1（3 个文件 4 处）、联网预留 640,197 改 620,197（1 处）、`(gpt-5.6-terra, xhigh)` 和 `(gpt-5.6-luna, xhigh)` 从「被拒」改为合法后换用仍被拒的组合（3 个文件 4 处）。
+- 完整后端测试：改动前 6,848 项通过、7 项跳过（7 个子测试通过）；改动后 6,952 项通过、7 项跳过（7 个子测试通过），多出的 104 项就是新测试文件，退出码 0。警告仍是原有的 8 条。
+- `python -m compileall -q backend/app` 通过，`git diff --check` 干净。
+
+### 未覆盖
+
+- 摘要门槛按删掉空白后的字符数算，这是对「去掉 HTML 和空白后 ≥300 字」的字面理解，比按原始长度严一些。要改成原始长度或只合并空白，改 `news_summary_sufficient` 一处即可。
+- 只按摘要分析的结果质量没有用真实样本评估。部署后用上面第三条 SQL 看「资料不足」的比例。
+- 模板规则来自 10-08 以来的 Zacks 标题统计。Zacks 新出的模板不会自动命中，要补进常量表。
+- 节省是估算，没有生产数据可以重放。
+- 联网任务的词元预留仍是 1,050,000。模型页现在写最大输入 922,000，按它算可以再低一些，本次没改。
+- 没有改前端。`skipped` 在界面上显示为「未分析」。
