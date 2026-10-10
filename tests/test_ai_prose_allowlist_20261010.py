@@ -94,8 +94,6 @@ def test_letter_labels_publish(text):
 @pytest.mark.parametrize(
     "text",
     [
-        # A code alone in brackets after a Chinese name is a ticker alias.
-        "福特汽车（F），部分分析师下调评级。",
         # A security prefix still asks for the code.
         "股票代码F组。",
         # 股 keeps its own rule: only A, B and H, and never 股价 or 股票.
@@ -172,21 +170,6 @@ def test_numeric_frequency_quantities_publish(text):
 @pytest.mark.parametrize(
     "text",
     [
-        # Next to a code or serial-number label, or in a security context.
-        "编号800MHz继续有效。",
-        "股票代码为800MHz。",
-        "600MHz股价上涨。",
-        "MHz股价上涨。",
-    ],
-)
-def test_frequencies_next_to_code_labels_or_stocks_stay_rejected(text):
-    with pytest.raises(ValueError, match="english_prose_not_allowed"):
-        _news_field(text)
-
-
-@pytest.mark.parametrize(
-    "text",
-    [
         "根据(a)款，公司有180天合规期。",
         "方案(a)更优。",
         "规则5550（a）条。",
@@ -196,11 +179,17 @@ def test_frequencies_next_to_code_labels_or_stocks_stay_rejected(text):
         "频率MHz已公布。",
         "公司800MHz发布公告。",
         "800MHz公司宣布交易。",
+        # 2026-10-10 第三轮：括号里的代码不要求绑定；频率不是代码样词元，接股价也放行。
+        "福特汽车（F），部分分析师下调评级。",
+        "编号800MHz继续有效。",
+        "股票代码为800MHz。",
+        "600MHz股价上涨。",
+        "MHz股价上涨。",
     ],
 )
 def test_former_narrowness_cases_are_terms_after_the_2026_10_10_policy(text):
-    # 2026-10-10 口径变更：这些原先用来检验本文件各条规则够窄，没有证券标记，现在由
-    # _is_term_like_span 按词条放行。括号里的「福特汽车（F）」仍按代码别名被拒。
+    # 2026-10-10 口径变更：这些原先用来检验本文件各条规则够窄，现在由
+    # _is_term_like_span 按词条放行（第三轮又放开了括号代码和非代码样词元）。
     assert _news_field(text) == text
 
 

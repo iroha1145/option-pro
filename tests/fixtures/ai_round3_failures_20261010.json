@@ -1,0 +1,3384 @@
+{
+ "earnings": [
+  {
+   "job_id": "aij_54e7d30d03af4898b8f65f9ab2b296ce",
+   "job_type": "earnings_impact",
+   "model": "claude-haiku-5-5",
+   "payload": {
+    "analysis_phase": "pre_release",
+    "analysis_stage": "pre_release",
+    "earnings_date": "2026-10-15",
+    "eps_actual": null,
+    "eps_estimate": 4.1753,
+    "input_hash": "4041da367033711783566d891934e5fc0b347d757b00a6604b7645188f5648fe",
+    "market_cap": null,
+    "name": "WSO",
+    "quarter": 3,
+    "release_status": "scheduled",
+    "report_id": "earnings:WSO:2026-10-15:2026:q3",
+    "revenue_actual": null,
+    "revenue_estimate": 2224744907.0,
+    "sector": "",
+    "ticker": "WSO",
+    "year": 2026
+   },
+   "production_error": "schema_validation_failed: 1 validation error for EarningsImpactResult",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "Watsco To Acquire Jackson Supply Company",
+      "type": "web_search",
+      "url": "https://investors.watsco.com/news-releases/news-release-details/watsco-acquire-jackson-supply-company"
+     },
+     {
+      "title": "WATSCO INC - Form 10-Q - FY2016",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/0000105016/000119312516758213/d240099d10q.htm"
+     },
+     {
+      "title": "Form 10-K for Watsco INC filed 02/28/2025",
+      "type": "web_search",
+      "url": "https://investors.watsco.com/static-files/d0f954d9-7e24-4079-8ad1-df7f81e4f668"
+     },
+     {
+      "title": "Carrier JV to Acquire Temperature Equipment Corporation, Largest Carrier Distributor in the Midwest",
+      "type": "web_search",
+      "url": "https://www.corporate.carrier.com/news/news-articles/carrier-jv-to-acquire-temperature-equipment-corporation-largest-carrier-distributor-in-the-midwest.html"
+     },
+     {
+      "title": "WATSCO INC - Form 10-K - FY2017 (Annual Financial Statement Tables - full year 2017)",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/0000105016/000119312518067229/Financial_Report.xlsx"
+     },
+     {
+      "title": "WATSCO INC - Form 10-K - FY2015 (Annual Financial Statement Tables - full year 2015)",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/0000105016/000119312516484870/Financial_Report.xlsx"
+     },
+     {
+      "title": "WATSCO INC - Form 10-K - FY2016 (Annual Financial Statement Tables - full year 2016)",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/0000105016/000119312517049156/Financial_Report.xlsx"
+     },
+     {
+      "title": "Form 10-K for Watsco INC filed 02/27/2026",
+      "type": "web_search",
+      "url": "https://investors.watsco.com/static-files/015cc5c2-8f7e-4eee-8fb1-b5c4bda508e5"
+     },
+     {
+      "title": "Table of Contents UNITED STATES SECURITIES AND EXCHANGE COMMISSION",
+      "type": "web_search",
+      "url": "https://investors.watsco.com/static-files/c5ee114c-9af3-401d-8bcb-2d4cbdeee53a"
+     },
+     {
+      "title": "Carrier and Watsco combine to acquire US distributor TEC - Cooling Post",
+      "type": "web_search",
+      "url": "https://www.coolingpost.com/world-news/carrier-and-watsco-combine-to-acquire-us-distributor-tec/"
+     }
+    ],
+    "id": "msg_011Cft3SfUGrtKoVhRwmE4Lw",
+    "model": "claude-haiku-5-5",
+    "output_text": "{\"output_language\":\"zh-CN\",\"ticker\":\"WSO\",\"summary\":\"WSO为美股上市的北美暖通空调分销商，本次为2026年第三季度财报，目前状态为已排期、尚未发布，输入的预定日期为2026年10月15日（本次未能独立核实该日期）。输入中的实际每股收益（EPS）、实际营收、市值与行业字段均为空，因此无法比较实际业绩，所有判断均基于预期。根据该公司2025年年报，前十大供应商合计占采购额85%，其中开利（CARR）占62%，供应集中度较高。2026年4月公司公告签署收购协议，拟收购一家在美国阳光带地区拥有25个网点的暖通分销商，该企业2025年销售额约2.3亿美元；交易是否完成需以后续公告为准。\",\"expectation\":\"财报尚未发布，尚无实际业绩可与预期比较。输入的每股收益预期为4.1753（输入未注明币种，按美股惯例理解为美元），营收预期为2,224,744,907，约合22.25亿美元。公布后需逐项比较实际每股收益与预期、实际营收与预期，判定超预期、不及预期或持平。目前缺少实际每股收益与实际营收数据，无法判断超预期或不及预期；观察重点可放在营收规模能否接近预期，以及每股收益是否受毛利率或费用变化影响。\",\"impacted\":[{\"ticker\":\"CARR\",\"name\":\"开利\",\"relation\":\"supplier\",\"direction\":\"bullish\",\"reason\":\"开利是该公司最大供应商，2025年年报显示其占采购额62%。若该公司业绩超预期，可能意味着开利系列产品的出货或住宅更换需求更强，对开利形成正面传导；但采购结构、渠道库存与定价变化都可能改变传导幅度，不能视为确定收益。\"},{\"ticker\":\"6367.T\",\"name\":\"大金工业\",\"relation\":\"supplier\",\"direction\":\"bullish\",\"reason\":\"大金旗下北美暖通设备业务是该公司的供应商之一，2025年年报列示的主要设备制造商中包含大金体系。若该公司分销端销量超预期，可能带动大金旗下设备的出货；但渠道库存调整与品牌间份额变化可能削弱这一传导，结果仍有不确定性。\"},{\"ticker\":\"TT\",\"name\":\"特灵科技\",\"relation\":\"competitor\",\"direction\":\"mixed\",\"reason\":\"特灵是年报列出的美国主要空调设备制造商之一，与开利在设备端存在竞争。若该公司业绩超预期反映住宅与商用暖通需求改善，可能对特灵有正面影响；若主要来自其他品牌份额提升，则可能形成竞争压力，方向需结合后续披露判断。\"},{\"ticker\":\"FERG\",\"name\":\"福格森\",\"relation\":\"competitor\",\"direction\":\"bearish\",\"reason\":\"福格森经营美国暖通产品分销业务，与该公司在分销渠道上存在竞争。若该公司业绩超预期，可能意味着其在部分市场获得更多份额，对福格森的暖通业务形成压力；但影响取决于区域与产品结构，且本次未核实福格森暖通业务的具体规模，判断存在不确定性。\"}]}",
+    "provider": "anthropic",
+    "stop_reason": "end_turn",
+    "terminal_error": null,
+    "tool_evidence": [
+     {
+      "content_sha256": "db30dd9f16a45ea94ec95c089fcec278e1a67e29110e168059bc7728c344c6d1",
+      "status": "success",
+      "title": "Watsco To Acquire Jackson Supply Company",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01HzDppPFFgNTT7Hb1N4hMfG",
+      "url": "https://investors.watsco.com/news-releases/news-release-details/watsco-acquire-jackson-supply-company"
+     },
+     {
+      "content_sha256": "9c9c958929f7e5d9afeaee18d1cf1d81bb514d0ac01fe08342b2d3455da2d17d",
+      "status": "success",
+      "title": "WATSCO INC - Form 10-Q - FY2016",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01HzDppPFFgNTT7Hb1N4hMfG",
+      "url": "https://www.sec.gov/Archives/edgar/data/0000105016/000119312516758213/d240099d10q.htm"
+     },
+     {
+      "content_sha256": "662e6061bb2eeebf6f34d9294a3d8b3cd5d16942f903c1931aff105e87b27ebc",
+      "status": "success",
+      "title": "Form 10-K for Watsco INC filed 02/28/2025",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01HzDppPFFgNTT7Hb1N4hMfG",
+      "url": "https://investors.watsco.com/static-files/d0f954d9-7e24-4079-8ad1-df7f81e4f668"
+     },
+     {
+      "content_sha256": "64c2c7f3cb9c8005a841a47e3007384615813a292eb61ec5989f33e85fece02f",
+      "status": "success",
+      "title": "Carrier JV to Acquire Temperature Equipment Corporation, Largest Carrier Distributor in the Midwest",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01HzDppPFFgNTT7Hb1N4hMfG",
+      "url": "https://www.corporate.carrier.com/news/news-articles/carrier-jv-to-acquire-temperature-equipment-corporation-largest-carrier-distributor-in-the-midwest.html"
+     },
+     {
+      "content_sha256": "f8a265daa902af689262d4a0854209a51da502162072aa0f56f313fe14b11b33",
+      "status": "success",
+      "title": "WATSCO INC - Form 10-K - FY2017 (Annual Financial Statement Tables - full year 2017)",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01HzDppPFFgNTT7Hb1N4hMfG",
+      "url": "https://www.sec.gov/Archives/edgar/data/0000105016/000119312518067229/Financial_Report.xlsx"
+     },
+     {
+      "content_sha256": "40a83989008be7e691415aa5802ff28e2f3a3ad2ec3896e97ef47764363d0cf5",
+      "status": "success",
+      "title": "WATSCO INC - Form 10-K - FY2015 (Annual Financial Statement Tables - full year 2015)",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01HzDppPFFgNTT7Hb1N4hMfG",
+      "url": "https://www.sec.gov/Archives/edgar/data/0000105016/000119312516484870/Financial_Report.xlsx"
+     },
+     {
+      "content_sha256": "e8493310bad55afec10903fe38bc68e73d845277031ee9959852bbfb3e03132f",
+      "status": "success",
+      "title": "WATSCO INC - Form 10-K - FY2016 (Annual Financial Statement Tables - full year 2016)",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01HzDppPFFgNTT7Hb1N4hMfG",
+      "url": "https://www.sec.gov/Archives/edgar/data/0000105016/000119312517049156/Financial_Report.xlsx"
+     },
+     {
+      "content_sha256": "abce07c41bab0e771cc7e58119555401cf75bd7e9132960766555848d7d4e67d",
+      "status": "success",
+      "title": "Form 10-K for Watsco INC filed 02/27/2026",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01HzDppPFFgNTT7Hb1N4hMfG",
+      "url": "https://investors.watsco.com/static-files/015cc5c2-8f7e-4eee-8fb1-b5c4bda508e5"
+     },
+     {
+      "content_sha256": "6745880dfe52e9dafaba5d8b5cc185103de39176fd48943cfa534c3fb113dde5",
+      "status": "success",
+      "title": "Table of Contents UNITED STATES SECURITIES AND EXCHANGE COMMISSION",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01HzDppPFFgNTT7Hb1N4hMfG",
+      "url": "https://investors.watsco.com/static-files/c5ee114c-9af3-401d-8bcb-2d4cbdeee53a"
+     },
+     {
+      "content_sha256": "cba1cde793207ef57052a911215afe3c99ae53df23d7032a9083e5ae1df1ff14",
+      "status": "success",
+      "title": "Carrier and Watsco combine to acquire US distributor TEC - Cooling Post",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01HzDppPFFgNTT7Hb1N4hMfG",
+      "url": "https://www.coolingpost.com/world-news/carrier-and-watsco-combine-to-acquire-us-distributor-tec/"
+     }
+    ],
+    "tool_evidence_version": "v1",
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": 12420,
+     "cached_input_tokens": 17018,
+     "code_execution_requests": 0,
+     "input_tokens": 29748,
+     "output_tokens": 12629,
+     "reasoning_tokens": 11455,
+     "total_tokens": 42377,
+     "web_fetch_requests": 0,
+     "web_search_requests": 1
+    }
+   }
+  },
+  {
+   "job_id": "aij_5d112d3ed8f94fb2b1e65240fe5b14c1",
+   "job_type": "earnings_impact",
+   "model": "claude-haiku-5-5",
+   "payload": {
+    "analysis_phase": "pre_release",
+    "analysis_stage": "pre_release",
+    "earnings_date": "2026-10-15",
+    "eps_actual": null,
+    "eps_estimate": 1.3347,
+    "input_hash": "d3496ae7fbce9f4ec38aca6e261be826bacb9970c9fca58763cefced751f422a",
+    "market_cap": null,
+    "name": "USB",
+    "quarter": 3,
+    "release_status": "scheduled",
+    "report_id": "earnings:USB:2026-10-15:2026:q3",
+    "revenue_actual": null,
+    "revenue_estimate": 8076127559.0,
+    "sector": "",
+    "ticker": "USB",
+    "year": 2026
+   },
+   "production_error": "schema_validation_failed: 1 validation error for EarningsImpactResult",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "FIFTH THIRD BANCORP - Form 8-K - FY2026",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/35527/000003552726000134/fitb-20260417.htm"
+     },
+     {
+      "title": "FIFTH THIRD BANCORP - Form 8-K - FY2026",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/0000035527/000003552726000193/fitb-20260717.htm"
+     },
+     {
+      "title": "U.S. Bancorp Announces Third Quarter Earnings Conference Call Details",
+      "type": "web_search",
+      "url": "https://www.marketscreener.com/news/u-s-bancorp-announces-third-quarter-earnings-conference-call-details-ce785ad3d08df12c"
+     },
+     {
+      "title": "U.S. Bancorp schedules third-quarter earnings conference call",
+      "type": "web_search",
+      "url": "https://www.webull.com/news/15673113323635712"
+     },
+     {
+      "title": "U.S. Bancorp Provides Schedule for 2026 Earnings Conference Calls - U.S. Bancorp",
+      "type": "web_search",
+      "url": "https://ir.usbank.com/news-events/news/news-details/2024/U.S.-Bancorp-Provides-Schedule-for-2026-Earnings-Conference-Calls/default.aspx"
+     },
+     {
+      "title": "U.S. Bancorp Provides Updated Schedule for 2027 Earnings Conference Calls - U.S. Bancorp",
+      "type": "web_search",
+      "url": "https://ir.usbank.com/news-events/news/news-details/2026/U-S--Bancorp-Provides-Updated-Schedule-for-2027-Earnings-Conference-Calls/default.aspx"
+     },
+     {
+      "title": "U.S. Bancorp (USB) Projected to Announce Earnings on Thursday",
+      "type": "web_search",
+      "url": "https://www.marketbeat.com/instant-alerts/upcoming-us-bancorp-usb-projected-to-announce-earnings-on-thursday-2026-10-08/"
+     },
+     {
+      "title": "U.S. Bancorp (USB) Earnings Date and Reports 2026 $USB",
+      "type": "web_search",
+      "url": "https://www.marketbeat.com/stocks/NYSE/USB/earnings/"
+     },
+     {
+      "title": "U.S. Bancorp Announces Third Quarter Earnings Conference Call Details - Industry Analysts, Inc.",
+      "type": "web_search",
+      "url": "https://industryanalysts.com/us-bancorp-announces-third-quarter-earnings-conference-call-details-us-bank/"
+     },
+     {
+      "title": "U.S. Bancorp Likely To Report Higher Q3 Earnings; These Most Accurate Analysts Revise Forecasts Ahead Of - Benzinga",
+      "type": "web_search",
+      "url": "https://www.benzinga.com/analyst-stock-ratings/price-target/26/10/62185173/u-s-bancorp-likely-to-report-higher-q3-earnings-these-most-accurate-analysts-revise-forecasts-ahead-of-earnings-call"
+     }
+    ],
+    "id": "msg_011Cft3BtwESXhM59PrCQWRi",
+    "model": "claude-haiku-5-5",
+    "output_text": "{\"expectation\":\"尚未发布，不能把预期写成实际业绩。输入资料中每股收益预期为1.3347美元，营收预期为8,076,127,559美元（约80.76亿美元），EPS与营收的实际值均为空，因此无法判断是否超预期。外部公开资料显示市场共识约为每股1.31至1.32美元、营收约79.9亿至80亿美元，与输入预期略有出入，判断时应以发布当日数据为准。观察重点包括净利息收入与净息差、支付及财富管理等非利息收入、信贷损失拨备以及费用率。\",\"impacted\":[{\"ticker\":\"WFC\",\"name\":\"富国银行\",\"relation\":\"competitor\",\"direction\":\"mixed\",\"reason\":\"富国银行与美国合众银行同为美国大型综合银行，在消费信贷、企业银行和支付业务上存在直接竞争。若美国合众银行超预期主要来自净利息收入或费用控制，可能被市场视为同业盈利环境向好，对富国银行形成情绪上的正向外溢；若增长来自份额扩张，则会对其相对竞争地位构成压力。两种路径并存，方向不确定，不能视为富国银行的确定收益。\"},{\"ticker\":\"JPM\",\"name\":\"摩根大通\",\"relation\":\"competitor\",\"direction\":\"mixed\",\"reason\":\"摩根大通在财富管理、企业银行和支付领域与美国合众银行存在业务重叠。若美国合众银行的超预期反映行业存款成本与信贷质量保持稳定，可能带动大型银行板块的估值情绪；若其在支付或零售业务中抢占份额，则可能对摩根大通的相对表现形成压力。摩根大通业绩还取决于投行与交易收入，本次关联只能提供有限参考。\"},{\"ticker\":\"BAC\",\"name\":\"美国银行\",\"relation\":\"competitor\",\"direction\":\"mixed\",\"reason\":\"美国银行在零售银行、财富管理和财资服务领域与美国合众银行竞争，同属全美性大型银行。若美国合众银行的超预期体现净息差和费用管理改善，可能被视为行业共同受益的信号；但若其在特定业务上取得增量，也可能分流美国银行的存贷客户。两者影响方向并不一致，需以各自季报为准。\"},{\"ticker\":\"PNC\",\"name\":\"PNC金融服务集团\",\"relation\":\"competitor\",\"direction\":\"bullish\",\"reason\":\"PNC金融服务集团是美国大型地区性银行，业务结构、利率敏感度和客户基础与美国合众银行较为接近。若美国合众银行超预期主要源于净利息收入稳定和信贷损失可控，可能提振同类银行的盈利预期和估值讨论，形成正向外溢。该联动基于相似业务模式，并不代表PNC金融服务集团的业绩会同步改善。\"},{\"ticker\":\"FITB\",\"name\":\"第五三银行\",\"relation\":\"competitor\",\"direction\":\"bullish\",\"reason\":\"第五三银行同为美国地区性银行，在存贷、财资和财富管理等方面与美国合众银行存在部分业务重叠。若美国合众银行超预期反映行业信贷环境平稳，可能对第五三银行形成同向的情绪传导。两家银行的区域布局和资产负债表结构差异较大，联动强度有限，需结合其自身披露判断。\"},{\"ticker\":\"TFC\",\"name\":\"TFC\",\"relation\":\"competitor\",\"direction\":\"bullish\",\"reason\":\"TFC同为美国大型地区性银行，业务覆盖零售、企业银行与财富管理，与美国合众银行存在直接竞争关系。若美国合众银行的超预期体现行业净息差与信贷质量改善，可能对同类银行估值形成正向外溢；若其在特定区域或客户群体中取得份额增长，则会对TFC的竞争地位构成压力。两种影响并存，结论需保持谨慎。\"},{\"ticker\":\"V\",\"name\":\"维萨\",\"relation\":\"supplier\",\"direction\":\"mixed\",\"reason\":\"维萨是美国合众银行发行的部分卡片产品所依托的支付网络，双方在网络服务与交易清算方面存在合作关系。若美国合众银行超预期主要来自卡片交易量或支付手续费增长，可能间接利好支付网络的交易规模；但若其盈利主要来自利息收入，则传导较弱。双方合作的具体条款与收费结构未在本次资料中披露，方向仅为可能性。\"}],\"output_language\":\"zh-CN\",\"summary\":\"美国合众银行（USB）计划于2026年10月15日美股开盘前发布2026年第三季度业绩。该日期来自公司2026年10月1日的公告，属于外部核实信息，并非输入资料原文。输入资料处于发布前阶段，实际EPS与营收均为空，市值与行业字段也为空，因此无法计算实际与预期的差异，也无法做估值比较。本分析仅依据输入的预期值及公开的业务关系梳理信息，不构成任何交易建议。\"}",
+    "provider": "anthropic",
+    "stop_reason": "end_turn",
+    "terminal_error": null,
+    "tool_evidence": [
+     {
+      "content_sha256": "477d21ef67386018cea0bb96c3ebbd808549b6aa944ca4da22a7abdbbd2a9ef5",
+      "status": "success",
+      "title": "FIFTH THIRD BANCORP - Form 8-K - FY2026",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_014EdVTxQVVWHV42L9oQZFYn",
+      "url": "https://www.sec.gov/Archives/edgar/data/35527/000003552726000134/fitb-20260417.htm"
+     },
+     {
+      "content_sha256": "70c6f13f5583086099417a599da8b257071760a0e5184a4d09b143988b0334b3",
+      "status": "success",
+      "title": "FIFTH THIRD BANCORP - Form 8-K - FY2026",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_014EdVTxQVVWHV42L9oQZFYn",
+      "url": "https://www.sec.gov/Archives/edgar/data/0000035527/000003552726000193/fitb-20260717.htm"
+     },
+     {
+      "content_sha256": "df2c287f587dc02b3bab6eaa7702d734f3ed768e46e6e6f9f2d65c520de1b81c",
+      "status": "success",
+      "title": "U.S. Bancorp Announces Third Quarter Earnings Conference Call Details",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_014EdVTxQVVWHV42L9oQZFYn",
+      "url": "https://www.marketscreener.com/news/u-s-bancorp-announces-third-quarter-earnings-conference-call-details-ce785ad3d08df12c"
+     },
+     {
+      "content_sha256": "1eb52c8b131acdcb008c2980c7a4e28c424f770214872d653ba54b42d66a704b",
+      "status": "success",
+      "title": "U.S. Bancorp schedules third-quarter earnings conference call",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_014EdVTxQVVWHV42L9oQZFYn",
+      "url": "https://www.webull.com/news/15673113323635712"
+     },
+     {
+      "content_sha256": "393b1238772b37b6b5ff982def8351f11e594aab2c259e3d2957773e84612a63",
+      "status": "success",
+      "title": "U.S. Bancorp Provides Schedule for 2026 Earnings Conference Calls - U.S. Bancorp",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_014EdVTxQVVWHV42L9oQZFYn",
+      "url": "https://ir.usbank.com/news-events/news/news-details/2024/U.S.-Bancorp-Provides-Schedule-for-2026-Earnings-Conference-Calls/default.aspx"
+     },
+     {
+      "content_sha256": "d4d2adf15542a59411ee0c2c6220d8f3167f25500efde4e231cefd4622421004",
+      "status": "success",
+      "title": "U.S. Bancorp Provides Updated Schedule for 2027 Earnings Conference Calls - U.S. Bancorp",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_014EdVTxQVVWHV42L9oQZFYn",
+      "url": "https://ir.usbank.com/news-events/news/news-details/2026/U-S--Bancorp-Provides-Updated-Schedule-for-2027-Earnings-Conference-Calls/default.aspx"
+     },
+     {
+      "content_sha256": "8634d6b96dd0361ae855103f6e4673fe0fac40fec1ff444631e9b0d222e32c1e",
+      "status": "success",
+      "title": "U.S. Bancorp (USB) Projected to Announce Earnings on Thursday",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_014EdVTxQVVWHV42L9oQZFYn",
+      "url": "https://www.marketbeat.com/instant-alerts/upcoming-us-bancorp-usb-projected-to-announce-earnings-on-thursday-2026-10-08/"
+     },
+     {
+      "content_sha256": "6d3ba9c9f5b91534e939b9b327dd19fbdab88dd4d54c642d1e46914132de4b38",
+      "status": "success",
+      "title": "U.S. Bancorp (USB) Earnings Date and Reports 2026 $USB",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_014EdVTxQVVWHV42L9oQZFYn",
+      "url": "https://www.marketbeat.com/stocks/NYSE/USB/earnings/"
+     },
+     {
+      "content_sha256": "73069bbd91f2d577ec3683dbf29994adb6d81f3617a736eadeb2705679eb0148",
+      "status": "success",
+      "title": "U.S. Bancorp Announces Third Quarter Earnings Conference Call Details - Industry Analysts, Inc.",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_014EdVTxQVVWHV42L9oQZFYn",
+      "url": "https://industryanalysts.com/us-bancorp-announces-third-quarter-earnings-conference-call-details-us-bank/"
+     },
+     {
+      "content_sha256": "6f587d82c28d2fccd19d9e5f92b2eeb25816a976c28cacca9ce86b3d1f77bcab",
+      "status": "success",
+      "title": "U.S. Bancorp Likely To Report Higher Q3 Earnings; These Most Accurate Analysts Revise Forecasts Ahead Of - Benzinga",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_014EdVTxQVVWHV42L9oQZFYn",
+      "url": "https://www.benzinga.com/analyst-stock-ratings/price-target/26/10/62185173/u-s-bancorp-likely-to-report-higher-q3-earnings-these-most-accurate-analysts-revise-forecasts-ahead-of-earnings-call"
+     }
+    ],
+    "tool_evidence_version": "v1",
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": 10357,
+     "cached_input_tokens": 17018,
+     "code_execution_requests": 0,
+     "input_tokens": 27688,
+     "output_tokens": 11090,
+     "reasoning_tokens": 9315,
+     "total_tokens": 38778,
+     "web_fetch_requests": 0,
+     "web_search_requests": 1
+    }
+   }
+  },
+  {
+   "job_id": "aij_db33f2e9c7634c1d9badada16a884d34",
+   "job_type": "earnings_impact",
+   "model": "claude-haiku-5-5",
+   "payload": {
+    "analysis_phase": "pre_release",
+    "analysis_stage": "pre_release",
+    "earnings_date": "2026-10-15",
+    "eps_actual": null,
+    "eps_estimate": 0.8609,
+    "input_hash": "bfad66b90499f3f5ec86f5b61375de41f64b4210ff8a61f345c8617fc8204fee",
+    "market_cap": 998133021.72,
+    "name": "METROCITY BANKSHARES INC",
+    "quarter": 3,
+    "release_status": "scheduled",
+    "report_id": "earnings:MCBS:2026-10-15:2026:q3",
+    "revenue_actual": null,
+    "revenue_estimate": 52326000.0,
+    "sector": "",
+    "ticker": "MCBS",
+    "year": 2026
+   },
+   "production_error": "schema_validation_failed: 2 validation errors for EarningsImpactResult",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "MetroCity Bankshares (MCBS) Projected to Release Earnings on Friday",
+      "type": "web_search",
+      "url": "https://www.marketbeat.com/instant-alerts/upcoming-metrocity-bankshares-mcbs-projected-to-release-earnings-on-friday-2026-10-09/"
+     },
+     {
+      "title": "MetroCity Bankshares (MCBS) Stock Price & Overview",
+      "type": "web_search",
+      "url": "https://stockanalysis.com/stocks/mcbs/"
+     },
+     {
+      "title": "MetroCity Bankshares, Inc. - Form 8-K - FY2023",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/1747068/000174706823000078/mcbs-20231020xex99d1.htm"
+     },
+     {
+      "title": "METROCITY BANKSHARES, INC._January 30, 2026",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/1747068/000174706826000004/mcbs-20260130x8k.htm"
+     },
+     {
+      "title": "Metropolitan Bank Holding Corp. Q3FY26 Results: Earnings release scheduled for October 20",
+      "type": "web_search",
+      "url": "https://scanx.trade/stock-market-news/companies/metropolitan-bank-holding-corp-q3fy26-results-earnings-release/52433656"
+     },
+     {
+      "title": "Metrocity Bankshares Inc (MCBS) Earnings Date & Reports & Earnings News",
+      "type": "web_search",
+      "url": "https://www.tradingkey.com/markets/stocks/mcbs/earnings"
+     },
+     {
+      "title": "MetroCity Bankshares (MCBS) Projected to Release Earnings on Friday - Defense World",
+      "type": "web_search",
+      "url": "https://www.defenseworld.net/2026/10/09/metrocity-bankshares-mcbs-projected-to-release-earnings-on-friday.html"
+     },
+     {
+      "title": "MetroCity Bankshares stock reports a Q2 EPS miss ahead of October results",
+      "type": "web_search",
+      "url": "https://www.ad-hoc-news.de/boerse/news/nebenwerte/metrocity-bankshares-stock-reports-a-q2-eps-miss-ahead-of-october-results/70195080"
+     },
+     {
+      "title": "Metropolitan Bank Holding Corp Announces Third Quarter Earnings Release and Conference Call Date 2022",
+      "type": "web_search",
+      "url": "https://s206.q4cdn.com/586823346/files/doc_news/Metropolitan-Bank-Holding-Corp--Announces-Third-Quarter-Earnings-Release-and-Conference-Call-Date-2022.pdf"
+     }
+    ],
+    "id": "msg_011Cft2fhmwDz4ymLZkD3vDf",
+    "model": "claude-haiku-5-5",
+    "output_text": "{\"output_language\":\"zh-CN\",\"ticker\":\"MCBS\",\"summary\":\"输入资料显示该公司为美国区域银行控股公司，本次为2026年第三季度财报，状态为已排期但尚未发布（release_status为scheduled），eps_actual与revenue_actual均为空，因此尚无实际业绩可供比较。输入的发布日期为2026年10月15日，但第三方财经日历显示将于2026年10月16日（周五）美股收盘后发布，两者相差一天；本次未能从公司正式公告中核实，应以公司公告为准。输入市值约9.98亿美元，sector字段为空，行业判断依据第三方资料中的区域银行分类。外部核对信息已与原始输入区分，未改动输入的预期、市值或评分。\",\"expectation\":\"尚未发布，不编造实际业绩。输入的EPS预期为0.8609美元，营收预期为52,326,000美元（约5232.6万美元），eps_actual与revenue_actual均为空，无法判断是否超预期。第三方资料引述的第三季度共识为EPS约0.84美元、营收约5130万美元，与输入预期略有差异，两者口径或来源不同，判断时应以输入为准。上一季（2026年第二季）第三方数据显示EPS为0.77美元、营收约4896万美元，均低于当时共识，市场关注其能否回到预期水平。观察重点包括净息差、贷款增长、资产质量与存款成本。\",\"impacted\":[{\"ticker\":\"HOPE\",\"name\":\"霍普银行控股\",\"relation\":\"competitor\",\"direction\":\"mixed\",\"reason\":\"霍普银行控股与本公司同为服务亚裔（尤其韩裔）社区的美国银行，客户群与产品存在重叠，属于直接竞争关系。若本公司第三季度业绩超预期，可能反映该细分市场的贷款需求与信用状况稳健，对同业估值形成正面参照；但也可能意味着存款揽储与贷款定价竞争加剧，对其市场份额构成压力。两种影响并存，方向不确定，此关联为业务推断，不代表其业绩必然受影响。\"},{\"ticker\":\"HAFC\",\"name\":\"韩美金融\",\"relation\":\"competitor\",\"direction\":\"mixed\",\"reason\":\"韩美金融与本公司同为主要服务韩裔客户的美国社区银行，在部分地区的存贷业务存在直接竞争。若本公司超预期，同业可能被视为韩裔社区银行景气度改善的参照，形成情绪外溢；但若超预期源于更积极的定价或揽存，则可能挤压韩美金融的利差与市场份额。实际方向取决于超预期的来源，且目前尚无本公司财报细节，结论仅为业务层面的推断。\"},{\"ticker\":\"PCB\",\"name\":\"太平洋城市银行控股\",\"relation\":\"competitor\",\"direction\":\"mixed\",\"reason\":\"太平洋城市银行控股同属亚裔社区银行，与本公司在部分客户群体上存在竞争关系，但地域布局与业务结构的重叠程度需以各公司财报披露为准。本公司超预期可能被视为亚裔社区银行业务稳定的正面信号，同时也可能反映竞争对手在存款和贷款市场面临更大压力。两种影响相互抵消的程度不确定，因此方向保持中性。\"},{\"ticker\":\"CATY\",\"name\":\"国泰银行控股\",\"relation\":\"competitor\",\"direction\":\"mixed\",\"reason\":\"国泰银行控股同为具亚裔背景的美国银行，但资产规模与业务结构明显更大，与本公司在客户和地域上的直接重叠相对有限，属于较弱的竞争关系。本公司超预期对其影响主要体现在亚裔银行板块的情绪与估值参照上，传导路径间接，方向不确定，不应视为确定的业绩影响。\"}]}",
+    "provider": "anthropic",
+    "stop_reason": "end_turn",
+    "terminal_error": null,
+    "tool_evidence": [
+     {
+      "content_sha256": "3d81cd6c61d23f100d460457288e7f507626d5fe0fb3324c46f4dfb6a5cf08e3",
+      "status": "success",
+      "title": "MetroCity Bankshares (MCBS) Projected to Release Earnings on Friday",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01S6ztcKZiHCb3hnNorBVzpu",
+      "url": "https://www.marketbeat.com/instant-alerts/upcoming-metrocity-bankshares-mcbs-projected-to-release-earnings-on-friday-2026-10-09/"
+     },
+     {
+      "content_sha256": "1fb3407560c8c702332f7df672886d159f6f576ee537b083804be21dc257c17a",
+      "status": "success",
+      "title": "MetroCity Bankshares (MCBS) Stock Price & Overview",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01S6ztcKZiHCb3hnNorBVzpu",
+      "url": "https://stockanalysis.com/stocks/mcbs/"
+     },
+     {
+      "content_sha256": "285e8ed8032740deb3749255d92c5d5de2b8a05bb1e623886c756fde30bee3c7",
+      "status": "success",
+      "title": "MetroCity Bankshares, Inc. - Form 8-K - FY2023",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01S6ztcKZiHCb3hnNorBVzpu",
+      "url": "https://www.sec.gov/Archives/edgar/data/1747068/000174706823000078/mcbs-20231020xex99d1.htm"
+     },
+     {
+      "content_sha256": "b32ad2465a0423bf979b93719adf92465e5c822bfa9c34ed59ff655f95ac8079",
+      "status": "success",
+      "title": "METROCITY BANKSHARES, INC._January 30, 2026",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01S6ztcKZiHCb3hnNorBVzpu",
+      "url": "https://www.sec.gov/Archives/edgar/data/1747068/000174706826000004/mcbs-20260130x8k.htm"
+     },
+     {
+      "content_sha256": "0f84f9b4b5d998a7c24e9598b592493a5df981e55a5c361e845092fe3752ff78",
+      "status": "success",
+      "title": "Metropolitan Bank Holding Corp. Q3FY26 Results: Earnings release scheduled for October 20",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01S6ztcKZiHCb3hnNorBVzpu",
+      "url": "https://scanx.trade/stock-market-news/companies/metropolitan-bank-holding-corp-q3fy26-results-earnings-release/52433656"
+     },
+     {
+      "content_sha256": "685e312aeaceecd505c9aea3a8943c0d89ffef52e9f17905d907a84798cd548b",
+      "status": "success",
+      "title": "Metrocity Bankshares Inc (MCBS) Earnings Date & Reports & Earnings News",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01S6ztcKZiHCb3hnNorBVzpu",
+      "url": "https://www.tradingkey.com/markets/stocks/mcbs/earnings"
+     },
+     {
+      "content_sha256": "58c0706cf68e5fd1cbf6c28c812f4cc27e776f200c71d733733e6aff28b874db",
+      "status": "success",
+      "title": "MetroCity Bankshares (MCBS) Projected to Release Earnings on Friday - Defense World",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01S6ztcKZiHCb3hnNorBVzpu",
+      "url": "https://www.defenseworld.net/2026/10/09/metrocity-bankshares-mcbs-projected-to-release-earnings-on-friday.html"
+     },
+     {
+      "content_sha256": "53fea938a607f9feddb9a5ae669ca127f9c4da133f57600d94cc39a710a2a8c4",
+      "status": "success",
+      "title": "MetroCity Bankshares stock reports a Q2 EPS miss ahead of October results",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01S6ztcKZiHCb3hnNorBVzpu",
+      "url": "https://www.ad-hoc-news.de/boerse/news/nebenwerte/metrocity-bankshares-stock-reports-a-q2-eps-miss-ahead-of-october-results/70195080"
+     },
+     {
+      "content_sha256": "2f4b9d1c7395f742c73409d83d6f7905c9992027f6fec8347d19b15d51fb02ff",
+      "status": "success",
+      "title": "Metropolitan Bank Holding Corp Announces Third Quarter Earnings Release and Conference Call Date 2022",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01S6ztcKZiHCb3hnNorBVzpu",
+      "url": "https://s206.q4cdn.com/586823346/files/doc_news/Metropolitan-Bank-Holding-Corp--Announces-Third-Quarter-Earnings-Release-and-Conference-Call-Date-2022.pdf"
+     }
+    ],
+    "tool_evidence_version": "v1",
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": 9771,
+     "cached_input_tokens": 25527,
+     "code_execution_requests": 0,
+     "input_tokens": 46341,
+     "output_tokens": 12632,
+     "reasoning_tokens": 11142,
+     "total_tokens": 58973,
+     "web_fetch_requests": 1,
+     "web_search_requests": 1
+    }
+   }
+  },
+  {
+   "job_id": "aij_fb8fa0da1f4a494d801b96c6fd8877ce",
+   "job_type": "earnings_impact",
+   "model": "claude-haiku-5-5",
+   "payload": {
+    "analysis_phase": "pre_release",
+    "analysis_stage": "pre_release",
+    "earnings_date": "2026-10-15",
+    "eps_actual": null,
+    "eps_estimate": 0.3407,
+    "input_hash": "2c3b5aeae0c55317e8b9ebe2862b3f11b0a1d3890cd2b6457b97a8218ecf1ad3",
+    "market_cap": 5040482613.12,
+    "name": "IRDM",
+    "quarter": 3,
+    "release_status": "scheduled",
+    "report_id": "earnings:IRDM:2026-10-15:2026:q3",
+    "revenue_actual": null,
+    "revenue_estimate": 241029264.0,
+    "sector": "",
+    "ticker": "IRDM",
+    "year": 2026
+   },
+   "production_error": "schema_validation_failed: 1 validation error for EarningsImpactResult",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "Iridium Communications Inc. - Form 8-K - FY2026",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/0001418819/000141881926000046/pressreleaseq22026.htm"
+     },
+     {
+      "title": "Iridium Communications Inc. - Form 8-K - FY2026",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/0001418819/000141881926000027/pressreleaseq12026.htm"
+     },
+     {
+      "title": "Iridium Announces Release Date for Second-Quarter 2026 Financial Results - Jul 9, 2026",
+      "type": "web_search",
+      "url": "https://investor.iridium.com/2026-07-09-Iridium-Announces-Release-Date-for-Second-Quarter-2026-Financial-Results"
+     },
+     {
+      "title": "Iridium Announces 2025 Results; Issues 2026 Outlook - Feb 12, 2026",
+      "type": "web_search",
+      "url": "https://investor.iridium.com/2026-02-12-Iridium-Announces-2025-Results-Issues-2026-Outlook"
+     },
+     {
+      "title": "Document",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/1418819/000141881926000027/pressreleaseq12026.htm"
+     },
+     {
+      "title": "Iridium Communications Inc. Reports 2025 Financial Results and 2026 Outlook — TradingView News",
+      "type": "web_search",
+      "url": "https://www.tradingview.com/news/tradingview:8a6347281f8c1:0-iridium-communications-inc-reports-2025-financial-results-and-2026-outlook/"
+     },
+     {
+      "title": "Iridium Communications (IRDM) Earnings Date and Reports 2026 $IRDM",
+      "type": "web_search",
+      "url": "https://www.marketbeat.com/stocks/NASDAQ/IRDM/earnings/"
+     },
+     {
+      "title": "Iridium Satellite Communications - SEC Filings",
+      "type": "web_search",
+      "url": "https://investor.iridium.com/sec-filings"
+     },
+     {
+      "title": "Iridium Communications (NasdaqGS:IRDM) Stock Forecast & Analyst Predictions - Simply Wall St",
+      "type": "web_search",
+      "url": "https://simplywall.st/stocks/us/telecom/nasdaq-irdm/iridium-communications/future"
+     },
+     {
+      "title": "Iridium Announces 2025 Results; Issues 2026 Outlook",
+      "type": "web_search",
+      "url": "https://www.prnewswire.com/news-releases/iridium-announces-2025-results-issues-2026-outlook-302685852.html"
+     }
+    ],
+    "id": "msg_011Cft2YY8Jz1mEqmswSEKbY",
+    "model": "claude-haiku-5-5",
+    "output_text": "{\"output_language\":\"zh-CN\",\"ticker\":\"IRDM\",\"summary\":\"铱星通信（IRDM）三季度财报尚未发布。输入数据给出的发布日期为2026年10月15日，但本次未找到公司对该日期的正式公告，第三方日历曾估算为10月22日，日期存在不确定性。二季度财报已于7月22日公布：营收2.252亿美元，同比增长4%；净利润970万美元，摊薄每股收益0.09美元，净利润下降主要因交易费用增加；运营EBITDA为1.191亿美元，低于上年同期的1.213亿美元，降幅主要来自激励薪酬计提增加。计费用户约262.7万，同比增长6%。公司于2026年6月28日与火箭实验室（RKLB）签订收购协议，预计2027年年中完成；二季度起不再召开业绩电话会，也不提供财务指引。7月2日公司完成对卫星空中交通监视业务的收购，公司称其年化服务收入至少增加1亿美元，年化运营EBITDA至少增加3000万美元。\",\"expectation\":\"输入的三季度预期为：摊薄每股收益0.3407美元、营收约2.410亿美元；实际值均为空，财报尚未发布，暂不能判断超预期或不及预期。与二季度实际营收2.252亿美元相比，营收预期环比约增7%；第三方数据显示去年三季度营收约2.269亿美元，据此推算同比约增6%。EPS预期明显高于二季度GAAP口径的0.09美元，也高于第三方样本较少的估计区间（0.23至0.26美元），需确认预期是否剔除交易费用，以及是否包含已完成收购的贡献。公司未提供指引且缺少三季度分项数据，判断依据有限。\",\"impacted\":[{\"ticker\":\"RKLB\",\"name\":\"火箭实验室\",\"relation\":\"opposing\",\"direction\":\"mixed\",\"reason\":\"火箭实验室是铱星通信的收购方，双方签订的确定性收购协议预计2027年年中完成，仍需铱星股东批准。三季度业绩超预期对其影响主要取决于交易对价条款及铱星股价与对价的挂钩程度，本次未能核实对价细节，方向无法确定。不应把铱星业绩超预期直接视为火箭实验室的确定收益。\"},{\"ticker\":\"LHX\",\"name\":\"L3哈里斯\",\"relation\":\"customer\",\"direction\":\"mixed\",\"reason\":\"L3哈里斯是铱星通信的载荷托管客户之一，二季度托管载荷及其他数据服务收入同比增长14%。该类收入还包含其他客户与服务，无法单独确认L3哈里斯的贡献。若三季度超预期来自该业务，对其影响可能偏正面；若只是收入时点或计费安排变化，影响则有限，方向不确定。\"},{\"ticker\":\"GRMN\",\"name\":\"佳明\",\"relation\":\"customer\",\"direction\":\"mixed\",\"reason\":\"佳明部分卫星通讯终端使用铱星网络，作为采购铱星网络服务的客户存在业务关联。铱星超预期若源于终端与服务量增长，可能对佳明形成需求端正面信号；若源于服务价格上调，则会增加其成本。三季度分项数据未公布，无法判断哪一因素占主导，方向不确定。\"},{\"ticker\":\"GSAT\",\"name\":\"全球星通信\",\"relation\":\"competitor\",\"direction\":\"mixed\",\"reason\":\"全球星同为卫星移动通信服务商，与铱星在卫星短信、物联网及直连手机等场景存在竞争。铱星超预期若反映其市场份额扩大，可能对全球星形成压力；若反映行业需求回暖，则可能带动同业情绪。两种传导方向相反，且铱星三季度分项数据未公布，判断不确定。\"},{\"ticker\":\"ASTS\",\"name\":\"ASTS\",\"relation\":\"competitor\",\"direction\":\"mixed\",\"reason\":\"ASTS同样布局直连手机卫星宽带，与铱星计划推出的直连手机标准化服务构成潜在竞争。若铱星三季度因物联网或定位导航授时业务超预期，可能说明传统窄带卫星服务仍具竞争力，对ASTS的商业化预期形成一定压力。但两者业务重叠有限，影响方向不确定，不构成确定结论。\"},{\"ticker\":\"VSAT\",\"name\":\"VSAT\",\"relation\":\"competitor\",\"direction\":\"mixed\",\"reason\":\"VSAT在航空、海事等卫星宽带市场与铱星的宽带业务存在竞争。铱星二季度宽带收入同比下降8%，显示该领域竞争压力较大。若三季度超预期主要来自物联网或定位导航授时业务，对VSAT的直接影响有限，因此方向不确定。\"}]}",
+    "provider": "anthropic",
+    "stop_reason": "end_turn",
+    "terminal_error": null,
+    "tool_evidence": [
+     {
+      "content_sha256": "54032a3ce50cc9ac0d443f2008ff2171bc5a27aaa2b9de5a60de16b4ef2dc3f7",
+      "status": "success",
+      "title": "Iridium Communications Inc. - Form 8-K - FY2026",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01Gxyf9rZnE8qJjry67gyr6h",
+      "url": "https://www.sec.gov/Archives/edgar/data/0001418819/000141881926000046/pressreleaseq22026.htm"
+     },
+     {
+      "content_sha256": "7fab97933c3329b58e354419403a13100b80e4cf25ed2bbff4a4f653df598833",
+      "status": "success",
+      "title": "Iridium Communications Inc. - Form 8-K - FY2026",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01Gxyf9rZnE8qJjry67gyr6h",
+      "url": "https://www.sec.gov/Archives/edgar/data/0001418819/000141881926000027/pressreleaseq12026.htm"
+     },
+     {
+      "content_sha256": "f2846e9c25f8f02fe70a5ae453fca578cd1df7ef06530e75e600c8c9b8b5ba9e",
+      "status": "success",
+      "title": "Iridium Announces Release Date for Second-Quarter 2026 Financial Results - Jul 9, 2026",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01Gxyf9rZnE8qJjry67gyr6h",
+      "url": "https://investor.iridium.com/2026-07-09-Iridium-Announces-Release-Date-for-Second-Quarter-2026-Financial-Results"
+     },
+     {
+      "content_sha256": "d3f3d055a863d0027a6b1ead05697b685b99903122a99fbd2f1678e61ea82d43",
+      "status": "success",
+      "title": "Iridium Announces 2025 Results; Issues 2026 Outlook - Feb 12, 2026",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01Gxyf9rZnE8qJjry67gyr6h",
+      "url": "https://investor.iridium.com/2026-02-12-Iridium-Announces-2025-Results-Issues-2026-Outlook"
+     },
+     {
+      "content_sha256": "1325821b15043d08733ef462aab866057423a5c5244c4bd3e4b47554504a82b8",
+      "status": "success",
+      "title": "Document",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01Gxyf9rZnE8qJjry67gyr6h",
+      "url": "https://www.sec.gov/Archives/edgar/data/1418819/000141881926000027/pressreleaseq12026.htm"
+     },
+     {
+      "content_sha256": "857e1461eb68f8b2a7f74feeabd55f1bf3c50a004a90205fc7ab7644754074e1",
+      "status": "success",
+      "title": "Iridium Communications Inc. Reports 2025 Financial Results and 2026 Outlook — TradingView News",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01Gxyf9rZnE8qJjry67gyr6h",
+      "url": "https://www.tradingview.com/news/tradingview:8a6347281f8c1:0-iridium-communications-inc-reports-2025-financial-results-and-2026-outlook/"
+     },
+     {
+      "content_sha256": "8a96dbd26ad990742547c03efc99a93e81995a4e5577e02e204ed9326a09e238",
+      "status": "success",
+      "title": "Iridium Communications (IRDM) Earnings Date and Reports 2026 $IRDM",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01Gxyf9rZnE8qJjry67gyr6h",
+      "url": "https://www.marketbeat.com/stocks/NASDAQ/IRDM/earnings/"
+     },
+     {
+      "content_sha256": "1e63747540bc2999c128266e01461b2b529350b2ceb6567f8f78c902770be064",
+      "status": "success",
+      "title": "Iridium Satellite Communications - SEC Filings",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01Gxyf9rZnE8qJjry67gyr6h",
+      "url": "https://investor.iridium.com/sec-filings"
+     },
+     {
+      "content_sha256": "e33c506bc8212ed8331bfb91e256eabe98f31abe54b6e1df258f7a25892df68c",
+      "status": "success",
+      "title": "Iridium Communications (NasdaqGS:IRDM) Stock Forecast & Analyst Predictions - Simply Wall St",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01Gxyf9rZnE8qJjry67gyr6h",
+      "url": "https://simplywall.st/stocks/us/telecom/nasdaq-irdm/iridium-communications/future"
+     },
+     {
+      "content_sha256": "4f4f7c0805ef013d33b602e02be24cff6b9f465cbfe1e6cbfe5f77c22dbf4fdc",
+      "status": "success",
+      "title": "Iridium Announces 2025 Results; Issues 2026 Outlook",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01Gxyf9rZnE8qJjry67gyr6h",
+      "url": "https://www.prnewswire.com/news-releases/iridium-announces-2025-results-issues-2026-outlook-302685852.html"
+     },
+     {
+      "content_sha256": "81735e306f37c53f16c3130fc01ecfc425453b4dae6e1ca41e71749550e73a9b",
+      "status": "success",
+      "title": "Document",
+      "tool_name": "web_fetch",
+      "tool_use_id": "srvtoolu_0169Q18GtQvzxGdipCGbHRX8",
+      "url": "https://www.sec.gov/Archives/edgar/data/0001418819/000141881926000046/pressreleaseq22026.htm"
+     }
+    ],
+    "tool_evidence_version": "v1",
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": 23686,
+     "cached_input_tokens": 37817,
+     "code_execution_requests": 0,
+     "input_tokens": 61838,
+     "output_tokens": 21721,
+     "reasoning_tokens": 19918,
+     "total_tokens": 83559,
+     "web_fetch_requests": 1,
+     "web_search_requests": 1
+    }
+   }
+  },
+  {
+   "job_id": "aij_9e4a209c856b40c1b0dd78666e06623f",
+   "job_type": "earnings_impact",
+   "model": "claude-haiku-5-5",
+   "payload": {
+    "analysis_phase": "pre_release",
+    "analysis_stage": "pre_release",
+    "earnings_date": "2026-10-15",
+    "eps_actual": null,
+    "eps_estimate": null,
+    "input_hash": "9d88704a09142b792d391df962c2a557f81bedd4c321b7ff88954fe90a982b12",
+    "market_cap": null,
+    "name": "IGSC",
+    "quarter": 4,
+    "release_status": "scheduled",
+    "report_id": "earnings:IGSC:2026-10-15:2025:q4",
+    "revenue_actual": null,
+    "revenue_estimate": null,
+    "sector": "",
+    "ticker": "IGSC",
+    "year": 2025
+   },
+   "production_error": "schema_validation_failed: 1 validation error for EarningsImpactResult",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "ISG - Information Services Group Announces Fourth-Quarter and Full-Year 2025 Results",
+      "type": "web_search",
+      "url": "https://ir.isg-one.com/news-market-information/press-releases/news-details/2026/Information-Services-Group-Announces-Fourth-Quarter-and-Full-Year-2025-Results/default.aspx"
+     },
+     {
+      "title": "Information Services Group Announces Fourth-Quarter and Full-Year 2025 Results",
+      "type": "web_search",
+      "url": "https://www.businesswire.com/news/home/20260305652175/en/Information-Services-Group-Announces-Fourth-Quarter-and-Full-Year-2025-Results"
+     },
+     {
+      "title": "EnerSys - Form 8-K - FY2025",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/1289308/000128930825000018/ex991_earningsx4qfy25.htm"
+     },
+     {
+      "title": "ATS Corp /ATS - Form 40-F - FY2025",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/1394832/000162828025028246/ats-mdaxfy25q4.htm"
+     },
+     {
+      "title": "ATS Corp /ATS - Form 40-F/A - FY2025",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/1394832/000162828025028283/ats-mdaxfy25q4.htm"
+     },
+     {
+      "title": "IGI Q4 2025 slides: 18.6% ROE achieved amid revenue headwinds By Investing.com",
+      "type": "web_search",
+      "url": "https://www.investing.com/news/company-news/igi-q4-2025-slides-186-roe-achieved-amid-revenue-headwinds-93CH-4524930"
+     },
+     {
+      "title": "Document",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/917520/000091752026000008/ex991q42025earnings.htm"
+     },
+     {
+      "title": "MERCURY SYSTEMS INC - Form 8-K - FY2025",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/1049521/000104952125000022/a2025q4earningsreleaseex.htm"
+     },
+     {
+      "title": "CSW INDUSTRIALS, INC. - Form 8-K - FY2025",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/1624794/000162479425000058/er_q42025.htm"
+     },
+     {
+      "title": "SERVICE CORP INTERNATIONAL - Form 8-K - FY2025",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/89089/000008908925000005/exhibit991sciq424earningsr.htm"
+     }
+    ],
+    "id": "msg_011Cft2TQ7UABAdhKtxAZUvG",
+    "model": "claude-haiku-5-5",
+    "output_text": "{\"output_language\":\"zh-CN\",\"ticker\":\"IGSC\",\"summary\":\"IGSC的2025年第四季度财报目前处于发布前阶段，排定发布日期为2026年10月15日，尚未公布实际业绩。输入资料中每股收益（EPS）与营收的实际值和预期值均为空，行业与市值字段也为空，无法据此判断市场预期水平。另外，2025年第四季度财报排定在2026年10月发布，与一般披露时间不符，可能是日期或财期录入有误，需以公司公告或交易所页面核实。本次外部搜索未能找到与IGSC对应的公司资料，因此无法确认其业务构成及上下游、竞争或同业关系，impacted留空，未列入任何公司，以避免编造。\",\"expectation\":\"尚未发布，无法逐项比较实际业绩与预期。EPS与营收的实际值、预期值目前均缺失，因此无法判断超预期、不及预期或持平。待公司正式公布后，应分别对照每股收益与营收的实际值与预期值，并结合公司公告中的指引与费用变化观察差异。在此之前，相关判断仅属信息性观察，不构成投资建议。\",\"impacted\":[]}",
+    "provider": "anthropic",
+    "stop_reason": "end_turn",
+    "terminal_error": null,
+    "tool_evidence": [
+     {
+      "content_sha256": "bf1b5badff4d08b57bed7f07f375ad573492408b9227dd9088fde4e146a1cf9a",
+      "status": "success",
+      "title": "ISG - Information Services Group Announces Fourth-Quarter and Full-Year 2025 Results",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_019HtaFBBF2woTwq7noCFoMo",
+      "url": "https://ir.isg-one.com/news-market-information/press-releases/news-details/2026/Information-Services-Group-Announces-Fourth-Quarter-and-Full-Year-2025-Results/default.aspx"
+     },
+     {
+      "content_sha256": "eda31a71b5f6c4ebc6274c09bb9ab7b2ffd936d606e8571681bf4e3b2c1f072f",
+      "status": "success",
+      "title": "Information Services Group Announces Fourth-Quarter and Full-Year 2025 Results",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_019HtaFBBF2woTwq7noCFoMo",
+      "url": "https://www.businesswire.com/news/home/20260305652175/en/Information-Services-Group-Announces-Fourth-Quarter-and-Full-Year-2025-Results"
+     },
+     {
+      "content_sha256": "4eda1e8ed2d37d409016bc1cd6513cc91194cf05ea4593a87160dfb5563f54e8",
+      "status": "success",
+      "title": "EnerSys - Form 8-K - FY2025",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_019HtaFBBF2woTwq7noCFoMo",
+      "url": "https://www.sec.gov/Archives/edgar/data/1289308/000128930825000018/ex991_earningsx4qfy25.htm"
+     },
+     {
+      "content_sha256": "084193119db9bc7a96a28ab076712854534af43b944a97c2fe584088f5919c08",
+      "status": "success",
+      "title": "ATS Corp /ATS - Form 40-F - FY2025",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_019HtaFBBF2woTwq7noCFoMo",
+      "url": "https://www.sec.gov/Archives/edgar/data/1394832/000162828025028246/ats-mdaxfy25q4.htm"
+     },
+     {
+      "content_sha256": "261cef930a7537f407563e1c4568c9abaf9682e7f394df131a49412f9e47599e",
+      "status": "success",
+      "title": "ATS Corp /ATS - Form 40-F/A - FY2025",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_019HtaFBBF2woTwq7noCFoMo",
+      "url": "https://www.sec.gov/Archives/edgar/data/1394832/000162828025028283/ats-mdaxfy25q4.htm"
+     },
+     {
+      "content_sha256": "a68fc1e1a18e28b938f06bf5ff5d68fd437d66419cb02ccd58e814821404c63d",
+      "status": "success",
+      "title": "IGI Q4 2025 slides: 18.6% ROE achieved amid revenue headwinds By Investing.com",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_019HtaFBBF2woTwq7noCFoMo",
+      "url": "https://www.investing.com/news/company-news/igi-q4-2025-slides-186-roe-achieved-amid-revenue-headwinds-93CH-4524930"
+     },
+     {
+      "content_sha256": "27331771cb431c047a49371cc8c281460b6e38359de73d97949b55c23557626e",
+      "status": "success",
+      "title": "Document",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_019HtaFBBF2woTwq7noCFoMo",
+      "url": "https://www.sec.gov/Archives/edgar/data/917520/000091752026000008/ex991q42025earnings.htm"
+     },
+     {
+      "content_sha256": "fbe43e641dbbd6aa4c942837815750c0f012c1db918df522a96b7dc603e419d8",
+      "status": "success",
+      "title": "MERCURY SYSTEMS INC - Form 8-K - FY2025",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_019HtaFBBF2woTwq7noCFoMo",
+      "url": "https://www.sec.gov/Archives/edgar/data/1049521/000104952125000022/a2025q4earningsreleaseex.htm"
+     },
+     {
+      "content_sha256": "46a173748650be06bb3ebf0b66ce88bda05167fa5e853bb166f64f37a15f5ca2",
+      "status": "success",
+      "title": "CSW INDUSTRIALS, INC. - Form 8-K - FY2025",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_019HtaFBBF2woTwq7noCFoMo",
+      "url": "https://www.sec.gov/Archives/edgar/data/1624794/000162479425000058/er_q42025.htm"
+     },
+     {
+      "content_sha256": "fa9522c1990b4ba6514e1ce2265c227f69d241a62d42aa695c533f4fbb2ab6ac",
+      "status": "success",
+      "title": "SERVICE CORP INTERNATIONAL - Form 8-K - FY2025",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_019HtaFBBF2woTwq7noCFoMo",
+      "url": "https://www.sec.gov/Archives/edgar/data/89089/000008908925000005/exhibit991sciq424earningsr.htm"
+     }
+    ],
+    "tool_evidence_version": "v1",
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": 9469,
+     "cached_input_tokens": 17018,
+     "code_execution_requests": 0,
+     "input_tokens": 26796,
+     "output_tokens": 5548,
+     "reasoning_tokens": 5070,
+     "total_tokens": 32344,
+     "web_fetch_requests": 0,
+     "web_search_requests": 1
+    }
+   }
+  },
+  {
+   "job_id": "aij_39961a74d27f4389a113138df5895e95",
+   "job_type": "earnings_impact",
+   "model": "claude-haiku-5-5",
+   "payload": {
+    "analysis_phase": "pre_release",
+    "analysis_stage": "pre_release",
+    "earnings_date": "2026-10-15",
+    "eps_actual": null,
+    "eps_estimate": 0.5328,
+    "input_hash": "fcc1f851ef6d71a003ab50f6958d076ef0f68eb96f03ce0cefbdf9425603f6d7",
+    "market_cap": 4499050444.7300005,
+    "name": "FFIN",
+    "quarter": 3,
+    "release_status": "scheduled",
+    "report_id": "earnings:FFIN:2026-10-15:2026:q3",
+    "revenue_actual": null,
+    "revenue_estimate": 182275224.0,
+    "sector": "",
+    "ticker": "FFIN",
+    "year": 2026
+   },
+   "production_error": "schema_validation_failed: 1 validation error for EarningsImpactResult",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "First Bank Announces Third Quarter 2026 Earnings Conference Call",
+      "type": "web_search",
+      "url": "https://finance.yahoo.com/markets/stocks/articles/first-bank-announces-third-quarter-183000723.html"
+     },
+     {
+      "title": "First Financial Bancorp to Announce Third Quarter 2026 Financial Results on Tuesday, October 27, 2026",
+      "type": "web_search",
+      "url": "https://www.morningstar.com/news/pr-newswire/20261002cl62046/first-financial-bancorp-to-announce-third-quarter-2026-financial-results-on-tuesday-october-27-2026"
+     },
+     {
+      "title": "First Financial Bancorp to Announce Third Quarter 2026 Financial Results on Tuesday, October 27, 2026",
+      "type": "web_search",
+      "url": "https://www.gurufocus.com/news/9107623/first-financial-bancorp-to-announce-third-quarter-2026-financial-results-on-tuesday-october-27-2026"
+     },
+     {
+      "title": "First Financial Bancorp. (FFBC) Q3 2026 Earnings Date, Time & Estimates",
+      "type": "web_search",
+      "url": "https://www.marketbeat.com/earnings/reports/2026-10-27-first-financial-bancorp-stock/"
+     },
+     {
+      "title": "First Financial Bancorp to Announce Third Quarter 2026 Financial Results on Tuesday, October 27, 2026",
+      "type": "web_search",
+      "url": "https://news.futunn.com/en/post/1000532399/first-financial-bancorp-to-announce-third-quarter-2026-financial-results"
+     },
+     {
+      "title": "FinancialContent - First American Financial Announces Third Quarter 2026 Earnings Conference Call",
+      "type": "web_search",
+      "url": "https://markets.financialcontent.com/stocks/article/bizwire-2026-10-7-first-american-financial-announces-third-quarter-2026-earnings-conference-call"
+     },
+     {
+      "title": "First Bank sets Oct. 23 Q3 2026 earnings call",
+      "type": "web_search",
+      "url": "https://www.stocktitan.net/news/FRBA/first-bank-announces-third-quarter-2026-earnings-conference-12d90jkuwd34.html"
+     },
+     {
+      "title": "The results call is at 8:30 a.m. Oct. 28, after First Financial Bancorp expects to release results.",
+      "type": "web_search",
+      "url": "https://www.stocktitan.net/news/FFBC/first-financial-bancorp-to-announce-third-quarter-2026-financial-7q9wd27ot4zd.html"
+     },
+     {
+      "title": "Six straight quarters of record earnings at First Bancshares",
+      "type": "web_search",
+      "url": "https://www.stocktitan.net/news/FBSI/first-bancshares-inc-announces-operating-results-for-the-quarter-2bpnjoltxkz9.html"
+     },
+     {
+      "title": "First Financial Bancorp to Announce Third Quarter 2026 Financial Results on Tuesday, October 27, 2026 ...Middle East",
+      "type": "web_search",
+      "url": "https://eng.pressbee.net/amp/show4907373.html"
+     }
+    ],
+    "id": "msg_011Cft2BvE1GcYoaJphXZ2ha",
+    "model": "claude-haiku-5-5",
+    "output_text": "{\"output_language\":\"zh-CN\",\"ticker\":\"FFIN\",\"summary\":\"FFIN财报目前处于发布前阶段（release_status为scheduled），输入的计划发布日期为2026年10月15日。EPS与营收的实际值（actual）均为空，尚未公布实际业绩，本分析不把预期写成已公布结果。输入的市值约为45.0亿美元（4,499,050,444.73美元）。外部核对方面，本次检索未找到FFIN自身发布的日期公告，结果多为名称相近的其他银行，因此该日期仍是未经核实的输入信息。同业名单依据既有业务认知列出，未逐一核实2026年的最新经营与并购状态，判断存在不确定性。\",\"expectation\":\"尚未发布，EPS与营收的actual字段均为空，无法比较超预期或不及预期。输入预期为每股收益0.5328美元、营收约1.82亿美元（182,275,224美元）。观察重点包括净利息收入与净息差走势、存款成本、贷款增长及信用损失准备，并需对照GAAP口径确认预期是否可比。输入未提供分析师家数与预期分布，无法判断预期分歧程度。\",\"impacted\":[{\"ticker\":\"CFR\",\"name\":\"CFR\",\"relation\":\"competitor\",\"direction\":\"mixed\",\"reason\":\"CFR为德州大型银行控股公司，与FFIN在德州存款、企业贷款及财富管理业务上存在直接竞争。若FFIN业绩超预期，可能显示其区域份额或定价能力增强，对CFR形成相对压力；同时也可能反映德州银行需求稳健，对同业形成情绪支撑。两种方向并存，实际影响取决于双方存款成本与贷款增速。本次未核实CFR最新财报与业务结构，此判断仅为关联推断，不代表确定收益。\"},{\"ticker\":\"PB\",\"name\":\"PB\",\"relation\":\"competitor\",\"direction\":\"mixed\",\"reason\":\"PB总部位于休斯顿，业务覆盖德州多个城市，与FFIN在本地存款与中小企业贷款市场存在重叠。FFIN超预期可能意味着区域竞争加剧，对PB的份额形成压力；但若其反映德州经济活动稳健，也可能对PB的贷款需求和资产质量形成正面影响。方向取决于两家公司的定价策略与信用表现，本次未核实PB的最新业绩，结论具有不确定性。\"},{\"ticker\":\"TCBI\",\"name\":\"TCBI\",\"relation\":\"competitor\",\"direction\":\"mixed\",\"reason\":\"TCBI总部位于达拉斯，侧重商业及中大型企业银行业务，与FFIN在德州部分大都会区的企业客户上存在竞争关系。FFIN若表现强劲，可能加剧对优质企业客户的争夺，对TCBI的存款与贷款定价形成压力；但区域需求改善也可能带动同业整体业务增长。两者影响方向不一，且本次未核实TCBI的最新经营状况，仅作为关联性参考。\"},{\"ticker\":\"HTH\",\"name\":\"HTH\",\"relation\":\"competitor\",\"direction\":\"mixed\",\"reason\":\"HTH总部位于达拉斯，其银行业务在德州与FFIN存在区域重叠，二者竞争主要体现在本地存款与贷款市场。FFIN超预期可能反映其经营效率或市场份额提升，对HTH构成相对竞争压力；若该结果来自德州整体经济改善，也可能对同业形成正面情绪影响。本次未核实HTH最新财报及业务构成，判断仅基于既有业务关系，不构成收益预测。\"}]}",
+    "provider": "anthropic",
+    "stop_reason": "end_turn",
+    "terminal_error": null,
+    "tool_evidence": [
+     {
+      "content_sha256": "a33272aafc167cc36b41bd5997ade5fdcc073520c7bb85915c82114523090721",
+      "status": "success",
+      "title": "First Bank Announces Third Quarter 2026 Earnings Conference Call",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_017KLacbm6aGoh9nn9XWxTsd",
+      "url": "https://finance.yahoo.com/markets/stocks/articles/first-bank-announces-third-quarter-183000723.html"
+     },
+     {
+      "content_sha256": "c12084b2f0fe7431c775a04a6a3f4f56259c4246301957089908f3ef0da0773e",
+      "status": "success",
+      "title": "First Financial Bancorp to Announce Third Quarter 2026 Financial Results on Tuesday, October 27, 2026",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_017KLacbm6aGoh9nn9XWxTsd",
+      "url": "https://www.morningstar.com/news/pr-newswire/20261002cl62046/first-financial-bancorp-to-announce-third-quarter-2026-financial-results-on-tuesday-october-27-2026"
+     },
+     {
+      "content_sha256": "93d047bc1cf9d448f64b648ee8f075a9db600a00be62548b2544487183298430",
+      "status": "success",
+      "title": "First Financial Bancorp to Announce Third Quarter 2026 Financial Results on Tuesday, October 27, 2026",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_017KLacbm6aGoh9nn9XWxTsd",
+      "url": "https://www.gurufocus.com/news/9107623/first-financial-bancorp-to-announce-third-quarter-2026-financial-results-on-tuesday-october-27-2026"
+     },
+     {
+      "content_sha256": "2e6d92dbd31472bc38afee9cc3ebdf0e3bf541868425420c2b8c75c19110b098",
+      "status": "success",
+      "title": "First Financial Bancorp. (FFBC) Q3 2026 Earnings Date, Time & Estimates",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_017KLacbm6aGoh9nn9XWxTsd",
+      "url": "https://www.marketbeat.com/earnings/reports/2026-10-27-first-financial-bancorp-stock/"
+     },
+     {
+      "content_sha256": "46c7c051977052fa09e51a5ed97b8c6769e639aeede0717febe1013a7a267820",
+      "status": "success",
+      "title": "First Financial Bancorp to Announce Third Quarter 2026 Financial Results on Tuesday, October 27, 2026",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_017KLacbm6aGoh9nn9XWxTsd",
+      "url": "https://news.futunn.com/en/post/1000532399/first-financial-bancorp-to-announce-third-quarter-2026-financial-results"
+     },
+     {
+      "content_sha256": "0ccc3af667fe9c29356b62d9ad1dc9826add0e3d5784cf33adb8a3f8249c1b5c",
+      "status": "success",
+      "title": "FinancialContent - First American Financial Announces Third Quarter 2026 Earnings Conference Call",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_017KLacbm6aGoh9nn9XWxTsd",
+      "url": "https://markets.financialcontent.com/stocks/article/bizwire-2026-10-7-first-american-financial-announces-third-quarter-2026-earnings-conference-call"
+     },
+     {
+      "content_sha256": "1c802abc5f93acb91e5649ec8d64a5cb6f25fefaccee941f567431af58725969",
+      "status": "success",
+      "title": "First Bank sets Oct. 23 Q3 2026 earnings call",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_017KLacbm6aGoh9nn9XWxTsd",
+      "url": "https://www.stocktitan.net/news/FRBA/first-bank-announces-third-quarter-2026-earnings-conference-12d90jkuwd34.html"
+     },
+     {
+      "content_sha256": "6ec794b85dcbf1766a8653d059c15cfcde94df3423de214b3c291050b9bb2ab5",
+      "status": "success",
+      "title": "The results call is at 8:30 a.m. Oct. 28, after First Financial Bancorp expects to release results.",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_017KLacbm6aGoh9nn9XWxTsd",
+      "url": "https://www.stocktitan.net/news/FFBC/first-financial-bancorp-to-announce-third-quarter-2026-financial-7q9wd27ot4zd.html"
+     },
+     {
+      "content_sha256": "6071432203b45560ceb5fff43af4a669343389d8a8d4e3c4bf6df61bf5c489eb",
+      "status": "success",
+      "title": "Six straight quarters of record earnings at First Bancshares",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_017KLacbm6aGoh9nn9XWxTsd",
+      "url": "https://www.stocktitan.net/news/FBSI/first-bancshares-inc-announces-operating-results-for-the-quarter-2bpnjoltxkz9.html"
+     },
+     {
+      "content_sha256": "0e96dc293102ce7d0dbcf5529ef5bb1c6f8cae58bdbafd6ac8633690de5eaeaa",
+      "status": "success",
+      "title": "First Financial Bancorp to Announce Third Quarter 2026 Financial Results on Tuesday, October 27, 2026 ...Middle East",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_017KLacbm6aGoh9nn9XWxTsd",
+      "url": "https://eng.pressbee.net/amp/show4907373.html"
+     }
+    ],
+    "tool_evidence_version": "v1",
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": 12749,
+     "cached_input_tokens": 17018,
+     "code_execution_requests": 0,
+     "input_tokens": 30098,
+     "output_tokens": 9330,
+     "reasoning_tokens": 8016,
+     "total_tokens": 39428,
+     "web_fetch_requests": 0,
+     "web_search_requests": 1
+    }
+   }
+  },
+  {
+   "job_id": "aij_96ae91ce2d1641f5ad16723048616ce5",
+   "job_type": "earnings_impact",
+   "model": "claude-haiku-5-5",
+   "payload": {
+    "analysis_phase": "pre_release",
+    "analysis_stage": "pre_release",
+    "earnings_date": "2026-10-15",
+    "eps_actual": null,
+    "eps_estimate": -7.5412,
+    "input_hash": "82143e301d2e51cdcfa19e657f86a8f5473e27f8ecca04eb56832c07fba3700a",
+    "market_cap": 255547640.82000002,
+    "name": "BCBP",
+    "quarter": 3,
+    "release_status": "scheduled",
+    "report_id": "earnings:BCBP:2026-10-15:2026:q3",
+    "revenue_actual": null,
+    "revenue_estimate": 73440.0,
+    "sector": "",
+    "ticker": "BCBP",
+    "year": 2026
+   },
+   "production_error": "schema_validation_failed: 1 validation error for EarningsImpactResult",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "BayCom Corp - Form 8-K - FY2026",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/1730984/000173098426000006/bcml-20260122xex99d1.htm"
+     },
+     {
+      "title": "BayCom Corp - Form 8-K - FY2026",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/0001730984/000173098426000032/bcml-20260423xex99d1.htm"
+     },
+     {
+      "title": "BayCom Corp - Form 8-K - FY2026",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/0001730984/000173098426000066/bcml-20260723xex99d1.htm"
+     },
+     {
+      "title": "BayCom Corp - Form 10-Q - FY2026",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/0001730984/000173098426000048/bcml-20260331x10q.htm"
+     },
+     {
+      "title": "BayCom Corp - Form 10-Q - FY2026",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/0001730984/000173098426000072/bcml-20260630x10q.htm"
+     },
+     {
+      "title": "BayCom (BCML) Earnings Dates & Reports - Investing.com",
+      "type": "web_search",
+      "url": "https://www.investing.com/equities/baycom-corp-earnings"
+     },
+     {
+      "title": "BAYCOM CORP_July 23, 2026",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/1730984/000173098426000066/bcml-20260723x8k.htm"
+     },
+     {
+      "title": "BAYCOM CORP_April 23, 2026",
+      "type": "web_search",
+      "url": "https://www.sec.gov/Archives/edgar/data/1730984/000173098426000032/bcml-20260423x8k.htm"
+     },
+     {
+      "title": "BCML Q3'26 Earnings: revenue estimate is 26.08M USD — TradingView News",
+      "type": "web_search",
+      "url": "https://www.tradingview.com/news/tradingview:e08130c841b70:0-bcml-q3-26-earnings-revenue-estimate-is-26-08m-usd/"
+     }
+    ],
+    "id": "msg_011Cft1xAgWuGqf98CydsEZt",
+    "model": "claude-haiku-5-5",
+    "output_text": "{\"expectation\":\"发布前阶段，实际EPS和营收字段均为空，无法逐项比较超预期、不及预期或持平。输入EPS预期为-7.5412，营收预期为73440.0，输入未注明营收单位（若按千美元计，约为7344万美元）。EPS预期的量级异常：若无重大一次性损失，它与约2.56亿美元的市值规模明显不匹配，可能是数据错误，需以公司正式公告核对。观察重点包括净利息收入、信贷拨备变化、是否存在一次性费用，以及营收实际值与预期的差距。\",\"impacted\":[{\"ticker\":\"PFS\",\"name\":\"普罗维登斯金融服务\",\"relation\":\"competitor\",\"direction\":\"mixed\",\"reason\":\"同为美国区域性银行控股公司，存款与贷款业务可能存在竞争关系。若BCBP业绩超预期，可能反映其定价或资产质量的变化，对同业估值情绪或有参考意义，但也可能意味着竞争加剧，方向不确定，不代表确定收益。\"},{\"ticker\":\"OCFC\",\"name\":\"海洋第一金融\",\"relation\":\"competitor\",\"direction\":\"mixed\",\"reason\":\"同属以存贷业务为核心的区域性银行，若BCBP在相近市场拓展贷款或吸收存款，可能对其定价与客户获取形成压力；板块估值联动也可能带来正面情绪。两种传导方向并存，结论不确定。\"},{\"ticker\":\"CLBK\",\"name\":\"哥伦比亚金融\",\"relation\":\"competitor\",\"direction\":\"mixed\",\"reason\":\"同为美国区域性银行，业务可能与BCBP在存款和贷款市场存在交叉。BCBP的超预期表现可能影响同业资金竞争与估值参照，但具体传导强度取决于双方市场重叠程度，本次未能核实，不代表确定收益。\"},{\"ticker\":\"KRNY\",\"name\":\"KRNY\",\"relation\":\"competitor\",\"direction\":\"mixed\",\"reason\":\"同为以存款与贷款为主的美国银行控股公司，与BCBP可能存在部分市场重叠。BCBP业绩可能通过同业估值和资金竞争产生间接影响，方向不确定，需以各公司公告为准。\"}],\"output_language\":\"zh-CN\",\"summary\":\"BCBP计划于2026年10月15日公布2026年第三季度业绩，截至2026年10月10日仍属发布前阶段，尚无已公布的实际EPS或营收。输入资料未提供公司全称与所属行业，本次检索未能核实BCBP的公司身份；检索结果中的银行资料均指向代码为BCML的另一家公司，已排除在本分析之外。同业关联依据的是一般行业竞争常识，本次未经工具核实，因此本分析仅基于输入预期数据，不构成对BCBP经营状况的确认。\",\"ticker\":\"BCBP\"}",
+    "provider": "anthropic",
+    "stop_reason": "end_turn",
+    "terminal_error": null,
+    "tool_evidence": [
+     {
+      "content_sha256": "62bc01ff6c49e9d13cf68e737975097c682cb040fc65895df4a6b2fdc89d53d5",
+      "status": "success",
+      "title": "BayCom Corp - Form 8-K - FY2026",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01PHhz8dByCoBpanT59NSGwr",
+      "url": "https://www.sec.gov/Archives/edgar/data/1730984/000173098426000006/bcml-20260122xex99d1.htm"
+     },
+     {
+      "content_sha256": "1ab83547a7dd3333f489593c2567e88cf6cdee3f6edb56053499c5737c658d5c",
+      "status": "success",
+      "title": "BayCom Corp - Form 8-K - FY2026",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01PHhz8dByCoBpanT59NSGwr",
+      "url": "https://www.sec.gov/Archives/edgar/data/0001730984/000173098426000032/bcml-20260423xex99d1.htm"
+     },
+     {
+      "content_sha256": "ca7edff91078d816aa6a890e975c679da4ec10679a7a6b8bbb2358caeb22d19d",
+      "status": "success",
+      "title": "BayCom Corp - Form 8-K - FY2026",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01PHhz8dByCoBpanT59NSGwr",
+      "url": "https://www.sec.gov/Archives/edgar/data/0001730984/000173098426000066/bcml-20260723xex99d1.htm"
+     },
+     {
+      "content_sha256": "66bbc963b503f3272ae97a2611dcc2468b4af6d38e009b0dbcc942ae4b4f3fb9",
+      "status": "success",
+      "title": "BayCom Corp - Form 10-Q - FY2026",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01PHhz8dByCoBpanT59NSGwr",
+      "url": "https://www.sec.gov/Archives/edgar/data/0001730984/000173098426000048/bcml-20260331x10q.htm"
+     },
+     {
+      "content_sha256": "2e3451d3b9fb7230bad96b798b6b397a1b21b978490f5e71e6095cef68baeb0b",
+      "status": "success",
+      "title": "BayCom Corp - Form 10-Q - FY2026",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01PHhz8dByCoBpanT59NSGwr",
+      "url": "https://www.sec.gov/Archives/edgar/data/0001730984/000173098426000072/bcml-20260630x10q.htm"
+     },
+     {
+      "content_sha256": "40b2ba3885a65b8f2bce61d4acf607b2934823825a1014e46559d2c649f042e5",
+      "status": "success",
+      "title": "BayCom (BCML) Earnings Dates & Reports - Investing.com",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01PHhz8dByCoBpanT59NSGwr",
+      "url": "https://www.investing.com/equities/baycom-corp-earnings"
+     },
+     {
+      "content_sha256": "9f3a5c6cab86ada0aab65f68e1bfb07e6bd0d5404232e2efb0d72145dd709116",
+      "status": "success",
+      "title": "BAYCOM CORP_July 23, 2026",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01PHhz8dByCoBpanT59NSGwr",
+      "url": "https://www.sec.gov/Archives/edgar/data/1730984/000173098426000066/bcml-20260723x8k.htm"
+     },
+     {
+      "content_sha256": "13817a01c854388b5db2c31f6f8a82723fd94792ef5aecd501efb17afd812248",
+      "status": "success",
+      "title": "BAYCOM CORP_April 23, 2026",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01PHhz8dByCoBpanT59NSGwr",
+      "url": "https://www.sec.gov/Archives/edgar/data/1730984/000173098426000032/bcml-20260423x8k.htm"
+     },
+     {
+      "content_sha256": "f6a72ba7ad1b2de9e224a8ec039d20a0402c01069ec0f686d9d38e4d7ee20a67",
+      "status": "success",
+      "title": "BCML Q3'26 Earnings: revenue estimate is 26.08M USD — TradingView News",
+      "tool_name": "web_search",
+      "tool_use_id": "srvtoolu_01PHhz8dByCoBpanT59NSGwr",
+      "url": "https://www.tradingview.com/news/tradingview:e08130c841b70:0-bcml-q3-26-earnings-revenue-estimate-is-26-08m-usd/"
+     }
+    ],
+    "tool_evidence_version": "v1",
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": 8337,
+     "cached_input_tokens": 25527,
+     "code_execution_requests": 0,
+     "input_tokens": 43906,
+     "output_tokens": 10975,
+     "reasoning_tokens": 9850,
+     "total_tokens": 54881,
+     "web_fetch_requests": 1,
+     "web_search_requests": 1
+    }
+   }
+  }
+ ],
+ "identity_mismatch": [
+  {
+   "job_id": "aij_77ee5c6cc3c6446c8dd52eac148e7c68",
+   "job_type": "news_impact",
+   "model": "gpt-5.6-luna",
+   "payload": {
+    "allowed_tickers": [],
+    "analysis_revision": 1,
+    "article_reason": "no_matching_article_body",
+    "article_status": "unavailable",
+    "change_sequence": 206340,
+    "content_hash": "924a56821fe334f72cd1fba75a8ba758537b28b1b60763ac2edbcd8d760992b9",
+    "fetched_at": "2026-10-10T01:11:49.350918Z",
+    "news_id": 195127,
+    "published_at": "2026-10-09T21:00:04Z",
+    "source": "massive/Zacks Investment Research",
+    "source_count": 1,
+    "source_ticker_hints": [
+     "BBAI",
+     "BBAI.WS"
+    ],
+    "sources": [
+     "massive/Zacks Investment Research"
+    ],
+    "summary": "BigBear.ai Holdings (BBAI) declined 1.24% to $2.39, underperforming the broader market which gained 0.6-0.83%. The stock has fallen 14.18% over the past month, lagging the Computer and Technology sector's 4.03% gain. Analysts expect the company to report earnings of -$0.05 per share with 15% revenue growth to $38.11 million. BBAI currently holds a Zacks Rank #3 (Hold) rating with no recent changes to EPS estimates.",
+    "title": "BigBear.ai Holdings, Inc. (BBAI) Stock Slides as Market Rises: Facts to Know Before You Trade",
+    "url": "https://www.zacks.com/stock/news/3004143/bigbear-ai-holdings-inc-bbai-stock-slides-as-market-rises-facts-to-know-before-you-trade?cid=CS-ZC-FT-fundamental_analysis%7Cyseop_template_6v2-3004143"
+   },
+   "production_error": "news_identity_mismatch: news_identity_mismatch",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "联网核验来源",
+      "type": "web_fetch",
+      "url": "https://www.zacks.com/stock/news/3004143/bigbear-ai-holdings-inc-bbai-stock-slides-as-market-rises-facts-to-know-before-you-trade?cid=CS-ZC-FT-fundamental_analysis%7Cyseop_template_6v2-3004143"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://advisortools.zacks.com/proxy/ResearchReport/BBWI/report?d=20251214"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/2952016/bigbearai-holdings-inc-bbai-stock-slides-as-market-rises-facts-to-know-before-you-trade"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/2822972/bigbearai-holdings-inc-bbai-stock-slides-as-market-rises-facts-to-know-before-you-trade"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/2955919/why-bigbearai-holdings-inc-bbai-dipped-more-than-broader-market-today"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/2955259/bigbearai-holdings-inc-bbai-falls-more-steeply-than-broader-market-what-investors-need-to-know"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/2619082/bigbearai-holdings-inc-bbai-stock-drops-despite-market-gains-important-facts-to-note"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/2901931/bigbear.ai-holdings%2C-inc.-%28bbai%29-stock-dips-while-market-gains%3A-key-facts"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/2886195/is-bigbearai-the-next-palantir-what-you-should-know-before-investing"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/2941108/heres-why-bigbearai-holdings-inc-bbai-fell-more-than-broader-market"
+     }
+    ],
+    "id": "resp_0a9d0e50cf638552006ac9d3d8f31087d18954920945da59b5",
+    "model": "gpt-5.6-luna",
+    "openai_web_calls": [
+     {
+      "action": "search",
+      "id": "ws_0a9d0e50cf638552006ac9d3dca9c487d1bdd52bf3825f485a",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://advisortools.zacks.com/proxy/ResearchReport/BBWI/report?d=20251214"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2952016/bigbearai-holdings-inc-bbai-stock-slides-as-market-rises-facts-to-know-before-you-trade"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2822972/bigbearai-holdings-inc-bbai-stock-slides-as-market-rises-facts-to-know-before-you-trade"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2955919/why-bigbearai-holdings-inc-bbai-dipped-more-than-broader-market-today"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2955259/bigbearai-holdings-inc-bbai-falls-more-steeply-than-broader-market-what-investors-need-to-know"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2619082/bigbearai-holdings-inc-bbai-stock-drops-despite-market-gains-important-facts-to-note"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2901931/bigbear.ai-holdings%2C-inc.-%28bbai%29-stock-dips-while-market-gains%3A-key-facts"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2886195/is-bigbearai-the-next-palantir-what-you-should-know-before-investing"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2941108/heres-why-bigbearai-holdings-inc-bbai-fell-more-than-broader-market"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://wn.com/BBAI"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.newsnow.com/us/?lang=en&search=%22BBAI%22&searchheadlines=1"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2952906/bigbearai-stock-falls-24-in-a-month-buy-the-dip-or-stay-away?cid=CS-STOCKNEWSAPI-FT-analyst_blog%7Crank_focused-2952906"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2880298/should-you-buy-sell-or-hold-bigbearai-stock-after-q4-results"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://advisortools.zacks.com/proxy/ResearchReport/BBAI/snapshot?d=20260102"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://advisortools.zacks.com/proxy/ResearchReport/AI/snapshot?d=20251219"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://advisortools.zacks.com/proxy/ResearchReport/PPIH/report?d=20251212"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://advisortools-dev.zacks.com/ZAT/Proxy/MarketStrategy/DailyMarketAndEconomicNews?d=20260214"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://advisortools.zacks.com/proxy/ResearchReport/BCAL/snapshot?d=20251122"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "open_page",
+      "id": "ws_0a9d0e50cf638552006ac9d3deff0c87d195f0277dc9da71d2",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://www.zacks.com/stock/news/3004143/bigbear-ai-holdings-inc-bbai-stock-slides-as-market-rises-facts-to-know-before-you-trade?cid=CS-ZC-FT-fundamental_analysis%7Cyseop_template_6v2-3004143"
+       }
+      ],
+      "status": "completed"
+     }
+    ],
+    "output_text": "{\"overall_sentiment\":-12,\"affected_commodities\":[],\"affected_sectors\":[],\"confidence\":22,\"headline_summary\":\"输入标题称，大熊人工智能控股公司股价在大盘上涨时走弱；现有材料更像单股表现与业绩预期的例行整理，未确认新的公司事件。\",\"causal_summary\":\"输入材料显示相对市场弱势以及分析师对下一季度业绩的预期，但不能据此确认新的基本面冲击。若摘要信息准确，持续亏损预期和股价近期落后可能压制市场情绪，但这只是可能的传导关系，并非原始正文已证实的因果关系。\",\"insufficient_context\":true,\"classification\":\"neutral\",\"affected_stocks\":[],\"market_relevance\":12,\"uncertainty_notes\":[\"新闻正文缺失，以下事实主要来自输入摘要，不能视为已经核验的全文内容。\",\"联网检索未能取得本次文章正文；直接访问原始页面时返回访问中断提示，因此无法核对文章的完整事实。([zacks.com](https://www.zacks.com/stock/news/3004143/bigbear-ai-holdings-inc-bbai-stock-slides-as-market-rises-facts-to-know-before-you-trade?cid=CS-ZC-FT-fundamental_analysis%7Cyseop_template_6v2-3004143))\",\"现有材料未提供公司公告、监管文件或新的财务结果，无法确认股价走弱的具体驱动因素。\",\"输入未提供可用的股票代码，且原始正文未能核验，因此未列出受影响股票或行业。\"],\"content_hash\":\"924a56821fe334f72cd1f75a8ba758537b28b1b60763ac2edbcd8d760992b9\",\"key_factors\":[\"输入摘要称，股价下跌1.24%至2.39美元，而相关大盘指数上涨约0.6%至0.83%。\",\"输入摘要称，股价过去一个月下跌14.18%，同期计算机与科技行业上涨4.03%。\",\"输入摘要称，分析师预计公司每股亏损0.05美元，收入同比增长15%至3811万美元。\",\"输入摘要称，公司当前的扎克斯评级为3级（持有），近期每股收益预期没有变化。\",\"这些信息主要描述市场表现和预期，未确认新的经营、监管或财务事件。\"],\"news_id\":195127,\"summary_zh\":\"大熊人工智能控股公司股价下跌1.24%至2.39美元，表现落后于上涨约0.6%至0.83%的大盘。股价过去一个月下跌14.18%，而计算机与科技行业上涨4.03%。输入摘要还称，分析师预计公司每股亏损0.05美元，收入同比增长15%至3811万美元；公司当前的扎克斯评级为3级（持有），近期每股收益预期没有变化。\",\"change_sequence\":206340,\"output_language\":\"zh-CN\",\"title_zh\":\"大熊人工智能控股公司股价下跌而市场上涨：交易前需要了解的事实\"}",
+    "provider": "openai",
+    "stop_reason": "completed",
+    "terminal_error": null,
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": null,
+     "cached_input_tokens": 5792,
+     "code_execution_requests": 0,
+     "input_tokens": 15062,
+     "output_tokens": 4745,
+     "reasoning_tokens": 4083,
+     "total_tokens": 19807,
+     "web_fetch_requests": 1,
+     "web_search_requests": 1
+    }
+   }
+  },
+  {
+   "job_id": "aij_3d7d6a2ff85a47628089da1f806ad6d6",
+   "job_type": "news_impact",
+   "model": "gpt-5.6-luna",
+   "payload": {
+    "allowed_tickers": [],
+    "analysis_revision": 1,
+    "article": {
+     "fetched_at": "2026-10-10T00:07:06.998750+00:00",
+     "reason": null,
+     "source_url": "https://www.globenewswire.com/news-release/2026/10/07/3376740/0/en/landmarks-illinois-acquires-illinois-main-street.html",
+     "status": "available",
+     "text": "Chicago, Oct. 07, 2026 (GLOBE NEWSWIRE) -- Landmarks Illinois is pleased to announce it has acquired Illinois Main Street (IMS), a robust community development network focused on commercial corridors, downtown districts and small business economic development, from its partners at Main Street America. The mutually agreed-upon acquisition brings together two statewide organizations with decades of experience helping Illinois communities preserve historic places, strengthen local economies and build thriving downtowns.\n\nThrough its acquisition, Landmarks Illinois will administer existing IMS operations and programming to continue serving its broad network of members and community organizations.\n\n“Historic downtowns are often the heart of a community, and the Main Street approach has demonstrated for decades that preservation and economic development go hand in hand,” said Frank Butterfield, Landmarks Illinois Interim President & CEO. “Landmarks Illinois’ acquisition of the Illinois Main Street Program will allow us to share expertise, networks and resources as we leverage historic assets for community and economic development. With this step, Landmarks Illinois will grow its partnership with local leaders, businesses and residents to ensure they have the tools to enhance historic commercial districts throughout Illinois.”\n\nLandmarks Illinois has 55 years of experience serving people across the state and has demonstrated the capacity and commitment needed to support IMS, its programs and network. IMS will benefit from Landmarks Illinois’ organizational stability and resources, while Landmarks Illinois will expand its ability to advance preservation-based economic development. Together, the organizations will be better positioned to connect historic preservation with the economic and community development priorities facing communities across Illinois.\n\nMain Street America, an organization dedicated to leading a nationwide network of organizations and individuals working to bring vitality and prosperity to historic downtowns and commercial corridors, began administering IMS in 2018. During this stewardship, IMS recovered from the loss of state funding three years earlier. The program has leveraged $2 million in public funding to reinstate its annual conference, expand membership opportunities and provide technical assistance, capacity-building support and pass-through grants to communities since 2021.\n\n\"Illinois Main Street is an impactful statewide organization in Main Street’s national movement, and Main Street America has been proud to steward it,\" said Erin Barnes, President and CEO at Main Street America. \"Landmarks Illinois, with its strong ties and local partners and understanding of the state’s economic development landscape, is uniquely suited to support the Illinois Main Street program in continuing and growing its success.”\n\nJoi Cuartero Austin, Senior Program Officer of Economic Vitality and Acting Illinois Director at Main Street America, will support IMS operations during this transition period, ensuring that IMS’ 39 communities continue to receive services and resources. Landmarks Illinois is also hiring a full-time Illinois Main Street program manager, and qualified applicants are encouraged to apply .\n\nWHY ILLINOIS MAIN STREET AND LANDMARKS ILLINOIS?\n\nStrong mission alignment: Both organizations are committed to building vibrant and resilient communities. Landmarks Illinois’ five-year Transformational Plan prioritizes community development, housing access, climate change and inclusive preservation—priorities that align closely with the Main Street Approach to strengthening historic downtowns and commercial districts.\n\nExpanded statewide reach: Both organizations have extensive networks of communities, local leaders and community partners. Forging these networks creates new opportunities to share resources, strengthen partnerships and connect communities with a broader range of preservation and development tools.\n\nGreater organizational stability and capacity: The acquisition gives IMS the organizational infrastructure and resources to sustain and grow the program statewide. IMS expands Landmarks Illinois's capacity to further engage in preservation-based economic development and strengthen its connection to communities working to revitalize historic places.\n\nGreater impact: Together, Landmarks Illinois and IMS will reach more communities, strengthen existing programs and create new opportunities to support historic downtowns and commercial districts across Illinois, resulting in greater capacity to help communities use historic places as catalysts for economic vitality, investment and long-term community development.\n\n2026 ILLINOIS MAIN STREET CONFERENCE Landmarks Illinois is excited to join Illinois Main Street community representatives and other statewide leaders at the 2026 Illinois Main Street Conference in Springfield, November 18-20. Frank Butterfield, Interim President & CEO of Landmarks Illinois, will deliver the opening keynote at 9 a.m. on Thursday, November 19.\n\nABOUT ILLINOIS MAIN STREET Illinois Main Street (IMS) works with communities across the state to foster local economic development and enhance overall quality of life. IMS does this by providing hands-on training, statewide workshops, networking opportunities, and access to resources of community organizations focused on revitalizing their older or historic commercial districts. Since 2018, generous support has been provided by the Illinois Lt. Governor’s Office, Illinois Department of Commerce & Economic Opportunity, the Richard H. Driehaus Foundation, and Main Street America. The network has collectively secured nearly $1.2 billion in public and private reinvestment, added over 11,000 jobs, created over 24,000 new businesses, and rehabilitated 1,220 buildings since 1993. Learn more at ilmainstreet.org .\n\nABOUT MAIN STREET AMERICA Main Street America leads a movement committed to strengthening communities through preservation-based economic development in older and historic downtowns and neighborhood commercial districts. Since 1980, the Main Street movement has resulted in $124.67 billion reinvested locally, 188,583 net new businesses, 852,443 net gain in jobs, 356,424 buildings rehabbed, and 41 million volunteer hours. For more information, visit mainstreet.org .\n\nABOUT LANDMARKS ILLINOIS Founded in 1971, Landmarks Illinois is a membership-based, statewide nonprofit organization supporting community-led historic preservation to foster healthy, livable and thriving communities. Through advocacy, funding, technical expertise and public engagement, we position the preservation of our built environment as an accessible, equitable and effective tool to support strategic, community-driven revitalization. For more information, visit www.Landmarks.org .\n\nMount Sterling, Illinois.",
+     "truncated": false
+    },
+    "article_status": "available",
+    "change_sequence": 205441,
+    "content_hash": "967e4bf782bd08131b9be9ff733a214e4e7fd8908f6ab41c8ca37f7a86defccb",
+    "fetched_at": "2026-10-07T17:51:27.964749Z",
+    "news_id": 192916,
+    "published_at": "2026-10-07T17:00:00Z",
+    "source": "finnhub/GlobalNewswire",
+    "source_count": 1,
+    "source_ticker_hints": [],
+    "sources": [
+     "finnhub/GlobalNewswire"
+    ],
+    "summary": "Acquisition will strengthen Landmarks Illinois’ commitment to fostering community-driven preservation and economic development across the state Acquisition will strengthen Landmarks Illinois’ commitment to fostering community-driven preservation and economic development across the state",
+    "title": "Landmarks Illinois acquires Illinois Main Street",
+    "url": "https://www.globenewswire.com/news-release/2026/10/07/3376740/0/en/landmarks-illinois-acquires-illinois-main-street.html"
+   },
+   "production_error": "news_identity_mismatch: news_identity_mismatch",
+   "receipt": {
+    "evidence_sources": [],
+    "id": "resp_02ad99481d50457d006ac9c119e00487d19c991ea97a497561",
+    "model": "gpt-5.6-luna",
+    "openai_web_calls": [],
+    "output_text": "{\"overall_sentiment\":15,\"affected_commodities\":[],\"affected_sectors\":[\"历史建筑保护\",\"地方商业与社区经济发展\",\"小企业扶持与商业街区更新\"],\"confidence\":96,\"headline_summary\":\"伊利诺伊州地标组织宣布从美国主街组织收购伊利诺伊主街项目，以延续并扩大面向历史商业街区、社区经济发展和小企业的服务。\",\"causal_summary\":\"已披露事实是，伊利诺伊州地标组织将接管伊利诺伊主街项目的既有运营、项目和网络，并在过渡期间继续为39个社区提供服务。可能的传导是，双方网络、技术援助和资源整合有望提升伊利诺伊历史商业街区的社区开发能力；但这是非营利组织层面的组织整合，未披露交易金额、收入或利润影响，也没有可归属的上市公司代码，因此对股票和大宗商品的直接影响很小。\",\"insufficient_context\":false,\"classification\":\"neutral\",\"affected_stocks\":[],\"market_relevance\":7,\"uncertainty_notes\":[\"公告未披露收购对价、资金安排、资产负债表或损益影响。\",\"公告未说明此次整合是否会改变政府拨款、项目规模或长期运营成本，社区经济效果仍需观察。\",\"输入允许的股票代码列表为空，新闻也未提供可归属的上市公司主体，因此无法映射个股影响。\",\"结论主要依据单一新闻稿，未有其他来源交叉验证。\"],\"content_hash\":\"9674e4bf782bd08131b9be9ff733a214e4e7fd8908f6ab41c8ca37f7a86defccb\",\"key_factors\":[\"交易主体为伊利诺伊州级非营利组织和社区发展网络，未提供上市公司代码。\",\"伊利诺伊州地标组织将管理伊利诺伊主街项目的既有运营和项目，并招聘全职项目经理。\",\"整合双方的全州网络、资源和专业能力，重点支持历史商业街区、地方经济发展和社区振兴。\",\"项目方称，自2021年以来曾利用200万美元公共资金恢复年度会议、扩大会员机会并提供技术援助和社区资助。\",\"项目方披露，伊利诺伊主街网络自1993年以来累计吸引近12亿美元公共和私人再投资、增加逾1.1万个就业岗位、创设逾2.4万家新企业并修复1220栋建筑；这些是网络累计数据，并不等同于此次收购带来的新增影响。\"],\"news_id\":192916,\"summary_zh\":\"新闻正文称，伊利诺伊州地标组织已从美国主街组织收购伊利诺伊主街项目，并将接管现有运营和项目。该项目将继续为全州社区提供培训、工作坊、网络交流、技术援助和资源支持，过渡期间覆盖39个社区。公告称，项目自2021年以来曾利用200万美元公共资金恢复年度会议、扩大会员机会并提供社区资助；公告未披露交易金额或对财务报表的影响。\",\"change_sequence\":205441,\"output_language\":\"zh-CN\",\"title_zh\":\"伊利诺伊州地标组织收购伊利诺伊主街项目\"}",
+    "provider": "openai",
+    "stop_reason": "completed",
+    "terminal_error": null,
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": null,
+     "cached_input_tokens": 1317,
+     "code_execution_requests": 0,
+     "input_tokens": 2888,
+     "output_tokens": 3217,
+     "reasoning_tokens": 2465,
+     "total_tokens": 6105,
+     "web_fetch_requests": 0,
+     "web_search_requests": 0
+    }
+   }
+  },
+  {
+   "job_id": "aij_153c12c4f5754c2cb86c6f5ff72d2b66",
+   "job_type": "news_impact",
+   "model": "gpt-5.6-luna",
+   "payload": {
+    "allowed_tickers": [],
+    "analysis_revision": 1,
+    "article_reason": "publisher_url_unavailable",
+    "article_status": "unavailable",
+    "change_sequence": 205119,
+    "content_hash": "496780472d92e0ed168ec53be201c2a49dc4b95e683d17b23e7a4516712c10fd",
+    "fetched_at": "2026-10-07T17:29:27.712916Z",
+    "news_id": 192902,
+    "published_at": "2026-10-07T17:25:58Z",
+    "source": "google/The Motley Fool",
+    "source_count": 2,
+    "source_ticker_hints": [],
+    "sources": [
+     "google/The Motley Fool",
+     "google/Yahoo Finance"
+    ],
+    "summary": null,
+    "title": "The Fed Is Embarking on a Rate-Hike Cycle. History Says This Is How the Market Will React.",
+    "url": "https://news.google.com/rss/articles/CBMilwFBVV95cUxOZl96bVY5UlJEZnIzM2xWRUZkVlhYeHA1ZGk2cHdfMzBESEtUMWpDMUlVeE5FWS1NUUlxN1NZVkF4TDdDMnZyV3NRYWFVQ0Rnb3luUjBTRThMY0pyNkZKaTFoeXNTNlBRbzNNTHljR083NjNuc3Y4S0NORlhlMldkUFBLS1JuQ09OOFd6WEhaYzd3RGJhdWxv?oc=5"
+   },
+   "production_error": "news_identity_mismatch: news_identity_mismatch",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.fool.com/investing/2026/10/07/the-fed-is-embarking-on-a-rate-hike-cycle-history//"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.federalreserve.gov/monetarypolicy/openmarket.htm"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.federalreserve.gov/newsevents/pressreleases/files/monetary20251125a1.pdf"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://finance.yahoo.com/economy/policy/articles/fed-embarking-rate-hike-cycle-174300526.html"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.federalreserve.gov/newsevents/2026-october.htm"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm?_sp=e6be8ab0-af44-43aa-829e-86f4d2bbeb64&trk=article-ssr-frontend-pulse_little-text-block"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm?os=io"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.aol.com/articles/fed-embarking-rate-hike-cycle-174300000.html"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.federalreserve.gov/releases/h15/current/Default.htm"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261007a.htm"
+     }
+    ],
+    "id": "resp_0d9ae2592ea27524006ac9c033236c87d1bc673061b9f3b948",
+    "model": "gpt-5.6-luna",
+    "openai_web_calls": [
+     {
+      "action": "search",
+      "id": "ws_0d9ae2592ea27524006ac9c036d34887d18522bd9b7fe54a2d",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.federalreserve.gov/newsevents/pressreleases/files/monetary20251125a1.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://finance.yahoo.com/economy/policy/articles/fed-embarking-rate-hike-cycle-174300526.html"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.federalreserve.gov/newsevents/2026-october.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.fool.com/investing/2026/10/07/the-fed-is-embarking-on-a-rate-hike-cycle-history//"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm?_sp=e6be8ab0-af44-43aa-829e-86f4d2bbeb64&trk=article-ssr-frontend-pulse_little-text-block"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm?os=io"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.aol.com/articles/fed-embarking-rate-hike-cycle-174300000.html"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.federalreserve.gov/releases/h15/current/Default.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261007a.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm?chain_id=Name1K9-3FXPhg.1kj4840&global_content=%7B%22promote_id%22%3A13764%2C%22sub_promote_id%22%3A39%2C%22f%22%3A%22www.moomoo.com%2Fus%2Fhans%2Flearn%2Fdetail-the-fed-dot-plot-explained-what-it-says-about-us-interest-rates-93916-230745092%22%7D"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.federalreserve.gov/monetarypolicy/openmarket.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.federalreserve.gov/releases/h15/current/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.federalreserve.gov/newsevents.htm"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.federalreserve.gov/monetarypolicy/files/fomcminutes20260429.pdf?ftag=YHF4eb9d17"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.federalreserve.gov/releases/h8/current/h8.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.federalreserve.gov/monetarypolicy/files/fomcminutes20260429.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.federalreserve.gov/monetarypolicy/files/fomcminutes20260128.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.federalreserve.gov/monetarypolicy/files/fomcminutes20260429.pdf?ftag=MSFd61514f"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "open_page",
+      "id": "ws_0d9ae2592ea27524006ac9c03c7cb487d1b438cb4ce5b23b11",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://www.fool.com/investing/2026/10/07/the-fed-is-embarking-on-a-rate-hike-cycle-history//"
+       }
+      ],
+      "status": "completed"
+     }
+    ],
+    "output_text": "{\"overall_sentiment\":-15,\"affected_commodities\":[],\"affected_sectors\":[\"美国股票市场([fool.com](https://www.fool.com/investing/2026/10/07/the-fed-is-embarking-on-a-rate-hike-cycle-history//))\"],\"confidence\":84,\"headline_summary\":\"这是一篇宏观市场评论，而非公司事件公告。文章称，美联储在2026年9月启动加息后，历史上股市在加息初期往往出现回撤，但冲击取决于加息速度；作者认为渐进式加息可能令影响较温和。公开记录确认2026年9月17日目标区间上调25个基点，后续加息仍是市场预期而非已确认事实。([fool.com](https://www.fool.com/investing/2026/10/07/the-fed-is-embarking-on-a-rate-hike-cycle-history//))\",\"causal_summary\":\"事实：美联储于2026年9月17日将联邦基金利率目标区间上调25个基点至3.75%—4.00%；同标题文章引用历史统计称，标普500在首次加息后6个月和12个月的最大回撤约为12%和14%。可能传导：更高政策利率可能抬升贴现率和融资成本，压制股票估值并增加市场波动；若加息节奏渐进且通胀改善，压力可能减轻。不确定性：后续加息次数、速度和经济增长反应尚未确定，历史平均值不能直接预测本轮市场表现。([fool.com](https://www.fool.com/investing/2026/10/07/the-fed-is-embarking-on-a-rate-hike-cycle-history//))\",\"insufficient_context\":false,\"classification\":\"neutral\",\"affected_stocks\":[],\"market_relevance\":82,\"uncertainty_notes\":[\"输入新闻正文未取得；已另行检索到同标题原文和美国联邦储备委员会公开记录用于核对同一事件，不能视为已读取输入链接全文。([fool.com](https://www.fool.com/investing/2026/10/07/the-fed-is-embarking-on-a-rate-hike-cycle-history//))\",\"后续加息次数和速度只是文章转述的市场定价及作者判断，尚未被官方决策完全确认；历史回撤统计不构成本轮市场结果的确定预测。([fool.com](https://www.fool.com/investing/2026/10/07/the-fed-is-embarking-on-a-rate-hike-cycle-history//))\",\"输入未提供获准股票代码，且事件未明确涉及具体公司或商品，因此不列示个股和商品影响。\"],\"content_hash\":\"496780472d92e0ed16853be201c2a49dc4b95e683d17b23e7a4516712c10fd\",\"key_factors\":[\"2026年9月17日，联邦基金利率目标区间上调25个基点至3.75%—4.00%。([federalreserve.gov](https://www.federalreserve.gov/monetarypolicy/openmarket.htm))\",\"同标题文章称，市场期货定价反映2026年内可能还有1至2次25个基点加息，并预期未来仍有更多加息；这不是官方已确认路径。([fool.com](https://www.fool.com/investing/2026/10/07/the-fed-is-embarking-on-a-rate-hike-cycle-history//))\",\"文章引用的历史研究称，标普500在首次加息后6个月和12个月的最大回撤分别约为12%和14%，且加息越快，市场压力通常越大。([fool.com](https://www.fool.com/investing/2026/10/07/the-fed-is-embarking-on-a-rate-hike-cycle-history//))\",\"文章同时称，首次加息后标普500上涨约3%，并认为渐进式政策可能使早期波动较短暂；这属于作者观点和历史类比。([fool.com](https://www.fool.com/investing/2026/10/07/the-fed-is-embarking-on-a-rate-hike-cycle-history//))\"],\"news_id\":192902,\"summary_zh\":\"输入未提供摘要；另行检索的同标题文章称，市场预期美联储可能在2026年内进一步加息，历史上加息初期股市可能回撤，但渐进式加息与通胀改善或缓和冲击。公开记录确认2026年9月17日加息25个基点至3.75%—4.00%，后续路径仍不确定。([fool.com](https://www.fool.com/investing/2026/10/07/the-fed-is-embarking-on-a-rate-hike-cycle-history//))\",\"change_sequence\":205119,\"output_language\":\"zh-CN\",\"title_zh\":\"美联储正开启加息周期：历史经验显示市场将如何反应\"}",
+    "provider": "openai",
+    "stop_reason": "completed",
+    "terminal_error": null,
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": null,
+     "cached_input_tokens": 5792,
+     "code_execution_requests": 0,
+     "input_tokens": 25531,
+     "output_tokens": 7412,
+     "reasoning_tokens": 6447,
+     "total_tokens": 32943,
+     "web_fetch_requests": 1,
+     "web_search_requests": 1
+    }
+   }
+  },
+  {
+   "job_id": "aij_595a138c386c43a09e84ccded0d289d3",
+   "job_type": "news_impact",
+   "model": "gpt-5.6-luna",
+   "payload": {
+    "allowed_tickers": [],
+    "analysis_revision": 1,
+    "article_reason": "publisher_url_unavailable",
+    "article_status": "unavailable",
+    "change_sequence": 205152,
+    "content_hash": "f146901b5cca5f9aba578a6682196423fa4a6e9ad2ea3df2176c2a69265e89d7",
+    "fetched_at": "2026-10-07T22:06:50.631240Z",
+    "news_id": 193146,
+    "published_at": "2026-10-07T18:47:00Z",
+    "source": "google/Kitco",
+    "source_count": 1,
+    "source_ticker_hints": [],
+    "sources": [
+     "google/Kitco"
+    ],
+    "summary": null,
+    "title": "Gold, silver slump as Fed minutes keep December hike risk alive - Kitco PM Report",
+    "url": "https://news.google.com/rss/articles/CBMivgFBVV95cUxQVzh6RF9GRFJ1SjJ0V19DWjBpY0J1eV9ZbFJ4dmFoRXdyeWNRSXNJa3pGV1daWjZrT2MwUFdpT2p1SnBiT1lfREl2cExkdDBiakNyYlpqd3JTdnBoMjhFX1N2WlhwSS1PVDhSV2tQZ0tHbm1hcVNnWm14dUJLaUIzX1lKeFZyWTdTV09uRFhnLTNtZmhDSzJCRkFhVmtGb1l2VXc5dW0wSTZ0ZTRjMElVTkYtd0RGUzhGdUhwbWJ3?oc=5"
+   },
+   "production_error": "news_identity_mismatch: news_identity_mismatch",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.kitco.com/news/article/2026-10-07/gold-silver-slump-fed-minutes-keep-december-hike-risk-alive-kitco-pm-report"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.kiplinger.com/investing/live/fed-meeting-updates-and-commentary-september-2026"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.kiplinger.com/investing/stocks/stocks-fall-as-treasury-yields-hit-new-highs-stock-market-today"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.kiplinger.com/investing/economy/this-weeks-economic-calendar"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.kitco.com/news/category/commodities"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.kitco.com/news/category/-1-or-3-525-525-1-0-0-0-1"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.kitco.com/news/article/2026-10-06/gold-silver-prices-rise-yields-ease-december-fed-risk-remains-kitco-am"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.kitco.com/news/article/2026-10-07/gold-silver-slide-yields-rise-fed-minutes-10-year-auction-kitco-am-report"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.kitco.com/news/category/a55e2790-8a61-424c-a885-f73ddb311ecd-gif"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.kitco.com/news/article/2026-07-06/gold-silver-down-and-cant-escape-anchor-fed-rate-hikes-kitco-pm-report"
+     }
+    ],
+    "id": "resp_0ac80d6b19d44b2e006ac9be383be887d1a455b080c378cacb",
+    "model": "gpt-5.6-luna",
+    "openai_web_calls": [
+     {
+      "action": "search",
+      "id": "ws_0ac80d6b19d44b2e006ac9be3b141087d1b8c1bafd67679f24",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.kiplinger.com/investing/live/fed-meeting-updates-and-commentary-september-2026"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.kiplinger.com/investing/stocks/stocks-fall-as-treasury-yields-hit-new-highs-stock-market-today"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.kiplinger.com/investing/economy/this-weeks-economic-calendar"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.kitco.com/news/article/2026-10-07/gold-silver-slump-fed-minutes-keep-december-hike-risk-alive-kitco-pm-report"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.kitco.com/news/category/commodities"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.kitco.com/news/category/-1-or-3-525-525-1-0-0-0-1"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.kitco.com/news/article/2026-10-06/gold-silver-prices-rise-yields-ease-december-fed-risk-remains-kitco-am"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.kitco.com/news/article/2026-10-07/gold-silver-slide-yields-rise-fed-minutes-10-year-auction-kitco-am-report"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.kitco.com/news/category/a55e2790-8a61-424c-a885-f73ddb311ecd-gif"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.kitco.com/news/article/2026-07-06/gold-silver-down-and-cant-escape-anchor-fed-rate-hikes-kitco-pm-report"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.kitco.com/news/article/2026-07-28/gold-silver-slide-buyers-stay-sidelined-ahead-fed-kitco-pm-report"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.kitco.com/news/article/2026-07-29/gold-silver-firm-fed-hold-hormuz-oil-spike-hit-equities-kitco-pm-report"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.kitco.com/news/article/2026-07-06/gold-slips-fed-minutes-loom-hormuz-risk-eases-oil-shock-kitco-am-report"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.kitco.com/charts/silver?sid1=X6HN5707&sub1=X6HN5707&xcode=X6HN5707"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://my.headtopics.com/news/gold-silver-slump-as-fed-minutes-keep-december-hike-risk-88568249"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/Wallstreetgold/comments/1wzvx7j/gold_market_brief_wed_07_oct_2026/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/u_FOREXcom/comments/1x07rtr/gold_analysis_fed_minutes_keep_pressure_on_xauusd/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/freedomgold/comments/1wzwtk3/gold_to_hit_5000_silver_97_in_the_next_12_months/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/Wallstreetgold/comments/1x0qbaj/gold_market_brief_thu_08_oct_2026/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/Wallstreetgold/comments/1wz1zbl/gold_market_brief_tue_06_oct_2026/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/Wallstreetgold/comments/1x1krap/gold_market_brief_fri_09_oct_2026/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://assets.ctfassets.net/tt9cqcvhrt2g/3YmCG8RnbyBpUPUcSfq3BI/5ec749df6f61ee067df976ade811758b/Precious_Metals_Update_Jun_17_2026.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/Wallstreetgold/comments/1wy7xst/gold_market_brief_mon_05_oct_2026/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.gold.org/download/file/20295/WMM_24_November_2025_AI_fears_and_the_Special_K.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://goldnewsletter.com/wp-content/uploads/2026/01/GNL_February-2026-2.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/Wallstreetsilver/comments/1wyd06r/what_would_convince_you_that_a_silver_bounce_has/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://assets.ctfassets.net/tt9cqcvhrt2g/4JycUAHUD4y1vr60MOR0AC/0ff5f260f163a63db40da384113b1572/Precious_Metals_Update_Jun_19_2026.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://assets.ctfassets.net/tt9cqcvhrt2g/36bffvywoFboTpKOlDfFoQ/f7c81a25f8e366c5c436b26ebce42cd7/Precious_Metals_Update_Jun_12_2026.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/Gold/comments/1wsyue0/now_is_the_time_to_buy/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.gold.org/download/file/20287/WMM_17_November_2025_Return_of_the_Macro.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/Gold/comments/1wgq4dh/why_is_gold_still_up_if_the_fed_is_about_to_hike/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/Wallstreetgold/comments/1wsdz64/gold_market_brief_mon_28_sep_2026/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/Gold/comments/1whi21v/gold_predictions_for_the_fed_decision/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://en.wikipedia.org/wiki/History_of_Federal_Open_Market_Committee_actions"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://en.wikipedia.org/wiki/Silver_as_an_investment"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "open_page",
+      "id": "ws_0ac80d6b19d44b2e006ac9be3e325887d183730726bf332e59",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://www.kitco.com/news/article/2026-10-07/gold-silver-slump-fed-minutes-keep-december-hike-risk-alive-kitco-pm-report"
+       }
+      ],
+      "status": "completed"
+     }
+    ],
+    "output_text": "{\"overall_sentiment\":-78,\"affected_commodities\":[{\"impact_score\":-88,\"name\":\"黄金\",\"reason\":\"报道显示，现货黄金在美国10月7日晚盘约报每盎司4109.90美元，单日下跌1.28%；美联储会议纪要保留年末再次加息可能性，长期美国国债收益率走高和美元走强共同压制无收益资产。([kitco.com](https://www.kitco.com/news/article/2026-10-07/gold-silver-slump-fed-minutes-keep-december-hike-risk-alive-kitco-pm-report))\"},{\"impact_score\":-92,\"name\":\"白银\",\"reason\":\"现货白银约报每盎司59.670美元，单日下跌2.55%，跌幅大于黄金；同一报道将压力归因于年末收紧风险、长期收益率上行和美元走强。([kitco.com](https://www.kitco.com/news/article/2026-10-07/gold-silver-slump-fed-minutes-keep-december-hike-risk-alive-kitco-pm-report))\"}],\"affected_sectors\":[\"贵金属开采\",\"大宗商品\"],\"confidence\":86,\"headline_summary\":\"美联储会议纪要保留年末再次加息可能性，长期美国国债收益率和美元走强，令10月7日美国晚盘黄金、白银分别下跌约1.28%和2.55%。([kitco.com](https://www.kitco.com/news/article/2026-10-07/gold-silver-slump-fed-minutes-keep-december-hike-risk-alive-kitco-pm-report))\",\"causal_summary\":\"事实：基特科页面称，10月7日美国晚盘现货黄金和白银分别下跌1.28%和2.55%；10年期美国国债收益率一度升至5.36%，美元走强，美联储会议纪要显示多数官员仍预计年内再次加息。可能的传导：更高的利率和债券收益率会提高持有无收益贵金属的机会成本，美元走强也可能降低美元计价贵金属的相对吸引力，因此短线对黄金和白银偏负面。缓冲与不确定性：9月就业数据偏弱降低10月加息紧迫性，油价回落减弱即时通胀推力，但服务业价格指数升至74.0、年末加息风险和中东航运风险仍可能造成双向波动。([kitco.com](https://www.kitco.com/news/article/2026-10-07/gold-silver-slump-fed-minutes-keep-december-hike-risk-alive-kitco-pm-report))\",\"insufficient_context\":false,\"classification\":\"bearish\",\"affected_stocks\":[],\"market_relevance\":70,\"uncertainty_notes\":[\"输入没有提供可读取的新闻正文，正文状态显示发布者页面不可用；本次另行检索并打开了10月7日同标题的基特科页面，仅用于核验同一事件，分析不等同于已取得输入正文。([kitco.com](https://www.kitco.com/news/article/2026-10-07/gold-silver-slump-fed-minutes-keep-december-hike-risk-alive-kitco-pm-report))\",\"该页面标注内容经过人工审核的AI辅助报道；关于年末加息、收益率、美元与贵金属之间的后续影响，仍取决于未来数据、政策表述和市场定价。([kitco.com](https://www.kitco.com/news/article/2026-10-07/gold-silver-slump-fed-minutes-keep-december-hike-risk-alive-kitco-pm-report))\",\"允许的股票代码列表为空，因此不进行个股归因；行业影响仅保留在贵金属和大宗商品层面。\"],\"content_hash\":\"f146501b5cca5f9aba578a6682196423fa4a6e9ad2ea3df2176c2a69265e89d7\",\"key_factors\":[\"美联储会议纪要显示，多数官员仍预计年内再次加息，但较弱就业数据降低了10月加息紧迫性。([kitco.com](https://www.kitco.com/news/article/2026-10-07/gold-silver-slump-fed-minutes-keep-december-hike-risk-alive-kitco-pm-report))\",\"10年期美国国债收益率一度升至5.36%，随后在390亿美元10年期国债拍卖后回落至约5.28%；美元指数走强。([kitco.com](https://www.kitco.com/news/article/2026-10-07/gold-silver-slump-fed-minutes-keep-december-hike-risk-alive-kitco-pm-report))\",\"现货黄金约每盎司4109.90美元、下跌1.28%；现货白银约每盎司59.670美元、下跌2.55%。([kitco.com](https://www.kitco.com/news/article/2026-10-07/gold-silver-slump-fed-minutes-keep-december-hike-risk-alive-kitco-pm-report))\",\"9月新增非农就业约2.9万人，失业率为4.2%，平均时薪环比上涨0.1%，7月和8月就业人数合计下修6万人。([kitco.com](https://www.kitco.com/news/article/2026-10-07/gold-silver-slump-fed-minutes-keep-december-hike-risk-alive-kitco-pm-report))\",\"服务业价格指数升至74.0；油价回落减弱短期通胀推力，但霍尔木兹海峡袭击和航运风险仍未解决。([kitco.com](https://www.kitco.com/news/article/2026-10-07/gold-silver-slump-fed-minutes-keep-december-hike-risk-alive-kitco-pm-report))\"],\"news_id\":193146,\"summary_zh\":\"基特科报道，10月7日美国晚盘现货黄金约报每盎司4109.90美元，下跌1.28%；现货白银约报每盎司59.670美元，下跌2.55%。市场解读美联储会议纪要认为，多数官员仍预计年内再次加息；叠加长期美国国债收益率上行和美元走强，非收益贵金属承压。较弱的9月就业数据降低10月加息紧迫性，但服务业价格指标上升使年末收紧风险仍未消失。([kitco.com](https://www.kitco.com/news/article/2026-10-07/gold-silver-slump-fed-minutes-keep-december-hike-risk-alive-kitco-pm-report))\",\"change_sequence\":205152,\"output_language\":\"zh-CN\",\"title_zh\":\"美联储会议纪要令12月加息风险仍存，黄金和白银下挫——基特科午后报告\"}",
+    "provider": "openai",
+    "stop_reason": "completed",
+    "terminal_error": null,
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": null,
+     "cached_input_tokens": 5792,
+     "code_execution_requests": 0,
+     "input_tokens": 18973,
+     "output_tokens": 7748,
+     "reasoning_tokens": 6524,
+     "total_tokens": 26721,
+     "web_fetch_requests": 1,
+     "web_search_requests": 1
+    }
+   }
+  }
+ ],
+ "prose_names": [
+  {
+   "job_id": "aij_3e0d93e075b24794ac45b6974ee4b40a",
+   "job_type": "news_impact",
+   "model": "gpt-5.6-luna",
+   "payload": {
+    "allowed_tickers": [
+     "CLSK"
+    ],
+    "analysis_revision": 1,
+    "article_reason": "no_matching_article_body",
+    "article_status": "unavailable",
+    "change_sequence": 206381,
+    "content_hash": "aae4cff2212def3c2a17515bbb962392c227b25f0ebb8ea3d27dc742abff61cd",
+    "fetched_at": "2026-10-10T01:11:49.350918Z",
+    "news_id": 195168,
+    "published_at": "2026-10-09T20:45:03Z",
+    "source": "massive/Zacks Investment Research",
+    "source_count": 1,
+    "source_ticker_hints": [
+     "CLSK",
+     "CLSKW"
+    ],
+    "sources": [
+     "massive/Zacks Investment Research"
+    ],
+    "summary": "CleanSpark (CLSK) declined 1.27% to $10.50, underperforming the broader market gains. The stock has lost 16.95% over the past month. Analysts forecast a significant EPS miss of -$0.36 (down 3500% YoY) and a 40.95% revenue decline for the upcoming quarter. The company received a Zacks Rank #4 (Sell) rating, with consensus EPS projections lowered 57.14% in the past 30 days.",
+    "title": "CleanSpark (CLSK) Stock Slides as Market Rises: Facts to Know Before You Trade",
+    "url": "https://www.zacks.com/stock/news/3004101/cleanspark-clsk-stock-slides-as-market-rises-facts-to-know-before-you-trade?cid=CS-ZC-FT-fundamental_analysis%7Cyseop_template_6-3004101"
+   },
+   "production_error": "schema_validation_failed: 2 validation errors for NewsImpactResult",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/3003255/heres-why-cleanspark-clsk-fell-more-than-broader-market"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_fetch",
+      "url": "https://www.zacks.com/stock/news/3004101/cleanspark-clsk-stock-slides-as-market-rises-facts-to-know-before-you-trade?cid=CS-ZC-FT-fundamental_analysis%7Cyseop_template_6-3004101"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.reddit.com/r/CleanSpark/comments/1vsooqp/2027_dilution/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/2818432/cleanspark-clsk-stock-slides-as-market-rises-facts-to-know-before-you-trade"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/2562368/cleanspark-clsk-stock-slides-as-market-rises-facts-to-know-before-you-trade"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/2779536/cleanspark-clsk-stock-slides-as-market-rises-facts-to-know-before-you-trade"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/2955884/cleanspark-clsk-rises-as-market-takes-a-dip-key-facts"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/2998521/why-cleanspark-clsk-dipped-more-than-broader-market-today"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/2908985/cleanspark-clsk-stock-sinks-as-market-gains-what-you-should-know"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/2960645/cleanspark-clsk-stock-drops-despite-market-gains-important-facts-to-note?cid=CS-ZC-FT-tale_of_the_tape%7Cyseop_template_6-2960645"
+     }
+    ],
+    "id": "resp_075938fdf883b8fc006ac9e22759a887d18ac97dca28699a96",
+    "model": "gpt-5.6-luna",
+    "openai_web_calls": [
+     {
+      "action": "search",
+      "id": "ws_075938fdf883b8fc006ac9e229811087d1ab23487923462888",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/CleanSpark/comments/1vsooqp/2027_dilution/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2818432/cleanspark-clsk-stock-slides-as-market-rises-facts-to-know-before-you-trade"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2562368/cleanspark-clsk-stock-slides-as-market-rises-facts-to-know-before-you-trade"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2779536/cleanspark-clsk-stock-slides-as-market-rises-facts-to-know-before-you-trade"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/3003255/heres-why-cleanspark-clsk-fell-more-than-broader-market"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2955884/cleanspark-clsk-rises-as-market-takes-a-dip-key-facts"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2998521/why-cleanspark-clsk-dipped-more-than-broader-market-today"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2908985/cleanspark-clsk-stock-sinks-as-market-gains-what-you-should-know"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2960645/cleanspark-clsk-stock-drops-despite-market-gains-important-facts-to-note?cid=CS-ZC-FT-tale_of_the_tape%7Cyseop_template_6-2960645"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2999662/cleanspark-clsk-exceeds-market-returns-some-facts-to-consider?cid=CS-ZC-FT-fundamental_analysis%7Cyseop_template_6-2999662"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2821547/cleanspark-clsk-rises-higher-than-market-key-facts"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2936834/cleanspark-clsk-laps-the-stock-market-heres-why"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2901910/cleanspark-clsk-outpaces-stock-market-gains-what-you-should-know"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://s21.q4cdn.com/978676932/files/doc_financials/2026/q2/Q2FY26-CLSK-Earnings-Call-Transcript-FINAL.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://s203.q4cdn.com/737227956/files/doc_financials/2026/q1/CLSK-FY2026-Q1-1.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://advisortools.zacks.com/Research/Stocks/CLSK/Overview/PDF/2015-08-28/2025-09-01"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://s203.q4cdn.com/737227956/files/doc_financials/2026/q1/Q1FY26_CLSK-Earnings-Transcript.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/CleanSpark/comments/1wztrx1/pain_and_no_gain/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://investors.cleanspark.com/files/doc_financials/2023/q4/FY2023-Q4-Earning-Results-FINAL.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/CleanSpark/comments/1uxbaby/earnings_report_thoughts/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/TradeVerseNetwork/comments/1vholdj/cleanspark_misses_estimates_shares_rise_3_after/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.reddit.com/r/CleanSpark/comments/1r0aqmn/clsk_q12026_a_379m_loss_a_trilliondollar_ai_pipe/"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "open_page",
+      "id": "ws_075938fdf883b8fc006ac9e22f0dac87d1851d52296d4345a8",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://www.zacks.com/stock/news/2998521/why-cleanspark-clsk-dipped-more-than-broader-market-today"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "open_page",
+      "id": "ws_075938fdf883b8fc006ac9e244df3887d19c67ee04d72a4a85",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://www.zacks.com/stock/news/3004101/cleanspark-clsk-stock-slides-as-market-rises-facts-to-know-before-you-trade?cid=CS-ZC-FT-fundamental_analysis%7Cyseop_template_6-3004101"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "search",
+      "id": "ws_075938fdf883b8fc006ac9e246e73087d19fe1a22da05f4bd0",
+      "sources": [],
+      "status": "searching"
+     }
+    ],
+    "output_text": "{\"overall_sentiment\":-68,\"affected_commodities\":[],\"affected_sectors\":[],\"confidence\":77,\"headline_summary\":\"报道聚焦CleanSpark公司在大盘上涨背景下股价走弱，以及下一季度盈利、营收预期和评级偏负面的变化。([zacks.com](https://www.zacks.com/stock/news/3003255/heres-why-cleanspark-clsk-fell-more-than-broader-market?utm_source=openai))\",\"causal_summary\":\"已知事实是，输入摘要称该股当日下跌且近一个月明显走弱；另行检索的扎克斯相关页面显示，下一季度每股收益预期为亏损0.36美元、营收预期同比下降40.95%，近30日每股收益一致预期下调57.14%，评级为第4档（卖出）。([zacks.com](https://www.zacks.com/stock/news/3003255/heres-why-cleanspark-clsk-fell-more-than-broader-market?utm_source=openai)) 可能的传导关系是盈利预期下修和评级压力削弱公司特异性情绪，促使股价相对大盘承压；这属于基于报道事实的推断，不是已核实的公司公告或单一因果解释。\",\"insufficient_context\":true,\"classification\":\"bearish\",\"affected_stocks\":[{\"impact_score\":-72,\"mechanism\":\"direct_company\",\"ticker\":\"CLSK\",\"confidence\":77,\"horizon\":\"days\",\"company\":\"CleanSpark公司\",\"reason\":\"公司层面的预期恶化是直接影响因素：摘要称股价在大盘上涨时下跌1.27%，且近一个月下跌16.95%；相关页面还显示下一季度盈利和营收预测偏弱、每股收益预期在近30天下调57.14%以及第4档评级。由于缺少新闻正文，无法确认哪一项是当日跌幅的主要触发因素。([zacks.com](https://www.zacks.com/stock/news/3003255/heres-why-cleanspark-clsk-fell-more-than-broader-market?utm_source=openai))\"}],\"market_relevance\":57,\"uncertainty_notes\":[\"新闻正文未能取得，未找到与该条新闻匹配的正文版本；直接访问原报道页面时显示访问中断提示，因此不能声称已阅读全文。([zacks.com](https://www.zacks.com/stock/news/3004101/cleanspark-clsk-stock-slides-as-market-rises-facts-to-know-before-you-trade?cid=CS-ZC-FT-fundamental_analysis%7Cyseop_template_6-3004101))\",\"本次另行检索到扎克斯于2026年10月8日发布的相关页面，核验了亏损0.36美元、营收同比下降40.95%、近30日预期下调57.14%和第4档评级；2026年10月2日的相关页面也显示前两项核心预测数字。检索结果只能支持摘要级核验，不替代缺失正文。([zacks.com](https://www.zacks.com/stock/news/3003255/heres-why-cleanspark-clsk-fell-more-than-broader-market?utm_source=openai))\",\"摘要所称同比下降3500%属于预测同比口径，且未取得对应财季、上一年比较基数、实际结果或公司指引，不能据此推导确定的业绩缺口。\",\"未核验公司公告、比特币价格、算力、产量、融资和监管因素，行业与商品影响暂不扩展。\"],\"content_hash\":\"aae4cff2212def3c2a17515bbb962392c227b25f0ebb8ea3d27dc742abff61cd\",\"key_factors\":[\"输入摘要显示该股在大盘上涨时下跌1.27%，并且近一个月累计下跌16.95%。\",\"另行检索的相关页面显示，下一季度每股收益预期为亏损0.36美元，营收预期同比下降40.95%；近30日每股收益一致预期下调57.14%，评级为第4档（卖出）。([zacks.com](https://www.zacks.com/stock/news/3003255/heres-why-cleanspark-clsk-fell-more-than-broader-market?utm_source=openai))\",\"新闻反映的是分析师预测和评级变化，并非已经公布的实际季度业绩，不能把预测当成已实现结果。\",\"目前没有经核验的比特币价格、公司产量、算力、融资或监管变化可用于支持更广泛的行业传导。\"],\"news_id\":195168,\"summary_zh\":\"摘要称，CleanSpark公司股价下跌1.27%至10.50美元，在大盘上涨时表现落后；过去一个月下跌16.95%。摘要还称，分析师预计下一季度每股收益为亏损0.36美元，同比下降3500%，营收同比下降40.95%；扎克斯将其评为第4档（卖出），过去30天每股收益一致预期下调57.14%。其中，下一季度预测数字、预期下调幅度和评级可由另行检索的相关页面部分核验。([zacks.com](https://www.zacks.com/stock/news/3003255/heres-why-cleanspark-clsk-fell-more-than-broader-market?utm_source=openai))\",\"change_sequence\":206381,\"output_language\":\"zh-CN\",\"title_zh\":\"CleanSpark股价在大盘上涨时下跌：交易前需要了解的事实\"}",
+    "provider": "openai",
+    "stop_reason": "completed",
+    "terminal_error": null,
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": null,
+     "cached_input_tokens": 5792,
+     "code_execution_requests": 0,
+     "input_tokens": 19884,
+     "output_tokens": 9099,
+     "reasoning_tokens": 8183,
+     "total_tokens": 28983,
+     "web_fetch_requests": null,
+     "web_search_requests": null
+    }
+   }
+  },
+  {
+   "job_id": "aij_a6944c1d79b94e7bb2b8131d2a247b89",
+   "job_type": "news_impact",
+   "model": "gpt-5.6-luna",
+   "payload": {
+    "allowed_tickers": [],
+    "analysis_revision": 1,
+    "article_reason": "no_matching_article_body",
+    "article_status": "unavailable",
+    "change_sequence": 206356,
+    "content_hash": "245e1f332ed6fb65106a6ccdb4af1400c7e5bac7e9aeb8b98e1e053e712751b7",
+    "fetched_at": "2026-10-10T01:11:49.350918Z",
+    "news_id": 195143,
+    "published_at": "2026-10-09T20:50:04Z",
+    "source": "massive/Zacks Investment Research",
+    "source_count": 1,
+    "source_ticker_hints": [
+     "AI"
+    ],
+    "sources": [
+     "massive/Zacks Investment Research"
+    ],
+    "summary": "C3.ai, Inc. (AI) closed at $11.53, up 1.68% in the latest session, outperforming the S&P 500's 0.6% gain. The stock has gained 8.31% over the past month. The company is projected to report earnings of -$0.22 per share with revenue expected at $53.1 million, down 29.34% year-over-year. C3.ai holds a Zacks Rank of #3 (Hold) with consensus EPS estimates down 0.36% over the last 30 days.",
+    "title": "Why C3.ai, Inc. (AI) Outpaced the Stock Market Today",
+    "url": "https://www.zacks.com/stock/news/3004119/why-c3-ai-inc-ai-outpaced-the-stock-market-today?cid=CS-ZC-FT-fundamental_analysis%7Cyseop_template_6v1-3004119"
+   },
+   "production_error": "schema_validation_failed: 1 validation error for NewsImpactResult",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://ca.finance.yahoo.com/news/why-c3-ai-inc-ai-205004636.html"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://en.wikipedia.org/wiki/C3_AI"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/2812077/why-c3ai-inc-ai-outpaced-the-stock-market-today"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.investing.com/equities/c3-ai-inc-historical-data"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://stockcharted.com/ai"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/2965131/c3ai-inc-ai-outpaces-stock-market-gains-what-you-should-know"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.chartmill.com/stock/quote/AI/earnings"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://c3.ai/news/c3-ai-announces-fiscal-fourth-quarter-and-full-fiscal-year-2026-results"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://stockanalysis.com/stocks/ai/statistics/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/2821557/why-c3ai-inc-ai-outpaced-the-stock-market-today?art_rec=blog-fundamental_analysis-up_next-ID01-img-2821557"
+     }
+    ],
+    "id": "resp_01803b002239067c006ac9db59eb3487d1a1dc28b193212eb2",
+    "model": "gpt-5.6-luna",
+    "openai_web_calls": [
+     {
+      "action": "search",
+      "id": "ws_01803b002239067c006ac9db5e57ec87d181febe546c251bf0",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://en.wikipedia.org/wiki/C3_AI"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://ca.finance.yahoo.com/news/why-c3-ai-inc-ai-205004636.html"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2812077/why-c3ai-inc-ai-outpaced-the-stock-market-today"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.investing.com/equities/c3-ai-inc-historical-data"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://stockcharted.com/ai"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2965131/c3ai-inc-ai-outpaces-stock-market-gains-what-you-should-know"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.chartmill.com/stock/quote/AI/earnings"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://c3.ai/news/c3-ai-announces-fiscal-fourth-quarter-and-full-fiscal-year-2026-results"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://stockanalysis.com/stocks/ai/statistics/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2821557/why-c3ai-inc-ai-outpaced-the-stock-market-today?art_rec=blog-fundamental_analysis-up_next-ID01-img-2821557"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://ca.finance.yahoo.com/quote/724.F/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.financialcontent.com/quote/NY%3AAI/historical"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://public.com/stocks/ai/news"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://ir.c3.ai/node/11571/pdf?utmContent=NULL&utmMedium=5r26nx&utmSource=8li1o0&utmTerm=NULL"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://ir.c3.ai/node/11571/pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://advisortools.zacks.com/proxy/ResearchReport/AI/snapshot?d=20251219"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://advisortools-dev.zacks.com/ZAT/Proxy/MarketStrategy/MonthlyInvestingMarketInsights?d=20260210"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://advisortools-dev.zacks.com/ZAT/Proxy/MarketStrategy/DailyMarketAndEconomicNews?d=20260214"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "open_page",
+      "id": "ws_01803b002239067c006ac9db610e9487d18a9d7b2c13753e0c",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://www.zacks.com/stock/news/3004119/why-c3-ai-inc-ai-outpaced-the-stock-market-today?cid=CS-ZC-FT-fundamental_analysis%7Cyseop_template_6v1-3004119"
+       }
+      ],
+      "status": "completed"
+     }
+    ],
+    "output_text": "{\"overall_sentiment\":-8,\"affected_commodities\":[],\"affected_sectors\":[],\"confidence\":72,\"headline_summary\":\"2026年10月9日，C3.ai公司上涨1.68%，跑赢标普500；但即将公布的业绩预期显示每股亏损、收入同比下降，且市场一致每股收益预期小幅下调。\",\"causal_summary\":\"从输入摘要看，这是一则对股价表现和业绩预期的日度点评，而非公司经营、订单或监管方面的新公告。单日相对强势和近月累计上涨可能提供短线情绪支撑，但预期收入同比下降、仍处于亏损状态且盈利预期下调，基本面信号偏弱。由于未取得原始正文，无法确认上涨的具体驱动因素，也不外推至其他公司或行业。\",\"insufficient_context\":true,\"classification\":\"neutral\",\"affected_stocks\":[],\"market_relevance\":18,\"uncertainty_notes\":[\"输入未提供可用的新闻正文；另行检索到同标题的转载页面，并核对到2026年10月9日的发布时间及收盘表现，但原始发布页面被访问拦截，未能取得原始正文，因此不能声称已阅读全文。 ([ca.finance.yahoo.com](https://ca.finance.yahoo.com/news/why-c3-ai-inc-ai-205004636.html?utm_source=openai))\",\"搜索到的同标题内容与输入摘要基本相符，但转载内容和搜索摘要不足以证明全文是否包含其他催化剂；对具体上涨原因的判断仅基于输入摘要。\",\"输入未提供可用股票代码，因此不列示受影响股票；在正文无法核验的情况下，不推断受影响行业。\"],\"content_hash\":\"245e1f332ed6fb65106a6ccdb4af1400c7e5bac7e9aeb8b98e1e053e712751b7\",\"key_factors\":[\"2026年10月9日单日上涨1.68%，收于11.53美元，跑赢标普500的0.6%。\",\"过去一个月累计上涨8.31%，但该涨幅本身不能证明存在新的基本面催化剂。\",\"市场预计即将公布的每股收益为亏损0.22美元，收入为5310万美元，同比下降29.34%。\",\"市场一致每股收益预期在过去30天内下调0.36%，分析机构评级为3级，即持有。\"],\"news_id\":195143,\"summary_zh\":\"C3.ai公司在2026年10月9日的最近一个交易日收于11.53美元，上涨1.68%，超过标普500指数0.6%的涨幅；过去一个月累计上涨8.31%。公司预计即将公布的业绩每股亏损0.22美元，收入预计为5310万美元，同比下降29.34%；分析机构评级为3级，即持有，市场一致每股收益预期在过去30天内下调0.36%。\",\"change_sequence\":206356,\"output_language\":\"zh-CN\",\"title_zh\":\"为何C3.ai公司在2026年10月9日跑赢股市\"}",
+    "provider": "openai",
+    "stop_reason": "completed",
+    "terminal_error": null,
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": null,
+     "cached_input_tokens": 5792,
+     "code_execution_requests": 0,
+     "input_tokens": 15308,
+     "output_tokens": 6961,
+     "reasoning_tokens": 6255,
+     "total_tokens": 22269,
+     "web_fetch_requests": 1,
+     "web_search_requests": 1
+    }
+   }
+  }
+ ],
+ "source": "Production failures after PR #241 went live (main 77013b02), exported on 2026-10-10 for the round-3 validator PR. Payloads and stored provider receipts are copied verbatim; no test contacts a provider.",
+ "url_unbound": [
+  {
+   "job_id": "aij_5330f8d98601473f9051b04895498e72",
+   "job_type": "news_impact",
+   "model": "gpt-5.6-luna",
+   "payload": {
+    "allowed_tickers": [],
+    "analysis_revision": 1,
+    "article_reason": "no_matching_article_body",
+    "article_status": "unavailable",
+    "change_sequence": 206201,
+    "content_hash": "31cd49f585b27d18a3ff3042fd74cd962fd44faef34eb1cadc9e38805596f70a",
+    "fetched_at": "2026-10-10T00:29:40.803956Z",
+    "news_id": 194988,
+    "published_at": "2026-10-09T14:34:00Z",
+    "source": "massive/Zacks Investment Research",
+    "source_count": 1,
+    "source_ticker_hints": [
+     "BOXX"
+    ],
+    "sources": [
+     "massive/Zacks Investment Research"
+    ],
+    "summary": "The Alpha Architect 1-3 Month Box ETF (BOXX) has reached a 52-week high and risen 4.04% from its low, driven by investors seeking safe-haven assets amid economic uncertainty, volatile oil prices, and Fed rate concerns. The fund's positive weighted alpha of 3.90 suggests potential for continued gains in the near term.",
+    "title": "Alpha Box ETF (BOXX) Hits New 52-Week High",
+    "url": "https://www.zacks.com/stock/news/3003890/alpha-box-etf-boxx-hits-new-52-week-high?cid=CS-ZC-FT-etf_news_and_commentary-3003890"
+   },
+   "production_error": "schema_validation_failed: ai_news_unbound_or_unhandled_url",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/3003890/alpha-box-etf-boxx-hits-new-52-week-high"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://advisortools.zacks.com/proxy/ResearchReport/EZMO/report?d=20251205"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://stockanalysis.com/etf/boxx/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.dividendinvestor.com/dividend-news/?symbol=boxx"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.wealthfront.com/explore/3543/boxx"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/2950806/alpha-box-etf-boxx-touches-fresh-52-week-high?cid=CS-ZC-FT-etf_news_and_commentary-2950806"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.barchart.com/stocks/quotes/BOXX"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.barchart.com/etfs-funds/quotes/BOXX/performance"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.webull.com/quote/bats-boxx"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.sofi.com/invest/stock/BOXX/"
+     }
+    ],
+    "id": "resp_0c070f462edeaa7f006ac9ecc12e1487d192a755a08adc2458",
+    "model": "gpt-5.6-luna",
+    "openai_web_calls": [
+     {
+      "action": "search",
+      "id": "ws_0c070f462edeaa7f006ac9ecc4e8f487d19c4e7a8abb472907",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://advisortools.zacks.com/proxy/ResearchReport/EZMO/report?d=20251205"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://stockanalysis.com/etf/boxx/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.dividendinvestor.com/dividend-news/?symbol=boxx"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.wealthfront.com/explore/3543/boxx"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2950806/alpha-box-etf-boxx-touches-fresh-52-week-high?cid=CS-ZC-FT-etf_news_and_commentary-2950806"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.barchart.com/stocks/quotes/BOXX"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.barchart.com/etfs-funds/quotes/BOXX/performance"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.webull.com/quote/bats-boxx"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.sofi.com/invest/stock/BOXX/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://robinhood.com/us/en/stocks/boxx/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://portfolioslab.com/symbol/BOXX"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.financecharts.com/etfs/BOXX/summary/price"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.tickerreport.com/banking-finance/13567751/alpha-architect-1-3-month-box-etf-batsboxx-reaches-new-52-week-high-heres-why.html"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://advisortools.zacks.com/proxy/ResearchReport/FYC/report?d=20251123"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://advisortools.zacks.com/proxy/ResearchReport/XLF/report?d=20260101"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://advisortools-dev.zacks.com/ZAT/Proxy/MarketStrategy/DailyMarketAndEconomicNews?d=20260220"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://advisortools.zacks.com/proxy/ResearchReport/FXO/report?d=20251223"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "open_page",
+      "id": "ws_0c070f462edeaa7f006ac9ecc6ea2087d1947d77b3e7f5adb3",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://www.zacks.com/stock/news/2950806/alpha-box-etf-boxx-touches-fresh-52-week-high?cid=CS-ZC-FT-etf_news_and_commentary-2950806"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "search",
+      "id": "ws_0c070f462edeaa7f006ac9ecc88b8887d182c4bfe3ad59faa9",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.researchgate.net/publication/408195262_Artificial_Intelligence_in_Medicine_and_Healthcare_Proceedings_of_the_2nd_International_Conference_on_AI_in_Medicine_and_Healthcare_AiMH%27_2026"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/3003890/alpha-box-etf-boxx-hits-new-52-week-high"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.tradingview.com/news/zacks%3A0af8633c6094b%3A0-alpha-box-etf-boxx-hits-new-52-week-high/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://stansberryresearch.com/stansberry-digest/this-oil-spike-could-be-a-screaming-buy"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.financecharts.com/stocks/USHY/news"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://studylib.net/doc/28460350/%EA%B2%BD%ED%86%B5-%EA%B5%90%EC%9E%AC"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.researchgate.net/publication/396125126_Perceived_Level_of_Job_Satisfaction_and_its_Relation_to_Employee_Retention_The_Case_of_a_Philippine_Government_Agency"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://studylib.net/doc/28460366/%EA%B2%BD%ED%86%B5-%EA%B5%90%EC%9E%AC"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://cdn.kscope.io/a9586e00f4def898c88970c4e8c60d97.html"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.researchgate.net/publication/338763618_European_Journal_of_Education_Studies_CLIENTS%27_SATISFACTION_ON_THE_FRONTLINE_SERVICES_OF_A_GOVERNMENT_HIGHER_EDUCATION_INSTITUTION"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.researchgate.net/publication/227408971_Projection_of_populations_by_level_of_educational_attainment_age_and_sex_for_120_countries_for_2005-2050"
+       }
+      ],
+      "status": "completed"
+     }
+    ],
+    "output_text": "{\"overall_sentiment\":30,\"affected_commodities\":[],\"affected_sectors\":[],\"confidence\":75,\"headline_summary\":\"阿尔法架构1至3个月箱式ETF于2026年10月9日创下52周新高，较52周低点上涨4.04%；另行检索到的同标题内容将其表现与避险需求及加权阿尔法3.90联系起来。 ([zacks.com](https://www.zacks.com/stock/news/3003890/alpha-box-etf-boxx-hits-new-52-week-high?utm_source=openai))\",\"causal_summary\":\"直接事实是该基金创新高并较52周低点上涨4.04%。可能的传导关系是经济不确定性、油价波动、联邦储备委员会利率路径不确定性及人工智能相关担忧提升现金类资产偏好，从而支持采用箱式价差、目标接近1至3个月美国国库券表现的短期策略；这属于来源文章的解释，不能确认后续走势。 ([zacks.com](https://www.zacks.com/stock/news/3003890/alpha-box-etf-boxx-hits-new-52-week-high?utm_source=openai))\",\"insufficient_context\":true,\"classification\":\"bullish\",\"affected_stocks\":[],\"market_relevance\":12,\"uncertainty_notes\":[\"输入未提供可用的新闻正文，且原链接打开时未能取得正文；另行检索到与标题、主体和2026年10月9日日期相符的扎克斯投资研究页面索引内容，用于核验主要事实，不能视为已取得输入新闻正文。 ([zacks.com](https://www.zacks.com/stock/news/3003890/alpha-box-etf-boxx-hits-new-52-week-high?cid=CS-ZC-FT-etf_news_and_commentary-3003890))\",\"文章将避险资金偏好、油价波动和利率担忧作为基金上涨原因，但未提供资金流、持仓变化或独立数据来证明因果关系。\",\"正加权阿尔法3.90是来源文章引用的历史表现指标，不能单独证明未来继续上涨。 ([zacks.com](https://www.zacks.com/stock/news/3003890/alpha-box-etf-boxx-hits-new-52-week-high?utm_source=openai))\",\"输入允许的股票代码列表为空，因此未列出受影响股票，也未推断其他公司或股票代码；油价在文章中属于背景变量，未列为受影响商品。\"],\"content_hash\":\"31cd49f585b27d18a3ff3042fd74cd962fd44faef34eb1cadc9e38805596f70a\",\"key_factors\":[\"同标题检索结果显示，该基金较52周低点上涨4.04%，并创下52周新高。 ([zacks.com](https://www.zacks.com/stock/news/3003890/alpha-box-etf-boxx-hits-new-52-week-high?utm_source=openai))\",\"该基金采用箱式价差策略，目标取得与1至3个月美国国库券相当或更高的价格和收益表现，年费为19个基点。 ([zacks.com](https://www.zacks.com/stock/news/3003890/alpha-box-etf-boxx-hits-new-52-week-high?utm_source=openai))\",\"来源文章将经济不确定性、油价波动、联邦储备委员会利率路径以及人工智能相关担忧列为现金类资产需求上升的背景。 ([zacks.com](https://www.zacks.com/stock/news/3003890/alpha-box-etf-boxx-hits-new-52-week-high?utm_source=openai))\"],\"news_id\":194988,\"summary_zh\":\"阿尔法架构1至3个月箱式ETF创下52周新高，较52周低点上涨4.04%。另行检索到的同标题内容称，经济不确定性、油价波动、联邦储备委员会利率路径担忧，以及人工智能泡沫和安全担忧，促使投资者偏向现金类资产；该内容还提到加权阿尔法为3.90。 ([zacks.com](https://www.zacks.com/stock/news/3003890/alpha-box-etf-boxx-hits-new-52-week-high?utm_source=openai))\",\"change_sequence\":206201,\"output_language\":\"zh-CN\",\"title_zh\":\"阿尔法架构1至3个月箱式ETF创52周新高\"}",
+    "provider": "openai",
+    "stop_reason": "completed",
+    "terminal_error": null,
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": null,
+     "cached_input_tokens": 5792,
+     "code_execution_requests": 0,
+     "input_tokens": 19152,
+     "output_tokens": 7364,
+     "reasoning_tokens": 6521,
+     "total_tokens": 26516,
+     "web_fetch_requests": 1,
+     "web_search_requests": 2
+    }
+   }
+  },
+  {
+   "job_id": "aij_49a7602ea195455da64e5c46f43b6dfe",
+   "job_type": "news_impact",
+   "model": "gpt-5.6-luna",
+   "payload": {
+    "allowed_tickers": [],
+    "analysis_revision": 1,
+    "article_reason": "no_matching_article_body",
+    "article_status": "unavailable",
+    "change_sequence": 206195,
+    "content_hash": "dd4c727b4a1eff7666f589371f3e33b164ce65ae4ce86b99b11458013f0e997d",
+    "fetched_at": "2026-10-10T00:29:40.803956Z",
+    "news_id": 194982,
+    "published_at": "2026-10-09T14:40:02Z",
+    "source": "massive/Zacks Investment Research",
+    "source_count": 1,
+    "source_ticker_hints": [
+     "IFS",
+     "BX"
+    ],
+    "sources": [
+     "massive/Zacks Investment Research"
+    ],
+    "summary": "In a comparison of two Financial - Miscellaneous Services sector stocks, Intercorp Financial Services Inc. (IFS) emerges as the more attractive option for value investors compared to Blackstone Inc. (BX). IFS holds a Zacks Rank #2 (Buy) versus BX's #3 (Hold), and significantly outperforms on valuation metrics including a forward P/E of 8.67 vs 18.97, a PEG ratio of 0.69 vs 1.35, and a P/B ratio of 1.56 vs 3.97. IFS received a Value grade of A while BX received a D.",
+    "title": "IFS vs. BX: Which Stock Should Value Investors Buy Now?",
+    "url": "https://www.zacks.com/stock/news/3003908/ifs-vs-bx-which-stock-should-value-investors-buy-now?cid=CS-ZC-FT-fundamental_analysis%7Cyseop_template_3-3003908"
+   },
+   "production_error": "schema_validation_failed: ai_news_unbound_or_unhandled_url",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://au.finance.yahoo.com/news/ifs-vs-bx-stock-value-144002699.html"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://alphamadera.com/stock/IFS/news"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/2417094/ifs-vs-bx-which-stock-should-value-investors-buy-now"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://finance.yahoo.com/quote/IFS/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://feed.zacks.com/commentary/AllHeadlines/html"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://tiblio.com/research/tickers/IFS?page=1"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.financecharts.com/stocks/IFS/summary/price"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://finviz.com/stock?t=ifs"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://finviz.com/stock?p=w&t=IFS&ta=0&ty=tr"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://finviz.com/stock?b=2&p=d&t=IFS"
+     }
+    ],
+    "id": "resp_0430674d29f49a53006ac9eb4436a087d1b843b5482ef4b505",
+    "model": "gpt-5.6-luna",
+    "openai_web_calls": [
+     {
+      "action": "search",
+      "id": "ws_0430674d29f49a53006ac9eb480e8887d18119ea438c76ce19",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://alphamadera.com/stock/IFS/news"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2417094/ifs-vs-bx-which-stock-should-value-investors-buy-now"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://au.finance.yahoo.com/news/ifs-vs-bx-stock-value-144002699.html"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://finance.yahoo.com/quote/IFS/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://feed.zacks.com/commentary/AllHeadlines/html"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://tiblio.com/research/tickers/IFS?page=1"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.financecharts.com/stocks/IFS/summary/price"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://finviz.com/stock?t=ifs"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://finviz.com/stock?p=w&t=IFS&ta=0&ty=tr"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://finviz.com/stock?b=2&p=d&t=IFS"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://finviz.com/stock?p=d&t=IFS&ta=2&ty=c"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://timsstocklists.com/Stocks/Scorecard?ticker=BX"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "open_page",
+      "id": "ws_0430674d29f49a53006ac9eb4ad26487d192b7ec690874c0b7",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://feed.zacks.com/commentary/AllHeadlines/html"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "find_in_page",
+      "id": "ws_0430674d29f49a53006ac9eb4c438487d18e3a0361bf748e3b",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://feed.zacks.com/commentary/AllHeadlines/html"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "search",
+      "id": "ws_0430674d29f49a53006ac9eb7a2f6087d1996b5a007aec9d25",
+      "sources": [],
+      "status": "searching"
+     }
+    ],
+    "output_text": "{\"overall_sentiment\":5,\"affected_commodities\":[],\"affected_sectors\":[\"金融服务\"],\"confidence\":68,\"headline_summary\":\"2026年10月9日发布的一篇扎克斯相对估值比较文章认为，英特科普金融服务公司在价值筛选指标上优于黑石集团；这属于研究模型下的相对比较，并非公司经营、监管或资本运作方面的新事件。 ([au.finance.yahoo.com](https://au.finance.yahoo.com/news/ifs-vs-bx-stock-value-144002699.html?utm_source=openai))\",\"causal_summary\":\"可能的传导关系是，该比较结论有望提升英特科普金融服务公司在价值风格筛选中的关注度，同时削弱黑石集团在这一单一比较框架下的相对吸引力。但文章没有提供新的业绩、经营指引、资本行动或监管信息，因此不足以推断持续的基本面变化或行业级价格影响；上述判断属于基于有限资料的推断。 ([au.finance.yahoo.com](https://au.finance.yahoo.com/news/ifs-vs-bx-stock-value-144002699.html?utm_source=openai))\",\"insufficient_context\":true,\"classification\":\"neutral\",\"affected_stocks\":[],\"market_relevance\":12,\"uncertainty_notes\":[\"输入未提供新闻正文，所附原始来源页面在本次检索中返回访问中断，因此不能声称已经读到该链接的完整原文。 ([zacks.com](https://www.zacks.com/stock/news/3003908/ifs-vs-bx-which-stock-should-value-investors-buy-now?cid=CS-ZC-FT-fundamental_analysis%7Cyseop_template_3-3003908))\",\"本次另行检索到同标题转载文本及来源聚合信息，用于核验同一事件、主体、日期和主要比较数字；这些材料不能替代缺失的原始正文。 ([au.finance.yahoo.com](https://au.finance.yahoo.com/news/ifs-vs-bx-stock-value-144002699.html?utm_source=openai))\",\"估值倍数、评级和价值评分属于时点性模型数据，可能随数据口径或模型更新而变化；输入未提供完整计算方法。\",\"输入允许使用的股票代码列表为空，因此未列出受影响股票；对金融服务行业的归类仅反映文章讨论范围，不代表已确认存在行业级传导。\"],\"content_hash\":\"dd4c727b4a1eff7666f589371f3e33b164ce65ae4ce86b99b11458013f0e997d\",\"key_factors\":[\"这是对金融服务行业两家公司的相对价值比较，而不是新的公司公告或监管披露。\",\"所给摘要的核心比较指标包括扎克斯评级、远期市盈率、PEG、市净率和价值评分。\",\"所给摘要称，英特科普金融服务公司的评级为2级（买入）、价值评分为A；黑石集团的评级为3级（持有）、价值评分为D。\",\"结论只表示在该模型和数据口径下英特科普金融服务公司相对占优，不等同于业绩改善或确定的股价方向。\",\"同标题转载文本的发布时间与输入所示的2026年10月9日事件日期一致，并复述了主要比较数据；原始来源页面本次无法直接取得。 ([au.finance.yahoo.com](https://au.finance.yahoo.com/news/ifs-vs-bx-stock-value-144002699.html?utm_source=openai))\"],\"news_id\":194982,\"summary_zh\":\"所给摘要称，英特科普金融服务公司相较黑石集团更符合价值投资筛选条件：前者的扎克斯评级为2级（买入），后者为3级（持有）；前者的远期市盈率、PEG和市净率分别为8.67、0.69和1.56，黑石集团相应为18.97、1.35和3.97；两者的价值评分分别为A和D。另行检索到的同标题转载文本复述了这些比较数据。 ([au.finance.yahoo.com](https://au.finance.yahoo.com/news/ifs-vs-bx-stock-value-144002699.html?utm_source=openai))\",\"change_sequence\":206195,\"output_language\":\"zh-CN\",\"title_zh\":\"英特科普金融服务公司与黑石集团：哪家公司更受价值投资者青睐？\"}",
+    "provider": "openai",
+    "stop_reason": "completed",
+    "terminal_error": null,
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": null,
+     "cached_input_tokens": 5792,
+     "code_execution_requests": 0,
+     "input_tokens": 37412,
+     "output_tokens": 3548,
+     "reasoning_tokens": 3548,
+     "total_tokens": 40960,
+     "web_fetch_requests": null,
+     "web_search_requests": null
+    }
+   }
+  },
+  {
+   "job_id": "aij_e8df756a4e13441e9f17c7a466021512",
+   "job_type": "news_impact",
+   "model": "gpt-5.6-luna",
+   "payload": {
+    "allowed_tickers": [],
+    "analysis_revision": 1,
+    "article_reason": "no_matching_article_body",
+    "article_status": "unavailable",
+    "change_sequence": 206196,
+    "content_hash": "80941a2b54e471ff0764e8b75840733b99fbee0597d93daf86376b7c234b6058",
+    "fetched_at": "2026-10-10T00:29:40.803956Z",
+    "news_id": 194983,
+    "published_at": "2026-10-09T14:40:02Z",
+    "source": "massive/Zacks Investment Research",
+    "source_count": 1,
+    "source_ticker_hints": [
+     "SWK",
+     "SWP",
+     "LECO"
+    ],
+    "sources": [
+     "massive/Zacks Investment Research"
+    ],
+    "summary": "In a comparison of two Manufacturing - Tools & Related Products stocks, Stanley Black & Decker (SWK) emerges as the superior value investment compared to Lincoln Electric Holdings (LECO). Both stocks hold a Zacks Rank #2 (Buy) with positive earnings outlooks, but SWK offers more attractive valuation metrics with a forward P/E of 15.99 versus LECO's 23.16, and a Value grade of A compared to LECO's C grade.",
+    "title": "SWK vs. LECO: Which Stock Is the Better Value Option?",
+    "url": "https://www.zacks.com/stock/news/3003909/swk-vs-leco-which-stock-is-the-better-value-option?cid=CS-ZC-FT-fundamental_analysis%7Cyseop_template_3-3003909"
+   },
+   "production_error": "schema_validation_failed: ai_news_unbound_or_unhandled_url",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://finance.yahoo.com/markets/stocks/articles/swk-vs-leco-stock-better-144002378.html"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://feed.zacks.com/commentary/AllHeadlines/html"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/2958419/cnm-vs-leco-which-stock-is-the-better-value-option"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/2990750/kmt-vs-leco-which-stock-is-the-better-value-option"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://ca.finance.yahoo.com/quote/LECO/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://finance.yahoo.com/quote/0669.HK/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://finance.yahoo.com/quote/TTNDY/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://public.com/stocks/ttndy"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.ventureline.com/financial-statement-analysis/TTNDY/arq-inc-financial-statement-analysis/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://public.com/stocks/ttndy/news"
+     }
+    ],
+    "id": "resp_09158e1698b11dc0006ac9eafca12c87d18d9d37faf515159c",
+    "model": "gpt-5.6-luna",
+    "openai_web_calls": [
+     {
+      "action": "search",
+      "id": "ws_09158e1698b11dc0006ac9eb0191b087d1b4c6effadf7f3903",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://feed.zacks.com/commentary/AllHeadlines/html"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://finance.yahoo.com/markets/stocks/articles/swk-vs-leco-stock-better-144002378.html"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2958419/cnm-vs-leco-which-stock-is-the-better-value-option"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2990750/kmt-vs-leco-which-stock-is-the-better-value-option"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://ca.finance.yahoo.com/quote/LECO/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://finance.yahoo.com/quote/0669.HK/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://finance.yahoo.com/quote/TTNDY/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://public.com/stocks/ttndy"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.ventureline.com/financial-statement-analysis/TTNDY/arq-inc-financial-statement-analysis/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://public.com/stocks/ttndy/news"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://uk.finance.yahoo.com/quote/0669.HK/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://carequest.mashreqdevelopments.com/?_=%2Fquote%2FLECO%2F%23aU4iOl%2FubBL8aPtyxWDvSmBSOSVLoiwZ"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "open_page",
+      "id": "ws_09158e1698b11dc0006ac9eb040c8887d18aa6d96f149b4767",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://feed.zacks.com/commentary/AllHeadlines/html"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "find_in_page",
+      "id": "ws_09158e1698b11dc0006ac9eb05738887d1a99568f66ee49777",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://feed.zacks.com/commentary/AllHeadlines/html"
+       }
+      ],
+      "status": "completed"
+     }
+    ],
+    "output_text": "{\"overall_sentiment\":2,\"affected_commodities\":[],\"affected_sectors\":[\"制造业工具及相关产品([finance.yahoo.com](https://finance.yahoo.com/markets/stocks/articles/swk-vs-leco-stock-better-144002378.html?utm_source=openai))\"],\"confidence\":78,\"headline_summary\":\"扎克斯投资研究比较史丹利百得与林肯电气控股的相对估值，认为前者是更具价值投资吸引力的选项；两家公司均获第二级“买入”评级。([finance.yahoo.com](https://finance.yahoo.com/markets/stocks/articles/swk-vs-leco-stock-better-144002378.html?utm_source=openai))\",\"causal_summary\":\"从已核验内容看，这是一篇基于估值指标和研究评分的行业内比较，不是公司公告、业绩发布或监管事件。远期P/E较低、价值评分较高的一方可能获得相对估值偏好，因而对史丹利百得相对偏正面、对林肯电气控股相对偏负面；但对整个行业需求和大盘的直接传导有限。([finance.yahoo.com](https://finance.yahoo.com/markets/stocks/articles/swk-vs-leco-stock-better-144002378.html?utm_source=openai))\",\"insufficient_context\":false,\"classification\":\"neutral\",\"affected_stocks\":[],\"market_relevance\":12,\"uncertainty_notes\":[\"输入未提供新闻正文；直接来源页面只返回访问中断提示，未能取得原始全文。另行检索到同一标题的转载内容并与输入摘要核对，分析不声称读过原始链接。([zacks.com](https://www.zacks.com/stock/news/3003909/swk-vs-leco-which-stock-is-the-better-value-option?cid=CS-ZC-FT-fundamental_analysis%7Cyseop_template_3-3003909))\",\"这是估值比较评论，不是已确认的基本面新变化；远期P/E、评分和评级可能随数据更新而改变。([finance.yahoo.com](https://finance.yahoo.com/markets/stocks/articles/swk-vs-leco-stock-better-144002378.html?utm_source=openai))\",\"输入允许使用的股票代码为空，因此不列示个股结构化影响；输入中的提示代码未用于输出。\"],\"content_hash\":\"80941a2b54e471ff0764e8b75840733b99fbee0597d93daf86376b7c234b6058\",\"key_factors\":[\"文章称两家公司均获扎克斯第二级“买入”评级，但史丹利百得的价值评分为A，高于林肯电气控股的C。([finance.yahoo.com](https://finance.yahoo.com/markets/stocks/articles/swk-vs-leco-stock-better-144002378.html?utm_source=openai))\",\"史丹利百得远期P/E为15.99，林肯电气控股为23.16，估值差异是文章判定前者更具价值吸引力的主要依据。([finance.yahoo.com](https://finance.yahoo.com/markets/stocks/articles/swk-vs-leco-stock-better-144002378.html?utm_source=openai))\",\"内容没有给出新的订单、指引、监管决定、资本运作或商品价格变化，因此事件级市场影响预计较低。([finance.yahoo.com](https://finance.yahoo.com/markets/stocks/articles/swk-vs-leco-stock-better-144002378.html?utm_source=openai))\"],\"news_id\":194983,\"summary_zh\":\"摘要所述比较认为，史丹利百得的估值指标优于林肯电气控股，因而更受价值投资者青睐；这属于相对估值观点，不等同于新的公司经营公告。([finance.yahoo.com](https://finance.yahoo.com/markets/stocks/articles/swk-vs-leco-stock-better-144002378.html?utm_source=openai))\",\"change_sequence\":206196,\"output_language\":\"zh-CN\",\"title_zh\":\"史丹利百得与林肯电气控股：哪一只股票更具估值优势？([finance.yahoo.com](https://finance.yahoo.com/markets/stocks/articles/swk-vs-leco-stock-better-144002378.html?utm_source=openai))\"}",
+    "provider": "openai",
+    "stop_reason": "completed",
+    "terminal_error": null,
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": null,
+     "cached_input_tokens": 5792,
+     "code_execution_requests": 0,
+     "input_tokens": 32151,
+     "output_tokens": 7204,
+     "reasoning_tokens": 6458,
+     "total_tokens": 39355,
+     "web_fetch_requests": 2,
+     "web_search_requests": 1
+    }
+   }
+  },
+  {
+   "job_id": "aij_cfcf6908936345b9b4ae089b585a81e2",
+   "job_type": "news_impact",
+   "model": "gpt-5.6-luna",
+   "payload": {
+    "allowed_tickers": [],
+    "analysis_revision": 1,
+    "article_reason": "no_matching_article_body",
+    "article_status": "unavailable",
+    "change_sequence": 206197,
+    "content_hash": "60ea7083c0241c1836af615d0a7aaae92c5036938ea8887586c2fe23c57f5f8a",
+    "fetched_at": "2026-10-10T00:29:40.803956Z",
+    "news_id": 194984,
+    "published_at": "2026-10-09T14:40:02Z",
+    "source": "massive/Zacks Investment Research",
+    "source_count": 1,
+    "source_ticker_hints": [
+     "SHG",
+     "EBKDY"
+    ],
+    "sources": [
+     "massive/Zacks Investment Research"
+    ],
+    "summary": "In a comparison of two foreign banks for value investors, Shinhan Financial (SHG) emerges as the more attractive option with a Zacks Rank of #1 (Strong Buy) compared to Erste Group Bank AG's (EBKDY) #3 (Hold) rating. SHG demonstrates superior valuation metrics including a lower forward P/E ratio of 8.51 versus EBKDY's 10.41, a better PEG ratio of 0.55 versus 0.61, and a lower P/B ratio of 0.82 versus 0.98, earning it a Value grade of B compared to EBKDY's C grade.",
+    "title": "SHG vs. EBKDY: Which Stock Is the Better Value Option?",
+    "url": "https://www.zacks.com/stock/news/3003907/shg-vs-ebkdy-which-stock-is-the-better-value-option?cid=CS-ZC-FT-fundamental_analysis%7Cyseop_template_3-3003907"
+   },
+   "production_error": "schema_validation_failed: ai_news_unbound_or_unhandled_url",
+   "receipt": {
+    "evidence_sources": [
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/stock/news/2750936/shg-vs-ebkdy-which-stock-is-the-better-value-option"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://feed.zacks.com/commentary/AllHeadlines/html"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.zacks.com/upload_education/ValueInvesting12_6.pdf"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://finance.yahoo.com/quote/EBKOF/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://ca.finance.yahoo.com/quote/SHG/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.financecharts.com/stocks/EBKDY/profile"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.financecharts.com/stocks/SHG"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://jyq.zhangyongyao.com/quote/SHG/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://finance.yahoo.com/quote/EBON/news/"
+     },
+     {
+      "title": "联网核验来源",
+      "type": "web_search",
+      "url": "https://www.ventureline.com/financial-statement-analysis/EBON/datatec-limited-financial-statement-analysis/"
+     }
+    ],
+    "id": "resp_0c7fdd8d1f162a8d006ac9eac49b3487d1ab086e767dad9e33",
+    "model": "gpt-5.6-luna",
+    "openai_web_calls": [
+     {
+      "action": "search",
+      "id": "ws_0c7fdd8d1f162a8d006ac9eac8c97487d1a51c8a0941190463",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/upload_education/ValueInvesting12_6.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/news/2750936/shg-vs-ebkdy-which-stock-is-the-better-value-option"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://finance.yahoo.com/quote/EBKOF/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://ca.finance.yahoo.com/quote/SHG/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://feed.zacks.com/commentary/AllHeadlines/html"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.financecharts.com/stocks/EBKDY/profile"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.financecharts.com/stocks/SHG"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://jyq.zhangyongyao.com/quote/SHG/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://finance.yahoo.com/quote/EBON/news/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.ventureline.com/financial-statement-analysis/EBON/datatec-limited-financial-statement-analysis/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://finance.yahoo.com/quote/SHG/news/"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://finviz.com/stock?t=SHG"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://public.com/stocks/shg"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://advisortools-test.zacks.com/Proxy/MarketStrategy/GlobalWeekAhead?d=20260222"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://advisortools-test.zacks.com/Proxy/IndustryOutlook/SHECY"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/stock/zer/pdf/index.php?article_id=305398&type=front&type=generate"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/upload_education/growthandincome12_4-Final.pdf"
+       },
+       {
+        "title": "联网核验来源",
+        "type": "web_search",
+        "url": "https://www.zacks.com/upload_education/aggressivegrowthinv12_4-Final.pdf"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "open_page",
+      "id": "ws_0c7fdd8d1f162a8d006ac9eacb2be887d19d79e4a21efa542a",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://www.zacks.com/stock/news/2750936/shg-vs-ebkdy-which-stock-is-the-better-value-option"
+       }
+      ],
+      "status": "completed"
+     },
+     {
+      "action": "find_in_page",
+      "id": "ws_0c7fdd8d1f162a8d006ac9eacc50f487d1879d342fd5f8dbe5",
+      "sources": [
+       {
+        "title": "联网核验来源",
+        "type": "web_fetch",
+        "url": "https://feed.zacks.com/commentary/AllHeadlines/html"
+       }
+      ],
+      "status": "completed"
+     }
+    ],
+    "output_text": "{\"overall_sentiment\":3,\"affected_commodities\":[],\"affected_sectors\":[],\"confidence\":58,\"headline_summary\":\"这是一篇面向价值投资者的海外银行估值比较。输入摘要称，新韩金融相较奥地利第一储蓄银行集团拥有更低的远期市盈率、PEG和市净率，并获得更高的价值评级；但本次新闻正文未能取得。\",\"causal_summary\":\"若输入摘要中的数据准确，较低估值与更高研究评级可能使市场形成对新韩金融相对有利的估值比较；但这不是新的业绩、资本、监管或经营事件，且正文未核验，直接市场传导预计有限。由于输入未提供可用股票代码，未列示具体股票影响。\",\"insufficient_context\":true,\"classification\":\"neutral\",\"affected_stocks\":[],\"market_relevance\":8,\"uncertainty_notes\":[\"输入说明显示未找到匹配的新闻正文；直接打开所给页面时返回访问中断，未能取得本次文章全文。 ([zacks.com](https://www.zacks.com/stock/news/3003907/shg-vs-ebkdy-which-stock-is-the-better-value-option?cid=CS-ZC-FT-fundamental_analysis%7Cyseop_template_3-3003907))\",\"另行检索到的资讯汇总页列出了与输入标题和发布时间一致的条目，时间为2026年10月9日14:40:02 GMT，可核对标题和日期，但不足以证明全文内容。 ([feed.zacks.com](https://feed.zacks.com/commentary/AllHeadlines/html?utm_source=openai))\",\"检索到的一篇同题目旧文章发表于2025年9月12日，不作为本次2026年10月9日事件的正文依据。 ([zacks.com](https://www.zacks.com/stock/news/2750936/shg-vs-ebkdy-which-stock-is-the-better-value-option?utm_source=openai))\",\"输入未提供可用股票代码，且原始正文缺失，因此不推断具体股票或行业层面的受影响对象。\"],\"content_hash\":\"60ea7083c0241c1836af615d0a7aaae92c5036938ea8887586c2fe23c57f5f8a\",\"key_factors\":[\"输入摘要称，新韩金融的远期市盈率为8.51，低于奥地利第一储蓄银行集团的10.41。\",\"输入摘要称，新韩金融的PEG为0.55，低于奥地利第一储蓄银行集团的0.61。\",\"输入摘要称，新韩金融的市净率为0.82，低于奥地利第一储蓄银行集团的0.98。\",\"输入摘要称，两者的价值评级分别为B和C，研究评级分别为1级和3级。\",\"该内容属于估值比较评论，不是公司公告、财务披露或监管行动。\"],\"news_id\":194984,\"summary_zh\":\"在对两家海外银行的价值指标比较中，输入摘要称新韩金融的远期市盈率为8.51，对方为10.41；PEG为0.55，对方为0.61；市净率为0.82，对方为0.98。两者的价值评级分别为B和C，研究评级分别为1级（强力买入）和3级（持有）。\",\"change_sequence\":206197,\"output_language\":\"zh-CN\",\"title_zh\":\"新韩金融与奥地利第一储蓄银行集团：哪一家更具价值投资吸引力？\"}",
+    "provider": "openai",
+    "stop_reason": "completed",
+    "terminal_error": null,
+    "usage": {
+     "cache_creation_1h_input_tokens": null,
+     "cache_creation_5m_input_tokens": null,
+     "cache_creation_input_tokens": null,
+     "cached_input_tokens": 5792,
+     "code_execution_requests": 0,
+     "input_tokens": 32059,
+     "output_tokens": 5768,
+     "reasoning_tokens": 5026,
+     "total_tokens": 37827,
+     "web_fetch_requests": 2,
+     "web_search_requests": 1
+    }
+   }
+  }
+ ]
+}

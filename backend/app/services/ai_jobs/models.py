@@ -415,9 +415,9 @@ _SELF_DESCRIBING_CODES = frozenset(
 _SEC_FORM_DESIGNATIONS = ("10-K", "10-Q", "8-K")
 # 频率数量（2026-10-10 生产取证：找回试运行里 MHz 被拒 7 次）。只认紧跟在数字
 # 后面的 MHz、GHz（「600 MHz」「600MHz」「3.5GHz」），边界与经核验热点的单位
-# 翻译 _VERIFIED_FOCUS_FREQUENCY 相同。不带数字的「频率MHz」、紧挨公司等标签的
-# 「公司800MHz」原先由本条拒绝，2026-10-10 口径变更后由 _is_term_like_span 放行；
-# 紧挨代码、编号和证券语境仍被拒。
+# 翻译 _VERIFIED_FOCUS_FREQUENCY 相同。本条不认的写法（不带数字的「频率MHz」、
+# 紧挨公司或编号等标签的「公司800MHz」）原先被拒；2026-10-10 口径变更后它们不是
+# 代码样词元，由 _is_term_like_span 按词条放行。
 _FREQUENCY_QUANTITY = re.compile(
     r"(?<![A-Za-z0-9_.])[0-9]+(?:\.[0-9]+)?[ \t]*(?:MHz|GHz)(?![A-Za-z0-9_])"
 )
@@ -601,50 +601,6 @@ _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
         "scikit-learn",
     }
 ) | _MARKET_TERM_ABBREVIATIONS | _RATE_BENCHMARK_NAMES
-_CROSS_SENTENCE_SECURITY_ISSUERS = frozenset(
-    {
-        "Adobe",
-        "Amazon",
-        "Amazon.com",
-        "Apple",
-        "Axios",
-        "Block",
-        "Cloudflare",
-        "CrowdStrike",
-        "Facebook",
-        "GitLab",
-        "Goodyear",
-        "Google",
-        "Instagram",
-        "IonQ",
-        "Kalshi",
-        "LinkedIn",
-        "McDonald's",
-        "Meta",
-        "Microsoft",
-        "Moderna",
-        "NVIDIA",
-        "OpenAI",
-        "Palantir",
-        "PayPal",
-        "Pharming",
-        "Qualcomm",
-        "Salesforce",
-        "ServiceNow",
-        "Skydance",
-        "Snowflake",
-        "Square",
-        "TSMC",
-        "Temu",
-        "TeraWulf",
-        "TikTok",
-        "Varonis",
-        "Visa",
-        "WhatsApp",
-        "YouTube",
-        "eBay",
-    }
-)
 _ALLOWED_LOWERCASE_FOREIGN_NAMES = frozenset(
     {
         "leniolisib",
@@ -751,9 +707,9 @@ _LETTER_GRADE = re.compile(
 )
 # 单个大写字母紧跟这些分类名词时是标签（2026-10-10 生产取证：「处方药D部分」
 # 被拒；同类还有「V型反转」「A级」「B组」「C区」）。名词必须紧挨字母，中间只许
-# 空格。隔着标点的「福特汽车F，部分分析师」原先由本条拒绝，2026-10-10 口径变更后
-# 由 _is_term_like_span 放行；括号里的「福特汽车（F）」仍按代码别名要求绑定。「轮」
-# 「类」沿用原来的判断，「股」仍只认 A、B、H。
+# 空格。隔着标点的「福特汽车F，部分分析师」和括号里的「福特汽车（F）」原先被拒，
+# 2026-10-10 口径变更后由 _is_term_like_span 放行。「轮」「类」沿用原来的判断，
+# 「股」仍只认 A、B、H。
 _LETTER_LABEL_NOUNS = ("部分", "型", "级", "组", "区")
 # 规则条款编号里括号中的小写字母：「规则5550(a)(2)」「规则10b5-1(c)」
 # （2026-10-10 生产取证，Luna 被拒片段 'a'）。只认 ASCII 括号里的单个小写
@@ -1956,7 +1912,8 @@ def _foreign_span_context(
 # 2026-10-10 口径变更（用户决定）：正文仍要求中文，但拉丁字母的专名和术语可以
 # 保留原文，english_prose_not_allowed 只拦英文散文。上面的规则都没认下的片段，
 # 由 _is_term_like_span 按「词条」再判一次：单个词元，或不超过 5 个词、每个词都是
-# 首字母大写、全大写、数字或连接词的名称。证券语境的红线照旧。
+# 首字母大写、全大写、数字或连接词的名称。证券语境的绑定只针对代码样词元
+# （见 _CODE_LIKE_TOKEN）。
 _TERM_MAX_WORDS = 5
 _TERM_CONNECTORS = frozenset(
     {
@@ -1979,11 +1936,12 @@ _TERM_MOVEMENT = re.compile(
     "[\u4e00-\u9fff]{0,2}?(?:" + "|".join(_TERM_MOVEMENT_WORDS) + ")"
 )
 _TERM_TRAILING_ALIAS = re.compile(r"[（(][^（()）]{1,24}[）)]")
-_CODE_LABEL_PREFIX = re.compile(r"(?:代码|编号)(?:为|是)?$")
-# 代码样片段：1 到 5 个大写字母。除了上面的证券语境，后面是「股」「涨」「跌」或
-# 公司、集团、企业（中间只隔标点、空格或数字），独自放在中文后的括号里（「英伟达
-# （NVDA）」），或后接带符号的百分比、基点（「盘前TSLA +3.5%」）和价格比较
-# （「F>12美元」）时，也是在说股票。
+# 代码样词元：1 到 5 个大写字母，按空格切分，点号、连字符连起来的不拆开。
+# 2026-10-10 第三轮起只有它们在证券语境要求代码绑定；混合大小写、带小写或带点号
+# 的名称（CleanSpark、C3.ai、Polymesh、BRK.B）紧挨股价、涨跌词也按词条放行。证券语境指：原有的股价、股票等判断，后面两个字以内接涨跌词，后面是
+# 「股」「涨」「跌」或公司、集团、企业（中间只隔标点、空格或数字），以及后接带
+# 符号的百分比、基点（「盘前TSLA +3.5%」）和价格比较（「F>12美元」）。「公司名
+# （代码）」里的代码和「代码为X」不再算证券语境。
 _CODE_LIKE_TOKEN = re.compile(r"[A-Z]{1,5}")
 _CODE_SIGNED_MOVE = re.compile(
     r"[ \t]*(?:[+＋\-－−]|加|减)[ \t]*[0-9]+(?:\.[0-9]+)?[ \t]*(?:%|％|个?基点)"
@@ -2024,48 +1982,55 @@ def _is_english_prose_span(span: str) -> bool:
     return prose_words >= 2
 
 
-def _code_like_token_in_security_context(*, sentence: str, start: int, end: int) -> bool:
-    return (
-        _strip_security_reference_separators(sentence[end:]).startswith(("股", "涨", "跌"))
-        or _normalize_security_reference_phrase(sentence[end:])
-        .removeprefix("的")
-        .startswith(_SECURITY_COMPANY_BRIDGES)
-        or (
-            start >= 2
-            and sentence[start - 1] in "（("
-            and sentence[end : end + 1] in "）)"
-            and _is_cjk(sentence[start - 2])
-        )
-        or _CODE_SIGNED_MOVE.match(sentence, end) is not None
-        or _CODE_PRICE_COMPARISON.match(sentence, end) is not None
-    )
-
-
-def _term_in_security_context(span: str, *, sentence: str, start: int, end: int) -> bool:
+def _code_like_token_in_security_context(
+    token: str, *, sentence: str, start: int, end: int,
+) -> bool:
     if _approved_span_requires_ticker_binding(
-        span, sentence=sentence, start=start, end=end,
-    ):
-        return True
-    if _CODE_LABEL_PREFIX.search(
-        _normalize_security_reference_phrase(sentence[:start])
-    ) is not None or _normalize_security_reference_phrase(sentence[end:]).startswith(
-        ("代码", "编号")
+        token, sentence=sentence, start=start, end=end,
     ):
         return True
     rest = sentence[end:].lstrip(" \t")
     alias = _TERM_TRAILING_ALIAS.match(rest)
     if alias is not None:
         rest = rest[alias.end() :]
-    if _TERM_MOVEMENT.match(_strip_security_reference_separators(rest)) is not None:
-        return True
+    return (
+        _TERM_MOVEMENT.match(_strip_security_reference_separators(rest)) is not None
+        or _strip_security_reference_separators(sentence[end:]).startswith(("股", "涨", "跌"))
+        or _normalize_security_reference_phrase(sentence[end:])
+        .removeprefix("的")
+        .startswith(_SECURITY_COMPANY_BRIDGES)
+        or _CODE_SIGNED_MOVE.match(sentence, end) is not None
+        or _CODE_PRICE_COMPARISON.match(sentence, end) is not None
+    )
+
+
+def _term_in_security_context(span: str, *, sentence: str, start: int, end: int) -> bool:
     return any(
         _CODE_LIKE_TOKEN.fullmatch(token.group(0)) is not None
         and _code_like_token_in_security_context(
+            token.group(0),
             sentence=sentence,
             start=start + token.start(),
             end=start + token.end(),
         )
         for token in re.finditer(r"\S+", span)
+    )
+
+
+def _payload_field_name_echo(
+    sentence: str, start: int, end: int, payload_field_names: frozenset[str],
+) -> bool:
+    def part(char: str) -> bool:
+        return char.isascii() and (char.isalnum() or char == "_")
+
+    while start > 0 and part(sentence[start - 1]):
+        start -= 1
+    while end < len(sentence) and part(sentence[end]):
+        end += 1
+    return sentence[start:end] in payload_field_names and not (
+        _approved_span_requires_ticker_binding(
+            sentence[start:end], sentence=sentence, start=start, end=end,
+        )
     )
 
 
@@ -2076,12 +2041,17 @@ def _is_term_like_span(
     start: int,
     end: int,
     source_texts: tuple[str, ...],
+    payload_field_names: frozenset[str] = frozenset(),
 ) -> bool:
     if not any(_is_cjk(char) for char in sentence):
         return False
-    # 字段名（「my_article_status」）、网址和主机名不是词条。
-    if sentence[start - 1 : start] == "_" or sentence[end : end + 1] == "_":
+    # 下划线连起来的字段名（「my_article_status」）不是词条。例外：财报照抄本条载荷
+    # 的字段名（「release_status」「eps_actual」，2026-10-10 第三轮），且不在证券语境。
+    if (sentence[start - 1 : start] == "_" or sentence[end : end + 1] == "_") and not (
+        _payload_field_name_echo(sentence, start, end, payload_field_names)
+    ):
         return False
+    # 网址和主机名不是词条。
     if "://" in (sentence[max(0, start - 3) : start], sentence[end : end + 3]):
         return False
     if _BRACKETED_HOSTNAME.fullmatch(span) is not None:
@@ -2213,28 +2183,6 @@ def _numeric_code_is_in_security_context(
     )
 
 
-def _foreign_span_stands_alone_before_sentence_break(
-    text: str,
-    *,
-    start: int,
-    end: int,
-) -> bool:
-    next_boundary = _SENTENCE_SPLIT.search(text, end)
-    if next_boundary is None:
-        return False
-    previous_boundary = max(
-        (text.rfind(marker, 0, start) for marker in "。！？!?\n"),
-        default=-1,
-    )
-    before = _normalize_security_reference_phrase(
-        text[previous_boundary + 1 : start]
-    )
-    after = _normalize_security_reference_phrase(
-        text[end : next_boundary.start()]
-    )
-    return not before and not after
-
-
 def _english_prose_error(fragment: str) -> ValueError:
     # 带上被拒片段：error_detail 能直接看出是哪段外文触发了规则，排障不必
     # 再重取付费响应复现（2026-09-25 审计）。
@@ -2338,6 +2286,9 @@ def validate_simplified_chinese_text(
         if isinstance(source, str) and source
     )
     news_payload = context.get("news_payload") if context is not None else None
+    payload_field_names = frozenset(
+        context.get("payload_field_names", ()) if context is not None else ()
+    )
     latin_count = sum(
         1 for char in scan_text if char.isascii() and char.isalpha()
     )
@@ -2396,31 +2347,13 @@ def validate_simplified_chinese_text(
                 start=match.start(),
                 end=match.end(),
                 source_texts=source_texts,
+                payload_field_names=payload_field_names,
             ):
                 continue
             raise _english_prose_error(match.group(0))
         if sentence_latin >= 16 and sentence_cjk == 0:
             raise _english_prose_error(sentence)
 
-    for match in _FOREIGN_SPAN.finditer(scan_text):
-        span = match.group(0)
-        if span not in _CROSS_SENTENCE_SECURITY_ISSUERS:
-            continue
-        if not _foreign_span_stands_alone_before_sentence_break(
-            scan_text,
-            start=match.start(),
-            end=match.end(),
-        ):
-            continue
-        if not _approved_span_requires_ticker_binding(
-            span,
-            sentence=scan_text,
-            start=match.start(),
-            end=match.end(),
-        ):
-            continue
-        if span not in normalized_codes:
-            raise _english_prose_error(span)
     return scan_text
 
 
@@ -3688,6 +3621,10 @@ def validate_result(job_type: str, raw_json: str, payload: dict) -> dict:
             "allowed_codes": allowed_codes,
             "news_payload": payload if job_type == "news_impact" else None,
             "source_texts": _validation_source_texts(job_type, payload),
+            # 只有财报没有字段名翻译，照抄的载荷字段名按词条放行（新闻先翻译）。
+            "payload_field_names": (
+                frozenset(map(str, payload)) if job_type == "earnings_impact" else frozenset()
+            ),
             "macro_conditions_status": (
                 payload["macro_conditions"].get("status")
                 if job_type == "market_focus"

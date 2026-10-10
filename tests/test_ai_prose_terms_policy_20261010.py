@@ -143,13 +143,10 @@ def test_english_prose_is_not_translated_word_by_word_into_a_term():
         "IT大涨后回落。",
         "盘前TSLA +3.5%，市场情绪回暖。",
         "F>12美元后福特汽车加速上涨。",
-        # A code-like fragment naming a company, or alone in brackets after one.
+        # A code-like fragment naming a company.
         "A公司宣布回购。",
-        "市场关注特斯拉（TSLA）财报表现。",
-        # Any name in a security context.
-        "CoreWeave股票受到关注。",
+        # A code-like word inside a name, next to a move.
         "T-Mobile US此前下跌约5.4%。",
-        "宏观环境块状态为active（代码），证据不足。",
     ],
 )
 def test_security_context_still_requires_binding(text):
@@ -160,20 +157,33 @@ def test_security_context_still_requires_binding(text):
 @pytest.mark.parametrize(
     "text",
     [
-        # Known costs of the guards, kept on purpose (audit doc, 口径变更):
-        # 代码 next to any name, a move word within two characters even when the
-        # market moves, a short all-caps gloss in brackets, two lower-case words.
+        # Known cost of the prose rule: two or more lower-case words.
+        "患者接受efgartigimod alfa治疗。",
+        "risk-off情绪升温。",
+    ],
+)
+def test_known_costs_of_the_prose_rule_are_still_rejected(text):
+    with pytest.raises(ValueError, match="english_prose_not_allowed"):
+        _news_field(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "市场关注特斯拉（TSLA）财报表现。",
+        "CoreWeave股票受到关注。",
+        "宏观环境块状态为active（代码），证据不足。",
         "团队用Rust代码重写了核心模块。",
         "用Go代码实现。",
         "Polymesh价格下跌。",
         "Fed Pauses市场上涨。",
         "末段高空区域防御系统（THAAD）部署完成。",
-        "患者接受efgartigimod alfa治疗。",
     ],
 )
-def test_known_costs_of_the_guards_are_still_rejected(text):
-    with pytest.raises(ValueError, match="english_prose_not_allowed"):
-        _news_field(text)
+def test_cases_relaxed_by_round_three_are_published(text):
+    # 2026-10-10 第三轮：证券语境的绑定只针对代码样词元，括号里的代码和「代码」标签不再算
+    # 证券语境。这些原先是本文件的红线或已知代价。
+    assert _news_field(text) == text
 
 
 def test_bound_code_still_publishes():

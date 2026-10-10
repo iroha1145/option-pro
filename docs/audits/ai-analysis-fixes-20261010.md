@@ -525,6 +525,170 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
 - 两字窗口之外的涨跌说法（「收于250美元」「股价随后走低」）不另作判断。
 - 部署后要跑一次找回试运行（「部署后操作」第 2 步），看第二轮剩下的失败里有多少转为 validated。
 
+## 第三轮（2026-10-10）
+
+分支 `claude/ai-prose-round3-2026-10-10`，基于 main 的 `77013b02`（PR #241 已合并部署）。生产样本原样存在 `tests/fixtures/ai_round3_failures_20261010.json`，回归测试在 `tests/test_ai_prose_round3_20261010.py`。
+
+### 生产证据
+
+- #241 上线两个多小时，Luna 新闻完成 69 条、校验失败 25 条。其中 23 条是 `ai_news_unbound_or_unhandled_url`，全是无正文、联网的任务；另有「CleanSpark股价在大…」「2026年10月9日，C3.ai…」被拒。
+- 财报（earnings_impact）7 条：
+  - 同业公司代码 CARR、RKLB、BCML 被拒。
+  - 照抄的字段名片段 release、eps 被拒。
+  - 另有 2 条是结构错误：缺 ticker、impacted 为空。
+- `news_identity_mismatch` 三个多小时里新出 8 条，10-03 起累计 13 条。
+
+### 1. 网址不再导致拒绝
+
+- 原因：引用的是输入新闻自己的网址，或者联网看过的页面的子域名。输入网址带 `cid` 参数，回执来源里存的是不带参数的版本。原规则只剥回执来源里有的链接，剩下就报错。
+- 做法：`runtime._normalize_luna_news_citations` 对 Luna 新闻正文做四件事：
+  - 括号里的 Markdown 引用整段剥掉，不论标签和链接是否对得上。
+  - 括号外的链接留下标签文字；标签本身是网站域名的整段剥掉。
+  - 括号里或单独出现的带协议网址剥掉（网址紧跟的英文句号会一起去掉）。
+  - 清理剩下的空括号、悬空的「来源：」、标点前的空格和重复标点。
+- 不再抛 `ai_news_unbound_or_unhandled_url`。回执的 evidence_sources 原样保留给 owner 视图。「回执来源必须来自成功的联网调用」这条完整性检查保留，捏造的来源仍报 `ai_job_provider_sources_invalid`。
+- 不变的部分：
+  - 只写域名、不带协议的括号标注（「（othersite.com）」）仍按原规则，只剥本次联网取回过的网站。
+  - 其他模型的新闻结果不做这套处理。
+  - 有正文、不联网的 Luna 任务也不做。
+- 样本组 url_unbound 4 条全部通过。
+
+### 2. 证券语境的绑定只针对代码样词元
+
+- 做法：`_term_in_security_context` 只检查按空格切出的、1 到 5 个大写字母的词元（`_CODE_LIKE_TOKEN`）。做代码判断时，点号、连字符连起来的不拆开；数散文词数时照旧拆开来数。这些词元在下面这些情况下照旧要求绑定：
+  - 原有的股价、股票等判断。
+  - 两个字以内接涨跌词。
+  - 后面是「股」「涨」「跌」或公司、集团、企业。
+  - 后接带符号的涨跌幅或价格比较。
+- 混合大小写、带小写或带点号的名称不再要求绑定，例如 CleanSpark、C3.ai、Apple、BRK.B。6 个大写字母的 NVIDIA 也不算代码样词元。
+- 去掉两条守卫：「公司名（代码）」里的括号别名，以及单独的「代码」「编号」标签。所以「市场关注英伟达（NVDA）财报表现」未绑定也放行；「英伟达（NVDA）股价上涨」照旧要求绑定。
+- 删掉只针对品牌名的跨句证券检查（`_CROSS_SENTENCE_SECURITY_ISSUERS` 与 `_foreign_span_stands_alone_before_sentence_break`）。新规则下品牌名紧挨股价都不要求绑定，跨句更不该要求。
+- 样本组 prose_names 2 条全部通过。
+
+### 3. 财报同样适用
+
+- 查明：财报走的是同一条校验路径，被拒原因有三类。
+  - release、eps 不是单独的小写词，而是照抄的载荷字段名 release_status、eps_actual，被 #241 的下划线字段名规则拦下。
+  - CARR、RKLB 出现在「公司名（代码）」里，被括号别名守卫拦下。
+  - BCML 出现在「代码为BCML」里，被「代码」标签守卫拦下。
+- 做法：
+  - 后两类在第 2 条里已经处理。
+  - 财报照抄本条载荷顶层字段名的下划线标识符，按词条放行，但不能在证券语境里。`validate_result` 只给财报的校验上下文带上 `payload_field_names`；新闻会先把精确字段名译成中文，热点不放行。
+- 财报发布的是原样字段名，例如「release_status为scheduled」，不像新闻那样译成中文。要给财报配中文标签需要另做。
+- 结构错误（缺 ticker、impacted 为空）没动，这 2 条照旧失败。其余 5 条通过。
+
+### 4. news_identity_mismatch 的诊断
+
+- 比对逻辑：`models.validate_result` 要求新闻结果的 news_id、change_sequence、content_hash 与载荷逐字相等。
+- 4 条样本里 news_id 和 change_sequence 都对，content_hash 全是模型抄错：
+
+  | 样本 | 抄错方式 | 结果长度 |
+  | --- | --- | --- |
+  | 1 | 漏 2 个字符 | 62 位 |
+  | 2 | 多 1 个字符 | 65 位 |
+  | 3 | 漏 2 个字符 | 62 位 |
+  | 4 | 改错 1 个字符 | 64 位 |
+
+  不是比对过严，是模型回显 64 位十六进制串时出错。
+- 本次没改代码。可选的两种做法：
+  - 不再让模型回显 content_hash，校验后由服务端从载荷填入。这要改输出结构，任务身份会变，必须登记上一版身份，否则队列里的任务会判 `runtime_configuration_changed`。
+  - 只比对 news_id 和 change_sequence，content_hash 用载荷的值覆盖。不改结构，也不改任务身份，改动只有几行。
+  - 如果要改，倾向后一种。
+
+### 改动的测试
+
+红线断言（代码样词元在证券语境、数字代码、网址以外的规则、结构和身份）一条没改。改动的都是断言「词条或网址被拒」的用例，按新口径改为断言发布。共 182 项：
+
+- `tests/test_ai_jobs_zh_contract.py`，143 项：
+  - 品牌名加股票语境两组各 50 句，新闻和热点全部翻转，例如「Apple股票受到市场关注」「NVIDIA股价出现波动」「股票代码：Apple受到关注」「Apple。股票受到市场关注」。
+  - 宏观状态词「active」后接股票、股价或代码 24 项，外加「active股票受到关注」1 项。翻译照旧不触发，只是不再报错。
+  - 英文碎片 9 句：Fed Pauses、Investors-Flee、Investors.flee、Aapl、Panic、上标的 PANIc、NvDa、PaNic、PANic。
+  - 「10b5-1」接股价、股票、证券代码 3 项。
+  - 来源绑定 5 项：Apple、SpaceX 接股票。
+  - 括号代码 1 项：「市场关注英伟达（NVDA）财报表现」未绑定。
+- `tests/test_ai_prose_terms_policy_20261010.py`（#241），8 项：
+  - 原红线里的「特斯拉（TSLA）」「CoreWeave股票」「active（代码）」。
+  - 原已知代价「Rust代码」「Go代码」「Polymesh价格下跌」「Fed Pauses市场上涨」「（THAAD）」。#241 列的这些代价，这一轮都已消失。
+- `tests/test_ai_prose_allowlist_20261010.py`（#240），5 项：「福特汽车（F）」和 4 句频率（编号800MHz、股票代码为800MHz、600MHz股价、MHz股价）。
+- `tests/test_ai_analysis_fixes_20261010.py`，4 项：
+  - 标签对不上链接的引用 1 项。
+  - 未取回的裸网址 1 项。
+  - 分号后的「股票代码；TSLA」和「Hexa Creation股价上涨」2 项。
+- `tests/test_ai_review_fixes_20261010.py`，1 项：「当x<5时信号失效」。
+- `tests/test_ai_jobs_audit_2026_09_25.py`，3 项：Delta、Call、Tesla 接股价。
+- `tests/test_news_output_metadata.py`，4 项：来源不符的「M-tron Industries股价下跌」。
+- `tests/test_verified_focus_prose_compatibility.py`，6 项：Gbps、8Gbps、800MHz 接股票或写在「股票代码」后面共 5 项，「Unknown Wireless此前下跌」1 项。
+- `tests/test_luna_news_receipt_normalization.py`，8 项：未绑定链接 7 项、捏造链接 1 项。这两类现在都剥掉；回执不变和来源完整性的断言保留。
+
+旧名字在新口径下不成立，9 个测试函数改了名：
+
+- `test_news_result_rejects_stock_context_for_an_unbound_approved_brand`
+- `test_market_focus_rejects_stock_context_for_an_unbound_approved_brand`
+- `test_zh_prose_gloss_does_not_launder_ticker_shaped_codes`
+- `test_known_costs_of_the_guards_are_still_rejected`
+- `test_domain_label_must_name_the_linked_site`
+- `test_bare_trusted_url_in_brackets_is_a_citation_but_unbound_url_still_rejects`
+- `test_s3_ticker_letters_and_other_symbols_take_no_comparison_exemption`
+- `test_bound_tmus_does_not_accept_other_companies_or_english_prose`
+- `test_tracking_match_never_erases_business_url_identity`
+
+`test_frequencies_next_to_code_labels_or_stocks_stay_rejected` 的四句全部移走，函数删除。
+
+### 仍会被拒的写法
+
+- 代码样词元在证券语境：
+  - 「TSLA上涨」「A股价上涨」「IT股价上涨」「ESG股价上涨」「F股受到关注」「A公司宣布回购」。
+  - 「特斯拉（TSLA）股价上涨」「IT大涨后回落」「盘前TSLA +3.5%」「F>12美元」。
+  - 「T-Mobile US此前下跌约5.4%」：其中 US 是代码样词元。
+- 「股票600519上涨」这类数字代码。
+- 只写域名、本次没取回过的括号网站，例如「（othersite.com）」。
+- 英文散文、JSON 字面量、不是本条字段名的下划线标识符。
+- 财报的结构错误、新闻身份不符。
+
+### 未覆盖
+
+- 带点号或混合大小写的代码写法（「BRK.B股价上涨」「Aapl股价上涨」）未绑定时也会放行。
+- 名称写在「股票代码」后面（「股票代码：Apple受到关注」）也会放行。
+- 有正文、不联网的 Luna 任务和其他模型的新闻结果里出现网址，照旧被拒。
+- 生产上没跑找回试运行，部署后可以跑「部署后操作」第 2 步，看这几类失败有多少转为 validated。
+
+### 检查记录
+
+- 新测试 52 项。在 main 的 `77013b02` 导出树上，28 项失败，都是新正例；24 项通过，是红线、结构失败、身份不符和只写域名的旧规则。在本分支全部通过。
+- 变异实验 7 个，都被对应的反例抓住：
+  - 代码样词元改成任何词元：CleanSpark、C3.ai 两条样本失败。
+  - 字段名豁免放到所有任务：热点的「未知cycle_id」失败。
+  - 字段名豁免不看证券语境：「股票代码eps_actual上涨」失败。
+  - 不剥裸网址：「详见https://…」失败。
+  - 域名标签保留：「详见[zacks.com](…)」失败。
+  - 加回括号别名守卫：CARR、RKLB 样本和「特斯拉（TSLA）财报」失败。
+  - 不清理残留：「来源：」「，(…)。」两句失败。
+- 定向测试 18 个文件全部通过：
+
+  | 文件 | 结果 |
+  | --- | --- |
+  | 新测试文件 | 52 项 |
+  | `test_ai_prose_terms_policy_20261010.py` | 71 项 |
+  | `test_ai_prose_allowlist_20261010.py` | 75 项 |
+  | `test_ai_analysis_fixes_20261010.py` | 78 项 |
+  | `test_ai_review_round2_20261010.py` | 141 项 |
+  | `test_ai_review_fixes_20261010.py` | 64 项 |
+  | `test_ai_review_round3_20261010.py` | 38 项 |
+  | `test_ai_jobs_zh_contract.py` | 765 项 |
+  | `test_ai_jobs.py` | 91 项 |
+  | `test_ai_jobs_audit_2026_09_25.py` | 108 项 |
+  | `test_claude_provider.py` | 63 项 |
+  | `test_news_output_metadata.py` | 13 项 |
+  | `test_verified_focus_prose_compatibility.py` | 221 项通过，1 项跳过 |
+  | `test_catalysts_audit_2026_09_25.py` | 38 项 |
+  | `test_luna_news_receipt_normalization.py` | 19 项 |
+  | `test_personal_catalyst_service.py` | 75 项 |
+  | `test_signal_context.py` | 18 项 |
+  | `test_luna_news_web_fallback.py` | 14 项 |
+
+- 完整后端测试：6,901 项通过、7 项跳过（7 个子测试通过），退出码 0。
+- `python -m compileall -q backend/app` 通过，`git diff --check origin/main...HEAD -- . ':(top,exclude)frontend'` 干净。
+
 ## 热点条带可见性（2026-10-10）
 
 分支 `claude/hotspot-strip-visibility-2026-10-10`（PR #244），基于 main 的 `77013b02`。

@@ -27,7 +27,9 @@ _MAX_BYTES = 1024 * 1024
 _TITLE_MATCH_STOP_WORDS = TITLE_STOP_WORDS | {"news"}
 _GOOGLE_ARTICLE_PATH = re.compile(r"/articles/[A-Za-z0-9_-]{16,4096}(?:\?hl=en-US&gl=US&ceid=US:en)?\Z")
 _NOISE = re.compile(r"(?:^|[-_\s])(nav|menu|footer|header|related|recommend\w*|comment\w*|subscribe\w*|subscription|newsletter|advert\w*|social|share|paywall)(?:$|[-_\s])", re.I)
-_CHALLENGE = re.compile(r"just a moment|verify (?:that )?you are human|access denied|captcha|checking your browser|enable javascript and cookies", re.I)
+# Imperva's bot check ("Pardon Our Interruption") arrives with HTTP 200 and
+# keeps its <title> inside <noscript>, so only the visible h1 names it.
+_CHALLENGE = re.compile(r"just a moment|verify (?:that )?you are human|access denied|captcha|checking your browser|enable javascript and cookies|pardon our interruption", re.I)
 _PAYWALL = re.compile(r"subscribe to (?:continue reading|read (?:the )?(?:full|rest))|subscription (?:is )?required|already a subscriber\??\s*(?:sign|log) in", re.I)
 
 
