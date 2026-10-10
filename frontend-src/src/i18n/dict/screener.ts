@@ -25,8 +25,8 @@ export const SCREENER: Dict = {
   '辅助指标': ['Additional indicators', '補助指標'],
   /* ---------------- FilterWorkbench.tsx ---------------- */
   '全部': ['All', 'すべて'],
-  '最高': ['Max', '上限'],
-  '最低': ['Min', '下限'],
+  '上限': ['Max', '上限'],
+  '下限': ['Min', '下限'],
   '已评分股票': ['the scored stocks', 'スコア算出済みの銘柄'],
   '当前结果中的股票': ['Stocks in the current results', '現在の結果に含まれる銘柄'],
   '扫描中 · 等待后台结果': ['Scanning · waiting for results', 'スキャン中 · バックグラウンド処理の結果待ち'],

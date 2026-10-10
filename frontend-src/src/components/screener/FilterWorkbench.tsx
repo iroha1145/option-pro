@@ -358,9 +358,9 @@ export default function FilterWorkbench({
             <div data-screener-field="price">
               <FieldLabel>{__t('价格范围')}</FieldLabel>
               <div className="flex items-center gap-1.5">
-                <PriceInput value={draft.priceMin} placeholder={__t("最低")} ariaLabel={__t("最低价格")} onCommit={(priceMin) => patch({ priceMin })} />
+                <PriceInput value={draft.priceMin} placeholder={__t("下限")} ariaLabel={__t("最低价格")} onCommit={(priceMin) => patch({ priceMin })} />
                 <span className="text-ink-300" aria-hidden="true">–</span>
-                <PriceInput value={draft.priceMax} placeholder={__t("最高")} ariaLabel={__t("最高价格")} onCommit={(priceMax) => patch({ priceMax })} />
+                <PriceInput value={draft.priceMax} placeholder={__t("上限")} ariaLabel={__t("最高价格")} onCommit={(priceMax) => patch({ priceMax })} />
               </div>
             </div>
             <div data-screener-field="dollar-volume">

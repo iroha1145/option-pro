@@ -14,7 +14,7 @@ export const WATCHLIST: Dict = {
   "添加股票代码": ["Add stock tickers", "銘柄コードを追加"],
   "用逗号、空格或换行分隔，重复代码会自动合并。": ["Separate with commas, spaces or new lines. Duplicates are merged.", "コンマ、空白、改行で区切って入力。重複は自動でまとめられます。"],
   "加入列表": ["Add to list", "リストに追加"],
-  "添加默认 4 只": ["Add 4 default tickers", "デフォルトの4銘柄を追加"],
+  "添加默认 {count} 只": ["Add {count} default tickers", "デフォルトの{count}銘柄を追加"],
   "全选": ["Select all", "すべて選択"],
   "移除所选（{count}）": ["Remove selected ({count})", "選択を削除（{count}）"],
   "选择 {ticker}": ["Select {ticker}", "{ticker} を選択"],

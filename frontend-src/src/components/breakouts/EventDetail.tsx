@@ -340,7 +340,7 @@ export default function EventDetail({
               {/* 证据列表：后端未提供时整段隐藏，不显示假 0。 */}
               {(event.evidence ?? []).length > 0 && (
                 <section>
-                  <p className="eyebrow mb-2">{__t('判断依据 ·')} {(event.evidence ?? []).length} {__t('条')}</p>
+                  <p className="eyebrow mb-2">{__t('判断依据 · {n} 条', { n: (event.evidence ?? []).length })}</p>
                   <ol className="relative ml-1.5 border-l-2 border-line pl-4">
                     {(event.evidence ?? []).map((line, i) => (
                     <motion.li

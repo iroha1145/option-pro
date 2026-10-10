@@ -265,7 +265,7 @@ export default function MarketBriefContent({ brief, year }: { brief: MarketBrief
           )}
           {result.invalidators.length > 0 && (
             <div className="mt-4 rounded-lg bg-paper-2 px-3 py-2.5">
-              <p className="text-caption text-ink-700">{t('出现以下情况应撤回当前判断')}</p>
+              <p className="text-caption text-ink-700">{t('撤回条件')}</p>
               <Bullets items={result.invalidators} className="mt-1.5" />
             </div>
           )}
@@ -290,7 +290,7 @@ export default function MarketBriefContent({ brief, year }: { brief: MarketBrief
       <SourceNote
         mark={false}
         className={result.prior_review || brief.externalSources.length > 0 ? undefined : 'mt-6'}
-        text={t('程序汇总行情、广度、宏观、行业、新闻与日历证据，模型负责解释与找矛盾')}
+        text={t('程序汇总行情、广度、宏观、行业、新闻与日历数据，模型负责解读并指出矛盾')}
       />
     </div>
   );

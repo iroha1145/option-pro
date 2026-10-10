@@ -239,7 +239,7 @@ export const MARKET: Dict = {
   '已评分': ['Scored', 'スコア算出済み'],
   '广度口径': ['Breadth basis', '広がりの算出基準'],
   '11 只行业 ETF 代理': ['11 sector ETFs as proxy', 'セクター ETF 11 本で代替'],
-  '缺': ['Missing', '欠落'],
+  '缺失': ['Missing', '欠落'],
   '市场信号': ['Market signals', '市場シグナル'],
   '全市场扫描': ['Full-market scan', '全市場スキャン'],
   '主题': ['Themes', 'テーマ'],
@@ -286,12 +286,12 @@ export const MARKET: Dict = {
   '是否已反映在价格中': ['Whether it is already priced in', 'すでに価格に織り込まれているか'],
   '后续观察与反证': ['What to watch and what would refute it', '今後の注目点と反証'],
   '改判条件': ['Revise if', '見直す条件'],
-  '出现以下情况应撤回当前判断': ['Withdraw the current view if any of these occur', '次のいずれかが起きたら現在の判断を撤回'],
+  '撤回条件': ['Withdraw if', '撤回する条件'],
   '上一份研判的复盘': ['Review of the previous brief', '前回レポートの振り返り'],
   '外部来源 {n}': ['External sources {n}', '外部ソース {n}'],
-  '程序汇总行情、广度、宏观、行业、新闻与日历证据，模型负责解释与找矛盾': [
-    'The program gathers price, breadth, macro, sector, news and calendar evidence; the model interprets it and looks for contradictions',
-    'プログラムが相場・広がり・マクロ・セクター・ニュース・カレンダーの根拠をまとめ、モデルが解釈と矛盾の洗い出しを担当します',
+  '程序汇总行情、广度、宏观、行业、新闻与日历数据，模型负责解读并指出矛盾': [
+    'The program gathers market, breadth, macro, sector, news and calendar data; the model interprets it and flags contradictions',
+    'プログラムが相場・広がり・マクロ・セクター・ニュース・カレンダーのデータをまとめ、モデルが解釈と矛盾の洗い出しを担当します',
   ],
   /* 运行失败原因（backend/app/services/market_brief/errors.py） */
   '密钥无效': ['Invalid API key', 'API キーが無効'],

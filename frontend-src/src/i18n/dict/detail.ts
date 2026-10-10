@@ -199,7 +199,7 @@ export const DETAIL: Dict = {
   '暂无技术信号数据': ['No technical signal data', 'テクニカルシグナルのデータがありません'],
   "暂无分项信号": ["No component signals available", "内訳のシグナルはありません"],
   "分项根据该股信号计算": ["Components are calculated from this stock's signals", "各項目はこの銘柄のシグナルから算出"],
-  " · 缺失项显示 — · 更新于 ": [" · Missing components show — · Updated at ", " · 欠測項目は — で表示 · 更新 "],
+  '更新于 {time}': ['Updated at {time}', '{time} 更新'],
 
   /* src/components/detail/api.ts */
   '5分': ['5m', '5分'],

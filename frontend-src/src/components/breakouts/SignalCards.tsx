@@ -171,7 +171,7 @@ function SignalCard({ ev: initialEvent, index, flash, locate, onOpen, showT1 = f
         {(ev.evidence ?? []).length > 0 && (
           <span className="radar-evidence-link inline-flex items-center gap-1 text-micro text-ink-500">
             <Icon name="doc-quote" size={12} />
-            {t('依据')} {(ev.evidence ?? []).length} {t('条')}
+            {t('{n} 条依据', { n: (ev.evidence ?? []).length })}
           </span>
         )}
       </div>

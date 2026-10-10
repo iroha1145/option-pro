@@ -91,7 +91,7 @@ export default function WatchlistManager({ tickers, maxTickers, busy, onSave, on
             <p id={`${id}-hint`} className="mt-1 text-caption text-ink-400">{t('用逗号、空格或换行分隔，重复代码会自动合并。')}</p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button className={secondary} onClick={() => append(input)} disabled={busy || !input.trim()}><Icon name="plus" size={15} />{t('加入列表')}</button>
-              <button className={secondary} onClick={() => append(DEFAULT_WATCHLIST_TICKERS.join(','), false)} disabled={busy || DEFAULT_WATCHLIST_TICKERS.every((symbol) => draft.includes(symbol))}>{t('添加默认 4 只')}</button>
+              <button className={secondary} onClick={() => append(DEFAULT_WATCHLIST_TICKERS.join(','), false)} disabled={busy || DEFAULT_WATCHLIST_TICKERS.every((symbol) => draft.includes(symbol))}>{t('添加默认 {count} 只', { count: DEFAULT_WATCHLIST_TICKERS.length })}</button>
             </div>
             <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-y border-line py-2">
               <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-caption text-ink-700">
