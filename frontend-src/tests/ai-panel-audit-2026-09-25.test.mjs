@@ -421,7 +421,7 @@ function renderOptionInsight(state) {
     '@/components/shared/MenuSelect': { default: 'MenuSelect' },
     '@/components/icons': { default: 'Icon' },
     '@/lib/utils': { cn: (...names) => names.filter(Boolean).join(' ') },
-    '@/lib/format': { fmtPrice: String, fmtRelative: String },
+    '@/lib/format': { fmtPrice: String, fmtRelative: String, daysUntilNewYork: () => 9 },
     '@/mocks/fixtures2': { OPTION_SUPPORTED_LIST: '', optionsSupported: () => true },
     '@/lib/optionCapability': { isDeclaredUnsupported: () => false },
     './useAiJob': { useAiJob: () => hookState(state) },
