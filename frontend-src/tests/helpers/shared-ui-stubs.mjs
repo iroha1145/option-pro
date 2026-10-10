@@ -18,6 +18,7 @@ export const SHARED_UI_STUBS = {
   '@/lib/boundedReadRetry': boundedReadRetry,
   '@/lib/retryDelay': retryDelay,
   '@/components/shared/AnalysisSources': { default: 'AnalysisSources' },
+  '@/components/shared/CollapsibleAnalysisSources': { default: 'CollapsibleAnalysisSources' },
   '@/components/shared/Spinner': { default: 'Spinner' },
   '@/components/shared/IconSwap': { default: 'IconSwap', BusyIcon: 'BusyIcon' },
   '@/components/shared/TextSwap': { default: ({ children }) => children },

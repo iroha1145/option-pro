@@ -10,6 +10,7 @@ import CollapsePresence from '@/components/shared/CollapsePresence';
 import InfoHint from '@/components/shared/InfoHint';
 import SoftBadge from '@/components/shared/SoftBadge';
 import SourceNote from '@/components/shared/SourceNote';
+import MarketBriefModelOutput from './MarketBriefModelOutput';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import { cn } from '@/lib/utils';
 import {
@@ -156,6 +157,7 @@ export default function MarketBriefContent({ brief, year }: { brief: MarketBrief
         </div>
       )}
 
+      <MarketBriefModelOutput brief={brief}>
       <div className="mt-3 flex flex-wrap items-start gap-x-4 gap-y-2">
         <p className={cn('min-w-0 flex-1 basis-[22rem] break-words text-h2', result.headline ? 'text-ink-900' : 'text-ink-400')}>
           {result.headline ?? MISSING}
@@ -271,6 +273,8 @@ export default function MarketBriefContent({ brief, year }: { brief: MarketBrief
           )}
         </Part>
       </div>
+
+      </MarketBriefModelOutput>
 
       {(result.prior_review || brief.externalSources.length > 0) && (
         <div className="mt-6">

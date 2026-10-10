@@ -47,7 +47,9 @@ function renderSources(sources) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
   const module = { exports: {} };
-  const jsx = { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) };
+  // 组件内部拆出的 SourceLinkList 是函数组件，替身直接展开它，断言看到的仍是最终的 <a>。
+  const element = (type, props) => (typeof type === 'function' ? type(props) : { type, props });
+  const jsx = { jsx: element, jsxs: element };
   vm.runInNewContext(code, { module, exports: module.exports, require(id) {
     if (id === 'react/jsx-runtime') return jsx;
     if (id === '../../api/evidenceSources.ts') return evidence;
