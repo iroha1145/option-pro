@@ -415,8 +415,9 @@ _SELF_DESCRIBING_CODES = frozenset(
 _SEC_FORM_DESIGNATIONS = ("10-K", "10-Q", "8-K")
 # 频率数量（2026-10-10 生产取证：找回试运行里 MHz 被拒 7 次）。只认紧跟在数字
 # 后面的 MHz、GHz（「600 MHz」「600MHz」「3.5GHz」），边界与经核验热点的单位
-# 翻译 _VERIFIED_FOCUS_FREQUENCY 相同。不带数字的「频率MHz」、紧挨代码、编号、
-# 公司等标签的「公司800MHz」以及证券语境照旧被拒，这些也是那段翻译不改写的写法。
+# 翻译 _VERIFIED_FOCUS_FREQUENCY 相同。不带数字的「频率MHz」、紧挨公司等标签的
+# 「公司800MHz」原先由本条拒绝，2026-10-10 口径变更后由 _is_term_like_span 放行；
+# 紧挨代码、编号和证券语境仍被拒。
 _FREQUENCY_QUANTITY = re.compile(
     r"(?<![A-Za-z0-9_.])[0-9]+(?:\.[0-9]+)?[ \t]*(?:MHz|GHz)(?![A-Za-z0-9_])"
 )
@@ -750,7 +751,8 @@ _LETTER_GRADE = re.compile(
 )
 # 单个大写字母紧跟这些分类名词时是标签（2026-10-10 生产取证：「处方药D部分」
 # 被拒；同类还有「V型反转」「A级」「B组」「C区」）。名词必须紧挨字母，中间只许
-# 空格：「福特汽车（F），部分分析师」里隔着标点的「部分」是另一个词。「轮」
+# 空格。隔着标点的「福特汽车F，部分分析师」原先由本条拒绝，2026-10-10 口径变更后
+# 由 _is_term_like_span 放行；括号里的「福特汽车（F）」仍按代码别名要求绑定。「轮」
 # 「类」沿用原来的判断，「股」仍只认 A、B、H。
 _LETTER_LABEL_NOUNS = ("部分", "型", "级", "组", "区")
 # 规则条款编号里括号中的小写字母：「规则5550(a)(2)」「规则10b5-1(c)」
@@ -1951,6 +1953,148 @@ def _foreign_span_context(
     return False
 
 
+# 2026-10-10 口径变更（用户决定）：正文仍要求中文，但拉丁字母的专名和术语可以
+# 保留原文，english_prose_not_allowed 只拦英文散文。上面的规则都没认下的片段，
+# 由 _is_term_like_span 按「词条」再判一次：单个词元，或不超过 5 个词、每个词都是
+# 首字母大写、全大写、数字或连接词的名称。证券语境的红线照旧。
+_TERM_MAX_WORDS = 5
+_TERM_CONNECTORS = frozenset(
+    {
+        "&", "and", "co", "corp", "da", "de", "der", "du", "for", "inc", "la",
+        "le", "llc", "ltd", "of", "plc", "the", "van", "von",
+    }
+)
+_TERM_SUBWORD_SPLIT = re.compile(r"[\s\-./&+']+")
+_JSON_LITERALS = frozenset({"false", "null", "true"})
+# 涨跌词：原有 8 个，加上第一轮审查补过、复核撤回的 14 个。那 14 个放进通用
+# 涨跌词表会误伤名单里的市场术语（「IV飙升」「RSI反弹」）；这里只对没有被任何
+# 规则认下的片段生效，名单里的术语走不到这一步。前面可以隔两个字的副词
+# （「T-Mobile US此前下跌约5.4%」）。
+_TERM_MOVEMENT_WORDS = (
+    "上涨", "下跌", "涨停", "跌停", "走强", "走弱", "收涨", "收跌",
+    "大涨", "大跌", "暴涨", "暴跌", "急涨", "急跌", "飙升", "重挫", "跳水",
+    "拉升", "走高", "走低", "下挫", "反弹",
+)
+_TERM_MOVEMENT = re.compile(
+    "[\u4e00-\u9fff]{0,2}?(?:" + "|".join(_TERM_MOVEMENT_WORDS) + ")"
+)
+_TERM_TRAILING_ALIAS = re.compile(r"[（(][^（()）]{1,24}[）)]")
+_CODE_LABEL_PREFIX = re.compile(r"(?:代码|编号)(?:为|是)?$")
+# 代码样片段：1 到 5 个大写字母。除了上面的证券语境，后面是「股」「涨」「跌」或
+# 公司、集团、企业（中间只隔标点、空格或数字），独自放在中文后的括号里（「英伟达
+# （NVDA）」），或后接带符号的百分比、基点（「盘前TSLA +3.5%」）和价格比较
+# （「F>12美元」）时，也是在说股票。
+_CODE_LIKE_TOKEN = re.compile(r"[A-Z]{1,5}")
+_CODE_SIGNED_MOVE = re.compile(
+    r"[ \t]*(?:[+＋\-－−]|加|减)[ \t]*[0-9]+(?:\.[0-9]+)?[ \t]*(?:%|％|个?基点)"
+)
+_CODE_PRICE_COMPARISON = re.compile(
+    r"[ \t]*(?:<=|>=|[<>=≤≥＜＞＝])[ \t]*[0-9]+(?:\.[0-9]+)?[ \t]*[万亿千百]*[ \t]*"
+    rf"(?:{_CURRENCY_UNITS})"
+)
+
+
+def _is_name_word(word: str) -> bool:
+    return (
+        word.casefold() in _TERM_CONNECTORS
+        or word[0].isdigit()
+        or any(char.isupper() for char in word)
+    )
+
+
+def _is_english_prose_span(span: str) -> bool:
+    """超过 5 个词、多词里有小写普通词，或出现两个以上普通英文词（含连字符、
+    点号、斜杠连起来的「market-rally」）。普通英文词指三个字母以上的小写词，
+    或英文标题词表里的词。"""
+
+    words = span.split()
+    if len(words) > _TERM_MAX_WORDS:
+        return True
+    if len(words) > 1 and not all(_is_name_word(word) for word in words):
+        return True
+    prose_words = 0
+    for word in _TERM_SUBWORD_SPLIT.split(span):
+        folded = word.casefold()
+        if not word or folded in _TERM_CONNECTORS:
+            continue
+        if (
+            word.isalpha() and word.islower() and len(word) >= 3
+        ) or folded in _ENGLISH_PROSE_WORDS:
+            prose_words += 1
+    return prose_words >= 2
+
+
+def _code_like_token_in_security_context(*, sentence: str, start: int, end: int) -> bool:
+    return (
+        _strip_security_reference_separators(sentence[end:]).startswith(("股", "涨", "跌"))
+        or _normalize_security_reference_phrase(sentence[end:])
+        .removeprefix("的")
+        .startswith(_SECURITY_COMPANY_BRIDGES)
+        or (
+            start >= 2
+            and sentence[start - 1] in "（("
+            and sentence[end : end + 1] in "）)"
+            and _is_cjk(sentence[start - 2])
+        )
+        or _CODE_SIGNED_MOVE.match(sentence, end) is not None
+        or _CODE_PRICE_COMPARISON.match(sentence, end) is not None
+    )
+
+
+def _term_in_security_context(span: str, *, sentence: str, start: int, end: int) -> bool:
+    if _approved_span_requires_ticker_binding(
+        span, sentence=sentence, start=start, end=end,
+    ):
+        return True
+    if _CODE_LABEL_PREFIX.search(
+        _normalize_security_reference_phrase(sentence[:start])
+    ) is not None or _normalize_security_reference_phrase(sentence[end:]).startswith(
+        ("代码", "编号")
+    ):
+        return True
+    rest = sentence[end:].lstrip(" \t")
+    alias = _TERM_TRAILING_ALIAS.match(rest)
+    if alias is not None:
+        rest = rest[alias.end() :]
+    if _TERM_MOVEMENT.match(_strip_security_reference_separators(rest)) is not None:
+        return True
+    return any(
+        _CODE_LIKE_TOKEN.fullmatch(token.group(0)) is not None
+        and _code_like_token_in_security_context(
+            sentence=sentence,
+            start=start + token.start(),
+            end=start + token.end(),
+        )
+        for token in re.finditer(r"\S+", span)
+    )
+
+
+def _is_term_like_span(
+    span: str,
+    *,
+    sentence: str,
+    start: int,
+    end: int,
+    source_texts: tuple[str, ...],
+) -> bool:
+    if not any(_is_cjk(char) for char in sentence):
+        return False
+    # 字段名（「my_article_status」）、网址和主机名不是词条。
+    if sentence[start - 1 : start] == "_" or sentence[end : end + 1] == "_":
+        return False
+    if "://" in (sentence[max(0, start - 3) : start], sentence[end : end + 3]):
+        return False
+    if _BRACKETED_HOSTNAME.fullmatch(span) is not None:
+        return False
+    if _is_copied_source_headline_fragment(span, source_texts):
+        return False
+    if _is_english_prose_span(span) or span.casefold() in _JSON_LITERALS:
+        return False
+    return not _term_in_security_context(
+        span, sentence=sentence, start=start, end=end,
+    )
+
+
 def _normalize_compatibility_alphanumerics(text: str) -> str:
     """Expose styled Latin letters and digits to the ASCII language gate."""
 
@@ -2244,6 +2388,14 @@ def validate_simplified_chinese_text(
                 continue
             if isinstance(news_payload, dict) and _news_source_bound_name(
                 match.group(0), sentence, match.start(), match.end(), news_payload,
+            ):
+                continue
+            if _is_term_like_span(
+                match.group(0),
+                sentence=sentence,
+                start=match.start(),
+                end=match.end(),
+                source_texts=source_texts,
             ):
                 continue
             raise _english_prose_error(match.group(0))
@@ -2824,6 +2976,10 @@ def _translate_news_metadata(value: str, payload: dict) -> str:
     # 翻译只修正中文句子里夹带的字段名；一句汉字都没有的文本（「title summary
     # source url」）不拼成中文词串发布，原样交给中文校验拒绝。
     if not any(_is_cjk(char) for char in value):
+        return value
+    # 含英文散文的文本也不逐词翻译（2026-10-10 口径变更后）：「article text
+    # truncated, source title available」译完只剩一个英文词，就会被当成词条放行。
+    if any(_is_english_prose_span(match.group(0)) for match in _FOREIGN_SPAN.finditer(value)):
         return value
     translations = _news_identifier_translations(payload)
     # Names are exact ASCII tokens, not substrings of an unknown program label.

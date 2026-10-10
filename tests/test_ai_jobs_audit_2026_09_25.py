@@ -1084,8 +1084,12 @@ def test_security_context_still_requires_ticker_binding(text, codes):
 
 
 def test_prose_rejection_names_the_rejected_fragment():
-    with pytest.raises(ValueError, match=r"english_prose_not_allowed: 'Foobar'"):
-        validate_simplified_chinese_text("公司发布Foobar更新。", None)
+    # 2026-10-10 口径变更后「Foobar」是词条，改用一段英文散文验证报错带出被拒片段。
+    with pytest.raises(
+        ValueError,
+        match=r"english_prose_not_allowed: 'the company reported strong results'",
+    ):
+        validate_simplified_chinese_text("公司称the company reported strong results。", None)
     with pytest.raises(
         ValidationError,
         match=r"english_prose_not_allowed: 'Apple Beats Estimates'",
@@ -1134,12 +1138,12 @@ def test_option_alert_strings_are_source_texts():
     summary = "出现Sweep成交，但缺少主动方。"
     validated = validate_result("option_alerts", _option_alert_result(summary), payload)
     assert validated["summary"] == summary
-    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
-        validate_result(
-            "option_alerts",
-            _option_alert_result(summary),
-            {**payload, "alerts": []},
-        )
+    # 2026-10-10 口径变更：输入里没有「Sweep」时也按词条原样发布（原先被拒）。
+    assert validate_result(
+        "option_alerts",
+        _option_alert_result(summary),
+        {**payload, "alerts": []},
+    )["summary"] == summary
     for wording in ("Call成交量放大，但缺少主动方。", "Put/Call比率上升。"):
         validate_result("option_alerts", _option_alert_result(wording), payload)
 
@@ -1229,12 +1233,12 @@ def test_earnings_payload_names_are_source_texts():
     )
 
     assert validated["summary"].startswith("Micron Technology")
-    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
-        validate_result(
-            "earnings_impact",
-            json.dumps(result, ensure_ascii=False),
-            {"ticker": "MU"},
-        )
+    # 2026-10-10 口径变更：载荷没有公司名时，「Micron Technology」也按词条原样发布（原先被拒）。
+    assert validate_result(
+        "earnings_impact",
+        json.dumps(result, ensure_ascii=False),
+        {"ticker": "MU"},
+    )["summary"] == result["summary"]
 
 
 @pytest.mark.parametrize("count", [1, 3])

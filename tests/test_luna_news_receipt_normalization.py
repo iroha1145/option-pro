@@ -240,19 +240,24 @@ def test_http_label_requires_matching_input_failure(article_status, article_reas
     captured = receipt(
         news(uncertainty_notes=["原始链接因HTTP 403不可用。"]), urls=[PUBLICATION]
     )
-    with pytest.raises(ValueError):
-        runtime.receipt_result(captured, "news_impact", data)
+    # 2026-10-10 口径变更：状态码对不上输入时照旧不翻译；「HTTP 403」按词条原样发布，
+    # 不再拒绝。
+    result = runtime.receipt_result(captured, "news_impact", data)
+    assert result["uncertainty_notes"][0] == "原始链接因HTTP 403不可用。"
 
 
 def test_trusted_links_do_not_relax_english_or_unknown_metadata():
     for prose in [
         f"公司表示[The deal will improve margins]({ISSUER})。",
-        "公司提供HTTP 404状态。",
         "公司提供UNKNOWN_METADATA标签。",
     ]:
         captured = receipt(news(summary_zh=prose))
         with pytest.raises(ValueError):
             runtime.receipt_result(captured, "news_impact", payload())
+    # 2026-10-10 口径变更：输入没有抓取失败记录时照旧不翻译；「HTTP 404」按词条原样发布
+    # （原先在上面的拒绝清单里）。
+    captured = receipt(news(summary_zh="公司提供HTTP 404状态。"))
+    assert runtime.receipt_result(captured, "news_impact", payload())["summary_zh"] == "公司提供HTTP 404状态。"
 
 
 @pytest.mark.parametrize(

@@ -135,20 +135,32 @@ def test_b3_field_names_are_published_in_chinese(text, changes, published):
 @pytest.mark.parametrize(
     ("text", "changes"),
     [
-        # Ordinary English left after translation is still rejected.
+        # Ordinary English is still rejected; since the 2026-10-10 policy change
+        # it is not translated word by word first.
         ("英伟达发布新品。article text truncated, source title available, summary status truncated.",
          {"article_status": "available", "article": _ARTICLE}),
-        # Without an article there is no text field to translate.
-        ("原文text缺失。", {}),
-        # A status value counts only when it is this payload's own value.
-        ("正文状态为available。", {"article_status": "unavailable"}),
+        # A status value counts only when it is this payload's own value, and a
+        # snake_case field name is not a term.
         ("正文因http_404无法读取。", {"article_status": "unavailable", "article_reason": "http_403"}),
-        ("输入status为可用。", {"article_status": "available", "article": _ARTICLE}),
     ],
 )
 def test_b3_words_outside_the_payload_vocabulary_are_still_rejected(text, changes):
     with pytest.raises(ValueError, match="english_prose_not_allowed"):
         _news_field(text, **changes)
+
+
+@pytest.mark.parametrize(
+    ("text", "changes"),
+    [
+        ("原文text缺失。", {}),
+        ("正文状态为available。", {"article_status": "unavailable"}),
+        ("输入status为可用。", {"article_status": "available", "article": _ARTICLE}),
+    ],
+)
+def test_b3_untranslated_single_words_are_terms_after_the_2026_10_10_policy(text, changes):
+    # 2026-10-10 口径变更：对不上本条输入的字段名和状态值照旧不翻译，单个英文词按词条原样
+    # 发布（原先在上面的拒绝清单里）。
+    assert _news_field(text, **changes) == text
 
 
 # --- Suggestion: only domains of retrieved sites are removed ------------------

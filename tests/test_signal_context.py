@@ -566,7 +566,7 @@ def _signal_result(asset: str = "AMD") -> dict:
     }
 
 
-def test_result_may_reference_context_tickers_but_not_strangers():
+def test_result_may_reference_tickers_outside_security_context():
     result = _signal_result()
     result["event_risks"] = ["相关新闻显示NVDA供应链改善，对AMD构成参照。"]
     payload = {"ticker": "AMD", "context_tickers": ["NVDA"]}
@@ -576,7 +576,12 @@ def test_result_may_reference_context_tickers_but_not_strangers():
     )
     assert "NVDA" in validated["event_risks"][0]
 
-    # 不在上下文代码表里的代码照旧拒：幻觉实体闸不放松。
+    # 2026-10-10 口径变更：不在上下文代码表里的代码，不在证券语境时按词条放行（原先被拒）；
+    # 在证券语境里照旧要求绑定。
+    assert validate_result(
+        "signal_analysis", json.dumps(result, ensure_ascii=False), {"ticker": "AMD"}
+    )["event_risks"] == result["event_risks"]
+    result["event_risks"] = ["相关新闻显示NVDA股价上涨，对AMD构成参照。"]
     with pytest.raises(Exception):
         validate_result(
             "signal_analysis",
@@ -602,12 +607,10 @@ def test_source_binding_covers_context_news_titles():
     )
     assert validated["event_risks"][0].startswith("Hormel Foods")
 
-    with pytest.raises(Exception):
-        validate_result(
-            "signal_analysis",
-            json.dumps(result, ensure_ascii=False),
-            {"ticker": "AMD"},
-        )
+    # 2026-10-10 口径变更：输入里没有这条新闻时，公司名也按词条原样发布（原先被拒）。
+    assert validate_result(
+        "signal_analysis", json.dumps(result, ensure_ascii=False), {"ticker": "AMD"}
+    )["event_risks"] == result["event_risks"]
 
 
 def test_source_texts_collect_every_context_block():
