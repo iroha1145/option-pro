@@ -127,7 +127,7 @@ def test_real_worker_factories_queue_each_model_with_matching_runtime_contract(s
     payload = json.loads(focus["payload_json"])
     assert payload["verification_version"] == "web-evidence-v1"
     assert payload["input_schema_version"] == "market-focus-input-v3"
-    assert focus["schema_version"] == "market_focus_verified_zh_cn_v1"
+    assert focus["schema_version"] == "market_focus_verified_zh_cn_v2"
     assert len(payload["events"]) == 1
     assert article_reads  # All article acquisition used the offline fixture.
     assert vars(settings) == before

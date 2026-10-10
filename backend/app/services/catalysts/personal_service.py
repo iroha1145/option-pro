@@ -1087,6 +1087,9 @@ class PersonalCatalystService:
             allowed_event_group_ids = []
         stored_payload = projected.pop("_validation_payload", None)
         raw_result = projected.pop("_validation_raw_result", None)
+        projection_job = projected.pop("_projection_job", None)
+        if not isinstance(projection_job, Mapping):
+            projection_job = {}
         result = projected.get("result")
         if result is None:
             return projected
@@ -1146,7 +1149,11 @@ class PersonalCatalystService:
         if validation_payload.get("verification_version") == "web-evidence-v1":
             # A successful job alone is insufficient: the local publication
             # transaction must have committed its exact verified projection.
-            projected["result"] = public_focus_result(result_data) if projected.get("verification_status") == "verified" else None
+            projected["result"] = public_focus_result(
+                result_data,
+                schema_version=projection_job.get("schema_version"),
+                verified_at=projection_job.get("completed_at"),
+            ) if projected.get("verification_status") == "verified" else None
         else:
             projected["verification_status"] = "legacy_unverified"
             projected["result"] = result_data

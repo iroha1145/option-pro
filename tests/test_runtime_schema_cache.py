@@ -45,7 +45,9 @@ def _identity_the_long_way(job_type: str, *, model: str) -> str:
     payload = {
         "instructions": request.instructions,
         "result_validation_contract": rt.RESULT_VALIDATION_CONTRACT_VERSION,
-        "schema": result_model_for(job_type).model_json_schema(mode="validation"),
+        # Requests carry the tightened market focus contract (2026-10-10);
+        # concise=True changes nothing for the other job types.
+        "schema": result_model_for(job_type, concise=True).model_json_schema(mode="validation"),
         "schema_name": request.schema_name,
         "max_input_tokens": rt.max_input_tokens_for(job_type, model=model),
         "max_output_tokens": rt.max_output_tokens_for(job_type, model=model),
@@ -74,7 +76,7 @@ def test_the_json_round_trip_preserves_the_schema_exactly(job_type: str) -> None
     """
 
     assert rt.build_runtime_request(job_type, {}).schema == result_model_for(
-        job_type
+        job_type, concise=True,
     ).model_json_schema(mode="validation")
 
 

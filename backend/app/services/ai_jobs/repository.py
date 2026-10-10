@@ -2964,6 +2964,7 @@ class AIJobRepository:
             payload = json.loads(str(current["payload_json"]))
         except (KeyError, TypeError, json.JSONDecodeError) as exc:
             raise RuntimeError("ai_job_recovery_payload_invalid") from exc
+        # Recovery applies the same limits as the original completion did.
         validated = validate_result(
             str(current["job_type"]),
             json.dumps(
@@ -2973,6 +2974,7 @@ class AIJobRepository:
                 allow_nan=False,
             ),
             payload,
+            schema_version=current.get("schema_version"),
         )
         if claude_result or current.get("provider_result_json"):
             receipt = self.get_provider_result(job_id)
@@ -3492,7 +3494,10 @@ class AIJobRepository:
                         raise ValueError("market_focus_tool_receipt_missing")
                     tool_evidence = validated_receipt.get("tool_evidence", [])
                     validate_market_focus_evidence(result, payload_source, tool_evidence)
-                    payload["result"] = public_focus_result(result)
+                    payload["result"] = public_focus_result(
+                        result, schema_version=row.get("schema_version"),
+                        verified_at=row.get("completed_at"),
+                    )
                     payload["evidence_sources"] = public_focus_sources(result, tool_evidence)
                 except (KeyError, TypeError, ValueError) as exc:
                     record_fallback_failure("ai_job_focus_evidence_hidden", exc)
