@@ -435,6 +435,18 @@ test('reduced motion stops grow-bar without adding a missing spin-once rule', as
   assert.doesNotMatch(css, /spin-once/);
 });
 
+test('opacity fades share one keyframe and keep their own durations', async () => {
+  const css = await source('index.css');
+  const catalog = await source('styles/transitions-catalog.css');
+  assert.match(css, /animation: fade-in var\(--tt-in-dur\) var\(--tt-in-ease\) both;/);
+  assert.match(css, /animation: fade-in 180ms ease-out both;/);
+  assert.doesNotMatch(css, /cloud-popover-enter/);
+  assert.match(catalog, /fade-in\s+var\(--check-opacity-dur\) var\(--check-ease-opacity\) forwards/);
+  assert.doesNotMatch(catalog, /@keyframes t-check-fade/);
+  assert.match(css, /@keyframes shimmer \{/);
+  assert.match(catalog, /@keyframes t-shimmer \{/);
+});
+
 test('state labels swap in place with the 04-text-swap tokens', async () => {
   const catalog = await source('styles/transitions-catalog.css');
   assert.match(catalog, /\.t-text-swap \{[^}]*animation: t-text-swap-in var\(--text-swap-dur\) var\(--text-swap-ease\) both;/s);

@@ -993,9 +993,8 @@
   border-radius: var(--r-group);
   background: var(--card);
   box-shadow: var(--popover-shadow);
-  animation: cloud-popover-enter var(--tt-in-dur) var(--tt-in-ease) both;
+  animation: fade-in var(--tt-in-dur) var(--tt-in-ease) both;
 }
-@keyframes cloud-popover-enter { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
   .cloud-popover { animation: none; }
   .cloud-chart-tooltip { transition: none !important; }

@@ -639,7 +639,7 @@
 
 .t-success-check[data-state="in"] {
   animation:
-    t-check-fade   var(--check-opacity-dur) var(--check-ease-opacity) forwards,
+    fade-in        var(--check-opacity-dur) var(--check-ease-opacity) forwards,
     t-check-rotate var(--check-rotate-dur)  var(--check-ease-rotate)  forwards,
     t-check-blur   var(--check-blur-dur)    var(--check-ease-out)     forwards,
     t-check-bob    var(--check-bob-dur)     var(--check-ease-bob)     forwards;
@@ -648,7 +648,6 @@
   animation: t-check-draw var(--check-path-dur) var(--check-ease-path) var(--check-path-delay, 0ms) forwards;
 }
 
-@keyframes t-check-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes t-check-rotate {
   from { transform: rotate(var(--check-rotate-from)); }
   to   { transform: rotate(0deg); }
