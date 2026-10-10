@@ -140,7 +140,7 @@ def test_successful_run_is_validated_and_stored(tmp_path: Path) -> None:
     assert 0 < client.calls[0]["timeout"] <= 1500.0
     assert seen_requests and seen_requests[0]["model"] == "claude-opus-5-5"
     assert seen_requests[0]["evidence_bytes"] == 1234
-    assert seen_requests[0]["prompt_version"] == "market-brief-prompt-v2"
+    assert seen_requests[0]["prompt_version"] == "market-brief-prompt-v3"
     assert record.request_meta == seen_requests[0]
     user_text = client.calls[0]["messages"][0]["content"][0]["text"]
     assert "<untrusted_market_evidence>" in user_text and "收盘后" in user_text
