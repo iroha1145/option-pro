@@ -125,7 +125,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
     <header className="glass sticky top-0 z-50 border-b border-line">
       <div className="mx-auto flex h-12 max-w-shell items-center gap-3 px-4 md:h-16 md:gap-5 md:px-8">
         {/* Logo */}
-        <Link to="/" className="flex shrink-0 items-center gap-2.5" aria-label={t("Optix Pro 首页")}>
+        <Link to="/" className="touch-target flex shrink-0 items-center gap-2.5" aria-label={t("Optix Pro 首页")}>
           <img src="/logo.svg" alt="" className="size-7 md:size-8 dark:brightness-0 dark:invert" />
           {/* 2026-10-06 第二轮：只留品牌名，去掉下方「US EQUITY DESK」小字 */}
           <span className="hidden font-display text-[17px] font-bold leading-none text-ink-900 sm:inline">Optix Pro</span>
