@@ -3976,8 +3976,15 @@ class LocalCatalystIntelligence:
 
     @staticmethod
     def _verified_focus_paid_result(job: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
-        """Validate the saved paid receipt without publishing or changing it."""
-        result = validate_result("market_focus", str(job.get("result_json") or ""), payload)
+        """Validate the saved paid receipt without publishing or changing it.
+
+        Every hotspot read re-checks the newest covering cycles. The two full
+        result validations are remembered per process by their exact bytes and
+        payload; receipt identity and evidence are still checked on each call.
+        """
+        result = validate_result_cached(
+            "market_focus", str(job.get("result_json") or ""), payload, validator=validate_result,
+        )
         receipt = _loads(job.get("provider_result_json"), None)
         if not isinstance(receipt, dict):
             raise ValueError("market_focus_verification_receipt_missing")
@@ -3989,7 +3996,10 @@ class LocalCatalystIntelligence:
             raise ValueError("market_focus_verification_receipt_mismatch")
         evidence = receipt.get("tool_evidence", [])
         validate_market_focus_evidence(result, payload, evidence)
-        paid_result = validate_result("market_focus", receipt["output_text"], payload)
+        output_text = receipt.get("output_text")
+        if not isinstance(output_text, str):
+            raise ValueError("market_focus_verification_receipt_mismatch")
+        paid_result = validate_result_cached("market_focus", output_text, payload, validator=validate_result)
         validate_market_focus_evidence(paid_result, payload, evidence)
         if paid_result != result:
             raise ValueError("market_focus_verification_receipt_mismatch")

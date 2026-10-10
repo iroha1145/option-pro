@@ -1190,7 +1190,10 @@ class PersonalCatalystService:
             }
         )
         try:
-            result_data = validate_result(
+            # Each poll projects the current, latest and previous cycles, and
+            # the current one is usually also the latest; the same paid result
+            # is checked once per process.
+            result_data = validate_result_cached(
                 "market_focus",
                 json.dumps(
                     raw_result if raw_result is not None else result,
@@ -1199,6 +1202,7 @@ class PersonalCatalystService:
                     allow_nan=False,
                 ),
                 validation_payload,
+                validator=validate_result,
             )
         except (TypeError, ValueError):
             projected["result"] = None
