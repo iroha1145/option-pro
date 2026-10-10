@@ -428,6 +428,13 @@ test('page enter and chrome polish ride transitions.dev / shadcn tokens', async 
   assert.match(css, /var\(--tilt-glare-opacity\)/);
 });
 
+test('reduced motion stops grow-bar without adding a missing spin-once rule', async () => {
+  const css = await source('index.css');
+  const block = css.slice(css.indexOf('§4.2'));
+  assert.match(block, /\.animate-grow-bar \{\s*animation: none !important;/);
+  assert.doesNotMatch(css, /spin-once/);
+});
+
 test('state labels swap in place with the 04-text-swap tokens', async () => {
   const catalog = await source('styles/transitions-catalog.css');
   assert.match(catalog, /\.t-text-swap \{[^}]*animation: t-text-swap-in var\(--text-swap-dur\) var\(--text-swap-ease\) both;/s);

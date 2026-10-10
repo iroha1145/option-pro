@@ -1199,7 +1199,8 @@
   .marquee-inner,
   .skeleton-shimmer::after,
   .spark-draw,
-  .animate-led-pulse {
+  .animate-led-pulse,
+  .animate-grow-bar {
     animation: none !important;
   }
   .ui-spinner {
