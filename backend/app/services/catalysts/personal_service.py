@@ -115,6 +115,16 @@ def _displayable_zh(item: Mapping[str, Any]) -> bool:
     return bool(str(item.get("title_zh") or "").strip() and str(item.get("summary_zh") or "").strip())
 
 
+def _counts_as_hidden(item: Mapping[str, Any]) -> bool:
+    """English news still waiting for its Chinese copy.
+
+    A skipped item (a template article scheduled analysis leaves alone) will
+    never get one, so it is not reported as waiting.
+    """
+
+    return not _displayable_zh(item) and item.get("analysis_status") != "skipped"
+
+
 def _apply_zh_visibility(projected: dict[str, Any], items: list[dict[str, Any]]) -> None:
     """Keep only items with validated Chinese copy; count the rest as hidden.
 
@@ -122,9 +132,8 @@ def _apply_zh_visibility(projected: dict[str, Any], items: list[dict[str, Any]])
     hidden_unanalyzed instead of being returned.
     """
 
-    visible = [item for item in items if _displayable_zh(item)]
-    projected["items"] = visible
-    projected["hidden_unanalyzed"] = len(items) - len(visible)
+    projected["items"] = [item for item in items if _displayable_zh(item)]
+    projected["hidden_unanalyzed"] = sum(1 for item in items if _counts_as_hidden(item))
 
 
 class _LocalIntelligence(Protocol):
@@ -223,6 +232,9 @@ class PersonalCatalystService:
                     effective_runtime.catalyst.manual_refresh_cooldown_seconds
                     if effective_runtime is not None
                     else self.personal_config.catalyst.manual_refresh_cooldown_seconds
+                ),
+                scheduled_skip_template_commentary=(
+                    self.personal_config.catalyst.scheduled_skip_template_commentary
                 ),
             )
         self.intelligence = intelligence
@@ -967,7 +979,13 @@ class PersonalCatalystService:
                     job_id = links.get(identity)
                     if job_id is None:
                         job = None
-                        status_override = "not_requested"
+                        # A skipped item was never requested either; keep
+                        # saying why it will not be analyzed.
+                        status_override = (
+                            None
+                            if candidate.get("analysis_status") == "skipped"
+                            else "not_requested"
+                        )
                     else:
                         job, status_override = self._project_news_job_as_of(
                             job_id,
@@ -1447,7 +1465,7 @@ class PersonalCatalystService:
                     visible.append(item)
                     if len(visible) >= requested_limit:
                         break
-                elif matches_projected_filters(item):
+                elif matches_projected_filters(item) and _counts_as_hidden(item):
                     hidden += 1
             projected["items"] = visible
             projected["hidden_unanalyzed"] = hidden

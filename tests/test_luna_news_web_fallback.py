@@ -64,7 +64,7 @@ def test_request_is_model_aware_and_bounded(tmp_path):
     assert params["reasoning"] == {"effort": "max"}
     assert params["tools"] == [{"type": "web_search", "search_context_size": "low", "external_web_access": True}]
     assert params["tool_choice"] == "required"
-    assert params["max_tool_calls"] == 3
+    assert params["max_tool_calls"] == 1
     assert params["include"] == ["web_search_call.action.sources"]
     assert "不浏览网页" not in params["instructions"]
     assert not runtime.build_runtime_request("news_impact", payload(), model=runtime.OFFICIAL_CLAUDE_MODEL).use_web_search

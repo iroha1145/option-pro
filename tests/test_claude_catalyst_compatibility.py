@@ -119,7 +119,7 @@ def test_new_news_uses_claude_and_original_provider_schema_hash(tmp_path):
 
 
 @pytest.mark.parametrize(("field", "value"), [
-    ("model", "unknown-model"), ("reasoning", "xhigh"),
+    ("model", "unknown-model"), ("reasoning", "medium"),
     ("schema_sha256", "f" * 64), ("prompt_version", "unknown-prompt"),
 ])
 def test_wrong_legacy_identity_still_rejected(tmp_path, field, value):

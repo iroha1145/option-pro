@@ -33,6 +33,10 @@ MACRO_SCORING_VERSION = "optix-macro-score-v1"
 #: every job type and job model (a Luna news task without an article body).
 #: Kept as a literal for the same reason; the two are asserted equal in tests.
 LARGEST_TASK_TOKEN_RESERVATION = 1_050_000
+#: Mirror of ``app.services.ai_jobs.runtime.OPENAI_REASONING_EFFORTS``: the
+#: reasoning efforts a GPT model accepts. Claude models accept only ``xhigh``.
+#: Kept as a literal for the same reason; the two are asserted equal in tests.
+OPENAI_REASONING_EFFORTS = ("max", "xhigh", "high")
 _PRIVATE_NETWORK_ENVELOPES = tuple(
     ipaddress.ip_network(value)
     for value in (
@@ -139,11 +143,20 @@ class ModelBudgetConfig(StrictConfigModel):
         return value.astimezone(timezone.utc)
 
 
+def reasoning_supported(model: str, reasoning: str) -> bool:
+    """Claude models run at ``xhigh``; GPT models at max, xhigh or high."""
+
+    if model.startswith("claude-"):
+        return reasoning == "xhigh"
+    return reasoning in OPENAI_REASONING_EFFORTS
+
+
 class AIConfig(StrictConfigModel):
     model: Literal["claude-haiku-5-5", "gpt-5.6-terra", "gpt-5.6-luna", "claude-sonnet-5-5"] = "claude-haiku-5-5"
-    reasoning: Literal["xhigh", "max"] = "xhigh"
+    reasoning: Literal["xhigh", "max", "high"] = "xhigh"
     news_model: Literal["gpt-5.6-luna", "gpt-5.6-terra", "claude-haiku-5-5"] | None = None
-    news_reasoning: Literal["max", "xhigh"] | None = None
+    # GPT 模型可选 max、xhigh、high：max 最贵，xhigh、high 依次更省。
+    news_reasoning: Literal["max", "xhigh", "high"] | None = None
     market_focus_model: Literal["claude-sonnet-5-5", "claude-haiku-5-5"] | None = None
     market_focus_reasoning: Literal["xhigh"] | None = None
     max_concurrency: int = Field(default=4, ge=1, le=4)
@@ -171,17 +184,14 @@ class AIConfig(StrictConfigModel):
 
     @model_validator(mode="after")
     def validate_model_reasoning(self) -> "AIConfig":
-        expected = "xhigh" if self.model.startswith("claude-") else "max"
-        if self.reasoning != expected:
+        if not reasoning_supported(self.model, self.reasoning):
             raise ValueError("AI model and reasoning must use a supported pair")
-        selected = self.news_model or self.model
-        effort = self.news_reasoning
-        if effort is not None and effort != ("xhigh" if selected.startswith("claude-") else "max"):
-            raise ValueError("AI task model and reasoning must use a supported pair")
-        selected = self.market_focus_model or self.model
-        effort = self.market_focus_reasoning
-        if effort is not None and effort != ("xhigh" if selected.startswith("claude-") else "max"):
-            raise ValueError("AI task model and reasoning must use a supported pair")
+        for selected, effort in (
+            (self.news_model or self.model, self.news_reasoning),
+            (self.market_focus_model or self.model, self.market_focus_reasoning),
+        ):
+            if effort is not None and not reasoning_supported(selected, effort):
+                raise ValueError("AI task model and reasoning must use a supported pair")
         if self.model == "gpt-5.6-terra" and self.max_concurrency != 1:
             raise ValueError("legacy OpenAI configuration supports concurrency 1 only")
         return self
@@ -246,6 +256,9 @@ class CatalystConfig(StrictConfigModel):
     # MacroLens ETL 远端同步，只为回滚保留（回滚前要恢复切换前的库备份）。
     news_source: Literal["local", "macrolens"] = "local"
     sources: CatalystSourcesConfig = Field(default_factory=CatalystSourcesConfig)
+    # 定时分析跳过 Zacks 的模板稿（标题套话或链接带 yseop_template 的自动生成稿），
+    # 读接口把它们标为 skipped。关掉即回到全部分析；站长手动点分析不受影响。
+    scheduled_skip_template_commentary: bool = True
 
     @field_validator("scheduled_times_et")
     @classmethod

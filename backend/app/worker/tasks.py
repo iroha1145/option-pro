@@ -261,6 +261,13 @@ async def _build_local_intelligence(
         focus_reasoning=focus_reasoning,
         max_queued=settings.openai_job_max_queued,
         manual_refresh_cooldown_seconds=refresh_cooldown,
+        scheduled_skip_template_commentary=bool(
+            getattr(
+                getattr(config, "catalyst", None),
+                "scheduled_skip_template_commentary",
+                True,
+            )
+        ),
         **content_options,
     )
     await _call_local(intelligence.initialize)
