@@ -1271,11 +1271,11 @@ def test_focus_projection_recovers_write_time_sources_from_linked_job() -> None:
     projected = _service("manual", repository=repository)._project_focus_cycle(cycle)
     assert projected["result"] is not None, "源绑定实体不得在读取投影时被误藏"
 
-    # 任务行缺失（无链接）时退回瘦上下文：源绑定实体无从佐证 → 仍隐藏。
+    # 2026-10-10 口径变更：任务行缺失（无链接）时退回瘦上下文，小写药名无从佐证，但按词条
+    # 放行，不再隐藏（原先判 legacy_output_hidden）。
     unlinked = {key: value for key, value in cycle.items() if key != "job_id"}
-    hidden = _service("manual")._project_focus_cycle(unlinked)
-    assert hidden["result"] is None
-    assert hidden["error_code"] == "legacy_output_hidden"
+    shown = _service("manual")._project_focus_cycle(unlinked)
+    assert shown["result"] is not None
 
 
 def test_public_latest_focus_cycle_revalidates_with_write_time_sources(

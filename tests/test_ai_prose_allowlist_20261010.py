@@ -60,19 +60,12 @@ def test_lower_case_clause_letters_next_to_a_number_or_group_publish(text):
 @pytest.mark.parametrize(
     "text",
     [
-        # Chinese on both sides: not a clause chain.
-        "根据(a)款，公司有180天合规期。",
-        "方案(a)更优。",
-        # Full-width brackets, two letters, an upper-case letter.
-        "规则5550（a）条。",
-        "规则5550(ab)条。",
-        "规则5550(A)条。",
         # The English article stays English.
         "报告称a deal已经达成。",
         "规则5550(a deal)。",
     ],
 )
-def test_other_bracketed_or_bare_lower_case_letters_stay_rejected(text):
+def test_english_phrases_with_a_bare_letter_stay_rejected(text):
     with pytest.raises(ValueError, match="english_prose_not_allowed"):
         _news_field(text)
 
@@ -101,9 +94,8 @@ def test_letter_labels_publish(text):
 @pytest.mark.parametrize(
     "text",
     [
-        # A comma or bracket between the letter and the noun: 部分 means "some".
+        # A code alone in brackets after a Chinese name is a ticker alias.
         "福特汽车（F），部分分析师下调评级。",
-        "福特汽车F，部分分析师下调评级。",
         # A security prefix still asks for the code.
         "股票代码F组。",
         # 股 keeps its own rule: only A, B and H, and never 股价 or 股票.
@@ -180,21 +172,36 @@ def test_numeric_frequency_quantities_publish(text):
 @pytest.mark.parametrize(
     "text",
     [
-        # The verified-focus unit translation leaves these alone and its
-        # red-line test expects the language gate to reject them
-        # (tests/test_verified_focus_prose_compatibility.py); news agrees.
-        "频率MHz已公布。",
-        "公司800MHz发布公告。",
+        # Next to a code or serial-number label, or in a security context.
         "编号800MHz继续有效。",
-        "800MHz公司宣布交易。",
         "股票代码为800MHz。",
         "600MHz股价上涨。",
         "MHz股价上涨。",
     ],
 )
-def test_bare_units_and_labelled_frequencies_stay_rejected(text):
+def test_frequencies_next_to_code_labels_or_stocks_stay_rejected(text):
     with pytest.raises(ValueError, match="english_prose_not_allowed"):
         _news_field(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "根据(a)款，公司有180天合规期。",
+        "方案(a)更优。",
+        "规则5550（a）条。",
+        "规则5550(ab)条。",
+        "规则5550(A)条。",
+        "福特汽车F，部分分析师下调评级。",
+        "频率MHz已公布。",
+        "公司800MHz发布公告。",
+        "800MHz公司宣布交易。",
+    ],
+)
+def test_former_narrowness_cases_are_terms_after_the_2026_10_10_policy(text):
+    # 2026-10-10 口径变更：这些原先用来检验本文件各条规则够窄，没有证券标记，现在由
+    # _is_term_like_span 按词条放行。括号里的「福特汽车（F）」仍按代码别名被拒。
+    assert _news_field(text) == text
 
 
 # --- Roman numerals as ordinals -----------------------------------------------

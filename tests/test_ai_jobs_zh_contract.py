@@ -223,7 +223,6 @@ def test_zh_prose_accepts_nyse_exchange_abbreviation(text):
         "NYSE股价上涨。",
         "股票代码为NYSE。",
         "NYSE（股票代码）受到关注。",
-        "NYSEX发布上市规则说明。",
     ],
 )
 def test_nyse_abbreviation_does_not_allow_english_prose_or_unbound_stocks(text):
@@ -232,6 +231,12 @@ def test_nyse_abbreviation_does_not_allow_english_prose_or_unbound_stocks(text):
         match="simplified_chinese_text_required|english_prose_not_allowed",
     ):
         validate_simplified_chinese_text(text, None, allowed_codes=("NVDA",))
+
+
+def test_unlisted_exchange_like_initialism_is_a_term_after_the_2026_10_10_policy():
+    # 2026-10-10 口径变更：「NYSEX」不在名单里，不在证券语境时按词条保留原文（原先被拒）。
+    text = "NYSEX发布上市规则说明。"
+    assert validate_simplified_chinese_text(text, None, allowed_codes=("NVDA",)) == text
 
 
 def test_market_focus_accepts_nyse_exchange_context_in_affected_fields():
@@ -309,24 +314,19 @@ def test_market_focus_translates_only_bound_macro_active_status(field, text):
 def test_market_focus_does_not_translate_macro_status_without_exact_input(macro):
     result = _market_focus_result()
     result["summary_zh"] = "宏观环境块状态为active，综合分47.3。"
-    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
-        validate_result(
-            "market_focus",
-            json.dumps(result, ensure_ascii=False),
-            _market_focus_payload(macro_conditions=macro),
-        )
+    # 2026-10-10 口径变更：没有对上输入时照旧不翻译；剩下的「active」按词条原样发布，不再拒绝。
+    validated = validate_result(
+        "market_focus",
+        json.dumps(result, ensure_ascii=False),
+        _market_focus_payload(macro_conditions=macro),
+    )
+    assert validated["summary_zh"] == "宏观环境块状态为active，综合分47.3。"
 
 
 @pytest.mark.parametrize(
     "text",
     [
-        "公司的状态为active，仍需观察。",
         "active股票受到关注。",
-        "文章指出状态为active，仍需观察。",
-        "宏观环境保持中性，公司的状态为active，仍需观察。",
-        "宏观环境保持中性。状态为active，仍需观察。",
-        "宏观环境块状态为inactive，综合分47.3。",
-        "宏观环境块状态为activeStock，综合分47.3。",
         "宏观环境块状态为active，公司 remains active。",
         "The macro status is active.",
         "宏观环境块状态为active，TSLA股价上涨。",
@@ -342,6 +342,29 @@ def test_bound_macro_translation_preserves_language_and_stock_checks(text):
             json.dumps(result, ensure_ascii=False),
             _market_focus_payload(macro_conditions={"status": "active"}),
         )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "公司的状态为active，仍需观察。",
+        "文章指出状态为active，仍需观察。",
+        "宏观环境保持中性，公司的状态为active，仍需观察。",
+        "宏观环境保持中性。状态为active，仍需观察。",
+        "宏观环境块状态为inactive，综合分47.3。",
+        "宏观环境块状态为activeStock，综合分47.3。",
+    ],
+)
+def test_unbound_macro_status_words_stay_untranslated_after_the_2026_10_10_policy(text):
+    # 2026-10-10 口径变更：这些位置照旧不翻译，状态词按词条原样发布（原先在上面的拒绝清单里）。
+    result = _market_focus_result()
+    result["market_summary"] = text
+    validated = validate_result(
+        "market_focus",
+        json.dumps(result, ensure_ascii=False),
+        _market_focus_payload(macro_conditions={"status": "active"}),
+    )
+    assert validated["market_summary"] == text
 
 
 @pytest.mark.parametrize("field", ["summary_zh", "market_summary"])
@@ -378,20 +401,22 @@ def test_macro_active_translation_accepts_delimited_enum_values(suffix):
 def test_bound_macro_translation_does_not_expand_to_other_fields(field):
     result = _market_focus_result()
     result[field] = "宏观环境块状态为active，综合分47.3。"
-    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
-        validate_result(
-            "market_focus",
-            json.dumps(result, ensure_ascii=False),
-            _market_focus_payload(macro_conditions={"status": "active"}),
-        )
+    # 2026-10-10 口径变更：别的字段照旧不翻译，「active」按词条原样发布，不再拒绝。
+    validated = validate_result(
+        "market_focus",
+        json.dumps(result, ensure_ascii=False),
+        _market_focus_payload(macro_conditions={"status": "active"}),
+    )
+    assert validated[field] == "宏观环境块状态为active，综合分47.3。"
 
 
 def test_bound_macro_translation_does_not_expand_to_other_jobs():
     result = _news_result()
     result["summary_zh"] = "宏观环境块状态为active，综合分47.3。"
     payload = {**_news_payload(), "macro_conditions": {"status": "active"}}
-    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
-        validate_result("news_impact", json.dumps(result, ensure_ascii=False), payload)
+    # 2026-10-10 口径变更：新闻照旧不翻译宏观状态，「active」按词条原样发布，不再拒绝。
+    validated = validate_result("news_impact", json.dumps(result, ensure_ascii=False), payload)
+    assert validated["summary_zh"] == "宏观环境块状态为active，综合分47.3。"
 
 
 @pytest.mark.parametrize("field", ["summary_zh", "market_summary"])
@@ -553,8 +578,6 @@ def test_greek_homoglyphs_are_rejected_in_security_contexts(text):
 @pytest.mark.parametrize(
     "text",
     [
-        "该交易依据10b5-2计划执行。",
-        "该交易依据11b5-1计划执行。",
         "该交易依据Rule 10b5-1 trading plan执行。",
         "10b5-1",
         "10b5-1股价上涨。",
@@ -565,6 +588,13 @@ def test_greek_homoglyphs_are_rejected_in_security_contexts(text):
 def test_rule_10b5_1_exception_remains_narrow(text):
     with pytest.raises(ValueError):
         validate_simplified_chinese_text(text, None)
+
+
+@pytest.mark.parametrize("text", ["该交易依据10b5-2计划执行。", "该交易依据11b5-1计划执行。"])
+def test_other_rule_numbers_are_terms_after_the_2026_10_10_policy(text):
+    # 2026-10-10 口径变更：10b5-1 的专门例外仍只认它自己；别的编号不在证券语境时按词条
+    # 放行（原先在上面的拒绝清单里）。
+    assert validate_simplified_chinese_text(text, None) == text
 
 
 def test_news_prompt_allows_compact_registered_names_but_not_english_prose():
@@ -840,9 +870,8 @@ def test_wholly_english_sentence_is_rejected():
 
 def test_source_bound_company_name_can_be_revalidated_outside_pydantic_context():
     text = "Hormel Foods公布最新季度业绩"
-
-    with pytest.raises(ValueError, match="english_prose_not_allowed"):
-        validate_simplified_chinese_text(text, None, allowed_codes={"HRL"})
+    # 2026-10-10 口径变更：没有来源文本时，公司名也按词条保留原文（原先被拒）。
+    assert validate_simplified_chinese_text(text, None, allowed_codes={"HRL"}) == text
 
     assert (
         validate_simplified_chinese_text(
@@ -1035,160 +1064,166 @@ def test_unihan_self_mapped_characters_remain_valid_in_simplified_contexts(title
     assert validated["title_zh"] == title
 
 
-@pytest.mark.parametrize(
-    "mixed_prose",
-    [
-        "Breaking 苹果公司发布新品",
-        "Breaking苹果公司发布新品",
-        "Update 苹果公司发布新品",
-        "苹果公司 reports 新品",
-        "英伟达launches新品",
-        "新闻称 shares rose after earnings",
-        "英伟达 reports strong growth now",
-        "NVIDIA launches new chip 新品",
-        "英伟达 launches chip",
-        "IonQ reports stronger revenue，市场关注",
-        "Varonis Systems shares rose after earnings，市场关注",
-        "NASCAR and Goodyear expand DEI partnership，市场关注",
-        "Markets Rally After Earnings 苹果",
-        "Company Reports Strong Growth 苹果",
-        "Report 苹果发布新品",
-        "Breaking NVIDIA新品",
-        "NVIDIA Reports Stronger Revenue，苹果公司表示需求改善",
-        "苹果Launches New Chip",
-        "REPORTS 苹果发布新品",
-        "LAUNCHES NVIDIA新品",
-        "AI Business Expands Rapidly 苹果",
-        "RALLY 苹果",
-        "RESULTS 苹果",
-        "IonQ Announces Quantum Partnership 苹果",
-        "Apple Raises Guidance，市场持续关注",
-        "Stocks Fall Hard 苹果",
-        "President Orders Military Attack 全球市场显著震荡",
-        "market-rally 苹果",
-        "strong-growth 苹果",
-        "Apple Beats Estimates，市场持续关注",
-        "Apple Cuts Outlook，市场持续关注",
-        "General Motors Reports Results，市场持续关注",
-        "ON Reports Results，市场持续关注",
-        "Crypto Crash市场恐慌",
-        "Trade War风险升温",
-        "Bank Crisis持续蔓延",
-        "Rate Shock冲击市场",
-        "Dollar Soars市场承压",
-        "Oil Spikes市场震荡",
-        "Bonds Sink市场承压",
-        "Tech Slumps科技股承压",
-        "Jobs Miss降息预期升温",
-        "Tariffs Loom市场担忧",
-        "Fed Pauses市场上涨",
-        "Trump Strikes伊朗局势升级",
-        "China Retaliates市场震荡",
-        "Bitcoin Crashes市场恐慌",
-        "Equities Tumble市场承压",
-        "CRASH ALERT市场恐慌",
-        "WAR FEAR市场震荡",
-        "BONDS SINK市场承压",
-        "RATE SHOCK市场震荡",
-        "BANK CRISIS风险升温",
-        "Credit Stress继续加剧",
-        "市场（investors flee quickly）持续下跌",
-        "Market-Crash公司发布预警",
-        "RSA Conference期间发布新研究",
-        "Varonis Systems发布新研究",
-        "Yaki Faitelson介绍公司战略",
-        "Johnson & Johnson公司发布最新业绩",
-        "Procter & Gamble公司发布最新业绩",
-        "Bank of America发布最新研究",
-        "Standard Chartered Bank发布最新研究",
-        "The Trade Desk发布最新业绩",
-        "Global Payments公司发布最新业绩",
-        "Taiwan Semiconductor Manufacturing公司发布最新业绩",
-        "Market's发布最新消息",
-        "Company's发布公告",
-        "Stock's推动股价上涨",
-        "Report's发布最新消息",
-        "Apple Inc.发布最新业绩",
-        "Foo Corp发布最新业绩",
-        "Market Inc.发布最新消息",
-        "Report LLC发布最新消息",
-        "Company Corp发布最新消息",
-        "MARKET/RALLY市场关注度上升",
-        "WAR/FEAR市场震荡",
-        "BANK.CRISIS风险升温",
-        "foobar用于治疗相关疾病",
-        "investors治疗相关疾病",
-        "Yaki-Faitelson介绍公司战略",
-        "Johnson-Johnson公司发布最新业绩",
-        "Procter-Gamble公司发布最新业绩",
-        "Credit-Stress继续加剧",
-        "Investors-Flee市场下跌",
-        "PANIC/SELL市场恐慌",
-        "BANK.RUN引发担忧",
-        "RATE.CUT推动股市上涨",
-        "JOB.LOSS拖累消费",
-        "RISK.SHIFT改变资金流向",
-        "CASH/CRUNCH冲击企业",
-        "BULL/BEAR分歧扩大",
-        "risk-off交易升温",
-        "credit-crunch持续加剧",
-        "investor-panic继续蔓延",
-        "dollar-strength压制黄金",
-        "rate-cut推动股市上涨",
-        "bond-yields继续攀升",
-        "economic-slowdown正在恶化",
-        "Apple-Inc公司发布最新业绩",
-        "Foo-Corp发布最新业绩",
-        "Acme-LLC发布最新业绩",
-        "PANIC-2026市场恐慌",
-        "RISK 2026市场关注",
-        "BOOM-2026推动股价上涨",
-        "Investor 2026继续影响市场",
-        "SELL-2026信号出现",
-        "Market.rally市场上涨",
-        "Investors.flee市场下跌",
-        "Company.reports公司发布业绩",
-        "GPT-5-market-rally市场上涨",
-        "F-35-crash市场恐慌",
-        "COVID-19-investors-flee市场下跌",
-        "Python-3-market-rally市场上涨",
-        "iPhone17crash2026推动市场上涨",
-        "Aapl股价上涨",
-        "Panic股价上涨",
-        "Investors市场恐慌",
-        "Bonds市场承压",
-        "Inflation推动利率上升",
-        "Recession风险升温",
-        "Investors、Flee与Quickly推动市场下跌",
-        "Officials、Analysts与Investors表示市场下跌",
-        "ＰＡＮＩＣ股价上涨",
-        "ᴾᴬᴺᴵᶜ股价上涨",
-        "𝐏𝐀𝐍𝐈𝐂股价上涨",
-        "Ｍａｒｋｅｔｓ ｒａｌｌｙ市场上涨",
-        "𝐌𝐚𝐫𝐤𝐞𝐭𝐬 𝐫𝐚𝐥𝐥𝐲市场上涨",
-        "ＭＡＲＫＥＴ／ＲＡＬＬＹ市场上涨",
-        "NvDa股价上涨",
-        "PaNic股价上涨",
-        "PANic股价上涨",
-        "RateCut推动股市上涨",
-        "InVestOrs市场恐慌",
-        "InFlation推动利率上升",
-        "ⓅⒶⓃⒾⒸ股价上涨",
-        "РЫНОК РАСТЕТ市场上涨",
-        "マーケット上昇，市场上涨",
-        "株式会社任天堂发布财报",
-        "任天堂株式会社发布财报",
-        "㈱任天堂发布财报",
-        "㍿任天堂发布财报",
-        "任天堂売上高增长",
-        "株価上昇，市场关注",
-        "Tesla发布最新业绩",
-        "苹果与Tesla合作扩大供应",
-        "Broadcom发布最新业绩",
-        "Intel发布最新业绩",
-        "H100 Markets需求增长",
-    ],
-)
+# 口径变更（2026-10-10）后仍被拒：英文散文（含用连字符、斜杠、点号连起来的复合
+# 散文）、证券语境与其他文字。
+_STILL_REJECTED_ENGLISH_FRAGMENTS = [
+    "新闻称 shares rose after earnings",
+    "英伟达 reports strong growth now",
+    "NVIDIA launches new chip 新品",
+    "英伟达 launches chip",
+    "IonQ reports stronger revenue，市场关注",
+    "Varonis Systems shares rose after earnings，市场关注",
+    "NASCAR and Goodyear expand DEI partnership，市场关注",
+    "Markets Rally After Earnings 苹果",
+    "Company Reports Strong Growth 苹果",
+    "NVIDIA Reports Stronger Revenue，苹果公司表示需求改善",
+    "苹果Launches New Chip",
+    "AI Business Expands Rapidly 苹果",
+    "IonQ Announces Quantum Partnership 苹果",
+    "Apple Raises Guidance，市场持续关注",
+    "Stocks Fall Hard 苹果",
+    "President Orders Military Attack 全球市场显著震荡",
+    "market-rally 苹果",
+    "strong-growth 苹果",
+    "Apple Beats Estimates，市场持续关注",
+    "Apple Cuts Outlook，市场持续关注",
+    "General Motors Reports Results，市场持续关注",
+    "ON Reports Results，市场持续关注",
+    "Bank Crisis持续蔓延",
+    "Rate Shock冲击市场",
+    "Bonds Sink市场承压",
+    "Tariffs Loom市场担忧",
+    "Fed Pauses市场上涨",  # 涨跌窗口：两个字以内接涨跌词，按证券语境拒绝
+    "Equities Tumble市场承压",
+    "CRASH ALERT市场恐慌",
+    "WAR FEAR市场震荡",
+    "BONDS SINK市场承压",
+    "RATE SHOCK市场震荡",
+    "BANK CRISIS风险升温",
+    "市场（investors flee quickly）持续下跌",
+    "Market-Crash公司发布预警",
+    "MARKET/RALLY市场关注度上升",
+    "WAR/FEAR市场震荡",
+    "BANK.CRISIS风险升温",
+    "Investors-Flee市场下跌",  # 涨跌窗口：两个字以内接涨跌词，按证券语境拒绝
+    "PANIC/SELL市场恐慌",
+    "JOB.LOSS拖累消费",
+    "RISK.SHIFT改变资金流向",
+    "CASH/CRUNCH冲击企业",
+    "BULL/BEAR分歧扩大",
+    "risk-off交易升温",
+    "credit-crunch持续加剧",
+    "investor-panic继续蔓延",
+    "dollar-strength压制黄金",
+    "rate-cut推动股市上涨",
+    "bond-yields继续攀升",
+    "economic-slowdown正在恶化",
+    "Market.rally市场上涨",
+    "Investors.flee市场下跌",  # 涨跌窗口：两个字以内接涨跌词，按证券语境拒绝
+    "Company.reports公司发布业绩",
+    "GPT-5-market-rally市场上涨",
+    "COVID-19-investors-flee市场下跌",
+    "Python-3-market-rally市场上涨",
+    "Aapl股价上涨",
+    "Panic股价上涨",
+    "ＰＡＮＩＣ股价上涨",
+    "ᴾᴬᴺᴵᶜ股价上涨",
+    "𝐏𝐀𝐍𝐈𝐂股价上涨",
+    "Ｍａｒｋｅｔｓ ｒａｌｌｙ市场上涨",
+    "𝐌𝐚𝐫𝐤𝐞𝐭𝐬 𝐫𝐚𝐥𝐥𝐲市场上涨",
+    "ＭＡＲＫＥＴ／ＲＡＬＬＹ市场上涨",  # 涨跌窗口：两个字以内接涨跌词，按证券语境拒绝
+    "NvDa股价上涨",
+    "PaNic股价上涨",
+    "PANic股价上涨",
+    "ⓅⒶⓃⒾⒸ股价上涨",
+    "РЫНОК РАСТЕТ市场上涨",
+    "マーケット上昇，市场上涨",
+    "株式会社任天堂发布财报",
+    "任天堂株式会社发布财报",
+    "㈱任天堂发布财报",
+    "㍿任天堂发布财报",
+    "任天堂売上高增长",
+    "株価上昇，市场关注",
+]
+# 口径变更（2026-10-10，用户决定）：专名、术语和单个英文词元保留原文，不在证券
+# 语境时不再按英文散文拒绝。这些原先都在上面的拒绝清单里。
+_TERM_FRAGMENTS_NOW_PUBLISHED = [
+    "Breaking 苹果公司发布新品",
+    "Breaking苹果公司发布新品",
+    "Update 苹果公司发布新品",
+    "苹果公司 reports 新品",
+    "英伟达launches新品",
+    "Report 苹果发布新品",
+    "Breaking NVIDIA新品",
+    "REPORTS 苹果发布新品",
+    "LAUNCHES NVIDIA新品",
+    "RALLY 苹果",
+    "RESULTS 苹果",
+    "Crypto Crash市场恐慌",
+    "Trade War风险升温",
+    "Dollar Soars市场承压",
+    "Oil Spikes市场震荡",
+    "Tech Slumps科技股承压",
+    "Jobs Miss降息预期升温",
+    "Trump Strikes伊朗局势升级",
+    "China Retaliates市场震荡",
+    "Bitcoin Crashes市场恐慌",
+    "Credit Stress继续加剧",
+    "RSA Conference期间发布新研究",
+    "Varonis Systems发布新研究",
+    "Yaki Faitelson介绍公司战略",
+    "Johnson & Johnson公司发布最新业绩",
+    "Procter & Gamble公司发布最新业绩",
+    "Bank of America发布最新研究",
+    "Standard Chartered Bank发布最新研究",
+    "The Trade Desk发布最新业绩",
+    "Global Payments公司发布最新业绩",
+    "Taiwan Semiconductor Manufacturing公司发布最新业绩",
+    "Market's发布最新消息",
+    "Company's发布公告",
+    "Stock's推动股价上涨",
+    "Report's发布最新消息",
+    "Apple Inc.发布最新业绩",
+    "Foo Corp发布最新业绩",
+    "Market Inc.发布最新消息",
+    "Report LLC发布最新消息",
+    "Company Corp发布最新消息",
+    "foobar用于治疗相关疾病",
+    "investors治疗相关疾病",
+    "Yaki-Faitelson介绍公司战略",
+    "Johnson-Johnson公司发布最新业绩",
+    "Procter-Gamble公司发布最新业绩",
+    "Credit-Stress继续加剧",
+    "BANK.RUN引发担忧",
+    "RATE.CUT推动股市上涨",
+    "Apple-Inc公司发布最新业绩",
+    "Foo-Corp发布最新业绩",
+    "Acme-LLC发布最新业绩",
+    "PANIC-2026市场恐慌",
+    "RISK 2026市场关注",
+    "BOOM-2026推动股价上涨",
+    "Investor 2026继续影响市场",
+    "SELL-2026信号出现",
+    "F-35-crash市场恐慌",
+    "iPhone17crash2026推动市场上涨",
+    "Investors市场恐慌",
+    "Bonds市场承压",
+    "Inflation推动利率上升",
+    "Recession风险升温",
+    "Investors、Flee与Quickly推动市场下跌",
+    "Officials、Analysts与Investors表示市场下跌",
+    "RateCut推动股市上涨",
+    "InVestOrs市场恐慌",
+    "InFlation推动利率上升",
+    "Tesla发布最新业绩",
+    "苹果与Tesla合作扩大供应",
+    "Broadcom发布最新业绩",
+    "Intel发布最新业绩",
+    "H100 Markets需求增长",
+]
+
+
+@pytest.mark.parametrize("mixed_prose", _STILL_REJECTED_ENGLISH_FRAGMENTS)
 def test_chinese_text_rejects_english_fragments(mixed_prose):
     result = _news_result()
     result["title_zh"] = mixed_prose
@@ -1201,6 +1236,18 @@ def test_chinese_text_rejects_english_fragments(mixed_prose):
             json.dumps(result, ensure_ascii=False),
             _news_payload(),
         )
+
+
+@pytest.mark.parametrize("term_text", _TERM_FRAGMENTS_NOW_PUBLISHED)
+def test_term_fragments_are_published_after_the_2026_10_10_policy(term_text):
+    result = _news_result()
+    result["title_zh"] = term_text
+    validated = validate_result(
+        "news_impact",
+        json.dumps(result, ensure_ascii=False),
+        _news_payload(),
+    )
+    assert validated["title_zh"] == term_text
 
 
 def test_chinese_text_allows_multiple_tickers_and_a_short_proper_name():
@@ -1797,7 +1844,6 @@ def test_chinese_text_rejects_a_ticker_not_bound_to_the_job_payload():
     [
         "ZZZZ今日上涨",
         "ZZZZ公司发布财报",
-        "HELLO WORLD正在发生",
     ],
 )
 def test_contextual_initialisms_do_not_bypass_ticker_or_language_binding(text):
@@ -1807,6 +1853,12 @@ def test_contextual_initialisms_do_not_bypass_ticker_or_language_binding(text):
             None,
             allowed_codes=["MSFT"],
         )
+
+
+def test_all_caps_name_is_a_term_after_the_2026_10_10_policy():
+    # 2026-10-10 口径变更：两个全大写词、没有证券语境，按名称放行（原先在上面的拒绝清单里）。
+    text = "HELLO WORLD正在发生"
+    assert validate_simplified_chinese_text(text, None, allowed_codes=["MSFT"]) == text
 
 
 @pytest.mark.parametrize(
@@ -2817,14 +2869,10 @@ def test_zh_prose_allows_source_bound_lowercase_entity():
     )
 
 
-def test_zh_prose_still_rejects_unbound_lowercase_entity_without_source():
-    """源绑定是放行前提：没有源文本佐证的小写实体照旧拒。"""
-    with pytest.raises(ValueError, match="english_prose_not_allowed"):
-        validate_simplified_chinese_text(
-            "据报道，PFE的berobenatide在2b期研究中显示潜力。",
-            None,
-            allowed_codes=("PFE",),
-        )
+def test_zh_prose_publishes_unbound_lowercase_entity_after_the_2026_10_10_policy():
+    """2026-10-10 口径变更：小写药名不在付费源文本里也按词条保留原文（原先被拒）。"""
+    text = "据报道，PFE的berobenatide在2b期研究中显示潜力。"
+    assert validate_simplified_chinese_text(text, None, allowed_codes=("PFE",)) == text
 
 
 def test_zh_prose_allows_cjk_gloss_annotation():

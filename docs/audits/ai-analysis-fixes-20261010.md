@@ -365,3 +365,162 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
 - 既有测试：`test_ai_analysis_fixes_20261010.py` 78 项、`test_ai_review_round2_20261010.py` 141 项（含白名单逐个名称接 10 个涨跌词的扫描，新加的 9 个名称都在里面）、`test_ai_review_fixes_20261010.py` 64 项、`test_ai_review_round3_20261010.py` 38 项、`test_ai_jobs_zh_contract.py` 765 项、`test_ai_jobs.py` 91 项、`test_ai_jobs_audit_2026_09_25.py` 108 项、`test_claude_provider.py` 63 项，全部通过；`test_verified_focus_prose_compatibility.py` 221 项通过、1 项跳过。
 - 完整后端测试跑了两次。第一次 MHz、GHz 还在名单里：6,771 项通过、2 项失败、7 项跳过，失败的就是上面那条频率红线测试。只跑指定的几个测试文件时没有发现这个冲突，是完整测试抓到的。收窄后：6,778 项通过、7 项跳过（7 个子测试通过），退出码 0。
 - `python -m compileall -q backend/app` 通过，`git diff --check origin/main...HEAD -- . ':(top,exclude)frontend'` 干净。
+
+## 口径变更（2026-10-10）
+
+分支 `claude/ai-prose-terms-2026-10-10`，基于 main 的 `94cf52e2`（PR #240 已合并部署）。
+
+### 用户决定
+
+审查可以不用那么严格，专有词等即使不是中文也可以。落到规则上：自然语言字段仍然要求中文，但拉丁字母的专名和术语可以保留原文；`english_prose_not_allowed` 只拦真正的英文散文，不拦词条。热点、财报和新闻共用同一条规则。
+
+### 新规则
+
+实现在 `backend/app/services/ai_jobs/models.py` 的 `_is_term_like_span`。原有的放行规则一条没删，都没认下的片段才走到这里，在主循环里最后判一次。
+
+- 放行两种词条：
+  - 单个词元，由字母、数字和连字符、点号、`&`、撇号组成。例如 efgartigimod、BRAFTOVI、THAAD、VEGF-A、CoreWeave、node.js、SThree、Polymesh。
+  - 不超过 5 个词的名称，每个词是首字母大写、全大写、数字或版本号，或者是连接词（of、and、&、de、the、for、plc、Inc、Ltd 等）。例如 Simply Good Foods、PAC-3 Edge、Gooch & Housego plc、Panmure Liberum、Genesis Mission、Rule 10b-5。
+  - 单字母评级（A+、B、D、F）、系列（B系列）、档（G档）、单位（300°C、MHz）、货币前缀（C$、US$、HK$），只要不在证券语境，都按这条放行。
+- 仍按散文拒绝：
+  - 超过 5 个词的片段。
+  - 多词片段里有小写的普通词。
+  - 出现两个以上普通英文词。普通英文词指三个字母以上的小写词，或者英文标题词表里的词，不分大小写。用连字符、斜杠、点号连起来的也拆开来数，所以「market-rally」「COVID-19-investors-flee」「MARKET/RALLY」「Apple Beats Estimates」仍被拒。
+  - 裸的 JSON 字面量 true、false、null。
+- 不算词条：
+  - 下划线连起来的字段名，例如「my_article_status」。
+  - 网址和主机名，例如「https://foo.io/bar」「（GlobeNewswire.com）」。
+  - 照抄来源英文标题的片段。
+  - 所在句子没有汉字的片段。
+- 新闻的字段名翻译：原文含英文散文时不再逐词翻译。不然「article text truncated, source title available…」译完只剩一个「status」，会被当成词条放行。
+- 校验版本名 `simplified-chinese-v4` 没改，任务身份不变，队列不作废。经核验热点的已知标签翻译 `_translate_verified_focus_prose` 没动。
+
+### 保留的红线
+
+协调者要求的红线全部照旧，新测试 `tests/test_ai_prose_terms_policy_20261010.py` 逐条验证：
+
+- 「TSLA上涨」「A股价上涨」「IT股价上涨」「ESG股价上涨」「A公司宣布回购」被拒。
+- 「股票600519上涨」按数字代码要求绑定。
+- 网址、新闻身份不符、空字段和「x」占位、日文假名等其他文字，结果不变。
+
+原来这些红线有一部分是靠「不认识的全大写片段一律拒绝」顺带守住的。放开词条以后，改成在 `_term_in_security_context` 里显式判断：
+
+- 所有片段都适用：
+  - 原有的证券语境判断（股价、股票、证券等名词，八个涨跌词，股票代码等前缀）。
+  - 前后出现「代码」「编号」，中间只隔标点、空格或数字。
+  - 后面两个字以内接涨跌词，可以先跳过紧跟的括号别名。涨跌词是原有 8 个，加上第一轮审查补过、复核撤回的 14 个（大涨、大跌、暴涨、暴跌、急涨、急跌、飙升、重挫、跳水、拉升、走高、走低、下挫、反弹）。这 14 个当初撤回是因为会误伤名单里的「IV飙升」「RSI反弹」；名单里的术语走不到这一步，所以这里可以用。这一条守住「T-Mobile US此前下跌约5.4%」「IT大涨后回落」。
+- 代码样片段（1 到 5 个大写字母）另外适用：
+  - 后面是「股」「涨」「跌」，中间只隔标点、空格或数字，例如「F股受到关注」。
+  - 后接公司、集团、企业，例如「A公司宣布回购」「TSLA公司」。
+  - 独自放在中文后的括号里，例如未绑定的「英伟达（NVDA）」「福特汽车（F）」。这是既有测试 `test_zh_prose_gloss_does_not_launder_ticker_shaped_codes` 的要求：代码不得借括号漂白。
+  - 后接带符号的百分比或基点，例如「盘前TSLA +3.5%」。
+  - 后接价格比较，例如「F>12美元」。
+
+### 仍会被拒的写法
+
+下面这些是规则的代价，都写进了测试（新测试文件的 `test_known_costs_of_the_guards_are_still_rejected` 和英文碎片拒绝清单）：
+
+- 前后出现「代码」的正常写法：「用Rust代码重写」「用Go代码实现」，中间隔着逗号也一样。
+- 后面两个字以内接涨跌词、但涨跌的是市场或价格：「Fed Pauses市场上涨」「Polymesh价格下跌」「Investors.flee市场下跌」。
+- 括号里 1 到 5 个大写字母的术语注释：「系统（THAAD）」。不带括号的「部署THAAD系统」能过。
+- 含两个以上小写普通词的术语：「risk-off」「efgartigimod alfa」。
+- 超过 5 个词的名称：「Bank of New York Mellon Trust Company」。
+
+### 顺带放松的检查
+
+下面几类原来靠语言校验顺带拦住，按新口径都是词条，现在原样发布。翻译规则本身没变，对不上输入的照旧不翻译，只是不再报错。
+
+- 与输入不符的复述：
+  - 状态码对不上输入的「HTTP 401」「HTTP 403」「HTTP 404」：`test_http_status_is_kept_only_when_it_matches_the_input_failure`、`test_http_label_requires_matching_input_failure`、`test_trusted_links_do_not_relax_english_or_unknown_metadata`。
+  - 状态值对不上输入的「unavailable」「available」：`test_a_status_value_that_differs_from_the_input_is_left_untranslated`、`test_b3_untranslated_single_words_are_terms_after_the_2026_10_10_policy`、`test_metadata_conversion_does_not_touch_url_or_non_news_validation`。
+  - 宏观状态不是「active」时的「active」：`test_market_focus_does_not_translate_macro_status_without_exact_input` 等。
+- 来源绑定。名称不必再出现在付费输入里：
+  - 小写药名「berobenatide」。
+  - 公司名「Hormel Foods」「Micron Technology」。
+  - 期权提醒里的「Sweep」。
+  - 产品系列「V系列」。
+  - 没有萨班斯法案来源的「SOX」。
+  - 读取投影：输入没提到的名称不再让热点周期对访客整体隐藏（`test_visitor_focus_cycle_shows_unnamed_terms_after_the_2026_10_10_policy`），任务行缺失时用精简上下文的投影也不再隐藏结果（`test_focus_projection_recovers_write_time_sources_from_linked_job`）。
+- 未绑定的股票代码：不在证券语境时也按词条放行，例如信号分析里的「相关新闻显示NVDA供应链改善」，原先按幻觉实体拒绝（`test_result_may_reference_tickers_outside_security_context`）。在证券语境里照旧要求绑定，例如「NVDA股价上涨」。
+
+### 改动的测试
+
+红线用例一条没改。改动的都是断言「词条被拒」的用例：从拒绝清单移到新的「按新口径放行」测试里，断言原样发布，不翻译。共 136 项：
+
+- `tests/test_ai_jobs_zh_contract.py`，95 项：
+  - `test_chinese_text_rejects_english_fragments` 拆成两张清单。仍被拒的 77 句：英文散文 56、证券语境 9、其他文字 8、涨跌窗口 4。放行的 72 句移到 `test_term_fragments_are_published_after_the_2026_10_10_policy`，分五类：
+    - 专名和公司名 22 句，例如 Tesla、Bank of America、Johnson & Johnson、Apple-Inc。
+    - 单个英文词或标题词 24 句，例如 Breaking、reports、Investors、Market's。
+    - 首字母大写、只含一个标题词的两词短语 13 句，例如 Crypto Crash、Trade War、H100 Markets。
+    - 普通词加公司后缀 3 句：Market Inc.、Report LLC、Company Corp。
+    - 连字符或点号连起来、只含一个普通词的复合词 10 句，例如 BANK.RUN、F-35-crash、PANIC-2026。
+  - NYSEX 1 项。
+  - 宏观状态词 17 项。
+  - 10b5-2、11b5-1 共 2 项。
+  - Hormel Foods 没有来源 1 项。
+  - HELLO WORLD 1 项。
+  - berobenatide 没有来源 1 项。
+- `tests/test_ai_analysis_fixes_20261010.py`，7 项：
+  - 状态值对不上 1 项。
+  - 热点里的「article」1 项。
+  - 状态码对不上 3 项。
+  - 「Galaxy 18 Pro」「iPhone 18 Pro Deluxe」2 项。这两句原先放在红线测试函数里，但没有证券语境。
+- `tests/test_ai_review_fixes_20261010.py`，3 项：单独的「text」「available」「status」。
+- `tests/test_ai_jobs_audit_2026_09_25.py`，3 项：
+  - 报错带出被拒片段的例子从「Foobar」改成一段英文散文。
+  - 没有来源的「Sweep」。
+  - 没有公司名的「Micron Technology」。
+- `tests/test_claude_provider.py`，1 项：「同为BDC」。
+- `tests/test_news_output_metadata.py`，6 项：
+  - 状态值对不上 1 项。
+  - 来源不符的「V系列」4 项。
+  - 没有来源的「SOX认证」1 项。
+- `tests/test_verified_focus_prose_compatibility.py`，4 项：「公司800MHz」「频率MHz」「800MHzExtra」「8GbpsExtra」。翻译照旧不改写它们。
+- `tests/test_ai_prose_allowlist_20261010.py`，9 项：PR #240 用来检验各条规则够窄的反例。
+  - 括号或单独的字母 5 句。
+  - 「福特汽车F，部分分析师」1 句。它和留下的「福特汽车（F），部分分析师」是一对：括号版仍按代码别名被拒；裸版没有协调者定义的证券标记，放行。
+  - 「频率MHz」「公司800MHz」「800MHz公司」3 句。
+- `tests/test_catalysts_audit_2026_09_25.py`，1 项：访客读热点周期，摘要里有输入没提到的药名时不再隐藏整个周期。
+- `tests/test_luna_news_receipt_normalization.py`，4 项：状态码对不上输入的「HTTP 403」3 项，输入没有失败记录时的「HTTP 404」1 项。
+- `tests/test_personal_catalyst_service.py`，1 项：任务行缺失时的投影不再隐藏结果。
+- `tests/test_signal_context.py`，2 项：不在上下文代码表里的「NVDA」（非证券语境），没有来源的「Hormel Foods」。
+
+改名的测试函数有七个，旧名字在新口径下不成立：
+
+- `test_zh_prose_still_rejects_unbound_lowercase_entity_without_source`
+- `test_candidate_retains_local_rejection_of_empty_placeholders_and_unapproved_abbreviations`
+- `test_product_series_requires_exact_series_source_and_local_context`
+- PR #240 的两个反例测试
+- `test_visitor_focus_cycle_still_hides_entities_the_payload_never_named`
+- `test_result_may_reference_context_tickers_but_not_strangers`
+
+### 检查记录
+
+- 新测试 `tests/test_ai_prose_terms_policy_20261010.py` 70 项，在本分支全部通过。在 main 的 `94cf52e2` 导出树上跑的是加最后一句已知代价之前的 69 项：31 项正例里 29 项失败（另 2 句「600 MHz」「600MHz」在 PR #240 已放行），其余 38 项反例、红线和已知代价全部通过。后加的「Fed Pauses市场上涨」在 main 上本来就在英文碎片拒绝清单里。
+- 变异实验 14 个，每个守卫一个，都被专门的反例抓住：
+  - 去掉原有证券语境判断：「CoreWeave股票受到关注」。
+  - 去掉涨跌窗口：「T-Mobile US此前下跌约5.4%」「IT大涨后回落」。
+  - 去掉括号别名：「特斯拉（TSLA）」。
+  - 去掉下划线判断：「my_article_status」。
+  - 去掉主机名判断：「（GlobeNewswire.com）」。
+  - 子词只按空格拆：「market-rally」。
+  - 去掉 JSON 字面量：true、false、null。
+  - 去掉代码标签：「active（代码）」。
+  - 去掉公司后缀：「A公司宣布回购」。
+  - 去掉带符号涨跌幅：「盘前TSLA +3.5%」。
+  - 去掉价格比较：「F>12美元」。
+  - 去掉汉字要求：「Polymesh。」。
+  - 去掉「股」字：「F股受到关注」。
+  - 去掉翻译前的散文检查：那句 B3 英文。
+- 定向测试 16 个文件全部通过。
+- 完整后端测试跑了两次：
+  - 第一次在更新既有测试之前：6,834 项通过、8 项失败。失败都在没有列入定向范围的四个文件里（热点访客投影、Luna 引用归一化、催化剂投影、信号分析），都是词条被拒的断言，已按新口径更新，算在上面的 136 项里。只跑定向文件发现不了它们。
+  - 最终版本：6,847 项通过、7 项跳过（7 个子测试通过），退出码 0。之后只改了一处代码注释，并在新测试文件里加了一句已知代价，新文件 70 项与 `test_ai_jobs_zh_contract.py` 765 项单独重跑通过。
+- `python -m compileall -q backend/app` 通过，`git diff --check origin/main...HEAD -- . ':(top,exclude)frontend'` 干净。
+
+### 未覆盖
+
+- 证券标记不紧挨名称时不按证券语境判断。例如「CoreWeave发布财报后股价大涨」现在能通过。这和协调者「紧挨」的定义一致。
+- 单个普通英文词（「Breaking」「reports」「Investors」）和只含一个标题词的两词标题（「Crypto Crash」）会原样发布。要拦它们需要一份常用英文词表，本次没有加。
+- 两字窗口之外的涨跌说法（「收于250美元」「股价随后走低」）不另作判断。
+- 部署后要跑一次找回试运行（「部署后操作」第 2 步），看第二轮剩下的失败里有多少转为 validated。

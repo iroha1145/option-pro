@@ -654,9 +654,9 @@ def test_earnings_provider_schema_describes_chinese_prose_without_regex_grammar(
 @pytest.mark.parametrize(("field", "value"), [
     ("summary", ""), ("summary", "   "), ("summary", "x"),
     ("expectation", ""), ("expectation", "x"),
-    ("reason", ""), ("reason", "x"), ("reason", "同为BDC，传导影响有限。"),
+    ("reason", ""), ("reason", "x"),
 ])
-def test_candidate_retains_local_rejection_of_empty_placeholders_and_unapproved_abbreviations(field, value):
+def test_candidate_retains_local_rejection_of_empty_placeholders(field, value):
     from pydantic import ValidationError
     from app.services.ai_jobs.models import validate_result
 
@@ -673,6 +673,21 @@ def test_candidate_retains_local_rejection_of_empty_placeholders_and_unapproved_
         result[field] = value
     with pytest.raises(ValidationError):
         validate_result("earnings_impact", json.dumps(result, ensure_ascii=False), {"ticker": "PENG"})
+
+
+def test_candidate_publishes_unlisted_abbreviations_after_the_2026_10_10_policy():
+    # 2026-10-10 口径变更：「BDC」不在名单里，不在证券语境时按词条保留原文（原先被拒）。
+    from app.services.ai_jobs.models import validate_result
+
+    result = {
+        "output_language": "zh-CN", "ticker": "PENG", "summary": "营收高于预期。",
+        "expectation": "每股收益高于预期。", "impacted": [{
+            "ticker": "QCOM", "name": "高通", "relation": "supplier",
+            "direction": "mixed", "reason": "同为BDC，传导影响有限。",
+        }],
+    }
+    validated = validate_result("earnings_impact", json.dumps(result, ensure_ascii=False), {"ticker": "PENG"})
+    assert validated["impacted"][0]["reason"] == "同为BDC，传导影响有限。"
 
 
 @pytest.mark.parametrize("tools", [None, _tools()])

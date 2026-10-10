@@ -86,7 +86,7 @@ def test_each_known_family_is_localized_only_on_explicit_prose_paths(path, text,
     "as_of公司股价上涨。", "证券as_of涨停。", "(700)公司宣布交易。",
     "(6)公司宣布交易。", "(6)公司类事件股份上涨。", "股票(6)公司类事件：上涨。",
     "截至as_of，市场 will strongly improve。", "截至as_of，市場仍待確認。",
-    "传输速率8GbpsExtra已公布。", "截至as_of_extra，事件仍待公布。",
+    "截至as_of_extra，事件仍待公布。",
     "未知cycle_id显示事件仍待公布。", "截至as_of，ZZZZ股票上涨。",
 ])
 def test_english_security_identifiers_and_unbound_codes_still_fail(text):
@@ -259,8 +259,7 @@ def test_frequency_identifiers_and_non_numeric_units_are_not_rewritten(text):
 
 
 @pytest.mark.parametrize("text", [
-    "800MHz股票上涨。", "股票代码为800MHz。", "公司800MHz发布公告。",
-    "频率MHz已公布。", "频率800MHzExtra已公布。",
+    "800MHz股票上涨。", "股票代码为800MHz。",
     "频率800MHz，市场 will strongly improve。",
 ])
 def test_frequency_translation_does_not_relax_language_or_security_binding(text):
@@ -268,6 +267,17 @@ def test_frequency_translation_does_not_relax_language_or_security_binding(text)
     raw["summary_zh"] = text
     with pytest.raises(ValueError):
         validate_result("market_focus", json.dumps(raw), payload)
+
+
+@pytest.mark.parametrize("text", [
+    "公司800MHz发布公告。", "频率MHz已公布。", "频率800MHzExtra已公布。", "传输速率8GbpsExtra已公布。",
+])
+def test_untranslated_identifiers_are_terms_after_the_2026_10_10_policy(text):
+    # 2026-10-10 口径变更：翻译照旧不改写这些写法（标签旁、不带数字、标识符），校验按词条
+    # 原样放行（原先在上面两条拒绝清单里）。证券语境的写法仍被拒。
+    payload, raw, _ = fixture()
+    raw["summary_zh"] = text
+    assert validate_result("market_focus", json.dumps(raw), payload)["summary_zh"] == text
 
 
 @pytest.mark.parametrize("field", ["summary", "risks"])

@@ -260,7 +260,6 @@ def test_exact_payload_field_names_are_published_in_chinese(text, changes, publi
         ("股票代码allowed_tickers上涨", {}),
         ("输入my_article_status为不可用", {"article_status": "unavailable"}),
         ("输入article_status_extra为不可用", {"article_status": "unavailable"}),
-        ("正文article_status为unavailable", {"article_status": "not_requested"}),
         ("正文因http_404无法读取", {"article_status": "unavailable", "article_reason": "http_403"}),
         ("The article is unavailable and stocks are falling", {}),
     ],
@@ -270,9 +269,17 @@ def test_field_name_rule_stays_exact_and_outside_security_context(text, changes)
         _news_field(text, field="uncertainty_notes", **changes)
 
 
+def test_a_status_value_that_differs_from_the_input_is_left_untranslated():
+    # 2026-10-10 口径变更：状态值对不上本条输入时照旧不翻译；剩下的「unavailable」按词条
+    # 原样发布，不再拒绝（原先在上面的拒绝清单里）。
+    assert _news_field(
+        "正文article_status为unavailable", field="uncertainty_notes", article_status="not_requested",
+    ) == "正文正文状态为unavailable"
+
+
 def test_non_news_text_gets_no_field_name_exemption():
-    with pytest.raises(ValueError):
-        _focus_field("输入article标记为可用。")
+    # 2026-10-10 口径变更：热点照旧不翻译字段名；「article」按词条原样发布，不再拒绝。
+    assert _focus_field("输入article标记为可用。") == "输入article标记为可用。"
 
 
 def test_http_status_is_kept_only_when_it_matches_the_input_failure():
@@ -295,8 +302,11 @@ def test_http_status_is_kept_only_when_it_matches_the_input_failure():
         {"article_reason": "http_401"},
         {},
     ):
-        with pytest.raises(ValueError):
-            _news_field("原始链接因HTTP 401无法读取。", field="uncertainty_notes", **changes)
+        # 2026-10-10 口径变更：状态码对不上输入时照旧不翻译；「HTTP 401」按词条原样发布，
+        # 不再拒绝。
+        assert _news_field(
+            "原始链接因HTTP 401无法读取。", field="uncertainty_notes", **changes,
+        ) == "原始链接因HTTP 401无法读取。"
 
 
 def test_semicolon_ends_the_security_prefix_for_a_source_bound_name():
@@ -360,12 +370,18 @@ def test_grades_statistics_rate_spreads_and_generic_initialisms(text):
 
 @pytest.mark.parametrize(
     "text",
-    ["A股价上涨", "A公司宣布回购", "股票代码SOFR加1%", "IT股价上涨", "URL股票下跌", "TSLA上涨",
-     "Galaxy 18 Pro销量预期下调。", "iPhone 18 Pro Deluxe销量下调。"],
+    ["A股价上涨", "A公司宣布回购", "股票代码SOFR加1%", "IT股价上涨", "URL股票下跌", "TSLA上涨"],
 )
 def test_single_letters_and_initialisms_keep_the_security_red_line(text):
     with pytest.raises(ValueError):
         _news_field(text)
+
+
+@pytest.mark.parametrize("text", ["Galaxy 18 Pro销量预期下调。", "iPhone 18 Pro Deluxe销量下调。"])
+def test_unlisted_product_names_are_terms_after_the_2026_10_10_policy(text):
+    # 2026-10-10 口径变更：不在名单里的产品线和档位，不在证券语境时按名称放行（原先在上面的
+    # 红线测试里，但它们没有证券语境）。
+    assert _news_field(text) == text
 
 
 # --- C. Limits and the identity transition they cause ------------------------

@@ -580,7 +580,7 @@ def test_focus_cycle_keeps_source_bound_entities_for_owner_and_visitor(
         assert "Pfizer" not in json.dumps(cycle, ensure_ascii=False)
 
 
-def test_visitor_focus_cycle_still_hides_entities_the_payload_never_named(tmp_path):
+def test_visitor_focus_cycle_shows_unnamed_terms_after_the_2026_10_10_policy(tmp_path):
     _engine, service = _ai1_focus_service(
         tmp_path,
         event_summary="An obesity candidate showed monthly dosing potential.",
@@ -589,7 +589,13 @@ def test_visitor_focus_cycle_still_hides_entities_the_payload_never_named(tmp_pa
     with request_owner_access_context(False):
         projected = service.latest_market_focus_cycle(now=_AI1_READ_AT)
 
-    assert projected["latest_successful_cycle"] is None
+    # 2026-10-10 口径变更：输入没提到的小写药名也按词条发布，访客能看到这个周期（原先整体
+    # 隐藏）；写入时的私有上下文照旧不随投影下发。
+    cycle = projected["latest_successful_cycle"]
+    assert cycle is not None
+    assert cycle["result"]["summary_zh"] == _AI1_BOUND_SUMMARY
+    assert "_validation_payload" not in cycle
+    assert "job_id" not in cycle
 
 
 # --- AI-8：超大新闻按字节预算截断入队，单条入队失败不拖垮整轮 ---

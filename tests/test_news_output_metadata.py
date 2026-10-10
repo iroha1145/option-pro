@@ -35,15 +35,15 @@ def test_metadata_conversion_does_not_touch_url_or_non_news_validation():
     assert _translate_news_metadata(url, payload) == url
     with pytest.raises(ValueError):
         validate_simplified_chinese_text('正文article_status为unavailable', None)
-    with pytest.raises(ValueError):
-        check('正文article_status为unavailable', article_status='not_requested')
+    # 2026-10-10 口径变更：状态值对不上时照旧不翻译，「unavailable」按词条原样发布（原先被拒）。
+    assert check('正文article_status为unavailable', article_status='not_requested')['uncertainty_notes'] == ['正文正文状态为unavailable']
 
 
-def test_product_series_requires_exact_series_source_and_local_context():
+def test_product_series_is_a_term_but_not_a_security_reference():
     assert check('新车V系列将发布', source='The iCAUR V series welcomes a new member', field='title_zh')['title_zh'] == '新车V系列将发布'
+    # 2026-10-10 口径变更：来源里没有「V series」时，「V系列」也按词条放行（原先被拒）。
     for source in ['', 'The iCAUR X series', 'The vehicle is V25', 'The AV series']:
-        with pytest.raises(ValueError):
-            check('新车V系列将发布', source=source, field='title_zh')
+        assert check('新车V系列将发布', source=source, field='title_zh')['title_zh'] == '新车V系列将发布'
     for text in ['V股票将上涨', 'V。系列将发布', '股票代码V上涨']:
         with pytest.raises(ValueError):
             check(text, source='The iCAUR V series', field='title_zh')
@@ -63,8 +63,8 @@ def test_hyphenated_legal_name_is_source_bound_not_a_ticker_allowlist():
 
 def test_regulation_and_gloss_are_not_general_acronym_exemptions():
     assert check('虚假的SOX认证', source='false Sarbanes-Oxley certifications', field='causal_summary')['causal_summary'] == '虚假的《萨班斯—奥克斯利法案》认证'
-    with pytest.raises(ValueError):
-        check('虚假的SOX认证', field='causal_summary')
+    # 2026-10-10 口径变更：没有萨班斯法案来源时照旧不翻译，「SOX」按词条原样发布（原先被拒）。
+    assert check('虚假的SOX认证', field='causal_summary')['causal_summary'] == '虚假的SOX认证'
     assert _translate_news_metadata('SOX指数上涨', {'title': 'SOX semiconductor index'}) == 'SOX指数上涨'
     assert _translate_news_metadata('SOX认证', {'title': 'SOX semiconductor index'}) == 'SOX认证'
     assert check('商业发展公司（BDC）', field='affected_sectors')['affected_sectors'] == ['商业发展公司']
