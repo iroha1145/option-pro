@@ -21,7 +21,15 @@ def _strip_ambient_provider_secrets() -> None:
 def _clear_settings_cache() -> None:
     from app.config import get_settings
 
-    get_settings.cache_clear()
+    # 有的用例会把 get_settings 换成普通函数。夹具收尾时补丁还在，
+    # 不能对着替身找 cache_clear；改清最初那个 lru 缓存。
+    clear = getattr(get_settings, "cache_clear", None)
+    if clear is None:
+        clear = getattr(_clear_settings_cache, "saved", None)
+    else:
+        _clear_settings_cache.saved = clear
+    if clear is not None:
+        clear()
 
 
 _strip_ambient_provider_secrets()
