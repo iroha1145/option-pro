@@ -3032,6 +3032,8 @@ export const EN: Record<string, string> = {
   "份": "contracts",
   "当前到期日": "Selected expiration",
   "{date} · {days} 天后到期": "{date} · expires in {days} days",
+  "{date} · 日期无效": "{date} · invalid date",
+  "{date} · 已到期": "{date} · expired",
   "更新失败，显示上次期权数据。": "Update failed. Showing the previous options data.",
   "持仓量为 0 且成交 {volume} 张，开平仓性质待确认（量持比不适用）": "Zero open interest with {volume} contracts traded; opening/closing activity is unconfirmed (volume/OI unavailable)",
   " · 数据获取于 {time}": " · Fetched {time}",

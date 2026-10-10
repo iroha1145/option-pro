@@ -104,6 +104,22 @@ export function fmtNyHHmm(iso: string | null | undefined): string {
   return NY_HHMM_FMT.format(d);
 }
 
+/**
+ * 到期日相对纽约日历日的天数。非法日期返回 null，已过期返回负数。
+ * 两端都取纽约日历日再相减：到期日字符串没有时区，若按浏览器本地时区理解，
+ * 东京在同一时刻会少算一天。不要把这两种情况钳成 0，否则菜单会写成「今天到期」。
+ */
+export function daysUntilNewYork(expiration: string, now: Date = new Date()): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(expiration)) return null;
+  const [year, month, day] = expiration.split('-').map((part) => Number(part));
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  if (probe.getUTCFullYear() !== year || probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) return null;
+  const expiryDay = Date.parse(`${expiration}T00:00:00Z`);
+  const todayMs = Date.parse(`${NY_DAY_KEY_FMT.format(now)}T00:00:00Z`);
+  if (!Number.isFinite(expiryDay) || !Number.isFinite(todayMs)) return null;
+  return Math.round((expiryDay - todayMs) / 86_400_000);
+}
+
 /** ISO → 纽约日历日；无效输入不生成分组键。 */
 export function fmtNyDayKey(iso: string): string | null {
   const d = new Date(iso);

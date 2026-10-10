@@ -20,7 +20,7 @@ import Icon from '@/components/icons';
 import { BusyIcon } from '@/components/shared/IconSwap';
 import ThinkingLabel from '@/components/shared/ThinkingLabel';
 import { cn } from '@/lib/utils';
-import { fmtPrice, fmtRelative } from '@/lib/format';
+import { daysUntilNewYork, fmtPrice, fmtRelative } from '@/lib/format';
 import { OPTION_SUPPORTED_LIST, optionsSupported } from '@/mocks/fixtures2';
 import { isDeclaredUnsupported } from '@/lib/optionCapability';
 import { useAiJob } from './useAiJob';
@@ -34,24 +34,11 @@ import SummaryTiles from './options/SummaryTiles.tsx';
 import type { OptionChain } from '@/api/types';
 import { t } from '../../i18n/core.ts';
 
-const NEW_YORK_DATE = new Intl.DateTimeFormat('en-CA', {
-  timeZone: 'America/New_York',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-});
-
-/**
- * 到期天数按纽约交易日的日历差计算（GPT-5.6-Pro 审计 P2-33）。
- * 旧实现把「到期日 + T16:00:00」交给 Date 解析，该串没有时区偏移，会按浏览器
- * 本地时区理解：在东京看同一个到期日会少算一天。这里两端都取纽约日历日再相减。
- */
-function dte(expiration: string): number {
-  const expiryDay = Date.parse(`${expiration}T00:00:00Z`);
-  if (!Number.isFinite(expiryDay)) return 0;
-  const todayInNewYork = Date.parse(`${NEW_YORK_DATE.format(new Date())}T00:00:00Z`);
-  if (!Number.isFinite(todayInNewYork)) return 0;
-  return Math.max(0, Math.round((expiryDay - todayInNewYork) / 86_400_000));
+function expirationLabel(date: string): string {
+  const days = daysUntilNewYork(date);
+  if (days === null) return t('{date} · 日期无效', { date });
+  if (days < 0) return t('{date} · 已到期', { date });
+  return t('{date} · {days} 天后到期', { date, days });
 }
 
 /** 缺失数值显「—」，不落回 0。 */
@@ -101,12 +88,13 @@ function AiOptionInsight({
     chain && chain.ticker === ticker && chain.expiration === expiration
       ? chain
       : null;
+  const daysToExpiry = expiration ? daysUntilNewYork(expiration) : null;
   const evidence = useMemo(
     () =>
-      activeChain && expiration
-        ? buildOptionAlertEvidence(activeChain, expiration, dte(expiration))
+      activeChain && expiration && daysToExpiry !== null
+        ? buildOptionAlertEvidence(activeChain, expiration, daysToExpiry)
         : [],
-    [activeChain, expiration],
+    [activeChain, expiration, daysToExpiry],
   );
   const result =
     job?.status === 'succeeded' ? parseOptionAlertResult(job.result) : null;
@@ -487,7 +475,7 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
           ariaLabel={t('选择到期日')}
           value={exp ?? expList[0]}
           onChange={setExpiration}
-          options={expList.map((x) => ({ value: x, label: t('{date} · {days} 天后到期', { date: x, days: dte(x) }) }))}
+          options={expList.map((x) => ({ value: x, label: expirationLabel(x) }))}
           triggerClassName="h-9 border-line-strong pl-3 text-ink-800"
         />
         {shownChain && (

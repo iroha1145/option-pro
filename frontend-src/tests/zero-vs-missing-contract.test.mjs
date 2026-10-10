@@ -394,7 +394,13 @@ test('缺失分项评分不被填成 0 分', async () => {
 
 test('到期天数不使用浏览器本地时区', async () => {
   const panel = await source('components/detail/OptionsPanel.tsx');
+  const format = await source('lib/format.ts');
+  const daysStart = format.indexOf('function daysUntilNewYork');
+  const days = format.slice(daysStart, format.indexOf('\n}', daysStart) + 2);
   assert.doesNotMatch(codeOf(panel), /T16:00:00/);
-  assert.match(panel, /timeZone: 'America\/New_York'/);
-  assert.match(panel, /T00:00:00Z/);
+  assert.doesNotMatch(codeOf(panel), /Math\.max\(0/);
+  assert.match(panel, /daysUntilNewYork/);
+  assert.match(format, /timeZone: 'America\/New_York'/);
+  assert.match(days, /T00:00:00Z/);
+  assert.doesNotMatch(codeOf(days), /Math\.max\(0/);
 });
