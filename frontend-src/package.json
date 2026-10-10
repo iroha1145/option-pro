@@ -20,6 +20,7 @@
     "test:stock-data": "playwright test --config=playwright.stock-data.config.mjs"
   },
   "dependencies": {
+    "@jetbrains/websandbox": "1.2.1",
     "@radix-ui/react-select": "^2.3.7",
     "clsx": "^2.1.1",
     "echarts": "^6.1.0",
