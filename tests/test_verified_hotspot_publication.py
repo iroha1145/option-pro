@@ -164,16 +164,21 @@ def test_all_unverifiable_completes_and_does_not_fall_back(verified_stack):
     assert public["evidence_sources"] == []
 
 
-def test_missing_tool_receipt_cannot_publish_even_if_job_was_marked_complete(verified_stack):
+def test_missing_tool_receipt_downgrades_every_verdict_instead_of_failing(verified_stack):
+    # 2026-10-10: citations without a successful call are dropped and their
+    # verdicts downgraded; nothing reaches the hotspot strip.
     _, ai, intelligence, revision, _ = verified_stack
     cycle = intelligence.request_market_focus_cycle(expected_prepared_revision=revision)
     raw, _ = complete_verified(ai, cycle, evidence_missing=True)
-    assert ai.public(ai.get_job(cycle["job_id"]))["result"] is None
+    job_public = ai.public(ai.get_job(cycle["job_id"]))
+    assert {entry["verdict"] for entry in job_public["result"]["event_verifications"]} == {"unverifiable"}
+    assert job_public["evidence_sources"] == []
     intelligence.reconcile()
     assert intelligence.hotspots(limit=20)["items"] == []
     public = project_cycle(intelligence, ai, cycle["cycle_id"])
-    assert public["result"] is None
-    assert public["status"] == "failed"
+    assert public["status"] == "completed"
+    assert {entry["verdict"] for entry in public["result"]["event_verifications"]} == {"unverifiable"}
+    assert public["evidence_sources"] == []
     assert json.loads(ai.get_job(cycle["job_id"])["result_json"]) == raw
 
 

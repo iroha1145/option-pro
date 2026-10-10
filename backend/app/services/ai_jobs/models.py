@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Any, Callable, Iterable, Literal, Optional
+from urllib.parse import urlsplit
 
 from pydantic import (
     AfterValidator,
@@ -3342,6 +3343,12 @@ class ConciseVerifiedMarketFocusResult(ConciseMarketFocusResult, VerifiedMarketF
     event_verifications: list[ConciseFocusEventVerification] = Field(max_length=200)
 
 
+def _focus_source_key(url: str) -> tuple[str, str]:
+    """Origin and path of a normalized source URL, without query, fragment or final slash."""
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}", parts.path.rstrip("/")
+
+
 def validate_market_focus_evidence(
     result: dict, payload: dict, tool_evidence: list[dict] | None,
 ) -> None:
@@ -3349,6 +3356,15 @@ def validate_market_focus_evidence(
 
     This verifies provenance, not real-world truth: the model still evaluates
     whether a retrieved source supports the individual claim.
+
+    The input binding stays strict: exactly one verification per input event
+    version. Since 2026-10-10 a citation that cannot be bound to a successful
+    call is dropped instead of failing the paid cycle, and a verdict left
+    without its required relation is downgraded to unverifiable; the hotspot
+    strip only shows supported events. Citations without a call id resolve to
+    the first call with the same URL, otherwise to the single receipt whose
+    URL starts with the cited one (the model truncates long article URLs).
+    Results bound once are left unchanged by binding them again.
     """
     if payload.get("verification_version") != FOCUS_VERIFICATION_VERSION:
         return
@@ -3363,8 +3379,8 @@ def validate_market_focus_evidence(
     actual = {entry["event_group_id"]: entry["event_group_version"] for entry in verifications}
     if len(actual) != len(verifications) or actual != expected:
         raise ValueError("market_focus_verification_event_mismatch")
-    receipts = {
-        (entry.get("tool_use_id"), entry.get("url"))
+    calls = [
+        (entry["tool_use_id"], entry["url"])
         for entry in tool_evidence or []
         if isinstance(entry, dict)
         and isinstance(entry.get("tool_use_id"), str)
@@ -3374,29 +3390,45 @@ def validate_market_focus_evidence(
         and isinstance(entry.get("content_sha256"), str)
         and re.fullmatch(r"[0-9a-f]{64}", entry["content_sha256"])
         and _public_source_url(entry.get("url")) == entry.get("url")
-    }
+    ]
+    receipts = set(calls)
+    first_call: dict[str, str] = {}
+    for call_id, url in calls:
+        first_call.setdefault(url, call_id)
+
+    def bind(ref: dict) -> tuple[str, str] | None:
+        url = _public_source_url(ref["url"])
+        if url is None:
+            return None
+        if ref["tool_use_id"] is not None:
+            return (ref["tool_use_id"], url) if (ref["tool_use_id"], url) in receipts else None
+        # The model may not see server-generated IDs.
+        if url in first_call:
+            return first_call[url], url
+        origin, path = _focus_source_key(url)
+        if not path:
+            return None  # A bare domain must not claim every page on it.
+        matches = [
+            candidate for candidate in first_call
+            if _focus_source_key(candidate)[0] == origin
+            and _focus_source_key(candidate)[1].startswith(path)
+        ]
+        return (first_call[matches[0]], matches[0]) if len(matches) == 1 else None
+
     for entry in verifications:
-        refs = entry["evidence_refs"]
-        for ref in refs:
-            normalized_url = _public_source_url(ref["url"])
-            if ref["tool_use_id"] is None:
-                # The model may not see server-generated IDs. Resolve only a
-                # unique successful call in this exact persisted receipt.
-                candidates = {call_id for call_id, url in receipts if url == normalized_url}
-                if len(candidates) != 1:
-                    raise ValueError("market_focus_verification_evidence_ambiguous")
-                ref["tool_use_id"] = candidates.pop()
-            if (ref["tool_use_id"], normalized_url) not in receipts:
-                raise ValueError("market_focus_verification_evidence_unbound")
-            ref["url"] = normalized_url
-        keys = [(ref["tool_use_id"], ref["url"]) for ref in refs]
-        if len(keys) != len(set(keys)):
-            raise ValueError("market_focus_verification_duplicate_evidence")
-        if any(key not in receipts for key in keys):
-            raise ValueError("market_focus_verification_evidence_unbound")
+        kept: list[dict] = []
+        bound: set[tuple[str, str]] = set()
+        for ref in entry["evidence_refs"]:
+            key = bind(ref)
+            if key is None or key in bound:
+                continue
+            bound.add(key)
+            ref["tool_use_id"], ref["url"] = key
+            kept.append(ref)
+        entry["evidence_refs"] = kept
         required = {"supported": "supports", "contradicted": "contradicts"}.get(entry["verdict"])
-        if required and not any(ref["relation"] == required for ref in refs):
-            raise ValueError("market_focus_verification_evidence_missing")
+        if required and not any(ref["relation"] == required for ref in kept):
+            entry["verdict"] = "unverifiable"
 
 
 class AIJobPublic(StrictModel):
