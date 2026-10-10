@@ -111,6 +111,16 @@ def _valid_zh_text(
         return None
 
 
+def _checked_copy(value: Any) -> str | None:
+    """Copy that passed the Chinese check where it was written, minus placeholders."""
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text or text in {_WAITING_HOTSPOT_TITLE, _WAITING_SUMMARY, _WAITING_TITLE}:
+        return None
+    return text
+
+
 def _displayable_zh(item: Mapping[str, Any]) -> bool:
     return bool(str(item.get("title_zh") or "").strip() and str(item.get("summary_zh") or "").strip())
 
@@ -150,7 +160,13 @@ class _LocalIntelligence(Protocol):
     def batch(self, tickers: Sequence[str], **kwargs: Any) -> dict[str, Any]: ...
     def calendar(self, **kwargs: Any) -> dict[str, Any]: ...
     def hotspot_status(self, *, now: datetime | None = None) -> dict[str, Any]: ...
-    def hotspots(self, *, limit: int, now: datetime | None = None) -> dict[str, Any]: ...
+    def hotspots(
+        self,
+        *,
+        limit: int,
+        now: datetime | None = None,
+        published_only: bool = False,
+    ) -> dict[str, Any]: ...
     def latest_market_focus_cycle(
         self, *, now: datetime | None = None
     ) -> dict[str, Any]: ...
@@ -1004,14 +1020,19 @@ class PersonalCatalystService:
         return projected
 
     @staticmethod
-    def _project_hotspots(payload: Mapping[str, Any]) -> dict[str, Any]:
+    def _project_hotspots(
+        payload: Mapping[str, Any],
+        *,
+        include_owner_state: bool = False,
+    ) -> dict[str, Any]:
         projected = dict(payload)
         items: list[dict[str, Any]] = []
         for raw in projected.get("items") or []:
             if not isinstance(raw, Mapping):
                 continue
             item = dict(raw)
-            item.pop("_analysis_published", None)
+            analysis_published = item.pop("_analysis_published", None)
+            analysis_copy = item.pop("_analysis_copy", None)
             item.pop("_verification_source", None)
             validation_sources = item.pop("_validation_sources", [])
             if not isinstance(validation_sources, list):
@@ -1047,43 +1068,64 @@ class PersonalCatalystService:
             )
             if not isinstance(validation_allowed_codes, list):
                 validation_allowed_codes = allowed_codes
-            candidate_title = item.get("representative_title")
-            if candidate_title == _WAITING_HOTSPOT_TITLE:
-                candidate_title = None
-            representative_title = (
-                _valid_zh_text(
-                    candidate_title,
-                    allowed_codes=validation_allowed_codes,
-                    source_texts=validation_source_texts,
-                )
-                or _valid_zh_text(
-                    item.get("title_zh"),
-                    allowed_codes=validation_allowed_codes,
-                    source_texts=validation_source_texts,
-                )
-                or _valid_zh_text(
-                    source_title,
-                    allowed_codes=validation_allowed_codes,
-                    source_texts=validation_source_texts,
-                )
-            )
-            # Keep the strip Chinese-only. A group without validated Chinese
-            # copy remains in the analysis queue instead of exposing source
-            # prose or an internal event code as a finished headline.
-            if representative_title is None:
+            # Copy that already passed the Chinese check with its full source
+            # context: a verified hotspot (its paid result is validated again
+            # on every read) or the published analysis of the representative
+            # news. Checking it again here without that context rejects
+            # source-bound terms such as REIT and empties the strip.
+            checked: tuple[Any, Any] = (None, None)
+            if item.get("verification_status") == "verified":
+                checked = (item.get("representative_title"), item.get("summary_zh"))
+            elif analysis_published is True and isinstance(analysis_copy, Mapping):
+                checked = (analysis_copy.get("title_zh"), analysis_copy.get("summary_zh"))
+            representative_title = _checked_copy(checked[0])
+            if representative_title is not None:
+                summary = _checked_copy(checked[1]) or ""
+            elif analysis_published is False and not include_owner_state:
+                # Visitors see a group only after its representative news has
+                # a published analysis.
                 continue
-            item["representative_title"] = representative_title
-            summary = item.get("summary_zh")
-            if summary == _WAITING_SUMMARY:
-                summary = None
-            item["summary_zh"] = (
-                _valid_zh_text(
-                    summary,
-                    allowed_codes=validation_allowed_codes,
-                    source_texts=validation_source_texts,
+            else:
+                candidate_title = item.get("representative_title")
+                if candidate_title == _WAITING_HOTSPOT_TITLE:
+                    candidate_title = None
+                representative_title = (
+                    _valid_zh_text(
+                        candidate_title,
+                        allowed_codes=validation_allowed_codes,
+                        source_texts=validation_source_texts,
+                    )
+                    or _valid_zh_text(
+                        item.get("title_zh"),
+                        allowed_codes=validation_allowed_codes,
+                        source_texts=validation_source_texts,
+                    )
+                    or _valid_zh_text(
+                        source_title,
+                        allowed_codes=validation_allowed_codes,
+                        source_texts=validation_source_texts,
+                    )
                 )
-                or ""
-            )
+                # Keep the strip Chinese-only. A group without validated Chinese
+                # copy remains in the analysis queue instead of exposing source
+                # prose or an internal event code as a finished headline.
+                if representative_title is None:
+                    continue
+                summary = item.get("summary_zh")
+                if summary == _WAITING_SUMMARY:
+                    summary = None
+                summary = (
+                    _valid_zh_text(
+                        summary,
+                        allowed_codes=validation_allowed_codes,
+                        source_texts=validation_source_texts,
+                    )
+                    or ""
+                )
+            item["representative_title"] = representative_title
+            item["summary_zh"] = summary
+            for key in [key for key in item if key.startswith("_")]:
+                del item[key]
             items.append(item)
         projected["items"] = items
         if projected.get("status") in {"active", "empty"}:
@@ -1910,11 +1952,13 @@ class PersonalCatalystService:
             # Scan a bounded window and apply the caller's limit afterwards;
             # otherwise untranslated leaders can hide valid translated groups
             # ranked immediately behind them and make a live snapshot look
-            # empty.
+            # empty. A visitor reads only groups with a published analysis,
+            # filtered before the engine's own LIMIT.
             requested_limit = min(100, max(1, int(limit)))
             payload = self.intelligence.hotspots(
                 limit=max(requested_limit, _HOTSPOT_PROJECTION_SCAN_LIMIT),
                 now=now,
+                published_only=not include_owner_state,
             )
         except Exception as error:
             if not self._is_local_store_error(error):
@@ -1926,7 +1970,10 @@ class PersonalCatalystService:
                 "items": [],
                 "warnings": ["cache_unavailable"],
             }
-        projected = self._project_hotspots(payload)
+        projected = self._project_hotspots(
+            payload,
+            include_owner_state=include_owner_state,
+        )
         projected["items"] = list(projected.get("items") or [])[:requested_limit]
         return projected
 

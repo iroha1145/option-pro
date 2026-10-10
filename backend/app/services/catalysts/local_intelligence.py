@@ -127,6 +127,9 @@ SCHEDULED_NEWS_WINDOW_HOURS = 72
 SCHEDULED_NEWS_MAX_ATTEMPTS = ai_runtime.SCHEDULED_MAX_ATTEMPTS
 SCHEDULED_FOCUS_MAX_ATTEMPTS = ai_runtime.SCHEDULED_MAX_ATTEMPTS
 SCHEDULED_FOCUS_EVENT_LIMIT = 20
+# A visitor's strip skips groups without a published analysis. It looks at
+# this many top-ranked groups, so untranslated leaders cannot fill the LIMIT.
+PUBLISHED_HOTSPOT_CANDIDATES = 200
 SCHEDULED_NEWS_RETRYABLE_ERRORS = ai_runtime.SCHEDULED_TRANSIENT_AI_ERRORS
 SCHEDULED_FOCUS_RETRYABLE_ERRORS = ai_runtime.SCHEDULED_TRANSIENT_AI_ERRORS
 MANUAL_REFRESH_CLAIM_TTL_SECONDS = 10 * 60
@@ -1117,6 +1120,32 @@ def _hotspot_plan_score_columns(connection: sqlite3.Connection) -> str:
         "NULL AS plan_component_scores_json,"
         "NULL AS plan_reasons_json"
     )
+
+
+# Title and summary from the published analysis of a group's representative
+# news: the newest link whose result was accepted under the current result
+# contract. Both texts passed the Chinese check with the full news context
+# when that result was accepted.
+_HOTSPOT_ANALYSIS_COPY_SQL = """(
+    SELECT json_object(
+               'title_zh', json_extract(link.result_json,'$.title_zh'),
+               'summary_zh', json_extract(link.result_json,'$.headline_summary')
+           )
+    FROM catalyst_local_analysis_links link
+    JOIN catalyst_local_analysis_result_audit audit
+      INDEXED BY idx_local_analysis_result_audit_job
+      ON audit.job_id=link.job_id
+     AND audit.contract_id=?
+     AND audit.outcome='accepted'
+     AND audit.result_json=link.result_json
+    WHERE link.news_id=g.representative_news_id
+      AND link.change_sequence=g.representative_change_sequence
+      AND link.content_hash=g.representative_content_hash
+      AND link.result_json IS NOT NULL
+      AND json_valid(link.result_json)
+    ORDER BY link.result_available_at DESC,link.created_at DESC,link.job_id DESC
+    LIMIT 1
+) AS representative_analysis_copy_json"""
 
 
 def _published_analysis(item: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -5974,9 +6003,30 @@ class LocalCatalystIntelligence:
         ) if key in payload}
         return _sha(document) == cycle["input_hash"]
 
-    def hotspots(self, *, limit: int, now: datetime | None = None) -> dict[str, Any]:
+    def hotspots(
+        self,
+        *,
+        limit: int,
+        now: datetime | None = None,
+        published_only: bool = False,
+    ) -> dict[str, Any]:
+        """Strip items.
+
+        Without verification, ``published_only`` keeps prepared groups whose
+        representative news has a published analysis. With verification, the
+        newest round in the 72-hour window that covered an event decides, even
+        if the event has since gained a newer version (user decision,
+        2026-10-10). A supported verdict shows the round's checked Chinese copy
+        with the current group's metadata; a contradicted or unverifiable one
+        hides the event. Published groups without a readable verdict fill the
+        rest, marked unverified.
+        """
         if not self.focus_verification_enabled:
-            return self._prepared_hotspots(limit=limit, now=now)
+            return self._prepared_hotspots(
+                limit=limit,
+                now=now,
+                published_only=published_only,
+            )
         observed = now or _utc_now()
         cutoff, floor = _iso(observed), _iso(observed - timedelta(hours=72))
         with self._connect() as connection:
@@ -5987,6 +6037,7 @@ class LocalCatalystIntelligence:
             publications = []
             current_bindings = {}
             trusted_coverage: set[str] = set()
+            candidate_ids: set[str] = set()
             if revision is not None:
                 current_bindings = self._hotspot_revision_bindings(connection, revision["prepared_revision"])
                 recent_cycles = connection.execute(
@@ -6009,15 +6060,23 @@ class LocalCatalystIntelligence:
                 # publications. Rank by original input coverage, before checking
                 # results: a corrupt newer rejection must occupy its event slot
                 # rather than disappearing and reviving an older positive.
-                publications = connection.execute(
-                    """WITH candidates AS (
-                           SELECT i.event_group_id,i.event_group_version,i.ordinal
+                # Coverage matches the event id only, so the newest round keeps
+                # deciding after the event gains a newer version (2026-10-10).
+                candidates_sql = """SELECT i.event_group_id,i.event_group_version,i.ordinal
                            FROM catalyst_local_hotspot_items i JOIN catalyst_local_event_groups g
                              ON g.event_group_id=i.event_group_id AND g.event_group_version=i.event_group_version
                            WHERE i.prepared_revision=? AND g.available_at<=?
                              AND g.last_published_at>=?
-                           ORDER BY i.ordinal LIMIT 100
-                       ), ranked AS (
+                           ORDER BY i.ordinal LIMIT 100"""
+                candidate_ids = {
+                    str(row["event_group_id"])
+                    for row in connection.execute(
+                        candidates_sql,
+                        (revision["prepared_revision"], cutoff, floor),
+                    )
+                }
+                publications = connection.execute(
+                    "WITH candidates AS (" + candidates_sql + """), ranked AS (
                            SELECT p.*,c.cycle_id AS covered_cycle_id,
                                   c.payload_json AS bound_payload_json,c.result_json AS bound_result_json,
                                   c.job_id AS bound_job_id,c.input_hash AS bound_input_hash,
@@ -6042,8 +6101,6 @@ class LocalCatalystIntelligence:
                                          '$.events') input_event
                                      WHERE json_extract(CASE WHEN input_event.type='object' THEN input_event.value ELSE '{}' END,
                                                         '$.event_group_id')=n.event_group_id
-                                       AND json_extract(CASE WHEN input_event.type='object' THEN input_event.value ELSE '{}' END,
-                                                        '$.event_group_version')=n.event_group_version
                                  )
                              )
                        ) SELECT * FROM ranked WHERE newest=1 ORDER BY ordinal""",
@@ -6056,7 +6113,14 @@ class LocalCatalystIntelligence:
         ) if publications else ({}, True)
         checked: dict[str, tuple[dict, dict, dict] | None] = {}
         original_revisions: dict[int, tuple[dict, list]] = {}
+        current_rows = (
+            self._hotspots_for_revision(revision["prepared_revision"], limit=100)[1]
+            if revision is not None
+            else []
+        )
+        current_by_id = {row["event_group_id"]: row for row in current_rows}
         items = []
+        rejected: set[str] = set()
         for publication in publications:
             cycle_id = publication["covered_cycle_id"]
             if cycle_id not in checked:
@@ -6131,27 +6195,68 @@ class LocalCatalystIntelligence:
                 except (KeyError, TypeError, ValueError):
                     continue
             accepted = checked[cycle_id]
-            key = (publication["candidate_id"], publication["candidate_version"])
             if accepted is None:
                 continue
             bindings, originals, projection = accepted
-            verdict = projection["verdicts"].get(key[0], {})
-            if (key not in originals or key not in current_bindings
-                    or bindings.get(key) != current_bindings[key]
-                    or verdict.get("event_group_version") != key[1] or verdict.get("verdict") != "supported"):
+            event_id = publication["candidate_id"]
+            verdict = projection["verdicts"].get(event_id, {})
+            if verdict.get("verdict") != "supported":
+                rejected.add(event_id)
                 continue
-            item = projection["items"].get(key[0])
-            if item is not None:
-                items.append({**item, "verified_at": projection["verified_at"],
-                              "verification_as_of": publication["snapshot_as_of"]})
+            # The verified version may be older than the current one. Its input
+            # must match the original row and both revisions must be intact;
+            # the current group supplies tickers, scores and sources.
+            verified_key = (event_id, verdict.get("event_group_version"))
+            current_key = (event_id, publication["candidate_version"])
+            item = projection["items"].get(event_id)
+            current = current_by_id.get(event_id)
+            if (item is None or current is None
+                    or verified_key not in originals or verified_key not in bindings
+                    or current_key not in current_bindings):
+                continue
+            items.append({
+                **{key: value for key, value in current.items() if not key.startswith("_")},
+                "representative_title": item["representative_title"],
+                "summary_zh": item["summary_zh"],
+                "status": "verified",
+                "verification_status": "verified",
+                "verified_at": projection["verified_at"],
+                "verification_as_of": publication["snapshot_as_of"],
+            })
+        shown = {item["event_group_id"] for item in items}
+        # Groups without a verdict from a readable newest round still show when
+        # their representative news has a published analysis, marked
+        # unverified. Only candidates had their verification state read.
+        items.extend(
+            {**row, "verification_status": "unverified"}
+            for row in current_rows
+            if row["event_group_id"] in candidate_ids
+            and row["event_group_id"] not in shown
+            and row["event_group_id"] not in rejected
+            and row["_analysis_published"] is True
+        )
         return {
             "status": "active" if items else "empty", "as_of": cutoff,
             "data_through": revision["data_through"] if revision else None,
             "items": items[:min(100, max(1, limit))], "warnings": [],
         }
 
-    def _prepared_hotspots(self, *, limit: int, now: datetime | None = None) -> dict[str, Any]:
+    def _prepared_hotspots(
+        self,
+        *,
+        limit: int,
+        now: datetime | None = None,
+        published_only: bool = False,
+    ) -> dict[str, Any]:
         observed = now or _utc_now()
+        # Filter before LIMIT so untranslated leaders cannot take every row.
+        # The scheduler reads without it: it queues analyses for those leaders.
+        # SQLite resolves the select-list alias in WHERE.
+        published_filter = (
+            "AND i.ordinal<=? AND representative_analysis_published"
+            if published_only
+            else ""
+        )
         with self._connect() as connection:
             revision = connection.execute(
                 """SELECT * FROM catalyst_local_hotspot_revisions
@@ -6187,7 +6292,8 @@ class LocalCatalystIntelligence:
                                     AND link.change_sequence=g.representative_change_sequence
                                     AND link.content_hash=g.representative_content_hash
                                     AND link.result_json IS NOT NULL
-                              ) AS representative_analysis_published
+                              ) AS representative_analysis_published,
+                              {_HOTSPOT_ANALYSIS_COPY_SQL}
                        FROM catalyst_local_hotspot_items i
                        JOIN catalyst_local_event_groups g
                          ON g.event_group_id=i.event_group_id
@@ -6197,11 +6303,18 @@ class LocalCatalystIntelligence:
                         AND r.change_sequence=g.representative_change_sequence
                         AND r.content_hash=g.representative_content_hash
                        WHERE i.prepared_revision=? AND g.available_at<=?
+                         {published_filter}
                        ORDER BY i.ordinal LIMIT ?""",
                     (
                         NEWS_RESULT_CONTRACT_ID,
+                        NEWS_RESULT_CONTRACT_ID,
                         revision["prepared_revision"],
                         _iso(observed),
+                        *(
+                            (PUBLISHED_HOTSPOT_CANDIDATES,)
+                            if published_only
+                            else ()
+                        ),
                         min(100, max(1, limit)),
                     ),
                 ).fetchall()
@@ -6310,6 +6423,10 @@ class LocalCatalystIntelligence:
                 "_analysis_published": bool(
                     row["representative_analysis_published"]
                 ),
+                "_analysis_copy": _loads(
+                    row["representative_analysis_copy_json"],
+                    None,
+                ),
             }
             for row in rows
         ]
@@ -6354,7 +6471,8 @@ class LocalCatalystIntelligence:
                                 AND link.change_sequence=g.representative_change_sequence
                                 AND link.content_hash=g.representative_content_hash
                                 AND link.result_json IS NOT NULL
-                          ) AS representative_analysis_published
+                          ) AS representative_analysis_published,
+                          {_HOTSPOT_ANALYSIS_COPY_SQL}
                    FROM catalyst_local_hotspot_items i
                    JOIN catalyst_local_event_groups g
                      ON g.event_group_id=i.event_group_id
@@ -6366,6 +6484,7 @@ class LocalCatalystIntelligence:
                    WHERE i.prepared_revision=?
                    ORDER BY i.ordinal LIMIT ?""",
                 (
+                    NEWS_RESULT_CONTRACT_ID,
                     NEWS_RESULT_CONTRACT_ID,
                     revision,
                     min(100, max(1, limit)),

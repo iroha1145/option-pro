@@ -50,7 +50,8 @@ def verified_stack(tmp_path, monkeypatch):
     return etl, ai, intelligence, revision, clock
 
 
-def complete_verified(ai, cycle, *, verdicts=None, evidence_missing=False, claimed_owner=None, null_ids=False):
+def complete_verified(ai, cycle, *, verdicts=None, evidence_missing=False, claimed_owner=None, null_ids=False,
+                      supported_copy=("新产品发布", "公司发布新产品，交付进展仍需观察。")):
     row = ai.get_job(cycle["job_id"])
     payload = json.loads(row["payload_json"])
     _, result, _ = verified_payload_result()
@@ -69,8 +70,8 @@ def complete_verified(ai, cycle, *, verdicts=None, evidence_missing=False, claim
         result["event_verifications"].append({
             "event_group_id": event["event_group_id"], "event_group_version": event["event_group_version"],
             "verdict": verdict, "evidence_refs": refs,
-            "title_zh": "新产品发布" if verdict == "supported" else "虚假并购",
-            "summary_zh": "公司发布新产品，交付进展仍需观察。" if verdict == "supported" else "虚假并购消息已被否认。",
+            "title_zh": supported_copy[0] if verdict == "supported" else "虚假并购",
+            "summary_zh": supported_copy[1] if verdict == "supported" else "虚假并购消息已被否认。",
             "affected_sectors": ["半导体"] if verdict == "supported" else ["虚假行业"],
         })
     result = validate_result("market_focus", json.dumps(result), payload)
@@ -176,22 +177,27 @@ def test_missing_tool_receipt_cannot_publish_even_if_job_was_marked_complete(ver
     assert json.loads(ai.get_job(cycle["job_id"])["result_json"]) == raw
 
 
-def test_changed_event_cannot_reuse_support_but_unchanged_event_remains(verified_stack):
+def test_changed_event_keeps_its_newest_round_copy_until_the_next_round(verified_stack):
+    # User decision 2026-10-10: a verdict follows the event id across versions.
+    # Accepted cost: a retitled or corrected report keeps the earlier verified
+    # headline until a newer round covers the event.
     etl, ai, intelligence, revision, clock = verified_stack
     cycle = intelligence.request_market_focus_cycle(expected_prepared_revision=revision)
     complete_verified(ai, cycle, verdicts=["supported"])
     intelligence.reconcile()
-    assert intelligence.hotspots(limit=20)["items"]
+    before = {item["representative_news_id"]: item for item in intelligence.hotspots(limit=20)["items"]}
     clock[0] += timedelta(minutes=5)
     _apply_news(etl, [_news_change(3, 11, available_at=clock[0] - timedelta(seconds=5),
                                   title="Nvidia cancels Blackwell platform launch", sources=("Reuters", "Bloomberg"))], as_of=clock[0])
     new_revision = intelligence.reconcile()["prepared_revision"]
     assert new_revision > revision
-    # The changed news cannot inherit its old verdict; the other original
-    # event still has the exact same version and remains independently valid.
-    remaining = intelligence.hotspots(limit=20)["items"]
-    assert [item["representative_news_id"] for item in remaining] == [12]
-    assert remaining[0]["prepared_revision"] == revision
+    remaining = {item["representative_news_id"]: item for item in intelligence.hotspots(limit=20)["items"]}
+    assert set(remaining) == {11, 12}
+    changed = remaining[11]
+    assert changed["event_group_version"] > before[11]["event_group_version"]
+    assert changed["representative_title"] == before[11]["representative_title"] == "新产品发布"
+    assert changed["verified_at"] == before[11]["verified_at"]
+    assert {item["prepared_revision"] for item in remaining.values()} == {new_revision}
 
 
 def test_newer_rejection_withdraws_previous_support_and_keeps_history(verified_stack):
@@ -255,7 +261,11 @@ def test_paid_haiku_news_and_legacy_cycle_survive_new_model_configuration(verifi
     legacy_cycle = project_cycle(intelligence, ai, cycle["cycle_id"])
     assert legacy_cycle["verification_status"] == "legacy_unverified"
     assert legacy_cycle["result"] is not None
-    assert intelligence.hotspots(limit=20)["items"] == []
+    # The legacy cycle verifies nothing. Since 2026-10-10 the published Haiku
+    # analysis of news 11 fills the strip, marked unverified.
+    items = intelligence.hotspots(limit=20)["items"]
+    assert [(item["representative_news_id"], item["verification_status"]) for item in items] == [(11, "unverified")]
+    assert "verified_at" not in items[0]
     # A genuinely new news request uses the new type-specific model.
     new_job = intelligence.request_analysis(12, force=False)
     assert (new_job["model"], new_job["reasoning"]) == ("gpt-5.6-luna", "max")
@@ -548,7 +558,12 @@ def test_unrelated_revision_preserves_paid_event_identity_and_original_verificat
     assert current > revision
     assert len(intelligence._prepared_hotspots(limit=20)["items"]) == 3
     after = intelligence.hotspots(limit=20)["items"]
-    assert {item["event_group_id"]: item for item in after} == {item["event_group_id"]: item for item in before}
+    paid = ("event_group_id", "event_group_version", "representative_title", "summary_zh",
+            "verification_status", "verified_at", "verification_as_of")
+    assert ({item["event_group_id"]: {key: item[key] for key in paid} for item in after}
+            == {item["event_group_id"]: {key: item[key] for key in paid} for item in before})
+    # Tickers, scores and sources follow the current snapshot (2026-10-10).
+    assert {item["prepared_revision"] for item in after} == {current}
     assert {item["verified_at"] for item in after} == {saved_job["completed_at"]}
     assert {item["verification_as_of"] for item in after} == {json.loads(saved_job["payload_json"])["as_of"]}
     assert ai.get_job(cycle["job_id"]) == saved_job
@@ -585,7 +600,11 @@ def test_cross_revision_new_negative_withdraws_support_even_if_old_publication_a
     assert intelligence.hotspots(limit=20)["items"] == []
 
 
-def test_same_id_new_version_never_inherits_old_paid_support(verified_stack):
+def test_same_id_new_version_keeps_the_newest_round_support(verified_stack):
+    # User decision 2026-10-10, replacing "a new version never inherits support":
+    # every new report gives the event a new version and the scheduled round
+    # waits for the leading twenty analyses, so exact-version matching left the
+    # strip empty for hours.
     etl, ai, intelligence, revision, clock = verified_stack
     cycle = intelligence.request_market_focus_cycle(expected_prepared_revision=revision)
     complete_verified(ai, cycle, verdicts=["supported"])
@@ -595,11 +614,16 @@ def test_same_id_new_version_never_inherits_old_paid_support(verified_stack):
     change = _news_change(3, 11, available_at=clock[0] - timedelta(seconds=5),
                           title="Nvidia launches Blackwell chip platform", summary="Updated timing and source details", sources=("Reuters", "Bloomberg"))
     _apply_news(etl, [change], as_of=clock[0])
-    intelligence.reconcile()
+    new_revision = intelligence.reconcile()["prepared_revision"]
     current = next(item for item in intelligence._prepared_hotspots(limit=20)["items"] if item["representative_news_id"] == 11)
     assert current["event_group_id"] == original["event_group_id"]
     assert current["event_group_version"] > original["event_group_version"]
-    assert [item["representative_news_id"] for item in intelligence.hotspots(limit=20)["items"]] == [12]
+    inherited = next(item for item in intelligence.hotspots(limit=20)["items"] if item["representative_news_id"] == 11)
+    assert inherited["verification_status"] == "verified"
+    assert inherited["event_group_version"] == current["event_group_version"]
+    assert inherited["prepared_revision"] == new_revision
+    for key in ("representative_title", "summary_zh", "verified_at", "verification_as_of"):
+        assert inherited[key] == original[key]
 
 
 @pytest.mark.parametrize("removed", ["deleted", "outside_window"])

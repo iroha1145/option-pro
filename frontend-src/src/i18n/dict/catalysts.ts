@@ -153,6 +153,7 @@ export const CATALYSTS: Dict = {
   '资料不足': ['Insufficient information', '資料不足'],
   '资料不足，暂不判断方向与置信度': ['Insufficient information to assess direction or confidence', '資料が不足しているため、方向性や確信度は判断できません'],
   '核验于 {time}': ['Verified {time}', '確認 {time}'],
+  '未核验': ['Unverified', '未確認'],
   '信息不足 · 未调用模型': ['Insufficient info · model not called', '情報不足 · モデル未呼び出し'],
   '登录后可用模型分析': ['Sign in to use model analysis', 'ログインするとモデル分析を利用できます'],
   '分析这条新闻的市场倾向与可能影响，将消耗模型用量，并计入每日额度和任务数量。': ['Analyze this news item\'s sentiment and likely impact. Counts toward the daily AI quota and task limit.', 'ニュースの市場への方向性と影響を分析します。モデルの利用量を消費し、1日の利用枠と処理件数に加算されます。'],

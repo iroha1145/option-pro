@@ -42,9 +42,14 @@ export function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: numb
         <HeatMeter level={h.heatLevel} heat={h.heat} className="ml-auto" />
       </div>
       <p className="mt-4 line-clamp-2 min-h-12 text-body font-medium leading-6 text-ink-800">{h.theme}</p>
-      {h.verifiedAt && (
-        <p className="mt-1 text-micro text-ink-400">
+      {/* 两种状态行同高：有核验时间就显示它；没有的是核验不足时补上的已发布分析，标「未核验」。 */}
+      {h.verifiedAt ? (
+        <p className="mt-1 flex h-5 items-center text-micro text-ink-400">
           <time dateTime={h.verifiedAt}>{__t('核验于 {time}', { time: fmtRelative(h.verifiedAt) })}</time>
+        </p>
+      ) : (
+        <p className="mt-1 flex h-5 items-center">
+          <SoftBadge>{__t('未核验')}</SoftBadge>
         </p>
       )}
       <div className="mt-3 flex flex-wrap items-center gap-1.5">

@@ -417,10 +417,14 @@ test('热点核验时间保留原事件时间，不以新整理时间代替', as
   });
   const times = (node) => Array.isArray(node) ? node.flatMap(times)
     : node?.props ? [...(node.type === 'time' ? [node] : []), ...times(node.props.children)] : [];
+  const texts = (node) => Array.isArray(node) ? node.flatMap(texts)
+    : typeof node === 'string' ? [node] : node?.props ? texts(node.props.children) : [];
   for (const item of items) {
     const tree = module.exports.HotspotCard({ h: item, index: 0, onOpen() {} });
     const rendered = times(tree);
     assert.equal(rendered.length, item.verifiedAt ? 1 : 0);
+    // 没有核验时间的卡片（核验不足时补上的已发布分析）标「未核验」。
+    assert.equal(texts(tree).includes('未核验'), !item.verifiedAt);
     if (item.verifiedAt) {
       assert.equal(rendered[0].props.dateTime, verifiedAt);
       assert.equal(rendered[0].props.children, `核验于 relative:${verifiedAt}`);
