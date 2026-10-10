@@ -11,7 +11,10 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from app.services.ai_jobs.models import (
+    CONCISE_FOCUS_SCHEMA_VERSIONS,
+    MARKET_FOCUS_SCHEMA_NAME,
     RESULT_VALIDATION_CONTRACT_VERSION,
+    VERIFIED_MARKET_FOCUS_SCHEMA_NAME,
     result_model_for,
     validate_job_payload,
     validate_result,
@@ -140,11 +143,18 @@ PROMPT_VERSIONS = {
     # v6 adds the compact Optix 宏观环境 block to the Market Focus input. The
     # output schema is unchanged, so results produced under v5 stay readable
     # exactly as they were and no historical paid job is resubmitted.
-    "market_focus": "market-focus-zh-cn-v6",
+    # v7（2026-10-10）：写明各字段的分工与目标长度，新输出按收紧的上限校验，
+    # 新任务公开模型各字段与核验结论（schema 升到 market_focus_zh_cn_v6 /
+    # market_focus_verified_zh_cn_v2）。
+    "market_focus": "market-focus-zh-cn-v7",
 }
 # v7 adds source content without changing the result schema. Existing v6 jobs
 # remain readable/cancellable and are never automatically paid for again.
 NEWS_READABLE_PROMPT_VERSIONS = frozenset({PROMPT_VERSIONS["news_impact"], "news-impact-zh-cn-v6"})
+# 热点 v7 改了输出写法、长度上限和新任务的公开规则，结果结构不变。v6 任务的
+# 确切上一版身份列在 _IDENTITY_PREDECESSORS：已完成的周期和已发布的核实热点照常
+# 可读（按原投影），排队中的任务按 v7 请求提交。
+FOCUS_READABLE_PROMPT_VERSIONS = frozenset({PROMPT_VERSIONS["market_focus"], "market-focus-zh-cn-v6"})
 LEGACY_NEWS_V6_SCHEMA_IDENTITY = (
     "news_impact_zh_cn_v6",
     "e35f6bc0b8d55cf0c8343e5fde84223b565ada5204be51bfdb956bfac652e3aa",
@@ -153,6 +163,17 @@ NEWS_CONTENT_SCHEMA_IDENTITY = (
     "news_impact_zh_cn_v6",
     "d0e6936d8749cc96ed7fa8b3bf07bc64bd4cc1f5fb70d18ec0b0fbe3c35576fe",
 )
+# 热点 v7（2026-10-10）改了写法、新输出的长度上限和公开规则，结果结构不变，同样按确切
+# 上一版身份放行（列在下方 _IDENTITY_PREDECESSORS），而不是退役：核实热点列表
+# 只采用身份为现行的周期，退役会让列表在下一轮完成前整体变空。放行的排队任务
+# 按 v7 请求提交；它们记的仍是旧 schema 版本，完成时按宽松上限校验、公开时按
+# 原投影（models.CONCISE_FOCUS_SCHEMA_VERSIONS）。
+LEGACY_FOCUS_CLAUDE_IDENTITY = ("market_focus_zh_cn_v5", "25bf4cbeabb2012319dce8e8487a6dc72fd0035c27b09694b12cff92b0ac53cc")
+LEGACY_FOCUS_OPENAI_IDENTITY = ("market_focus_zh_cn_v5", "6c3d008c66678f7729b5f69afcaa011597376fc7025431e2fd8a1afd67509d39")
+LEGACY_VERIFIED_FOCUS_IDENTITY = ("market_focus_verified_zh_cn_v1", "0fb6fd7a1481f1da7a9b369b626e1736828b5ba0e934824f7a905c22646e8495")
+FOCUS_CLAUDE_IDENTITY = ("market_focus_zh_cn_v6", "e95c0b1b35cc10087760a99391f1ea9e7d7dd7730290110eff414016a0a069a2")
+FOCUS_OPENAI_IDENTITY = ("market_focus_zh_cn_v6", "6fefeec2b2b09a751e0c341911741a503d1a507385d611c4afa689a4cf405cd3")
+VERIFIED_FOCUS_IDENTITY = ("market_focus_verified_zh_cn_v2", "aae4f97495d407b14dfbb685ca2b5d8cc82c70f8bfb4eae8938cec719d8e696d")
 # 2026-10-10 的资源策略变化（OpenAI 新闻与财报输出上限 32,768→65,536，Luna
 # 联网改为只在缺正文时启用）没有改结果结构。只按「确切的现行身份 → 上一版
 # 身份」放行：待处理任务按现行策略提交，已完成结果照常可读；策略再变时现行
@@ -162,6 +183,9 @@ _IDENTITY_PREDECESSORS: dict[tuple[str, str], frozenset[tuple[str, str]]] = {
     LUNA_WEB_NEWS_IDENTITY: frozenset({LUNA_ALWAYS_WEB_NEWS_IDENTITY, LEGACY_LUNA_NEWS_IDENTITY}),
     LUNA_ARTICLE_NEWS_IDENTITY: frozenset({LUNA_ALWAYS_WEB_NEWS_IDENTITY, LEGACY_LUNA_NEWS_IDENTITY}),
     OPENAI_EARNINGS_IDENTITY: frozenset({LEGACY_OPENAI_EARNINGS_IDENTITY}),
+    FOCUS_CLAUDE_IDENTITY: frozenset({LEGACY_FOCUS_CLAUDE_IDENTITY}),
+    FOCUS_OPENAI_IDENTITY: frozenset({LEGACY_FOCUS_OPENAI_IDENTITY}),
+    VERIFIED_FOCUS_IDENTITY: frozenset({LEGACY_VERIFIED_FOCUS_IDENTITY}),
 }
 # Failures a scheduler may retry on its own, at most SCHEDULED_MAX_ATTEMPTS
 # executions per item. Anything else (schema or binding failures, oversized
@@ -266,7 +290,8 @@ def _validation_schema_json(job_type: str, model: str | None = None) -> str:
     """
 
     return json.dumps(
-        result_model_for(job_type, model=model).model_json_schema(mode="validation"),
+        # New requests always carry the tightened market focus contract.
+        result_model_for(job_type, model=model, concise=True).model_json_schema(mode="validation"),
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
@@ -425,14 +450,25 @@ def _runtime_request(
             "引用时只能说明当前金融环境相对历史的松紧。"
             "当macro_conditions.status为stale时必须明确说明宏观数据已陈旧；"
             "当该块缺失时不得提及或推测宏观环境。"
+            # 2026-10-10：每个字段只做一件事。目标长度约为本地上限
+            # （models.FOCUS_TEXT_LIMITS）的一半，上限只拦明显失控的输出。
+            "字段各司其职，写得简洁：title_zh写本轮主线，不超过30字，不得使用“市场热点分析”这类泛称；"
+            "headline_summary写一两句导语，不超过120字；"
+            "summary_zh写市场层面的结论与限制，三到五句，不超过500字，不得重复导语；"
+            "market_summary只写输入市场状态（如市场广度、宏观环境）与事件的关系，不超过300字；"
+            "dominant_events每条summary不超过220字，先写一句标题式短句，"
+            "再写一句以“已证实：”“部分证实：”或“未证实：”开头的事实，最后写一句以“推断：”开头的影响推断；"
+            "focus_ticker_assessments每条summary不超过160字，risks每条不超过40字；"
+            "market_uncertainties每条不超过60字，存在不确定性时必须列出。"
+            "不同字段之间不得整段重复。"
         )
         use_web_search = False
-        schema_name = "market_focus_zh_cn_v5"
+        schema_name = MARKET_FOCUS_SCHEMA_NAME
         boundary = "untrusted_market_focus_snapshot"
     else:
         raise ValueError("unsupported_job_type")
     if job_type == "market_focus" and (model == SONNET_MODEL or payload.get("verification_version") == "web-evidence-v1"):
-        schema_name = "market_focus_verified_zh_cn_v1"
+        schema_name = VERIFIED_MARKET_FOCUS_SCHEMA_NAME
         instructions = instructions.replace("不得浏览网页，不得虚构催化剂；", "必须使用公开一手来源核验候选事件，不得虚构催化剂；") + (
             "逐一核验候选事件，所有新事件都须列入event_verifications。"
             "supported只能用于本次web_search/web_fetch成功返回的来源，引用须包含来源url；tool_use_id可见时原样复制，不可见时填null，禁止猜造；"
@@ -444,6 +480,14 @@ def _runtime_request(
             "supported要求实际来源支持原标题的核心主体、时间、数值和统计口径；背景证据或自行计算不能证明核心新闻断言。"
             "核心断言失真或有反证时标contradicted，缺乏直接证据时标unverifiable；"
             "不得把原断言改写成另一个较弱事实后仍保留supported。"
+            # 热点列表只发布 supported 事件自己的标题和摘要；新任务的全局字段和
+            # dominant_events 原样公开（focus_verification.public_focus_result）。
+            "event_verifications每条title_zh写成不超过30字的事件标题；summary_zh不超过220字，"
+            "先写一句标题式短句，再写一句以“已证实：”“部分证实：”或“未证实：”开头的事实，"
+            "最后写一句以“推断：”开头的影响推断。"
+            "title_zh、headline_summary、summary_zh、market_summary、market_uncertainties和dominant_events"
+            "会原样公开展示：结论只能依据supported事件；提及unverifiable或contradicted事件时，"
+            "必须写明“未证实”或“与来源不符”，不得当作事实。"
         )
     if job_type == "news_impact" and model == LUNA_MODEL:
         use_web_search = web_search
@@ -1170,6 +1214,8 @@ def claude_output_schema(job_type: str, schema: dict[str, Any]) -> dict[str, Any
     The local validation schema stays unchanged; completed native-JSON results
     remain readable and paid receipts remain locally recoverable. New earnings
     requests have a distinct v3 transport identity; market focus uses v4.
+    Market focus descriptions repeat each field's job and target length from
+    the instructions; the schema's maxLength is the looser local ceiling.
     """
     result = deepcopy(schema)
     if job_type == "news_impact":
@@ -1188,15 +1234,34 @@ def claude_output_schema(job_type: str, schema: dict[str, Any]) -> dict[str, Any
                 f"必须逐字复制本次输入的{name}，不得为空、使用示例值或重新生成。"
             )
         for name, purpose in {
-            "title_zh": "概括本次市场焦点",
-            "summary_zh": "综合输入事件和市场状态，说明主要发现与限制",
-            "headline_summary": "概述输入新闻簇中的重要事件及其证据",
-            "market_summary": "说明输入市场状态与事件的关系，不重算程序评分",
+            "title_zh": "写本轮主线，不超过30字，不得使用“市场热点分析”这类泛称",
+            "summary_zh": "写市场层面的结论与限制，三到五句，不超过500字，不得重复导语",
+            "headline_summary": "写一两句导语，概括最重要的事件，不超过120字",
+            "market_summary": "只写输入市场状态（如市场广度、宏观环境）与事件的关系，不超过300字，不重算程序评分",
         }.items():
             fields[name]["description"] = (
                 purpose + "。必须写有实质内容的非空简体中文，不得返回空字符串或占位符。"
                 "资料不足时说明具体缺少什么及判断限制，不得编造；仍须填写本字段。"
+                "不得与其他字段整段重复。"
             )
+        fields["market_uncertainties"]["description"] = (
+            "每条不超过60字，写一个具体的不确定因素；存在不确定性时必须列出。"
+        )
+        event_summary = (
+            "不超过220字：先写一句标题式短句，再写一句以“已证实：”“部分证实：”或“未证实：”"
+            "开头的事实，最后写一句以“推断：”开头的影响推断。"
+        )
+        definitions = result.get("$defs", {})
+        if "ConciseMarketFocusDominantEvent" in definitions:
+            definitions["ConciseMarketFocusDominantEvent"]["properties"]["summary"]["description"] = event_summary
+        if "ConciseMarketFocusTickerAssessment" in definitions:
+            assessment = definitions["ConciseMarketFocusTickerAssessment"]["properties"]
+            assessment["summary"]["description"] = "不超过160字，说明证据与方向判断的理由。"
+            assessment["risks"]["description"] = "每条不超过40字。"
+        if "ConciseFocusEventVerification" in definitions:
+            verification = definitions["ConciseFocusEventVerification"]["properties"]
+            verification["title_zh"]["description"] = "不超过30字的事件标题。"
+            verification["summary_zh"]["description"] = event_summary
         return result
     if job_type != "earnings_impact":
         return result
@@ -1308,6 +1373,19 @@ def response_result(
     if not isinstance(output_text, str) or not output_text.strip():
         raise ValueError("ai_empty_response")
     return validate_result(job_type, output_text, payload)
+
+
+def enforce_new_output_limits(job: Mapping[str, Any], output_text: Any, payload: dict[str, Any]) -> None:
+    """Re-check a completed market focus output against its job's own schema.
+
+    Jobs created under CONCISE_FOCUS_SCHEMA_VERSIONS (2026-10-10) must also fit
+    the tightened field limits; older jobs and other job types pass unchanged.
+    The worker calls this after receipt_result/response_result have accepted
+    the same output text.
+    """
+    schema_version = job.get("schema_version")
+    if job.get("job_type") == "market_focus" and schema_version in CONCISE_FOCUS_SCHEMA_VERSIONS:
+        validate_result("market_focus", output_text, payload, schema_version=schema_version)
 
 
 def response_terminal_error(response: Any) -> str | None:

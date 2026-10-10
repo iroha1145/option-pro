@@ -2541,10 +2541,11 @@ class LocalCatalystIntelligence:
             current_identity=current_identity,
             model=model,
         )
-        prompt = (
-            NEWS_PROMPT_VERSION if expected_type == "news_impact" else FOCUS_PROMPT_VERSION
+        supported_prompts = (
+            ai_runtime.NEWS_READABLE_PROMPT_VERSIONS
+            if expected_type == "news_impact"
+            else ai_runtime.FOCUS_READABLE_PROMPT_VERSIONS
         )
-        supported_prompts = ai_runtime.NEWS_READABLE_PROMPT_VERSIONS if expected_type == "news_impact" else {prompt}
         return (
             ai_runtime.analysis_identity_supported(row.get("model"), row.get("reasoning"))
             and row.get("execution_mode") == EXECUTION_MODE
@@ -2670,8 +2671,10 @@ class LocalCatalystIntelligence:
             or not row.get("result_json")
         ):
             return None
+        # A readable prompt version still needs its exact identity (current or
+        # listed predecessor); only older prompt families skip that check.
         if (
-            row.get("prompt_version") == FOCUS_PROMPT_VERSION
+            row.get("prompt_version") in ai_runtime.FOCUS_READABLE_PROMPT_VERSIONS
             and not self._has_current_job_identity(row, expected_type="market_focus")
         ):
             return None
@@ -3991,7 +3994,10 @@ class LocalCatalystIntelligence:
                    public_result_json,hotspot_items_json,evidence_sources_json
                ) VALUES(?,?,?,?,?,?,?,?,?,?)""",
             (cycle["cycle_id"], job["job_id"], cycle["prepared_revision"], payload["as_of"], completed_at,
-             payload["input_hash"], digest, _json(public_focus_result(result)), _json(items),
+             payload["input_hash"], digest,
+             _json(public_focus_result(
+                 result, schema_version=job.get("schema_version"), verified_at=job.get("completed_at"),
+             )), _json(items),
              _json(public_focus_sources(result, evidence))),
         )
         return result
@@ -8314,6 +8320,14 @@ class LocalCatalystIntelligence:
                 # visitors lose job_id below, so this is their only source of
                 # the event texts that bound source-named entities.
                 "_validation_payload": cycle_payload,
+                # Private: which contract the paid job ran under, and when it
+                # finished. The public projection publishes the model's own
+                # fields only for the concise contract.
+                "_projection_job": (
+                    {"schema_version": linked_job.get("schema_version"),
+                     "completed_at": linked_job.get("completed_at")}
+                    if linked_job is not None else None
+                ),
                 "model": identity_job.get("model") if identity_job else None,
                 "reasoning_effort": identity_job.get("reasoning") if identity_job else None,
                 "evidence_sources": (

@@ -270,7 +270,7 @@ def test_market_focus_prompt_explains_cross_field_evidence_semantics():
         _market_focus_payload(),
     )
 
-    assert request.schema_name == "market_focus_zh_cn_v5"
+    assert request.schema_name == "market_focus_zh_cn_v6"
     assert "insufficient_evidence为true时，catalyst_bias必须为null" in (
         request.instructions
     )

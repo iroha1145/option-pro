@@ -119,7 +119,13 @@ def test_pending_is_not_public_then_mixed_result_publishes_atomically(verified_s
     # The worker's result alone cannot publish prepared hotspots.
     assert intelligence.hotspots(limit=20)["items"] == []
     public_job = ai.public(ai.get_job(cycle["job_id"]))
-    assert "虚假" not in json.dumps(public_job["result"], ensure_ascii=False)
+    # 2026-10-10 口径：新任务（market_focus_verified_zh_cn_v2）公开模型自己的全局
+    # 文字和每个事件的核实结论，不再只拼已证实事件的摘要。全局文字里混入的
+    # 被否定事件只靠提示词约束（这份夹具的全局文字就把被否定的并购写成了事实）。
+    assert public_job["result"]["title_zh"] == raw["title_zh"]
+    assert [entry["verdict"] for entry in public_job["result"]["event_verifications"]] == ["supported", "contradicted"]
+    assert "evidence_refs" not in json.dumps(public_job["result"])
+    assert "srv_" not in json.dumps(public_job["result"])
     assert "False merger" not in json.dumps(public_job["evidence_sources"])
     intelligence.reconcile()
     hotspots = intelligence.hotspots(limit=20)
@@ -127,8 +133,12 @@ def test_pending_is_not_public_then_mixed_result_publishes_atomically(verified_s
     assert hotspots["items"][0]["representative_title"] == "新产品发布"
     cycle_public = project_cycle(intelligence, ai, cycle["cycle_id"])
     assert cycle_public["verification_status"] == "verified"
-    assert "虚假" not in json.dumps(cycle_public, ensure_ascii=False)
-    assert "event_verifications" not in json.dumps(cycle_public)
+    assert cycle_public["result"]["summary_zh"] == raw["summary_zh"]
+    assert all(
+        set(entry) == {"event_group_id", "verdict", "verified_at"}
+        for entry in cycle_public["result"]["event_verifications"]
+    )
+    assert "evidence_refs" not in json.dumps(cycle_public)
     # Raw receipt, original mixed prose and charges are retained internally.
     stored = ai.get_job(cycle["job_id"])
     assert json.loads(stored["result_json"]) == raw
@@ -149,7 +159,7 @@ def test_all_unverifiable_completes_and_does_not_fall_back(verified_stack):
     assert intelligence.hotspots(limit=20)["items"] == []
     public = project_cycle(intelligence, ai, cycle["cycle_id"])
     assert public["status"] == "completed"
-    assert public["result"]["summary_zh"] == "当前暂无可展示热点。"
+    assert {entry["verdict"] for entry in public["result"]["event_verifications"]} == {"unverifiable"}
     assert public["evidence_sources"] == []
 
 
@@ -195,7 +205,8 @@ def test_newer_rejection_withdraws_previous_support_and_keeps_history(verified_s
     complete_verified(ai, second, verdicts=["contradicted"])
     intelligence.reconcile()
     assert intelligence.hotspots(limit=20)["items"] == []
-    assert project_cycle(intelligence, ai, first["cycle_id"])["result"]["dominant_events"]
+    history = project_cycle(intelligence, ai, first["cycle_id"])["result"]["event_verifications"]
+    assert [entry["verdict"] for entry in history] == ["supported", "supported"]
 
 
 def test_public_job_rejects_receipt_identity_mismatch(verified_stack):
@@ -217,8 +228,9 @@ def test_anonymous_cycle_uses_same_verified_projection(verified_stack):
     with request_owner_access_context(False):
         public = service._project_focus_cycle_for_access(intelligence.market_focus_cycle(cycle["cycle_id"]), include_owner_state=False)
         assert public["verification_status"] == "verified"
-        assert "虚假" not in json.dumps(public, ensure_ascii=False)
+        assert "evidence_refs" not in json.dumps(public)
         assert "_validation" not in json.dumps(public)
+        assert "_projection" not in json.dumps(public)
         assert len(intelligence.hotspots(limit=20)["items"]) == 1
 
 
@@ -414,14 +426,14 @@ def test_latest_cycle_and_strip_keep_newer_rejection_after_old_completion_delay(
         latest = service.latest_market_focus_cycle(now=clock[0], include_owner_state=owner)
         for key in ("cycle", "latest_successful_cycle"):
             assert latest[key]["cycle_id"] == newer["cycle_id"]
-            assert latest[key]["result"]["dominant_events"] == []
+            assert {entry["verdict"] for entry in latest[key]["result"]["event_verifications"]} == {"contradicted"}
             assert latest[key]["is_historical"] is False
             assert latest[key]["verification_status"] == "verified"
         previous = latest["previous_successful_cycle"]
         assert previous["cycle_id"] == older["cycle_id"]
         assert previous["is_historical"] is True
         assert previous["verification_status"] == "verified"
-        assert len(previous["result"]["dominant_events"]) == 2
+        assert [entry["verdict"] for entry in previous["result"]["event_verifications"]] == ["supported", "supported"]
         exact_history = service.market_focus_cycle(older["cycle_id"])
         assert exact_history["is_historical"] is True
         assert exact_history["verification_status"] == "verified"

@@ -59,6 +59,9 @@ async def _finish_claude_receipt(
 
         payload = json.loads(job["payload_json"])
         result = runtime.receipt_result(receipt, job["job_type"], payload)
+        # The job's own schema version decides whether the tightened market
+        # focus limits apply; reads of older results stay lenient.
+        runtime.enforce_new_output_limits(job, receipt.get("output_text"), payload)
         if job["job_type"] == "market_focus" and payload.get("verification_version") == "web-evidence-v1":
             validate_market_focus_evidence(result, payload, receipt.get("tool_evidence") or [])
     except (TypeError, ValueError) as exc:
@@ -527,6 +530,7 @@ async def _finish_response(
         payload = json.loads(job["payload_json"])
         try:
             result = runtime.response_result(response, job["job_type"], payload)
+            runtime.enforce_new_output_limits(job, response.output_text, payload)
         except Exception as exc:
             # 后台任务的校验失败绝大多数从这里落库（轮询完成路径）——此前
             # 只有提交路径带 detail，生产 schema_validation_failed 全是 NULL，
