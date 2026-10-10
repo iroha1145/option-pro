@@ -60,6 +60,22 @@ def _visitor_strip(service, **kwargs):
         return service.hotspots(**kwargs)
 
 
+def _publish_analysis(ai, intelligence, *, news_id, sequence, title, summary):
+    job = intelligence.request_analysis(news_id, force=False)
+    result = _news_result(
+        news_id=news_id,
+        change_sequence=sequence,
+        content_hash=f"hash-{news_id}-{sequence}",
+    )
+    result.update(
+        title_zh=title,
+        summary_zh=summary,
+        headline_summary=summary,
+        market_relevance=5,
+    )
+    _finish_job(ai, job["job_id"], result)
+
+
 def _strip_stack(tmp_path):
     """Three multi-source English leaders, one unanalyzed Chinese source
     title, and two low-relevance groups with published analyses behind them."""
@@ -87,23 +103,8 @@ def _strip_stack(tmp_path):
     ]
     _apply_news(etl, changes, as_of=now - timedelta(minutes=9))
     intelligence.reconcile()
-    for sequence, news_id, title, summary in (
-        (5, 41, REIT_TITLE, REIT_SUMMARY),
-        (6, 42, WRAP_TITLE, WRAP_SUMMARY),
-    ):
-        job = intelligence.request_analysis(news_id, force=False)
-        result = _news_result(
-            news_id=news_id,
-            change_sequence=sequence,
-            content_hash=f"hash-{news_id}-{sequence}",
-        )
-        result.update(
-            title_zh=title,
-            summary_zh=summary,
-            headline_summary=summary,
-            market_relevance=5,
-        )
-        _finish_job(ai, job["job_id"], result)
+    _publish_analysis(ai, intelligence, news_id=41, sequence=5, title=REIT_TITLE, summary=REIT_SUMMARY)
+    _publish_analysis(ai, intelligence, news_id=42, sequence=6, title=WRAP_TITLE, summary=WRAP_SUMMARY)
     intelligence.reconcile()
     return ai, intelligence
 
@@ -287,11 +288,11 @@ def verified_strip(tmp_path, monkeypatch):
     change["news"]["url"] = "https://www.reuters.com/news/41"
     _apply_news(etl, [change], as_of=now - timedelta(minutes=8))
     revision = intelligence.reconcile()["prepared_revision"]
-    return ai, intelligence, revision, clock
+    return etl, ai, intelligence, revision, clock
 
 
 def test_verified_hotspot_keeps_its_source_bound_title(verified_strip):
-    ai, intelligence, revision, clock = verified_strip
+    _etl, ai, intelligence, revision, clock = verified_strip
     cycle = intelligence.request_market_focus_cycle(expected_prepared_revision=revision)
     complete_verified(ai, cycle, verdicts=["supported"], supported_copy=(REIT_TITLE, REIT_SUMMARY))
     intelligence.reconcile()
@@ -308,3 +309,98 @@ def test_verified_hotspot_keeps_its_source_bound_title(verified_strip):
         assert _titles(payload) == [REIT_TITLE]
         assert payload["items"][0]["summary_zh"] == REIT_SUMMARY
         assert payload["items"][0]["verification_status"] == "verified"
+
+
+def _add_wrap_news(ai, intelligence, clock, etl):
+    """A later, more widely sourced group with a published analysis."""
+
+    clock[0] += timedelta(minutes=2)
+    change = _news_change(
+        2, 42, available_at=clock[0] - timedelta(seconds=5), title=WRAP_SOURCE_TITLE,
+        sources=("Reuters", "Bloomberg", "CNBC", "Dow Jones"),
+    )
+    change["news"]["url"] = "https://www.reuters.com/news/42"
+    _apply_news(etl, [change], as_of=clock[0])
+    intelligence.reconcile()
+    _publish_analysis(ai, intelligence, news_id=42, sequence=2, title=WRAP_TITLE, summary=WRAP_SUMMARY)
+    return intelligence.reconcile()["prepared_revision"]
+
+
+def test_support_from_an_earlier_version_still_shows(verified_strip):
+    # User decision 2026-10-10: the newest round's verdict follows the event id.
+    etl, ai, intelligence, revision, clock = verified_strip
+    cycle = intelligence.request_market_focus_cycle(expected_prepared_revision=revision)
+    complete_verified(ai, cycle, verdicts=["supported"], supported_copy=(REIT_TITLE, REIT_SUMMARY))
+    intelligence.reconcile()
+    verified = intelligence.hotspots(limit=20)["items"][0]
+    clock[0] += timedelta(minutes=2)
+    update = _news_change(
+        2, 41, available_at=clock[0] - timedelta(seconds=5), title=REIT_SOURCE_TITLE,
+        summary="Tower operators respond to the spectrum deal", sources=("Reuters", "Bloomberg"),
+    )
+    update["news"]["url"] = "https://www.reuters.com/news/41"
+    _apply_news(etl, [update], as_of=clock[0])
+    current_revision = intelligence.reconcile()["prepared_revision"]
+    service = _service("manual", engine=intelligence, repository=ai)
+
+    payload = _visitor_strip(service, limit=8, now=clock[0])
+
+    [item] = payload["items"]
+    assert item["verification_status"] == "verified"
+    assert (item["representative_title"], item["summary_zh"]) == (REIT_TITLE, REIT_SUMMARY)
+    assert item["event_group_id"] == verified["event_group_id"]
+    assert item["event_group_version"] > verified["event_group_version"]
+    assert item["prepared_revision"] == current_revision
+    assert item["verified_at"] == verified["verified_at"]
+
+
+@pytest.mark.parametrize("negative", ["contradicted", "unverifiable"])
+def test_newest_round_without_support_hides_a_published_event(verified_strip, negative):
+    etl, ai, intelligence, revision, clock = verified_strip
+    _publish_analysis(ai, intelligence, news_id=41, sequence=1, title=REIT_TITLE, summary=REIT_SUMMARY)
+    revision = intelligence.reconcile()["prepared_revision"]
+    older = intelligence.request_market_focus_cycle(expected_prepared_revision=revision)
+    complete_verified(ai, older, verdicts=["supported"], supported_copy=(REIT_TITLE, REIT_SUMMARY))
+    intelligence.reconcile()
+    clock[0] += timedelta(minutes=1)
+    newer = intelligence.request_market_focus_cycle(expected_prepared_revision=revision, force=True)
+    complete_verified(ai, newer, verdicts=[negative])
+    _add_wrap_news(ai, intelligence, clock, etl)
+    service = _service("manual", engine=intelligence, repository=ai)
+
+    # News 41 has a published analysis, so only the newest round keeps it out
+    # of the unverified fill; the uncovered group 42 still fills the strip.
+    for payload in (_visitor_strip(service, limit=8, now=clock[0]), service.hotspots(limit=8, now=clock[0])):
+        assert [(item["representative_news_id"], item["verification_status"]) for item in payload["items"]] == [
+            (42, "unverified"),
+        ]
+        assert REIT_TITLE not in json.dumps(payload, ensure_ascii=False)
+
+
+@pytest.mark.parametrize("reader", ["visitor", "owner"])
+def test_unverified_fill_follows_verified_items_without_duplicates(verified_strip, reader):
+    etl, ai, intelligence, revision, clock = verified_strip
+    _publish_analysis(ai, intelligence, news_id=41, sequence=1, title="通信塔股票承压", summary=REIT_SUMMARY)
+    revision = intelligence.reconcile()["prepared_revision"]
+    cycle = intelligence.request_market_focus_cycle(expected_prepared_revision=revision)
+    complete_verified(ai, cycle, verdicts=["supported"], supported_copy=(REIT_TITLE, REIT_SUMMARY))
+    intelligence.reconcile()
+    _add_wrap_news(ai, intelligence, clock, etl)
+    ranked = [item["representative_news_id"] for item in intelligence._prepared_hotspots(limit=20)["items"]]
+    assert ranked == [42, 41]  # the unverified group ranks higher
+    service = _service("manual", engine=intelligence, repository=ai)
+
+    payload = (
+        _visitor_strip(service, limit=8, now=clock[0])
+        if reader == "visitor"
+        else service.hotspots(limit=8, now=clock[0])
+    )
+
+    verified, unverified = payload["items"]
+    assert (verified["representative_news_id"], verified["verification_status"]) == (41, "verified")
+    assert verified["representative_title"] == REIT_TITLE  # the round's copy, not the news analysis
+    assert verified["verified_at"]
+    assert (unverified["representative_news_id"], unverified["verification_status"]) == (42, "unverified")
+    assert (unverified["representative_title"], unverified["summary_zh"]) == (WRAP_TITLE, WRAP_SUMMARY)
+    assert "verified_at" not in unverified and "verification_as_of" not in unverified
+    assert unverified["status"] == "prepared"

@@ -1823,6 +1823,7 @@ export const EN: Record<string, string> = {
   "资料不足": "Insufficient information",
   "资料不足，暂不判断方向与置信度": "Insufficient information to assess direction or confidence",
   "核验于 {time}": "Verified {time}",
+  "未核验": "Unverified",
   "信息不足 · 未调用模型": "Insufficient info · model not called",
   "登录后可用模型分析": "Sign in to use model analysis",
   "分析这条新闻的市场倾向与可能影响，将消耗模型用量，并计入每日额度和任务数量。": "Analyze this news item's sentiment and likely impact. Counts toward the daily AI quota and task limit.",

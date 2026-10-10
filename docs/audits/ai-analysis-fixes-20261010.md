@@ -524,3 +524,69 @@ Luna 被拒片段（7 天）：globenewswire.com 31、zacks.com 9、tradingview.
 - 单个普通英文词（「Breaking」「reports」「Investors」）和只含一个标题词的两词标题（「Crypto Crash」）会原样发布。要拦它们需要一份常用英文词表，本次没有加。
 - 两字窗口之外的涨跌说法（「收于250美元」「股价随后走低」）不另作判断。
 - 部署后要跑一次找回试运行（「部署后操作」第 2 步），看第二轮剩下的失败里有多少转为 validated。
+
+## 热点条带可见性（2026-10-10）
+
+分支 `claude/hotspot-strip-visibility-2026-10-10`（PR #244），基于 main 的 `77013b02`。
+
+### 两层原因
+
+新闻页「市场热点」条带一直显示「当前时段暂无热点」。生产的热点模型是 Sonnet，访客读取走经核验分支，只展示最近 72 小时内 Sonnet 核验周期判为有支持证据的事件。生产只读诊断（10-10）：核验原始条目 0 条，投影后 0 条。
+
+1. 展示层二次校验。核验结果写入发布表时去掉了来源字段，`PersonalCatalystService._project_hotspots` 再做中文校验时没有上下文。「通信塔REIT股票因……下跌」这类标题因为 REIT 绑定不到来源被丢掉。这些文字在每次读取时已经按付费回执和完整输入重新校验过。
+2. 核验覆盖跟不上。原规则要求核验周期覆盖的事件版本和当前快照完全一致。事件每加入一条报道就换一个版本；每小时的定时周期又要等前 20 个热点的代表新闻全部分析完才启动（`run_scheduled` 的 `focus_pending_news_ids`）。最近一次周期 10-09 16:31Z 创建，10-10 06:28Z 才完成，之后没有新周期，条带长期为空。
+
+### 用户决定
+
+- 核验结论沿用到同一事件的新版本：按事件编号（`event_group_id`）匹配，72 小时窗口不变。同一事件在窗口内有多轮核验时取最新一轮；最新一轮判「有矛盾」或「无法核实」时不展示。这取代了原来「新版本不继承旧核验结论」的规则。
+- 没有新鲜核验时，用代表新闻有已发布分析的热点补齐，并标明「未核验」。
+
+原因：每来一条报道事件就换版本，定时周期又要等前 20 条分析齐，按版本严格匹配时条带长期为空。
+
+### 新规则
+
+实现在 `backend/app/services/catalysts/local_intelligence.py` 的 `LocalCatalystIntelligence.hotspots`（经核验分支）和 `backend/app/services/catalysts/personal_service.py` 的 `_project_hotspots`。
+
+- 覆盖判定：核验周期的输入里有这个事件编号就算覆盖，不再比较版本。「最新一轮决定」，以及「无法校验的较新一轮占住位置、不让更早的支持复活」，这两条照旧。
+- 显示为已核验的条件：最新一轮通过付费回执和发布记录的全部校验，结论是 supported；被核验版本的输入和当时快照的行一致；当时快照和当前快照都通过完整性校验。
+- 已核验条目的标题和摘要用核验周期里的中文文字；代码、热度分、来源、代表新闻等元数据取当前快照的事件组；`verified_at`（卡片上的「核验于…」）和 `verification_as_of` 照旧。
+- 补齐：已核验条目排在前面，后面按当前排名补上代表新闻有已发布分析的热点，按事件编号去重，带 `verification_status: "unverified"`，没有 `verified_at`。访客和站长相同。字段沿用仓库已有的 `verification_status`：已核验是 `"verified"`，旧周期是 `"legacy_unverified"`。
+- 两处取舍：
+  - 补齐只取核验读取的候选窗口（当前快照前 100 名、72 小时内），不取未开核验时访客读取用的前 200 名。只有候选窗口里的事件读过核验状态，这样判了「有矛盾」的事件不会以「未核验」混进来。
+  - 最新一轮无法校验（记录损坏、回执对不上）时，事件按「没有新鲜核验」处理，有已发布分析就标「未核验」显示。「无法校验即不算核验」这条只用于「已核验」这一档。
+- 前端 `HotspotsStrip.tsx`：有核验时间的卡片显示「核验于…」，没有的显示中性色「未核验」小徽标；两种状态行同高。卡片按 `verifiedAt` 判断，因为热点类型（`src/mocks/fixtures2.ts`）和映射（`api.ts` 的 `nHotspot`）不在这次允许改的文件里。对生产接口两者等价：已核验条目都带 `verified_at`，补齐条目都不带。代价是未开核验的配置和演示数据里，所有卡片都显示「未核验」。英文 Unverified，日文 未確認。
+
+### 测试
+
+后端 `tests/test_hotspot_strip_visibility_20261010.py`，共 13 项：
+
+- 旧版本的支持结论在新版本上仍显示：文字来自核验周期，版本和快照编号是当前的，核验时间不变。
+- 最新一轮判「有矛盾」或「无法核实」（参数化）时，即使事件有已发布分析也不显示，站长和访客都查；没被覆盖的事件照常补齐。
+- 核验不足时用已发布分析补齐：已核验条目排前，即使补齐的条目排名更高；同一事件只出现一次；补齐条目带 `verification_status: "unverified"`，没有 `verified_at`。访客、站长各一条。
+- 此前的 8 项：Sonnet 核验标题「通信塔REIT股票因太空探索技术公司与格兰管理公司的频谱交易下跌」访客和站长都能看到；未开核验时访客只读有已发布分析的热点，SQL 里先过滤再截断；英文原标题和占位文案不显示。
+
+按用户决定改的既有测试（`tests/test_verified_hotspot_publication.py`）：
+
+- `test_same_id_new_version_never_inherits_old_paid_support` 改为 `test_same_id_new_version_keeps_the_newest_round_support`。
+- `test_changed_event_cannot_reuse_support_but_unchanged_event_remains` 改为 `test_changed_event_keeps_its_newest_round_copy_until_the_next_round`，测试里写明代价。
+- `test_unrelated_revision_preserves_paid_event_identity_and_original_verification_time` 只比较核验相关的字段，快照编号改为当前。
+- `test_paid_haiku_news_and_legacy_cycle_survive_new_model_configuration`：旧周期仍不产生已核验条目，新闻 11 的已发布分析以「未核验」补上。
+
+前端：`frontend-src/tests/catalysts-source-ui-contract.test.mjs` 的卡片渲染测试加了「未核验」徽标的断言。
+
+变异检查：去掉「被否定的事件不进补齐」，两项否定测试失败；恢复按版本匹配，「旧版本支持仍显示」失败。
+
+### 检查记录
+
+- 热点相关 14 个测试文件 719 项通过；完整后端 6,861 项通过、7 项跳过；`python -m compileall -q backend/app`、`git diff --check` 通过。
+- 前端：`tsc -p tsconfig.app.json --noEmit` 通过；lint 通过，只有 `pages/Breakouts.tsx` 两条既有警告；node 测试 1,293 项通过；产物断言通过。`VITE_API_MODE=live` 构建后同步到 `frontend/`，`diff -r frontend-src/dist frontend` 为空。本机 Node 是 24.6，CI 是 22.17，锁文件相同，以 CI 的字节闸门为准。
+- 浏览器面板用演示数据看过：卡片标题下显示「未核验」，各卡片底部对齐。
+
+### 未覆盖
+
+- 同一事件里来了更正或撤回报道时，下一轮核验之前仍显示旧的已核验标题。这是按事件编号沿用结论的代价。
+- 最新一轮的记录损坏、而它其实判了「有矛盾」时，事件会标「未核验」显示。
+- 生产目前关了定时分析（运行设置 `catalyst.scheduled_analysis_enabled=false`）。部署后条带先靠补齐显示，已核验条目要等恢复定时分析后的下一轮。
+- 首页研判（`backend/app/services/market_brief/evidence.py`）读同一个热点接口，现在也会拿到「未核验」的补齐条目，它的证据行不带核验字段。
+- 定时周期的启动条件（前 20 个热点的代表新闻全部分析完）没改。
+- 给热点类型和映射加上核验状态字段，卡片就不用靠 `verifiedAt` 推断。这要改 `api.ts` 和 `src/mocks/fixtures2.ts`，这次没做。

@@ -5972,9 +5972,17 @@ class LocalCatalystIntelligence:
         now: datetime | None = None,
         published_only: bool = False,
     ) -> dict[str, Any]:
-        """Strip items. ``published_only`` keeps prepared groups whose
-        representative news has a published analysis; verified items always
-        come from published results."""
+        """Strip items.
+
+        Without verification, ``published_only`` keeps prepared groups whose
+        representative news has a published analysis. With verification, the
+        newest round in the 72-hour window that covered an event decides, even
+        if the event has since gained a newer version (user decision,
+        2026-10-10). A supported verdict shows the round's checked Chinese copy
+        with the current group's metadata; a contradicted or unverifiable one
+        hides the event. Published groups without a readable verdict fill the
+        rest, marked unverified.
+        """
         if not self.focus_verification_enabled:
             return self._prepared_hotspots(
                 limit=limit,
@@ -5991,6 +5999,7 @@ class LocalCatalystIntelligence:
             publications = []
             current_bindings = {}
             trusted_coverage: set[str] = set()
+            candidate_ids: set[str] = set()
             if revision is not None:
                 current_bindings = self._hotspot_revision_bindings(connection, revision["prepared_revision"])
                 recent_cycles = connection.execute(
@@ -6013,15 +6022,23 @@ class LocalCatalystIntelligence:
                 # publications. Rank by original input coverage, before checking
                 # results: a corrupt newer rejection must occupy its event slot
                 # rather than disappearing and reviving an older positive.
-                publications = connection.execute(
-                    """WITH candidates AS (
-                           SELECT i.event_group_id,i.event_group_version,i.ordinal
+                # Coverage matches the event id only, so the newest round keeps
+                # deciding after the event gains a newer version (2026-10-10).
+                candidates_sql = """SELECT i.event_group_id,i.event_group_version,i.ordinal
                            FROM catalyst_local_hotspot_items i JOIN catalyst_local_event_groups g
                              ON g.event_group_id=i.event_group_id AND g.event_group_version=i.event_group_version
                            WHERE i.prepared_revision=? AND g.available_at<=?
                              AND g.last_published_at>=?
-                           ORDER BY i.ordinal LIMIT 100
-                       ), ranked AS (
+                           ORDER BY i.ordinal LIMIT 100"""
+                candidate_ids = {
+                    str(row["event_group_id"])
+                    for row in connection.execute(
+                        candidates_sql,
+                        (revision["prepared_revision"], cutoff, floor),
+                    )
+                }
+                publications = connection.execute(
+                    "WITH candidates AS (" + candidates_sql + """), ranked AS (
                            SELECT p.*,c.cycle_id AS covered_cycle_id,
                                   c.payload_json AS bound_payload_json,c.result_json AS bound_result_json,
                                   c.job_id AS bound_job_id,c.input_hash AS bound_input_hash,
@@ -6046,8 +6063,6 @@ class LocalCatalystIntelligence:
                                          '$.events') input_event
                                      WHERE json_extract(CASE WHEN input_event.type='object' THEN input_event.value ELSE '{}' END,
                                                         '$.event_group_id')=n.event_group_id
-                                       AND json_extract(CASE WHEN input_event.type='object' THEN input_event.value ELSE '{}' END,
-                                                        '$.event_group_version')=n.event_group_version
                                  )
                              )
                        ) SELECT * FROM ranked WHERE newest=1 ORDER BY ordinal""",
@@ -6060,7 +6075,14 @@ class LocalCatalystIntelligence:
         ) if publications else ({}, True)
         checked: dict[str, tuple[dict, dict, dict] | None] = {}
         original_revisions: dict[int, tuple[dict, list]] = {}
+        current_rows = (
+            self._hotspots_for_revision(revision["prepared_revision"], limit=100)[1]
+            if revision is not None
+            else []
+        )
+        current_by_id = {row["event_group_id"]: row for row in current_rows}
         items = []
+        rejected: set[str] = set()
         for publication in publications:
             cycle_id = publication["covered_cycle_id"]
             if cycle_id not in checked:
@@ -6135,19 +6157,46 @@ class LocalCatalystIntelligence:
                 except (KeyError, TypeError, ValueError):
                     continue
             accepted = checked[cycle_id]
-            key = (publication["candidate_id"], publication["candidate_version"])
             if accepted is None:
                 continue
             bindings, originals, projection = accepted
-            verdict = projection["verdicts"].get(key[0], {})
-            if (key not in originals or key not in current_bindings
-                    or bindings.get(key) != current_bindings[key]
-                    or verdict.get("event_group_version") != key[1] or verdict.get("verdict") != "supported"):
+            event_id = publication["candidate_id"]
+            verdict = projection["verdicts"].get(event_id, {})
+            if verdict.get("verdict") != "supported":
+                rejected.add(event_id)
                 continue
-            item = projection["items"].get(key[0])
-            if item is not None:
-                items.append({**item, "verified_at": projection["verified_at"],
-                              "verification_as_of": publication["snapshot_as_of"]})
+            # The verified version may be older than the current one. Its input
+            # must match the original row and both revisions must be intact;
+            # the current group supplies tickers, scores and sources.
+            verified_key = (event_id, verdict.get("event_group_version"))
+            current_key = (event_id, publication["candidate_version"])
+            item = projection["items"].get(event_id)
+            current = current_by_id.get(event_id)
+            if (item is None or current is None
+                    or verified_key not in originals or verified_key not in bindings
+                    or current_key not in current_bindings):
+                continue
+            items.append({
+                **{key: value for key, value in current.items() if not key.startswith("_")},
+                "representative_title": item["representative_title"],
+                "summary_zh": item["summary_zh"],
+                "status": "verified",
+                "verification_status": "verified",
+                "verified_at": projection["verified_at"],
+                "verification_as_of": publication["snapshot_as_of"],
+            })
+        shown = {item["event_group_id"] for item in items}
+        # Groups without a verdict from a readable newest round still show when
+        # their representative news has a published analysis, marked
+        # unverified. Only candidates had their verification state read.
+        items.extend(
+            {**row, "verification_status": "unverified"}
+            for row in current_rows
+            if row["event_group_id"] in candidate_ids
+            and row["event_group_id"] not in shown
+            and row["event_group_id"] not in rejected
+            and row["_analysis_published"] is True
+        )
         return {
             "status": "active" if items else "empty", "as_of": cutoff,
             "data_through": revision["data_through"] if revision else None,
