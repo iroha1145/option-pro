@@ -126,6 +126,9 @@ SCHEDULED_NEWS_WINDOW_HOURS = 72
 SCHEDULED_NEWS_MAX_ATTEMPTS = ai_runtime.SCHEDULED_MAX_ATTEMPTS
 SCHEDULED_FOCUS_MAX_ATTEMPTS = ai_runtime.SCHEDULED_MAX_ATTEMPTS
 SCHEDULED_FOCUS_EVENT_LIMIT = 20
+# A visitor's strip skips groups without a published analysis. It looks at
+# this many top-ranked groups, so untranslated leaders cannot fill the LIMIT.
+PUBLISHED_HOTSPOT_CANDIDATES = 200
 SCHEDULED_NEWS_RETRYABLE_ERRORS = ai_runtime.SCHEDULED_TRANSIENT_AI_ERRORS
 SCHEDULED_FOCUS_RETRYABLE_ERRORS = ai_runtime.SCHEDULED_TRANSIENT_AI_ERRORS
 MANUAL_REFRESH_CLAIM_TTL_SECONDS = 10 * 60
@@ -1116,6 +1119,32 @@ def _hotspot_plan_score_columns(connection: sqlite3.Connection) -> str:
         "NULL AS plan_component_scores_json,"
         "NULL AS plan_reasons_json"
     )
+
+
+# Title and summary from the published analysis of a group's representative
+# news: the newest link whose result was accepted under the current result
+# contract. Both texts passed the Chinese check with the full news context
+# when that result was accepted.
+_HOTSPOT_ANALYSIS_COPY_SQL = """(
+    SELECT json_object(
+               'title_zh', json_extract(link.result_json,'$.title_zh'),
+               'summary_zh', json_extract(link.result_json,'$.headline_summary')
+           )
+    FROM catalyst_local_analysis_links link
+    JOIN catalyst_local_analysis_result_audit audit
+      INDEXED BY idx_local_analysis_result_audit_job
+      ON audit.job_id=link.job_id
+     AND audit.contract_id=?
+     AND audit.outcome='accepted'
+     AND audit.result_json=link.result_json
+    WHERE link.news_id=g.representative_news_id
+      AND link.change_sequence=g.representative_change_sequence
+      AND link.content_hash=g.representative_content_hash
+      AND link.result_json IS NOT NULL
+      AND json_valid(link.result_json)
+    ORDER BY link.result_available_at DESC,link.created_at DESC,link.job_id DESC
+    LIMIT 1
+) AS representative_analysis_copy_json"""
 
 
 def _published_analysis(item: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -5936,9 +5965,22 @@ class LocalCatalystIntelligence:
         ) if key in payload}
         return _sha(document) == cycle["input_hash"]
 
-    def hotspots(self, *, limit: int, now: datetime | None = None) -> dict[str, Any]:
+    def hotspots(
+        self,
+        *,
+        limit: int,
+        now: datetime | None = None,
+        published_only: bool = False,
+    ) -> dict[str, Any]:
+        """Strip items. ``published_only`` keeps prepared groups whose
+        representative news has a published analysis; verified items always
+        come from published results."""
         if not self.focus_verification_enabled:
-            return self._prepared_hotspots(limit=limit, now=now)
+            return self._prepared_hotspots(
+                limit=limit,
+                now=now,
+                published_only=published_only,
+            )
         observed = now or _utc_now()
         cutoff, floor = _iso(observed), _iso(observed - timedelta(hours=72))
         with self._connect() as connection:
@@ -6112,8 +6154,22 @@ class LocalCatalystIntelligence:
             "items": items[:min(100, max(1, limit))], "warnings": [],
         }
 
-    def _prepared_hotspots(self, *, limit: int, now: datetime | None = None) -> dict[str, Any]:
+    def _prepared_hotspots(
+        self,
+        *,
+        limit: int,
+        now: datetime | None = None,
+        published_only: bool = False,
+    ) -> dict[str, Any]:
         observed = now or _utc_now()
+        # Filter before LIMIT so untranslated leaders cannot take every row.
+        # The scheduler reads without it: it queues analyses for those leaders.
+        # SQLite resolves the select-list alias in WHERE.
+        published_filter = (
+            "AND i.ordinal<=? AND representative_analysis_published"
+            if published_only
+            else ""
+        )
         with self._connect() as connection:
             revision = connection.execute(
                 """SELECT * FROM catalyst_local_hotspot_revisions
@@ -6149,7 +6205,8 @@ class LocalCatalystIntelligence:
                                     AND link.change_sequence=g.representative_change_sequence
                                     AND link.content_hash=g.representative_content_hash
                                     AND link.result_json IS NOT NULL
-                              ) AS representative_analysis_published
+                              ) AS representative_analysis_published,
+                              {_HOTSPOT_ANALYSIS_COPY_SQL}
                        FROM catalyst_local_hotspot_items i
                        JOIN catalyst_local_event_groups g
                          ON g.event_group_id=i.event_group_id
@@ -6159,11 +6216,18 @@ class LocalCatalystIntelligence:
                         AND r.change_sequence=g.representative_change_sequence
                         AND r.content_hash=g.representative_content_hash
                        WHERE i.prepared_revision=? AND g.available_at<=?
+                         {published_filter}
                        ORDER BY i.ordinal LIMIT ?""",
                     (
                         NEWS_RESULT_CONTRACT_ID,
+                        NEWS_RESULT_CONTRACT_ID,
                         revision["prepared_revision"],
                         _iso(observed),
+                        *(
+                            (PUBLISHED_HOTSPOT_CANDIDATES,)
+                            if published_only
+                            else ()
+                        ),
                         min(100, max(1, limit)),
                     ),
                 ).fetchall()
@@ -6272,6 +6336,10 @@ class LocalCatalystIntelligence:
                 "_analysis_published": bool(
                     row["representative_analysis_published"]
                 ),
+                "_analysis_copy": _loads(
+                    row["representative_analysis_copy_json"],
+                    None,
+                ),
             }
             for row in rows
         ]
@@ -6316,7 +6384,8 @@ class LocalCatalystIntelligence:
                                 AND link.change_sequence=g.representative_change_sequence
                                 AND link.content_hash=g.representative_content_hash
                                 AND link.result_json IS NOT NULL
-                          ) AS representative_analysis_published
+                          ) AS representative_analysis_published,
+                          {_HOTSPOT_ANALYSIS_COPY_SQL}
                    FROM catalyst_local_hotspot_items i
                    JOIN catalyst_local_event_groups g
                      ON g.event_group_id=i.event_group_id
@@ -6328,6 +6397,7 @@ class LocalCatalystIntelligence:
                    WHERE i.prepared_revision=?
                    ORDER BY i.ordinal LIMIT ?""",
                 (
+                    NEWS_RESULT_CONTRACT_ID,
                     NEWS_RESULT_CONTRACT_ID,
                     revision,
                     min(100, max(1, limit)),

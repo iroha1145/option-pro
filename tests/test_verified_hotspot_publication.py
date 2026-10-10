@@ -50,7 +50,8 @@ def verified_stack(tmp_path, monkeypatch):
     return etl, ai, intelligence, revision, clock
 
 
-def complete_verified(ai, cycle, *, verdicts=None, evidence_missing=False, claimed_owner=None, null_ids=False):
+def complete_verified(ai, cycle, *, verdicts=None, evidence_missing=False, claimed_owner=None, null_ids=False,
+                      supported_copy=("新产品发布", "公司发布新产品，交付进展仍需观察。")):
     row = ai.get_job(cycle["job_id"])
     payload = json.loads(row["payload_json"])
     _, result, _ = verified_payload_result()
@@ -69,8 +70,8 @@ def complete_verified(ai, cycle, *, verdicts=None, evidence_missing=False, claim
         result["event_verifications"].append({
             "event_group_id": event["event_group_id"], "event_group_version": event["event_group_version"],
             "verdict": verdict, "evidence_refs": refs,
-            "title_zh": "新产品发布" if verdict == "supported" else "虚假并购",
-            "summary_zh": "公司发布新产品，交付进展仍需观察。" if verdict == "supported" else "虚假并购消息已被否认。",
+            "title_zh": supported_copy[0] if verdict == "supported" else "虚假并购",
+            "summary_zh": supported_copy[1] if verdict == "supported" else "虚假并购消息已被否认。",
             "affected_sectors": ["半导体"] if verdict == "supported" else ["虚假行业"],
         })
     result = validate_result("market_focus", json.dumps(result), payload)

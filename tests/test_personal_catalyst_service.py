@@ -185,7 +185,7 @@ class FakeIntelligence:
             "manual_enabled": True,
         }
 
-    def hotspots(self, *, limit, now=None):
+    def hotspots(self, *, limit, now=None, published_only=False):
         return {
             "status": "ok",
             "items": [
@@ -566,7 +566,7 @@ def test_deleted_news_and_untranslated_hotspots_stay_hidden() -> None:
 def test_hidden_hotspots_change_an_active_payload_to_empty() -> None:
     engine = FakeIntelligence()
 
-    def hotspots(*, limit, now=None):
+    def hotspots(*, limit, now=None, published_only=False):
         return {
             "status": "active",
             "items": [
@@ -589,7 +589,7 @@ def test_hotspot_projection_scans_past_untranslated_leaders_before_limiting() ->
     engine = FakeIntelligence()
     requested_limits: list[int] = []
 
-    def hotspots(*, limit, now=None):
+    def hotspots(*, limit, now=None, published_only=False):
         requested_limits.append(limit)
         return {
             "status": "active",
@@ -625,7 +625,7 @@ def test_hotspot_projection_scans_past_untranslated_leaders_before_limiting() ->
 def test_source_bound_names_remain_visible_in_hotspots_without_english_leaks() -> None:
     engine = FakeIntelligence()
 
-    def hotspots(*, limit, now=None):
+    def hotspots(*, limit, now=None, published_only=False):
         return {
             "status": "ok",
             "items": [
