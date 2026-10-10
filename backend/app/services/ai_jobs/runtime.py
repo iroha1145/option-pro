@@ -1482,6 +1482,19 @@ _PAREN_SOURCE_DOMAINS = re.compile(
     rf"(?P<hosts>{_HOSTNAME}(?:[ \t]*[、,，;；][ \t]*{_HOSTNAME})*)"
     r"[ \t]*(?P<close>[）)])[ \t]*"
 )
+# 2026-10-10 第三轮（用户的宽松口径）：Luna 新闻正文里的 Markdown 引用和带协议的
+# 网址一律剥掉，不再要求它是回执里联网取回的来源；evidence_sources 原样留在回执
+# 里给 owner 视图。括号外的链接留下标签文字，标签本身是网站域名的整段去掉。
+_BARE_URL = re.compile(r"https?://[^\s()（）<>\[\]，。；、！？“”「」\"']+", re.IGNORECASE)
+_HOSTNAME_LABEL = re.compile(_HOSTNAME)
+# 剥掉引用后留下的空括号、悬空的「来源：」、标点前的空格和重复标点。
+_CITATION_RESIDUE = (
+    (re.compile(r"[（(][ \t]*[）)]"), ""),
+    (re.compile(r"(?:资料来源|来源|参见|详见)[：:][ \t]*(?=[。；;，,）)]|$)"), ""),
+    (re.compile(r"[ \t]+(?=[。！？；，、：）)!?;,:]|$)"), ""),
+    (re.compile(r"[，、；：,;:]+[ \t]*([。！？!?])"), r"\1"),
+    (re.compile(r"([。！？；，、])[ \t]*\1+"), r"\1"),
+)
 _NEWS_NARRATIVE_FIELDS = (
     "title_zh",
     "summary_zh",
@@ -1583,55 +1596,34 @@ def _normalize_luna_news_citations(
         if not isinstance(value, str):
             return value
 
-        def paired(match: re.Match[str]) -> bool:
-            return (match.group("open"), match.group("close")) in {
-                ("(", ")"),
-                ("（", "）"),
-            }
-
-        def standalone(match: re.Match[str]) -> str:
-            url = match.group("url")
-            bound = _citation_url_key(url) in trusted_keys
-            # Luna 的标签是可注册域名：「[sec.gov](https://www.sec.gov/…)」。
-            # 按点号边界比对主机名，标签与链接指向同一网站才算来源标注。
-            host = (urlsplit(url).hostname or "").casefold()
-            label = match.group("label").strip().casefold()
-            domain_label = "." in label and (host == label or host.endswith("." + label))
-            return "" if bound and paired(match) and domain_label else match.group(0)
-
-        def bare(match: re.Match[str]) -> str:
-            bound = _citation_url_key(match.group("url")) in trusted_keys
-            return "" if bound and paired(match) else match.group(0)
+        def link(match: re.Match[str]) -> str:
+            label = match.group("label").strip()
+            return "" if _HOSTNAME_LABEL.fullmatch(label.casefold()) else label
 
         def domains(match: re.Match[str]) -> str:
-            # Only the sites this response actually retrieved; any other
-            # bracketed domain stays in the text for the language gate.
+            # 只写域名、不带协议的括号标注不是网址：只去掉本次联网取回过的网站，
+            # 其余留给中文校验拒绝。
             labels = re.split(r"[ \t]*[、,，;；][ \t]*", match.group("hosts"))
             bound = all(
                 any(host == label or host.endswith("." + label) for host in trusted_hosts)
                 for label in labels
             )
-            return "" if bound and paired(match) else match.group(0)
+            paired = (match.group("open"), match.group("close")) in {("(", ")"), ("（", "）")}
+            return "" if bound and paired else match.group(0)
 
-        def link(match: re.Match[str]) -> str:
-            return (
-                match.group("label")
-                if _citation_url_key(match.group("url")) in trusted_keys
-                else match.group(0)
-            )
-
-        normalized = _PAREN_SOURCE_DOMAINS.sub(
-            domains,
+        stripped = _BARE_URL.sub(
+            "",
             _PAREN_BARE_URL.sub(
-                bare,
-                _MARKDOWN_SOURCE_LINK.sub(link, _PAREN_SOURCE_LINK.sub(standalone, value)),
+                "",
+                _MARKDOWN_SOURCE_LINK.sub(link, _PAREN_SOURCE_LINK.sub("", value)),
             ),
         )
-        if re.search(r"https?://", normalized, re.IGNORECASE):
-            # Leave unknown and unsupported URLs in the original receipt and
-            # reject this result; never erase unverified evidence to pass Chinese.
-            raise ValueError("ai_news_unbound_or_unhandled_url")
-        return normalized
+        normalized = _PAREN_SOURCE_DOMAINS.sub(domains, stripped)
+        if normalized == value:
+            return value
+        for pattern, replacement in _CITATION_RESIDUE:
+            normalized = pattern.sub(replacement, normalized)
+        return normalized.strip()
 
     for name in _NEWS_NARRATIVE_FIELDS:
         if name in data:

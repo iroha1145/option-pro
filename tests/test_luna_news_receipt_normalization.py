@@ -140,11 +140,13 @@ def test_cited_successful_sources_are_selected_before_ten_source_limit():
         ISSUER + "#different-section",
     ],
 )
-def test_tracking_match_never_erases_business_url_identity(unbound):
+def test_unbound_links_are_stripped_and_the_receipt_is_untouched(unbound):
+    # 2026-10-10 第三轮：链接不论是否对得上回执来源都剥掉，标签文字留下（原先报
+    # ai_news_unbound_or_unhandled_url）。回执原样不动。
     captured = receipt(news(summary_zh=f"公司公布新安排。[公司公告]({unbound})"))
     original = deepcopy(captured)
-    with pytest.raises(ValueError, match="ai_news_unbound_or_unhandled_url"):
-        runtime.receipt_result(captured, "news_impact", payload())
+    result = runtime.receipt_result(captured, "news_impact", payload())
+    assert result["summary_zh"] == "公司公布新安排。公司公告"
     assert captured == original
 
 
@@ -166,8 +168,9 @@ def test_unknown_urls_annotations_and_failed_calls_cannot_authenticate_text():
     )
     captured = runtime.openai_receipt(output)
     assert invented not in [source["url"] for source in captured["evidence_sources"]]
-    with pytest.raises(ValueError, match="ai_news_unbound_or_unhandled_url"):
-        runtime.receipt_result(captured, "news_impact", payload())
+    # 2026-10-10 第三轮：正文里的引用照样剥掉，但它进不了回执来源（原先报
+    # ai_news_unbound_or_unhandled_url）。
+    assert runtime.receipt_result(captured, "news_impact", payload())["summary_zh"] == "公司公布新安排。"
     captured["evidence_sources"].append(
         dict(url=invented, title="捏造来源", type="web_search")
     )

@@ -5,6 +5,7 @@ import json
 import http.client
 import socket
 import time
+from pathlib import Path
 
 import pytest
 
@@ -74,6 +75,26 @@ def test_rejects_paywalls_challenges_and_non_articles(monkeypatch, payload):
 def test_rejects_unrelated_title(monkeypatch):
     serve(monkeypatch, page())
     assert article.fetch_article("https://example.com", expected_title="Federal reserve announces interest rate decision")["status"] == "unavailable"
+
+
+ZACKS_INTERSTITIAL = (Path(__file__).parent / "fixtures" / "article_pages" / "zacks_imperva_interstitial.html").read_bytes()
+
+
+@pytest.mark.parametrize("payload", [
+    # Served with HTTP 200. Its <title> sits inside <head><noscript>, so the
+    # visible h1 is the only page title the extractor can see.
+    ZACKS_INTERSTITIAL,
+    b"<title>Pardon Our Interruption</title><article><p>" + BODY.encode() + b"</p></article>",
+], ids=["zacks_noscript_title", "head_title"])
+def test_imperva_interstitial_is_reported_as_challenge_page(monkeypatch, payload):
+    serve(monkeypatch, payload)
+    result = article.fetch_article(
+        "https://www.zacks.com/stock/news/3003853/cancer-stocks-to-consider-as-oncology-innovation-accelerates",
+        expected_title="Cancer Stocks to Consider as Oncology Innovation Accelerates",
+    )
+    assert result["status"] == "unavailable"
+    assert result["reason"] == "challenge_page"
+    assert result["text"] == ""
 
 
 def test_truncates_long_body(monkeypatch):

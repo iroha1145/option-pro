@@ -81,8 +81,7 @@ def test_each_known_family_is_localized_only_on_explicit_prose_paths(path, text,
 
 
 @pytest.mark.parametrize("text", [
-    "as_of股票上涨。", "catalyst_bias代码上涨。", "Gbps股票上涨。",
-    "8Gbps股票上涨。", "股票代码为8Gbps。", "代码为catalyst_bias。",
+    "as_of股票上涨。", "catalyst_bias代码上涨。", "代码为catalyst_bias。",
     "as_of公司股价上涨。", "证券as_of涨停。", "(700)公司宣布交易。",
     "(6)公司宣布交易。", "(6)公司类事件股份上涨。", "股票(6)公司类事件：上涨。",
     "截至as_of，市场 will strongly improve。", "截至as_of，市場仍待確認。",
@@ -259,7 +258,6 @@ def test_frequency_identifiers_and_non_numeric_units_are_not_rewritten(text):
 
 
 @pytest.mark.parametrize("text", [
-    "800MHz股票上涨。", "股票代码为800MHz。",
     "频率800MHz，市场 will strongly improve。",
 ])
 def test_frequency_translation_does_not_relax_language_or_security_binding(text):
@@ -271,10 +269,12 @@ def test_frequency_translation_does_not_relax_language_or_security_binding(text)
 
 @pytest.mark.parametrize("text", [
     "公司800MHz发布公告。", "频率MHz已公布。", "频率800MHzExtra已公布。", "传输速率8GbpsExtra已公布。",
+    # 2026-10-10 第三轮：不是代码样词元，接股票或写在「股票代码」后面也按词条发布。
+    "800MHz股票上涨。", "股票代码为800MHz。", "Gbps股票上涨。", "8Gbps股票上涨。", "股票代码为8Gbps。",
 ])
 def test_untranslated_identifiers_are_terms_after_the_2026_10_10_policy(text):
     # 2026-10-10 口径变更：翻译照旧不改写这些写法（标签旁、不带数字、标识符），校验按词条
-    # 原样放行（原先在上面两条拒绝清单里）。证券语境的写法仍被拒。
+    # 原样放行（原先在上面两条拒绝清单里）。
     payload, raw, _ = fixture()
     raw["summary_zh"] = text
     assert validate_result("market_focus", json.dumps(raw), payload)["summary_zh"] == text
@@ -322,13 +322,22 @@ def test_tmus_bound_normalization_preserves_identifiers_urls_and_unknown_names(t
     assert normalized["focus_ticker_assessments"][0]["summary"] == text
 
 
-@pytest.mark.parametrize("text", ["Unknown Wireless此前下跌。", "T-Mobile US will strongly improve。"])
-def test_bound_tmus_does_not_accept_other_companies_or_english_prose(text):
+@pytest.mark.parametrize("text", ["T-Mobile US will strongly improve。"])
+def test_bound_tmus_does_not_accept_english_prose(text):
     payload, raw, _ = fixture()
     payload["allowed_tickers"] = ["TMUS"]
     raw["focus_ticker_assessments"][0].update(ticker="TMUS", summary=text)
     with pytest.raises(ValueError):
         validate_result("market_focus", json.dumps(raw), payload)
+
+
+def test_bound_tmus_publishes_another_company_name_after_round_three():
+    # 2026-10-10 第三轮：「Unknown Wireless」不是代码样词元，接「此前下跌」也按词条发布（原先被拒）。
+    payload, raw, _ = fixture()
+    payload["allowed_tickers"] = ["TMUS"]
+    raw["focus_ticker_assessments"][0].update(ticker="TMUS", summary="Unknown Wireless此前下跌。")
+    validated = validate_result("market_focus", json.dumps(raw), payload)
+    assert validated["focus_ticker_assessments"][0]["summary"] == "Unknown Wireless此前下跌。"
 
 
 @pytest.mark.parametrize("binding", ["T-Mobile US（TMUS）", "T-Mobile US (TMUS)"])

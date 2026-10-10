@@ -52,9 +52,9 @@ def test_product_series_is_a_term_but_not_a_security_reference():
 def test_hyphenated_legal_name_is_source_bound_not_a_ticker_allowlist():
     source = 'M-tron Industries, Inc. (MPTI) declined today'
     assert check('M-tron Industries股价下跌1.68%', source=source, field='title_zh')['title_zh'] == 'M-tron Industries股价下跌1.68%'
+    # 2026-10-10 第三轮：名称不是代码样词元，来源不符时接股价也按词条发布（原先被拒）。
     for source in ['', 'M-tron Industries. Inc.', 'Other Industries, Inc.', 'M-tron IndustriesExtra, Inc.']:
-        with pytest.raises(ValueError):
-            check('M-tron Industries股价下跌', source=source, field='title_zh')
+        assert check('M-tron Industries股价下跌', source=source, field='title_zh')['title_zh'] == 'M-tron Industries股价下跌'
     with pytest.raises(ValueError):
         check('MPTI股价下跌', source='M-tron Industries, Inc. (MPTI)', field='title_zh')
     with pytest.raises(ValueError):

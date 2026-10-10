@@ -209,12 +209,16 @@ def test_s2_it_phrases_still_pass(text):
     [
         "F>12美元后福特汽车加速上涨。",
         "福特汽车F<10美元后买盘涌入。",
-        "当x<5时信号失效。",
     ],
 )
-def test_s3_ticker_letters_and_other_symbols_take_no_comparison_exemption(text):
+def test_s3_ticker_letters_take_no_comparison_exemption(text):
     with pytest.raises(ValueError):
         _news_field(text)
+
+
+def test_s3_a_lower_case_variable_is_a_term_after_round_three():
+    # 2026-10-10 第三轮：小写的「x」不是代码样词元，接比较号也按词条发布（原先在上面的清单里）。
+    assert _news_field("当x<5时信号失效。") == "当x<5时信号失效。"
 
 
 @pytest.mark.parametrize(
