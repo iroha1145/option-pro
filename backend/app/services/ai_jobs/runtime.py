@@ -39,9 +39,9 @@ LUNA_ALWAYS_WEB_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "719aed2113e2b6ab0f0834
 LUNA_THREE_CALL_WEB_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "cda8f76d5306ceaeb712f52e3b1b1a85dfa49aae5e640d4ab24009cf22092308")
 # 现行 Luna 新闻身份按载荷分三种：缺正文且摘要不够长时联网（最多 1 次）；有正文时
 # 不联网；缺正文但来源摘要够长时只按摘要分析、不联网。
-LUNA_WEB_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "135ee2bf6c3460581e209ae15caf8c6a1479362d0290d3e86bfff1a1a84fa1fc")
-LUNA_ARTICLE_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "e64f425270938c5aed9f470d1cb59d34f4d4da99e941d6063f805bc8c61c7ca3")
-LUNA_SUMMARY_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "b13ab0647d03e8cf295f15691f793532a4617724549dddfab8f158ec80bee796")
+LUNA_WEB_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "ba9de050d017c065e8e081b4b12bd77519d5c26d358b761d6c5a8d2a7d91a1bb")
+LUNA_ARTICLE_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "39bf385d759974f7044e4a4d5247d6bcf6185154140a77c25caa9ca1288ee9bf")
+LUNA_SUMMARY_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "1df1e491ca840be82031d28c9e062d11b0d1971de41e573071495a132579b1aa")
 # Luna 新闻请求的三种形态，顺序无意义。
 LUNA_NEWS_MODES = ("search", "article", "summary")
 # 联网任务的内置工具调用（搜索、打开网页、页内查找）合计上限。
@@ -49,9 +49,9 @@ LUNA_MAX_TOOL_CALLS = 1
 # 缺正文时，来源摘要去掉 HTML 标签、连续空白合并成一个空格、去掉首尾空白后至少
 # 这么多个字符，就只按摘要分析。口径与取证时按原始长度统计的一致。
 NEWS_SUMMARY_AS_BODY_MIN_CHARS = 300
-TERRA_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "e2f660481a77543a7a020798cea014e6c8b8298b78a0f89d3e7e507046fc6c2e")
+TERRA_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "30c26c36cb63ca57b052305a8ffeb29f10c175d6be018dccf96fba582604777e")
 LEGACY_OPENAI_EARNINGS_IDENTITY = ("earnings_impact_zh_cn_v5", "efcf4a6d24e87c8bfcb8620183338d7ddd927a8df9290b1a8ee7f601a05e9265")
-OPENAI_EARNINGS_IDENTITY = ("earnings_impact_zh_cn_v5", "07071987fa5fc17daaa8c6b0d23cc750afb8bc096277398dca261a2c6d046742")
+OPENAI_EARNINGS_IDENTITY = ("earnings_impact_zh_cn_v5", "7629904ec17593e0a889bc2285d6a2c86dd3789d282d0d405256cdf959d14ee5")
 SONNET_MODEL = "claude-sonnet-5-5"
 # OpenAI remains available for already-paid responses and explicit rollback.
 # New personal installations use Claude; the persisted job model chooses the
@@ -187,28 +187,85 @@ NEWS_CONTENT_SCHEMA_IDENTITY = (
 LEGACY_FOCUS_CLAUDE_IDENTITY = ("market_focus_zh_cn_v5", "25bf4cbeabb2012319dce8e8487a6dc72fd0035c27b09694b12cff92b0ac53cc")
 LEGACY_FOCUS_OPENAI_IDENTITY = ("market_focus_zh_cn_v5", "6c3d008c66678f7729b5f69afcaa011597376fc7025431e2fd8a1afd67509d39")
 LEGACY_VERIFIED_FOCUS_IDENTITY = ("market_focus_verified_zh_cn_v1", "0fb6fd7a1481f1da7a9b369b626e1736828b5ba0e934824f7a905c22646e8495")
-FOCUS_CLAUDE_IDENTITY = ("market_focus_zh_cn_v6", "e95c0b1b35cc10087760a99391f1ea9e7d7dd7730290110eff414016a0a069a2")
-FOCUS_OPENAI_IDENTITY = ("market_focus_zh_cn_v6", "6fefeec2b2b09a751e0c341911741a503d1a507385d611c4afa689a4cf405cd3")
-VERIFIED_FOCUS_IDENTITY = ("market_focus_verified_zh_cn_v2", "aae4f97495d407b14dfbb685ca2b5d8cc82c70f8bfb4eae8938cec719d8e696d")
+FOCUS_CLAUDE_IDENTITY = ("market_focus_zh_cn_v6", "4a69535636e8223ac878a787ea97e95392128d0b3285a2324e2cc79f354de2e5")
+FOCUS_OPENAI_IDENTITY = ("market_focus_zh_cn_v6", "df2a0baa5563c588f12f3d9f0b71fb76b0e48f0928ccaf02802750003eed2263")
+VERIFIED_FOCUS_IDENTITY = ("market_focus_verified_zh_cn_v2", "7c73f1d157c525dd92dad655023757cb16d30d033cd9b853874e89a7089a0ad7")
 # 2026-10-10 的资源策略变化（OpenAI 新闻与财报输出上限 32,768→65,536，Luna
 # 联网改为只在缺正文时启用；之后联网上限 3 次改 1 次，摘要够长时不联网）没有
 # 改结果结构。只按「确切的现行身份 → 上一版身份」放行：待处理任务按现行策略
 # 提交，已完成结果照常可读；策略再变时现行身份不再等于这里的键，旧任务照常判
 # runtime_configuration_changed。3 次联网身份的待处理任务没有正文，按载荷落到
 # 联网或摘要两种现行形态之一，所以它是这两者的上一版。
+# 校验v5只放宽中文正文词条，不改变请求结构或资源策略。纳入每个模型/任务的
+# 确切v4身份及此前已允许的前代，避免旧已发布结果隐藏或待处理任务重新付费。
 _IDENTITY_PREDECESSORS: dict[tuple[str, str], frozenset[tuple[str, str]]] = {
-    TERRA_NEWS_IDENTITY: frozenset({NEWS_CONTENT_SCHEMA_IDENTITY}),
     LUNA_WEB_NEWS_IDENTITY: frozenset({
-        LUNA_THREE_CALL_WEB_NEWS_IDENTITY, LUNA_ALWAYS_WEB_NEWS_IDENTITY, LEGACY_LUNA_NEWS_IDENTITY,
+        ('news_impact_zh_cn_v6', '135ee2bf6c3460581e209ae15caf8c6a1479362d0290d3e86bfff1a1a84fa1fc'),
+        LUNA_ALWAYS_WEB_NEWS_IDENTITY,
+        LUNA_THREE_CALL_WEB_NEWS_IDENTITY,
+        NEWS_CONTENT_SCHEMA_IDENTITY,
     }),
-    LUNA_ARTICLE_NEWS_IDENTITY: frozenset({LUNA_ALWAYS_WEB_NEWS_IDENTITY, LEGACY_LUNA_NEWS_IDENTITY}),
+    LUNA_ARTICLE_NEWS_IDENTITY: frozenset({
+        LUNA_ALWAYS_WEB_NEWS_IDENTITY,
+        NEWS_CONTENT_SCHEMA_IDENTITY,
+        ('news_impact_zh_cn_v6', 'e64f425270938c5aed9f470d1cb59d34f4d4da99e941d6063f805bc8c61c7ca3'),
+    }),
     LUNA_SUMMARY_NEWS_IDENTITY: frozenset({
-        LUNA_THREE_CALL_WEB_NEWS_IDENTITY, LUNA_ALWAYS_WEB_NEWS_IDENTITY, LEGACY_LUNA_NEWS_IDENTITY,
+        LUNA_ALWAYS_WEB_NEWS_IDENTITY,
+        ('news_impact_zh_cn_v6', 'b13ab0647d03e8cf295f15691f793532a4617724549dddfab8f158ec80bee796'),
+        LUNA_THREE_CALL_WEB_NEWS_IDENTITY,
+        NEWS_CONTENT_SCHEMA_IDENTITY,
     }),
-    OPENAI_EARNINGS_IDENTITY: frozenset({LEGACY_OPENAI_EARNINGS_IDENTITY}),
-    FOCUS_CLAUDE_IDENTITY: frozenset({LEGACY_FOCUS_CLAUDE_IDENTITY}),
-    FOCUS_OPENAI_IDENTITY: frozenset({LEGACY_FOCUS_OPENAI_IDENTITY}),
-    VERIFIED_FOCUS_IDENTITY: frozenset({LEGACY_VERIFIED_FOCUS_IDENTITY}),
+    OPENAI_EARNINGS_IDENTITY: frozenset({
+        ('earnings_impact_zh_cn_v5', '07071987fa5fc17daaa8c6b0d23cc750afb8bc096277398dca261a2c6d046742'),
+        LEGACY_OPENAI_EARNINGS_IDENTITY,
+    }),
+    ('earnings_impact_zh_cn_v5', '7deae1568dfb5d48efd1b179a1d5c9ed97d072932cd93794e1667d4d6403ccb3'): frozenset({
+        ('earnings_impact_zh_cn_v5', '9a42103185d035a9a3c5fb58d075b81dda8dcc3e7bd68972f1b907ba6698ecf9'),
+    }),
+    ('earnings_impact_zh_cn_v5', '0f3be8aaf0c34f41754162edd662ceb65b12553ab196f48211ab60e545d5bc1c'): frozenset({
+        ('earnings_impact_zh_cn_v5', 'ab90412bf98abbc56581f04d899b41e1b4a1d61385668f6f04d96b94e60a13cc'),
+    }),
+    ('option_alerts_zh_cn_v4', '6a66f413e286a1c57024750418ffcf2ca11acc60fef07888518f159b1fb50a74'): frozenset({
+        ('option_alerts_zh_cn_v4', '24e832d8625a5298abfbc29f7bf839bcd17c66f9b307723b036ceeae50a3ab6f'),
+    }),
+    ('option_alerts_zh_cn_v4', '5d8a692c58c534fa97c8897f39f43df617add1d3f9161518dec76dce8ef526bc'): frozenset({
+        ('option_alerts_zh_cn_v4', '2817085fe7f12590b30e2b0a5631952dda6ff31216b5a7468ec237af39efcdcd'),
+    }),
+    ('option_alerts_zh_cn_v4', 'c0809a8247f90370d0903f98cb34494c1fb4937adb308f2eba0edf6db2084b5b'): frozenset({
+        ('option_alerts_zh_cn_v4', 'f644ebd4c96009506842f312ae6663ba38e5f57132761e6e71a392ee3e23dcfe'),
+    }),
+    ('signal_analysis_zh_cn_v5', 'ef82b8da3055dc3b570ba90f4d7c028332f99f696e4aeb2d9bf91ecf0d3f8e5c'): frozenset({
+        ('signal_analysis_zh_cn_v5', '2574c44d0eb91112ff8118014dfeba2db028e3b4dd9c47771d245763e9cdc233'),
+    }),
+    ('signal_analysis_zh_cn_v5', '393310a4d34a4b9b457c9047b741d7e2ad274259d48f9eb7213a61f7df85d984'): frozenset({
+        ('signal_analysis_zh_cn_v5', 'c96f6a0c9cc838df1a72a687983f31526cd0bdfb6155ff3d58e79d287387c18c'),
+    }),
+    ('signal_analysis_zh_cn_v5', 'ab3cd243b820ae14ab50eabc750d9f3319118b0dd1487fb604038d221e1d05ad'): frozenset({
+        ('signal_analysis_zh_cn_v5', '48fb0e8649af04b2f9f860fa818d6432ac8a22ac07f8f373b9ee1bb6aaf2f453'),
+    }),
+    TERRA_NEWS_IDENTITY: frozenset({
+        NEWS_CONTENT_SCHEMA_IDENTITY,
+        ('news_impact_zh_cn_v6', 'e2f660481a77543a7a020798cea014e6c8b8298b78a0f89d3e7e507046fc6c2e'),
+    }),
+    ('news_impact_zh_cn_v6', '5af4f57aab99b266b88abec9b93ce1181f73a1d2322d519f09e0906c0cf2c916'): frozenset({
+        ('news_impact_zh_cn_v6', '68b3095ba0f47e559a5a7edd3daf6b091350546961ce398368684143bbb76a4a'),
+    }),
+    ('news_impact_zh_cn_v6', 'dd630f1f8eda470551af753dcda196c161e49aa0455c330c8622bf1395eb9b3e'): frozenset({
+        ('news_impact_zh_cn_v6', 'e4e3a8f651ab661158cc643a9449e8cef0d76417601c76d57027348e4b733ea2'),
+    }),
+    FOCUS_OPENAI_IDENTITY: frozenset({
+        LEGACY_FOCUS_OPENAI_IDENTITY,
+        ('market_focus_zh_cn_v6', '6fefeec2b2b09a751e0c341911741a503d1a507385d611c4afa689a4cf405cd3'),
+    }),
+    FOCUS_CLAUDE_IDENTITY: frozenset({
+        LEGACY_FOCUS_CLAUDE_IDENTITY,
+        ('market_focus_zh_cn_v6', 'e95c0b1b35cc10087760a99391f1ea9e7d7dd7730290110eff414016a0a069a2'),
+    }),
+    VERIFIED_FOCUS_IDENTITY: frozenset({
+        LEGACY_VERIFIED_FOCUS_IDENTITY,
+        ('market_focus_verified_zh_cn_v2', 'aae4f97495d407b14dfbb685ca2b5d8cc82c70f8bfb4eae8938cec719d8e696d'),
+    }),
 }
 # Failures a scheduler may retry on its own, at most SCHEDULED_MAX_ATTEMPTS
 # executions per item. Anything else (schema or binding failures, oversized

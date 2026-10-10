@@ -1,8 +1,8 @@
 """Counterexamples from the independent review of the 2026-10-10 AI fixes.
 
-Each case below was accepted by the code under review and must be rejected
-(or translated) now; the positive cases are the production sentences those
-fixes were made for.
+The production examples remain exercised under v5: ordinary prose names
+and abbreviations publish, while source formatting, structure and identity
+checks keep their assertions.
 """
 
 from __future__ import annotations
@@ -42,11 +42,9 @@ def owner_context():
         "盘前TSLA+3.5%。",
     ],
 )
-def test_b1_a_ticker_followed_by_a_percentage_move_still_needs_binding(text):
-    with pytest.raises(ValueError):
-        _news_field(text)
-    with pytest.raises(ValueError):
-        _focus_field(text, field="summary_zh")
+def test_b1_prose_codes_next_to_percentage_moves_are_published(text):
+    assert _news_field(text) == text
+    assert _focus_field(text, field="summary_zh") == text
 
 
 @pytest.mark.parametrize(
@@ -80,11 +78,9 @@ def test_b1_named_benchmarks_keep_their_spread_notation(text):
         "股票600519万股成交。",
     ],
 )
-def test_b2_unbound_numeric_codes_are_not_quantities(text):
-    with pytest.raises(ValueError, match="unbound_numeric_security_code"):
-        _focus_field(text, field="summary_zh")
-    with pytest.raises(ValueError, match="unbound_numeric_security_code"):
-        _news_field(text)
+def test_b2_numbers_without_explicit_code_labels_are_published(text):
+    assert _news_field(text) == text
+    assert _focus_field(text, field="summary_zh") == text
 
 
 @pytest.mark.parametrize(
@@ -188,9 +184,8 @@ def test_bracketed_hosts_that_are_not_retrieved_sites_are_rejected_not_deleted(t
         "股票600519大涨。",
     ],
 )
-def test_s2_it_outside_its_phrases_needs_binding(text):
-    with pytest.raises(ValueError):
-        _news_field(text)
+def test_s2_it_in_prose_does_not_guess_structured_identity(text):
+    assert _news_field(text) == text
 
 
 @pytest.mark.parametrize(
@@ -211,9 +206,8 @@ def test_s2_it_phrases_still_pass(text):
         "福特汽车F<10美元后买盘涌入。",
     ],
 )
-def test_s3_ticker_letters_take_no_comparison_exemption(text):
-    with pytest.raises(ValueError):
-        _news_field(text)
+def test_s3_prose_letters_next_to_prices_are_published(text):
+    assert _news_field(text) == text
 
 
 def test_s3_a_lower_case_variable_is_a_term_after_round_three():

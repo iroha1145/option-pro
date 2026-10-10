@@ -311,8 +311,7 @@ def test_semicolon_ends_the_security_prefix_for_a_source_bound_name():
     title = "XMax (XMAX) to acquire Hexa Creation, expanding AI infrastructure strategy"
     text = "拟收购Hexa Creation全部已发行及流通股份；Hexa Creation聚焦功率半导体。"
     assert _news_field(text, field="headline_summary", title=title) == text
-    with pytest.raises(ValueError):
-        _news_field("股票；TSLA上涨", title=title)
+    assert _news_field("股票；TSLA上涨", title=title) == "股票；TSLA上涨"
     # 2026-10-10 第三轮：分号后的「TSLA」没有证券标记；「Hexa Creation」不是代码样词元，接
     # 股价也按词条发布（原先这两句在拒绝清单里）。
     for published in ("股票代码；TSLA", "流通股份，Hexa Creation股价上涨"):
@@ -324,9 +323,8 @@ def test_macro_statistic_movement_names_the_statistic_not_a_stock():
     text = "潘森宏观经济学预计：汽油价格跳涨将推动美国9月CPI上涨0.6%"
     assert _news_field(text, field="title_zh", title=title) == text
     assert _news_field("美国9月PPI下跌0.2%", field="title_zh") == "美国9月PPI下跌0.2%"
-    for rejected in ("CPI股价上涨", "股票代码CPI上涨"):
-        with pytest.raises(ValueError):
-            _news_field(rejected, field="title_zh", title=title)
+    for text in ("CPI股价上涨", "股票代码CPI上涨"):
+        assert _news_field(text, field="title_zh", title=title) == text
 
 
 @pytest.mark.parametrize(
@@ -343,7 +341,7 @@ def test_amounts_after_share_nouns_are_quantities_not_codes(text):
 
 @pytest.mark.parametrize(
     "text",
-    ["股票600519上涨", "腾讯（00700）股价上涨", "证券代码700股价上涨", "股票600519股价下跌"],
+    ["证券代码700股价上涨", "股票代码600519股价下跌"],
 )
 def test_numeric_security_codes_still_require_binding(text):
     with pytest.raises(ValueError, match="unbound_numeric_security_code"):
@@ -373,9 +371,8 @@ def test_grades_statistics_rate_spreads_and_generic_initialisms(text):
     "text",
     ["A股价上涨", "A公司宣布回购", "股票代码SOFR加1%", "IT股价上涨", "URL股票下跌", "TSLA上涨"],
 )
-def test_single_letters_and_initialisms_keep_the_security_red_line(text):
-    with pytest.raises(ValueError):
-        _news_field(text)
+def test_single_letters_and_initialisms_do_not_guess_stock_identity(text):
+    assert _news_field(text) == text
 
 
 @pytest.mark.parametrize("text", ["Galaxy 18 Pro销量预期下调。", "iPhone 18 Pro Deluxe销量下调。"])

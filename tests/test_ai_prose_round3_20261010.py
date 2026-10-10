@@ -7,9 +7,8 @@ echoed payload field names. The user's lenient policy now says:
 
 * Markdown citations and URLs in Luna news text are stripped, never a reason
   to reject. The receipt keeps its evidence_sources for the owner view.
-* Only code-like words (one to five capital letters) need ticker binding in
-  a security context. Names in mixed case or with a dot do not, and a code in
-  「公司名（代码）」 or after 「代码为」 is not a security context.
+* v5 no longer guesses structured ticker identity from names or uppercase
+  words in Chinese prose. Explicit numeric code labels still require binding.
 * Earnings may echo its own payload field names (「release_status」).
 
 The fixture rows are copied verbatim from production; no test contacts a
@@ -169,27 +168,25 @@ def test_names_and_aliases_are_published(text):
 
 
 @pytest.mark.parametrize(
-    ("text", "error"),
+    "text",
     [
-        ("TSLA上涨。", "english_prose_not_allowed"),
-        ("A股价上涨。", "english_prose_not_allowed"),
-        ("IT股价上涨。", "english_prose_not_allowed"),
-        ("ESG股价上涨。", "english_prose_not_allowed"),
-        ("F股受到关注。", "english_prose_not_allowed"),
-        ("A公司宣布回购。", "english_prose_not_allowed"),
-        ("特斯拉（TSLA）股价上涨。", "english_prose_not_allowed"),
-        ("IT大涨后回落。", "english_prose_not_allowed"),
-        ("盘前TSLA +3.5%，市场情绪回暖。", "english_prose_not_allowed"),
-        ("F>12美元后福特汽车加速上涨。", "english_prose_not_allowed"),
-        ("T-Mobile US此前下跌约5.4%。", "english_prose_not_allowed"),
-        ("股票600519上涨。", "unbound_numeric_security_code"),
+        "TSLA上涨。",
+        "A股价上涨。",
+        "IT股价上涨。",
+        "ESG股价上涨。",
+        "F股受到关注。",
+        "A公司宣布回购。",
+        "特斯拉（TSLA）股价上涨。",
+        "IT大涨后回落。",
+        "盘前TSLA +3.5%，市场情绪回暖。",
+        "F>12美元后福特汽车加速上涨。",
+        "T-Mobile US此前下跌约5.4%。",
+        "股票600519上涨。",
     ],
 )
-def test_code_like_words_in_security_context_still_need_binding(text, error):
-    with pytest.raises(ValueError, match=error):
-        _news_field(text)
-    with pytest.raises(ValueError, match=error):
-        _focus_field(text, field="summary_zh")
+def test_code_like_words_in_chinese_do_not_guess_structured_identity(text):
+    assert _news_field(text) == text
+    assert _focus_field(text, field="summary_zh") == text
 
 
 def test_bound_code_in_security_context_still_publishes():

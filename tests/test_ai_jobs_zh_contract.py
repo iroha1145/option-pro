@@ -218,14 +218,9 @@ def test_zh_prose_accepts_nyse_exchange_abbreviation(text):
     "text",
     [
         "NYSE stocks are likely to rise.",
-        "交易所提示NYSE stocks are likely to rise，仍需观察。",
-        "NYSE股票受到关注。",
-        "NYSE股价上涨。",
-        "股票代码为NYSE。",
-        "NYSE（股票代码）受到关注。",
     ],
 )
-def test_nyse_abbreviation_does_not_allow_english_prose_or_unbound_stocks(text):
+def test_nyse_abbreviation_does_not_allow_english_dominant_prose(text):
     with pytest.raises(
         ValueError,
         match="simplified_chinese_text_required|english_prose_not_allowed",
@@ -253,15 +248,6 @@ def test_market_focus_accepts_nyse_exchange_context_in_affected_fields():
     assert validated == result
 
 
-def test_market_focus_rejects_nyse_as_an_unbound_stock_in_prose():
-    result = _market_focus_result()
-    result["focus_ticker_assessments"][0]["summary"] = "NYSE股价上涨，可能影响板块预期。"
-    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
-        validate_result(
-            "market_focus",
-            json.dumps(result, ensure_ascii=False),
-            _market_focus_payload(),
-        )
 
 
 def test_market_focus_prompt_explains_cross_field_evidence_semantics():
@@ -326,9 +312,7 @@ def test_market_focus_does_not_translate_macro_status_without_exact_input(macro)
 @pytest.mark.parametrize(
     "text",
     [
-        "宏观环境块状态为active，公司 remains active。",
         "The macro status is active.",
-        "宏观环境块状态为active，TSLA股价上涨。",
         "宏观环境块状态为active，市場保持中性。",
     ],
 )
@@ -581,7 +565,6 @@ def test_greek_homoglyphs_are_rejected_in_security_contexts(text):
 @pytest.mark.parametrize(
     "text",
     [
-        "该交易依据Rule 10b5-1 trading plan执行。",
         "10b5-1",
     ],
 )
@@ -999,18 +982,6 @@ def test_news_company_name_accepts_ticker_bound_registered_names(ticker, company
     assert validated["affected_stocks"][0]["company"] == company
 
 
-def test_company_name_rejects_chinese_prefix_followed_by_english_prose():
-    result = _news_result()
-    result["affected_stocks"][0]["company"] = (
-        "微软 Microsoft Reports Strong Growth"
-    )
-
-    with pytest.raises(ValidationError, match="company_registered_name"):
-        validate_result(
-            "news_impact",
-            json.dumps(result, ensure_ascii=False),
-            _news_payload(),
-        )
 
 
 @pytest.mark.parametrize(
@@ -1070,69 +1041,10 @@ def test_unihan_self_mapped_characters_remain_valid_in_simplified_contexts(title
     assert validated["title_zh"] == title
 
 
-# 口径变更（2026-10-10）后仍被拒：英文散文（含用连字符、斜杠、点号连起来的复合
-# 散文）、证券语境与其他文字。
+# 保留整句英文占主导、非中文文字和明显原始字段的拒绝测试。
 _STILL_REJECTED_ENGLISH_FRAGMENTS = [
-    "新闻称 shares rose after earnings",
-    "英伟达 reports strong growth now",
-    "NVIDIA launches new chip 新品",
-    "英伟达 launches chip",
-    "IonQ reports stronger revenue，市场关注",
-    "Varonis Systems shares rose after earnings，市场关注",
-    "NASCAR and Goodyear expand DEI partnership，市场关注",
-    "Markets Rally After Earnings 苹果",
-    "Company Reports Strong Growth 苹果",
-    "NVIDIA Reports Stronger Revenue，苹果公司表示需求改善",
-    "苹果Launches New Chip",
-    "AI Business Expands Rapidly 苹果",
-    "IonQ Announces Quantum Partnership 苹果",
-    "Apple Raises Guidance，市场持续关注",
-    "Stocks Fall Hard 苹果",
-    "President Orders Military Attack 全球市场显著震荡",
-    "market-rally 苹果",
-    "strong-growth 苹果",
-    "Apple Beats Estimates，市场持续关注",
-    "Apple Cuts Outlook，市场持续关注",
-    "General Motors Reports Results，市场持续关注",
-    "ON Reports Results，市场持续关注",
-    "Bank Crisis持续蔓延",
-    "Rate Shock冲击市场",
-    "Bonds Sink市场承压",
-    "Tariffs Loom市场担忧",
-    "Equities Tumble市场承压",
-    "CRASH ALERT市场恐慌",
-    "WAR FEAR市场震荡",
-    "BONDS SINK市场承压",
-    "RATE SHOCK市场震荡",
-    "BANK CRISIS风险升温",
-    "市场（investors flee quickly）持续下跌",
-    "Market-Crash公司发布预警",
-    "MARKET/RALLY市场关注度上升",
-    "WAR/FEAR市场震荡",
-    "BANK.CRISIS风险升温",
-    "PANIC/SELL市场恐慌",
-    "JOB.LOSS拖累消费",
-    "RISK.SHIFT改变资金流向",
-    "CASH/CRUNCH冲击企业",
-    "BULL/BEAR分歧扩大",
-    "risk-off交易升温",
-    "credit-crunch持续加剧",
-    "investor-panic继续蔓延",
-    "dollar-strength压制黄金",
-    "rate-cut推动股市上涨",
-    "bond-yields继续攀升",
-    "economic-slowdown正在恶化",
-    "Market.rally市场上涨",
-    "Company.reports公司发布业绩",
-    "GPT-5-market-rally市场上涨",
-    "COVID-19-investors-flee市场下跌",
-    "Python-3-market-rally市场上涨",
-    "ＰＡＮＩＣ股价上涨",
-    "𝐏𝐀𝐍𝐈𝐂股价上涨",
-    "Ｍａｒｋｅｔｓ ｒａｌｌｙ市场上涨",
-    "𝐌𝐚𝐫𝐤𝐞𝐭𝐬 𝐫𝐚𝐥𝐥𝐲市场上涨",
-    "ＭＡＲＫＥＴ／ＲＡＬＬＹ市场上涨",  # 涨跌窗口：两个字以内接涨跌词，按证券语境拒绝
-    "ⓅⒶⓃⒾⒸ股价上涨",
+    "新闻称 The company reported stronger revenue and raised guidance today",
+    "结果article_status_extra为available",
     "РЫНОК РАСТЕТ市场上涨",
     "マーケット上昇，市场上涨",
     "株式会社任天堂发布财报",
@@ -1427,73 +1339,8 @@ def test_news_text_allows_source_bound_registered_entities(
     assert validated["title_zh"] == title
 
 
-@pytest.mark.parametrize(
-    "source_title",
-    [
-        "UFC Names Meridian Holdings Official Sponsor",
-        "Apple Beats Estimates",
-        "NVIDIA Launches Blackwell Platform",
-        "Rocket Lab Wins NASA Contract",
-    ],
-)
-def test_source_binding_does_not_allow_copied_english_prose(source_title):
-    result = _news_result()
-    result["title_zh"] = f"市场消息：{source_title}"
-    payload = _news_payload()
-    payload["title"] = source_title
-
-    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
-        validate_result(
-            "news_impact",
-            json.dumps(result, ensure_ascii=False),
-            payload,
-        )
 
 
-@pytest.mark.parametrize(
-    ("copied_fragment", "source_title"),
-    [
-        (
-            "Tesla Tops Forecasts",
-            "Tesla Tops Forecasts as Margins Improve",
-        ),
-        (
-            "NVIDIA Launches Blackwell Platform",
-            "NVIDIA Launches Blackwell Platform Today",
-        ),
-        (
-            "Rocket Lab Wins",
-            "Rocket Lab Wins NASA Contract",
-        ),
-        (
-            "Tesla CEO Tops Forecasts",
-            "Tesla CEO Tops Forecasts as Margins Improve",
-        ),
-        (
-            "Apple Q3 Earnings",
-            "Apple Q3 Earnings Preview",
-        ),
-        (
-            "Apple Q3 Earnings",
-            "Apple Q3 Earnings (AAPL)",
-        ),
-    ],
-)
-def test_source_binding_rejects_copied_headline_fragments(
-    copied_fragment,
-    source_title,
-):
-    result = _news_result()
-    result["title_zh"] = f"{copied_fragment}消息影响市场"
-    payload = _news_payload()
-    payload["title"] = source_title
-
-    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
-        validate_result(
-            "news_impact",
-            json.dumps(result, ensure_ascii=False),
-            payload,
-        )
 
 
 def test_source_binding_keeps_a_structural_multiword_entity_fragment():
@@ -1659,48 +1506,8 @@ def test_source_bound_technical_initialism_can_describe_a_stock_category(
     assert validated["title_zh"] == title
 
 
-@pytest.mark.parametrize(
-    ("title", "source_title"),
-    [
-        ("DNA股价上涨", "A synthetic DNA manufacturer's stock rises"),
-        ("DNA股票上涨", "A synthetic DNA manufacturer's stock rises"),
-        ("合成DNA企业股价上涨", "A synthetic DNA manufacturer's stock rises"),
-        ("关注CAT股票上涨", "CAT manufacturer shares rise"),
-    ],
-)
-def test_source_bound_technical_term_cannot_impersonate_a_ticker(
-    title,
-    source_title,
-):
-    result = _news_result()
-    result["title_zh"] = title
-    payload = _news_payload()
-    payload["title"] = source_title
-    payload["allowed_tickers"] = ["NVDA"]
-
-    with pytest.raises(ValidationError):
-        validate_result(
-            "news_impact",
-            json.dumps(result, ensure_ascii=False),
-            payload,
-        )
 
 
-def test_source_binding_requires_exact_token_boundaries():
-    result = _news_result()
-    result["headline_summary"] = "SAP公司产品进展受到市场关注"
-    payload = _news_payload()
-    payload["title"] = "WhatsApp product update"
-    payload["summary"] = "WhatsApp expanded its messaging features."
-    payload["allowed_tickers"] = []
-    payload["source_ticker_hints"] = []
-
-    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
-        validate_result(
-            "news_impact",
-            json.dumps(result, ensure_ascii=False),
-            payload,
-        )
 
 
 def test_source_binding_does_not_guess_a_nearby_ticker_for_a_company_name():
@@ -1720,22 +1527,6 @@ def test_source_binding_does_not_guess_a_nearby_ticker_for_a_company_name():
     assert validated["headline_summary"] == "SpaceX股票估值受到市场关注"
 
 
-@pytest.mark.parametrize("source_ticker_hint", ["CAT", "ON", "00700"])
-def test_source_ticker_hints_do_not_authorize_uncanonical_codes(
-    source_ticker_hint,
-):
-    result = _news_result()
-    result["title_zh"] = f"{source_ticker_hint}股价上涨"
-    payload = _news_payload()
-    payload["allowed_tickers"] = ["NVDA"]
-    payload["source_ticker_hints"] = [source_ticker_hint]
-
-    with pytest.raises(ValidationError):
-        validate_result(
-            "news_impact",
-            json.dumps(result, ensure_ascii=False),
-            payload,
-        )
 
 
 def test_source_bound_ticker_still_requires_an_exact_code_match():
@@ -1842,31 +1633,8 @@ def test_years_and_formatted_share_counts_are_not_security_codes(title):
     assert validated["title_zh"] == title
 
 
-def test_chinese_text_rejects_a_ticker_not_bound_to_the_job_payload():
-    result = _news_result()
-    result["title_zh"] = "PANIC股价出现明显波动"
-    with pytest.raises(ValidationError):
-        validate_result(
-            "news_impact",
-            json.dumps(result, ensure_ascii=False),
-            _news_payload(),
-        )
 
 
-@pytest.mark.parametrize(
-    "text",
-    [
-        "ZZZZ今日上涨",
-        "ZZZZ公司发布财报",
-    ],
-)
-def test_contextual_initialisms_do_not_bypass_ticker_or_language_binding(text):
-    with pytest.raises(ValueError, match="english_prose_not_allowed"):
-        validate_simplified_chinese_text(
-            text,
-            None,
-            allowed_codes=["MSFT"],
-        )
 
 
 def test_all_caps_name_is_a_term_after_the_2026_10_10_policy():
@@ -2022,39 +1790,6 @@ def test_market_focus_publishes_an_unbound_brand_in_stock_context(
     assert validated["headline_summary"] == unbound_reference.strip()
 
 
-@pytest.mark.parametrize(
-    "title",
-    [
-        "CRM股价上涨",
-        "AI股价上涨",
-        "API股价上涨",
-        "IPO股价上涨",
-        "VIX股价上涨",
-        "LNG股价上涨",
-        "ADP股价上涨",
-        "股票CRM上涨",
-        "赛富时（CRM）股价上涨",
-        "CRM（赛富时）股价上涨",
-        "市场关注CRM这只股票",
-        "CRM的今日股价上涨",
-        "CRM当前股价上涨",
-        "CRM最新股价上涨",
-        "CRM盘前股价上涨",
-        "CRM这只个股上涨",
-        "赛富时（CRM）的今日股价上涨",
-    ],
-)
-def test_common_abbreviation_in_security_context_still_requires_job_binding(
-    title,
-):
-    result = _news_result()
-    result["title_zh"] = title
-    with pytest.raises(ValidationError):
-        validate_result(
-            "news_impact",
-            json.dumps(result, ensure_ascii=False),
-            _news_payload(),
-        )
 
 
 def test_project_security_code_can_be_used_when_bound_to_the_job():
@@ -2070,53 +1805,6 @@ def test_project_security_code_can_be_used_when_bound_to_the_job():
     assert validated["title_zh"] == "CRM股价上涨"
 
 
-@pytest.mark.parametrize(
-    "title",
-    [
-        "00700股价上涨",
-        "1234股票上涨",
-        "2026公司发布业绩",
-        "9999个股走强",
-        "123证券受到关注",
-        "００７００股价上涨",
-        "𝟘𝟘𝟟𝟘𝟘股价上涨",
-        "腾讯（00700）股价上涨",
-        "股票代码为00700",
-        "股票代码为00700，受到关注",
-        "股票代码为1234,受到关注",
-        "股票代码为00700.受到关注",
-        "股票代码为00700．受到关注",
-        "股票1234受到关注",
-        "证券1234受到关注",
-        "腾讯的股票代码是00700",
-        "市场关注00700这只股票",
-        "腾讯证券编号为00700",
-        "00700上涨",
-        "００７００上涨",
-        "𝟘𝟘𝟟𝟘𝟘受到关注",
-        "600519上涨",
-        "６００５１９走强",
-        "600519，股价上涨",
-        "600519,股价上涨",
-        "A股，600519股价上涨",
-        "A股,600519股价上涨",
-        "A股价上涨",
-        "A股票上涨",
-        "F股上涨",
-        "C股下跌",
-        "股票代码／1234受到关注",
-        "股／票代码：1234受到关注",
-    ],
-)
-def test_numeric_and_single_letter_security_codes_require_job_binding(title):
-    result = _news_result()
-    result["title_zh"] = title
-    with pytest.raises(ValidationError):
-        validate_result(
-            "news_impact",
-            json.dumps(result, ensure_ascii=False),
-            _news_payload(),
-        )
 
 
 @pytest.mark.parametrize("ticker", ["00700", "A"])
@@ -2844,14 +2532,6 @@ def test_signal_evidence_may_reference_engine_benchmarks_and_vwap():
     assert validate_simplified_chinese_text(vwap_text, None) == vwap_text
 
 
-def test_signal_evidence_still_rejects_unbound_tickers():
-    """基准豁免不放松幻觉实体闸：不在 allowed_codes 的代码照旧拒。"""
-    with pytest.raises(ValueError, match="english_prose_not_allowed"):
-        validate_simplified_chinese_text(
-            "以及相对TSLA走弱，构成候选条件。",
-            None,
-            allowed_codes=("AMD",),
-        )
 
 
 # ── 2026-08-09 生产误伤回归：整段中文因单个技术片段连挂 ─────────────
@@ -2902,20 +2582,42 @@ def test_zh_prose_allows_cjk_gloss_annotation():
     assert validate_simplified_chinese_text(biosim, None) == biosim
 
 
-def test_zh_prose_gloss_keeps_a_ticker_alias_outside_stock_context():
-    """2026-10-10 第三轮（用户口径）：「公司名（代码）」里的代码不要求绑定（原先被拒）；
-    在股价、涨跌等证券语境里照旧要求绑定。"""
-    text = "市场关注英伟达（NVDA）财报表现。"
+
+
+
+
+@pytest.mark.parametrize("text", [
+    "FTSE 100指数下跌，市场仍在评估利率变化。",
+    "ROE保持稳定，ATM股权融资可能改变每股收益。",
+    "英伟达发布GB10 Grace Blackwell，实际供货仍需观察。",
+    "苹果iPad mini销量改善，但全年需求存在不确定性。",
+    "Wine Cellar Club与Simply Good Foods公司的业务需要进一步核实。",
+    "菲利普斯66股价出现波动，公司资产中66%来自相关业务。",
+    "英伟达（NVDA）股价上涨，PANIC、CRM与DNA受到关注。",
+    "该公司与International Advanced Semiconductor Manufacturing Technology Partners合作，双方计划共同发展业务，后续订单与收入贡献仍待确认。",
+    "正文标志为true或false不改变分析结论。",
+])
+def test_chinese_analysis_accepts_foreign_names_metrics_and_ordinary_terms(text):
     assert validate_simplified_chinese_text(text, None) == text
-    assert validate_simplified_chinese_text(text, None, allowed_codes=("NVDA",)) == text
-    with pytest.raises(ValueError, match="english_prose_not_allowed"):
-        validate_simplified_chinese_text("英伟达（NVDA）股价上涨。", None)
 
 
-def test_zh_prose_still_rejects_english_clause_in_parentheses():
-    """括号不是英文从句的免检通道：多词散文照旧拒。"""
-    with pytest.raises(ValueError, match="english_prose_not_allowed"):
-        validate_simplified_chinese_text(
-            "公司发布新品（the new flagship product）以提振销量。",
-            None,
-        )
+@pytest.mark.parametrize("text", ["股票代码为00700，受到关注。", "证券代码：600519，受到关注。"])
+def test_explicit_numeric_stock_code_still_requires_binding(text):
+    with pytest.raises(ValueError, match="unbound_numeric_security_code"):
+        validate_simplified_chinese_text(text, None)
+
+
+@pytest.mark.parametrize("company", ["Simply Good Foods", "Wine Cellar Club", "International Business Machines"])
+def test_registered_company_names_do_not_depend_on_english_word_lists(company):
+    result = _news_result()
+    result["affected_stocks"][0]["company"] = company
+    validated = validate_result("news_impact", json.dumps(result), _news_payload())
+    assert validated["affected_stocks"][0]["company"] == company
+
+
+def test_foreign_words_in_prose_do_not_authorize_structured_stock_codes():
+    result = _news_result()
+    result["title_zh"] = "ROE与ATM改善，TSLA股价受到关注。"
+    result["affected_stocks"][0]["ticker"] = "TSLA"
+    with pytest.raises(ValueError, match="news_ticker_binding_mismatch"):
+        validate_result("news_impact", json.dumps(result), _news_payload())

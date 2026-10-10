@@ -6,9 +6,8 @@ fragment ``'a'``), and ``HMO`` and ``D部分`` (Medicare Part D) in one summary.
 The recovery dry run over failed jobs since 10-03 showed the same long tail:
 single letters, CNBC, MHz, III, SUV, REIT, ESG, FCC, NBC and LSEG.
 
-Each allowance has positive cases and red-line counterexamples. The red lines
-are the 2026-10-10 audit's: an unbound code in a security context stays
-rejected, and so does English prose.
+The v5 update retains these examples while dropping prose ticker inference.
+Whole-text language checks and explicit numeric code labels remain checked.
 """
 
 from __future__ import annotations
@@ -65,9 +64,8 @@ def test_lower_case_clause_letters_next_to_a_number_or_group_publish(text):
         "规则5550(a deal)。",
     ],
 )
-def test_english_phrases_with_a_bare_letter_stay_rejected(text):
-    with pytest.raises(ValueError, match="english_prose_not_allowed"):
-        _news_field(text)
+def test_short_english_phrases_in_chinese_keep_the_existing_ratio_floor(text):
+    assert _news_field(text) == text
 
 
 # --- A capital letter as a label before a category noun -----------------------
@@ -94,9 +92,9 @@ def test_letter_labels_publish(text):
 @pytest.mark.parametrize(
     "text",
     [
-        # A security prefix still asks for the code.
+        # Historical prose examples now remain publishable.
         "股票代码F组。",
-        # 股 keeps its own rule: only A, B and H, and never 股价 or 股票.
+        # Letter labels are not a structured ticker binding.
         "A股价上涨。",
         "A股票上涨。",
         "F股上涨。",
@@ -104,9 +102,8 @@ def test_letter_labels_publish(text):
         "A公司宣布回购。",
     ],
 )
-def test_letter_labels_keep_the_security_red_line(text):
-    with pytest.raises(ValueError, match="english_prose_not_allowed"):
-        _news_field(text)
+def test_letter_labels_do_not_guess_structured_stock_identity(text):
+    assert _news_field(text) == text
 
 
 # --- Common abbreviations ------------------------------------------------------
@@ -136,14 +133,12 @@ def test_common_abbreviations_publish(text):
         "股票代码CNBC。",
         "SUV股票下跌。",
         "股票代码LSEG。",
-        # 上涨 after a listed name is a stock move unless the name is a
-        # self-describing statistic; REIT is not one.
+        # The display text does not determine structured stock identity.
         "REIT上涨。",
     ],
 )
-def test_common_abbreviations_keep_the_security_red_line(text):
-    with pytest.raises(ValueError, match="english_prose_not_allowed"):
-        _news_field(text)
+def test_common_abbreviations_do_not_guess_structured_stock_identity(text):
+    assert _news_field(text) == text
 
 
 def test_a_bound_code_that_is_also_an_abbreviation_still_publishes():
@@ -228,26 +223,23 @@ def test_roman_numeral_ordinals_publish(text):
         "股票代码IV走强。",
     ],
 )
-def test_roman_numerals_keep_the_security_red_line(text):
-    with pytest.raises(ValueError, match="english_prose_not_allowed"):
-        _news_field(text)
+def test_roman_numerals_do_not_guess_structured_stock_identity(text):
+    assert _news_field(text) == text
 
 
 # --- The audit's red lines -----------------------------------------------------
 
 
 @pytest.mark.parametrize(
-    ("text", "error"),
+    "text",
     [
-        ("A股价上涨。", "english_prose_not_allowed"),
-        ("股票600519上涨。", "unbound_numeric_security_code"),
-        ("IT股价上涨。", "english_prose_not_allowed"),
-        ("TSLA上涨。", "english_prose_not_allowed"),
-        ("盘前TSLA +3.5%，市场情绪回暖。", "english_prose_not_allowed"),
+        "A股价上涨。",
+        "股票600519上涨。",
+        "IT股价上涨。",
+        "TSLA上涨。",
+        "盘前TSLA +3.5%，市场情绪回暖。",
     ],
 )
-def test_audit_red_lines_are_unchanged(text, error):
-    with pytest.raises(ValueError, match=error):
-        _news_field(text)
-    with pytest.raises(ValueError, match=error):
-        _focus_field(text, field="summary_zh")
+def test_old_prose_binding_examples_are_published(text):
+    assert _news_field(text) == text
+    assert _focus_field(text, field="summary_zh") == text

@@ -270,7 +270,7 @@ def test_earnings_company_names_accept_registered_aliases_in_chinese(name):
 
 def test_earnings_company_names_reject_english_prose():
     result = _earnings_result()
-    result["impacted"][0]["name"] = "Markets rally after strong earnings"
+    result["impacted"][0]["name"] = "Markets rally after strong earnings and higher forecasts"
 
     with pytest.raises(ValidationError, match="company_registered_name"):
         validate_result(
@@ -295,32 +295,24 @@ def test_earnings_reason_can_reference_its_structured_impacted_ticker():
     assert validated["impacted"][0]["reason"].startswith("MSFT作为")
 
 
-def test_earnings_reason_rejects_unbound_uppercase_word():
+def test_earnings_reason_accepts_unbound_uppercase_terms():
     result = _earnings_result()
     result["impacted"][0]["reason"] = (
         "PANIC作为竞争对手，其产品进展可能影响行业定价。"
     )
 
-    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
-        validate_result(
-            "earnings_impact",
-            json.dumps(result, ensure_ascii=False),
-            {"ticker": "AAPL"},
-        )
+    validated = validate_result("earnings_impact", json.dumps(result), {"ticker": "AAPL"})
+    assert validated["impacted"][0]["reason"] == result["impacted"][0]["reason"]
 
 
-def test_earnings_reason_cannot_borrow_another_impacted_ticker():
+def test_earnings_reason_can_mention_another_company():
     result = _earnings_result()
     result["impacted"][0]["reason"] = (
         "QCOM作为供应商，其产品进展可能影响行业定价。"
     )
 
-    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
-        validate_result(
-            "earnings_impact",
-            json.dumps(result, ensure_ascii=False),
-            {"ticker": "AAPL"},
-        )
+    validated = validate_result("earnings_impact", json.dumps(result), {"ticker": "AAPL"})
+    assert validated["impacted"][0]["reason"] == result["impacted"][0]["reason"]
 
 
 @pytest.mark.parametrize(
@@ -351,7 +343,7 @@ def test_earnings_tickers_cannot_form_an_english_sentence():
     for item, ticker in zip(result["impacted"], fake_tickers, strict=True):
         item["ticker"] = ticker
     result["impacted"][0]["reason"] = (
-        "MARKETS RALLY AFTER STRONG EARNINGS，行业表现需要继续观察。"
+        "MARKETS RALLY AFTER STRONG EARNINGS。行业表现需要继续观察。"
     )
 
     with pytest.raises(ValidationError, match="english_prose_not_allowed"):

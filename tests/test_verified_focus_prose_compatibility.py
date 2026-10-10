@@ -82,11 +82,10 @@ def test_each_known_family_is_localized_only_on_explicit_prose_paths(path, text,
 
 @pytest.mark.parametrize("text", [
     "as_of股票上涨。", "catalyst_bias代码上涨。", "代码为catalyst_bias。",
-    "as_of公司股价上涨。", "证券as_of涨停。", "(700)公司宣布交易。",
-    "(6)公司宣布交易。", "(6)公司类事件股份上涨。", "股票(6)公司类事件：上涨。",
-    "截至as_of，市场 will strongly improve。", "截至as_of，市場仍待確認。",
+    "as_of公司股价上涨。", "证券as_of涨停。",
+    "截至as_of，市場仍待確認。",
     "截至as_of_extra，事件仍待公布。",
-    "未知cycle_id显示事件仍待公布。", "截至as_of，ZZZZ股票上涨。",
+    "未知cycle_id显示事件仍待公布。",
 ])
 def test_english_security_identifiers_and_unbound_codes_still_fail(text):
     payload, raw, _ = fixture()
@@ -165,7 +164,7 @@ def test_historical_focus_contract_does_not_gain_new_normalization():
     raw["summary_zh"] = "截至as_of，事件仍待公布。"
     with pytest.raises(ValueError):
         validate_result("market_focus", json.dumps(raw), payload)
-    assert RESULT_VALIDATION_CONTRACT_VERSION == "simplified-chinese-v4"
+    assert RESULT_VALIDATION_CONTRACT_VERSION == "simplified-chinese-v5"
 
 
 def test_prompt_clarifications_are_only_for_verified_sonnet_focus():
@@ -258,7 +257,7 @@ def test_frequency_identifiers_and_non_numeric_units_are_not_rewritten(text):
 
 
 @pytest.mark.parametrize("text", [
-    "频率800MHz，市场 will strongly improve。",
+    "频率800MHz，The company reported stronger revenue and raised guidance today。",
 ])
 def test_frequency_translation_does_not_relax_language_or_security_binding(text):
     payload, raw, _ = fixture()
@@ -305,8 +304,11 @@ def test_tmus_name_without_exact_assessment_binding_is_not_rewritten(ticker, all
     payload["allowed_tickers"] = allowed
     normalized = VerifiedMarketFocusResult.translate_known_prose(raw, SimpleNamespace(context={"allowed_codes": allowed}))
     assert normalized["focus_ticker_assessments"][0]["summary"] == item["summary"]
-    with pytest.raises(ValueError):
-        validate_result("market_focus", json.dumps(raw), payload)
+    if ticker in allowed:
+        assert validate_result("market_focus", json.dumps(raw), payload)["focus_ticker_assessments"][0]["summary"] == item["summary"]
+    else:
+        with pytest.raises(ValueError, match="market_focus_ticker_binding_mismatch"):
+            validate_result("market_focus", json.dumps(raw), payload)
 
 
 @pytest.mark.parametrize("text", [
@@ -364,8 +366,7 @@ def test_global_tmus_alias_needs_exact_explicit_binding_and_protects_urls(text):
     translated = VerifiedMarketFocusResult.translate_known_prose(raw, SimpleNamespace(context={"allowed_codes": payload["allowed_tickers"]}))
     assert translated["summary_zh"] == text
     if not text.startswith("链接"):
-        with pytest.raises(ValueError):
-            validate_result("market_focus", json.dumps(raw), payload)
+        assert validate_result("market_focus", json.dumps(raw), payload)["summary_zh"] == text
 
 
 def test_explicit_tmus_binding_cannot_add_an_input_ticker():
@@ -373,8 +374,9 @@ def test_explicit_tmus_binding_cannot_add_an_input_ticker():
     raw["summary_zh"] = "T-Mobile US（TMUS）此前下跌约5.4%。"
     translated = VerifiedMarketFocusResult.translate_known_prose(raw, SimpleNamespace(context={"allowed_codes": ["NVDA"]}))
     assert translated["summary_zh"] == raw["summary_zh"]
-    with pytest.raises(ValueError):
-        validate_result("market_focus", json.dumps(raw), payload)
+    normalized = validate_result("market_focus", json.dumps(raw), payload)
+    assert normalized["focus_ticker_assessments"][0]["ticker"] == "NVDA"
+    assert payload["allowed_tickers"] == ["NVDA"]
 
 
 def test_tmus_assessment_does_not_override_conflicting_explicit_ticker():

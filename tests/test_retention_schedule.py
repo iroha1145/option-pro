@@ -275,7 +275,7 @@ def test_history_prune_batches_do_not_scan_the_table_per_deleted_row(
     assert any("idx_ai_jobs_retry_of" in row[3] for row in plan)
 
 
-def test_failed_jobs_with_a_paid_receipt_are_never_pruned(tmp_path: Path, monkeypatch) -> None:
+def test_failed_jobs_with_a_paid_receipt_follow_the_history_window(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(repo_mod, "_utcnow", lambda: NOW - timedelta(days=400))
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     with_receipt, without_receipt, completed = (
@@ -300,9 +300,125 @@ def test_failed_jobs_with_a_paid_receipt_are_never_pruned(tmp_path: Path, monkey
         connection.commit()
     monkeypatch.setattr(repo_mod, "_utcnow", lambda: NOW)
 
-    # The receipt is the only way to recover a result the local validator
-    # rejected (recover_ai_schema_results); with one backup it must stay.
-    assert repository.prune_scheduled_history(retain_days=30, now=NOW) == 2
+    # Old unreferenced receipts expire too: offline recovery ends at this cutoff.
+    assert repository.prune_scheduled_history(retain_days=10, now=NOW) == 3
     with repository._connect() as connection:
         remaining = [row[0] for row in connection.execute("SELECT job_id FROM ai_jobs")]
-    assert remaining == [with_receipt]
+    assert remaining == []
+
+
+def test_maintenance_reports_history_cleanup_failure(tmp_path):
+    async def prune():
+        return {"status": "failed", "retain_days": 10}, "ai_history_retention_failed"
+
+    task = MaintenanceTask(
+        {"db": _database(tmp_path / "db.sqlite")},
+        destination=tmp_path / "backups", keep=1, after_cycle=prune, now=lambda: NOW,
+    )
+    result = asyncio.run(task())
+    assert result.status == "degraded"
+    assert result.error_code == "ai_history_retention_failed"
+    assert result.details["ai_history"]["status"] == "failed"
+
+
+def test_ten_day_history_boundary_and_current_publication_protection(tmp_path, monkeypatch):
+    monkeypatch.setattr(repo_mod, "_utcnow", lambda: NOW - timedelta(days=11))
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    expired, boundary, published, active = [_news_job(repository, i) for i in range(1, 5)]
+    with repository._connect() as connection:
+        connection.execute("UPDATE ai_jobs SET status='completed',completed_at=? WHERE job_id!=?",
+                           (repo_mod._iso(NOW - timedelta(days=11)), active))
+        connection.execute("UPDATE ai_jobs SET completed_at=? WHERE job_id=?",
+                           (repo_mod._iso(NOW - timedelta(days=10)), boundary))
+        connection.commit()
+    assert repository.prune_scheduled_history(retain_days=10, now=NOW, protected_job_ids={published}) == 1
+    with repository._connect() as connection:
+        assert {row[0] for row in connection.execute("SELECT job_id FROM ai_jobs")} == {boundary, published, active}
+    assert repository.prune_scheduled_history(retain_days=10, now=NOW, protected_job_ids={published}) == 0
+
+
+def test_journal_and_job_retention_does_not_requeue_paid_news(tmp_path, monkeypatch):
+    from app.services.catalysts import local_intelligence as local_module
+    from tests.test_catalyst_read_path_costs import NOW as STORE_NOW, _analyzed_store
+    from app.worker.tasks import prune_ai_history
+
+    from app.access import request_owner_access_context
+
+    with request_owner_access_context(True):
+        intelligence = _analyzed_store(tmp_path, monkeypatch)
+        later = STORE_NOW + timedelta(days=11)
+        monkeypatch.setattr(local_module, "_utc_now", lambda: later)
+        monkeypatch.setattr(repo_mod, "_utcnow", lambda: later)
+        intelligence.mode = "scheduled"
+        for _ in range(2):
+            intelligence.prune_journal(retention_days=10, now=later)
+            _, error = asyncio.run(prune_ai_history(
+                lambda: intelligence.ai_repository, retain_days=10, now=later,
+                catalyst_cache_path=intelligence.db_path,
+            ))
+            assert error is None
+            assert intelligence.reconcile(allow_scheduled_jobs=True)["queued"] == 0
+
+
+def test_daily_cache_backup_and_six_hour_account_backup_survive_restart(tmp_path):
+    clock = {"now": NOW}
+    databases = {label: _database(tmp_path / f"{label}.db") for label in ("optix", "accounts")}
+    settings = tmp_path / "runtime-settings.json"
+    settings.write_text('{}')
+
+    def task(**kwargs):
+        return MaintenanceTask(databases, files={"runtime-settings": settings},
+                               destination=tmp_path / "backups", keep=7,
+                               now=lambda: clock["now"], **kwargs)
+
+    original = task()
+    assert set(asyncio.run(original()).details["backed_up"]) == {"optix", "accounts", "runtime-settings"}
+    clock["now"] += timedelta(hours=6)
+    assert set(asyncio.run(original()).details["backed_up"]) == {"accounts", "runtime-settings"}
+    clock["now"] += timedelta(hours=6)
+    restarted = task()
+    assert set(asyncio.run(restarted()).details["backed_up"]) == {"accounts", "runtime-settings"}
+    clock["now"] += timedelta(hours=12)
+    assert set(asyncio.run(restarted()).details["backed_up"]) == {"optix", "accounts", "runtime-settings"}
+    # The explicit retention path must still get a fresh complete backup.
+    assert set(asyncio.run(task(full_cycle_per_call=True)()).details["backed_up"]) == {"optix", "accounts", "runtime-settings"}
+
+
+def test_daily_cache_backup_failure_retries_without_waiting_a_day(tmp_path):
+    clock = {"now": NOW}
+    broken = tmp_path / "optix.db"
+    broken.write_bytes(b"broken sqlite")
+    task = MaintenanceTask({"optix": broken}, destination=tmp_path / "backups", keep=1,
+                           failure_backoff_seconds=60, now=lambda: clock["now"])
+    assert asyncio.run(task()).status == "degraded"
+    broken.unlink()
+    _database(broken)
+    clock["now"] += timedelta(minutes=1)
+    recovered = asyncio.run(task())
+    assert recovered.status == "idle"
+    assert recovered.details["backed_up"] == ["optix"]
+
+
+def test_journal_ten_day_boundary_and_active_job_input_are_preserved(tmp_path, monkeypatch):
+    from app.access import request_owner_access_context
+    from tests.test_catalyst_local_intelligence import _stack, _apply_news, _news_change
+    from app.services.catalysts import local_intelligence as local_module
+
+    monkeypatch.setattr(local_module, "_utc_now", lambda: NOW)
+    monkeypatch.setattr(repo_mod, "_utcnow", lambda: NOW - timedelta(days=11))
+    with request_owner_access_context(True):
+        etl, ai, intelligence = _stack(tmp_path)
+        changes = [
+            _news_change(1, 101, available_at=NOW - timedelta(days=11)),
+            _news_change(2, 102, available_at=NOW - timedelta(days=11)),
+            _news_change(3, 103, available_at=NOW - timedelta(days=10)),
+        ]
+        changes[2]["news"]["published_at"] = repo_mod._iso(NOW - timedelta(days=10))
+        _apply_news(etl, changes, as_of=NOW)
+        intelligence.reconcile()
+        _news_job(ai, 101)
+        result = intelligence.prune_journal(retention_days=10, now=NOW)
+        assert result["pruned_items"] == 1
+        with intelligence._connect() as connection:
+            assert {row[0] for row in connection.execute("SELECT news_id FROM catalyst_local_news_revisions")} == {101, 103}
+        assert intelligence.prune_journal(retention_days=10, now=NOW)["pruned_items"] == 0

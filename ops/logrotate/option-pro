@@ -1,0 +1,16 @@
+/www/wwwlogs/option.openweb-ui.xyz.log /www/wwwlogs/option.openweb-ui.xyz.error.log {
+    daily
+    rotate 10
+    maxage 10
+    missingok
+    notifempty
+    compress
+    delaycompress
+    dateext
+    create
+    su root root
+    sharedscripts
+    postrotate
+        /usr/bin/nginx -s reopen
+    endscript
+}

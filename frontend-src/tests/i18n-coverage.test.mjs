@@ -101,10 +101,10 @@ function inThrow(node) {
  * TYPE_DISCRIMINANTS 第 2 类）。行号来自这些 mock 拼接语句。
  */
 const KNOWN_TEMPLATE_EXEMPT_LINES = new Set([
-  'components/detail/api.ts:413',
+  'components/detail/api.ts:412',
+  'components/detail/api.ts:565',
   'components/detail/api.ts:566',
   'components/detail/api.ts:567',
-  'components/detail/api.ts:568',
 ]);
 
 // ── 收集 dict/*.ts 里的全部词条（跳过 types.ts / index.ts 本身） ────────────

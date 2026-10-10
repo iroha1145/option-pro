@@ -20,6 +20,7 @@ import CommandPalette from '@/components/CommandPalette';
 import { pushRecent } from '@/lib/recentTickers';
 import { ShellContext } from '@/hooks/useShell';
 import { useAccess } from '@/hooks/useAccess';
+import { useToast } from '@/hooks/useToast';
 import { isMock } from '@/api/client';
 import { afterLoadIdle } from '@/lib/afterLoadIdle';
 import { prefetchRouteOnIntent } from '@/lib/prefetchRouteChunk';
@@ -29,6 +30,18 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const navigationType = useNavigationType();
+  const toast = useToast();
+  const consumedLoginNotice = useRef<string | null>(null);
+  useEffect(() => {
+    const notice = location.state?.loginNotice as { title: string; description: string } | undefined;
+    if (!notice || consumedLoginNotice.current === location.key) return;
+    consumedLoginNotice.current = location.key;
+    // 先清除导航状态，刷新或返回这条历史记录都不会再次弹出登录通知。
+    const rest = { ...location.state };
+    delete rest.loginNotice;
+    navigate(location.pathname + location.search + location.hash, { replace: true, state: rest });
+    toast.success(notice.title, notice.description);
+  }, [location, navigate, toast]);
   const { role, username, hasConfirmedIdentity, identityUnavailable, refresh } = useAccess();
   // An actual principal change retires every page-owned snapshot and draft, including
   // non-polling state. Temporary identity read failures keep the last known principal.

@@ -363,7 +363,7 @@ test("password mode keeps public research readable and reserves owner controls f
   await expect(page.getByRole("alert")).toHaveText("用户名或密码不正确");
   await screenshot(page, "password-login-error");
 
-  // 正确口令 → 200 + HttpOnly 会话 Cookie → SPA 回到 /watchlist
+  // 正确口令 → 200 + HttpOnly 会话 Cookie → SPA 回到发起登录的 /catalysts
   const loginResponsePromise = page.waitForResponse(response => (
     new URL(response.url()).pathname === "/api/access/login"
     && response.request().method() === "POST"
@@ -379,13 +379,16 @@ test("password mode keeps public research readable and reserves owner controls f
   expect(setCookie).toMatch(/Secure/i);
   expect(setCookie).toMatch(/SameSite=Strict/i);
   expect(setCookie).toMatch(/Path=\//i);
-  await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/watchlist`);
+  await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/catalysts`);
+  const loginNotice = page.getByRole("status").filter({ hasText: "欢迎回来" });
+  await expect(loginNotice).toHaveCount(1);
+  await expect(loginNotice).toContainText("管理员已登录");
 
-  // 登录成功后不得残留延迟跳转：过去的 400ms 定时器会把随后打开的页面拉回 /watchlist。
-  await page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: "新闻", exact: true }).click();
-  await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/catalysts`);
+  // 登录成功后不得残留延迟跳转：打开另一页后，超过旧 400ms 定时器仍留在该页。
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: "市场", exact: true }).click();
+  await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/market`);
   await page.waitForTimeout(500);
-  await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/catalysts`);
+  await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/market`);
   await page.getByRole("link", { name: /我的关注/ }).click();
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/watchlist`);
 

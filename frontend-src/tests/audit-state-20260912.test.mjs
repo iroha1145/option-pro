@@ -338,6 +338,7 @@ test('route content changes identity only for pathname or principal, not a same-
   Object.assign(imports, {
     react: runner.React, 'react/jsx-runtime': jsx,
     'react-router': { Outlet: 'outlet', useLocation: () => ({ pathname }), useNavigate: () => () => {}, useNavigationType: () => 'POP' },
+    '@/hooks/useToast': { useToast: () => ({ success() {} }) },
     '@/hooks/useAccess': { useAccess: () => identity }, '@/hooks/useShell': { ShellContext: { Provider: 'shell' } },
     '@/lib/recentTickers': { pushRecent() {} }, '@/lib/afterLoadIdle': { afterLoadIdle: () => () => {} },
     '@/lib/prefetchRouteChunk': { prefetchRouteOnIntent() {} },

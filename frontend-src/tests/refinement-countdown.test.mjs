@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
+import { fmtScanCountdown } from '../src/lib/format.ts';
 
 const source = fs.readFileSync(new URL('../src/pages/Breakouts.tsx', import.meta.url), 'utf8');
 const parsed = ts.createSourceFile('Breakouts.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -17,6 +18,7 @@ test('only the next-scan display owns the one-second clock', () => {
   const module = { exports: {} };
   const code = ts.transpileModule(`${component.getText(parsed)}\nexport { NextScanCountdown };`, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   vm.runInNewContext(code, { module, exports: module.exports, Date,
+    fmtScanCountdown,
     useNow: (interval) => { intervals.push(interval); return now; },
     __t: (value) => value,
     require: () => ({ jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) }),

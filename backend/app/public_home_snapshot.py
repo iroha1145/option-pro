@@ -132,18 +132,6 @@ _OVERVIEW_FIELDS = {
     "year_high",
     "year_low",
 }
-# Third payload in the same provider-attribution change to carry price_provider
-# without the validator knowing. Named rather than inlined so the drift guard can
-# see it the way it sees the overview and chart sets.
-_SIGNALS_FIELDS = {
-    "ticker",
-    "price",
-    "price_provider",
-    "score",
-    "overall",
-    "signals",
-    "tags",
-}
 _CHART_FIELDS = {
     # Same omission as profile_provider on the overview: the chart builder has
     # attributed its price source since the provider work in #47/#49, but this
@@ -219,33 +207,6 @@ _EARNINGS_EXPECTED_MOVE_SUCCESS_STATUSES = {
     "degraded:chain_fetch_time_only",
 }
 _EARNINGS_FEATURED_REASONS = {"market_cap", "earnings_pool"}
-_UNUSUAL_ROW_FIELDS = {
-    "ticker",
-    "contract_ticker",
-    "contract_type",
-    "type",
-    "strike",
-    "expiration",
-    "volume",
-    "open_interest",
-    "oi",
-    "vol_oi_ratio",
-    "vol_oi",
-    "premium",
-    "premium_basis",
-    "premium_kind",
-    "last_price",
-    "implied_volatility",
-    "underlying_price",
-    "in_the_money",
-    "moneyness",
-    "direction",
-    "direction_confidence",
-    "direction_status",
-    "signal",
-    "inferred_direction",
-    "direction_deprecated",
-}
 
 
 @dataclass(frozen=True)
@@ -267,10 +228,6 @@ PUBLIC_HOME_RESOURCE_SPECS: dict[str, PublicHomeResourceSpec] = {
     # the same ticker already use 7 days, which is what the comment above intends.
     "focus_overview": PublicHomeResourceSpec("focus-overview-v2", 7 * 24 * 60 * 60),
     "focus_chart": PublicHomeResourceSpec("focus-chart-v1", 7 * 24 * 60 * 60),
-    # worker 不再生成 focus_signals 与 unusual。生产快照文件里仍有这两项，
-    # 解析遇到未知资源名会拒绝整份文档，所以规格、参数和校验器还在；
-    # 下一次发布只带走仍在生成的资源，会把它们从文件里清掉。
-    "focus_signals": PublicHomeResourceSpec("focus-signals-v1", 7 * 24 * 60 * 60),
     "market_signals": PublicHomeResourceSpec("market-signals-v1", 7 * 24 * 60 * 60),
     "breakout_lead_chart": PublicHomeResourceSpec(
         "breakout-lead-chart-v1",
@@ -280,7 +237,6 @@ PUBLIC_HOME_RESOURCE_SPECS: dict[str, PublicHomeResourceSpec] = {
     # 交叉验证与 provider 化预期波动。改行形状必须 bump schema，旧条目
     # 在 worker 下一次成功刷新前按不可用处理。
     "earnings": PublicHomeResourceSpec("earnings-upcoming-v3", 30 * 60 * 60),
-    "unusual": PublicHomeResourceSpec("options-unusual-v1", 4 * 24 * 60 * 60),
     # CTA 趋势资金代理估算：日频模型，7 天上限撑过长周末；参数里带
     # method_version——模型参数换代时旧快照按参数不匹配自动失效。
     "cta_trend": PublicHomeResourceSpec("cta-trend-v1", 7 * 24 * 60 * 60),
@@ -298,14 +254,10 @@ def public_home_resource_parameters(resource: str, *, now: float) -> dict[str, A
             "range": "1d",
             "adjustment": "raw",
         }
-    if resource == "focus_signals":
-        return {"ticker": PUBLIC_HOME_DEFAULT_TICKER, "period": "100d"}
     if resource == "market_signals":
         return {"period": "1y"}
     if resource == "earnings":
         return earnings_resource_parameters(datetime.fromtimestamp(now, _MARKET_TZ).date())
-    if resource == "unusual":
-        return {"type": "all", "min_vol_oi": 1.0}
     if resource == "cta_trend":
         from app.services.cta.config import INSTRUMENTS, METHOD_VERSION
 
@@ -415,7 +367,6 @@ def _payload_timestamp_bounds(
         "breakout_lead_chart",
         "market_signals",
         "earnings",
-        "unusual",
     }:
         iso_values.append(payload.get("as_of"))
     if resource == "cta_trend":
@@ -658,39 +609,6 @@ def _validate_breakout_lead_chart(payload: Mapping[str, Any]) -> bool:
         isinstance(ticker, str)
         and _BREAKOUT_TICKER_PATTERN.fullmatch(ticker)
         and _validate_chart_for_ticker(payload, expected_ticker=ticker)
-    )
-
-
-def _validate_signals(payload: Mapping[str, Any]) -> bool:
-    signals = payload.get("signals")
-    if not isinstance(signals, dict) or set(signals) != {
-        "rsi",
-        "macd",
-        "ema20",
-        "sma50",
-        "volume",
-    }:
-        return False
-    for item in signals.values():
-        if (
-            not isinstance(item, dict)
-            or set(item) != {"value", "signal", "label"}
-            or not _finite_number(item.get("value"))
-            or not isinstance(item.get("signal"), str)
-            or not isinstance(item.get("label"), str)
-        ):
-            return False
-    return bool(
-        set(payload) == _SIGNALS_FIELDS
-        and payload.get("ticker") == PUBLIC_HOME_DEFAULT_TICKER
-        and payload.get("price_provider") in {"Massive", "Yahoo/yfinance"}
-        and _finite_number(payload.get("price"), minimum=0.0000001)
-        and _finite_number(payload.get("score"), minimum=0)
-        and float(payload.get("score")) <= 100
-        and payload.get("overall") in {"bullish", "bearish", "neutral"}
-        and isinstance(payload.get("tags"), list)
-        and len(payload.get("tags")) <= 8
-        and all(isinstance(item, str) for item in payload.get("tags"))
     )
 
 
@@ -1121,94 +1039,6 @@ def _validate_earnings(payload: Mapping[str, Any]) -> bool:
     )
 
 
-def _validate_unusual(payload: Mapping[str, Any]) -> bool:
-    rows = payload.get("results")
-    attempted = payload.get("attempted")
-    succeeded = payload.get("succeeded")
-    if not (
-        set(payload) == {
-            "results",
-            "data_limited",
-            "source_status",
-            "attempted",
-            "succeeded",
-            "planned_tickers",
-            "successful_tickers",
-            "failed_symbols",
-            "partial_symbols",
-            "expiration_window",
-            "result_limit",
-            "premium_kind",
-            "contract_multiplier",
-            "as_of",
-        }
-        and isinstance(rows, list)
-        and len(rows) <= 1_000
-        and isinstance(attempted, int)
-        and not isinstance(attempted, bool)
-        and isinstance(succeeded, int)
-        and not isinstance(succeeded, bool)
-        and 1 <= succeeded <= attempted <= 1_000
-        and payload.get("planned_tickers") == attempted
-        and payload.get("successful_tickers") == succeeded
-        and payload.get("expiration_window") == "nearest_2"
-        and payload.get("result_limit") == 50
-        and payload.get("premium_kind") == "estimated_notional"
-        and payload.get("contract_multiplier") == 100
-        and _valid_iso_timestamp(payload.get("as_of"))
-        and isinstance(payload.get("data_limited"), bool)
-        and payload.get("source_status") in {"active", "degraded"}
-        and all(
-            isinstance(payload.get(field), list)
-            and len(payload.get(field)) <= attempted
-            and all(isinstance(item, str) for item in payload.get(field))
-            for field in ("failed_symbols", "partial_symbols")
-        )
-    ):
-        return False
-    for row in rows:
-        if (
-            not isinstance(row, dict)
-            or set(row) not in (_UNUSUAL_ROW_FIELDS, _UNUSUAL_ROW_FIELDS | {"iv_source"})
-            or ("iv_source" in row and row["iv_source"] not in {"vendor", "missing"})
-            or not isinstance(row.get("ticker"), str)
-            or not isinstance(row.get("contract_ticker"), str)
-            or row.get("contract_type") not in {"call", "put"}
-            or row.get("type") not in {"call", "put"}
-            or not _finite_number(row.get("strike"), minimum=0.0000001)
-            or not isinstance(row.get("expiration"), str)
-            or not _finite_number(row.get("volume"), minimum=0)
-            or not _finite_number(row.get("open_interest"), minimum=0)
-            or not _finite_number(row.get("oi"), minimum=0)
-            or not _finite_number(row.get("vol_oi_ratio"), minimum=0)
-            or not _finite_number(row.get("vol_oi"), minimum=0)
-            or not all(
-                _optional_finite(row.get(field), minimum=0)
-                for field in (
-                    "premium",
-                    "last_price",
-                    "implied_volatility",
-                    "underlying_price",
-                )
-            )
-            or not (
-                row.get("in_the_money") is None
-                or isinstance(row.get("in_the_money"), bool)
-            )
-            or not isinstance(row.get("moneyness"), str)
-            or row.get("direction") is not None
-            or not _finite_number(row.get("direction_confidence"), minimum=0)
-            or not isinstance(row.get("direction_status"), str)
-            or not isinstance(row.get("signal"), str)
-            or not isinstance(row.get("inferred_direction"), str)
-            or not isinstance(row.get("direction_deprecated"), bool)
-            or row.get("premium_kind") not in {None, "estimated_notional"}
-            or row.get("premium_basis") not in {None, "quality_mid", "last_price"}
-        ):
-            return False
-    return True
-
-
 def _validate_cta_trend(payload: Mapping[str, Any]) -> bool:
     from app.services.cta.config import INSTRUMENTS, METHOD_VERSION
 
@@ -1256,11 +1086,9 @@ _PAYLOAD_VALIDATORS = {
     "indices": _validate_indices,
     "focus_overview": _validate_overview,
     "focus_chart": _validate_chart,
-    "focus_signals": _validate_signals,
     "market_signals": _validate_market_signals,
     "breakout_lead_chart": _validate_breakout_lead_chart,
     "earnings": _validate_earnings,
-    "unusual": _validate_unusual,
     "cta_trend": _validate_cta_trend,
 }
 
@@ -1272,16 +1100,6 @@ def validate_public_home_payload(resource: str, payload: Any) -> dict[str, Any]:
     if not isinstance(payload, dict) or not _valid_json_tree(payload) or not validator(payload):
         raise ValueError(f"invalid public home payload: {resource}")
     result = dict(payload)
-    if resource == "unusual":
-        from app.services.quote_quality import vendor_iv
-
-        # Read-time compatibility for snapshots saved before Q-04 was fixed.
-        # A provider placeholder must not remain visible for another weekend.
-        result["results"] = [
-            {**row, "implied_volatility": iv, "iv_source": "vendor" if iv is not None else "missing"}
-            for row in payload["results"]
-            for iv in [vendor_iv(row.get("implied_volatility"))]
-        ]
     return result
 
 

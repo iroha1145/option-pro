@@ -1,5 +1,5 @@
 /**
- * 信号卡列表（stock-detail.md T1）：stocks/{t}/signals + breakouts/tickers/{t}
+ * 信号卡列表（stock-detail.md T1）：signals/stock/{t} + breakouts/tickers/{t}
  * 类型 chip + 触发价 Mono + 状态章 + 相对时间；空态「近期无信号 · 雷达仍在盯」。
  * loading / error / empty 三态分开（审计 2.2.5/2.2.6）：首帧不闪空态文案，
  * 请求失败明说「读不到」并给重试，不冒充「确实没有信号」。

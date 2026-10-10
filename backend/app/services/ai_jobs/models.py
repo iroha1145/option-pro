@@ -39,7 +39,7 @@ AIJobStatus = Literal[
     "insufficient_context",
     "budget_blocked",
 ]
-RESULT_VALIDATION_CONTRACT_VERSION = "simplified-chinese-v4"
+RESULT_VALIDATION_CONTRACT_VERSION = "simplified-chinese-v5"
 AIJobType = Literal[
     "earnings_impact",
     "option_alerts",
@@ -1910,11 +1910,8 @@ def _foreign_span_context(
     return False
 
 
-# 2026-10-10 口径变更（用户决定）：正文仍要求中文，但拉丁字母的专名和术语可以
-# 保留原文，english_prose_not_allowed 只拦英文散文。上面的规则都没认下的片段，
-# 由 _is_term_like_span 按「词条」再判一次：单个词元，或不超过 5 个词、每个词都是
-# 首字母大写、全大写、数字或连接词的名称。证券语境的绑定只针对代码样词元
-# （见 _CODE_LIKE_TOKEN）。
+# 正文保持中文为主；外文名称和缩写不再依靠逐词白名单或证券语境推断。
+# 以下旧名称形态判断仍供来源识别与新闻元信息翻译使用。
 _TERM_MAX_WORDS = 5
 _TERM_CONNECTORS = frozenset(
     {
@@ -1923,36 +1920,6 @@ _TERM_CONNECTORS = frozenset(
     }
 )
 _TERM_SUBWORD_SPLIT = re.compile(r"[\s\-./&+']+")
-_JSON_LITERALS = frozenset({"false", "null", "true"})
-# 涨跌词：原有 8 个，加上第一轮审查补过、复核撤回的 14 个。那 14 个放进通用
-# 涨跌词表会误伤名单里的市场术语（「IV飙升」「RSI反弹」）；这里只对没有被任何
-# 规则认下的片段生效，名单里的术语走不到这一步。前面可以隔两个字的副词
-# （「T-Mobile US此前下跌约5.4%」）。
-_TERM_MOVEMENT_WORDS = (
-    "上涨", "下跌", "涨停", "跌停", "走强", "走弱", "收涨", "收跌",
-    "大涨", "大跌", "暴涨", "暴跌", "急涨", "急跌", "飙升", "重挫", "跳水",
-    "拉升", "走高", "走低", "下挫", "反弹",
-)
-_TERM_MOVEMENT = re.compile(
-    "[\u4e00-\u9fff]{0,2}?(?:" + "|".join(_TERM_MOVEMENT_WORDS) + ")"
-)
-_TERM_TRAILING_ALIAS = re.compile(r"[（(][^（()）]{1,24}[）)]")
-# 代码样词元：1 到 5 个大写字母，按空格切分，点号、连字符连起来的不拆开。
-# 2026-10-10 第三轮起只有它们在证券语境要求代码绑定；混合大小写、带小写或带点号
-# 的名称（CleanSpark、C3.ai、Polymesh、BRK.B）紧挨股价、涨跌词也按词条放行。证券语境指：原有的股价、股票等判断，后面两个字以内接涨跌词，后面是
-# 「股」「涨」「跌」或公司、集团、企业（中间只隔标点、空格或数字），以及后接带
-# 符号的百分比、基点（「盘前TSLA +3.5%」）和价格比较（「F>12美元」）。「公司名
-# （代码）」里的代码和「代码为X」不再算证券语境。
-_CODE_LIKE_TOKEN = re.compile(r"[A-Z]{1,5}")
-_CODE_SIGNED_MOVE = re.compile(
-    r"[ \t]*(?:[+＋\-－−]|加|减)[ \t]*[0-9]+(?:\.[0-9]+)?[ \t]*(?:%|％|个?基点)"
-)
-_CODE_PRICE_COMPARISON = re.compile(
-    r"[ \t]*(?:<=|>=|[<>=≤≥＜＞＝])[ \t]*[0-9]+(?:\.[0-9]+)?[ \t]*[万亿千百]*[ \t]*"
-    rf"(?:{_CURRENCY_UNITS})"
-)
-
-
 def _is_name_word(word: str) -> bool:
     return (
         word.casefold() in _TERM_CONNECTORS
@@ -1981,41 +1948,6 @@ def _is_english_prose_span(span: str) -> bool:
         ) or folded in _ENGLISH_PROSE_WORDS:
             prose_words += 1
     return prose_words >= 2
-
-
-def _code_like_token_in_security_context(
-    token: str, *, sentence: str, start: int, end: int,
-) -> bool:
-    if _approved_span_requires_ticker_binding(
-        token, sentence=sentence, start=start, end=end,
-    ):
-        return True
-    rest = sentence[end:].lstrip(" \t")
-    alias = _TERM_TRAILING_ALIAS.match(rest)
-    if alias is not None:
-        rest = rest[alias.end() :]
-    return (
-        _TERM_MOVEMENT.match(_strip_security_reference_separators(rest)) is not None
-        or _strip_security_reference_separators(sentence[end:]).startswith(("股", "涨", "跌"))
-        or _normalize_security_reference_phrase(sentence[end:])
-        .removeprefix("的")
-        .startswith(_SECURITY_COMPANY_BRIDGES)
-        or _CODE_SIGNED_MOVE.match(sentence, end) is not None
-        or _CODE_PRICE_COMPARISON.match(sentence, end) is not None
-    )
-
-
-def _term_in_security_context(span: str, *, sentence: str, start: int, end: int) -> bool:
-    return any(
-        _CODE_LIKE_TOKEN.fullmatch(token.group(0)) is not None
-        and _code_like_token_in_security_context(
-            token.group(0),
-            sentence=sentence,
-            start=start + token.start(),
-            end=start + token.end(),
-        )
-        for token in re.finditer(r"\S+", span)
-    )
 
 
 def _payload_field_name_echo(
@@ -2057,13 +1989,10 @@ def _is_term_like_span(
         return False
     if _BRACKETED_HOSTNAME.fullmatch(span) is not None:
         return False
-    if _is_copied_source_headline_fragment(span, source_texts):
-        return False
-    if _is_english_prose_span(span) or span.casefold() in _JSON_LITERALS:
-        return False
-    return not _term_in_security_context(
-        span, sentence=sentence, start=start, end=end,
-    )
+    # 中文句子里的外文不再逐词猜测是产品名、指标还是英文散文。
+    # 大小写、普通英文词表和股价语境都无法可靠区分 ROE、ATM 等术语。
+    # 整段语言比例和完整英文句子仍在调用方校验；股票绑定由结构字段负责。
+    return True
 
 
 def _normalize_compatibility_alphanumerics(text: str) -> str:
@@ -2091,96 +2020,12 @@ def _numeric_code_is_in_security_context(
     start: int,
     end: int,
 ) -> bool:
-    for foreign_match in _FOREIGN_SPAN.finditer(sentence):
-        if foreign_match.start() > start:
-            break
-        if (
-            foreign_match.start() <= start
-            and end <= foreign_match.end()
-            and foreign_match.group(0) in _ALLOWED_EXACT_FOREIGN_SPANS
-        ):
-            return False
-
-    span = sentence[start:end]
-    if (
-        start >= 2
-        and sentence[start - 1] in ".．"
-        and sentence[start - 2].isascii()
-        and sentence[start - 2].isalnum()
-    ) or (
-        end + 1 < len(sentence)
-        and sentence[end] in ".．"
-        and sentence[end + 1].isascii()
-        and sentence[end + 1].isalnum()
-    ):
-        return False
-    if any(
-        formatted.start() <= start and end <= formatted.end()
-        for formatted in _FORMATTED_NUMBER.finditer(sentence)
-    ):
-        return False
-    if _FORMATTED_NUMBER_CONTINUATION.match(sentence[end:]) is not None:
-        return False
-    if len(span) == 5 and span.startswith("0"):
-        return True
-    before_index = start - 1
-    prefix_blocked = False
-    while (
-        before_index >= 0
-        and _is_security_reference_separator(sentence[before_index])
-    ):
-        if sentence[before_index] in _NUMERIC_CONTEXT_BOUNDARIES:
-            prefix_blocked = True
-            break
-        before_index -= 1
-    after_index = end
-    suffix_blocked = False
-    while (
-        after_index < len(sentence)
-        and _is_security_reference_separator(sentence[after_index])
-    ):
-        if sentence[after_index] in _NUMERIC_SUFFIX_HARD_BOUNDARIES:
-            suffix_blocked = True
-            break
-        after_index += 1
-    prefix = (
-        ""
-        if prefix_blocked
-        else _normalize_security_reference_phrase(sentence[: before_index + 1])
-    )
-    suffix = (
-        ""
-        if suffix_blocked
-        else _normalize_security_reference_phrase(sentence[after_index:])
-    )
-    if len(span) == 4 and suffix.startswith(("年", "年度", "财年")):
-        return False
-    if (
-        _NUMERIC_QUANTITY_SUFFIX.match(sentence[end:]) is not None
-        and _NUMERIC_CODE_ONLY_PREFIX.search(prefix) is None
-    ):
-        return False
-    if (
-        len(span) != 6
-        and prefix.endswith("股票")
-        and _MAGNITUDE_QUANTITY_SUFFIX.match(sentence[end:]) is not None
-    ):
-        return False
-    if (
-        len(span) in (4, 5)
-        and _HONG_KONG_CODE_PREFIX.search(prefix) is not None
-        and _NUMERIC_QUANTITY_SUFFIX.match(sentence[end:]) is None
-        and _HONG_KONG_COUNT_SUFFIX.match(sentence[end:]) is None
-    ):
-        return True
-    return (
-        _SECURITY_REFERENCE_PREFIX.search(prefix) is not None
-        or suffix.startswith(_SECURITY_CODE_SUFFIXES)
-        or suffix.startswith("这只股票")
-        or (
-            len(span) == 6
-            and suffix.startswith(_SECURITY_PRICE_MOVEMENTS)
-        )
+    # 数字名称、比例和资产数量不能可靠地当成股票代码，例如菲利普斯66。
+    # 仅保留明确写明「股票代码」「证券代码」等的绑定，结构化代码另行校验。
+    prefix = _normalize_security_reference_phrase(sentence[:start])
+    match = _SECURITY_REFERENCE_PREFIX.search(prefix) or _HONG_KONG_CODE_PREFIX.search(prefix)
+    return match is not None and (
+        "代码" in match.group(0) or "编号" in match.group(0)
     )
 
 
@@ -2421,12 +2266,7 @@ def validate_simplified_chinese_company_name(
         raise ValueError("company_registered_name_invalid")
     words = re.findall(r"[A-Za-z]+", scan_text)
     has_cjk = any(_is_cjk(char) for char in scan_text)
-    prose_words = sum(
-        1 for word in words if word.casefold() in _ENGLISH_PROSE_WORDS
-    )
     if len(words) > 6 or sum(len(word) for word in words) > 48:
-        raise ValueError("company_registered_name_looks_like_english_prose")
-    if prose_words >= 3:
         raise ValueError("company_registered_name_looks_like_english_prose")
     if not has_cjk and not any(
         char.isupper() or char.isdigit() for char in scan_text
@@ -2899,6 +2739,10 @@ def _news_identifier_translations(payload: dict) -> dict[str, str]:
     translations.update(
         {value: label for value, label in _NEWS_STATUS_LABELS.items() if value in statuses}
     )
+    if article:
+        # 发布文字偶尔照抄嵌套字段；沿用同一翻译入口，不改变结构化值。
+        translations["article.truncated"] = "新闻正文是否截断"
+    translations.update({"true": "是", "false": "否"})
     reason = re.fullmatch(r"http_([1-5][0-9]{2})", str(payload.get("article_reason") or ""))
     if reason is not None:
         translations[reason.group(0)] = f"状态码{reason.group(1)}"
@@ -2913,9 +2757,12 @@ def _translate_news_metadata(value: str, payload: dict) -> str:
         return value
     # 含英文散文的文本也不逐词翻译（2026-10-10 口径变更后）：「article text
     # truncated, source title available」译完只剩一个英文词，就会被当成词条放行。
-    if any(_is_english_prose_span(match.group(0)) for match in _FOREIGN_SPAN.finditer(value)):
-        return value
     translations = _news_identifier_translations(payload)
+    if any(
+        match.group(0) not in translations and _is_english_prose_span(match.group(0))
+        for match in _FOREIGN_SPAN.finditer(value)
+    ):
+        return value
     # Names are exact ASCII tokens, not substrings of an unknown program label.
     tokens = "|".join(sorted(map(re.escape, translations), key=len, reverse=True))
     pattern = re.compile(r"(?<![A-Za-z0-9_])(" + tokens + r")(?![A-Za-z0-9_])")

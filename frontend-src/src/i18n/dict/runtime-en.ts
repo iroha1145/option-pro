@@ -1228,6 +1228,8 @@ export const EN: Record<string, string> = {
   "评分设置未知": "Profile unknown",
   "20日均成交额": "20D avg $ volume",
   "20 日均成交额（美元）": "20-day average dollar volume",
+  "{days} 天 {hours} 小时": "{days}d {hours}h",
+  "{hours} 小时 {minutes} 分钟": "{hours}h {minutes}m",
   "盘前跳空，待盘中确认": "Pre-market gap, awaiting regular-session confirmation",
   "无有效整理平台": "No valid base",
   "距突破位过远": "Extended from pivot",

@@ -7,14 +7,13 @@
  *   错误映射：login_cooldown→连续登录失败，请稍后再试 / https_required→密码模式需 HTTPS / 其他→密码不正确
  * L3 移动单栏；「返回公开研究页面」链接；reduced-motion 降级；页面不可见暂停 K 线循环
  */
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { motion } from 'framer-motion';
 import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 import { useAccess } from '@/hooks/useAccess';
 import { accessApi } from '@/api/modules/access';
 import { ApiError } from '@/api/client';
-import { useToast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
 import { DUR_SECTION, EASE_PAPER, SPRING_INDICATOR } from '@/lib/motion';
 import { useCatalogShake } from '@/lib/transitions';
@@ -151,7 +150,6 @@ export default function Login() {
   const location = useLocation();
   /* 从别处「去登录」带来的来源页（#21）：登录成功回到出发点而不是固定 /watchlist */
   const fromPath = (location.state as { from?: string } | null)?.from ?? null;
-  const toast = useToast();
   const reduced = usePrefersReducedMotion();
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -169,6 +167,26 @@ export default function Login() {
   const { inputRef: userInputRef, ...userShake } = useCatalogShake(1200);
   const { inputRef: passwordInputRef, ...pwShake } = useCatalogShake(1200);
   const [serviceDown, setServiceDown] = useState(false);
+  const completedRef = useRef(false);
+  const submittedRef = useRef<{ mode: 'login' | 'register'; name: string } | null>(null);
+  const completeLogin = useCallback(() => {
+    const submitted = submittedRef.current;
+    if (completedRef.current || !submitted) return;
+    completedRef.current = true;
+    navigate(fromPath ?? '/watchlist', {
+      replace: true,
+      state: { loginNotice: {
+        title: submitted.mode === 'register' ? t('账号已创建') : t('欢迎回来'),
+        description: submitted.name.toLowerCase() === 'admin'
+          ? t('管理员已登录') : t('已登录 {name}', { name: submitted.name }),
+      } },
+    });
+  }, [fromPath, navigate]);
+
+  // 身份已经确认时即可返回；模型能力探针不应让登录页停在「当前会话」。
+  useEffect(() => {
+    if (state === 'verifying' && (isOwner || isCustomer)) completeLogin();
+  }, [state, isOwner, isCustomer, completeLogin]);
 
 
   /* access/status 失败 → 顶部警告条 + 禁用；探测可重试（原实现置位后永不恢复，
@@ -252,6 +270,7 @@ export default function Login() {
       pwShake.play();
       return;
     }
+    submittedRef.current = { mode, name: username.trim() };
     setState('verifying');
     setStatusMsg(null);
     userShake.clear();
@@ -261,12 +280,7 @@ export default function Login() {
       if (mode === 'register') await register(name, password);
       else await login(name, password);
       setState('success');
-      const isAdmin = name.toLowerCase() === 'admin';
-      toast.success(
-        mode === 'register' ? t('账号已创建') : t('欢迎回来'),
-        isAdmin ? t('管理员已登录') : t('已登录 {name}', { name }),
-      );
-      navigate(fromPath ?? '/watchlist', { replace: true });
+      completeLogin();
     } catch (err) {
       setState('error');
       setStatusMsg(mapError(err));
@@ -285,7 +299,7 @@ export default function Login() {
     );
   }
 
-  if (isOwner || isCustomer) {
+  if ((isOwner || isCustomer) && state !== 'verifying' && state !== 'success') {
     /* 已登录不再无条件弹走：客户账号此前被这里立刻 replace 回 /watchlist，
        整个 UI 没有任何地方能结束会话或换账号。 */
     return (

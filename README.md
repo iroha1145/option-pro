@@ -63,16 +63,13 @@ chmod 600 .env machine.env secrets.env
 - `FINNHUB_API_KEY`
 - `MARKETDATA_TOKEN`
 - `MASSIVE_API_KEY`
-- `FMP_API_KEY`
 - `FRED_API_KEY`
 - `INTERNAL_API_TOKEN`
 - `APP_PASSWORD_HASH`
 
-进程已经导出的值优先级最高；`.env` 是部署级覆盖文件，只放其他配置文件都没有归属的运维覆盖（例如 `RANGE_PERSISTENCE_VERSION`），`machine.env` 只接收七个机器字段，`secrets.env` 只接收九个密钥。错放到其他文件的字段不会覆盖正式来源。
+进程已经导出的值优先级最高；`.env` 是部署级覆盖文件，只放其他配置文件都没有归属的运维覆盖（例如 `RANGE_PERSISTENCE_VERSION`），`machine.env` 只接收七个机器字段，`secrets.env` 只接收八个密钥。错放到其他文件的字段不会覆盖正式来源。
 
-`FMP_API_KEY`（Financial Modeling Prep）是可选的第二财报日历来源与批量市值来源：
-未配置时财报页完全走 Finnhub 主源，不影响启动与刷新；配置后双日历交叉验证
-（日期冲突显式标注，不静默合并），市值批量补全并持久缓存，由 Worker 低频刷新。
+财报日历使用 Finnhub 与 Yahoo，市值复用持久缓存并由 Massive 少量补缺。
 
 新闻与经济日历默认由 Worker 直接抓取各来源（`[catalyst].news_source = "local"`），只用已有的 `MASSIVE_API_KEY` 与 `FINNHUB_API_KEY`。`MACROLENS_URL` 与 `INTERNAL_API_TOKEN` 只在切回 `macrolens` 回滚时使用，下一个版本随远端同步一起删除；来源清单、切换、回滚与上线手动项见 `docs/catalysts/news-ingest.md`。
 
@@ -83,6 +80,8 @@ chmod 600 .env machine.env secrets.env
 可选的实时行情通道支持顶部指数基金、突破雷达与当前页面股票，共享最多 50 个 Finnhub 订阅。报价逐位滚动，雷达可逐笔触发，正式确认仍使用完整 5 分钟行情。功能与公开展示均默认关闭，启用、授权边界及接口说明见[实时行情文档](docs/realtime-quotes.md)。
 
 ## 模型分析
+
+新闻、焦点历史与突破扫描附件默认保留 10 天；当前页面仍在使用的结果和活动任务保留引用保护。大库每天备份，账户与运行设置等小文件每 6 小时备份。旧配置迁移、过期回执恢复及日志控制见[存储维护说明](docs/personal-edition/storage-maintenance.md)。
 
 默认没有模型密钥，因此不会提交付费任务。需要启用时，在服务器上执行：
 
@@ -191,7 +190,6 @@ mode = "private_network"
 ./personal.sh secrets set FINNHUB_API_KEY
 ./personal.sh secrets set MARKETDATA_TOKEN
 ./personal.sh secrets set MASSIVE_API_KEY
-./personal.sh secrets set FMP_API_KEY
 ./personal.sh secrets set FRED_API_KEY
 ./personal.sh secrets set INTERNAL_API_TOKEN
 ./personal.sh secrets set APP_PASSWORD_HASH

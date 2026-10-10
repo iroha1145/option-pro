@@ -19,9 +19,11 @@ async function fixture(page, options = {}) {
         account: state.customer && !state.expired ? { logged_in: true, username: state.customer } : null } });
     }
     if (path === '/api/access/login') {
-      state.failIdentity = true;
+      if (state.holdLogin) { state.loginRoutes ??= []; state.loginRoutes.push(route); return; }
+      state.failIdentity = state.failIdentityAfterLogin ?? true;
       return route.fulfill({ json: { ok: true }, headers: { 'Set-Cookie': 'audit_owner=1; Path=/; HttpOnly; SameSite=Lax' } });
     }
+    if (path === '/api/ai/status' && state.holdCapabilities) { state.capabilityRoutes ??= []; state.capabilityRoutes.push(route); return; }
     if (path === '/api/ai/status') return route.fulfill({ json: { enabled: false } });
     if (path === '/api/runtime-settings') return route.fulfill({ json: { settings: { ai: { manual_analysis_enabled: false } } } });
     if (path === '/api/account/watchlist') return state.expired
@@ -152,5 +154,86 @@ test('login cookie plus failed identity pauses personalized reads and restores o
   // The confirmed principal remounts Home and obtains an owner-tagged response.
   await expect.poll(async () => (await cached(page, '/strength/market'))?.principal).toBe('owner\0');
   expect((await cached(page, '/strength/market')).raw.source).toBe('audit-owner-cookie');
+  expect(state.errors).toEqual([]);
+});
+
+
+test('confirmed administrator returns to the source page before capability probes finish, with one notice', async ({ page }) => {
+  const state = await fixture(page, { failIdentityAfterLogin: false, holdCapabilities: true });
+  await page.goto('/watchlist');
+  await expect(page.getByRole('heading', { name: '我的关注', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: '登录', exact: true }).click();
+  await page.getByLabel('用户名', { exact: true }).fill('admin');
+  await page.getByLabel('密码', { exact: true }).fill('audit-password-12345');
+  await page.locator('form').getByRole('button', { name: '登录', exact: true }).click();
+  await expect(page).toHaveURL(/\/watchlist$/);
+  await expect(page.getByRole('heading', { name: '我的关注', exact: true })).toBeVisible();
+  await expect(page.getByText('当前会话', { exact: true })).toHaveCount(0);
+  const notices = page.getByRole('status').filter({ hasText: '欢迎回来' });
+  await expect(notices).toHaveCount(1);
+  await expect(notices).toContainText('管理员已登录');
+  const box = await notices.boundingBox();
+  expect(box.x).toBeGreaterThan(1000);
+  expect(box.y).toBeLessThan(100);
+  expect(await page.evaluate(() => history.state.usr?.loginNotice)).toBeUndefined();
+  // Finishing the original Promise must not navigate back or add another notice.
+  await page.getByRole('link', { name: 'Optix Pro 首页', exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+  for (const route of state.capabilityRoutes ?? []) await route.fulfill({ json: { enabled: false } });
+  await expect(notices).toHaveCount(1);
+  await expect(page).toHaveURL(/\/$/);
+  state.holdCapabilities = false;
+  await page.reload();
+  await expect(page.getByRole('link', { name: 'Optix Pro 首页', exact: true })).toBeVisible();
+  await expect(notices).toHaveCount(0);
+  expect(state.errors).toEqual([]);
+});
+
+test('direct login keeps its default destination and existing sessions can still switch account', async ({ page }) => {
+  const state = await fixture(page, { failIdentityAfterLogin: false });
+  await page.goto('/login');
+  await page.getByLabel('用户名', { exact: true }).fill('admin');
+  await page.getByLabel('密码', { exact: true }).fill('audit-password-12345');
+  await page.locator('form').getByRole('button', { name: '登录', exact: true }).click();
+  await expect(page).toHaveURL(/\/watchlist$/);
+  await expect(page.getByRole('heading', { name: '我的关注', exact: true })).toBeVisible();
+  await page.goto('/login');
+  await expect(page.getByText('当前会话', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '切换账号', exact: true })).toBeVisible();
+  expect(state.errors).toEqual([]);
+});
+
+
+for (const source of ['/breakouts?view=history#radar', '/stock/NVDA?range=1mo#options']) {
+  test(`global login returns to its complete source location ${source}`, async ({ page }) => {
+    const state = await fixture(page, { failIdentityAfterLogin: false });
+    await page.goto(source);
+    await page.getByRole('link', { name: '登录', exact: true }).click();
+    await expect(page).toHaveURL(/\/login$/);
+    await page.getByLabel('用户名', { exact: true }).fill('admin');
+    await page.getByLabel('密码', { exact: true }).fill('audit-password-12345');
+    await page.locator('form').getByRole('button', { name: '登录', exact: true }).click();
+    await expect(page).toHaveURL(`http://127.0.0.1:3147${source}`);
+    await expect(page.getByRole('status').filter({ hasText: '欢迎回来' })).toHaveCount(1);
+    await expect(page.getByText('当前会话', { exact: true })).toHaveCount(0);
+    expect(state.errors).toEqual([]);
+  });
+}
+
+test('switching to registration while login is pending keeps the actual login notice', async ({ page }) => {
+  const state = await fixture(page, { failIdentityAfterLogin: false, holdLogin: true });
+  await page.goto('/login');
+  await page.getByLabel('用户名', { exact: true }).fill('admin');
+  await page.getByLabel('密码', { exact: true }).fill('audit-password-12345');
+  await page.locator('form').getByRole('button', { name: '登录', exact: true }).click();
+  await expect.poll(() => state.loginRoutes?.length ?? 0).toBe(1);
+  await page.getByRole('button', { name: '注册账号', exact: true }).first().click();
+  await expect(page.getByRole('button', { name: '注册账号', exact: true }).first()).toHaveAttribute('aria-pressed', 'true');
+  await state.loginRoutes[0].fulfill({ json: { ok: true }, headers: {
+    'Set-Cookie': 'audit_owner=1; Path=/; HttpOnly; SameSite=Lax',
+  } });
+  await expect(page).toHaveURL(/\/watchlist$/);
+  await expect(page.getByRole('status').filter({ hasText: '欢迎回来' })).toHaveCount(1);
+  await expect(page.getByRole('status').filter({ hasText: '账号已创建' })).toHaveCount(0);
   expect(state.errors).toEqual([]);
 });

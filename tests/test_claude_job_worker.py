@@ -469,7 +469,7 @@ def test_configured_claude_slots_stream_together_and_drain_on_cancel(
         assert repo.claim_due("later", 60, max_concurrency=concurrency) is not None
 
 
-def test_claude_prompt_json_changes_only_earnings_identity_and_keeps_prepare_policies(tmp_path):
+def test_claude_prompt_json_and_validation_upgrade_keep_prepare_policies(tmp_path):
     # Pinned to the production v2 contract before the provider encoding fix.
     expected = {
         ("earnings_impact", "claude-haiku-5-5"): "90a0d7b406e0e84af3d618e715fe071404f26fe8a004cfcf5b6450ccd8407e8b",
@@ -483,7 +483,10 @@ def test_claude_prompt_json_changes_only_earnings_identity_and_keeps_prepare_pol
         if (job_type, model) == ("earnings_impact", "claude-haiku-5-5"):
             assert identity[1] != digest
         else:
-            assert identity[1] == digest
+            assert identity[1] != digest
+            assert runtime.schema_identity_current(
+                job_type, runtime.PROMPT_VERSIONS[job_type], identity[0], digest, model=model,
+            )
         assert runtime.schema_identity_current(job_type, runtime.PROMPT_VERSIONS[job_type], *identity, model=model)
     for job_type, previous in (
         ("earnings_impact", "efcf4a6d24e87c8bfcb8620183338d7ddd927a8df9290b1a8ee7f601a05e9265"),
@@ -591,7 +594,7 @@ def test_prompt_json_fixed_cached_prefix_fits_existing_input_and_reservation_bou
     ("news_impact", {"news_id": 1, "change_sequence": 1, "content_hash": "a" * 64, "allowed_tickers": []},
      "68b3095ba0f47e559a5a7edd3daf6b091350546961ce398368684143bbb76a4a"),
 ])
-def test_other_claude_job_types_keep_native_json_and_v2_identity(tmp_path, job_type, payload, v2_digest):
+def test_other_claude_job_types_keep_native_json_and_v4_identity_compatibility(tmp_path, job_type, payload, v2_digest):
     config = settings(tmp_path / "jobs.db")
     request = runtime.build_runtime_request(job_type, payload)
     expected = claude_provider.prepare_message(
@@ -604,7 +607,11 @@ def test_other_claude_job_types_keep_native_json_and_v2_identity(tmp_path, job_t
     assert actual.params == expected.params
     assert actual.params["output_config"]["format"]["type"] == "json_schema"
     assert claude_provider._PROMPT_JSON_INSTRUCTIONS not in actual.params["system"][0]["text"]
-    assert runtime.schema_identity(job_type, model="claude-haiku-5-5")[1] == v2_digest
+    current = runtime.schema_identity(job_type, model="claude-haiku-5-5")
+    assert current[1] != v2_digest
+    assert runtime.schema_identity_current(
+        job_type, runtime.PROMPT_VERSIONS[job_type], current[0], v2_digest, model="claude-haiku-5-5",
+    )
 
 
 def test_claim_failure_does_not_cancel_paid_sibling_streams(tmp_path, monkeypatch):

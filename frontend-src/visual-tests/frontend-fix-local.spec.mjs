@@ -26,6 +26,16 @@ async function fixture(page, options = {}) {
       state.indexReads += 1;
       return route.fulfill({ json: { indices: [{ symbol: '^GSPC', price: state.indexPrice, change_percent: 1 }] } });
     }
+    if (state.detailFixture && pathName === '/api/stocks/NVDA') return route.fulfill({ json: {
+      ticker: 'NVDA', name: 'NVIDIA', price: 100, change_percent: 1, open: 99, high: 102, low: 98,
+      prev_close: 99, volume: 1000000, market_cap: 2000000000, pe_ratio: 25,
+      year_low: 50, year_high: 150, as_of: new Date().toISOString(),
+    } });
+    if (state.detailFixture && pathName === '/api/strength/stocks/NVDA') return state.score == null
+      ? route.fulfill({ status: 404, json: { message: 'Not in published candidates' } })
+      : route.fulfill({ json: { as_of: new Date().toISOString(), row: {
+        ticker: 'NVDA', price: 100, final_score: state.score,
+      } } });
     if (pathName === '/api/quotes') return route.fulfill({ json: { quotes: [], status: { enabled: false, allowed: false, connected: false } } });
     if (pathName === '/api/catalysts/feed' && url.searchParams.get('limit') === '12') {
       return route.fulfill({ json: { items: state.showJob ? [news] : [], next_cursor: null,
@@ -113,3 +123,22 @@ test('a missing job record stops polling and names the failure', async ({ page }
   expect(state.jobReads).toBe(2);
   expect(state.errors).toEqual([]);
 });
+
+
+for (const score of [null, 0, 83.61]) {
+  test(`detail hides unsupported statistics and preserves available score ${score}`, async ({ page }) => {
+    const state = await fixture(page, { detailFixture: true, score });
+    await page.goto('/stock/NVDA');
+    await expect(page.getByRole('heading', { name: '关键数据', exact: true })).toBeVisible();
+    await expect(page.locator('dt').filter({ hasText: /^均量$/ })).toHaveCount(0);
+    await expect(page.locator('dt').filter({ hasText: /^IV 百分位$/ })).toHaveCount(0);
+    const header = page.locator('main header').first();
+    if (score === null) await expect(header.getByText('评分', { exact: true })).toHaveCount(0);
+    else {
+      await expect(header.getByText('评分', { exact: true })).toBeVisible();
+      await expect(header.getByLabel(`评分 ${score.toFixed(1)}`, { exact: true })).toBeVisible();
+    }
+    await expect(page.locator('dt').filter({ hasText: /^市盈率$/ })).toBeVisible();
+    expect(state.errors).toEqual([]);
+  });
+}

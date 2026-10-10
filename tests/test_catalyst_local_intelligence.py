@@ -605,11 +605,11 @@ def test_prune_journal_removes_stale_items_and_keeps_live_history(tmp_path):
         assert count(
             "SELECT COUNT(*) FROM macrolens_etl_news WHERE news_id=101"
         ) == 0
-        # 付费结果的不可变审计副本保留；tombstone 防复活行保留。
+        # 无引用的过期全文审计删除；tombstone 防复活行保留。
         assert count(
             "SELECT COUNT(*) FROM catalyst_local_analysis_result_audit"
             " WHERE job_id='job-101'"
-        ) == 1
+        ) == 0
         assert count(
             "SELECT COUNT(*) FROM macrolens_etl_news_tombstones"
             " WHERE news_id=999"
@@ -6259,7 +6259,7 @@ def test_local_publication_rejects_mostly_english_model_text(tmp_path):
         change_sequence=1,
         content_hash="hash-171-1",
     )
-    result["title_zh"] = "NVIDIA launches new chip 新品"
+    result["title_zh"] = "NVIDIA launches a new chip and raises its revenue outlook 新品"
     _finish_job(ai, job["job_id"], result)
 
     intelligence.reconcile()
@@ -8218,3 +8218,52 @@ def test_earlier_query_cannot_replace_expired_later_cache(monkeypatch, same_curs
     assert existing["query_as_of"] == later
     assert existing["rows"] == [{"news_id": 10}]
     assert existing["anon_items"] == [{"news_id": 10}]
+
+
+def test_ten_day_focus_and_audit_retention_keeps_boundaries_and_active_tasks(tmp_path, monkeypatch):
+    now = datetime(2026, 10, 11, 12, tzinfo=timezone.utc)
+    _etl, _ai, intelligence = _stack(tmp_path)
+    cutoff = now - timedelta(days=10)
+    expired = cutoff - timedelta(seconds=1)
+    with intelligence._connect() as connection:
+        for cycle_id, status, created, result in (
+            ("expired", "completed", expired - timedelta(days=3), "{}"),
+            ("previous", "completed", expired - timedelta(days=2), "{}"),
+            ("current", "completed", expired - timedelta(days=1), "{}"),
+            ("boundary", "failed", cutoff, None),
+            ("active", "in_progress", expired, None),
+        ):
+            stamp = _iso(created)
+            connection.execute(
+                """INSERT INTO catalyst_local_focus_cycles(
+                    cycle_id,status,prepared_revision,snapshot_as_of,input_hash,job_id,
+                    payload_json,result_json,created_at,completed_at,updated_at)
+                    VALUES(?,?,1,?,?,?,'{}',?,?,?,?)""",
+                (cycle_id, status, stamp, "a" * 64, cycle_id, result, stamp, stamp, stamp),
+            )
+        for job_id, observed, outcome, digest in (
+            ("orphan", expired, "accepted", "a"),
+            ("orphan", expired, "rejected", "b"),
+            ("audit-boundary", cutoff, "accepted", "c"),
+            ("recent-negative", expired, "accepted", "d"),
+            ("recent-negative", now, "rejected", "e"),
+        ):
+            connection.execute(
+                """INSERT INTO catalyst_local_analysis_result_audit(
+                    job_id,contract_id,result_sha256,outcome,result_json,observed_at)
+                    VALUES(?,'test',?,?, '{}',?)""",
+                (job_id, digest * 64, outcome, _iso(observed)),
+            )
+        connection.commit()
+    result = intelligence.prune_journal(retention_days=10, now=now)
+    assert result["pruned_focus_cycles"] == 1
+    assert result["pruned_analysis_audits"] == 2
+    with intelligence._connect() as connection:
+        assert {row[0] for row in connection.execute("SELECT cycle_id FROM catalyst_local_focus_cycles")} == {
+            "previous", "current", "boundary", "active",
+        }
+        assert [(row[0], row[1]) for row in connection.execute(
+            "SELECT job_id,outcome FROM catalyst_local_analysis_result_audit ORDER BY job_id,outcome"
+        )] == [("audit-boundary", "accepted"), ("recent-negative", "accepted"), ("recent-negative", "rejected")]
+    again = intelligence.prune_journal(retention_days=10, now=now)
+    assert not any(again.values())

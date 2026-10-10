@@ -640,8 +640,7 @@ def snapshot_minute_quote(snapshot: dict[str, Any]) -> tuple[float, str] | None:
 def reference_ticker_detail(ticker: str) -> dict[str, Any]:
     """单只代码的参考详情（含 market_cap）。
 
-    仅用于小规模补缺（财报市值增强的兜底），批量场景必须走 FMP 批量接口；
-    调用方自己限流限量。
+    仅用于小规模补缺（财报市值增强的兜底）；调用方复用持久缓存并限制查询数量。
     """
 
     symbol = to_symbol(ticker)

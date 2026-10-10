@@ -155,3 +155,17 @@ export function fmtCountdown(targetIso: string, now: number): string {
   const pad = (x: number) => String(x).padStart(2, '0');
   return `${pad(h)}:${pad(m)}:${pad(s)}`;
 }
+
+/** 雷达下次扫描：休市长等待按天/小时展示，短等待保留分秒。 */
+export function fmtScanCountdown(targetIso: string | null, now: number): string {
+  const remaining = targetIso ? new Date(targetIso).getTime() - now : Number.NaN;
+  if (!Number.isFinite(remaining)) return '—';
+  const ms = Math.max(0, remaining);
+  const days = Math.floor(ms / 86_400_000);
+  const hours = Math.floor(ms / 3_600_000) % 24;
+  const minutes = Math.floor(ms / 60_000) % 60;
+  if (days > 0) return t('{days} 天 {hours} 小时', { days, hours });
+  if (hours > 0) return t('{hours} 小时 {minutes} 分钟', { hours, minutes });
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${pad(minutes)}:${pad(Math.floor(ms / 1000) % 60)}`;
+}
