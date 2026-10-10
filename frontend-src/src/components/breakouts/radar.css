@@ -53,7 +53,6 @@
 .radar-current-readout strong { color: var(--ink-800); font-size: 13px; font-weight: 500; }
 .radar-reference-invalid { color: var(--down-600); }
 .radar-reference-trigger { color: var(--brand-600); }
-.radar-reference-target { color: var(--up-600); }
 .radar-reference-mark {
   position: absolute;
   top: 50%;

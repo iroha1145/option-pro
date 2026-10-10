@@ -776,7 +776,6 @@
   border-radius: 2px;
   background: var(--brand-600);
 }
-.page-tab-count { color: var(--ink-400); font-weight: 400; }
 @media (hover: hover) and (pointer: fine) {
   .page-tab:hover { color: var(--ink-900); }
 }
