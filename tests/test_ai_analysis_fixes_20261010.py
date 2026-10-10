@@ -499,7 +499,7 @@ def test_luna_request_tools_follow_each_tasks_article():
     searching = runtime._create_params(settings, "news_impact", without)
     assert searching["tools"][0]["type"] == "web_search"
     assert searching["tool_choice"] == "required"
-    assert searching["max_tool_calls"] == 3
+    assert searching["max_tool_calls"] == 1
     assert "必须先联网搜索原始事件" in searching["instructions"]
     assert "不得附加网址、Markdown链接或括号中的网站域名" in searching["instructions"]
 
@@ -512,7 +512,7 @@ def test_luna_request_tools_follow_each_tasks_article():
 
     assert runtime.schema_identity("news_impact", model=runtime.LUNA_MODEL, payload=without) == runtime.LUNA_WEB_NEWS_IDENTITY
     assert runtime.schema_identity("news_impact", model=runtime.LUNA_MODEL, payload=with_article) == runtime.LUNA_ARTICLE_NEWS_IDENTITY
-    assert runtime.max_tool_calls_for("news_impact", model=runtime.LUNA_MODEL, payload=without) == 3
+    assert runtime.max_tool_calls_for("news_impact", model=runtime.LUNA_MODEL, payload=without) == 1
     assert runtime.max_tool_calls_for("news_impact", model=runtime.LUNA_MODEL, payload=with_article) == 0
     assert runtime.budget_reservation_microusd(
         "news_impact", model=runtime.LUNA_MODEL, payload=with_article,

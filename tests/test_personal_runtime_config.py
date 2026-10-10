@@ -163,7 +163,7 @@ def test_claude_endpoint_environment_override_is_rejected(monkeypatch) -> None:
 
 @pytest.mark.parametrize(
     ("model", "reasoning"),
-    [("claude-haiku-5-5", "max"), ("gpt-5.6-terra", "xhigh")],
+    [("claude-haiku-5-5", "max"), ("claude-haiku-5-5", "high")],
 )
 def test_settings_reject_mixed_model_reasoning(model, reasoning) -> None:
     with pytest.raises(ValidationError):

@@ -15,9 +15,13 @@ catalyst_mode = "scheduled"
 [ai]
 model = "claude-haiku-5-5"
 reasoning = "xhigh"
-# 新闻按已抓到的正文分析，只有没拿到正文时 Luna 才联网查原始报道；
+# 新闻按已抓到的正文分析；没拿到正文时，来源摘要够长（去掉 HTML 与空白后至少
+# 300 字符）就只按摘要分析，摘要也不够时 Luna 才联网查原始报道（最多 1 次）；
 # 热点由 Sonnet 联网核验后发布。
 news_model = "gpt-5.6-luna"
+# GPT 模型的推理档位可选 max、xhigh、high：max 最贵，xhigh、high 依次更省。
+# 改档位后，队列里还没提交的新闻任务记 runtime_configuration_changed（没有花钱），
+# 下一小时按新档位重建；已完成的结果照常显示。
 news_reasoning = "max"
 market_focus_model = "claude-sonnet-5-5"
 market_focus_reasoning = "xhigh"
@@ -49,6 +53,10 @@ manual_refresh_cooldown_seconds = 30
 # 新闻与经济日历的写入方：local 由 Worker 直接抓取下面各来源；macrolens 沿用
 # MacroLens ETL 远端同步，只为回滚保留，回滚步骤见 docs/catalysts/news-ingest.md。
 news_source = "local"
+# 定时分析跳过 Zacks 的模板稿（行情回顾、排名榜单、博客摘要等标题套话，或链接
+# 带 yseop_template 的自动生成稿），新闻列表把它们标为「不分析」（skipped）。
+# 改 false 回到全部分析；站长手动点分析不受这个开关影响。
+scheduled_skip_template_commentary = true
 
 [catalyst.sources]
 # 各来源的开关与轮询间隔（秒）。到期的来源在下一个同步周期（sync_seconds）抓取，

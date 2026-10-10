@@ -41,6 +41,7 @@ from app.services.sqlite_errors import is_sqlite_lock_contention
 
 from .errors import CatalystError, InvalidCursorError
 from .news_quality import NEWS_QUALITY_RULES_VERSION, TITLE_STOP_WORDS, news_quality
+from .template_commentary import template_commentary_reason
 
 
 def macro_conditions_context() -> dict[str, Any] | None:
@@ -1133,6 +1134,12 @@ def _published_analysis(item: Mapping[str, Any]) -> dict[str, Any] | None:
     return analysis
 
 
+def _awaiting_analysis(item: Mapping[str, Any]) -> bool:
+    """No published analysis yet, and not one that scheduling leaves alone."""
+
+    return _published_analysis(item) is None and item.get("analysis_status") != "skipped"
+
+
 def _sha(value: Any) -> str:
     return hashlib.sha256(_json(value).encode("utf-8")).hexdigest()
 
@@ -1753,6 +1760,7 @@ class LocalCatalystIntelligence:
         max_queued: int = 200,
         manual_refresh_cooldown_seconds: int = 30,
         article_fetcher: Callable[..., dict[str, Any]] | None = None,
+        scheduled_skip_template_commentary: bool = True,
     ) -> None:
         if mode not in {"off", "read", "manual", "scheduled"}:
             raise ValueError("invalid catalyst mode")
@@ -1781,6 +1789,7 @@ class LocalCatalystIntelligence:
         self.manual_refresh_cooldown_seconds = int(
             manual_refresh_cooldown_seconds
         )
+        self.scheduled_skip_template_commentary = bool(scheduled_skip_template_commentary)
         normalized = {
             str(value).strip().upper()
             for value in canonical_tickers
@@ -4313,10 +4322,7 @@ class LocalCatalystIntelligence:
                 maybe_complete = (
                     cached is not None
                     and cached["query_as_of"] <= as_of
-                    and _anon_items_match_rows(
-                        cached.get("anon_items"),
-                        cached.get("rows") or (),
-                    )
+                    and self._anon_items_usable(cached)
                 )
             if maybe_complete:
                 store_cursor = _revision_store_cursor(connection)
@@ -4325,10 +4331,7 @@ class LocalCatalystIntelligence:
                     if (
                         cached is not None
                         and _revision_cache_fresh(cached, store_cursor, as_of=as_of)
-                        and _anon_items_match_rows(
-                            cached.get("anon_items"),
-                            cached.get("rows") or (),
-                        )
+                        and self._anon_items_usable(cached)
                     ):
                         return cached["rows"], cached["anon_items"]
         rows, source_cursor = self._active_revisions_tracked(
@@ -4352,7 +4355,7 @@ class LocalCatalystIntelligence:
                 # Equal DB cursors can still represent different as_of row
                 # sets. Do not reuse another request's projected window.
                 and cached["rows"] == rows
-                and _anon_items_match_rows(cached.get("anon_items"), cached.get("rows") or ())
+                and self._anon_items_usable(cached)
             ):
                 return rows, cached["anon_items"]
         built_items = [
@@ -4372,7 +4375,20 @@ class LocalCatalystIntelligence:
                     and _anon_items_match_rows(built_items, cached.get("rows") or ())
                 ):
                     cached["anon_items"] = built_items
+                    cached["anon_skip_templates"] = self.scheduled_skip_template_commentary
         return rows, built_items
+
+    def _anon_items_usable(self, cached: Mapping[str, Any]) -> bool:
+        """Cached anonymous items match the row set and this skip setting.
+
+        Their analysis status depends on scheduled_skip_template_commentary,
+        and the cache key covers only the database and the window.
+        """
+
+        return (
+            _anon_items_match_rows(cached.get("anon_items"), cached.get("rows") or ())
+            and cached.get("anon_skip_templates") == self.scheduled_skip_template_commentary
+        )
 
     def _data_through(self, connection: sqlite3.Connection) -> str | None:
         """Light equivalent of status()['data_through'] for feed/batch reads."""
@@ -4590,6 +4606,18 @@ class LocalCatalystIntelligence:
         value = sum(score * weight for score, weight, _reason in components.values()) / total_weight
         reasons = [reason for _score, _weight, reason in components.values() if reason]
         return round(max(0.0, min(100.0, value)), 2), scores, reasons
+
+    def _analysis_skip_reason(self, row: Mapping[str, Any]) -> str | None:
+        """Why scheduled analysis leaves this revision alone, if it does.
+
+        Only Zacks template articles are skipped, and only while
+        ``[catalyst] scheduled_skip_template_commentary`` is on. An owner may
+        still request one explicitly.
+        """
+
+        if not self.scheduled_skip_template_commentary:
+            return None
+        return template_commentary_reason(row.get("source"), row.get("raw_title"), row.get("url"))
 
     def _analysis_for_revision(
         self,
@@ -5124,6 +5152,12 @@ class LocalCatalystIntelligence:
             status = "completed" if current else "pending"
         elif status == "completed":
             status = "pending"
+        # Never requested and never scheduled: not an item waiting for analysis.
+        skip_reason = (
+            self._analysis_skip_reason(row) if status == "not_requested" else None
+        )
+        if skip_reason is not None:
+            status = "skipped"
         item = {
             "news_id": int(row["news_id"]),
             "change_sequence": int(row["change_sequence"]),
@@ -5187,6 +5221,8 @@ class LocalCatalystIntelligence:
             "available_at": available,
             "is_stale": False,
         }
+        if skip_reason is not None:
+            item["analysis_skip_reason"] = skip_reason
         if result:
             item.update(
                 {
@@ -5499,7 +5535,7 @@ class LocalCatalystIntelligence:
                 "analyzed_count": len(analyzed),
                 "bullish": sum(1 for item in analyzed if item.get("classification") == "bullish"),
                 "bearish": sum(1 for item in analyzed if item.get("classification") == "bearish"),
-                "pending": sum(1 for item in filtered if not _published_analysis(item)),
+                "pending": sum(1 for item in filtered if _awaiting_analysis(item)),
                 "high_impact_macro": None,
             },
             "stock_impacts": [],
@@ -5739,11 +5775,7 @@ class LocalCatalystIntelligence:
                     "pending": (
                         0
                         if directional_only
-                        else sum(
-                            1
-                            for item in filtered
-                            if not _published_analysis(item)
-                        )
+                        else sum(1 for item in filtered if _awaiting_analysis(item))
                     ),
                     "high_impact_macro": None,
                 },
@@ -6874,7 +6906,13 @@ class LocalCatalystIntelligence:
                 ).fetchall()
             except sqlite3.OperationalError:
                 return []
-        items = [dict(row) for row in rows]
+        # Template articles never enter automatic analysis, so they neither
+        # take a candidate position nor cost an article probe.
+        items = [
+            item
+            for item in (dict(row) for row in rows)
+            if self._analysis_skip_reason(item) is None
+        ]
         # A routine-looking RSS headline can conceal a dividend increase in
         # the body. Probe a bounded number before excluding them from automatic
         # analysis. Prioritize never-read/oldest attempts to avoid starvation.
@@ -7237,6 +7275,11 @@ class LocalCatalystIntelligence:
                     as_of=observed,
                 )
                 if analysis is not None:
+                    continue
+                if self._analysis_skip_reason(revision) is not None:
+                    # The focus cycle reads published news only; a template
+                    # article it will never get must not hold the cycle back.
+                    skipped += 1
                     continue
                 focus_pending_news_ids.add(news_id)
                 candidates.append(revision)
