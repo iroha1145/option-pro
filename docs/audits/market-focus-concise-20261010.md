@@ -119,3 +119,58 @@
 - 「存在不确定性时必须列出」无法机器判断，只在提示词里。
 - 前端没有改，也没有跑 PR #246 的测试；只按它的 `nCycleRecord` 对齐了字段名。
 - 中文校验器的词条规则没有改动。
+
+## 来源绑定放宽（2026-10-10）
+
+分支 `claude/focus-evidence-lenient-2026-10-10`，基于 main `858707ed`。用户反馈「热点追踪又失败了，把条件放的再松一点看看」。
+
+### 取证
+
+- 第六批上线后第一轮 Sonnet 核实周期 `aij_af48b5a12957427c9f0cad78c5a533b9`（schema `market_focus_verified_zh_cn_v2`）整轮失败，`schema_validation_failed`，原因 `market_focus_verification_evidence_ambiguous`。
+- 来自 `models.validate_market_focus_evidence`：引用没有调用编号时，按规范化网址在回执里找成功调用，候选数不等于 1 就整轮报错（候选为 0 也报这个码）。
+- 这轮回执有 114 次成功调用（搜索 113、抓取 1），没有同一网址被调用多次。核验 20 条（已证实 11、无法核实 9），没有编号的引用 33 个：32 个唯一命中，1 个为 0。没命中的那个是模型把网址截断了：引用 `…/stock-market-today-oct-9-at-and-t-slides-on-spacex`，回执里是 `…-slides-on-spacex-spectrum-deal-threat/?source=…`。
+- 篇幅没有碰到本 PR 前面定的任何上限（标题 21 字、导语 73、总结 243、市场摘要 204），这次没改上限。
+
+### 新规则
+
+只改了 `validate_market_focus_evidence` 这一个校验函数。提示词、结构和任务身份都不变，有测试钉住三种模型的身份。worker 完成路径、找回已付费结果（`recover_schema_validation_failure`）、任务公开视图和发布前复核都调这个函数，所以走同一套规则。
+
+1. 没有调用编号的引用：先按规范化网址精确匹配；同一网址被调用多次时，取回执里的第一次。精确匹配不到时，找「回执网址以引用网址为前缀」的唯一一条：比较前去掉查询串、片段和末尾斜杠，协议和主机必须相同，引用必须带域名之外的路径（只写域名不会命中）。绑定后，引用的网址换成回执里的完整网址。
+2. 仍对不上的引用直接丢弃，不再整轮报错：网址无效、候选为 0、前缀命中多条网址、带编号但「编号加网址」不在回执里。重复引用只留第一条。
+3. 丢弃之后，判 supported 的事件没有任何 supports 引用、判 contradicted 的事件没有任何 contradicts 引用时，把判定降为 unverifiable。热点条带只展示 supported 事件，所以这样是保守的。
+4. 输入绑定保持严格：核验列表必须与输入事件逐一对应（编号与版本都对），否则仍报 `market_focus_verification_event_mismatch`。`validate_result` 本身也做同样的检查。
+5. 规则是幂等的：已绑定的结果再绑定一次不变。发布前复核会分别绑定库里的结果和付费回执原文，再比较两者是否相同，这一点由测试覆盖。
+
+### 代价
+
+- 被降级事件的标题和摘要不进热点条带，个股评估也只发布引用全部已证实的那些。但模型的全局文字（标题、导语、总结、市场摘要、不确定性、主导事件）是按原文公开的，里面仍可能提到被降级的事件，只靠提示词约束。
+- 前缀匹配只要求唯一。模型若把网址截得很短，恰好只命中一条不相干的回执，也会绑上去；引用必须带路径，并且协议和主机要相同，可以挡住只写域名的情况，但挡不住所有误配。
+- 带了编号、但网址被截断的引用不做前缀匹配，直接丢弃。这是有意收窄的：编号和网址必须同时对上。
+- 丢弃引用和降级判定都不记日志、不计数，看不出模型引用质量是否在变差。
+
+### 仍会整轮失败的情况
+
+- 核验列表与输入事件对不上：漏写、重复、编号或版本写错（`market_focus_verification_event_mismatch`）。事件编号是 32 位十六进制，模型抄错一位就会触发，和新闻摘要抄错是同一类问题。生产上是否发生过，我没有查到数据。
+- 主导事件或个股评估引用了输入之外的事件编号或股票（`market_focus_event_binding_mismatch`、`market_focus_ticker_binding_mismatch`），以及结构、长度和中文校验不过（`schema_validation_failed` 的其他原因）。
+
+### 找回
+
+失败的那一轮有付费回执，错误码是 `schema_validation_failed`，部署后可以用找回工具按现行规则重验落库：先 `--job-id aij_af48b5a12957427c9f0cad78c5a533b9` 试运行，确认后加 `--apply`。命令写法同 `ai-analysis-fixes-20261010.md` 的「部署后操作」。
+
+注意：找回工具的试运行只做结构和中文校验，不做来源绑定；来源绑定在 `--apply` 时才执行。所以试运行显示 validated 并不代表绑定后的结果，哪些引用被丢弃、哪些判定被降级，要在 `--apply` 后看库里的结果。这轮在本 PR 之前试运行也会显示 validated，`--apply` 才会失败。
+
+### 测试
+
+- 新增 `tests/test_focus_evidence_lenient_20261010.py`，20 项，夹具按这轮的形状合成（20 个事件、114 次调用、33 个无编号引用，截断的 fool.com 网址取自生产）：
+  - 整轮不再报错，截断网址按前缀唯一命中、绑到正确的调用；再绑定一次结果不变。
+  - 同一网址多次调用取第一次；前缀命中多条时丢弃；只写域名、主机或协议不同、比回执更长的引用都不会命中。
+  - 唯一的支持引用被丢弃后，该事件降为 unverifiable，其他事件不受影响；contradicted 没有反证引用时也降级。
+  - 重复引用去重；编号错误或编号与网址不配的引用丢弃。
+  - 输入绑定的四种错误仍然整轮报错；任务身份不变。
+  - worker 完成路径入库成功；找回工具 `--job-id` 试运行为 validated，`--apply` 为 recovered，用量、费用和回执不变。
+- 改动的既有测试 3 个，都是规则改变：
+  - `test_verified_focus_contract.py::test_invalid_verification_cannot_pass` 改名为 `test_invalid_verification_cannot_support_an_event`：输入绑定的 4 种错误仍断言报错；证据类的 7 种（回执为空、编号捏造、只有代码执行、调用失败、缺内容摘要、关系写反、私有网址）改为断言该事件降为 unverifiable、没有 supports 引用。
+  - `test_null_id_resolution_cannot_guess_or_repair_false_id` 改名为 `test_null_id_resolution_never_guesses_or_repairs_a_false_id`：同一网址两次成功调用时改为绑到第一次；找不到和编号写错时改为断言丢弃并降级。
+  - `test_verified_hotspot_publication.py::test_missing_tool_receipt_cannot_publish_even_if_job_was_marked_complete` 改名为 `test_missing_tool_receipt_downgrades_every_verdict_instead_of_failing`：回执里没有工具调用时，所有判定降为 unverifiable，周期正常完成，热点条带为空，公开来源为空。
+- 变异实验 8 个全部被抓住：不做前缀匹配、允许只写域名、不降级、不去重、同网址取最后一次、错编号改按网址找、不比较协议和主机、去掉证据函数自己的输入绑定检查。
+- 完整后端测试：7,100 项通过，7 项跳过，7 个子测试通过，pytest 退出码 0。`compileall` 通过，`git diff --check` 干净。

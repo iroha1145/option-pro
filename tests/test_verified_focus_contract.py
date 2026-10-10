@@ -57,7 +57,7 @@ def test_new_contract_is_selected_only_by_explicit_payload_or_new_model():
 
 
 @pytest.mark.parametrize("change", ["missing", "duplicate", "version", "unknown", "missing_source", "fake_call", "code_only", "failed_tool", "missing_digest", "wrong_relation", "private_url"])
-def test_invalid_verification_cannot_pass(change):
+def test_invalid_verification_cannot_support_an_event(change):
     payload, result, evidence = verified_payload_result()
     entry = result["event_verifications"][0]
     if change == "missing": result["event_verifications"].pop()
@@ -72,9 +72,19 @@ def test_invalid_verification_cannot_pass(change):
     elif change == "wrong_relation": entry["evidence_refs"][0]["relation"] = "contradicts"
     elif change == "private_url":
         evidence[0]["url"] = entry["evidence_refs"][0]["url"] = "http://127.0.0.1/private"
-    with pytest.raises(ValueError):
-        checked = validate_result("market_focus", json.dumps(result), payload)
-        validate_market_focus_evidence(checked, payload, evidence)
+    if change in {"missing", "duplicate", "version", "unknown"}:
+        # The input binding stays strict.
+        with pytest.raises(ValueError):
+            checked = validate_result("market_focus", json.dumps(result), payload)
+            validate_market_focus_evidence(checked, payload, evidence)
+        return
+    # 2026-10-10: unbound evidence is dropped and the verdict downgraded,
+    # instead of failing the whole paid cycle.
+    checked = validate_result("market_focus", json.dumps(result), payload)
+    validate_market_focus_evidence(checked, payload, evidence)
+    good = checked["event_verifications"][0]
+    assert good["verdict"] == "unverifiable"
+    assert not any(ref["relation"] == "supports" for ref in good["evidence_refs"])
 
 
 def test_mixed_event_projection_discards_every_global_prose_and_bad_sources():
@@ -124,7 +134,7 @@ def test_null_server_id_resolves_only_from_unique_successful_receipt():
 
 
 @pytest.mark.parametrize("failure", ["ambiguous", "absent", "explicit_wrong"])
-def test_null_id_resolution_cannot_guess_or_repair_false_id(failure):
+def test_null_id_resolution_never_guesses_or_repairs_a_false_id(failure):
     payload, result, evidence = verified_payload_result()
     ref = result["event_verifications"][0]["evidence_refs"][0]
     ref["tool_use_id"] = None
@@ -134,5 +144,13 @@ def test_null_id_resolution_cannot_guess_or_repair_false_id(failure):
         evidence.pop(0)
     else:
         ref["tool_use_id"] = "explicitly_wrong"
-    with pytest.raises(ValueError):
-        validate_market_focus_evidence(result, payload, evidence)
+    validate_market_focus_evidence(result, payload, evidence)
+    entry = result["event_verifications"][0]
+    if failure == "ambiguous":
+        # 2026-10-10: two successful calls to one URL bind to the first one.
+        assert entry["verdict"] == "supported"
+        assert entry["evidence_refs"][0]["tool_use_id"] == "srv_good"
+    else:
+        # A citation that cannot be bound is dropped and the verdict downgraded.
+        assert entry["verdict"] == "unverifiable"
+        assert entry["evidence_refs"] == []
