@@ -174,7 +174,7 @@ export default function DetailBand({
 
           <div>
             <div className="flex items-center justify-between gap-3">
-              <p className="eyebrow">{t('目录股票')}</p>
+              <p className="eyebrow">{t('行业成分股')}</p>
               <span className="text-micro text-ink-400 tnum">
                 {sector.memberCount} {t('只')}
               </span>

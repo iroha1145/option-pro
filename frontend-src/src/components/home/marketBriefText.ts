@@ -360,7 +360,7 @@ export function coverageItems(coverage: MarketBriefCoverage, year?: string): Cov
   if (coverage.missingBlocks.length > 0) {
     items.push({
       key: 'missing',
-      label: t('缺'),
+      label: t('缺失'),
       value: coverage.missingBlocks.map((item) => BLOCK_LABEL[item.block] ?? item.block).join(t('、')),
       warn: true,
     });

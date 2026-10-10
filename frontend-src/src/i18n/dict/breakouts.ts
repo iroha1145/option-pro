@@ -30,7 +30,7 @@ export const BREAKOUTS: Dict = {
   '时段涨跌': ['Session change', 'セッション騰落率'],
   '支撑 / 阻力区': ['Support / resistance zones', 'サポート / レジスタンス帯'],
   '区间持续指标': ['Range persistence', 'レンジ持続指標'],
-  '判断依据 ·': ['Evidence ·', '根拠一覧 ·'],
+  '判断依据 · {n} 条': ['Evidence · {n} item||Evidence · {n} items', '根拠一覧 · {n} 件'],
   '条': ['items', '件'],
   '相关消息': ["Related news", "関連ニュース"],
   '股票详情': ['View stock details', '銘柄詳細を見る'],
@@ -116,7 +116,7 @@ export const BREAKOUTS: Dict = {
   '区间持续五项': ['Range persistence (5 items)', 'レンジ持続5項目'],
 
   /* ---- SignalCards.tsx ---- */
-  '依据': ['Evidence', '根拠'],
+  '{n} 条依据': ['{n} evidence point||{n} evidence points', '根拠 {n} 件'],
 
   /* ---- types.ts：生命周期状态 ---- */
   '观察中': ['Watching', '観察中'],

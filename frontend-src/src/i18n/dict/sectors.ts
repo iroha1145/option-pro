@@ -18,7 +18,7 @@ export const SECTORS: Dict = {
   '历史评分': ['Historical scores', '過去のスコア'],
   '高分股票': ["Top-scoring stocks", "高スコア銘柄"],
   '暂无行业高分股票数据。': ["No top-scoring stocks for this sector yet.", "このセクターの高スコア銘柄データはまだありません。"],
-  '目录股票': ["Directory stocks", "リストの銘柄"],
+  '行业成分股': ["Constituent stocks", "構成銘柄"],
   '暂未获取到该行业的成分股。': ['Constituent stocks are not available for this sector yet.', 'このセクターの構成銘柄はまだ取得できていません。'],
 
   /* HeatMatrix.tsx —— 板块平均收益热力矩阵 */
