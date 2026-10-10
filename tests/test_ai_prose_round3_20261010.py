@@ -13,8 +13,9 @@ echoed payload field names. The user's lenient policy now says:
 * Earnings may echo its own payload field names (「release_status」).
 
 The fixture rows are copied verbatim from production; no test contacts a
-provider. news_identity_mismatch is diagnosed, not changed: the model
-mistyped the 64-character content_hash.
+provider. news_identity_mismatch was the model mistyping the 64-character
+content_hash; since the follow-up fix the hash comes from the payload (see
+test_news_identity_hash_20261010.py).
 """
 
 from __future__ import annotations
@@ -100,8 +101,9 @@ def test_identity_mismatch_is_a_mistyped_content_hash(row):
     assert output["news_id"] == payload["news_id"]
     assert output["change_sequence"] == payload["change_sequence"]
     assert output["content_hash"] != payload["content_hash"]
-    with pytest.raises(ValueError, match="news_identity_mismatch"):
-        runtime.receipt_result(deepcopy(row["receipt"]), row["job_type"], payload)
+    # Accepted since the follow-up fix; the stored hash is the payload's.
+    result = runtime.receipt_result(deepcopy(row["receipt"]), row["job_type"], payload)
+    assert result["content_hash"] == payload["content_hash"]
 
 
 # --- Citations and URLs in Luna news -----------------------------------------

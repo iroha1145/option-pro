@@ -2016,7 +2016,9 @@ def test_projection_requires_exact_identity_and_simplified_chinese(tmp_path):
     wrong_job = intelligence.request_analysis(21, force=False)
     english_job = intelligence.request_analysis(22, force=False)
     valid_job = intelligence.request_analysis(23, force=False)
-    wrong = _news_result(news_id=21, change_sequence=1, content_hash="wrong-hash")
+    # 2026-10-10 起身份只比对 news_id 与 change_sequence，content_hash 取载荷值，
+    # 所以这里用错的 change_sequence 代表「绑到了别的版本」。
+    wrong = _news_result(news_id=21, change_sequence=2, content_hash="hash-21-1")
     english = _news_result(news_id=22, change_sequence=2, content_hash="hash-22-2")
     english["title_zh"] = "NVIDIA launches a new chip platform"
     valid = _news_result(news_id=23, change_sequence=3, content_hash="hash-23-3")

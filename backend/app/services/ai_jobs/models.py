@@ -3742,12 +3742,16 @@ def validate_result(
             raise ValueError("signal_ticker_mismatch")
     elif job_type == "news_impact":
         validate_job_payload(job_type, payload)
+        # 身份只比对 news_id 与 change_sequence。content_hash 是 64 位十六进制
+        # 摘要，模型照抄时会漏位、多位或改错一位（2026-10-03 起 Luna 约 13 条
+        # 新闻因此失败，抄错的都只有这一项），所以结果一律改用载荷里的值。
+        # 提示词仍要求原样复制：改提示词会移动任务身份，这里只是不再校验。
         if (
             data["news_id"] != payload["news_id"]
             or data["change_sequence"] != payload["change_sequence"]
-            or data["content_hash"] != str(payload["content_hash"]).strip()
         ):
             raise ValueError("news_identity_mismatch")
+        data["content_hash"] = str(payload["content_hash"]).strip()
         allowed_tickers = {
             str(ticker).strip().upper() for ticker in payload["allowed_tickers"]
         }
