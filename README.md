@@ -324,7 +324,7 @@ npm --prefix frontend-src run test:quotes
 ./scripts/compose.sh down
 ```
 
-工作进程的停止宽限期为 2100 秒，避免把正在保存响应身份的模型任务留在未知状态。
+工作进程的停止宽限期为 7500 秒，避免把正在保存响应身份的模型任务留在未知状态。
 
 ## 许可证
 
