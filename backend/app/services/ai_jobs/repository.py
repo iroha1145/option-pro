@@ -65,9 +65,15 @@ _RESERVATION_HOLDING_ERRORS = frozenset(
     {"submission_outcome_unknown", "provider_poll_timeout"}
 )
 # 已拿到 response id、本地却没能落下结果的失败：恢复工具可以重新取回付费
-# 结果而不重新提交。
+# 结果而不重新提交。news_identity_mismatch 自 2026-10-10 起也在内：此前只因
+# 模型抄错 content_hash 被拒的回执，按现行规则重验即可落库。
 RECOVERABLE_FAILURE_CODES = frozenset(
-    {"schema_validation_failed", "provider_unavailable", "local_storage_error"}
+    {
+        "schema_validation_failed",
+        "provider_unavailable",
+        "local_storage_error",
+        "news_identity_mismatch",
+    }
 )
 _SCHEDULED_HISTORY_JOB_TYPES = ("news_impact", "market_focus")
 _TERMINAL = {
