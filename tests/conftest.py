@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -7,9 +8,57 @@ from pathlib import Path
 import pytest
 
 
+# 收集测试前丢掉环境里的行情供应商密钥。否则本机 secrets 会让夹具打到真实 API。
+_PROVIDER_SECRET_PREFIXES = ("MASSIVE_", "SHARADAR_")
+
+
+def _strip_ambient_provider_secrets() -> None:
+    for key in list(os.environ):
+        if key.startswith(_PROVIDER_SECRET_PREFIXES):
+            del os.environ[key]
+
+
+def _clear_settings_cache() -> None:
+    from app.config import get_settings
+
+    # 有的用例会把 get_settings 换成普通函数。夹具收尾时补丁还在，
+    # 不能对着替身找 cache_clear；改清最初那个 lru 缓存。
+    clear = getattr(get_settings, "cache_clear", None)
+    if clear is None:
+        clear = getattr(_clear_settings_cache, "saved", None)
+    else:
+        _clear_settings_cache.saved = clear
+    if clear is not None:
+        clear()
+
+
+_strip_ambient_provider_secrets()
+
+
+def pytest_configure(config) -> None:
+    # 再清一次：插件导入可能已经构造过 Settings 缓存。
+    del config
+    _strip_ambient_provider_secrets()
+    _clear_settings_cache()
+
+
 BACKEND_ROOT = Path(__file__).resolve().parents[1] / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
+
+
+@pytest.fixture(autouse=True)
+def _isolated_provider_secrets(monkeypatch):
+    """每个用例开始前再丢掉供应商密钥，并清掉 Settings 缓存。
+
+    用例若要覆盖密钥，应在本夹具之后自行 setenv，并再次 cache_clear。
+    """
+    for key in list(os.environ):
+        if key.startswith(_PROVIDER_SECRET_PREFIXES):
+            monkeypatch.delenv(key, raising=False)
+    _clear_settings_cache()
+    yield
+    _clear_settings_cache()
 
 
 @pytest.fixture(autouse=True)

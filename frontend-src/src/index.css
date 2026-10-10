@@ -776,7 +776,6 @@
   border-radius: 2px;
   background: var(--brand-600);
 }
-.page-tab-count { color: var(--ink-400); font-weight: 400; }
 @media (hover: hover) and (pointer: fine) {
   .page-tab:hover { color: var(--ink-900); }
 }
@@ -993,9 +992,8 @@
   border-radius: var(--r-group);
   background: var(--card);
   box-shadow: var(--popover-shadow);
-  animation: cloud-popover-enter var(--tt-in-dur) var(--tt-in-ease) both;
+  animation: fade-in var(--tt-in-dur) var(--tt-in-ease) both;
 }
-@keyframes cloud-popover-enter { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
   .cloud-popover { animation: none; }
   .cloud-chart-tooltip { transition: none !important; }
@@ -1199,7 +1197,8 @@
   .marquee-inner,
   .skeleton-shimmer::after,
   .spark-draw,
-  .animate-led-pulse {
+  .animate-led-pulse,
+  .animate-grow-bar {
     animation: none !important;
   }
   .ui-spinner {

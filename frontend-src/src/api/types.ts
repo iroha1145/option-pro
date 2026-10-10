@@ -1,4 +1,4 @@
-/** API 契约类型（与后端 REST 形状 1:1 对齐，info.md §3） */
+/** API 契约类型（与后端 REST 形状 1:1 对齐） */
 import type { MacroFitDriver } from '@/lib/macroFit';
 
 /* ---------- 市场 ---------- */

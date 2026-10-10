@@ -125,7 +125,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
     <header className="glass sticky top-0 z-50 border-b border-line">
       <div className="mx-auto flex h-12 max-w-shell items-center gap-3 px-4 md:h-16 md:gap-5 md:px-8">
         {/* Logo */}
-        <Link to="/" className="flex shrink-0 items-center gap-2.5" aria-label={t("Optix Pro 首页")}>
+        <Link to="/" className="touch-target flex shrink-0 items-center gap-2.5" aria-label={t("Optix Pro 首页")}>
           <img src="/logo.svg" alt="" className="size-7 md:size-8 dark:brightness-0 dark:invert" />
           {/* 2026-10-06 第二轮：只留品牌名，去掉下方「US EQUITY DESK」小字 */}
           <span className="hidden font-display text-[17px] font-bold leading-none text-ink-900 sm:inline">Optix Pro</span>
@@ -180,7 +180,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
           <button
             onClick={onOpenPalette}
             /* 一级入口收成 6 项后 xl 不再拥挤，文字搜索框从 md 起常显（此前 xl–2xl 只留图标）。 */
-            className="touch-target hidden h-8 w-44 items-center gap-2 rounded-pill border border-line bg-card px-3.5 text-caption text-ink-400 transition-[border-color,box-shadow,color] duration-fast hover:border-line-strong hover:text-ink-500 focus-visible:border-brand-500 focus-visible:shadow-focus-ring md:flex 2xl:w-[220px]"
+            className="touch-target hidden h-8 w-60 items-center gap-2 rounded-pill border border-line bg-card px-3.5 text-caption text-ink-400 transition-[border-color,box-shadow,color] duration-fast hover:border-line-strong hover:text-ink-500 focus-visible:border-brand-500 focus-visible:shadow-focus-ring md:flex"
             aria-label={t("搜索代码或功能")}
           >
             <Icon name="search" size={14} />

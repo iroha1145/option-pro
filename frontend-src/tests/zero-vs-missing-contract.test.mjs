@@ -361,12 +361,12 @@ test('ChangeBadge 与指数跑马灯都有中性平盘态', async () => {
   const reading = await source('components/market/SignalsReading.tsx');
 
   assert.doesNotMatch(codeOf(badge), /value >= 0/);
-  assert.match(badge, /value > 0 \? 'up' : value < 0 \? 'down' : 'flat'/);
+  assert.match(badge, /value > 0 \? 'up' : value < 0 && percentText !== '\+0\.00%' \? 'down' : 'flat'/);
   assert.match(badge, /持平/);
   assert.match(badge, /name=\{[\s\S]{0,160}'minus'/);
 
   assert.doesNotMatch(codeOf(tape), /q\.changePct >= 0/);
-  assert.match(tape, /q\.changePct > 0 \? 'up' : q\.changePct < 0 \? 'down' : 'flat'/);
+  assert.match(tape, /q\.changePct > 0 \? 'up' : q\.changePct < 0 && pctText !== '\+0\.00%' \? 'down' : 'flat'/);
 
   assert.doesNotMatch(codeOf(reading), /q\.changePct >= 0/);
   assert.match(reading, /usIndices\.filter\(\(q\) => q\.changePct !== null && q\.changePct > 0\)/);
@@ -394,7 +394,13 @@ test('缺失分项评分不被填成 0 分', async () => {
 
 test('到期天数不使用浏览器本地时区', async () => {
   const panel = await source('components/detail/OptionsPanel.tsx');
+  const format = await source('lib/format.ts');
+  const daysStart = format.indexOf('function daysUntilNewYork');
+  const days = format.slice(daysStart, format.indexOf('\n}', daysStart) + 2);
   assert.doesNotMatch(codeOf(panel), /T16:00:00/);
-  assert.match(panel, /timeZone: 'America\/New_York'/);
-  assert.match(panel, /T00:00:00Z/);
+  assert.doesNotMatch(codeOf(panel), /Math\.max\(0/);
+  assert.match(panel, /daysUntilNewYork/);
+  assert.match(format, /timeZone: 'America\/New_York'/);
+  assert.match(days, /T00:00:00Z/);
+  assert.doesNotMatch(codeOf(days), /Math\.max\(0/);
 });

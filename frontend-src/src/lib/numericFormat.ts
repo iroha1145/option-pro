@@ -17,14 +17,32 @@ export function fmtSigned(n: number | null | undefined, digits = 2): string {
 }
 export function fmtPct(n: number | null | undefined, digits = 2): string {
   if (!finite(n)) return missing;
-  return `${n >= 0 ? '+' : '−'}${Math.abs(n).toFixed(precision(digits))}%`;
+  const places = precision(digits);
+  const body = Math.abs(n).toFixed(places);
+  // 先四舍五入再取符号：-0.004 在两位小数下是 0.00，不能写成 −0.00%。
+  const sign = n < 0 && Number(body) !== 0 ? '−' : '+';
+  return `${sign}${body}%`;
 }
 export function fmtCompact(n: number | null | undefined): string {
   if (!finite(n)) return missing;
+  const sign = n < 0 ? '-' : '';
   const magnitude = Math.abs(n);
-  if (magnitude >= 1e12) return `${(n / 1e12).toFixed(2)}T`;
-  if (magnitude >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
-  if (magnitude >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
-  if (magnitude >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
+  const tiers = [
+    [1e12, 2, 'T'],
+    [1e9, 2, 'B'],
+    [1e6, 1, 'M'],
+    [1e3, 1, 'K'],
+  ] as const;
+  for (let i = 0; i < tiers.length; i += 1) {
+    const [divisor, digits, suffix] = tiers[i];
+    if (magnitude < divisor) continue;
+    const body = (magnitude / divisor).toFixed(digits);
+    // 999950 → 1000.0K 会越过下一档。T 以上没有更大单位，保留 1000.00T。
+    if (Number(body) >= 1000 && i > 0) {
+      const [nextDivisor, nextDigits, nextSuffix] = tiers[i - 1];
+      return `${sign}${(magnitude / nextDivisor).toFixed(nextDigits)}${nextSuffix}`;
+    }
+    return `${sign}${body}${suffix}`;
+  }
   return String(Math.round(n));
 }

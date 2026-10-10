@@ -3,7 +3,6 @@
  * GET  /api/macro/conditions
  * GET  /api/macro/conditions/history?days=
  * GET  /api/macro/conditions/modules/{module_id}
- * GET  /api/macro/conditions/factors/{factor_id}/history?days=
  * POST /api/macro/conditions/refresh（Owner）
  *
  * 归一原则（同 api/live.ts §0.5「不造假」）：

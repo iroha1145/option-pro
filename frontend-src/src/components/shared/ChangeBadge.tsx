@@ -49,8 +49,9 @@ export default function ChangeBadge({
   }
   /* 平盘是第三种事实，不是「涨」。旧写法 value >= 0 让 0.00% 显示绿色 ↑ 并读成
      「涨 0.00%」（GPT-5.6-Pro 审计 P2-8）。 */
-  const direction = value > 0 ? 'up' : value < 0 ? 'down' : 'flat';
   const points = format === 'points';
+  const percentText = points ? null : fmtPct(value);
+  const direction = value > 0 ? 'up' : value < 0 && percentText !== '+0.00%' ? 'down' : 'flat';
   const magnitude = points
     ? `${Math.abs(value).toFixed(1)} ${pointsSuffix}`
     : `${Math.abs(value).toFixed(2)}%`;

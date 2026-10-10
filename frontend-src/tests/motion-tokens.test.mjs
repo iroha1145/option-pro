@@ -169,7 +169,7 @@ test('each catalog snippet keeps prefers-reduced-motion', async () => {
     '.t-panel-slide',
     '.t-modal',
     '.t-dropdown',
-    '.t-tabs-pill',
+    '.t-tab',
     '.t-skel-skeleton',
     '.t-tt',
     '.t-acc-panel',
@@ -426,6 +426,25 @@ test('page enter and chrome polish ride transitions.dev / shadcn tokens', async 
   assert.match(css, /var\(--tabs-dur\)/);
   assert.match(css, /var\(--learn-shift\)/);
   assert.match(css, /var\(--tilt-glare-opacity\)/);
+});
+
+test('reduced motion stops grow-bar without adding a missing spin-once rule', async () => {
+  const css = await source('index.css');
+  const block = css.slice(css.indexOf('§4.2'));
+  assert.match(block, /\.animate-grow-bar \{\s*animation: none !important;/);
+  assert.doesNotMatch(css, /spin-once/);
+});
+
+test('opacity fades share one keyframe and keep their own durations', async () => {
+  const css = await source('index.css');
+  const catalog = await source('styles/transitions-catalog.css');
+  assert.match(css, /animation: fade-in var\(--tt-in-dur\) var\(--tt-in-ease\) both;/);
+  assert.match(css, /animation: fade-in 180ms ease-out both;/);
+  assert.doesNotMatch(css, /cloud-popover-enter/);
+  assert.match(catalog, /fade-in\s+var\(--check-opacity-dur\) var\(--check-ease-opacity\) forwards/);
+  assert.doesNotMatch(catalog, /@keyframes t-check-fade/);
+  assert.match(css, /@keyframes shimmer \{/);
+  assert.match(catalog, /@keyframes t-shimmer \{/);
 });
 
 test('state labels swap in place with the 04-text-swap tokens', async () => {

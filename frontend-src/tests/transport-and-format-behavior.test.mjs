@@ -5,7 +5,7 @@ import {
   apiHeaders, fetchBuffered, parseRetryAfter, ResponseLimitError, TransportTimeoutError,
 } from '../src/api/transport.ts';
 import { ApiError, consumeBootPrefetch, idFromLocation, invalidateBootPrefetch, offerBootPrefetch, PREFETCH_TTL_MS, resetBootPrefetchForTests, postCreate, request, requestRaw } from '../src/api/client.ts';
-import { fmtPrice, fmtSigned, fmtPct, fmtCompact, fmtCountdown, fmtNyTime, fmtTimeHHMMSS } from '../src/lib/format.ts';
+import { daysUntilNewYork, fmtPrice, fmtSigned, fmtPct, fmtCompact, fmtCountdown, fmtNyTime, fmtTimeHHMMSS } from '../src/lib/format.ts';
 import { fmtChartPrice } from '../src/lib/numericFormat.ts';
 
 for (const status of [200, 503]) {
@@ -170,8 +170,32 @@ test('missing and nonfinite financial values remain distinct from real zero', ()
   assert.equal(fmtCompact(-2_500_000_000), '-2.50B');
   assert.equal(fmtSigned(-12), '−12.00');
   assert.equal(fmtPct(1.5), '+1.50%');
+  assert.equal(fmtPct(-0.004), '+0.00%');
+  assert.equal(fmtPct(-0.0001), '+0.00%');
+  assert.equal(fmtPct(0), '+0.00%');
+  assert.equal(fmtPct(-0), '+0.00%');
+  assert.equal(fmtPct(-0.005), '−0.01%');
+  assert.equal(fmtPct(-1.235), '−1.24%');
+  assert.equal(fmtCompact(999_950), '1.0M');
+  assert.equal(fmtCompact(-999_950), '-1.0M');
+  assert.equal(fmtCompact(999_949), '999.9K');
+  assert.equal(fmtCompact(999_950_000), '1.00B');
+  assert.equal(fmtCompact(999_995_000_000), '1.00T');
+  assert.equal(fmtCompact(999_995_000_000_000), '1000.00T');
   assert.doesNotThrow(() => fmtPrice(1.23, -1));
   assert.doesNotThrow(() => fmtPct(1.23, Infinity));
+});
+
+test('expiration day count follows the New York calendar', () => {
+  const afternoon = new Date('2026-10-10T16:00:00Z');
+  const tokyoMorning = new Date('2026-10-10T03:00:00Z');
+  assert.equal(daysUntilNewYork('2026-10-19', afternoon), 9);
+  assert.equal(daysUntilNewYork('2026-10-10', afternoon), 0);
+  assert.equal(daysUntilNewYork('2026-10-10', tokyoMorning), 1);
+  assert.ok((daysUntilNewYork('2020-01-01', afternoon) ?? 0) < 0);
+  assert.equal(daysUntilNewYork('not-a-date', afternoon), null);
+  assert.equal(daysUntilNewYork('2026-02-31', afternoon), null);
+  assert.equal(daysUntilNewYork('', afternoon), null);
 });
 
 test('chart price labels keep optional decimals and four places below one', () => {

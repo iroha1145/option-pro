@@ -60,6 +60,8 @@ export const OPTIONS_UI: Dict = {
   '份': ['contracts', '件'],
   "当前到期日": ["Selected expiration", "選択した満期日"],
   '{date} · {days} 天后到期': ['{date} · expires in {days} days', '{date}・満期まで{days}日'],
+  '{date} · 日期无效': ['{date} · invalid date', '{date}・日付が無効'],
+  '{date} · 已到期': ['{date} · expired', '{date}・満期済み'],
   "更新失败，显示上次期权数据。": ["Update failed. Showing the previous options data.", "更新に失敗したため、前回のオプションデータを表示しています。"],
   '持仓量为 0 且成交 {volume} 张，开平仓性质待确认（量持比不适用）': ['Zero open interest with {volume} contracts traded; opening/closing activity is unconfirmed (volume/OI unavailable)', '建玉 0・出来高 {volume} 枚。新規・決済の別は未確認（出来高／建玉比は算出不可）'],
   " · 数据获取于 {time}": [" · Fetched {time}", "・データ取得 {time}"],
