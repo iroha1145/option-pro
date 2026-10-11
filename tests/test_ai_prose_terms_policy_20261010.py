@@ -1,9 +1,10 @@
 """Chinese-text policy change of 2026-10-10: Latin terms stay, English prose goes.
 
-The v5 policy keeps the existing whole-text and sentence language ratios,
-but stops guessing stock identity from Latin words in Chinese prose. These
-production examples exercise that change while raw fields, host names,
-explicit numeric code labels and structured identity remain checked.
+Since 2026-10-11 Chinese prose no longer guesses stock identity from Latin
+words; structured fields keep their ticker binding. English prose (three or
+more words with an ordinary lower-case word and an English function word),
+English titles copied from the source, raw literals, field names, host names
+and explicit numeric code labels remain checked.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ import json
 
 import pytest
 
-from app.services.ai_jobs.models import validate_result
+from app.services.ai_jobs.models import validate_result, validate_simplified_chinese_text
 from test_ai_analysis_fixes_20261010 import _ARTICLE, _focus_field, _news_field
 from test_ai_jobs_audit_2026_09_25 import _earnings_result
 from test_ai_jobs_zh_contract import _news_payload, _news_result
@@ -90,9 +91,9 @@ def test_earnings_results_share_the_term_rule():
     ("Apple Beats Estimates，市场持续关注。", "Apple Beats Estimates，市场持续关注。"),
     ("market-rally带动指数。", "market-rally带动指数。"),
     ("Bank of New York Mellon Trust Company发布公告。", None),
-    ("uncertainty为true。", "uncertainty为是。"),
-    ("该字段为false。", "该字段为否。"),
-    ("数据为null。", "数据为null。"),
+    ("uncertainty为true。", None),
+    ("该字段为false。", None),
+    ("数据为null。", None),
     ("输入my_article_status为不可用。", None),
     ("详见https://foo.io/bar。", None),
     ("公司公布融资安排（GlobeNewswire.com）。", None),
@@ -207,3 +208,72 @@ def test_complete_english_output_is_still_rejected(text):
         _news_field(text)
     with pytest.raises(ValueError, match="simplified_chinese_text_required"):
         _focus_field(text, field="summary_zh")
+
+
+# --- 2026-10-11: terms stay; prose, copied titles and raw literals go ---------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "TSLA上涨。",
+        "市场情绪转向risk-off。",
+        "efgartigimod alfa获批上市。",
+        "苹果iPad mini销量改善，ROE仍保持稳定。",
+        "Breaking：市场下跌。",
+        "Fed Pauses市场上涨。",
+        "Bank of America发布财报。",
+    ],
+)
+def test_names_terms_and_tickers_publish(text):
+    assert validate_simplified_chinese_text(text, None) == text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "分析师认为the Fed will cut rates soon，市场上涨。",
+        "市场 will strongly improve。",
+        "美联储主席鲍威尔表示 inflation remains elevated and 需要观察。",
+        "该结论为true。",
+        "正文标志为true或false不改变分析结论。",
+        "数据为null。",
+    ],
+)
+def test_english_prose_and_raw_literals_are_rejected(text):
+    with pytest.raises(ValueError, match="english_prose_not_allowed"):
+        validate_simplified_chinese_text(text, None)
+
+
+def test_only_a_title_copied_from_the_source_is_rejected():
+    text = "市场消息：Apple Beats Estimates"
+    assert validate_simplified_chinese_text(text, None) == text
+    with pytest.raises(ValueError, match="english_prose_not_allowed: 'Apple Beats Estimates'"):
+        validate_simplified_chinese_text(text, None, source_texts=["Apple Beats Estimates"])
+
+
+@pytest.mark.parametrize(
+    ("text", "code"),
+    [
+        ("贵州茅台（股票代码600519）2025年净利润增长。", "600519"),
+        ("股票代码为600519，2026年营收增长。", "600519"),
+        ("证券代码688981，3月出货量上升。", "688981"),
+        ("港股代码00700，2025年回购1000万股。", "00700"),
+    ],
+)
+def test_only_the_number_right_after_a_code_label_is_a_code(text, code):
+    assert validate_simplified_chinese_text(text, None, allowed_codes=[code]) == text
+    with pytest.raises(ValueError, match="unbound_numeric_security_code"):
+        validate_simplified_chinese_text(text, None, allowed_codes=["NVDA"])
+
+
+def test_unbound_code_after_a_label_is_still_rejected():
+    with pytest.raises(ValueError, match="unbound_numeric_security_code"):
+        validate_simplified_chinese_text("股票代码600519上涨。", None)
+
+
+def test_hong_kong_label_binds_four_or_five_digit_codes_only():
+    text = "汇丰控股（港股代码5）派息。"
+    assert validate_simplified_chinese_text(text, None) == text
+    with pytest.raises(ValueError, match="unbound_numeric_security_code"):
+        validate_simplified_chinese_text("汇丰控股（港股代码0005）派息。", None)

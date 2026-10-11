@@ -7,8 +7,8 @@ echoed payload field names. The user's lenient policy now says:
 
 * Markdown citations and URLs in Luna news text are stripped, never a reason
   to reject. The receipt keeps its evidence_sources for the owner view.
-* v5 no longer guesses structured ticker identity from names or uppercase
-  words in Chinese prose. Explicit numeric code labels still require binding.
+* Since 2026-10-11 Chinese prose no longer guesses ticker identity from
+  names or uppercase words. Explicit numeric code labels still require binding.
 * Earnings may echo its own payload field names (「release_status」).
 
 The fixture rows are copied verbatim from production; no test contacts a

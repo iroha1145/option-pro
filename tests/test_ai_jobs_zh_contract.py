@@ -218,9 +218,10 @@ def test_zh_prose_accepts_nyse_exchange_abbreviation(text):
     "text",
     [
         "NYSE stocks are likely to rise.",
+        "交易所提示NYSE stocks are likely to rise，仍需观察。",
     ],
 )
-def test_nyse_abbreviation_does_not_allow_english_dominant_prose(text):
+def test_nyse_abbreviation_does_not_allow_english_prose(text):
     with pytest.raises(
         ValueError,
         match="simplified_chinese_text_required|english_prose_not_allowed",
@@ -982,6 +983,18 @@ def test_news_company_name_accepts_ticker_bound_registered_names(ticker, company
     assert validated["affected_stocks"][0]["company"] == company
 
 
+def test_company_name_rejects_chinese_prefix_followed_by_english_prose():
+    result = _news_result()
+    result["affected_stocks"][0]["company"] = (
+        "微软 Microsoft Reports Strong Growth"
+    )
+
+    with pytest.raises(ValidationError, match="company_registered_name"):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            _news_payload(),
+        )
 
 
 @pytest.mark.parametrize(
@@ -1041,8 +1054,16 @@ def test_unihan_self_mapped_characters_remain_valid_in_simplified_contexts(title
     assert validated["title_zh"] == title
 
 
-# 保留整句英文占主导、非中文文字和明显原始字段的拒绝测试。
+# 口径变更（2026-10-10）后仍被拒：英文散文（三个及以上的词里有普通小写词和
+# 英文虚词）、英文占主导的片段、原始字段与其他文字。
 _STILL_REJECTED_ENGLISH_FRAGMENTS = [
+    "新闻称 shares rose after earnings",
+    "IonQ reports stronger revenue，市场关注",
+    "Varonis Systems shares rose after earnings，市场关注",
+    "NASCAR and Goodyear expand DEI partnership，市场关注",
+    "Markets Rally After Earnings 苹果",
+    "Company Reports Strong Growth 苹果",
+    "IonQ Announces Quantum Partnership 苹果",
     "新闻称 The company reported stronger revenue and raised guidance today",
     "结果article_status_extra为available",
     "РЫНОК РАСТЕТ市场上涨",
@@ -1339,8 +1360,73 @@ def test_news_text_allows_source_bound_registered_entities(
     assert validated["title_zh"] == title
 
 
+@pytest.mark.parametrize(
+    "source_title",
+    [
+        "UFC Names Meridian Holdings Official Sponsor",
+        "Apple Beats Estimates",
+        "NVIDIA Launches Blackwell Platform",
+        "Rocket Lab Wins NASA Contract",
+    ],
+)
+def test_source_binding_does_not_allow_copied_english_prose(source_title):
+    result = _news_result()
+    result["title_zh"] = f"市场消息：{source_title}"
+    payload = _news_payload()
+    payload["title"] = source_title
+
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            payload,
+        )
 
 
+@pytest.mark.parametrize(
+    ("copied_fragment", "source_title"),
+    [
+        (
+            "Tesla Tops Forecasts",
+            "Tesla Tops Forecasts as Margins Improve",
+        ),
+        (
+            "NVIDIA Launches Blackwell Platform",
+            "NVIDIA Launches Blackwell Platform Today",
+        ),
+        (
+            "Rocket Lab Wins",
+            "Rocket Lab Wins NASA Contract",
+        ),
+        (
+            "Tesla CEO Tops Forecasts",
+            "Tesla CEO Tops Forecasts as Margins Improve",
+        ),
+        (
+            "Apple Q3 Earnings",
+            "Apple Q3 Earnings Preview",
+        ),
+        (
+            "Apple Q3 Earnings",
+            "Apple Q3 Earnings (AAPL)",
+        ),
+    ],
+)
+def test_source_binding_rejects_copied_headline_fragments(
+    copied_fragment,
+    source_title,
+):
+    result = _news_result()
+    result["title_zh"] = f"{copied_fragment}消息影响市场"
+    payload = _news_payload()
+    payload["title"] = source_title
+
+    with pytest.raises(ValidationError, match="english_prose_not_allowed"):
+        validate_result(
+            "news_impact",
+            json.dumps(result, ensure_ascii=False),
+            payload,
+        )
 
 
 def test_source_binding_keeps_a_structural_multiword_entity_fragment():
@@ -2582,8 +2668,13 @@ def test_zh_prose_allows_cjk_gloss_annotation():
     assert validate_simplified_chinese_text(biosim, None) == biosim
 
 
-
-
+def test_zh_prose_still_rejects_english_clause_in_parentheses():
+    """括号不是英文从句的免检通道：多词散文照旧拒。"""
+    with pytest.raises(ValueError, match="english_prose_not_allowed"):
+        validate_simplified_chinese_text(
+            "公司发布新品（the new flagship product）以提振销量。",
+            None,
+        )
 
 
 @pytest.mark.parametrize("text", [
@@ -2595,7 +2686,6 @@ def test_zh_prose_allows_cjk_gloss_annotation():
     "菲利普斯66股价出现波动，公司资产中66%来自相关业务。",
     "英伟达（NVDA）股价上涨，PANIC、CRM与DNA受到关注。",
     "该公司与International Advanced Semiconductor Manufacturing Technology Partners合作，双方计划共同发展业务，后续订单与收入贡献仍待确认。",
-    "正文标志为true或false不改变分析结论。",
 ])
 def test_chinese_analysis_accepts_foreign_names_metrics_and_ordinary_terms(text):
     assert validate_simplified_chinese_text(text, None) == text
@@ -2608,7 +2698,7 @@ def test_explicit_numeric_stock_code_still_requires_binding(text):
 
 
 @pytest.mark.parametrize("company", ["Simply Good Foods", "Wine Cellar Club", "International Business Machines"])
-def test_registered_company_names_do_not_depend_on_english_word_lists(company):
+def test_registered_multiword_company_names_are_accepted(company):
     result = _news_result()
     result["affected_stocks"][0]["company"] = company
     validated = validate_result("news_impact", json.dumps(result), _news_payload())

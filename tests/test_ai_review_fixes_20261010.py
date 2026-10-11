@@ -1,6 +1,6 @@
 """Counterexamples from the independent review of the 2026-10-10 AI fixes.
 
-The production examples remain exercised under v5: ordinary prose names
+The production examples remain exercised under the 2026-10-11 policy: ordinary prose names
 and abbreviations publish, while source formatting, structure and identity
 checks keep their assertions.
 """

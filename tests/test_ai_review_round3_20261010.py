@@ -1,6 +1,6 @@
 """Counterexamples from the last review of the 2026-10-10 AI fixes (head 0b7b68fa).
 
-The original samples stay exercised under v5. Ordinary market counts and
+The original samples stay exercised under the 2026-10-11 policy. Ordinary market counts and
 prose codes publish; explicit Hong Kong code labels still require binding.
 """
 

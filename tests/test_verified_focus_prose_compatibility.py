@@ -83,7 +83,7 @@ def test_each_known_family_is_localized_only_on_explicit_prose_paths(path, text,
 @pytest.mark.parametrize("text", [
     "as_of股票上涨。", "catalyst_bias代码上涨。", "代码为catalyst_bias。",
     "as_of公司股价上涨。", "证券as_of涨停。",
-    "截至as_of，市場仍待確認。",
+    "截至as_of，市场 will strongly improve。", "截至as_of，市場仍待確認。",
     "截至as_of_extra，事件仍待公布。",
     "未知cycle_id显示事件仍待公布。",
 ])
@@ -164,7 +164,7 @@ def test_historical_focus_contract_does_not_gain_new_normalization():
     raw["summary_zh"] = "截至as_of，事件仍待公布。"
     with pytest.raises(ValueError):
         validate_result("market_focus", json.dumps(raw), payload)
-    assert RESULT_VALIDATION_CONTRACT_VERSION == "simplified-chinese-v5"
+    assert RESULT_VALIDATION_CONTRACT_VERSION == "simplified-chinese-v4"
 
 
 def test_prompt_clarifications_are_only_for_verified_sonnet_focus():
@@ -257,7 +257,7 @@ def test_frequency_identifiers_and_non_numeric_units_are_not_rewritten(text):
 
 
 @pytest.mark.parametrize("text", [
-    "频率800MHz，The company reported stronger revenue and raised guidance today。",
+    "频率800MHz，市场 will strongly improve。",
 ])
 def test_frequency_translation_does_not_relax_language_or_security_binding(text):
     payload, raw, _ = fixture()

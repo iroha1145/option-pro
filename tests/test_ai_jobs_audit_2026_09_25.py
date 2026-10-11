@@ -1217,9 +1217,7 @@ def test_validator_changes_keep_queued_task_identities(job_type, identity):
     """The whitelist lives in the validator, not the prompt: pending jobs of
     the other four types must not flip to runtime_configuration_changed."""
 
-    assert runtime.schema_identity_current(
-        job_type, runtime.PROMPT_VERSIONS[job_type], *identity, model="gpt-5.6-terra",
-    )
+    assert runtime.schema_identity(job_type, model="gpt-5.6-terra") == identity
 
 
 # --- AI-7: earnings impact binds its inputs and accepts short lists

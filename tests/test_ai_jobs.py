@@ -270,7 +270,7 @@ def test_earnings_company_names_accept_registered_aliases_in_chinese(name):
 
 def test_earnings_company_names_reject_english_prose():
     result = _earnings_result()
-    result["impacted"][0]["name"] = "Markets rally after strong earnings and higher forecasts"
+    result["impacted"][0]["name"] = "Markets rally after strong earnings"
 
     with pytest.raises(ValidationError, match="company_registered_name"):
         validate_result(
