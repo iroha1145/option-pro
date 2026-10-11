@@ -156,6 +156,8 @@ test('单标的财报任务向访客开放且只使用报告级公开接口', ()
   assert.equal(card.includes('owner / visitor 均可'), true);
   assert.equal(card.includes('earningsApi.reportAnalysis'), true);
   assert.equal(card.includes('earningsApi.requestReportAnalysis'), true);
+  assert.equal(card.includes('Claude Sonnet 5.5 · xhigh'), true);
+  assert.equal(card.includes('Claude Opus 5.5 · xhigh'), false);
   assert.equal(card.includes('aiJobsApi'), false);
   assert.equal(card.includes('createEarningsImpact'), false);
   assert.equal(card.includes('cancelJob'), false);
@@ -244,4 +246,24 @@ test('财报发布后显示自动重分析、进度和最终锁定状态', () =>
   assert.equal(page.includes('reportAnalysisStates[reportAnalysisKey(row.ticker, row.date)]'), true);
   assert.equal(page.includes('impactReady: analysis.result != null'), true);
   assert.equal(page.includes('onAnalyzed={onReportAnalysis}'), true);
+});
+
+
+test('historical earnings keep actual model metadata without borrowing the current model', () => {
+  const normalize = loadImpactNormalizer();
+  const historical = normalize({ ...completedResult, _model: 'claude-haiku-5-5', _reasoning: 'high' });
+  assert.equal(historical.model, 'claude-haiku-5-5');
+  assert.equal(historical.reasoning, 'high');
+  assert.equal('model' in normalize(completedResult), false);
+});
+
+
+test('report model metadata uses persisted task identity and preserves result metadata', () => {
+  const { normalizeEarningsReportAnalysis } = loadEarningsModule();
+  const report = normalizeEarningsReportAnalysis({ status: 'completed', model: 'claude-haiku-5-5', reasoning: 'high', result: completedResult });
+  assert.equal(report.result.model, 'claude-haiku-5-5');
+  assert.equal(report.result.reasoning, 'high');
+  const own = normalizeEarningsReportAnalysis({ status: 'completed', model: 'claude-sonnet-5-5', reasoning: 'xhigh', result: { ...completedResult, model: 'historical-model', reasoning: 'low' } });
+  assert.equal(own.result.model, 'historical-model');
+  assert.equal(own.result.reasoning, 'low');
 });

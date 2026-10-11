@@ -17,7 +17,7 @@ import EmptyState from '@/components/shared/EmptyState';
 import InfoHint from '@/components/shared/InfoHint';
 import SoftBadge from '@/components/shared/SoftBadge';
 import type { EarningsRow } from './types';
-import { daysUntil, earningsSectorLabel, exBool, exNum, exStr, fmtMDCN, relativeDayCN, weekdayCN } from './types';
+import { daysUntil, earningsSectorLabel, exBool, exNum, exStr, isFeaturedRow, fmtMDCN, relativeDayCN, weekdayCN } from './types';
 import { t } from '../../i18n/core.ts';
 
 /* ---------------- 迷你斜纹柱对（48px，预估 45° 斜纹 / 实际实心） ---------------- */
@@ -174,7 +174,7 @@ function ExpectedMoveCell({
 }
 
 /* ---------------- AI 影响操作钮 ---------------- */
-function ImpactAction({ row, onSelect }: { row: EarningsRow; onSelect: () => void }) {
+function ImpactAction({ row, eligible, onSelect }: { row: EarningsRow; eligible: boolean; onSelect: () => void }) {
   const ready = exBool(row, 'impactReady');
   const locked = exBool(row, 'locked') === true || exBool(row, 'final') === true;
   // 只信后端算出的「确实有最终分析在跑」。原先只要阶段是 post_release_final
@@ -182,7 +182,9 @@ function ImpactAction({ row, onSelect }: { row: EarningsRow; onSelect: () => voi
   const finalizing = exBool(row, 'finalizationInProgress') === true;
   /* 这一列只有 96px：标签必须短且单行，四个汉字会折行把 h-7 撑破。
      列头已经写着「财报影响」，按钮不必再重复一遍，状态交给配色区分。 */
-  const [label, title] = locked
+  const [label, title] = !eligible && ready !== true
+    ? [t('查看'), t('仅重点公司支持财报分析')]
+    : locked
     ? [t('最终'), t('查看最终分析')]
     : finalizing
       ? [t('分析中'), t('最终分析生成中')]
@@ -210,6 +212,7 @@ function ImpactAction({ row, onSelect }: { row: EarningsRow; onSelect: () => voi
 /* ---------------- 主组件 ---------------- */
 interface EarningsListProps {
   items: EarningsRow[];
+  personalTickers?: ReadonlySet<string>;
   selectedTicker: string | null;
   onSelectTicker: (ticker: string) => void;
   onNextWeek?: () => void;
@@ -231,6 +234,7 @@ interface EarningsListProps {
 
 export default function EarningsList({
   items,
+  personalTickers = new Set<string>(),
   selectedTicker,
   onSelectTicker,
   onNextWeek,
@@ -452,7 +456,7 @@ export default function EarningsList({
                     <ExpectedMoveCell pct={move} index={i} status={moveStatus} />
                     {/* AI 影响 */}
                     <span className="flex justify-end">
-                      <ImpactAction row={row} onSelect={() => onSelectTicker(row.ticker)} />
+                      <ImpactAction row={row} eligible={isFeaturedRow(row, personalTickers)} onSelect={() => onSelectTicker(row.ticker)} />
                     </span>
                   </motion.div>
 

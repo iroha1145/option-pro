@@ -60,6 +60,8 @@ class Settings(BaseSettings):
     openai_news_reasoning: Literal["max", "xhigh", "high"] | None = Field(default=_PERSONAL_CONFIG.ai.news_reasoning, alias="OPENAI_NEWS_REASONING")
     openai_market_focus_model: Literal["claude-sonnet-5-5", "claude-haiku-5-5"] | None = Field(default=_PERSONAL_CONFIG.ai.market_focus_model, alias="OPENAI_MARKET_FOCUS_MODEL")
     openai_market_focus_reasoning: Literal["xhigh"] | None = Field(default=_PERSONAL_CONFIG.ai.market_focus_reasoning, alias="OPENAI_MARKET_FOCUS_REASONING")
+    openai_earnings_model: Literal["claude-sonnet-5-5"] = Field(default=_PERSONAL_CONFIG.ai.earnings_model, alias="OPENAI_EARNINGS_MODEL")
+    openai_earnings_reasoning: Literal["xhigh"] = Field(default=_PERSONAL_CONFIG.ai.earnings_reasoning, alias="OPENAI_EARNINGS_REASONING")
     openai_timeout_seconds: float = Field(
         default=900.0,
         ge=5.0,
@@ -313,6 +315,8 @@ class Settings(BaseSettings):
             "openai_news_reasoning": _PERSONAL_CONFIG.ai.news_reasoning,
             "openai_market_focus_model": _PERSONAL_CONFIG.ai.market_focus_model,
             "openai_market_focus_reasoning": _PERSONAL_CONFIG.ai.market_focus_reasoning,
+            "openai_earnings_model": _PERSONAL_CONFIG.ai.earnings_model,
+            "openai_earnings_reasoning": _PERSONAL_CONFIG.ai.earnings_reasoning,
             "openai_model": _PERSONAL_CONFIG.ai.model,
             "openai_reasoning": _PERSONAL_CONFIG.ai.reasoning,
             "openai_max_concurrency": _PERSONAL_CONFIG.ai.max_concurrency,
@@ -403,6 +407,7 @@ class Settings(BaseSettings):
         for selected, effort in (
             (self.openai_news_model or self.openai_model, self.openai_news_reasoning),
             (self.openai_market_focus_model or self.openai_model, self.openai_market_focus_reasoning),
+            (self.openai_earnings_model, self.openai_earnings_reasoning),
         ):
             if effort is not None and not reasoning_supported(selected, effort):
                 raise ValueError("AI task model and reasoning must use a supported pair")

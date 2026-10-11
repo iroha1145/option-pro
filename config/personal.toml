@@ -25,6 +25,9 @@ news_model = "gpt-5.6-luna"
 news_reasoning = "max"
 market_focus_model = "claude-sonnet-5-5"
 market_focus_reasoning = "xhigh"
+# 重点公司财报使用独立模型；其他任务沿用各自设置。
+earnings_model = "claude-sonnet-5-5"
+earnings_reasoning = "xhigh"
 max_concurrency = 4
 daily_max_jobs = 0
 daily_budget_usd = 0.0

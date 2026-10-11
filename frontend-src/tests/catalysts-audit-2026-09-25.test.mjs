@@ -1504,6 +1504,7 @@ function impactHarness({ reportAnalysis, requestReportAnalysis }) {
     }) },
     '@/hooks/useShell': { useShell: () => ({ openTicker() {} }) },
     '@/lib/utils': { cn: (...xs) => xs.filter(Boolean).join(' ') },
+    '@/lib/aiModelLabel': aiModelLabels,
     './types': { exNum: () => null },
     '@/components/shared/AnalysisIcon': { default: 'AnalysisIcon' },
     '@/components/shared/SoftBadge': { default: 'SoftBadge' },
@@ -1519,7 +1520,7 @@ function impactHarness({ reportAnalysis, requestReportAnalysis }) {
     document: { visibilityState: 'visible' },
     Date: clock.Date,
   }).default;
-  const props = { ticker: 'NVDA', row: { date: '2026-09-24' }, calendarRevision: 1, onAnalyzed: (ticker, value) => analyzed.push([ticker, value]) };
+  const props = { ticker: 'NVDA', analysisEligible: true, row: { date: '2026-09-24', publicFeatured: true }, calendarRevision: 1, onAnalyzed: (ticker, value) => analyzed.push([ticker, value]) };
   const read = runner.mount(() => Card(props));
   return { clock, toasts, analyzed, reads, tree: () => read(), unmount: () => runner.unmount() };
 }

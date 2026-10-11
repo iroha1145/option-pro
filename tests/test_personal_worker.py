@@ -903,6 +903,7 @@ def test_scheduled_pre_release_cap_ignores_other_jobs_but_keeps_global_cap(
             "earnings": [
                 {
                     "ticker": f"P{index:03d}",
+                    "public_featured": True,
                     "name": f"Pre release {index}",
                     "earnings_date": "2026-07-24",
                     "days_until": 1,
@@ -1040,6 +1041,7 @@ def test_existing_scheduled_pre_release_jobs_consume_the_independent_cap(
             "earnings": [
                 {
                     "ticker": f"N{index:03d}",
+                    "public_featured": True,
                     "earnings_date": "2026-07-25",
                     "days_until": 2,
                     "eps_estimate": 1.0,

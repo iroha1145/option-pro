@@ -67,6 +67,7 @@ function loadEarningsListComponent(translate = stubT) {
       return {
         daysUntil: () => 0,
         earningsSectorLabel: value => value,
+        isFeaturedRow: (row, personalTickers) => exValue(row, 'publicFeatured') === true || personalTickers.has(row.ticker.toUpperCase()),
         exBool: (row, key) => typeof exValue(row, key) === 'boolean' ? exValue(row, key) : null,
         exNum: (row, key) => {
           const value = exValue(row, key);

@@ -159,6 +159,8 @@ class AIConfig(StrictConfigModel):
     news_reasoning: Literal["max", "xhigh", "high"] | None = None
     market_focus_model: Literal["claude-sonnet-5-5", "claude-haiku-5-5"] | None = None
     market_focus_reasoning: Literal["xhigh"] | None = None
+    earnings_model: Literal["claude-sonnet-5-5"] = "claude-sonnet-5-5"
+    earnings_reasoning: Literal["xhigh"] = "xhigh"
     max_concurrency: int = Field(default=4, ge=1, le=4)
     # Retained for one migration cycle so old personal.toml files remain
     # readable. Zero means unlimited; the active safety boundary is Token use.
@@ -189,6 +191,7 @@ class AIConfig(StrictConfigModel):
         for selected, effort in (
             (self.news_model or self.model, self.news_reasoning),
             (self.market_focus_model or self.model, self.market_focus_reasoning),
+            (self.earnings_model, self.earnings_reasoning),
         ):
             if effort is not None and not reasoning_supported(selected, effort):
                 raise ValueError("AI task model and reasoning must use a supported pair")

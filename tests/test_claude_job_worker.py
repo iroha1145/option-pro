@@ -30,7 +30,10 @@ def settings(path):
         openai_market_focus_model=None,
         openai_market_focus_reasoning=None,
         openai_manual_cooldown_seconds=0,
-    )
+    ).model_copy(update={
+        # Explicit historical route: production defaults continue using Sonnet.
+        "openai_earnings_model": "claude-haiku-5-5", "openai_earnings_reasoning": "xhigh",
+    })
 
 
 _V2_CLAUDE_EARNINGS_DIGEST = "90a0d7b406e0e84af3d618e715fe071404f26fe8a004cfcf5b6450ccd8407e8b"
@@ -337,6 +340,7 @@ def test_rollback_model_jobs_reach_the_legacy_provider(tmp_path, monkeypatch, en
     repo = AIJobRepository(tmp_path / "jobs.db")
     config = settings(repo.path).model_copy(update={
         "openai_model": "gpt-5.6-terra", "openai_reasoning": "max",
+        "openai_earnings_model": "gpt-5.6-terra", "openai_earnings_reasoning": "max",
         "openai_max_concurrency": 1,
     })
     monkeypatch.setattr(ai, "get_settings", lambda: config)

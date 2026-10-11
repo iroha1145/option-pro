@@ -662,6 +662,7 @@ export default function Earnings() {
               </div>
               <EarningsList
                 items={visibleItems}
+                personalTickers={personalTickers}
                 selectedTicker={selectedTicker}
                 autoSelected={selectedTicker !== null && selectedTicker === autoPickedTicker}
                 onSelectTicker={onSelectTickerFromRow}
@@ -698,6 +699,7 @@ export default function Earnings() {
           ) : (
             <ImpactCard
               row={selectedRow}
+              analysisEligible={selectedRow !== null && isFeaturedRow(selectedRow, personalTickers)}
               ticker={selectedTicker}
               calendarRevision={q.data?.asOf ?? refreshStatus}
               onAnalyzed={onReportAnalysis}

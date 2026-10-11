@@ -2627,7 +2627,7 @@ def test_local_preflight_failure_does_not_consume_budget_or_become_unknown(
     tmp_path,
 ):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
-    row = _create_job(repository, "AAA")
+    row = _create_job(repository, "AAPL")
     settings = _settings(tmp_path / "ai-jobs.db")
 
     def fail_preflight(*_args, **_kwargs):
@@ -2652,8 +2652,8 @@ def test_explicit_provider_rejection_does_not_create_an_unknown_submission_lock(
         status_code = 401
 
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
-    first = _create_job(repository, "AAA")
-    second = _create_job(repository, "BBB")
+    first = _create_job(repository, "AAPL")
+    second = _create_job(repository, "MSFT")
     settings = _settings(tmp_path / "ai-jobs.db")
 
     async def reject_submission(*_args, **_kwargs):
@@ -2690,7 +2690,7 @@ def test_explicit_provider_rejection_does_not_create_an_unknown_submission_lock(
 def test_oversized_runtime_input_fails_before_paid_capacity_is_reserved(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     version, digest = runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
-    oversized = {"ticker": "AAA", "raw_context": "x" * 61_000}
+    oversized = {"ticker": "AAPL", "raw_context": "x" * 61_000}
 
     def create(payload):
         return repository.create_job(
@@ -2709,7 +2709,7 @@ def test_oversized_runtime_input_fails_before_paid_capacity_is_reserved(tmp_path
     with pytest.raises(ValueError, match="ai_job_payload_too_large"):
         create(oversized)
     # 提交前的运行时闸门仍在：库里已有的超限行照样在预留付费容量之前失败。
-    row, _ = create({"ticker": "AAA"})
+    row, _ = create({"ticker": "AAPL"})
     with repository._connect() as connection:
         connection.execute(
             "UPDATE ai_jobs SET payload_json=? WHERE job_id=?",

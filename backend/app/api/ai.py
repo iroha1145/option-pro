@@ -34,6 +34,7 @@ from app.services.ai_jobs.models import (
 )
 from app.services.ai_jobs.repository import AIJobRepository
 from app.services.request_security import request_client_ip
+from app.services.earnings_analysis_scope import is_featured_company
 from app.services.runtime_settings import (
     RuntimeSettingsStorageError,
     get_effective_runtime_settings,
@@ -180,8 +181,10 @@ def _job_repository() -> AIJobRepository:
     return _job_repository_for_path(str(get_settings().openai_job_db_path))
 
 
-def _require_runtime_capability() -> None:
+def _require_runtime_capability(job_type: str | None = None) -> None:
     settings = get_settings()
+    if job_type is not None:
+        settings = ai_job_runtime.settings_for_job(settings, job_type)
     capability = ai_job_runtime.capability_status(settings)
     if not capability.get("supported"):
         raise HTTPException(
@@ -256,7 +259,7 @@ def _require_manual_submission() -> None:
 
 def _require_earnings_manual_submission() -> None:
     _require_earnings_manual_analysis_enabled()
-    _require_runtime_capability()
+    _require_runtime_capability("earnings_impact")
 
 
 def _create_job(
@@ -265,14 +268,17 @@ def _create_job(
     *,
     force_retry: bool = False,
     priority: int = 80,
+    earnings_featured_verified: bool = False,
 ) -> tuple[dict, bool]:
     # Recheck at the durable enqueue boundary in case the owner changed the
     # switch after the endpoint's initial validation.
     if job_type == "earnings_impact":
         _require_earnings_manual_analysis_enabled()
+        if not earnings_featured_verified and not is_featured_company(payload):
+            _reject_nonfeatured_earnings()
     else:
         _require_manual_analysis_enabled()
-    settings = get_settings()
+    settings = ai_job_runtime.settings_for_job(get_settings(), job_type)
     # Scheduled work may fill the normal queue. Every entry point here is a
     # manual submission, so it keeps its own reserve above the base ceiling;
     # the earnings reserve is not added on top.
@@ -298,6 +304,7 @@ def _create_job(
             submission_source="manual",
             priority=priority,
             force_retry=force_retry,
+            earnings_featured_verified=(job_type == "earnings_impact"),
         )
     except RuntimeError as exc:
         if str(exc) == "ai_job_queue_full":
@@ -401,12 +408,45 @@ def _earnings_report_force_retry(row: dict | None, *, owner: bool) -> bool:
     )
 
 
+def _reject_nonfeatured_earnings() -> None:
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "code": "earnings_company_not_featured",
+            "message": "仅重点公司支持财报分析",
+        },
+    )
+
+
+def _require_featured_earnings_company(source: dict, request: Request | None) -> None:
+    if is_featured_company(source):
+        return
+    if request is not None:
+        from app.api.accounts import require_personal_account
+        from app.services.accounts import get_account_store
+
+        try:
+            # A customer cookie wins over an overlapping owner session, just
+            # as it does for the personal watchlist shown on the earnings page.
+            account = require_personal_account(request)
+        except HTTPException as exc:
+            if exc.status_code != 401:
+                raise
+        else:
+            if is_featured_company(
+                source, personal_tickers=get_account_store().watchlist(account.user_id),
+            ):
+                return
+    _reject_nonfeatured_earnings()
+
+
 async def _snapshot_bound_earnings_report(
     ticker: str,
     report_date: str,
     *,
     year: int | None,
     quarter: int | None,
+    request: Request | None = None,
 ) -> dict:
     from app.api import earnings
 
@@ -451,6 +491,7 @@ async def _snapshot_bound_earnings_report(
             },
         )
     source = matches[0]
+    _require_featured_earnings_company(source, request)
     raw = {
         field: source.get(field)
         for field in (
@@ -496,6 +537,8 @@ def _public_earnings_report_status(
     return _sanitize(
         {
             "status": published.get("status"),
+            "model": published.get("model"),
+            "reasoning": published.get("reasoning"),
             "error_code": published.get("error_code"),
             "result": published.get("result"),
             "retry_after_seconds": (
@@ -689,6 +732,7 @@ async def trigger_earnings_report_impact(
         report_date,
         year=year,
         quarter=quarter,
+        request=request,
     )
     repository = _job_repository()
     force_retry = _earnings_report_force_retry(
@@ -707,6 +751,7 @@ async def trigger_earnings_report_impact(
         "earnings_impact",
         payload,
         force_retry=force_retry,
+        earnings_featured_verified=True,
         priority=(
             ai_job_runtime.EARNINGS_OWNER_PRIORITY
             if current_request_is_owner()

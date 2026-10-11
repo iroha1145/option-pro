@@ -5,6 +5,7 @@ import type { Dict } from './types';
  * 覆盖 src/components/earnings/*.tsx、src/pages/Earnings.tsx。
  */
 export const EARNINGS: Dict = {
+  '仅重点公司支持财报分析': ['Earnings analysis is available only for featured companies.', '決算分析は重点企業のみが対象です。'],
   '检查结果已保存，后台状态暂时读不到': ['Check results are saved, but the background status is unavailable.', '確認結果は保存済みですが、バックグラウンドの状態を一時的に取得できません。'],
   '操作未完成，请稍后重试': ['The action could not be completed. Try again shortly.', '操作を完了できませんでした。しばらくしてから再試行してください。'],
   // ---------------- DensityStrip.tsx ----------------
@@ -22,7 +23,7 @@ export const EARNINGS: Dict = {
   '分析任务未能启动': ["Analysis task failed to start", "分析タスクを開始できませんでした"],
   "检查已完成，暂无明细": ["Check complete; details unavailable", "確認は完了しましたが、内訳を取得できませんでした"],
   '每日自动分析已关闭': ["Daily auto-analysis is off", "毎日の自動分析はオフです"],
-  "自动分析未来 5 天内的财报": ["Automatically analyzes earnings in the next 5 days", "今後5日以内の決算を自動分析します"],
+  "自动分析未来 5 天内重点公司的财报": ["Automatically analyzes featured-company earnings in the next 5 days", "今後5日以内の重点企業の決算を自動分析します"],
   "设置已更新，请重试": ["Settings changed. Try again.", "設定が変更されました。もう一度お試しください"],
   '已重新读取最新设置': ["Reloaded the latest settings", "最新の設定を再読み込みしました"],
   "已完成首次检查": ["Initial check complete", "初回の確認が完了しました"],
@@ -34,10 +35,10 @@ export const EARNINGS: Dict = {
   '分析设置': ["Analysis settings", "分析設定"],
   '正在更新日历…': ["Updating the calendar…", "カレンダーを更新中…"],
   '未来 5 天': ["Next 5 days", "今後5日間"],
-  "为未来 5 天内的财报安排分析，同一份财报不会重复安排。": ["Schedules analysis for earnings in the next 5 days. Reports already scheduled are skipped.", "今後5日以内の決算を分析対象に追加します。同じ決算は重複して追加しません。"],
+  "为未来 5 天内重点公司的财报安排分析，同一份财报不会重复安排。": ["Schedules analysis for featured-company earnings in the next 5 days. Reports already scheduled are skipped.", "今後5日以内の重点企業の決算を分析対象に追加します。同じ決算は重複して追加しません。"],
   '每日自动分析': ["Daily auto-analysis", "毎日自動分析"],
   "财报分析服务暂不可用": ["Earnings analysis is temporarily unavailable", "決算分析は一時的に利用できません"],
-  "分析未来 5 天内尚未安排分析的财报": ["Analyze earnings in the next 5 days that are not yet scheduled", "今後5日以内の決算のうち、未手配のものを分析します"],
+  "分析未来 5 天内重点公司尚未安排分析的财报": ["Analyze featured-company earnings in the next 5 days that are not yet scheduled", "今後5日以内の重点企業の決算のうち、未手配のものを分析します"],
   "正在检查财报…": ["Checking earnings…", "決算を確認中…"],
   '分析新财报': ["Analyze new earnings", "新規決算を分析"],
   "正在为新增财报安排分析…": ["Scheduling analysis for new earnings…", "新たな決算の分析を準備中…"],

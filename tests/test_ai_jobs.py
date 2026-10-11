@@ -1761,7 +1761,7 @@ def test_failure_detail_is_persisted_exposed_and_cleared_by_recovery(tmp_path):
     assert recovered["error_code"] is None
 
 
-def test_v3_v4_registry_rows_survive_beside_the_current_v5_row(tmp_path):
+def test_v3_v4_v5_registry_rows_survive_beside_the_current_v6_row(tmp_path):
     """2026-08-08 生产事故的登记表一半：老库带 v3、v4 行（旧建表文本的校验和）。
 
     加列改变建表文本 → 校验和改变；版本号没升时，老库 registry 里的旧行
@@ -1789,7 +1789,7 @@ def test_v3_v4_registry_rows_survive_beside_the_current_v5_row(tmp_path):
     ).hexdigest()
     with repository._connect() as connection:
         connection.execute(
-            "DELETE FROM ai_job_schema WHERE version IN ('ai-jobs-v3','ai-jobs-v4','ai-jobs-v5')"
+            "DELETE FROM ai_job_schema WHERE version IN ('ai-jobs-v3','ai-jobs-v4','ai-jobs-v5','ai-jobs-v6')"
         )
         connection.execute(
             """INSERT INTO ai_job_schema(version,checksum,applied_at)
@@ -1803,6 +1803,10 @@ def test_v3_v4_registry_rows_survive_beside_the_current_v5_row(tmp_path):
                 "b436ff83ab65b48ca267a6ac87f51a426dcc54c26341d1fb16f6fe72d5a06ed6",
                 "2026-08-08T00:00:00Z",
             ),
+        )
+        connection.execute(
+            "INSERT INTO ai_job_schema(version,checksum,applied_at) VALUES('ai-jobs-v5',?,?)",
+            ("2f06c215736fe635b8d29792bbb4eacd0c875a80a2357434bd4372893fb9ef74", "2026-10-08T00:00:00Z"),
         )
         connection.commit()
 
@@ -1818,12 +1822,13 @@ def test_v3_v4_registry_rows_survive_beside_the_current_v5_row(tmp_path):
                 "SELECT version,checksum FROM ai_job_schema"
             ).fetchall()
         }
-    # 老 v3/v4 行原样保留（回滚安全），v5 行写入当前校验和。
+    # 老 v3/v4/v5 行原样保留（回滚安全），v6 行写入当前校验和。
     assert registry["ai-jobs-v3"] == old_checksum
     assert registry["ai-jobs-v4"] == (
         "b436ff83ab65b48ca267a6ac87f51a426dcc54c26341d1fb16f6fe72d5a06ed6"
     )
-    assert registry["ai-jobs-v5"] == repo_module._SCHEMA_CHECKSUM
+    assert registry["ai-jobs-v5"] == "2f06c215736fe635b8d29792bbb4eacd0c875a80a2357434bd4372893fb9ef74"
+    assert registry["ai-jobs-v6"] == repo_module._SCHEMA_CHECKSUM
     assert reopened.get_job(row["job_id"]) is not None
 
 
@@ -1858,9 +1863,10 @@ def test_fresh_database_has_every_column_and_registry_row_production_has(
         "legacy_execution_mode",
         "anthropic_message_id",
         "provider_result_json",
+        "earnings_featured_verified",
     } <= columns
     assert registry == {
-        "ai-jobs-v5": "2f06c215736fe635b8d29792bbb4eacd0c875a80a2357434bd4372893fb9ef74",
+        "ai-jobs-v6": "da5c8079317c409f65f27cdff0b93d844c60c55e8d3cfb755a968488e912cdb8",
         "ai-job-sources-v1": "1dc4fa74c9dfdad32936cd896d2422d18d771700b52d4779144bdfa2ac843feb",
         "ai-job-batch-members-v1": "ad0fe9d62541faf14b048a3a11f47495a3fd53cfe18ebb2a762aa3f3a7f9de24",
         "ai-earnings-final-locks-v1": "adbaf0f8bfe306da3445d55aa5f94f6b67693fe7510e9eb6f419c6294ada87e3",
@@ -2524,7 +2530,8 @@ def test_daily_token_limit_is_reserved_before_provider_submission(
             max_queued=200,
         )[0]
 
-    row = create("USED")
+    # Featured companies let this case reach the token admission boundary.
+    row = create("AAPL")
     seed_owner = "worker-seed"
     claimed = repository.claim_due(seed_owner, 60)
     assert claimed is not None and claimed["job_id"] == row["job_id"]
@@ -2547,7 +2554,7 @@ def test_daily_token_limit_is_reserved_before_provider_submission(
         usage={"input_tokens": 100_000, "output_tokens": 60_000, "total_tokens": 160_000},
     )
 
-    blocked = create("LIMIT")
+    blocked = create("MSFT")
     owner = "worker-limit"
     claimed = repository.claim_due(owner, 60)
     assert claimed is not None and claimed["job_id"] == blocked["job_id"]

@@ -29,6 +29,7 @@ import { useToast } from '@/hooks/useToast';
 import { useShell } from '@/hooks/useShell';
 import { AI_JOB_POLL_WAITS_MS, boundedReadRetryDelayMs } from '@/lib/boundedReadRetry';
 import { cn } from '@/lib/utils';
+import { aiModelLabel } from '@/lib/aiModelLabel';
 import { DUR_FAST, DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import Icon from '@/components/icons';
 import SourceNote from '@/components/shared/SourceNote';
@@ -196,6 +197,8 @@ type Phase =
 interface ImpactCardProps {
   ticker: string | null;
   row?: EarningsRow | null;
+  /** 重点公司标注与当前账号自选的并集；缺失资格时不提交。 */
+  analysisEligible: boolean;
   onAnalyzed: (ticker: string, analysis: EarningsReportAnalysis) => void;
   /** 日历快照修订（asOf / 刷新状态）。刷新后必须重新读报告级分析。 */
   calendarRevision?: string | null;
@@ -211,8 +214,8 @@ function reportAnalysisNeedsPolling(value: EarningsReportAnalysis | null): boole
   return isActive(normalizedStage(value.status)) || value.finalizationInProgress;
 }
 
-export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, className }: ImpactCardProps) {
-  const { isOwner, aiEnabled, aiAvailable, aiPending } = useAccess();
+export default function ImpactCard({ ticker, row, analysisEligible, onAnalyzed, calendarRevision, className }: ImpactCardProps) {
+  const { isOwner, username, aiEnabled, aiAvailable, aiPending } = useAccess();
   const { openTicker } = useShell();
   const toast = useToast();
   const reportDate = row?.date ?? null;
@@ -224,6 +227,8 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
   const [analysis, setAnalysis] = useState<EarningsReportAnalysis | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [confirming, setConfirming] = useState(false);
+  const [eligibilityDenied, setEligibilityDenied] = useState(false);
+  const canAnalyze = analysisEligible && !eligibilityDenied;
   const [pollAttempt, setPollAttempt] = useState(0);
   /* 5 分钟自动查询用完：停表并给出手动重新查询，不能再说「会自动显示」（审计 FE-8）。 */
   const [pollPaused, setPollPaused] = useState(false);
@@ -321,7 +326,10 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
           setPollNotice(__t('暂时读不到最新状态，正在自动重试'));
           return null;
         }
-        if (err?.bizCode === 'earnings_analysis_locked') {
+        if (err?.bizCode === 'earnings_company_not_featured') {
+          setEligibilityDenied(true);
+          setPhase('needs-analysis');
+        } else if (err?.bizCode === 'earnings_analysis_locked') {
           setPhase('final-locked');
         } else if (err?.bizCode === 'earnings_finalization_in_progress') {
           setPhase('finalizing');
@@ -363,6 +371,8 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
     aiAvailable,
     aiPending,
     isOwner,
+    username,
+    analysisEligible,
   ].join('|');
   const [prevContextKey, setPrevContextKey] = useState(contextKey);
   if (contextKey !== prevContextKey) {
@@ -372,6 +382,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
     requestSequenceRef.current += 1;
     setAnalysis(null);
     setConfirming(false);
+    setEligibilityDenied(false);
     setPollAttempt(0);
     setPollPaused(false);
     setPollNotice(null);
@@ -394,7 +405,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
     if (!ticker || aiPending) return;
     const id = window.setTimeout(() => void loadImpact(ticker), 0);
     return () => window.clearTimeout(id);
-  }, [ticker, calendarRevision, aiEnabled, aiAvailable, aiPending, isOwner, loadImpact]);
+  }, [ticker, calendarRevision, aiEnabled, aiAvailable, aiPending, isOwner, username, analysisEligible, loadImpact]);
 
   /* 排队、分析或自动终版期间只轮询报告级 GET。 */
   const shouldPoll = reportAnalysisNeedsPolling(analysis);
@@ -457,7 +468,8 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
   const [submitting, setSubmitting] = useState(false);
   const startJob = async () => {
     if (
-      !ticker
+      !canAnalyze
+      || !ticker
       || !reportDate
       || phase === 'finalizing'
       || phase === 'final-locked'
@@ -479,7 +491,10 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
     } catch (e) {
       if (seq !== requestSequenceRef.current) return;
       const err = e instanceof ApiError ? e : null;
-      if (err?.bizCode === 'earnings_analysis_locked') {
+      if (err?.bizCode === 'earnings_company_not_featured') {
+        setEligibilityDenied(true);
+        setPhase('needs-analysis');
+      } else if (err?.bizCode === 'earnings_analysis_locked') {
         const finalState = await loadImpact(ticker);
         if (!finalState?.result) setPhase('final-locked');
       } else if (err?.bizCode === 'earnings_finalization_in_progress') {
@@ -523,6 +538,11 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
           transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
           className="p-5"
         >
+          {ticker && !canAnalyze && phase !== 'loading' && (
+            <p className="mb-3 rounded-md border border-line bg-paper-2 px-3 py-2 text-caption leading-5 text-ink-500" role="status">
+              {__t('仅重点公司支持财报分析')}
+            </p>
+          )}
           {/* ---------- 未选标的 ---------- */}
           {phase === 'idle' && (
             <div className="flex flex-col items-center py-10 text-center">
@@ -624,7 +644,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
           )}
 
           {/* ---------- 409：公开生成引导 ---------- */}
-          {phase === 'needs-analysis' && (
+          {phase === 'needs-analysis' && canAnalyze && (
             <div className="flex flex-col items-center py-8 text-center">
               <span className="flex size-12 items-center justify-center rounded-lg bg-ai-50 text-ai-600">
                 <AnalysisIcon size={22} />
@@ -637,6 +657,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                 <div className="mt-4 w-full rounded-md border border-ai-600/30 bg-ai-50 p-3 text-left">
                   <p className="text-caption text-ink-600">
                     {__t('为 {ticker} 生成本次财报分析。', { ticker })}
+                    <span className="mt-1 block text-micro text-ink-500">Claude Sonnet 5.5 · xhigh</span>
                   </p>
                   <div className="mt-2.5 flex gap-2">
                     <button
@@ -697,7 +718,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
           )}
 
           {/* ---------- 任务失败：原因 + 重试 ---------- */}
-          {phase === 'job-failed' && (
+          {phase === 'job-failed' && canAnalyze && (
             <div>
               {jobCancelled ? (
                 <div className="rounded-md border border-line bg-paper-2 p-3">
@@ -840,6 +861,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                   })}
                 </div>
                 <SourceNote className="mt-3" text={__t("AI 生成的财报影响分析")} />
+                {impact.model?.trim() && <p className="mt-1 break-words text-micro text-ink-400">{aiModelLabel(impact.model, impact.reasoning)}</p>}
               </Section>
             </motion.div>
           )}

@@ -224,7 +224,7 @@ def test_manual_routes_fail_closed_when_only_scheduled_analysis_is_enabled(
     )
     capability_checked = False
 
-    def capability() -> None:
+    def capability(_job_type=None) -> None:
         nonlocal capability_checked
         capability_checked = True
 
@@ -271,7 +271,7 @@ def test_earnings_manual_route_is_independent_from_catalyst_read_only_mode(
     )
     capability_checked = False
 
-    def capability() -> None:
+    def capability(_job_type=None) -> None:
         nonlocal capability_checked
         capability_checked = True
 

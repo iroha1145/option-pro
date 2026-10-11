@@ -19,6 +19,8 @@ export interface EarningsImpactItem {
 
 export interface EarningsImpactResult {
   outputLanguage: 'zh-CN';
+  model?: string;
+  reasoning?: string;
   ticker: string;
   summary: string;
   expectation: string;
@@ -134,6 +136,8 @@ function pickOptionalBool(
 export function normalizeLiveEarningsImpact(body: unknown): EarningsImpactResult {
   const row = asRec(body);
   const outputLanguage = pickS(row, 'outputLanguage', 'output_language');
+  const model = pickS(row, 'model', '_model', 'analysis_model');
+  const reasoning = pickS(row, 'reasoning', '_reasoning', 'analysis_reasoning');
   const ticker = pickS(row, 'ticker');
   const summary = pickS(row, 'summary');
   const expectation = pickS(row, 'expectation');
@@ -183,6 +187,8 @@ export function normalizeLiveEarningsImpact(body: unknown): EarningsImpactResult
 
   return {
     outputLanguage: 'zh-CN',
+    ...(model ? { model } : {}),
+    ...(reasoning ? { reasoning } : {}),
     ticker: ticker.toUpperCase(),
     summary,
     expectation,
@@ -216,6 +222,9 @@ export function normalizeEarningsReportAnalysis(body: unknown): EarningsReportAn
     const normalized = normalizeLiveEarningsImpact(rawResult);
     result = {
       ...normalized,
+      // 已存结果自己的模型优先；仅接收报告接口附带的真实任务元数据。
+      ...(normalized.model || !pickS(row, 'model') ? {} : { model: pickS(row, 'model')! }),
+      ...(normalized.reasoning || !pickS(row, 'reasoning') ? {} : { reasoning: pickS(row, 'reasoning')! }),
       ...(analysisStage ? { analysisStage } : {}),
       ...(locked ? { locked: true } : {}),
       ...(final ? { final: true } : {}),
