@@ -198,7 +198,7 @@ def test_haiku_pipeline_three_rounds_completes_and_shared_budget_counts_once(tmp
         {'type': 'text', 'text': json.dumps({**valid_result(focus_payload), "event_verifications": []}, ensure_ascii=False)}]))
     process(repo, focus_config.model_copy(update={'model_daily_budget_usd': 100, 'model_budget_start_at': None}))
     focus_row = repo.get_job(focus_job['job_id'])
-    # Sonnet card: 100 x $2 + 20 x $0.20 + 50 x $2.50 + 10 x $10 per million tokens.
+    # Sonnet card: 100 x $2 + 20 x $0.10 + 50 x $2.50 + 10 x $10 per million tokens.
     assert focus_row['status'] == 'completed' and focus_row['budget_charge_microusd'] == 200 + 2 + 125 + 100, focus_row
     assert requests[-1]['system'][0]['cache_control']['ttl'] == '5m'
     assert 'cache_control' not in requests[-1] and 'container' not in requests[-1]

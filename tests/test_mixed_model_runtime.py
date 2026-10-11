@@ -47,6 +47,30 @@ def test_sonnet_has_no_long_context_multiplier():
     assert runtime.settled_usage_cost_microusd('market_focus',usage,fallback_microusd=9_000_000,model='claude-sonnet-5-5') == 1_620_000
 
 
+# 官方定价页（platform.claude.com/docs/en/about-claude/pricing，2026-10-11 核对）：Sonnet 5.5 输入 2、
+# 5 分钟写入 2.50、1 小时写入 4、缓存命中 0.10、输出 10 美元每百万 tokens。Sonnet 5.5 与 Opus 5.5 的
+# 缓存命中按输入价的 0.05 倍计，Sonnet 5 和其余型号是 0.1 倍，所以读缓存是 0.10 美元而不是 0.20 美元。
+def _sonnet_usage(*, ordinary=0, cached=0, five_minute=0, one_hour=0, output=0):
+    writes = five_minute + one_hour
+    return {
+        'input_tokens': ordinary + cached + writes, 'cached_input_tokens': cached,
+        'cache_creation_input_tokens': writes, 'cache_creation_5m_input_tokens': five_minute,
+        'cache_creation_1h_input_tokens': one_hour, 'output_tokens': output, 'web_search_requests': 0,
+    }
+
+
+@pytest.mark.parametrize('usage,expected', [
+    (_sonnet_usage(ordinary=1_000_000), 2_000_000),
+    (_sonnet_usage(cached=1_000_000), 100_000),
+    (_sonnet_usage(five_minute=1_000_000), 2_500_000),
+    (_sonnet_usage(one_hour=1_000_000), 4_000_000),
+    (_sonnet_usage(output=1_000_000), 10_000_000),
+    (_sonnet_usage(ordinary=1_000_000, cached=1_000_000, five_minute=1_000_000, one_hour=1_000_000, output=1_000_000), 18_600_000),
+], ids=['input', 'cache_read', 'write_5m', 'write_1h', 'output', 'all_five'])
+def test_sonnet_settled_cost_follows_the_official_price_card(usage, expected):
+    assert runtime.settled_usage_cost_microusd('market_focus', usage, fallback_microusd=1, model='claude-sonnet-5-5') == expected
+
+
 @pytest.mark.parametrize('model,expected', [('gpt-5.6-luna', 7_300), ('gpt-5.6-terra', 91_250)])
 def test_known_openai_usage_is_not_capped_by_a_small_reservation(model, expected):
     usage = {'input_tokens': 10_000, 'cached_input_tokens': 0, 'output_tokens': 4_000}
