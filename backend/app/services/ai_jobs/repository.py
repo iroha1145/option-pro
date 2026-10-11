@@ -3659,23 +3659,19 @@ class AIJobRepository:
         with self._connect() as connection:
             connection.execute("BEGIN")
             shared_totals = model_budget_totals(connection, observed, shared_budget_start_at) if shared_budget_enabled else None
-            totals = connection.execute(
-                """
-                SELECT COUNT(*) AS submitted_jobs,
-                       COALESCE(SUM(budget_charge_microusd),0) AS charged,
-                       COALESCE(SUM(usage_total_tokens),0) AS total_tokens
-                FROM ai_jobs
-                WHERE submission_started_at>=? AND submission_started_at<?
-                """,
-                (_iso(day_start_dt), _iso(day_end_dt)),
-            ).fetchone()
+            # submission_started_at has no index: the day's rows cost a full
+            # scan, so one scan returns them with the day totals on each row.
             token_rows = connection.execute(
                 """SELECT job_type,model,submission_started_at,status,error_code,openai_response_id,
-                          usage_total_tokens
+                          usage_total_tokens,
+                          COUNT(*) OVER () AS submitted_jobs,
+                          COALESCE(SUM(budget_charge_microusd) OVER (),0) AS charged,
+                          COALESCE(SUM(usage_total_tokens) OVER (),0) AS total_tokens
                    FROM ai_jobs
                    WHERE submission_started_at>=? AND submission_started_at<?""",
                 (_iso(day_start_dt), _iso(day_end_dt)),
             ).fetchall()
+            totals = token_rows[0] if token_rows else None
             # This is a recent failure signal, not a live balance lookup. A
             # later successful paid result confirms recovery after funding;
             # pending jobs and local-only completions cannot confirm it.

@@ -6810,7 +6810,7 @@ def test_directional_batch_keeps_only_the_requested_tickers_nonzero_impact(
     monkeypatch.setattr(intelligence, "_ai_job_snapshot", lambda **_kwargs: {})
     monkeypatch.setattr(
         intelligence,
-        "_item",
+        "_published_item",
         lambda _connection, row, **_kwargs: items[row["index"]],
     )
     monkeypatch.setattr(
@@ -6862,37 +6862,33 @@ def test_owner_feed_and_batch_reuse_one_ai_job_snapshot(
     expected_job_ids = {first_job["job_id"], second_job["job_id"]}
 
     original_snapshot = intelligence._ai_job_snapshot
-    original_linked = intelligence._linked_news_job_at
+    original_status = intelligence._window_job_status
     snapshot_calls = 0
-    linked_calls = 0
+    status_calls = 0
     requested_job_ids: list[set[str]] = []
 
     def counted_snapshot(*args, **kwargs):
         nonlocal snapshot_calls
         snapshot_calls += 1
+        assert kwargs.get("state_only") is True
         captured = set(kwargs["job_ids"])
         requested_job_ids.append(captured)
         kwargs["job_ids"] = captured
         return original_snapshot(*args, **kwargs)
 
-    def checked_linked(connection, row, *, as_of, jobs=None):
-        nonlocal linked_calls
-        linked_calls += 1
+    def checked_status(row, *, as_of, jobs, identities):
+        nonlocal status_calls
+        status_calls += 1
         assert "analysis_job_id" in row
         assert "analysis_job_created_at" in row
         assert jobs is not None
-        return original_linked(
-            connection,
-            row,
-            as_of=as_of,
-            jobs=jobs,
-        )
+        return original_status(row, as_of=as_of, jobs=jobs, identities=identities)
 
     def unexpected_individual_read(*_args, **_kwargs):
         pytest.fail("owner list reads must reuse the AI job snapshot")
 
     monkeypatch.setattr(intelligence, "_ai_job_snapshot", counted_snapshot)
-    monkeypatch.setattr(intelligence, "_linked_news_job_at", checked_linked)
+    monkeypatch.setattr(intelligence, "_window_job_status", checked_status)
     monkeypatch.setattr(intelligence, "_read_ai_job", unexpected_individual_read)
 
     viewed_at = observed + timedelta(minutes=1)
@@ -6901,7 +6897,7 @@ def test_owner_feed_and_batch_reuse_one_ai_job_snapshot(
 
     assert snapshot_calls == 2
     assert requested_job_ids == [expected_job_ids, expected_job_ids]
-    assert linked_calls == 4
+    assert status_calls == 4
     assert len(feed["items"]) == 2
     assert {item["analysis_status"] for item in feed["items"]} == {"pending"}
     assert len(batch["results"]["NVDA"]["items"]) == 1
@@ -7100,14 +7096,14 @@ def test_owner_item_only_projects_job_state_without_published_analysis(
         "historical_before_job": base - timedelta(minutes=1),
         "historical_pending": base + timedelta(seconds=30),
     }.get(scenario, clock["now"])
-    original = intelligence._linked_news_job_at
+    original = intelligence._window_job_status
     calls = []
 
     def counted(*args, **kwargs):
         calls.append(kwargs["as_of"])
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(intelligence, "_linked_news_job_at", counted)
+    monkeypatch.setattr(intelligence, "_window_job_status", counted)
     payload = intelligence.feed(as_of=as_of, window_hours=24, limit=12)
     assert len(payload["items"]) == 1
     item = payload["items"][0]
@@ -7243,9 +7239,14 @@ def test_windowed_and_journal_revision_queries_agree(tmp_path) -> None:
     assert any(row["news_id"] == 204 for row in historical)
 
 
-def test_owner_reads_reuse_cached_rows_but_rebuild_items(
+def test_owner_reads_reuse_cached_rows_and_shared_items(
     tmp_path, monkeypatch
 ) -> None:
+    """Shared items carry no job state, so owners reuse the visitor entry.
+
+    The owner's job statuses are layered on in _window_items on every read.
+    """
+
     etl, _ai, intelligence = _stack(tmp_path)
     base = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
     monkeypatch.setattr(local_module, "_utc_now", lambda: base)
@@ -7274,7 +7275,9 @@ def test_owner_reads_reuse_cached_rows_but_rebuild_items(
     finally:
         del intelligence._active_revisions_query
     assert [row["news_id"] for row in rows] == [121]
-    assert items is None
+    cached = local_module._REVISION_CACHE[(str(intelligence.db_path), 24)]
+    assert items is cached["anon_items"]
+    assert [item["analysis_status"] for item in items] == ["not_requested"]
 
 
 def test_cached_feed_items_are_isolated_from_caller_mutation(

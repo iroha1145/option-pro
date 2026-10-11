@@ -784,21 +784,40 @@ def schema_identity_current(
     *,
     current_identity: tuple[str, str] | None = None,
     model: str | None = None,
+    identities: dict[tuple[str, str | None, str | None], tuple[str, str]] | None = None,
 ) -> bool:
     """Whether a stored job's schema identity still matches the runtime contract.
 
     News jobs also accept the known v6 transition; every other type needs the
     exact current identity. Prompt-version gating stays with the callers: the
     worker deliberately applies none.
+
+    ``identities`` is a memo owned by a caller that checks many stored jobs in
+    one pass (a feed read): each (job type, model, request variant) identity
+    is computed once for the pass instead of once per job. It must not outlive
+    that pass. The identity follows the mutable policy table (see
+    schema_identity), so the next pass starts from an empty memo and reads the
+    policy again.
     """
+
+    def identity(mode: str | None) -> tuple[str, str]:
+        if identities is None:
+            return _schema_identity(job_type, model=model, mode=mode)
+        key = (job_type, model, mode)
+        if key not in identities:
+            identities[key] = _schema_identity(job_type, model=model, mode=mode)
+        return identities[key]
+
     # A completed legacy result stays readable after the transport changes.
     # Its identity is checked against that model's original resource policy;
     # a caller that already computed it for this model passes it in.
-    current = (
-        current_identity if current_identity is not None
-        else schema_identity(job_type, model=model) if model is not None
-        else schema_identity(job_type)
-    )
+    if current_identity is not None:
+        current = current_identity
+    elif identities is not None:
+        # The same value as schema_identity(job_type, model=model).
+        current = identity(luna_news_mode(job_type, None, model=model))
+    else:
+        current = schema_identity(job_type, model=model) if model is not None else schema_identity(job_type)
     stored = (schema_version, schema_sha256)
     if stored == current:
         return True
@@ -806,10 +825,7 @@ def schema_identity_current(
     if job_type == "news_impact" and model == LUNA_MODEL:
         # Whether a Luna news task searches depends on its own payload; every
         # variant of the current policy is current.
-        currents.update(
-            _schema_identity(job_type, model=model, mode=mode)
-            for mode in LUNA_NEWS_MODES
-        )
+        currents.update(identity(mode) for mode in LUNA_NEWS_MODES)
     if job_type == "news_impact":
         return any(
             news_schema_identity_matches(
