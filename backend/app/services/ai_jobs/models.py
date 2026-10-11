@@ -2215,6 +2215,27 @@ def validate_simplified_chinese_text(
     return scan_text
 
 
+# 行业与商品标签允许单独写通行的大写缩写（REIT、ETF、LNG、GPU、AI）。2026-10-11 07:30Z 的
+# Sonnet 核实周期 aij_5c439766 因 affected_sectors 里单独的 'REIT'（三处）在
+# simplified_chinese_text_required 上整轮作废，付费结果约 1 到 4 美元；近 10 天新闻分析另有
+# ETF、LNG、SOL、GPU、AVAX、USDC 同类拒绝。这类标签本身没有可翻译的汉字，所以只放宽它们：
+# 去掉首尾空白后整体匹配 [A-Z]{2,5}s?（可带复数 s）才直接接受，其余照旧走
+# validate_simplified_chinese_text；英文单词（Telecom、Real estate）、小写、六位及以上和夹杂
+# 其他符号的写法仍被拒。标题、摘要、要点、风险、不确定性等正文字段不用这个规则。只换校验函数，
+# StringConstraints 与 ZhShortText 完全相同，结果模型的 JSON schema 和任务身份都不变。
+_ACRONYM_LABEL = re.compile(r"[A-Z]{2,5}s?")
+
+
+def validate_simplified_chinese_label(
+    value: str,
+    info: ValidationInfo | None,
+) -> str:
+    text = value.strip()
+    if _ACRONYM_LABEL.fullmatch(text):
+        return text
+    return validate_simplified_chinese_text(value, info)
+
+
 def validate_simplified_chinese_company_name(
     value: str,
     info: ValidationInfo | None,
@@ -2342,6 +2363,12 @@ ZhShortText = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1, max_length=500),
     AfterValidator(validate_simplified_chinese_text),
+]
+# 行业与商品标签：约束与 ZhShortText 相同，只有校验函数不同。
+ZhLabelText = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=500),
+    AfterValidator(validate_simplified_chinese_label),
 ]
 ZhCompanyName = Annotated[
     str,
@@ -2676,7 +2703,7 @@ class NewsStockImpact(StrictModel):
 
 
 class NewsCommodityImpact(StrictModel):
-    name: ZhShortText
+    name: ZhLabelText
     impact_score: StrictInt = Field(ge=-100, le=100)
     reason: ZhBoundedText
 
@@ -2827,7 +2854,7 @@ class NewsImpactResult(SimplifiedChineseResult):
     confidence: StrictInt = Field(ge=0, le=100)
     market_relevance: StrictInt = Field(ge=0, le=100)
     affected_stocks: list[NewsStockImpact] = Field(max_length=50)
-    affected_sectors: list[ZhShortText] = Field(max_length=50)
+    affected_sectors: list[ZhLabelText] = Field(max_length=50)
     affected_commodities: list[NewsCommodityImpact] = Field(max_length=30)
     causal_summary: ZhBoundedText
     key_factors: list[ZhShortText] = Field(max_length=30)
@@ -2908,7 +2935,7 @@ class MarketFocusTickerAssessment(StrictModel):
 class MarketFocusDominantEvent(StrictModel):
     event_group_id: Annotated[str, StringConstraints(min_length=1, max_length=100)]
     summary: ZhBoundedText
-    affected_sectors: list[ZhShortText] = Field(max_length=10)
+    affected_sectors: list[ZhLabelText] = Field(max_length=10)
 
 
 # 只翻译输入已绑定的宏观程序状态；中间从句限定为分数与日期，不能借同句
@@ -2936,7 +2963,7 @@ class MarketFocusResult(SimplifiedChineseResult):
     market_summary: ZhLongText
     dominant_events: list[MarketFocusDominantEvent] = Field(max_length=8)
     market_uncertainties: list[ZhShortText] = Field(max_length=20)
-    affected_sectors: list[ZhShortText] = Field(max_length=20)
+    affected_sectors: list[ZhLabelText] = Field(max_length=20)
     focus_ticker_assessments: list[MarketFocusTickerAssessment] = Field(max_length=20)
     no_new_material_catalyst: StrictBool
     insufficient_context: StrictBool
@@ -3021,7 +3048,7 @@ class FocusEventVerification(StrictModel):
     # Global prose in the paid output stays available in the internal audit.
     title_zh: ZhShortText
     summary_zh: ZhBoundedText
-    affected_sectors: list[ZhShortText] = Field(max_length=10)
+    affected_sectors: list[ZhLabelText] = Field(max_length=10)
 
 
 _VERIFIED_FOCUS_METADATA = re.compile(
