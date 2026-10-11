@@ -13,15 +13,18 @@
  * （`t` 确实存在，只是变成了 string）。双保险：局部改名 `symbol`，翻译函数按
  * codemod 惯例以 `__t` 别名引入（见 i18n-coverage 的 classify）。
  */
-import { ApiError, mockOr } from '@/api/client';
+import { ApiError, get, mockOr } from '@/api/client';
 import { quoteSymbol } from '@/lib/quoteSymbol';
 import { marketGet } from '@/api/marketRead';
 import { asRec, pickLabel, pickN, pickS, unwrap, type Rec } from '@/api/live';
 import { ma20Of, mapBar } from '@/api/modules/stocks';
 import { stocksApi } from '@/api/modules/stocks';
+import { parseStockAnalysisView, type StockAnalysisView } from './stockAnalysisTypes';
 import { postAiJob } from '@/api/modules/ai-jobs';
 import * as fx from '@/mocks/fixtures';
 import * as fx2 from '@/mocks/fixtures2';
+import { stockAnalysisFixture } from '@/mocks/stockAnalysis';
+import { getAccess as mockAccess } from '@/mocks/session';
 import type { AiJob, StockChart, StockDetail, TechBaseStatus, TechnicalStructure, TechSwingPoint } from '@/api/types';
 import type {
   ChartBarEx,
@@ -409,7 +412,7 @@ function signalReading(label: string, key: string, value: number): string {
   const formatted = value.toLocaleString(localeTag(), {
     maximumFractionDigits: 2,
   });
-  return `${label}：${formatted}${PERCENT_SIGNALS.has(key) ? '%' : ''}`;
+  return __t('{label}：{value}{unit}', { label, value: formatted, unit: PERCENT_SIGNALS.has(key) ? '%' : '' });
 }
 
 function mapProvidedFactors(body: Rec): TrendBiasFactor[] {
@@ -551,7 +554,38 @@ export function getTrendBias(ticker: string, force = false): Promise<StockTrendB
   );
 }
 
-/** signal_analysis 任务（owner）；轮询/取消复用 aiJobsApi.get / cancel */
+/** Shared public report; this read never consumes the account's daily quota. */
+export function getStockAnalysisView(ticker: string, signal?: AbortSignal): Promise<StockAnalysisView> {
+  const symbol = quoteSymbol(ticker);
+  return mockOr(
+    async () => {
+      const used: 0 | 1 = mockStockUsed.has(mockStockPrincipal()) ? 1 : 0;
+      const id = mockStockJobs.get(symbol);
+      const job = id ? fx2.getAiJob(id) : null;
+      return { ticker: symbol, enabled: true, canGenerate: used === 0 && !job,
+        quota: { limit: 1, used, remaining: used === 0 ? 1 : 0,
+          resetAt: mockStockResetAt, periodStart: mockStockPeriodStart },
+        activeJob: job && !['succeeded', 'failed', 'cancelled'].includes(job.status) ? job : null,
+        latestJob: job?.status === 'succeeded' ? job : null };
+    },
+    async () => {
+      const view = parseStockAnalysisView(await get(`/signals/stock/${encodeURIComponent(symbol)}/ai-analysis`, { signal }), symbol);
+      if (!view) throw new ApiError(502, __t('暂时无法读取股票报告'));
+      return view;
+    },
+  );
+}
+const mockStockJobs = new Map<string, string>();
+const mockStockUsed = new Set<string>();
+const mockStockPeriodStart = new Date().toISOString();
+const mockStockResetAt = new Date(Date.now() + 86400000).toISOString();
+function mockStockPrincipal(): string {
+  const access = mockAccess();
+  if (access.role !== 'owner' && !access.accountUsername) throw new ApiError(401, __t('请先登录'), { bizCode: 'account_login_required' });
+  return access.role === 'owner' ? 'owner' : `account:${access.accountUsername}`;
+}
+
+/** signal_analysis 任务（已登录主体）；轮询/取消复用 aiJobsApi.get / cancel */
 export function createSignalAnalysisJob(ticker: string): Promise<AiJob> {
   const symbol = quoteSymbol(ticker);
   return mockOr(
@@ -559,16 +593,17 @@ export function createSignalAnalysisJob(ticker: string): Promise<AiJob> {
       if (!fx.hasTicker(symbol)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: symbol }));
       const d = fx.getStockDetail(symbol);
       const b = fx.getStockTrendBias(symbol);
-      // mock 模式下模拟「模型写的分析正文」，与真实 AI 输出同样不做界面翻译（如实保留原文）。
-      const ivTone = d.ivPercentile >= 60 ? '偏贵' : d.ivPercentile <= 40 ? '相对便宜' : '中性';
-      const text =
-        `${symbol} 模型分析完成：趋势偏向分 ${b.trend_bias_score}（${b.trend_bias_label}），` +
-        `分项读数 趋势 ${b.scores.trend} / 动量 ${b.scores.momentum} / 量能 ${b.scores.volume} / 波动 ${b.scores.volatility}。` +
-        `现价 ${d.price.toFixed(2)} 美元，IV 百分位 ${d.ivPercentile}%，期权定价${ivTone}。` +
-        `近端观察 MA20 附近的量能配合与突破延续性；若量价背离放大，偏向读数将快速回落。`;
-      return fx2.createAiJob('signal-analysis' as AiJob['kind'], text);
+      const text = stockAnalysisFixture(symbol, d.price, d.ivPercentile, b.scores, b.trend_bias_score, b.trend_bias_label);
+      const principal = mockStockPrincipal();
+      const existing = mockStockJobs.get(symbol);
+      if (existing) return fx2.getAiJob(existing);
+      if (mockStockUsed.has(principal)) throw new ApiError(429, __t('今日分析额度已用完，额度重置后再试'), { bizCode: 'stock_analysis_daily_limit' });
+      const job = fx2.createAiJob('signal-analysis' as AiJob['kind'], text);
+      mockStockJobs.set(symbol, job.id);
+      mockStockUsed.add(principal);
+      return job;
     },
-    // 契约：owner+SO → 202 + Location（job_id 可能仅在 Location 头）
+    // 契约：登录主体+同源请求 → 202 + Location（job_id 可能仅在 Location 头）
     () => postAiJob(`/signals/stock/${encodeURIComponent(symbol)}/ai-analysis`, { force: false }),
   );
 }

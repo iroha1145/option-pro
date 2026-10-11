@@ -47,7 +47,7 @@ function compile(file, React, imports, environment = {}) {
     require(id) {
       if (id === 'react') return React;
       if (id === 'react/jsx-runtime') return JSX;
-      if (id.includes('i18n/core')) return { t: interpolate };
+      if (id.includes('i18n/core')) return { t: interpolate, localeTag: () => 'zh-CN' };
       if (id in imports) return imports[id];
       if (id in SHARED_UI_STUBS) return SHARED_UI_STUBS[id];
       throw new Error(`Unexpected import: ${id}`);
@@ -387,24 +387,47 @@ test('postAiJob 把创建响应的 Retry-After 随任务带回', async () => {
 
 const hookState = (state) => ({
   job: null, error: null, queryIssue: null, starting: false,
-  start() {}, cancel() {}, resume() {}, reset() {}, ...state,
+  start() {}, cancel() {}, resume() {}, reset() {}, adopt() {}, clear() {}, ...state,
 });
 
-function renderSignalCard(state) {
+async function renderSignalCard(state) {
   const stub = createReactStub();
+  const clock = timers();
+  const task = hookState(state);
+  const exhausted = task.job !== null;
+  const savedView = {
+    ticker: 'NVDA', enabled: true, canGenerate: !exhausted,
+    quota: { limit: 1, used: exhausted ? 1 : 0, remaining: exhausted ? 0 : 1,
+      periodStart: '2026-10-09T20:00:00Z', resetAt: '2026-10-12T20:00:00Z' },
+    activeJob: task.job && ['queued', 'in_progress', 'running'].includes(task.job.status) ? task.job : null,
+    latestJob: task.job?.status === 'succeeded' ? task.job : null,
+  };
   const { exports } = compile('components/detail/AiAnalysisCard.tsx', stub.React, {
     'react-router': { Link: 'Link' },
-    'framer-motion': { AnimatePresence: 'AnimatePresence', motion: new Proxy({}, { get: (_target, tag) => `motion.${String(tag)}` }) },
-    '@/hooks/useAccess': { useAccess: () => ({ isOwner: true, loading: false }) },
+    '@/api/client': { ApiError },
+    '@/api/modules/ai-jobs': { aiJobsApi: { get: async id => ({ ...task.job, id }) } },
+    '@/hooks/useAccess': { useAccess: () => ({ isOwner: true, isSignedIn: true, username: null, loading: false }) },
     '@/components/icons': { default: 'Icon' },
-    './api': { createSignalAnalysisJob: () => Promise.reject(new Error('unused')) },
-    './useAiJob': { useAiJob: () => hookState(state) },
+    './api': { createSignalAnalysisJob: () => Promise.reject(new Error('unused')), getStockAnalysisView: async () => savedView },
+    './useAiJob': { useAiJob: () => task },
+    './StockAnalysisReport': { default: 'StockAnalysisReport' },
     '@/api/aiJobNormalize': normalize,
     '@/lib/aiModelLabel': aiModelLabels,
     '@/lib/quoteSymbol': { isIndexSymbol: () => false },
     '@/lib/loginReturn': loginReturn,
+  }, { AbortController, setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout,
+    document: { hidden: false, addEventListener() {}, removeEventListener() {} },
+    window: { addEventListener() {}, removeEventListener() {} },
   });
-  return snapshot(stub.mount(() => exports.default({ ticker: 'NVDA' }))());
+  // The signed-in body is now a separate component keyed by account and ticker.
+  const get = stub.mount(() => {
+    const body = exports.default({ ticker: 'NVDA' });
+    return typeof body.type === 'function' ? body.type(body.props) : body;
+  });
+  await settle();
+  const view = snapshot(get());
+  stub.unmount();
+  return view;
 }
 
 function renderOptionInsight(state) {
@@ -435,42 +458,44 @@ function renderOptionInsight(state) {
 }
 
 for (const [name, render] of [['个股 AI 卡片', renderSignalCard], ['期权解读', renderOptionInsight]]) {
-  test(`${name}：已请求取消时显示原因并禁用取消按钮`, () => {
-    const view = render({ job: { id: 'job-1', status: 'in_progress', progress: null, cancelRequested: true } });
+  test(`${name}：已请求取消时显示原因并禁用取消按钮`, async () => {
+    const view = await render({ job: { id: 'job-1', status: 'in_progress', progress: null, cancelRequested: true } });
     assert.match(view.text, /已请求取消/);
     assert.deepEqual(view.buttons.filter((b) => b.label === '取消分析').map((b) => b.disabled), [true]);
-    const active = render({ job: { id: 'job-1', status: 'in_progress', progress: null } });
+    const active = await render({ job: { id: 'job-1', status: 'in_progress', progress: null } });
     assert.match(active.text, /模型分析中…/);
     assert.deepEqual(active.buttons.filter((b) => b.label === '取消分析').map((b) => b.disabled), [false]);
   });
 
-  test(`${name}：排队推迟显示原因，开始处理后不再显示旧码`, () => {
-    const queued = render({ job: { id: 'job-1', status: 'queued', progress: null, error: 'global_concurrency_limit' } });
+  test(`${name}：排队推迟显示原因，开始处理后不再显示旧码`, async () => {
+    const queued = await render({ job: { id: 'job-1', status: 'queued', progress: null, error: 'global_concurrency_limit' } });
     assert.match(queued.text, /排队中…/);
     assert.match(queued.text, /同时进行的分析较多，稍后自动开始/);
-    const running = render({ job: { id: 'job-1', status: 'in_progress', progress: null, error: 'global_concurrency_limit' } });
+    const running = await render({ job: { id: 'job-1', status: 'in_progress', progress: null, error: 'global_concurrency_limit' } });
     assert.doesNotMatch(running.text, /同时进行的分析/);
   });
 
-  test(`${name}：失败按共用表说明原因，取消与旧结果隐藏各有说法`, () => {
-    const credit = render({ job: { id: 'job-1', status: 'failed', progress: null, error: 'provider_credit_exhausted' } });
+  test(`${name}：失败按共用表说明原因，取消与旧结果隐藏各有说法`, async () => {
+    const credit = await render({ job: { id: 'job-1', status: 'failed', progress: null, error: 'provider_credit_exhausted' } });
     assert.match(credit.text, /模型服务余额不足，需充值/);
-    assert.ok(credit.buttons.some((b) => b.label === '关闭'), '重试也会被挡下时按钮写「关闭」');
-    const schema = render({ job: { id: 'job-1', status: 'failed', progress: null, error: 'schema_validation_failed' } });
+    if (name === '个股 AI 卡片') assert.ok(credit.buttons.some((b) => b.label === '生成分析' && b.disabled));
+    else assert.ok(credit.buttons.some((b) => b.label === '关闭'), '重试也会被挡下时按钮写「关闭」');
+    const schema = await render({ job: { id: 'job-1', status: 'failed', progress: null, error: 'schema_validation_failed' } });
     assert.match(schema.text, /分析结果未通过格式检查，请重试/);
-    assert.ok(schema.buttons.some((b) => b.label === '重试'));
-    const cancelled = render({ job: { id: 'job-1', status: 'cancelled', progress: null, error: 'global_concurrency_limit' } });
+    if (name === '个股 AI 卡片') assert.ok(schema.buttons.some((b) => b.label === '生成分析' && b.disabled));
+    else assert.ok(schema.buttons.some((b) => b.label === '重试'));
+    const cancelled = await render({ job: { id: 'job-1', status: 'cancelled', progress: null, error: 'global_concurrency_limit' } });
     assert.match(cancelled.text, /任务已取消/);
     assert.doesNotMatch(cancelled.text, /同时进行的分析/, '取消状态的残留码不当失败原因');
-    const legacy = render({ job: { id: 'job-1', status: 'succeeded', progress: null, error: 'legacy_output_hidden' } });
+    const legacy = await render({ job: { id: 'job-1', status: 'succeeded', progress: null, error: 'legacy_output_hidden' } });
     assert.match(legacy.text, /旧版分析结果已不再展示/);
   });
 }
 
-test('个股 AI 卡片：任务记录不存在时只给「重试」，不给「继续查询原任务」', () => {
-  const view = renderSignalCard({ job: null, error: '任务记录已不存在', queryIssue: 'missing' });
+test('个股 AI 卡片：记录不存在时按服务端额度允许新建，不继续查询不存在的任务', async () => {
+  const view = await renderSignalCard({ job: null, error: '任务记录已不存在', queryIssue: 'missing' });
   assert.match(view.text, /任务记录已不存在/);
-  assert.ok(view.buttons.some((b) => b.label === '重试'));
+  assert.ok(view.buttons.some((b) => b.label === '生成分析' && !b.disabled));
   assert.ok(!view.buttons.some((b) => b.label === '继续查询原任务'));
 });
 
@@ -696,22 +721,25 @@ test('零引用的旧代码与死词条已清掉（接线检查）', () => {
 });
 
 
-test('completed stock analysis labels its recorded model rather than the current default', () => {
+test('completed stock analysis labels its recorded model rather than the current default', async () => {
   for (const [model, reasoning, expected] of [
     ['claude-haiku-5-5', 'xhigh', 'Claude Haiku 5.5 · xhigh'],
     ['gpt-5.6-terra', 'max', 'GPT-5.6 Terra · max'],
   ]) {
-    const view = renderSignalCard({ job: { id: 'saved-result', status: 'succeeded', model, reasoning, result: { summary: '已保存结果' } } });
+    const view = await renderSignalCard({ job: { id: 'saved-result', status: 'succeeded', model, reasoning, result: { summary: '已保存结果' } } });
     assert.ok(view.text.includes(expected));
   }
-  const unknown = renderSignalCard({ job: { id: 'legacy-without-identity', status: 'succeeded', result: { summary: '旧结果' } } });
+  const unknown = await renderSignalCard({ job: { id: 'legacy-without-identity', status: 'succeeded', result: { summary: '旧结果' } } });
   assert.doesNotMatch(unknown.text, /Claude Haiku|GPT-5.6 Terra/);
 });
 
 
-test('unknown stock analysis submission offers close instead of retry', () => {
-  const view = renderSignalCard({ job: { id: 'unknown', status: 'failed', error: 'submission_outcome_unknown' } });
+test('unknown stock analysis submission cannot start another paid job during the same quota period', async () => {
+  const view = await renderSignalCard({ job: { id: 'unknown', status: 'failed', error: 'submission_outcome_unknown' } });
   assert.match(view.text, /停止重复提交/);
-  assert.ok(view.buttons.some((button) => button.label === '关闭'));
+  assert.ok(view.buttons.some((button) => button.label === '生成分析' && button.disabled));
+  assert.match(view.text, /今日剩余 0\/1 次/);
+  assert.ok(view.buttons.some((button) => button.label === '继续查询原任务'));
+  assert.doesNotMatch(view.text, /模型分析中/);
   assert.ok(!view.buttons.some((button) => button.label === '重试'));
 });

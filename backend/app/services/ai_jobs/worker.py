@@ -1083,7 +1083,7 @@ async def run_configured_once(
         "news_impact": catalyst_manual_analysis_enabled,
         "market_focus": catalyst_manual_analysis_enabled,
         "option_alerts": catalyst_manual_analysis_enabled,
-        "signal_analysis": catalyst_manual_analysis_enabled,
+        "signal_analysis": bool(getattr(effective.ai, "stock_analysis_enabled", True)),
         "earnings_impact": earnings_manual_analysis_enabled,
     }
     catalyst_scheduled_analysis_enabled = bool(

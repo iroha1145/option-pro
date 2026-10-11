@@ -23,6 +23,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import SecretStr, ValidationError
 
+from tests.http_response_support import anonymous_get_request as _areq
 from app.access import request_owner_access_context
 from app.api import ai, signals
 from app.services.ai_jobs import repository as repo_mod
@@ -1329,8 +1330,16 @@ def test_old_identity_jobs_fail_retryably_without_reaching_the_provider(
 
 
 def _signal_stubs(monkeypatch, repository, counter):
-    monkeypatch.setattr(signals, "_require_manual_analysis_enabled", lambda: None)
-    monkeypatch.setattr(signals, "_require_runtime_capability", lambda: None)
+    monkeypatch.setattr(signals, "_require_stock_analysis_enabled", lambda: None)
+    monkeypatch.setattr(signals, "_analysis_account_id", lambda _request: "account-audit-test")
+    monkeypatch.setattr(signals, "request_is_owner_session", lambda _request: True)
+    version, digest = runtime.schema_identity("signal_analysis", model="gpt-5.6-terra")
+    monkeypatch.setattr(signals, "_signal_analysis_identity", lambda *, since: {
+        "model": "gpt-5.6-terra", "reasoning": "max",
+        "prompt_version": runtime.PROMPT_VERSIONS["signal_analysis"],
+        "schema_version": version, "schema_sha256": digest, "since": since,
+    })
+    monkeypatch.setattr(signals, "_require_runtime_capability", lambda _job_type=None: None)
     monkeypatch.setattr(
         signals,
         "read_stock_pull_resource",
@@ -1352,7 +1361,9 @@ def _signal_stubs(monkeypatch, repository, counter):
 
     monkeypatch.setattr(signals, "build_signal_context", dynamic_context)
 
-    def create_job(job_type, payload, *, force_retry=False):
+    def create_job(
+        job_type, payload, *, force_retry=False, stock_analysis_account_id=None
+    ):
         version, digest = runtime.schema_identity(job_type, model="gpt-5.6-terra")
         return repository.create_job(
             job_type=job_type,
@@ -1367,6 +1378,7 @@ def _signal_stubs(monkeypatch, repository, counter):
             submission_source="manual",
             priority=80,
             force_retry=force_retry,
+            stock_analysis_account_id=stock_analysis_account_id,
         )
 
     monkeypatch.setattr(signals, "_create_job", create_job)
@@ -1391,8 +1403,8 @@ def test_concurrent_signal_requests_for_one_ticker_create_one_job(
     async def both():
         request = signals.SignalAnalysisJobCreateRequest()
         return await asyncio.gather(
-            signals.stock_ai_analysis("AMD", request),
-            signals.stock_ai_analysis("AMD", request),
+            signals.stock_ai_analysis("AMD", _areq(), request),
+            signals.stock_ai_analysis("AMD", _areq(), request),
         )
 
     first, second = asyncio.run(both())
@@ -1404,11 +1416,13 @@ def test_concurrent_signal_requests_for_one_ticker_create_one_job(
     forced = asyncio.run(
         signals.stock_ai_analysis(
             "AMD",
+            _areq(),
             signals.SignalAnalysisJobCreateRequest(force=True),
         )
     )
-    assert forced.headers["Location"] != first.headers["Location"]
-    assert _active_signal_jobs(repository) == 2
+    assert forced.headers["Location"] == first.headers["Location"]
+    assert _active_signal_jobs(repository) == 1
+    assert repository.stock_analysis_quota("account-audit-test")["used"] == 1
 
 
 def test_signal_repository_calls_run_off_the_event_loop(tmp_path, monkeypatch):
@@ -1417,34 +1431,41 @@ def test_signal_repository_calls_run_off_the_event_loop(tmp_path, monkeypatch):
     loop_threads: list[int] = []
     call_threads: dict[str, int] = {}
     real_create = signals._create_job
-    real_active = repository.active_for_ticker
+    real_shared = repository.shared_signal_analysis
+    real_quota = repository.stock_analysis_quota
 
     def create_job(*args, **kwargs):
         call_threads["create_job"] = threading.get_ident()
         return real_create(*args, **kwargs)
 
-    def active_for_ticker(*args, **kwargs):
-        call_threads["active_for_ticker"] = threading.get_ident()
-        return real_active(*args, **kwargs)
+    def shared_signal_analysis(*args, **kwargs):
+        call_threads["shared_signal_analysis"] = threading.get_ident()
+        return real_shared(*args, **kwargs)
+
+    def stock_analysis_quota(*args, **kwargs):
+        call_threads["stock_analysis_quota"] = threading.get_ident()
+        return real_quota(*args, **kwargs)
 
     monkeypatch.setattr(signals, "_create_job", create_job)
-    monkeypatch.setattr(repository, "active_for_ticker", active_for_ticker)
+    monkeypatch.setattr(repository, "shared_signal_analysis", shared_signal_analysis)
+    monkeypatch.setattr(repository, "stock_analysis_quota", stock_analysis_quota)
 
     async def run():
         loop_threads.append(threading.get_ident())
         return await signals.stock_ai_analysis(
             "AMD",
+            _areq(),
             signals.SignalAnalysisJobCreateRequest(),
         )
 
     assert asyncio.run(run()).status_code == 202
-    assert set(call_threads) == {"create_job", "active_for_ticker"}
+    assert set(call_threads) == {"create_job", "shared_signal_analysis", "stock_analysis_quota"}
     assert loop_threads[0] not in set(call_threads.values())
 
 
 def test_dropping_recent_news_also_drops_its_context_tickers():
     context = {
-        "blocks": {"recent_news": {"items": [{"title": "新闻" * 20_000}]}},
+        "blocks": {"recent_news": {"items": [{"title": "新闻" * 120_000}]}},
         "status": {"recent_news": "ok"},
         "context_tickers": ["NVDA"],
     }
@@ -1562,11 +1583,14 @@ def test_release_rule_is_a_whitelist():
 # --- AI-21: one payload size limit
 
 
-def test_payload_between_the_old_limits_is_refused_at_enqueue(tmp_path):
+@pytest.mark.parametrize(
+    ("job_type", "limit"), [("signal_analysis", 240_000), ("news_impact", 60_000)]
+)
+def test_enqueue_and_provider_share_the_escaped_input_limit(tmp_path, job_type, limit):
     repository = AIJobRepository(tmp_path / "ai.db")
     payload = {
         "ticker": "AMD",
-        "signals": {"note": "x" * 50_000 + ">" * 2_500},
+        "signals": {"note": "x" * (limit - 10_000) + ">" * 2_500},
         "scores": {},
     }
     canonical = json.dumps(
@@ -1575,11 +1599,14 @@ def test_payload_between_the_old_limits_is_refused_at_enqueue(tmp_path):
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")
-    assert len(canonical) < 60_000
+    # Canonical storage fits, but escaping each > as \u003e crosses the
+    # provider boundary. Enqueue must reject before starting paid work.
+    assert len(canonical) < limit
+    assert len(canonical.replace(b">", b"\\u003e")) > limit
     with pytest.raises(ValueError, match="^ai_job_payload_too_large$"):
-        _create(repository, "signal_analysis", payload, source="manual")
+        _create(repository, job_type, payload, source="manual")
     with pytest.raises(ValueError, match="ai_input_too_large"):
-        runtime._bounded_untrusted_json(payload)
+        runtime._bounded_untrusted_json(payload, job_type=job_type)
 
 
 # --- AI-22: error codes point at the right party

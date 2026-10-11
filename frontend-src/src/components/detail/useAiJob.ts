@@ -154,11 +154,13 @@ export function useAiJob() {
   );
 
   const startingRef = useRef(false);
+  const submissionRef = useRef(0);
   const start = useCallback(
     async (create: () => Promise<AiJob>) => {
       if (!aliveRef.current || startingRef.current || activeJobRef.current !== null) return;
       stop();
       const generation = generationRef.current;
+      const submission = ++submissionRef.current;
       startingRef.current = true;
       setStarting(true);
       setError(null);
@@ -175,8 +177,10 @@ export function useAiJob() {
         if (!aliveRef.current || generation !== generationRef.current) return;
         setError(aiJobCreateErrorMessage(e));
       } finally {
-        startingRef.current = false;
-        if (aliveRef.current) setStarting(false);
+        if (submission === submissionRef.current) {
+          startingRef.current = false;
+          if (aliveRef.current) setStarting(false);
+        }
       }
     },
     [poll, stop],
@@ -233,5 +237,30 @@ export function useAiJob() {
     setQueryIssue(null);
   }, [stop]);
 
-  return { job, error, queryIssue, starting, start, cancel, resume, reset };
+  /** Restore a server-owned task without creating another paid request. */
+  const adopt = useCallback((next: AiJob | null) => {
+    stop();
+    activeJobRef.current = next && !TERMINAL.has(next.status) ? next.id : null;
+    cancelRequestedIdRef.current = null;
+    setJob(next);
+    setError(null);
+    setQueryIssue(null);
+    if (next && !TERMINAL.has(next.status)) poll(next.id, 0);
+  }, [poll, stop]);
+
+  /** Identity changes invalidate outstanding reads and submissions, including active tasks. */
+  const clear = useCallback(() => {
+    stop();
+    activeJobRef.current = null;
+    cancelRequestedIdRef.current = null;
+    submissionRef.current += 1;
+    startingRef.current = false;
+    cancelingRef.current = false;
+    setStarting(false);
+    setJob(null);
+    setError(null);
+    setQueryIssue(null);
+  }, [stop]);
+
+  return { job, error, queryIssue, starting, start, cancel, resume, reset, adopt, clear };
 }

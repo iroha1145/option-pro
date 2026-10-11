@@ -38,6 +38,7 @@ from app.access import (
     is_public_sector_iv_refresh_path,
     is_public_stock_pull_path,
     request_has_account_session,
+    is_account_stock_analysis_request,
     request_owner_access_context,
     require_public_read_or_owner_access,
     require_same_origin_action,
@@ -626,10 +627,14 @@ class _GatewayMiddleware:
             and method == "POST"
             and is_public_stock_pull_path(path)
         )
+        is_account_stock_analysis = (
+            self.access_runtime.mode == "password"
+            and is_account_stock_analysis_request(path, method, raw_path=scope.get("raw_path"))
+        )
         if (
             not publicly_available
             and not owner_access
-            and is_stock_pull_post
+            and (is_stock_pull_post or is_account_stock_analysis)
             and request_has_account_session(owner_request)
         ):
             # 手动拉取对登录客户开放（仅匿名保持只读）。账号 cookie 只在
@@ -644,7 +649,7 @@ class _GatewayMiddleware:
             if self.access_runtime.mode == "password" and is_html:
                 response = RedirectResponse("/login", status_code=303)
                 return await response(scope, receive, send_with_response_headers)
-            if is_stock_pull_post:
+            if is_stock_pull_post or is_account_stock_analysis:
                 # 匿名点拉取：如实要求登录，而不是抛 owner 门。
                 return await _send_json(
                     send_with_response_headers,

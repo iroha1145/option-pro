@@ -63,6 +63,7 @@ export function normalizeAiJob(raw: unknown, fallbackId?: string | null): AiJob 
   const status = normalizeJobStatus(record.status);
   const rawProgress = finiteNumber(record.progress);
   const rawResult = record.result;
+  const completedAt = firstString(record, 'completedAt', 'completed_at');
   const result =
     typeof rawResult === 'string'
       ? rawResult
@@ -82,6 +83,7 @@ export function normalizeAiJob(raw: unknown, fallbackId?: string | null): AiJob 
       firstString(record, 'createdAt', 'submitted_at', 'created_at') ?? '',
     updatedAt:
       firstString(record, 'updatedAt', 'updated_at', 'completed_at') ?? '',
+    completedAt: completedAt && Number.isFinite(Date.parse(completedAt)) ? completedAt : null,
     evidenceSources: normalizeEvidenceSources(record.evidence_sources),
     model: firstString(record, 'model'),
     reasoning: firstString(record, 'reasoning', 'reasoning_effort'),
@@ -91,6 +93,7 @@ export function normalizeAiJob(raw: unknown, fallbackId?: string | null): AiJob 
       ),
     ) as Record<string, number | null>,
     result,
+    visuals: record.visuals,
     error:
       firstString(record, 'error', 'error_code', 'message') ?? undefined,
     errorDetail: firstString(record, 'error_detail') ?? undefined,

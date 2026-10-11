@@ -77,6 +77,7 @@ OFFICIAL_EXECUTION_MODE = "background"
 OFFICIAL_CONTEXT_WINDOW_TOKENS = 1_050_000
 OFFICIAL_LONG_CONTEXT_THRESHOLD_TOKENS = 272_000
 _MAX_UNTRUSTED_JSON_BYTES = 60_000
+SIGNAL_MAX_UNTRUSTED_JSON_BYTES = 240_000
 _INPUT_ACCOUNTING_OVERHEAD_TOKENS = 4_096
 _INPUT_BOUND_ROUNDING_TOKENS = 4_096
 _TOKEN_PRICE_DENOMINATOR = 1_000_000
@@ -176,7 +177,7 @@ PROMPT_VERSIONS = {
     "option_alerts": "option-alerts-zh-cn-v4",
     # v6：证据包加入大盘/宏观/期权链/新闻/财报日程上下文块（输出 schema 不变，
     # 历史 v5 结果照常可读，不触发任何历史付费任务重投）。
-    "signal_analysis": "signal-analysis-zh-cn-v6",
+    "signal_analysis": "signal-analysis-stock-report-zh-cn-v2",
     "news_impact": "news-impact-zh-cn-v7",
     # v6 adds the compact Optix 宏观环境 block to the Market Focus input. The
     # output schema is unchanged, so results produced under v5 stay readable
@@ -292,7 +293,12 @@ def untrusted_json_size(value: Any) -> int:
     return len(_escape_untrusted_json(raw).encode("utf-8"))
 
 
-def _bounded_untrusted_json(payload: dict[str, Any]) -> str:
+def max_payload_bytes_for(job_type: str | None) -> int:
+    """Only stock reports may carry the larger immutable research packet."""
+    return SIGNAL_MAX_UNTRUSTED_JSON_BYTES if job_type == "signal_analysis" else _MAX_UNTRUSTED_JSON_BYTES
+
+
+def _bounded_untrusted_json(payload: dict[str, Any], *, job_type: str | None = None) -> str:
     raw = json.dumps(
         payload,
         ensure_ascii=False,
@@ -301,7 +307,7 @@ def _bounded_untrusted_json(payload: dict[str, Any]) -> str:
         allow_nan=False,
     )
     raw = _escape_untrusted_json(raw)
-    if len(raw.encode("utf-8")) > _MAX_UNTRUSTED_JSON_BYTES:
+    if len(raw.encode("utf-8")) > max_payload_bytes_for(job_type):
         raise ValueError("ai_input_too_large")
     return raw
 
@@ -316,7 +322,11 @@ def claude_earnings(job_type: str, model: str | None) -> bool:
 
 def claude_conversation(job_type: str, model: str | None) -> bool:
     """Claude jobs whose request may continue across several provider requests."""
-    return claude_earnings(job_type, model) or (model == SONNET_MODEL and job_type == "market_focus")
+    return claude_earnings(job_type, model) or (model == SONNET_MODEL and job_type in {"market_focus", "signal_analysis"})
+
+
+def claude_stock_report(job_type: str, model: str | None) -> bool:
+    return job_type == "signal_analysis" and model == SONNET_MODEL
 
 
 def earnings_request_preamble(today: str) -> str:
@@ -544,6 +554,10 @@ def _runtime_request(
         use_web_search = False
         schema_name = "signal_analysis_zh_cn_v5"
         boundary = "untrusted_signal_data"
+        if claude_stock_report(job_type, model):
+            from app.services.ai_jobs.stock_report import REPORT_SCHEMA_NAME, instructions as stock_instructions
+            instructions = common + stock_instructions()
+            schema_name = REPORT_SCHEMA_NAME
     elif job_type == "news_impact":
         instructions = common + (
             "分析输入的原始新闻标题、摘要、新闻正文article及来源信息。"
@@ -664,7 +678,7 @@ def _runtime_request(
             "source、summary、allowed_tickers、http_403），改用中文说法，"
             "例如新闻正文、正文状态、正文缺失原因、来源、摘要。"
         )
-    data = _bounded_untrusted_json(payload)
+    data = _bounded_untrusted_json(payload, job_type=job_type if job_type != "signal_analysis" or claude_stock_report(job_type, model) else None)
     return RuntimeRequest(
         instructions=instructions,
         input_text=f"<{boundary}>{data}</{boundary}>",
@@ -723,8 +737,10 @@ def _schema_identity(
     }
     if model is None or uses_claude(model):
         earnings = claude_earnings(job_type, model)
+        stock = claude_stock_report(job_type, model)
         identity["claude_features"] = {
             "contract": (
+                "sonnet-stock-report-conversation-v1" if stock else
                 "claude-earnings-conversation-last-json-container-v1"
                 if earnings
                 else "sonnet-verified-web-evidence-v1"
@@ -732,11 +748,17 @@ def _schema_identity(
                 else "haiku-native-tools-market-focus-prompt-json-v4"
                 if job_type == "market_focus" else "haiku-native-tools-json-v2"
             ),
-            "instructions": claude_instructions(request.instructions, verified=model == SONNET_MODEL and not earnings, earnings=earnings),
+            "instructions": request.instructions if stock else claude_instructions(request.instructions, verified=model == SONNET_MODEL and not earnings, earnings=earnings),
             "tools": claude_tools_for(job_type, {}, model=model),
             "reservation_tokens": CLAUDE_TOOL_TOKEN_RESERVATION,
-            "cache": "system-5m-continuation-auto-5m" if earnings else "system-5m",
+            "cache": "system-schema-1h" if stock else "system-5m-continuation-auto-5m" if earnings else "system-5m",
         }
+        if stock:
+            from app.services.ai_jobs.stock_report import TOOL_LIMITS
+            identity["claude_features"].update(
+                tool_limits=dict(TOOL_LIMITS), max_rounds=CONVERSATION_MAX_ROUNDS,
+                payload_bytes=SIGNAL_MAX_UNTRUSTED_JSON_BYTES, request_date=EARNINGS_REQUEST_TIMEZONE,
+            )
         if earnings:
             identity["claude_features"].update(
                 tool_limits=dict(EARNINGS_TOOL_LIMITS),
@@ -824,9 +846,14 @@ def schema_identity_current(
 
 
 def model_identity_for_job(settings: Any, job_type: str) -> tuple[str, str]:
-    prefix = {"news_impact": "news", "market_focus": "market_focus"}.get(job_type)
+    prefix = {"news_impact": "news", "market_focus": "market_focus", "signal_analysis": "signal_analysis"}.get(job_type)
     selected = getattr(settings, f"openai_{prefix}_model", None) if prefix else None
     effort = getattr(settings, f"openai_{prefix}_reasoning", None) if prefix else None
+    if job_type == "signal_analysis":
+        selected = selected or SONNET_MODEL
+        effort = effort or "xhigh"
+        if (str(selected), str(effort)) != (SONNET_MODEL, "xhigh"):
+            raise ValueError("runtime_configuration_invalid")
     model = str(selected or settings.openai_model)
     reasoning = str(effort or (("xhigh" if uses_claude(model) else "max") if selected else settings.openai_reasoning))
     if not analysis_identity_supported(model, reasoning):
@@ -876,9 +903,11 @@ def api_key_configured(settings: Any, *, model: str | None = None) -> bool:
     return bool(secret and secret.get_secret_value().strip())
 
 
-def capability_status(settings: Any) -> dict[str, Any]:
+def capability_status(settings: Any, *, job_type: str | None = None) -> dict[str, Any]:
     """Report local readiness without contacting OpenAI or another provider."""
 
+    if job_type is not None:
+        settings = settings_for_job(settings, job_type)
     claude = uses_claude(settings.openai_model)
     methods = {"stream": False} if claude else {
         "create": False, "retrieve": False, "cancel": False,
@@ -1031,7 +1060,7 @@ def _max_input_tokens(request: RuntimeRequest, job_type: str, *, model: str | No
         return OFFICIAL_CONTEXT_WINDOW_TOKENS - max_output_tokens_for(job_type, model=model)
     return _semantic_input_upper_bound(
         request,
-        payload_bytes=_MAX_UNTRUSTED_JSON_BYTES,
+        payload_bytes=max_payload_bytes_for(job_type) if job_type != "signal_analysis" or claude_stock_report(job_type, model) else _MAX_UNTRUSTED_JSON_BYTES,
     )
 
 
@@ -1072,6 +1101,9 @@ def max_tool_calls_for(
 
 
 def _max_tool_calls(request: RuntimeRequest, job_type: str, *, model: str | None) -> int:
+    if claude_stock_report(job_type, model):
+        from app.services.ai_jobs.stock_report import TOOL_LIMITS
+        return TOOL_LIMITS["total"]
     if claude_earnings(job_type, model):
         return EARNINGS_TOOL_LIMITS["total"]
     # Only a searching Luna news request carries tools.
@@ -1083,6 +1115,13 @@ def _ceil_token_cost_microusd(tokens: int, rate: int) -> int:
     return (
         numerator + _TOKEN_PRICE_DENOMINATOR - 1
     ) // _TOKEN_PRICE_DENOMINATOR
+
+
+def max_tool_searches_for(job_type: str, *, model: str | None = None) -> int:
+    if claude_stock_report(job_type, model):
+        from app.services.ai_jobs.stock_report import TOOL_LIMITS
+        return TOOL_LIMITS["web_search"]
+    return EARNINGS_TOOL_LIMITS["web_search"] if claude_earnings(job_type, model) else 12 if model == SONNET_MODEL else CLAUDE_MAX_WEB_SEARCHES
 
 
 def budget_reservation_microusd(
@@ -1111,7 +1150,8 @@ def budget_reservation_microusd(
                 output_tokens, (10_000_000 if model == SONNET_MODEL else _CLAUDE_OUTPUT_MICROUSD_PER_MILLION) * multiplier,
             )
             + (
-                EARNINGS_TOOL_LIMITS["web_search"] if claude_earnings(job_type, model)
+                max_tool_searches_for(job_type, model=model) if claude_stock_report(job_type, model)
+                else EARNINGS_TOOL_LIMITS["web_search"] if claude_earnings(job_type, model)
                 else 12 if model == SONNET_MODEL else CLAUDE_MAX_WEB_SEARCHES
             ) * _WEB_SEARCH_CALL_MICROUSD
         )
@@ -1353,12 +1393,21 @@ def claude_tools_for(job_type: str, payload: dict[str, Any], *, model: str | Non
     }, {
         "type": "code_execution_20260120", "name": "code_execution",
     }]
-    if job_type in {"news_impact", "earnings_impact", "market_focus"}:
+    if job_type in {"news_impact", "earnings_impact", "market_focus"} or claude_stock_report(job_type, model):
         tools.insert(0, {
             "type": "web_search_20260318", "name": "web_search",
             "max_uses": CLAUDE_MAX_WEB_SEARCHES, "allowed_callers": ["direct"],
         })
-    if model == SONNET_MODEL and job_type == "market_focus":
+    if claude_stock_report(job_type, model):
+        from app.services.ai_jobs.stock_report import TOOL_MAX_USES, WEB_FETCH_MAX_CONTENT_TOKENS
+        for tool in tools:
+            if tool["name"] in {"web_search", "web_fetch"}:
+                tool["max_uses"] = TOOL_MAX_USES[tool["name"]]
+            if tool["name"] == "web_fetch":
+                tool["max_content_tokens"] = WEB_FETCH_MAX_CONTENT_TOKENS
+            if tool["name"] == "code_execution":
+                tool["type"] = "code_execution_20260521"
+    elif model == SONNET_MODEL and job_type == "market_focus":
         for tool in tools:
             if tool["name"] in {"web_search", "web_fetch"}:
                 tool["max_uses"] = 12
@@ -1511,15 +1560,16 @@ def prepare_claude(settings: Any, job_type: str, payload: dict[str, Any]) -> Any
     except ImportError as exc:
         raise RuntimeError("ai_sdk_unavailable") from exc
     earnings = claude_earnings(job_type, model)
+    stock = claude_stock_report(job_type, model)
     return prepare_message(
         settings,
         job_type=job_type,
-        instructions=claude_instructions(request.instructions, verified=model == SONNET_MODEL and not earnings, earnings=earnings),
-        input_text=(earnings_request_preamble(_earnings_request_date()) if earnings else "") + request.input_text,
+        instructions=request.instructions if stock else claude_instructions(request.instructions, verified=model == SONNET_MODEL and not earnings, earnings=earnings),
+        input_text=(f"今天是{_earnings_request_date()}（纽约时间）。资料截止时间以输入证据时间为准。\n" if stock else earnings_request_preamble(_earnings_request_date()) if earnings else "") + request.input_text,
         schema=claude_output_schema(job_type, request.schema),
         max_tokens=max_output_tokens_for(job_type, model=model),
         tools=claude_tools_for(job_type, payload, model=model),
-        output_mode="prompt_json" if job_type in {"earnings_impact", "market_focus"} else "native_json",
+        output_mode="prompt_json" if job_type in {"earnings_impact", "market_focus"} or stock else "native_json",
     )
 
 
@@ -1592,6 +1642,14 @@ def enforce_new_output_limits(job: Mapping[str, Any], output_text: Any, payload:
     the same output text.
     """
     schema_version = job.get("schema_version")
+    if job.get("job_type") == "signal_analysis":
+        from app.services.ai_jobs.stock_report import REPORT_SCHEMA_NAME
+        if schema_version == REPORT_SCHEMA_NAME:
+            # receipt_result has already validated text with the actual tool
+            # titles. Do not repeat it without that source context here.
+            result = json.loads(output_text)
+            if result.get("report") is None:
+                raise ValueError("stock_report_required")
     if job.get("job_type") == "market_focus" and schema_version in CONCISE_FOCUS_SCHEMA_VERSIONS:
         validate_result("market_focus", output_text, payload, schema_version=schema_version)
 
@@ -1941,7 +1999,13 @@ def receipt_result(receipt: dict[str, Any], job_type: str, payload: dict[str, An
             and job_type == "news_impact" and receipt.get("evidence_sources")):
         trusted_keys = _trusted_receipt_citation_keys(receipt)
         output_text = _normalize_luna_news_citations(output_text, payload, trusted_keys)
-    result = validate_result(job_type, output_text, payload)
+    source_texts: tuple[str, ...] = ()
+    if job_type == "signal_analysis":
+        from app.services.ai_jobs.stock_report import successful_web_evidence, validate_stock_report_evidence
+        source_texts = tuple(item.get("title", "") for item in successful_web_evidence(receipt.get("tool_evidence")))
+    result = validate_result(job_type, output_text, payload, external_source_texts=source_texts)
+    if job_type == "signal_analysis":
+        validate_stock_report_evidence(result, payload, receipt.get("tool_evidence"))
     if (receipt["provider"] == "openai" and job_type == "news_impact"
             and not news_article_available(payload) and receipt.get("evidence_sources")):
         note = "原始正文未取得；分析采用另行联网检索的来源，请查阅来源链接。"

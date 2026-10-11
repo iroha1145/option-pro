@@ -2626,6 +2626,80 @@ class SignalKeyLevels(StrictModel):
     options_levels: list[EvidenceText] = Field(max_length=10)
 
 
+StockReportText = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000),
+    AfterValidator(validate_simplified_chinese_text),
+]
+StockReportPoint = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=600),
+    AfterValidator(validate_simplified_chinese_text),
+]
+StockReportTitle = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=160),
+    AfterValidator(validate_simplified_chinese_text),
+]
+
+
+class StockReportSection(StrictModel):
+    id: Literal["company", "financials", "valuation", "technical", "options", "events", "market"]
+    title: StockReportTitle
+    summary: StockReportText
+    points: list[StockReportPoint] = Field(max_length=8)
+    evidence_ids: list[Annotated[str, StringConstraints(min_length=1, max_length=160)]] = Field(max_length=20)
+    source_urls: list[Annotated[str, StringConstraints(min_length=1, max_length=2048)]] = Field(max_length=10)
+
+    @field_validator("source_urls")
+    @classmethod
+    def safe_source_urls(cls, values: list[str]) -> list[str]:
+        from app.services.ai_jobs.claude_provider import _public_source_url
+        normalized = [_public_source_url(value) for value in values]
+        if any(value is None for value in normalized):
+            raise ValueError("stock_report_source_url_invalid")
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("stock_report_duplicate_source")
+        return normalized
+
+    @field_validator("evidence_ids")
+    @classmethod
+    def unique_evidence(cls, values: list[str]) -> list[str]:
+        if len(values) != len(set(values)):
+            raise ValueError("stock_report_duplicate_evidence")
+        return values
+
+
+class StockReportWatchItem(StrictModel):
+    what: StockReportPoint
+    why: StockReportPoint
+    revise_if: StockReportPoint
+
+
+class StockReport(StrictModel):
+    version: Literal["stock-report-v1"]
+    headline: StockReportTitle
+    sections: list[StockReportSection] = Field(min_length=7, max_length=7)
+    watch_items: list[StockReportWatchItem] = Field(max_length=8)
+    data_gaps: list[StockReportPoint] = Field(max_length=20)
+
+    @model_validator(mode="after")
+    def narrative_links_stay_in_source_fields(self) -> "StockReport":
+        texts = [self.headline, *self.data_gaps]
+        for section in self.sections:
+            texts.extend([section.title, section.summary, *section.points])
+        for item in self.watch_items:
+            texts.extend([item.what, item.why, item.revise_if])
+        if any(re.search(r"https?://|\[[^\]]+\]\([^)]*\)", text, re.I) for text in texts):
+            raise ValueError("stock_report_narrative_link_not_allowed")
+        return self
+
+    @field_validator("sections")
+    @classmethod
+    def fixed_sections(cls, values: list[StockReportSection]) -> list[StockReportSection]:
+        from app.services.ai_jobs.stock_report import REPORT_SECTION_IDS
+        if tuple(value.id for value in values) != REPORT_SECTION_IDS:
+            raise ValueError("stock_report_sections_mismatch")
+        return values
+
+
 class SignalAnalysisResult(SimplifiedChineseResult):
     asset: Ticker
     horizon: Annotated[
@@ -2676,6 +2750,15 @@ class SignalAnalysisResult(SimplifiedChineseResult):
     @classmethod
     def normalize_asset(cls, value: str) -> str:
         return value.upper()
+
+
+class StockReportReadableResult(SignalAnalysisResult):
+    report: Optional[StockReport] = None
+
+
+class StockReportAnalysisResult(SignalAnalysisResult):
+    """Required for new Sonnet requests, optional for historical reads."""
+    report: StockReport
 
 
 class NewsStockImpact(StrictModel):
@@ -3362,6 +3445,7 @@ class AIJobPublic(StrictModel):
     budget_charge_usd: float = Field(default=0.0, ge=0)
     usage: dict[str, Optional[StrictInt]] = Field(default_factory=dict)
     evidence_sources: list[dict[str, str]] = Field(default_factory=list, max_length=10)
+    visuals: Optional[dict] = None
 
 
 class CancelRequest(StrictModel):
@@ -3382,7 +3466,9 @@ def result_model_for(
     if job_type == "option_alerts":
         return OptionAlertResult
     if job_type == "signal_analysis":
-        return SignalAnalysisResult
+        if concise and model == "claude-sonnet-5-5":
+            return StockReportAnalysisResult
+        return SignalAnalysisResult if concise else StockReportReadableResult
     if job_type == "news_impact":
         return NewsImpactResult
     if job_type == "market_focus":
@@ -3578,6 +3664,8 @@ def _validation_source_texts(job_type: str, payload: dict) -> tuple[str, ...]:
         collect(payload.get("name"))
         collect(payload.get("sector"))
     elif job_type == "signal_analysis":
+        for block in ("company_profile", "financials", "analyst_consensus", "earnings_history"):
+            collect(payload.get(block))
         collect(payload.get("signals"))
         collect(payload.get("scores"))
         # 证据包 v2 的上下文块。新闻标题/摘要先收集：模型引用其中的外文
@@ -3588,6 +3676,7 @@ def _validation_source_texts(job_type: str, payload: dict) -> tuple[str, ...]:
         collect(payload.get("market_context"))
         collect(payload.get("macro_conditions"))
         collect(payload.get("upcoming_earnings"))
+        collect(payload.get("price_history"))
     return tuple(values)
 
 
@@ -3601,8 +3690,16 @@ _SIGNAL_BENCHMARK_CODES = ("SPY", "QQQ", "IWM", "RSP", "HYG", "TLT")
 
 def validate_result(
     job_type: str, raw_json: str, payload: dict, *, schema_version: Any = None,
+    external_source_texts: tuple[str, ...] = (),
 ) -> dict:
     """``schema_version`` is the job's own; pass it only when accepting new output."""
+    if job_type == "signal_analysis":
+        from app.services.ai_jobs.stock_report import REPORT_VERSION, normalize_stock_report_labels
+        raw_result = json.loads(raw_json)
+        if isinstance(raw_result, dict) and isinstance(raw_result.get("report"), dict) and raw_result["report"].get("version") == REPORT_VERSION:
+            from app.json_validation import reject_duplicate_json_keys, reject_non_finite_json
+            raw_result = json.loads(raw_json, object_pairs_hook=reject_duplicate_json_keys, parse_constant=reject_non_finite_json)
+            raw_json = json.dumps(normalize_stock_report_labels(raw_result), ensure_ascii=False, separators=(",", ":"), allow_nan=False)
     model = result_model_for(
         job_type, payload=payload,
         concise=(
@@ -3638,7 +3735,7 @@ def validate_result(
         context={
             "allowed_codes": allowed_codes,
             "news_payload": payload if job_type == "news_impact" else None,
-            "source_texts": _validation_source_texts(job_type, payload),
+            "source_texts": (*_validation_source_texts(job_type, payload), *external_source_texts[:200]),
             # 只有财报没有字段名翻译，照抄的载荷字段名按词条放行（新闻先翻译）。
             "payload_field_names": (
                 frozenset(map(str, payload)) if job_type == "earnings_impact" else frozenset()
@@ -3677,6 +3774,11 @@ def validate_result(
         expected = str(payload.get("ticker") or "").upper()
         if data["asset"] != expected:
             raise ValueError("signal_ticker_mismatch")
+        if data.get("report") is not None:
+            from app.services.ai_jobs.stock_report import validate_stock_report_evidence
+            validate_stock_report_evidence(data, payload, require_tool_binding=False)
+        else:
+            data.pop("report", None)
     elif job_type == "news_impact":
         validate_job_payload(job_type, payload)
         # 身份只比对 news_id 与 change_sequence。content_hash 是 64 位十六进制
@@ -3744,6 +3846,7 @@ def validate_result_cached(
     payload: dict,
     *,
     validator: Callable[[str, str, dict], dict] = validate_result,
+    external_source_texts: tuple[str, ...] = (),
 ) -> dict:
     """``validator(job_type, raw_json, payload)`` with its verdict remembered per process.
 
@@ -3753,22 +3856,28 @@ def validate_result_cached(
     start from an empty cache.
     """
 
+    def validate() -> dict:
+        if external_source_texts:
+            return validator(job_type, raw_json, payload, external_source_texts=external_source_texts)
+        return validator(job_type, raw_json, payload)
+
     try:
         key = (
             validator,
             job_type,
             hashlib.sha256(raw_json.encode("utf-8")).digest(),
             hashlib.sha256(canonical_json_text(payload).encode("utf-8")).digest(),
+            hashlib.sha256(canonical_json_text(list(external_source_texts)).encode("utf-8")).digest(),
         )
     except (TypeError, ValueError):
-        return validator(job_type, raw_json, payload)
+        return validate()
     with _result_verdicts_lock:
         verdict = _result_verdicts.get(key)
         if verdict is not None:
             _result_verdicts.move_to_end(key)
     if verdict is None:
         try:
-            verdict = (True, validator(job_type, raw_json, payload))
+            verdict = (True, validate())
         except (TypeError, ValueError) as exc:
             verdict = (False, exc)
         with _result_verdicts_lock:
