@@ -94,11 +94,15 @@ def test_substantive_fixture_validates_without_loosening_binding(focus_payload):
     for field, value, error in (
         ("cycle_id", "different", "market_focus_cycle_mismatch"),
         ("as_of", "2026-10-08T15:50:39Z", "market_focus_as_of_mismatch"),
-        ("input_hash", "b" * 64, "market_focus_input_hash_mismatch"),
         ("summary_zh", "English only", None),
     ):
         with pytest.raises(ValueError, match=error):
             runtime.validate_result("market_focus", json.dumps({**result, field: value}), focus_payload)
+    # input_hash comes from the payload since 2026-10-11, see
+    # test_focus_cycle_reliability_20261011.py.
+    assert runtime.validate_result(
+        "market_focus", json.dumps({**result, "input_hash": "b" * 64}), focus_payload,
+    ) == result
 
 
 def test_focus_prompt_prefix_keeps_input_and_reservation_bounds(tmp_path, focus_payload):

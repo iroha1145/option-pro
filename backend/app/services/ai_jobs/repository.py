@@ -67,12 +67,15 @@ _RESERVATION_HOLDING_ERRORS = frozenset(
 # 已拿到 response id、本地却没能落下结果的失败：恢复工具可以重新取回付费
 # 结果而不重新提交。news_identity_mismatch 自 2026-10-10 起也在内：此前只因
 # 模型抄错 content_hash 被拒的回执，按现行规则重验即可落库。
+# market_focus_input_hash_mismatch 自 2026-10-11 起同理（热点 input_hash 改用载荷值）；
+# 抄成非十六进制的摘要当时记成 schema_validation_failed，本来就在内。
 RECOVERABLE_FAILURE_CODES = frozenset(
     {
         "schema_validation_failed",
         "provider_unavailable",
         "local_storage_error",
         "news_identity_mismatch",
+        "market_focus_input_hash_mismatch",
     }
 )
 _SCHEDULED_HISTORY_JOB_TYPES = ("news_impact", "market_focus")

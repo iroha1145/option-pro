@@ -134,7 +134,8 @@ def test_sonnet_market_focus_keeps_its_original_contract():
         max_tokens=65_536, job_type='market_focus', tools=runtime.claude_tools_for('market_focus', {}, model=runtime.SONNET_MODEL))
     assert focus.params['system'][0]['cache_control'] == {'type': 'ephemeral', 'ttl': '5m'}
     assert 'cache_control' not in focus.params and 'container' not in focus.params
-    assert provider.tool_limits(focus) == {'web_search': 12, 'web_fetch': 12, 'code': 2, 'total': 26}
+    # One above max_uses and the prompt's two code runs, as for earnings (2026-10-11).
+    assert provider.tool_limits(focus) == {'web_search': 13, 'web_fetch': 13, 'code': 3, 'total': 29}
     assert {tool['name']: tool['type'] for tool in focus.params['tools']}['code_execution'] == 'code_execution_20260521'
     assert runtime.max_tool_calls_for('market_focus', model=runtime.SONNET_MODEL) == 0
     assert runtime.uses_claude('claude-opus-5-5') is False

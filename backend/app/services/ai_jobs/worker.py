@@ -957,9 +957,14 @@ async def process_job(
                     usage=zero_usage, detail=f"Claude rejected request (HTTP {status_code})",
                 )
             else:
+                # The message names the step that stopped the stream, such as
+                # provider_tool_limit_exceeded or provider_stream_incomplete; the
+                # type alone left aij_2b4c1afd (2026-10-11) undiagnosable.
+                reason = " ".join(str(exc).split())[:300]
                 persist_failure_or_record(
                     "submission_outcome_unknown",
-                    f"Claude stream outcome unknown ({type(exc).__name__})",
+                    f"Claude stream outcome unknown ({type(exc).__name__}"
+                    + (f": {reason})" if reason else ")"),
                 )
             return
         code = _public_error(

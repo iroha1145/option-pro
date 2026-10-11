@@ -1200,7 +1200,7 @@ def test_read_mode_can_cancel_a_news_job_created_before_the_mode_changed() -> No
     assert cancelled["status"] == "cancelled"
 
 
-def test_focus_result_must_match_cycle_time_and_input_hash() -> None:
+def test_focus_result_must_match_cycle_and_time() -> None:
     expected_hash = "a" * 64
     cycle = {
         "cycle_id": "mfc_" + "a" * 32,
@@ -1213,13 +1213,17 @@ def test_focus_result_must_match_cycle_time_and_input_hash() -> None:
     projected = _service("manual")._project_focus_cycle(cycle)
     assert projected["result"]["input_hash"] == expected_hash
 
-    mismatched = {
-        **cycle,
-        "result": _focus_result(input_hash="b" * 64),
-    }
-    hidden = _service("manual")._project_focus_cycle(mismatched)
-    assert hidden["result"] is None
-    assert hidden["error_code"] == "legacy_output_hidden"
+    # 2026-10-11 起 input_hash 取周期输入的值，不再比对模型抄写的摘要
+    # （见 test_focus_cycle_reliability_20261011.py）。
+    mistyped = {**cycle, "result": _focus_result(input_hash="b" * 64)}
+    assert _service("manual")._project_focus_cycle(mistyped)["result"]["input_hash"] == expected_hash
+
+    # 绑到别的周期或别的快照时点的结果仍然隐藏。
+    for field, value in (("cycle_id", "mfc_" + "b" * 32), ("as_of", "2026-07-15T05:00:00Z")):
+        mismatched = {**cycle, "result": {**_focus_result(input_hash=expected_hash), field: value}}
+        hidden = _service("manual")._project_focus_cycle(mismatched)
+        assert hidden["result"] is None
+        assert hidden["error_code"] == "legacy_output_hidden"
 
 
 def test_focus_projection_recovers_write_time_sources_from_linked_job() -> None:
