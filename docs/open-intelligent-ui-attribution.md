@@ -2,11 +2,9 @@
 
 来源：[CopilotKit/OpenIntelligentUI](https://github.com/CopilotKit/OpenIntelligentUI)。固定版本：`f6e4388b26a64b9a0714943b08a1ce622b924eec`。
 
-本地 `frontend-src/src/components/open-intelligent-ui/` 改编自上游 `apps/app/src/components/generative-ui/open-generative-ui/` 的 `renderer.tsx`、`frame-content.ts`、`websandbox-loader.ts` 和 `schema.ts`，保留完成态协议、JetBrains Websandbox 加载、沙箱生命周期和连续高度测量。运行依赖 `@jetbrains/websandbox` 1.2.1，其许可证随该包保留。
+本地 `frontend-src/src/components/open-intelligent-ui/schema.ts` 改编自上游 `apps/app/src/components/generative-ui/open-generative-ui/` 的 `schema.ts`，只保留完成态协议和它的校验：内容必须是完成态，格式不对就返回空；脚本字段有内容时，首页退回文字版。
 
-2026 年 10 月 11 日起，首页报告改为把同一完成态内容（只有 HTML 与 CSS）写进 Shadow DOM 显示：生产 CSP 会被 srcdoc 沙箱框架继承，Websandbox 的内联启动脚本在生产里不能运行。上述 Websandbox 渲染器保留，目前没有引用，见 [市场报告：图文版](open-intelligent-ui-preview.md)。
-
-改编只渲染完成态报告；未完成或错误时保留现有文字。移除聊天工具、导出、流式预览、外部资源与上游设计系统。宿主不暴露函数；限制网络、弹窗、表单和顶层页面导航，增加按序执行、取消与超时处理。主题仅由宿主显式传入样式；同一内容重复读取不会重复执行。高度上限 20,000 像素，超出部分通过报告内部滚动阅读。
+首页报告把这份完成态内容（只有 HTML 与 CSS）写进自己的 Shadow DOM 显示，见 [市场报告：图文版](open-intelligent-ui-preview.md)。PR #253 曾经从上游改编过 `renderer.tsx`、`frame-content.ts` 和 `websandbox-loader.ts`，并依赖 `@jetbrains/websandbox` 1.2.1，在 iframe 里显示报告。生产页面的 CSP 会被 srcdoc 沙箱框架继承，Websandbox 的内联启动脚本在生产里不能运行，所以这些文件和这个依赖都已移除。仓库里不再有来自上游的渲染代码，也不再依赖该包。
 
 以下完整保留上游 MIT 许可证：
 

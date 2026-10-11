@@ -43,21 +43,3 @@ export function normalizeOpenGenUIContent(content: unknown): OpenGenUIContent | 
   const signature = JSON.stringify(snapshot);
   return signature.length <= 512_000 ? snapshot : null;
 }
-
-export function completedContentSignature(content: unknown): string | null {
-  const normalized = normalizeOpenGenUIContent(content);
-  return normalized ? JSON.stringify(normalized) : null;
-}
-
-/** Filter before upstream transport sees messages from generated code. */
-export function isAllowedSandboxMessage(data: unknown): boolean {
-  if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
-  const value = data as Record<string, unknown>;
-  if (value.type === '__ogui_resize') return clampReportedHeight(value.height) !== null;
-  if (value.type === '__ogui_report_error') return true;
-  const numericId = typeof value.callId === 'string' && /^\d{1,16}$/.test(value.callId);
-  if (!numericId) return false;
-  if (value.type === 'response') return typeof value.success === 'boolean';
-  return value.type === 'service-message' && value.methodName === 'iframeInitialized'
-    && Array.isArray(value.arguments) && value.arguments.length === 0;
-}

@@ -42,8 +42,8 @@
    320 像素手机 6359→1763 像素。
    Shadow DOM 版在 1440、390、320 像素，浅色和深色共 18 次加载中都是 0 次。
 
-`components/open-intelligent-ui/` 里的 Websandbox 渲染器和 `@jetbrains/websandbox` 依赖保留，但目前没有
-引用，构建不会打包。是否删除另行决定。
+PR #253 的 Websandbox 渲染器（`renderer.tsx`、`frame-content.ts`、`websandbox-loader.ts`）和 `@jetbrains/websandbox` 依赖已经移除。
+`components/open-intelligent-ui/` 里只剩 `schema.ts`，即完成态协议和它的校验。
 
 ## 本地预览
 

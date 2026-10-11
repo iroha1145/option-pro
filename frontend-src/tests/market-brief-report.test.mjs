@@ -241,9 +241,18 @@ test('渲染组件：没有开发、演示或网址参数开关，用 Shadow DOM
   assert.match(output, /\}, \[html, css\]\);/, '只有内容变了才重写影子根');
   assert.doesNotMatch(card, /useMarketBriefPreview|marketBriefPreview/);
   assert.match(card, /const data = latestQ\.data;/);
-  for (const gone of ['mocks/marketBriefServerArchive.ts', 'mocks/marketBriefOpenUI.ts', 'components/home/marketBriefPreview.ts']) {
+  for (const gone of [
+    'mocks/marketBriefServerArchive.ts',
+    'mocks/marketBriefOpenUI.ts',
+    'components/home/marketBriefPreview.ts',
+    'components/open-intelligent-ui/renderer.tsx',
+    'components/open-intelligent-ui/frame-content.ts',
+    'components/open-intelligent-ui/websandbox-loader.ts',
+  ]) {
     assert.equal(fs.existsSync(path.join(srcDir, gone)), false, `${gone} 已删除`);
   }
+  const pkg = JSON.parse(fs.readFileSync(path.resolve(here, '..', 'package.json'), 'utf8'));
+  assert.equal(pkg.dependencies?.['@jetbrains/websandbox'], undefined, 'iframe 渲染器的依赖已移除');
   const content = read('components/home/MarketBriefContent.tsx');
   assert.match(content, /<MarketBriefModelOutput brief=\{brief\} year=\{year\}>/);
 });
