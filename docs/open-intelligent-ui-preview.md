@@ -1,9 +1,51 @@
-# 市场报告：OpenIntelligentUI 本地预览
+# 市场报告：图文版
 
-代码已同步 Option Pro 主分支 `69ed4763`，沿用最新的「市场报告」名称。
-上游来源与许可见 [归属说明](open-intelligent-ui-attribution.md)。
+首页「市场报告」有图表数据时，结论和四段正文显示为图文版；没有图表数据时显示原来的文字版。
+没有开关，也不需要网址参数。图表由程序按该次报告的证据数据绘制，不调用模型、不改提示词、
+不增加费用。上游来源与许可见 [归属说明](open-intelligent-ui-attribution.md)。
 
-## 预览
+## 数据从哪里来
+
+`backend/app/services/market_brief/visuals.py` 在读取 `GET /api/market-brief/latest` 时，
+从该次运行记录（`runs/*.json`）里的证据包现算 `brief.visuals`。证据包本来就随运行记录保存，
+所以部署前生成的报告也能画。一共四张图：
+
+- 美股指数涨跌幅：标普 500、纳指综合、道琼斯，证据里有罗素 2000 时一起画。日经、上证不画。
+  图注写数据时点（纽约时间）；快照不新鲜时写明。
+- 行业广度：11 只行业 ETF 里站上 50 日均线的只数，分子和分母照证据原值。
+- 主题一个月超额收益：只画报告正文引用过的主题（`theme:` 证据编号），单位是相对标普 500 的百分点。
+- 宏观分项评分：0–100 分。宏观数据截止日期早于报告交易日时，图下加一行提醒。
+
+接口只给标签、数字和日期，不给证据原文或新闻文字。某一块缺失或数值不合格，那张图就是
+`null`，不补值；四张都画不出来时 `visuals` 是 `null`。前端 `api/modules/marketBrief.ts`
+再校验一遍：数值必须有限并在合理范围内，广度必须是整数且分子不超过分母。运行记录被清理后
+`visuals` 会变成 `null`，所以接口字节缓存的版本键也包含 `visuals`。
+
+## 怎么显示
+
+- `frontend-src/src/components/home/marketBriefReport.ts` 拼出静态 HTML 和 CSS，沿用 PR #253 的完成态
+  协议（`open-intelligent-ui/schema.ts`）：只有 `html` 和 `css`，`jsFunctions` 为空、`jsExpressions` 为空数组。
+  协议校验不通过就显示文字版。
+- 模型写的正文全部转义后原样放入，不翻译；界面文字和程序给的标签（指数、主题、宏观分项名）经 `t()`，
+  有英文和日文译文。
+- `MarketBriefModelOutput.tsx` 在 `useLayoutEffect` 里把内容写进 Shadow DOM，和卡片其他部分同一帧排版。
+  同一份内容轮询回来不重写，展开的明细不会被收起。
+- 颜色读页面的 CSS 变量。深色、浅色和涨跌配色一切换就生效，不用重新生成内容。
+
+## 为什么不用 PR #253 的 iframe
+
+1. 生产页面的 CSP（`backend/app/main.py` 的 `script-src 'self'`）会被 `srcdoc` 沙箱框架继承。
+   用真实 Chrome 按生产 CSP 测试：Websandbox 的内联启动脚本被拦下，框架始终没有初始化。
+   原实现会先显示文字版，15 秒后再出现一行失败提示。要让 iframe 工作只能放宽全站 CSP，这次不做。
+2. iframe 版先显示文字，框架就绪后再替换，高度会变。主分支 `f8bd6821` 模拟模式实测（每种情况 3 次）：
+   报告出现后，卡片高度还要再变 1 到 2 次，桌面 2099→1544→2561 像素，390 像素手机 5323→1713 像素，
+   320 像素手机 6359→1763 像素。
+   Shadow DOM 版在 1440、390、320 像素，浅色和深色共 18 次加载中都是 0 次。
+
+`components/open-intelligent-ui/` 里的 Websandbox 渲染器和 `@jetbrains/websandbox` 依赖保留，但目前没有
+引用，构建不会打包。是否删除另行决定。
+
+## 本地预览
 
 ```sh
 cd frontend-src
@@ -11,59 +53,21 @@ npm ci
 VITE_API_MODE=mock npm run dev -- --host 127.0.0.1 --port 5217 --strictPort
 ```
 
-- 最新真实存档：<http://127.0.0.1:5217/?report=openui>，正文内可切换四份报告。
-- 固定演示样例：<http://127.0.0.1:5217/?report=openui&sample=demo>
-- 原有文字输出：<http://127.0.0.1:5217/>
-
-入口同时要求开发服务器、模拟数据模式和 `report=openui` 参数。首页其他模块继续使用原有
-模拟数据；研判正文明确标为服务器存档。2026 年 10 月 11 日 01:22（东京时间）只读取得
-服务器最新四份已完成报告：10 月 8 日及 9 日各一份开盘前、一份收盘后。采样时服务器版本为
-`858707ed984b8b32e21cfcf191abf39ef000444b`。原始采样保留在忽略提交的 `frontend-src/output/openui-server/reports.json`，
-预览文件仅保留公开报告字段与绘图所需数值，没有密钥、请求或完整证据包。
-
-旧报告文字原样保留。指数涨跌、主题一个月超额收益、宏观分项和行业广度均取自该份报告的
-证据，不从自然语言抽取数字，也不在缺数据时补演示值。主题超额收益用百分点；广度给出
-实际分子和分母；各图独立标明数据日期。跨日生成的报告同时显示研判交易日与纽约生成时间。
-图表使用圆角容器、圆角条形与分段广度条，字体、颜色、主题和涨跌色跟随网页。
-
-## 本次接入范围
-
-只在 `MarketBriefContent` 内包裹模型正文。首页导航、其他模块、卡片外框、
-生成按钮、数据覆盖、复盘和外部来源维持原实现。切换本地存档时，卡片沿用原有展示组件，
-同步显示该份报告的日期、覆盖范围、复盘和来源。
-
-后端只有本地提示词候选 `market-brief-prompt-v3` 及对应标题说明调整，依据 Claude 官方文档
-明确段落分工、使用正向示例、减少重复、补全跨日时间和新闻引用边界。具体来源、项目取舍与
-验证限制见 [提示词调整说明](market-brief-prompt-notes.md)。未改接口、模型设置、调用预算或校验器，
-未重新调用模型、改写历史报告或部署；页面展示的是旧报告在新排版中的效果。
-
-移植上游完成态输出协议、Websandbox 加载器、最终文档渲染、自动高度和脚本执行顺序，
-由 `@jetbrains/websandbox@1.2.1` 实际创建隔离框架。未引入聊天界面、追问、可视化路由服务
-或流式预览，也未用另一套图表组件替代上游渲染方式。
-
-当前完成态包括 `css`、`html`、`jsFunctions`、`jsExpressions` 与对应完成标记。
-本地组装的输出只有 HTML/CSS；图表数值不从自然语言中猜测。
-未完成或格式不合格的内容继续显示原正文；加载失败、执行失败和超时回退文字。
-
-此版本是展示接入原型，尚未让真实模型生成或持久化该协议。生产构建关闭入口并移除模拟
-输出。沙箱隔离宿主、不给宿主工具权限，内容安全策略限制外部资源；这不能单独阻止
-任意脚本导航框架自身。接入真实模型之前，需要先确定报告输出的内容限制及导航控制，
-不能直接取消开发模拟模式的限制。
+打开 <http://127.0.0.1:5217/>。模拟接口返回带示例图表数据的报告，图文版顶部标明「演示数据」。
 
 ## 验证
 
 ```sh
-npm run build
-node --test tests/market-brief-contract.test.mjs tests/market-brief-mock-contract.test.mjs tests/open-intelligent-ui.test.mjs tests/market-brief-openui-preview.test.mjs tests/market-brief-server-archive.test.mjs
+node --experimental-strip-types --test frontend-src/tests/market-brief-report.test.mjs frontend-src/tests/market-brief-mock-contract.test.mjs frontend-src/tests/market-brief-contract.test.mjs frontend-src/tests/open-intelligent-ui.test.mjs
+.venv/bin/python -m pytest tests/test_market_brief_visuals.py tests/test_market_brief_store.py tests/test_market_brief_api.py -q
 ```
 
-2026 年 10 月 11 日本地验收：全量 1,327 项前端检查和 7 项后端定向检查通过，正式模式构建通过；
-构建结果不含四份存档、存档选择器或模拟图表文案。真实浏览器已核对四份报告切换、
-1440 / 390 / 320 像素宽度、浅色与深色、两种涨跌配色、明细展开/收起和报告收起/恢复。
-窄屏图表没有横向溢出。浏览器已恢复跟随系统、绿涨红跌和默认窗口宽度。
-存档切换复用网页的 `MenuSelect`，加载、失败提示及预览控件已接入现有中英日文案字典。
-同步主分支后重新验证了「市场报告」名称、存档切换和 390 像素宽度下的菜单位置。
+接口样例 `tests/fixtures/market_brief_sample.json` 里的 `visuals` 是三方共用的契约：后端测试用同形的
+证据包算出同一份 `visuals`，前端模拟数据与样例逐字段一致。
 
-截图保存在 `frontend-src/output/openui-preview/server-report-light.jpg` 与
-`server-mobile-390.jpg`。本地模拟模式的登录状态探测仍会因未启动本地后端而报连接失败，
-本次验证覆盖报告展示，不包含登录或真实生成。
+## 已知限制
+
+- 浏览器里还存着部署前那份报告（没有 `visuals`）时，首屏先按旧数据显示文字版，网络结果回来后换成
+  图文版。每个浏览器只会发生一次。
+- 行业隐含波动率、突破雷达等其他证据没有画图。
+- 卡片从加载骨架换成正文时的位移是原有行为：骨架至少撑到首屏以下，位移发生在视口外。

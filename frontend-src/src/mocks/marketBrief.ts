@@ -1,7 +1,8 @@
 /**
  * 首页「市场报告」演示数据：GET /api/market-brief/latest 的完整响应（snake_case 原样），
  * 与 tests/fixtures/market_brief_sample.json 是同一份样例（market-brief-mock-contract 测试逐字段比对），
- * 由 api/modules/marketBrief.ts 的 mapLatest 归一。
+ * 由 api/modules/marketBrief.ts 的 mapLatest 归一。visuals 也是示例数值：演示模式不带任何参数
+ * 就显示图文版，报告里另有「演示数据」标注；后端测试用同形的证据包算出同一份 visuals。
  *
  * live 构建会把这里的每个导出替换成 undefined（vite.config 的 strip-mocks），所以只导出常量与函数。
  */
@@ -115,6 +116,38 @@ export const MARKET_BRIEF_SAMPLE = {
     ],
     validation_warnings: [],
     web_search_count: 6,
+    visuals: {
+      market: {
+        as_of: '2026-10-08T20:05:12Z',
+        stale: false,
+        rows: [
+          { id: 'idx:^GSPC', label: '标普500', value: 0.62 },
+          { id: 'idx:^IXIC', label: '纳指综合', value: 0.91 },
+          { id: 'idx:^DJI', label: '道琼斯', value: 0.04 },
+          { id: 'idx:^RUT', label: '罗素2000', value: -0.35 },
+        ],
+      },
+      breadth: { above: 6, total: 11, expected: 11, as_of: '2026-10-08T20:02:40Z', stale: false },
+      sectors: {
+        served_session: '2026-10-08',
+        rows: [
+          { id: 'theme:semiconductors', label: '半导体', value: 8.42 },
+          { id: 'theme:energy', label: '能源', value: -3.71 },
+        ],
+      },
+      macro: {
+        data_through: '2026-10-08',
+        rows: [
+          { id: 'macro:credit', label: '信用', value: 61.2 },
+          { id: 'macro:external', label: '外部冲击', value: 52.4 },
+          { id: 'macro:funding', label: '融资', value: 66.8 },
+          { id: 'macro:liquidity', label: '流动性', value: 63.5 },
+          { id: 'macro:rates', label: '利率', value: 38.9 },
+          { id: 'macro:risk', label: '风险', value: 57.3 },
+          { id: 'macro:treasury', label: '国债', value: 49.6 },
+        ],
+      },
+    },
   },
   latest_attempt: null,
   next_slot: {

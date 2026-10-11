@@ -32,6 +32,7 @@ from app.services.snapshot_read_cache import FingerprintedFileCache
 from . import errors
 from .scheduler import BriefSchedule, next_slot_at
 from .schema import SCHEMA_VERSION, BriefSlot, BriefTrigger
+from .visuals import brief_visuals
 
 RunStatus = str  # "completed" | "failed"
 
@@ -653,6 +654,22 @@ class BriefStore:
             if str(item.get("started_at") or "")[:10] == day and item.get("run_id") not in known
         )
 
+    def _visuals(self, projection: Mapping[str, Any]) -> dict[str, Any] | None:
+        """图表数据：读这份研判自己的运行记录，从证据包现算；记录已清理或读不出时为 None。
+
+        直接读缓存里的文档（不经 _record_from_document 的深拷贝），brief_visuals 只读不改。
+        """
+
+        run_id = projection.get("run_id")
+        file_name = f"{projection.get('trading_date')}-{projection.get('slot')}-{run_id}.json"
+        if not isinstance(run_id, str) or not _RUN_FILE.fullmatch(file_name):
+            return None
+        document = self._read(self.runs_dir / file_name)
+        record = document.get("record") if document else None
+        if not isinstance(record, Mapping) or record.get("run_id") != run_id:
+            return None
+        return brief_visuals(record.get("evidence"), projection.get("result"))
+
     def latest_record(self, *, status: RunStatus | None = "completed") -> BriefRunRecord | None:
         """最近一条运行记录（含证据包与原始输出）；status=None 时不限状态。"""
 
@@ -672,6 +689,7 @@ class BriefStore:
 
         owner=True 时附加 usage / cost_usd / duration_seconds 与完整 coverage。没有任何成功
         记录时 status="missing"、brief=None，但仍给 latest_attempt 与 next_slot。
+        brief.visuals 是首页图表的数据，读取时从该次运行记录的证据包现算（见 visuals.py）。
         结果只随落盘内容与槽位边界变化，便于 ETag。
         """
 
@@ -693,6 +711,7 @@ class BriefStore:
             # 警告正文里带着被拒文本的片段（可能是英文原句），访客只看到被剔除的位置。
             brief["validation_warnings"] = warnings if owner else [_public_warning(item) for item in warnings]
             brief["web_search_count"] = success.get("web_search_count") or 0
+            brief["visuals"] = self._visuals(success)
             if owner:
                 brief["usage"] = success.get("usage")
                 brief["cost_usd"] = success.get("cost_usd")
