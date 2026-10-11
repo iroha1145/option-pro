@@ -38,6 +38,7 @@ import AiAnalysisCard from '@/components/detail/AiAnalysisCard';
 import ManualStockPull from '@/components/detail/ManualStockPull';
 import KeyStats from '@/components/detail/KeyStats';
 import { pageRegionProps } from '@/lib/pageRegion';
+import { loginReturnState } from '@/lib/loginReturn';
 import { t, t as __t } from '../i18n/core.ts';
 
 export default function StockDetail() {
@@ -195,7 +196,7 @@ export default function StockDetail() {
             ) : loginExpired ? (
               <Link
                 to="/login"
-                state={{ from: `${window.location.pathname}${window.location.search}` }}
+                state={loginReturnState(window.location)}
                 className="btn-primary"
               >
                 {__t('重新登录')}

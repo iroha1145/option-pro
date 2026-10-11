@@ -14,6 +14,7 @@ import { marketApi } from '@/api/modules/market';
 import { usePolling } from '@/hooks/usePolling';
 import { fmtNyTime } from '@/lib/format';
 import { placeGlide } from '@/lib/transitions';
+import { loginReturnState } from '@/lib/loginReturn';
 import Icon from '@/components/icons';
 import { SessionDot } from '@/components/shared/SessionLED';
 import SettingsMenu from '@/components/SettingsMenu';
@@ -220,7 +221,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
           ) : (
             <Link
               to="/login"
-              state={{ from: location.pathname + location.search + location.hash }}
+              state={loginReturnState(location)}
               {...routeIntentHandlers('/login')}
               className="touch-target header-action"
             >

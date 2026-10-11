@@ -133,8 +133,12 @@ for (const score of [null, 0, 83.61]) {
     await expect(page.locator('dt').filter({ hasText: /^均量$/ })).toHaveCount(0);
     await expect(page.locator('dt').filter({ hasText: /^IV 百分位$/ })).toHaveCount(0);
     const header = page.locator('main header').first();
-    if (score === null) await expect(header.getByText('评分', { exact: true })).toHaveCount(0);
-    else {
+    if (score === null) {
+      // The slot keeps its place in the layout, so a score that arrives later moves nothing.
+      const label = header.getByText('评分', { exact: true });
+      await expect(label).toBeHidden();
+      expect((await label.boundingBox())?.height).toBeGreaterThan(0);
+    } else {
       await expect(header.getByText('评分', { exact: true })).toBeVisible();
       await expect(header.getByLabel(`评分 ${score.toFixed(1)}`, { exact: true })).toBeVisible();
     }

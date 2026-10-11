@@ -1,4 +1,4 @@
-import { fmtScanCountdown } from '@/lib/format';
+import { fmtScanCountdown, scanCountdownSamples } from '@/lib/format';
 import { invalidateQueryPaths } from '@/api/queryRegistry';
 import { quoteStore } from '@/lib/liveQuotes';
 import { useQuoteSymbols, useRadarVersion, useRadarUpdates } from '@/hooks/useLiveQuote';
@@ -131,13 +131,15 @@ const SESSION_CHIP_SAMPLES = (Object.keys(SESSION_TEXT) as BreakoutSession[]).ma
   <span key={session} className="radar-chip radar-chip-neutral"><span className="size-1.5" />{SESSION_TEXT[session]}</span>
 ));
 const WORKER_STATE_SAMPLES = ['—', __t('正常'), __t('异常'), __t('状态未知')];
+/* 下次扫描在「59:57」「23 小时 59 分钟」「2 天 13 小时」之间切换，格子取最宽的一种，同一行里它左边的内容不跟着挪 */
+const SCAN_COUNTDOWN_SAMPLES = scanCountdownSamples();
 
 function NextScanCountdown({ nextSessionAt }: { nextSessionAt: string | null }) {
   const now = useNow(nextSessionAt ? 1000 : 0);
   const countdown = fmtScanCountdown(nextSessionAt, now);
   return (
     <span className="tnum">
-      {__t('下次扫描')} <span className="inline-block min-w-[5ch] text-brand-600">{countdown}</span>
+      {__t('下次扫描')} <SameWidth samples={SCAN_COUNTDOWN_SAMPLES} className="text-brand-600">{countdown}</SameWidth>
     </span>
   );
 }

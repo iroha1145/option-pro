@@ -14,6 +14,7 @@ import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 import { useAccess } from '@/hooks/useAccess';
 import { accessApi } from '@/api/modules/access';
 import { ApiError } from '@/api/client';
+import { useToast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
 import { DUR_SECTION, EASE_PAPER, SPRING_INDICATOR } from '@/lib/motion';
 import { useCatalogShake } from '@/lib/transitions';
@@ -24,6 +25,7 @@ import SelectionViewport from '@/components/shared/SelectionViewport';
 import { useGlideLayoutId } from '@/hooks/useGlideLayoutId';
 import type { IconName } from '@/components/icons';
 import { pageRegionProps } from '@/lib/pageRegion';
+import { safeReturnPath } from '@/lib/loginReturn';
 import { t } from '../i18n/core.ts';
 
 /* ---------------- L0 主视觉（login-motif + K 线循环，样式在 index.css） ---------------- */
@@ -148,8 +150,10 @@ export default function Login() {
   const navigate = useNavigate();
   const { login, register, isOwner, isCustomer, username: signedInName, logout, loading } = useAccess();
   const location = useLocation();
-  /* 从别处「去登录」带来的来源页（#21）：登录成功回到出发点而不是固定 /watchlist */
-  const fromPath = (location.state as { from?: string } | null)?.from ?? null;
+  /* 从别处「去登录」带来的来源页（#21）：登录成功回到出发点而不是固定 /watchlist。
+     只认站内路径：「//host」之类交给 navigate 会抛错，登录成功后整页变成错误页。 */
+  const fromPath = safeReturnPath((location.state as { from?: unknown } | null)?.from);
+  const toast = useToast();
   const reduced = usePrefersReducedMotion();
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -173,15 +177,12 @@ export default function Login() {
     const submitted = submittedRef.current;
     if (completedRef.current || !submitted) return;
     completedRef.current = true;
-    navigate(fromPath ?? '/watchlist', {
-      replace: true,
-      state: { loginNotice: {
-        title: submitted.mode === 'register' ? t('账号已创建') : t('欢迎回来'),
-        description: submitted.name.toLowerCase() === 'admin'
-          ? t('管理员已登录') : t('已登录 {name}', { name: submitted.name }),
-      } },
-    });
-  }, [fromPath, navigate]);
+    toast.success(
+      submitted.mode === 'register' ? t('账号已创建') : t('欢迎回来'),
+      submitted.name.toLowerCase() === 'admin' ? t('管理员已登录') : t('已登录 {name}', { name: submitted.name }),
+    );
+    navigate(fromPath ?? '/watchlist', { replace: true });
+  }, [fromPath, navigate, toast]);
 
   // 身份已经确认时即可返回；模型能力探针不应让登录页停在「当前会话」。
   useEffect(() => {

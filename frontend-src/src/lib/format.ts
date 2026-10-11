@@ -169,3 +169,13 @@ export function fmtScanCountdown(targetIso: string | null, now: number): string 
   const pad = (value: number) => String(value).padStart(2, '0');
   return `${pad(minutes)}:${pad(Math.floor(ms / 1000) % 60)}`;
 }
+
+/** 倒计时三种写法（天 + 小时、小时 + 分钟、分:秒）各自可能出现的最长文案，页面拿来撑住格子的宽度。 */
+export function scanCountdownSamples(): string[] {
+  const longest = (ms: number) => fmtScanCountdown(new Date(ms).toISOString(), 0);
+  return [
+    longest(9 * 86_400_000 + 23 * 3_600_000),
+    longest(23 * 3_600_000 + 59 * 60_000),
+    longest(59 * 60_000 + 59_000),
+  ];
+}

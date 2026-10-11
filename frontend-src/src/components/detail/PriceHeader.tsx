@@ -14,6 +14,7 @@ import TickerLogo from '@/components/shared/TickerLogo';
 import { InsightValue } from '@/components/shared/InsightCard';
 import SessionLED from '@/components/shared/SessionLED';
 import StrengthBar from '@/components/shared/StrengthBar';
+import SameWidth from '@/components/shared/SameWidth';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import type { StockDetail } from '@/api/types';
@@ -32,6 +33,7 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
   const useLive = preferLiveQuote(quote, isNum(detail?.price) && detail.price > 0, detail?.updatedAt);
   const updatedAt = useLive ? quote?.trade_at : detail?.updatedAt;
   const priceLabel = quote ? displayedQuoteLabel(quote, quoteStatus, useLive || !isNum(detail?.price)) : null;
+  const hasScore = isNum(detail?.strengthScore);
 
   /* 不做入场位移：读取中与读到后是两棵树，页头会重挂，位移动画会在数据到达时再播一遍。 */
   return (
@@ -55,13 +57,18 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
             )}
           </div>
         </div>
-        {isNum(detail?.strengthScore) && <div className="ml-auto text-right">
+        {/* 评分块始终占着位置：分数晚到（4 秒补取或下一轮轮询）时，手机上它会从与名称同一行掉到自己一行，
+            页头变高、下面的内容整体下移。没有分数时整块仍在版面里，只是看不见，读屏跳过；
+            宽度按最长的「100.0」撑住，有没有分数、分数几位数，都不改变这一行放不放得下。 */}
+        <div className={cn('ml-auto text-right', !hasScore && 'invisible')} aria-hidden={hasScore ? undefined : true}>
           <p className="eyebrow">
             {__t('评分')}
             <InfoHint hint={SCORE_HINTS.strengthComposite} side="bottom" align="end" size={12} className="ml-1" />
           </p>
-          <StrengthBar score={detail.strengthScore} width={72} className="mt-1.5" />
-        </div>}
+          <SameWidth samples={[<StrengthBar score={100} width={72} />]} className="mt-1.5 justify-items-end leading-none">
+            <StrengthBar score={detail?.strengthScore} width={72} />
+          </SameWidth>
+        </div>
       </div>
 
       {/* 2026-10-09 Arc 改版（行情终端式页头）：左边大号价格 + 涨跌 + 比较基准，右边一组小指标
