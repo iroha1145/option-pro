@@ -23,7 +23,6 @@ const imports = {
   '@/components/shared/InsightCard': { InsightValue: 'InsightValue' },
   '@/components/shared/SessionLED': { default: 'SessionLED' },
   '@/components/shared/StrengthBar': { default: 'StrengthBar' },
-  '@/components/shared/SameWidth': { default: 'SameWidth' },
   '@/components/shared/InfoHint': { default: 'InfoHint' },
   '@/lib/scoreHints': { SCORE_HINTS: { strengthComposite: 'hint' } },
   '../../i18n/core.ts': { t: (text) => text },
@@ -54,7 +53,6 @@ function find(node, match) {
 const PriceHeader = loadPriceHeader();
 const slotOf = (props) => find(PriceHeader(props), (node) => node.type === 'div' && /\bml-auto\b/.test(node.props?.className ?? ''));
 const barOf = (slot) => find(slot, (node) => node.type === 'StrengthBar');
-const reserveOf = (slot) => find(slot, (node) => node.type === 'SameWidth');
 
 test('the score block stays in the header layout when there is no score yet', () => {
   const withScore = slotOf({ symbol: 'NVDA', detail: { ticker: 'NVDA', strengthScore: 83.61 } });
@@ -73,13 +71,24 @@ test('the score block stays in the header layout when there is no score yet', ()
   }
 });
 
-test('the score block is as wide as the widest score, so a one- or two-digit score never changes where the row wraps', () => {
-  for (const detail of [undefined, { ticker: 'NVDA', strengthScore: 5 }, { ticker: 'NVDA', strengthScore: 72.5 }]) {
-    const reserve = reserveOf(slotOf({ symbol: 'NVDA', detail }));
-    assert.ok(reserve, `width reserve missing for ${JSON.stringify(detail)}`);
-    assert.equal(reserve.props.samples.length, 1);
-    assert.equal(reserve.props.samples[0].type, 'StrengthBar');
-    assert.equal(reserve.props.samples[0].props.score, 100); // "100.0" is the longest score text
+test('the first row does not depend on the name: one-line title, score block on its own row below sm', () => {
+  const details = [
+    undefined, // the loading skeleton only knows the ticker
+    { ticker: 'NVDA', name: 'NVIDIA Corporation', strengthScore: 72.5 },
+    { ticker: 'NVDA', name: 'Taiwan Semiconductor Manufacturing Company Limited' },
+  ];
+  for (const detail of details) {
+    const tree = PriceHeader({ symbol: 'NVDA', detail });
+    const h1 = find(tree, (node) => node.type === 'h1');
+    const [symbolText, nameText] = h1.props.children;
+    assert.doesNotMatch(h1.props.className, /\bflex-wrap\b/); // never a second title line
+    assert.match(symbolText.props.className, /\bshrink-0\b/);
+    assert.match(nameText.props.className, /\btruncate\b/); // a long name is cut, not wrapped
+    const nameBlock = find(tree, (node) => node.type === 'div' && /\bflex-1\b/.test(node.props?.className ?? ''));
+    assert.ok(nameBlock, 'the name block takes the remaining width, so its content never pushes the score block');
+    const slot = slotOf({ symbol: 'NVDA', detail });
+    assert.match(slot.props.className, /\bbasis-full\b/); // own row on phones
+    assert.match(slot.props.className, /\bsm:basis-auto\b/); // same row from sm up
   }
 });
 
