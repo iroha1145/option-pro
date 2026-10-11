@@ -35,7 +35,7 @@ def test_personal_runtime_loads_the_committed_toml() -> None:
     assert config.catalyst.scheduled_times_et == list(HOURLY_ANALYSIS_TIMES_ET)
     assert config.catalyst.manual_force_reanalysis is True
     assert config.catalyst.manual_refresh_cooldown_seconds == 30
-    assert config.storage.retention_days == 90
+    assert config.storage.retention_days == 10
 
 
 def test_personal_ai_uses_a_daily_token_safety_limit() -> None:
@@ -120,7 +120,7 @@ def test_legacy_environment_cannot_override_personal_runtime(
     assert breakout.scan_interval_premarket_seconds == 600
     assert breakout.scan_interval_regular_seconds == 300
     assert breakout.scan_interval_closed_seconds == 1800
-    assert breakout.scan_retention_days == 90
+    assert breakout.scan_retention_days == 10
     assert breakout.range_persistence_mode == "shadow"
 
 

@@ -177,6 +177,7 @@ test('chart lazy-load rejection does not unmount the earnings page', async () =>
 test('command palette does not prefetch while closed', async () => {
   const paletteSource = await readFile(src('components', 'CommandPalette.tsx'), 'utf8');
   const recent = { tickers: [] };
+  const location = { pathname: '/', search: '', hash: '' };
 
   const mountPalette = (open) => {
     const prefetched = [];
@@ -187,13 +188,14 @@ test('command palette does not prefetch while closed', async () => {
         jsxs: (type, props, key) => createElement(type, { ...props, key }),
         Fragment: 'Fragment',
       },
-      'react-router': { useNavigate: () => () => {} },
+      'react-router': { useLocation: () => location, useNavigate: () => () => {} },
       '@/api/client': { ApiError: class ApiError extends Error {} },
       '@/api/modules/stocks': { stocksApi: { search: async () => [] } },
       '@/hooks/useAccess': { useAccess: () => ({ isOwner: false, isSignedIn: false, username: '', logout: async () => {} }) },
       '@/hooks/useFocusTrap': { useFocusTrap() {} },
       '@/hooks/useBodyScrollLock': { useBodyScrollLock() {} },
       '@/lib/focusScope': { isTopFocusScope: () => true },
+      '@/lib/loginReturn': { loginReturnState: () => undefined },
       '@/lib/utils': { cn: (...parts) => parts.filter(Boolean).join(' ') },
       '@/lib/transitions': {
         overlayClassName: () => '',

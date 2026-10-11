@@ -23,7 +23,7 @@ src/api/         client.ts（mock/live 切换）+ modules/（12 域）+ types.ts
 src/mocks/       确定性种子 fixtures + session（写操作内存落盘）
 src/components/  Navbar / Footer / Layout（<Outlet/> 嵌套路由）/ CommandPalette / Drawer / Toast / MobileDock
 src/components/shared/   StatCard TickerLogo ChangeBadge StrengthBar SignalChip SessionLED
-                         Segmented HatchLegend SourceNote EmptyState Skeleton DataTable PageHeader
+                         Segmented SourceNote EmptyState Skeleton DataTable PageHeader
 src/components/charts/   ReactECharts 包装 + Sparkline（含点阵面积工艺）
 src/components/icons.tsx 手绘细线图标（24 viewBox · 1.6px stroke · currentColor）
 src/lib/chart.ts ECharts 按需注册 + 全站统一工艺（发丝网格/毛玻璃 tooltip/斜纹/点阵/热力色阶）

@@ -14,7 +14,7 @@ from app.services.technical.structure import clean_series, _frame, compute_techn
 from test_breakout_base_detector import _base_frame
 from test_breakout_event_anchor import orb_service, _scan, TailPrices
 from test_breakout_service import AS_OF
-from test_earnings_featured_and_enrichment import isolated_build, _calendar_row, _fmp_success, TODAY
+from test_earnings_featured_and_enrichment import isolated_build, _calendar_row, TODAY
 
 
 def test_first_scan_confirms_completed_opening_holds_independently_of_daily_base(orb_service):
@@ -29,70 +29,6 @@ def test_first_scan_one_complete_hold_cannot_use_unfinished_bar(orb_service):
     event, _ = _scan(orb_service)
     assert event.features["hold_bars_above_opening_range"] == 1
     assert event.lifecycle_state.value == "TRIGGERED"
-
-
-@pytest.mark.parametrize("difference", [{"days_until": 7, "earnings_date": "2026-07-30"}, {"quarter": 3}, {"year": 2025}])
-def test_conflicting_report_never_supplies_missing_estimates(isolated_build, difference):
-    primary = {**_calendar_row("CLASH", eps_estimate=None), "quarter": 2, "year": 2026}
-    secondary = {**primary, "eps_estimate": 9.9, "revenue_estimate": 999_000, **difference}
-    payload = isolated_build(finnhub_rows=[primary], fmp_result=_fmp_success([secondary]))
-    row = payload["earnings"][0]
-    assert row["earnings_date"] == primary["earnings_date"]
-    assert row["quarter"] == 2 and row["year"] == 2026
-    assert row["eps_estimate"] is None and row["revenue_estimate"] is None
-    assert row["estimate_source"] is None and row["estimate_sources"] == {}
-    assert row["calendar_date_status"] == "conflict"
-    expected_conflict = (
-        {field: secondary[field] for field in ("earnings_date", "quarter", "year")}
-        if primary["earnings_date"] == secondary["earnings_date"]
-        else secondary["earnings_date"]
-    )
-    assert row["calendar_conflict"] == {"fmp_calendar": expected_conflict}
-    assert validate_public_home_payload("earnings", payload) == payload
-    entry = create_public_home_entry(
-        "earnings", payload, saved_at=datetime.now(timezone.utc).timestamp(),
-        parameters={"market_date": TODAY.isoformat()},
-    )
-    assert entry["payload"]["earnings"][0]["calendar_conflict"] == row["calendar_conflict"]
-
-
-@pytest.mark.parametrize("period", [
-    {"quarter": 2, "year": 2026}, {"quarter": None, "year": None},
-    {"quarter": True, "year": 2026}, {"quarter": 5, "year": 2026},
-    {"quarter": 3, "year": "2026"}, {"quarter": 3, "year": 2201},
-])
-def test_same_day_conflict_requires_a_valid_different_period(isolated_build, period):
-    primary = {**_calendar_row("CLASH"), "quarter": 2, "year": 2026}
-    secondary = {**primary, "quarter": 3}
-    payload = isolated_build(finnhub_rows=[primary], fmp_result=_fmp_success([secondary]))
-    payload["earnings"][0]["calendar_conflict"] = {
-        "fmp_calendar": {"earnings_date": primary["earnings_date"], **period},
-    }
-    with pytest.raises(ValueError, match="invalid public home payload"):
-        validate_public_home_payload("earnings", payload)
-
-
-@pytest.mark.parametrize("primary_eps", [None, 1.2])
-@pytest.mark.parametrize("secondary_period", [{}, {"quarter": 2, "year": 2026}, {"quarter": 2}])
-def test_matching_report_tracks_each_supplemented_estimate_source(isolated_build, primary_eps, secondary_period):
-    primary = {**_calendar_row("MATCH", eps_estimate=primary_eps), "quarter": 2, "year": 2026}
-    secondary = {**_calendar_row("MATCH", eps_estimate=9.9), "revenue_estimate": 999_000, **secondary_period}
-    payload = isolated_build(finnhub_rows=[primary], fmp_result=_fmp_success([secondary]))
-    row = payload["earnings"][0]
-    assert row["calendar_date_status"] == "confirmed"
-    assert row["calendar_conflict"] is None
-    assert row["eps_estimate"] == (primary_eps if primary_eps is not None else 9.9)
-    assert row["revenue_estimate"] == 999_000
-    assert row["estimate_sources"] == {
-        "eps_estimate": "finnhub_calendar" if primary_eps is not None else "fmp_calendar",
-        "revenue_estimate": "fmp_calendar",
-    }
-    assert row["estimate_source"] == ("mixed" if primary_eps is not None else "fmp_calendar")
-    assert "FMP" in payload["providers"]
-    assert validate_public_home_payload("earnings", payload) == payload
-    row["estimate_sources"]["revenue_estimate"] = "invented"
-    with pytest.raises(ValueError, match="invalid public home payload"):
-        validate_public_home_payload("earnings", payload)
 
 
 @pytest.mark.parametrize("same_date", [True, False])

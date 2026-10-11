@@ -5,13 +5,14 @@
  * 字体口径：中文走正文 sans，mono 仅用于代码/序号/快捷键；选中行 brand-50 底 + 左 2px brand 竖条。
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { ApiError } from '@/api/client';
 import { stocksApi } from '@/api/modules/stocks';
 import { useAccess } from '@/hooks/useAccess';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { isTopFocusScope } from '@/lib/focusScope';
+import { loginReturnState } from '@/lib/loginReturn';
 import { cn } from '@/lib/utils';
 import {
   overlayClassName,
@@ -79,6 +80,7 @@ function Kbd({ children }: { children: React.ReactNode }) {
 
 export default function CommandPalette({ open, onClose, onOpenTicker, onForceRefresh }: PaletteProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isOwner, isSignedIn, username, logout } = useAccess();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<{ ticker: string; name: string; sector: string }[]>([]);
@@ -245,13 +247,13 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
           path: '/login',
           action: () => {
             onClose();
-            navigate('/login');
+            navigate('/login', { state: loginReturnState(location) });
           },
         });
       }
     }
     return list;
-  }, [query, results, navigate, onClose, onForceRefresh, pickTicker, isOwner, isSignedIn, username, logout]);
+  }, [query, results, navigate, location, onClose, onForceRefresh, pickTicker, isOwner, isSignedIn, username, logout]);
 
   const flat = entries;
   const clampedActive = Math.min(active, Math.max(0, flat.length - 1));

@@ -14,6 +14,7 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 import { ApiError } from '../src/api/client.ts';
 import * as normalize from '../src/api/aiJobNormalize.ts';
+import * as loginReturn from '../src/lib/loginReturn.ts';
 import { setLocale } from '../src/i18n/testing.ts';
 import { t } from '../src/i18n/core.ts';
 import { DICT } from '../src/i18n/dict/index.ts';
@@ -401,6 +402,7 @@ function renderSignalCard(state) {
     '@/api/aiJobNormalize': normalize,
     '@/lib/aiModelLabel': aiModelLabels,
     '@/lib/quoteSymbol': { isIndexSymbol: () => false },
+    '@/lib/loginReturn': loginReturn,
   });
   return snapshot(stub.mount(() => exports.default({ ticker: 'NVDA' }))());
 }

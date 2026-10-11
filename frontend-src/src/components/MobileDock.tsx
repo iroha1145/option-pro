@@ -16,6 +16,7 @@ import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { overlayVisible, useOverlayPhase } from '@/lib/transitions';
 import { isTopFocusScope } from '@/lib/focusScope';
+import { loginReturnState } from '@/lib/loginReturn';
 import Icon, { type IconName } from '@/components/icons';
 import GlidePill from '@/components/shared/GlidePill';
 import { t } from '../i18n/core.ts';
@@ -226,7 +227,7 @@ function MobileDockContent({ onHeightChange }: MobileDockProps) {
                   onClick={() => {
                     if (!isSignedIn) {
                       setMoreOpen(false);
-                      navigate('/login');
+                      navigate('/login', { state: loginReturnState(location) });
                       return;
                     }
                     setLoggingOut(true);
@@ -262,7 +263,7 @@ function MobileDockContent({ onHeightChange }: MobileDockProps) {
                     type="button"
                     onClick={() => {
                       setMoreOpen(false);
-                      navigate('/login');
+                      navigate('/login', { state: loginReturnState(location) });
                     }}
                     className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-micro text-ink-500 transition-[background-color] hover:bg-paper-2 active:bg-line/60"
                   >

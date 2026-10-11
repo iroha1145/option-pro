@@ -13,7 +13,7 @@ const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFin
 const priceOr = (v: number | null | undefined): string => (isNum(v) ? fmtPrice(v) : '—');
 const compactOr = (v: number | null | undefined): string => (isNum(v) ? fmtCompact(v) : '—');
 
-/** detail 为 null 时是读取中的骨架：同样九行与 52 周区间，读到后卡片不变高。 */
+/** detail 为 null 时是读取中的骨架：同样七行与 52 周区间，读到后卡片不变高。 */
 export default function KeyStats({ detail, className }: { detail: StockDetail | null; className?: string }) {
   const rows: [string, string | null][] = [
     [t('今开'), detail && priceOr(detail.open)],
@@ -21,10 +21,8 @@ export default function KeyStats({ detail, className }: { detail: StockDetail | 
     [t('最高价'), detail && priceOr(detail.high)],
     [t('最低价'), detail && priceOr(detail.low)],
     [t('成交量'), detail && compactOr(detail.volume)],
-    [t('均量'), detail && compactOr(detail.avgVolume)],
     [t('市值'), detail && (isNum(detail.marketCap) ? `$${fmtCompact(detail.marketCap)}` : '—')],
     [t('市盈率'), detail && (isNum(detail.pe) ? detail.pe.toFixed(1) : '—')],
-    [t('IV 百分位'), detail && (isNum(detail.ivPercentile) ? `${detail.ivPercentile}%` : '—')],
   ];
   const r52 = detail?.range52w;
   const has52 = Array.isArray(r52) && isNum(r52[0]) && isNum(r52[1]);

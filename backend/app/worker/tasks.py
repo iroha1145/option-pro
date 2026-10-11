@@ -19,7 +19,7 @@ from app.access import bind_trusted_system_task
 from app.failure_diagnostics import record_fallback_failure
 from app.data_paths import get_data_paths
 from app.execution_limits import AI_JOBS_TASK_TIMEOUT_SECONDS, BREAKOUT_TASK_TIMEOUT_SECONDS
-from app.personal_config import get_personal_config
+from app.personal_config import DEFAULT_RETENTION_DAYS, get_personal_config
 
 from .inventory import DEFAULT_TASK_NAMES
 from .runtime import TaskResult, TaskSpec, _public_error_code, backoff_seconds
@@ -458,7 +458,7 @@ class EarningsAnalysisTask:
         retention_deleted = await _call_local(
             repository.prune_earnings_retention,
             now=self._now(),
-            retention_days=30,
+            retention_days=int(self._personal_config.storage.retention_days),
         )
         if manual and not bool(effective.ai.manual_analysis_enabled):
             return TaskResult(
@@ -1107,9 +1107,9 @@ class CatalystSyncTask:
                 getattr(
                     getattr(self._personal_config, "catalyst", None),
                     "journal_retention_days",
-                    30,
+                    DEFAULT_RETENTION_DAYS,
                 )
-                or 30
+                or DEFAULT_RETENTION_DAYS
             )
             try:
                 pruned = await _call_local(
@@ -1133,7 +1133,7 @@ class CatalystSyncTask:
                     journal_prune_metrics = {
                         str(key)[:64]: int(value)
                         for index, (key, value) in enumerate(pruned.items())
-                        if index < 8 and isinstance(value, int)
+                        if index < 12 and isinstance(value, int)
                     }
                 if ingest_pruned is not None:
                     journal_prune_metrics = {
@@ -1976,7 +1976,7 @@ class PublicHomeTask:
         """Owner 手动财报刷新（审计 P2-04）：动作路径立即重建并发布 earnings。
 
         此前 POST /earnings/upcoming/refresh 在 HTTP 请求内同步跑完全部上游
-        （Finnhub/可选 FMP/Yahoo/市值补全/期权预期波动），按钮时长完全由
+        （Finnhub/Yahoo/市值补全/期权预期波动），按钮时长完全由
         上游决定。现在 POST 只入队（earnings_calendar → 本任务名），这里
         承担全部 provider 工作，并复用与定时发布完全相同的完整性闸——
         上游断供时 _produce_entry 抛 earnings_snapshot_incomplete，上一份
@@ -3694,8 +3694,17 @@ class _BackupRetry:
     error_code: str
 
 
+# The two large stores, breakout scans and the news cache, are copied once a
+# day. ai-jobs.db holds paid model results and keeps the six-hour cadence with
+# accounts and settings. Explicit retention still backs up every label.
+_DAILY_BACKUP_LABELS = frozenset({"optix", "catalyst-cache"})
+# Copies are stamped after their cycle starts, so a strict 24 h check skips the
+# next day's cycle and slides to 30 h; an hour of slack keeps the daily copy daily.
+_DAILY_BACKUP_MIN_AGE = timedelta(hours=23)
+
+
 class MaintenanceTask:
-    """Back up every label once per cycle and retry only the labels that failed.
+    """Back up due labels and retry only the labels that failed.
 
     One failing database used to make every run degraded with a fixed 300 s
     retry that copied all the healthy databases again, rotating their history
@@ -3781,6 +3790,12 @@ class MaintenanceTask:
                     label
                     for label in labels
                     if not self._recently_backed_up(label, since)
+                ]
+            if not self.full_cycle_per_call:
+                labels = [
+                    label for label in labels
+                    if label not in _DAILY_BACKUP_LABELS or label in self._retries
+                    or not self._recently_backed_up(label, observed - _DAILY_BACKUP_MIN_AGE)
                 ]
             self._unattempted = labels
             return list(labels)
@@ -3871,6 +3886,7 @@ class MaintenanceTask:
             details["retrying"] = {
                 label: retry.error_code for label, retry in self._retries.items()
             }
+        history_error = None
         if (
             self._after_cycle is not None
             and self._cycle_started_at is not None
@@ -3878,7 +3894,7 @@ class MaintenanceTask:
             and not self._retries
             and self._after_cycle_done_for != self._cycle_started_at
         ):
-            details["ai_history"], _error_code = await self._after_cycle()
+            details["ai_history"], history_error = await self._after_cycle()
             self._after_cycle_done_for = self._cycle_started_at
         next_delay = self._next_delay(self._now())
         if self._retries:
@@ -3889,11 +3905,16 @@ class MaintenanceTask:
                 details=details,
                 next_delay_seconds=next_delay,
             )
+        if history_error:
+            return TaskResult(
+                status="degraded", error_code=history_error,
+                details=details, next_delay_seconds=next_delay,
+            )
         return TaskResult(status="idle", details=details, next_delay_seconds=next_delay)
 
 
 # The local news retention default; scheduled AI history never goes below it.
-AI_HISTORY_MIN_RETAIN_DAYS = 30
+AI_HISTORY_MIN_RETAIN_DAYS = DEFAULT_RETENTION_DAYS
 
 
 async def prune_ai_history(
@@ -3901,6 +3922,7 @@ async def prune_ai_history(
     *,
     retain_days: int,
     now: datetime,
+    catalyst_cache_path: Path | None,
 ) -> tuple[dict[str, Any], str | None]:
     """Delete settled scheduled news and focus jobs past the news window.
 
@@ -3910,10 +3932,23 @@ async def prune_ai_history(
 
     try:
         repository = await _call_local(repository_factory)
+        def retained_jobs() -> set[str]:
+            # Journal pruning removes expired references first. The remaining
+            # receipts include current publications even when over ten days old.
+            protected: set[str] = set()
+            if catalyst_cache_path is not None and Path(catalyst_cache_path).is_file():
+                uri = f"{Path(catalyst_cache_path).resolve().as_uri()}?mode=ro"
+                with sqlite3.connect(uri, uri=True) as connection:
+                    for table in ("catalyst_local_analysis_links", "catalyst_local_focus_cycles"):
+                        protected.update(row[0] for row in connection.execute(f"SELECT job_id FROM {table}"))
+            return protected
+
+        protected_job_ids = await _call_local(retained_jobs)
         deleted = await _call_local(
             repository.prune_scheduled_history,
             retain_days=retain_days,
             now=now,
+            protected_job_ids=protected_job_ids,
         )
     except (RuntimeError, sqlite3.Error, OSError) as exc:
         record_fallback_failure("ai_history_retention", exc)
@@ -4048,6 +4083,7 @@ class RetentionTask:
             self._ai_repository_factory,
             retain_days=self._ai_history_retain_days,
             now=self._now(),
+            catalyst_cache_path=self.backup.databases.get("catalyst-cache"),
         )
 
 
@@ -4132,6 +4168,7 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         after_cycle=lambda: prune_ai_history(
             ai_history_repository,
             retain_days=ai_history_retain_days,
+            catalyst_cache_path=settings.macrolens_cache_db_path,
             now=datetime.now(timezone.utc),
         ),
     )

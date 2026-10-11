@@ -16,6 +16,7 @@ import { createSignalAnalysisJob } from './api';
 import { useAiJob } from './useAiJob';
 import { aiJobBlockedMessage, aiJobDeferralMessage, aiJobErrorMessage, aiJobResultSummary } from '@/api/aiJobNormalize';
 import { isIndexSymbol } from '@/lib/quoteSymbol';
+import { loginReturnState } from '@/lib/loginReturn';
 import ThinkingLabel from '@/components/shared/ThinkingLabel';
 import { t } from '../../i18n/core.ts';
 
@@ -56,7 +57,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
           <p className="text-caption text-ink-500">{t('登录后可用模型分析')}</p>
           <Link
             to="/login"
-            state={{ from: `${window.location.pathname}${window.location.search}` }}
+            state={loginReturnState(window.location)}
             className="shrink-0 text-caption font-medium text-brand-600 hover:text-brand-700"
           >
             {t('去登录')}

@@ -7,7 +7,7 @@ import { LivePrice, LiveChange, PeriodicPriceFlash } from '@/components/shared/L
  */
 import SoftBadge from '@/components/shared/SoftBadge';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useLocation, useSearchParams } from 'react-router';
 import { motion } from 'framer-motion';
 import { stocksApi } from '@/api/modules/stocks';
 import { useWatchlistUndo } from '@/hooks/useWatchlistUndo';
@@ -49,6 +49,7 @@ import ChangeBadge from '@/components/shared/ChangeBadge';
 import Icon from '@/components/icons';
 import { BusyIcon } from '@/components/shared/IconSwap';
 import { pageRegionProps } from '@/lib/pageRegion';
+import { loginReturnState } from '@/lib/loginReturn';
 import { getLocale, t } from '../i18n/core.ts';
 
 /* ---------------- B1 小件：涨跌宽度比条 ---------------- */
@@ -424,6 +425,7 @@ export default function Watchlist() {
   const { openTicker } = useShell();
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
 
   const [view, setView] = useState<'table' | 'cards'>('cards');
   const [sort, setSort] = useState<SortState | null>(null);
@@ -822,7 +824,7 @@ export default function Watchlist() {
                   <Icon name="plus" size={15} />{t('管理关注')}
                 </button>
               ) : (
-                <Link to="/login" state={{ from: '/watchlist' }} className="inline-flex min-h-11 items-center gap-1.5 rounded-pill border border-line-strong bg-card px-3 text-caption text-ink-600 hover:border-brand-400 hover:text-brand-600">
+                <Link to="/login" state={loginReturnState(location)} className="inline-flex min-h-11 items-center gap-1.5 rounded-pill border border-line-strong bg-card px-3 text-caption text-ink-600 hover:border-brand-400 hover:text-brand-600">
                   <Icon name="plus" size={15} />{t('登录后管理关注')}
                 </Link>
               )}
@@ -939,7 +941,7 @@ export default function Watchlist() {
                       <Icon name="plus" size={14} />
                       {t('管理关注')}
                     </button>
-                  ) : <Link to="/login" className="control-button">{t('登录后管理关注')}</Link>}
+                  ) : <Link to="/login" state={loginReturnState(location)} className="control-button">{t('登录后管理关注')}</Link>}
                 />
               </div>
             ) : view === 'table' ? (

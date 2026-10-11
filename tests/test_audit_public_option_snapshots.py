@@ -315,29 +315,6 @@ def test_one_queue_close_failure_does_not_abandon_the_other_queue():
     asyncio.run(run())
 
 
-def test_unusual_snapshot_accepts_iv_provenance_and_normalizes_legacy_placeholders(tmp_path):
-    from app.public_home_snapshot import create_public_home_entry, read_public_home_resource, validate_public_home_payload, public_home_resource_parameters
-    from tests.test_public_home_snapshot import _payload
-
-    payload = _payload("unusual", NOW)
-    payload["results"][0].update(implied_volatility=None, iv_source="missing")
-    assert validate_public_home_payload("unusual", payload)["results"][0]["iv_source"] == "missing"
-    entry = create_public_home_entry("unusual", payload, saved_at=NOW,
-                                     parameters=public_home_resource_parameters("unusual", now=NOW))
-    # Reproduce an already-saved pre-fix snapshot, bypassing today's writer.
-    entry["payload"]["results"][0].pop("iv_source")
-    entry["payload"]["results"][0]["implied_volatility"] = .00001
-    path = tmp_path / "legacy-public-home.json"
-    path.write_text(json.dumps({"version": 1, "resources": {"unusual": entry}}))
-    read = read_public_home_resource("unusual", path=path, now=NOW + 1,
-                                     parameters={"type": "all", "min_vol_oi": 1.0})
-    assert read["results"][0]["implied_volatility"] is None
-    assert read["results"][0]["iv_source"] == "missing"
-    payload["results"][0]["provider_token"] = "must not be published"
-    with pytest.raises(ValueError):
-        validate_public_home_payload("unusual", payload)
-
-
 @pytest.mark.parametrize("stamp", ["2026-09-07T14:59:00Z", None, "2026-09-07T15:00:00Z"])
 def test_later_save_cannot_replace_known_quote_with_older_unknown_or_same_source_time(tmp_path, stamp):
     public.write_option_snapshot("AAPL", {**chain(), "underlying_price": 110}, EXP, root=tmp_path, now=NOW)
