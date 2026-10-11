@@ -17,6 +17,7 @@
     --card: #FFFFFF;
     --card-warm: #FCFCFC;
     --overlay: rgba(255, 255, 255, 0.8);
+    --mobile-nav-overlay: rgba(255, 255, 255, 0.6);
     /* §1.2 文字三档为主：900 标题与数值、600 正文与说明（全站最多）、400 提示与元信息；
        800/700/500 是兼容旧调用点的过渡档，都落在这三档附近。300 只给线条与装饰。 */
     --ink-900: #111111;
@@ -170,6 +171,7 @@
     --card: #161617;
     --card-warm: #141415;
     --overlay: rgba(15, 15, 16, 0.86);
+    --mobile-nav-overlay: rgba(15, 15, 16, 0.68);
     --ink-900: #F2F2F2;
     --ink-800: #EBEBEB;
     --ink-700: #C7C7C7;
@@ -372,6 +374,29 @@
     background: var(--overlay);
     backdrop-filter: blur(14px) saturate(1.5);
     -webkit-backdrop-filter: blur(14px) saturate(1.5);
+  }
+
+  /* 与手机底栏的 xl 隐藏断点一致，只让上下导航更通透。 */
+  @media (max-width: 1279px) {
+    .mobile-nav-glass {
+      background: var(--card);
+    }
+
+    @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+      .mobile-nav-glass {
+        background: var(--mobile-nav-overlay);
+        backdrop-filter: blur(22px) saturate(1.65);
+        -webkit-backdrop-filter: blur(22px) saturate(1.65);
+      }
+    }
+
+    @media (prefers-reduced-transparency: reduce) {
+      .mobile-nav-glass {
+        background: var(--card);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+      }
+    }
   }
 
   /* 卡片：白底 + 一圈细线 + 18px 圆角，静止不投影（2026-10-09 Arc 改版，原 16px）。 */
