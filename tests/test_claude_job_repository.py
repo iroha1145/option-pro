@@ -26,7 +26,7 @@ def accounting(monkeypatch):
         calls.append(("tokens", model))
         return 1000 if model == CLAUDE else 2000
 
-    def settle(job_type, usage, *, fallback_microusd, model=None):
+    def settle(job_type, usage, *, fallback_microusd, model=None, rounds=None):
         calls.append(("settle", model))
         return 90 if model == CLAUDE else 180
 
@@ -83,17 +83,23 @@ def test_v4_migration_preserves_registry_and_history(tmp_path, accounting):
     with sqlite3.connect(repo.path) as conn:
         for field in storage._CLAUDE_COLUMNS:
             conn.execute(f"ALTER TABLE ai_jobs DROP COLUMN {field}")
-        conn.execute("DELETE FROM ai_job_schema WHERE version='ai-jobs-v5'")
+        conn.execute("ALTER TABLE ai_jobs DROP COLUMN earnings_featured_verified")
+        conn.execute("DELETE FROM ai_job_schema WHERE version IN ('ai-jobs-v5','ai-jobs-v6')")
         conn.execute("INSERT INTO ai_job_schema VALUES('ai-jobs-v4',?,?)", (checksum, storage._iso()))
     repo.initialize()
     repo.initialize()
     migrated = repo.get_job(created["job_id"])
+    assert migrated["earnings_featured_verified"] == 0
     assert {k: v for k, v in migrated.items() if k not in storage._CLAUDE_COLUMNS} == {
         k: v for k, v in original.items() if k not in storage._CLAUDE_COLUMNS
     }
     with sqlite3.connect(repo.path) as conn:
         assert conn.execute("SELECT checksum FROM ai_job_schema WHERE version='ai-jobs-v4'").fetchone()[0] == checksum
-        assert conn.execute("SELECT COUNT(*) FROM ai_job_schema WHERE version='ai-jobs-v5'").fetchone()[0] == 1
+        # A v4 database upgrades directly to the current v6 marker; the old
+        # columns and v4 checksum are still verified above. No fictitious v5
+        # migration is registered when it was never applied.
+        assert conn.execute("SELECT COUNT(*) FROM ai_job_schema WHERE version='ai-jobs-v5'").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM ai_job_schema WHERE version='ai-jobs-v6'").fetchone()[0] == 1
 
 
 @pytest.mark.parametrize("saved_stop_reason", ["end_turn", "tool_use"])
@@ -256,7 +262,7 @@ def test_optional_cache_usage_remains_unknown_in_receipt(tmp_path, accounting, m
         "cache_creation_5m_input_tokens": None, "cache_creation_1h_input_tokens": None,
     })
 
-    def conservative(job_type, usage, *, fallback_microusd, model=None):
+    def conservative(job_type, usage, *, fallback_microusd, model=None, rounds=None):
         assert usage["cached_input_tokens"] is None
         return fallback_microusd
 
@@ -294,7 +300,7 @@ def test_tool_receipt_publishes_bounded_sources_and_usage_without_raw_content(tm
     ]
     value["usage"].update(web_search_requests=1, web_fetch_requests=1, code_execution_requests=None)
 
-    def settle(job_type, usage, *, fallback_microusd, model=None):
+    def settle(job_type, usage, *, fallback_microusd, model=None, rounds=None):
         assert usage["web_search_requests"] == 1
         assert usage["web_fetch_requests"] == 1
         assert usage["code_execution_requests"] is None
@@ -386,3 +392,31 @@ def test_public_hides_tampered_evidence_receipt(tmp_path, accounting):
     public = repo.public(row)
     assert public["evidence_sources"] == []
     assert "127.0.0.1" not in json.dumps(public)
+
+
+
+def test_v5_paid_history_migration_preserves_receipt_and_original_checksum(tmp_path, accounting):
+    repo, ident = started(tmp_path, accounting)
+    repo.link_anthropic_message(ident, "owner", "msg_test")
+    repo.record_provider_result(ident, "owner", receipt())
+    original = repo.get_job(ident)
+    v5_table = storage._AI_JOBS_V4_TABLE_SQL.replace(
+        "    openai_response_id TEXT,",
+        "    openai_response_id TEXT,\n" + "".join(
+            f"    {name} {definition},\n" for name, definition in storage._CLAUDE_COLUMNS.items()
+        ).rstrip("\n"),
+    )
+    checksum = hashlib.sha256((storage._SCHEMA_REGISTRY_SQL + v5_table + storage._AI_JOBS_INDEX_SQL).encode()).hexdigest()
+    with sqlite3.connect(repo.path) as connection:
+        connection.execute("ALTER TABLE ai_jobs DROP COLUMN earnings_featured_verified")
+        connection.execute("DELETE FROM ai_job_schema WHERE version='ai-jobs-v6'")
+        connection.execute("INSERT INTO ai_job_schema VALUES('ai-jobs-v5',?,?)", (checksum, storage._iso()))
+    repo.initialize()
+    repo.initialize()
+    migrated = repo.get_job(ident)
+    assert migrated["earnings_featured_verified"] == 0
+    assert migrated == original
+    assert repo.get_provider_result(ident) == receipt()
+    with sqlite3.connect(repo.path) as connection:
+        assert connection.execute("SELECT checksum FROM ai_job_schema WHERE version='ai-jobs-v5'").fetchone()[0] == checksum
+        assert connection.execute("SELECT COUNT(*) FROM ai_job_schema WHERE version='ai-jobs-v6'").fetchone()[0] == 1

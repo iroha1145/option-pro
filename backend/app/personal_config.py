@@ -37,6 +37,11 @@ LARGEST_TASK_TOKEN_RESERVATION = 1_050_000
 #: reasoning efforts a GPT model accepts. Claude models accept only ``xhigh``.
 #: Kept as a literal for the same reason; the two are asserted equal in tests.
 OPENAI_REASONING_EFFORTS = ("max", "xhigh", "high")
+#: Default retention of news, hotspots, focus and AI job history, and breakout
+#: scan attachments (``[catalyst].journal_retention_days`` and
+#: ``[storage].retention_days``). Completed earnings analyses are kept longer;
+#: see ``EARNINGS_ANALYSIS_RETENTION_DAYS`` in the AI job repository.
+DEFAULT_RETENTION_DAYS = 10
 _PRIVATE_NETWORK_ENVELOPES = tuple(
     ipaddress.ip_network(value)
     for value in (
@@ -244,7 +249,7 @@ class CatalystConfig(StrictConfigModel):
     focus_seconds: int = Field(default=1800, ge=300, le=86_400)
     # 变更日志整条目保留期。下限 8 天必须大于公共 feed 窗口上限 7 天：
     # 保留期内的条目全量保留（含旧变更），窗口读与 cursor 分页语义不受修剪影响。
-    journal_retention_days: int = Field(default=30, ge=8, le=3650)
+    journal_retention_days: int = Field(default=DEFAULT_RETENTION_DAYS, ge=8, le=3650)
     manual_force_reanalysis: Literal[True] = True
     manual_refresh_cooldown_seconds: int = Field(default=30, ge=0, le=3600)
     scheduled_times_et: list[str] = Field(
@@ -303,9 +308,6 @@ class PublicHomeConfig(StrictConfigModel):
     chart_seconds: int = Field(default=300, ge=300, le=86_400)
     signals_seconds: int = Field(default=900, ge=900, le=86_400)
     earnings_seconds: int = Field(default=21_600, ge=21_600, le=172_800)
-    # 不再读取。生产 personal.toml 仍有这一行，模型是 extra="forbid"，
-    # 删掉字段会让配置加载失败。
-    unusual_seconds: int = Field(default=1800, ge=1800, le=86_400)
     # CTA 趋势资金估算：日频模型，盘中 30 分钟一算足够（末根未收盘只做
     # 暂定标记，正式仓位要等收盘后的下一轮刷新）。
     cta_seconds: int = Field(default=1800, ge=900, le=86_400)
@@ -434,7 +436,9 @@ class MarketBriefConfig(StrictConfigModel):
     web_search_max_uses: int = Field(default=10, ge=0, le=20)
     web_fetch_max_uses: int = Field(default=8, ge=0, le=20)
     web_fetch_max_content_tokens: int = Field(default=12_000, ge=1_000, le=100_000)
-    code_execution_tool: bool = True
+    #: 20260209 版网页搜索与抓取自带动态过滤（内部已在运行代码），另开独立代码执行
+    #: 只会多一个执行环境，所以默认关。
+    code_execution_tool: bool = False
     refusal_fallback: bool = False
     #: 结构化输出与网页工具并用没有文档背书（文档写明结构化输出与引用不兼容，而网页
     #: 搜索结果自带引用），所以部署默认关：JSON Schema 附在系统提示词里，解析与校验流程
@@ -531,7 +535,7 @@ class MarketBriefConfig(StrictConfigModel):
 
 
 class StorageConfig(StrictConfigModel):
-    retention_days: int = Field(default=90, ge=1, le=3650)
+    retention_days: int = Field(default=DEFAULT_RETENTION_DAYS, ge=1, le=3650)
     backup_keep: int = Field(default=7, ge=1, le=100)
 
 

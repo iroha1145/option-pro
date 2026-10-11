@@ -35,7 +35,7 @@ from app.services.ai_jobs.models import (
 # 校验和，形状变了版本不变会在老库上撞出 ai_job_schema_checksum_mismatch，
 # ai_jobs/catalyst/focus 三个任务整体停摆（2026-08-08 生产事故：加 error_detail
 # 列没升版本）。老版本行保留作历史；回滚安全——旧代码只查自己版本的行。
-_SCHEMA_VERSION = "ai-jobs-v5"
+_SCHEMA_VERSION = "ai-jobs-v6"
 _SOURCE_SCHEMA_VERSION = "ai-job-sources-v1"
 _BATCH_SCHEMA_VERSION = "ai-job-batch-members-v1"
 _EARNINGS_LOCK_SCHEMA_VERSION = "ai-earnings-final-locks-v1"
@@ -76,6 +76,11 @@ RECOVERABLE_FAILURE_CODES = frozenset(
     }
 )
 _SCHEDULED_HISTORY_JOB_TYPES = ("news_impact", "market_focus")
+# Completed earnings analyses, and failed ones holding a paid receipt, stay about
+# one reporting quarter. The stock page banner and the earnings cards read the
+# newest completed analysis; deleting it brings back "not generated" and invites
+# a paid re-run.
+EARNINGS_ANALYSIS_RETENTION_DAYS = 120
 _TERMINAL = {
     "completed",
     "failed",
@@ -158,6 +163,11 @@ _CLAUDE_COLUMNS = {
     "usage_cache_creation_5m_input_tokens": "INTEGER",
     "usage_cache_creation_1h_input_tokens": "INTEGER",
 }
+_EARNINGS_ADMISSION_COLUMNS = {
+    # Admission is server-owned metadata, not a model fact or request identity.
+    # It intentionally records no account ID or private watchlist contents.
+    "earnings_featured_verified": "INTEGER NOT NULL DEFAULT 0 CHECK(earnings_featured_verified IN (0,1))",
+}
 _CACHE_USAGE_FIELDS = (
     "cache_creation_input_tokens",
     "cache_creation_5m_input_tokens",
@@ -169,7 +179,8 @@ _TOOL_USAGE_FIELDS = (
 _AI_JOBS_TABLE_SQL = _AI_JOBS_V4_TABLE_SQL.replace(
     "    openai_response_id TEXT,",
     "    openai_response_id TEXT,\n" + "".join(
-        f"    {name} {definition},\n" for name, definition in _CLAUDE_COLUMNS.items()
+        f"    {name} {definition},\n"
+        for name, definition in {**_CLAUDE_COLUMNS, **_EARNINGS_ADMISSION_COLUMNS}.items()
     ).rstrip("\n"),
 )
 _AI_JOBS_INDEX_SQL = """
@@ -431,7 +442,9 @@ def _settled_budget_charge_microusd(
     *,
     fallback_microusd: int,
     model: str | None = None,
+    rounds: Any = None,
 ) -> int:
+    """``rounds`` are a continued Claude conversation's requests, priced one by one."""
     from app.services.ai_jobs.runtime import settled_usage_cost_microusd
 
     return settled_usage_cost_microusd(
@@ -439,6 +452,7 @@ def _settled_budget_charge_microusd(
         usage,
         fallback_microusd=fallback_microusd,
         model=model,
+        rounds=rounds if isinstance(rounds, list) else None,
     )
 
 
@@ -479,11 +493,13 @@ def _backfilled_budget_charge(missing: Mapping[str, Any]) -> int | None:
     # The receipt carries tool counters that have no separate SQL
     # columns. Recalculate from that durable evidence, not an
     # incomplete token-only projection after process restart.
+    rounds = None
     if missing["provider_result_json"]:
         try:
             receipt = json.loads(missing["provider_result_json"])
             receipt_usage = receipt.get("usage") if isinstance(receipt, dict) else None
             usage = dict(receipt_usage) if isinstance(receipt_usage, dict) else {}
+            rounds = receipt.get("rounds") if isinstance(receipt, dict) else None
         except (TypeError, ValueError):
             usage = {}
     elif _confirmed_unbilled_claude_row(missing):
@@ -512,6 +528,7 @@ def _backfilled_budget_charge(missing: Mapping[str, Any]) -> int | None:
             usage,
             fallback_microusd=reservation,
             model=str(missing["model"]),
+            rounds=rounds,
         )
         if has_terminal_usage
         else reservation
@@ -632,7 +649,7 @@ class AIJobRepository:
                 row["name"]
                 for row in connection.execute("PRAGMA table_info(ai_jobs)")
             }
-            for name, definition in _CLAUDE_COLUMNS.items():
+            for name, definition in {**_CLAUDE_COLUMNS, **_EARNINGS_ADMISSION_COLUMNS}.items():
                 if name not in columns:
                     connection.execute(f"ALTER TABLE ai_jobs ADD COLUMN {name} {definition}")
             progress_schema = connection.execute(
@@ -997,11 +1014,16 @@ class AIJobRepository:
         force_retry: bool = False,
         batch_id: str | None = None,
         batch_position: int | None = None,
+        earnings_featured_verified: bool = False,
     ) -> tuple[dict[str, Any], bool]:
         if execution_mode != "background":
             raise ValueError("background_execution_required")
         if submission_source not in {"manual", "scheduled"}:
             raise ValueError("invalid_submission_source")
+        if type(earnings_featured_verified) is not bool or (
+            earnings_featured_verified and job_type != "earnings_impact"
+        ):
+            raise ValueError("invalid_earnings_admission")
         if batch_id is not None:
             if (
                 job_type != "news_impact"
@@ -1263,12 +1285,28 @@ class AIJobRepository:
                         execution_number=global_max_execution + 1,
                         batch_id=batch_id,
                         batch_position=batch_position,
+                        earnings_featured_verified=earnings_featured_verified,
                     )
                     decorated = self._decorate_earnings_row(connection, row)
                     connection.commit()
                     return decorated, True
                 # 与 get_job 同一口径补上终稿锁与「终稿进行中」：202 响应直接
                 # 用这一行生成报告状态（2026-09-25 审计）。
+                if (
+                    earnings_featured_verified
+                    and not existing.get("earnings_featured_verified")
+                    and existing["status"] in {"pending", "queued", "in_progress"}
+                    and not existing.get("submission_started_at")
+                    and not existing.get("openai_response_id")
+                    and not existing.get("anthropic_message_id")
+                ):
+                    # Reusing an unsubmitted job can add trusted admission,
+                    # without changing its hash, facts, execution or history.
+                    connection.execute(
+                        "UPDATE ai_jobs SET earnings_featured_verified=1 WHERE job_id=?",
+                        (existing["job_id"],),
+                    )
+                    existing["earnings_featured_verified"] = 1
                 decorated = self._decorate_earnings_row(connection, existing)
                 connection.commit()
                 return decorated, False
@@ -1299,6 +1337,7 @@ class AIJobRepository:
                 execution_number=1,
                 batch_id=batch_id,
                 batch_position=batch_position,
+                earnings_featured_verified=earnings_featured_verified,
             )
             decorated = self._decorate_earnings_row(connection, row)
             connection.commit()
@@ -1353,6 +1392,7 @@ class AIJobRepository:
         execution_number: int,
         batch_id: str | None = None,
         batch_position: int | None = None,
+        earnings_featured_verified: bool = False,
     ) -> dict[str, Any]:
         job_id = "aij_" + uuid.uuid4().hex
         connection.execute(
@@ -1361,8 +1401,8 @@ class AIJobRepository:
                 job_id,job_type,request_hash,payload_json,status,priority,
                 model,reasoning,execution_mode,prompt_version,schema_version,
                 schema_sha256,next_attempt_at,retry_of_job_id,execution_number,
-                created_at,updated_at
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                created_at,updated_at,earnings_featured_verified
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 job_id,
@@ -1382,6 +1422,7 @@ class AIJobRepository:
                 execution_number,
                 now,
                 now,
+                int(earnings_featured_verified),
             ),
         )
         connection.execute(
@@ -1717,51 +1758,60 @@ class AIJobRepository:
     def prune_earnings_retention(
         self,
         *,
+        retention_days: int,
         now: datetime | None = None,
-        retention_days: int = 30,
     ) -> int:
-        """Delete terminal earnings inputs and outputs strictly before cutoff."""
+        """Delete settled earnings jobs strictly before their cutoff.
+
+        Completed analyses and failed jobs holding a paid receipt keep
+        ``EARNINGS_ANALYSIS_RETENTION_DAYS``; other settled rows follow
+        ``retention_days``. A job whose report date has not passed is kept
+        whatever its status, or the scheduler would buy it again.
+        """
 
         if isinstance(retention_days, bool) or retention_days < 1:
             raise ValueError("invalid_earnings_retention_days")
         self.ensure_initialized()
         observed = (now or _utcnow()).astimezone(timezone.utc)
-        cutoff = _iso(observed - timedelta(days=retention_days))
-        with self._connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            expired_ids = [
-                str(row["job_id"])
-                for row in connection.execute(
-                    """SELECT job_id FROM ai_jobs
-                       WHERE job_type='earnings_impact'
-                         AND status IN (
-                           'completed','failed','cancelled',
-                           'insufficient_context','budget_blocked'
-                         )
-                         AND COALESCE(completed_at,updated_at,created_at)<?""",
-                    (cutoff,),
-                ).fetchall()
-            ]
-            if not expired_ids:
+        parameters = (
+            _iso(observed - timedelta(days=EARNINGS_ANALYSIS_RETENTION_DAYS)),
+            _iso(observed - timedelta(days=retention_days)),
+            # US market dates trail UTC by up to a day.
+            (observed - timedelta(days=1)).date().isoformat(),
+        )
+        deleted = 0
+        while True:
+            with self._connect() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                expired_ids = [
+                    str(row["job_id"])
+                    for row in connection.execute(
+                        """SELECT job_id FROM ai_jobs
+                           WHERE job_type='earnings_impact'
+                             AND status IN (
+                               'completed','failed','cancelled',
+                               'insufficient_context','budget_blocked'
+                             )
+                             AND COALESCE(completed_at,updated_at,created_at)<CASE
+                               WHEN status='completed'
+                                 OR (status='failed' AND provider_result_json IS NOT NULL)
+                               THEN ? ELSE ? END
+                             AND COALESCE(json_extract(payload_json,'$.earnings_date'),'')<?
+                           LIMIT 500""",
+                        parameters,
+                    ).fetchall()
+                ]
+                if not expired_ids:
+                    connection.commit()
+                    return deleted
+                placeholders = ",".join("?" for _ in expired_ids)
+                for table in ("ai_job_sources", "ai_job_batch_members", "ai_earnings_final_locks", "ai_jobs"):
+                    connection.execute(
+                        f"DELETE FROM {table} WHERE job_id IN ({placeholders})",
+                        expired_ids,
+                    )
                 connection.commit()
-                return 0
-            placeholders = ",".join("?" for _ in expired_ids)
-            params = tuple(expired_ids)
-            connection.execute(
-                f"DELETE FROM ai_job_sources WHERE job_id IN ({placeholders})",
-                params,
-            )
-            connection.execute(
-                f"DELETE FROM ai_earnings_final_locks "
-                f"WHERE job_id IN ({placeholders})",
-                params,
-            )
-            connection.execute(
-                f"DELETE FROM ai_jobs WHERE job_id IN ({placeholders})",
-                params,
-            )
-            connection.commit()
-            return len(expired_ids)
+                deleted += len(expired_ids)
 
     def prune_scheduled_history(
         self,
@@ -1769,6 +1819,7 @@ class AIJobRepository:
         retain_days: int,
         now: datetime | None = None,
         batch_size: int = 500,
+        protected_job_ids: Iterable[str] = (),
     ) -> int:
         """Delete settled news and focus jobs older than ``retain_days``.
 
@@ -1777,9 +1828,8 @@ class AIJobRepository:
         完成时间都要早于截止点，当天才结算的积压任务仍留在当日 token 账里。
         候选在写锁外只读选出；每批一个短写事务，批内按同一条件复核后再删，
         首次清理上万行时其它写入方（认领、入队、取消）仍能在批间拿到写锁。
-        带付费回执（provider_result_json）的失败任务永不删除：被本地校验误判
-        失败的结果只能靠这份回执离线找回（recover_ai_schema_results），备份只留
-        一份时删了就无从恢复。
+        已付费的失败回执也受同一窗口约束；超过窗口且无现存发布引用后，
+        离线恢复能力随回执删除而结束。活动任务与 protected_job_ids 不删除。
         """
 
         if (
@@ -1799,8 +1849,7 @@ class AIJobRepository:
             f"""job_type IN ({",".join("?" for _ in job_types)})
                 AND status IN ({",".join("?" for _ in statuses)})
                 AND created_at<?
-                AND COALESCE(completed_at,updated_at,created_at)<?
-                AND NOT (status='failed' AND provider_result_json IS NOT NULL)"""
+                AND COALESCE(completed_at,updated_at,created_at)<?"""
         )
         settled_parameters = (*job_types, *statuses, cutoff, cutoff)
         with self._connect() as connection:
@@ -1811,6 +1860,8 @@ class AIJobRepository:
                     settled_parameters,
                 ).fetchall()
             ]
+        protected = set(protected_job_ids)
+        expired_ids = [job_id for job_id in expired_ids if job_id not in protected]
         deleted = 0
         for offset in range(0, len(expired_ids), int(batch_size)):
             chunk = expired_ids[offset : offset + int(batch_size)]
@@ -2412,10 +2463,12 @@ class AIJobRepository:
     def _provider_receipt_json(receipt: dict[str, Any]) -> str:
         fields = {"provider", "model", "id", "output_text", "stop_reason", "terminal_error", "usage"}
         if (not isinstance(receipt, dict) or not fields <= set(receipt)
-                or set(receipt) - fields - {"evidence_sources", "tool_evidence", "tool_evidence_version", "request_ids", "rounds", "openai_web_calls"}):
+                or set(receipt) - fields - {"evidence_sources", "tool_evidence", "tool_evidence_version", "request_ids", "rounds", "openai_web_calls", "job_type"}):
             raise ValueError("ai_job_provider_receipt_invalid")
         if not ((receipt["provider"] == "anthropic" and _uses_claude(receipt["model"]))
                 or (receipt["provider"] == "openai" and receipt["model"] == "gpt-5.6-luna")):
+            raise ValueError("ai_job_provider_receipt_invalid")
+        if "job_type" in receipt and (receipt["job_type"] != "earnings_impact" or receipt["provider"] != "anthropic"):
             raise ValueError("ai_job_provider_receipt_invalid")
         if receipt["provider"] == "openai":
             calls = receipt.get("openai_web_calls")
@@ -2502,6 +2555,15 @@ class AIJobRepository:
         return value
 
     @staticmethod
+    def _round_allows_continuation(value: dict[str, Any], item: dict[str, Any]) -> bool:
+        return item.get("stop_reason") == "pause_turn" or (
+            _uses_claude(value.get("model"))
+            and value.get("job_type") == "earnings_impact"
+            and item.get("stop_reason") == "end_turn"
+            and item.get("continuation_reason") == "incomplete_final_json"
+        )
+
+    @staticmethod
     def _validate_provider_rounds(value: dict[str, Any], *, complete: bool) -> None:
         from app.services.ai_jobs.claude_provider import sum_round_usage
 
@@ -2513,9 +2575,11 @@ class AIJobRepository:
                 or len(request_ids) - len(rounds) > (0 if complete else 1)):
             raise ValueError("ai_job_provider_rounds_invalid")
         for index, item in enumerate(rounds):
-            if (not isinstance(item, dict) or set(item) != {"id", "stop_reason", "usage"}
+            if (not isinstance(item, dict) or not {"id", "stop_reason", "usage"} <= set(item)
+                    or set(item) - {"id", "stop_reason", "usage", "continuation_reason"}
+                    or ("continuation_reason" in item and not (_uses_claude(value.get("model")) and value.get("job_type") == "earnings_impact" and item["stop_reason"] == "end_turn" and item["continuation_reason"] == "incomplete_final_json"))
                     or item["id"] != request_ids[index]
-                    or (index < len(request_ids) - 1 and item["stop_reason"] != "pause_turn")):
+                    or (index < len(request_ids) - 1 and not AIJobRepository._round_allows_continuation(value, item))):
                 raise ValueError("ai_job_provider_rounds_invalid")
             # Reuse the same usage shape/invariants as a terminal receipt, but
             # never include nested rounds or untrusted output in this check.
@@ -2532,8 +2596,10 @@ class AIJobRepository:
     @staticmethod
     def _provider_progress_json(progress: dict[str, Any]) -> str:
         fields = {"provider", "model", "id", "request_ids", "rounds", "confirmed_usage"}
-        if (not isinstance(progress, dict) or set(progress) != fields
+        if (not isinstance(progress, dict) or not fields <= set(progress) or set(progress) - fields - {"job_type"}
                 or progress["provider"] != "anthropic" or not _uses_claude(progress["model"])):
+            raise ValueError("ai_job_provider_progress_invalid")
+        if "job_type" in progress and progress["job_type"] != "earnings_impact":
             raise ValueError("ai_job_provider_progress_invalid")
         AIJobRepository._validate_provider_rounds(progress, complete=False)
         value = canonical_json_text(progress)
@@ -2543,7 +2609,7 @@ class AIJobRepository:
 
     @staticmethod
     def _progress_extends(previous: dict[str, Any], current: dict[str, Any]) -> bool:
-        return (all(previous[key] == current[key] for key in ("provider", "model", "id"))
+        return (all(previous.get(key) == current.get(key) for key in ("provider", "model", "id", "job_type"))
                 and current["request_ids"][:len(previous["request_ids"])] == previous["request_ids"]
                 and current["rounds"][:len(previous["rounds"])] == previous["rounds"])
 
@@ -2564,7 +2630,7 @@ class AIJobRepository:
         progress_json = self._provider_progress_json(progress)
         shared_limit = usd_to_microusd(shared_daily_budget_usd)
         if will_continue and (
-            not progress["rounds"] or progress["rounds"][-1]["stop_reason"] != "pause_turn"
+            not progress["rounds"] or not self._round_allows_continuation(progress, progress["rounds"][-1])
             or len(progress["rounds"]) != len(progress["request_ids"])
             or len(progress["rounds"]) >= 4
             or any(progress["confirmed_usage"].get(key) is None for key in (
@@ -2584,7 +2650,7 @@ class AIJobRepository:
                      AND provider_result_json IS NULL""",
                 (job_id, owner, now, progress["model"], progress["id"]),
             ).fetchone()
-            if row is None:
+            if row is None or ("job_type" in progress and progress["job_type"] != row["job_type"]):
                 raise RuntimeError("ai_job_provider_progress_rejected")
             previous = connection.execute(
                 "SELECT progress_json FROM ai_job_provider_progress WHERE job_id=?", (job_id,),
@@ -2594,7 +2660,7 @@ class AIJobRepository:
             held = int(row["budget_charge_microusd"] or 0)
             confirmed = _settled_budget_charge_microusd(
                 str(row["job_type"]), progress["confirmed_usage"],
-                fallback_microusd=held, model=str(row["model"]),
+                fallback_microusd=held, model=str(row["model"]), rounds=progress["rounds"],
             )
             needed = confirmed + (
                 _task_budget_reservation_microusd(str(row["job_type"]), model=str(row["model"]))
@@ -2623,7 +2689,7 @@ class AIJobRepository:
         self.ensure_initialized()
         with self._connect() as connection:
             row = connection.execute(
-                """SELECT p.progress_json,j.model,j.anthropic_message_id
+                """SELECT p.progress_json,j.model,j.anthropic_message_id,j.job_type
                    FROM ai_job_provider_progress p JOIN ai_jobs j ON j.job_id=p.job_id WHERE p.job_id=?""",
                 (job_id,),
             ).fetchone()
@@ -2631,7 +2697,7 @@ class AIJobRepository:
             return None
         progress = json.loads(row["progress_json"])
         self._provider_progress_json(progress)
-        if progress["model"] != row["model"] or progress["id"] != row["anthropic_message_id"]:
+        if progress["model"] != row["model"] or progress["id"] != row["anthropic_message_id"] or ("job_type" in progress and progress["job_type"] != row["job_type"]):
             raise ValueError("ai_job_provider_progress_identity_mismatch")
         return progress
 
@@ -2695,7 +2761,7 @@ class AIJobRepository:
                      AND openai_response_id IS NULL""",
                 (job_id, owner, now, receipt["model"]),
             ).fetchone()
-            if row is None:
+            if row is None or ("job_type" in receipt and receipt["job_type"] != row["job_type"]):
                 raise RuntimeError("ai_job_lease_lost")
             if row["anthropic_message_id"] not in (None, receipt["id"]):
                 raise RuntimeError("ai_job_provider_result_conflict")
@@ -2716,7 +2782,7 @@ class AIJobRepository:
             charge = _settled_budget_charge_microusd(
                 str(row["job_type"]), usage,
                 fallback_microusd=int(row["budget_charge_microusd"] or 0),
-                model=str(row["model"]),
+                model=str(row["model"]), rounds=receipt.get("rounds"),
             )
             connection.execute(
                 """UPDATE ai_jobs SET anthropic_message_id=?,provider_result_json=?,
@@ -2735,13 +2801,15 @@ class AIJobRepository:
         self.ensure_initialized()
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT model,anthropic_message_id,openai_response_id,provider_result_json FROM ai_jobs WHERE job_id=?", (job_id,),
+                "SELECT model,anthropic_message_id,openai_response_id,provider_result_json,job_type FROM ai_jobs WHERE job_id=?", (job_id,),
             ).fetchone()
         if not row or not row["provider_result_json"]:
             return None
         receipt = json.loads(row["provider_result_json"])
         self._provider_receipt_json(receipt)
         if receipt["model"] != row["model"] or receipt["id"] != row["anthropic_message_id" if receipt["provider"] == "anthropic" else "openai_response_id"]:
+            raise ValueError("ai_job_provider_result_identity_mismatch")
+        if "job_type" in receipt and receipt["job_type"] != row["job_type"]:
             raise ValueError("ai_job_provider_result_identity_mismatch")
         receipt.setdefault("evidence_sources", [])
         return receipt
@@ -2847,13 +2915,16 @@ class AIJobRepository:
             if current is None:
                 connection.rollback()
                 raise RuntimeError("ai_job_completion_rejected")
+            rounds = None
             if current["provider_result_json"]:
-                usage = json.loads(current["provider_result_json"])["usage"]
+                stored = json.loads(current["provider_result_json"])
+                usage, rounds = stored["usage"], stored.get("rounds")
             budget_charge_microusd = _settled_budget_charge_microusd(
                 str(current["job_type"]),
                 usage,
                 fallback_microusd=int(current["budget_charge_microusd"] or 0),
                 model=str(current["model"]),
+                rounds=rounds,
             )
             updated = connection.execute(
                 """
@@ -3168,11 +3239,11 @@ class AIJobRepository:
             if current is None:
                 connection.rollback()
                 raise RuntimeError("ai_job_lease_lost")
-            usage_values = (
-                json.loads(current["provider_result_json"])["usage"]
-                if current["provider_result_json"]
-                else dict(usage or {})
+            stored = (
+                json.loads(current["provider_result_json"])
+                if current["provider_result_json"] else None
             )
+            usage_values = stored["usage"] if stored else dict(usage or {})
             has_reported_usage = any(
                 usage_values.get(field) is not None
                 for field in (
@@ -3212,6 +3283,7 @@ class AIJobRepository:
                     usage_values,
                     fallback_microusd=budget_charge_microusd,
                     model=str(current["model"]),
+                    rounds=stored.get("rounds") if stored else None,
                 )
             elif confirmed_without_usage or _reservation_released(
                 "failed",
@@ -3286,11 +3358,11 @@ class AIJobRepository:
             if current is None:
                 connection.commit()
                 return
-            usage_values = (
-                json.loads(current["provider_result_json"])["usage"]
-                if current["provider_result_json"]
-                else dict(usage or {})
+            stored = (
+                json.loads(current["provider_result_json"])
+                if current["provider_result_json"] else None
             )
+            usage_values = stored["usage"] if stored else dict(usage or {})
             budget_charge_microusd = int(
                 current["budget_charge_microusd"] or 0
             )
@@ -3300,6 +3372,7 @@ class AIJobRepository:
                     usage_values,
                     fallback_microusd=budget_charge_microusd,
                     model=str(current["model"]),
+                    rounds=stored.get("rounds") if stored else None,
                 )
             elif _reservation_released(
                 "cancelled",

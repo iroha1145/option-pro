@@ -734,6 +734,7 @@ def test_earnings_analysis_task_queues_only_new_reports_within_5_days(
     )
     personal = SimpleNamespace(
         features=SimpleNamespace(catalyst_mode="off"),
+        storage=SimpleNamespace(retention_days=10),
     )
 
     async def builder(_today):
@@ -903,6 +904,7 @@ def test_scheduled_pre_release_cap_ignores_other_jobs_but_keeps_global_cap(
             "earnings": [
                 {
                     "ticker": f"P{index:03d}",
+                    "public_featured": True,
                     "name": f"Pre release {index}",
                     "earnings_date": "2026-07-24",
                     "days_until": 1,
@@ -1040,6 +1042,7 @@ def test_existing_scheduled_pre_release_jobs_consume_the_independent_cap(
             "earnings": [
                 {
                     "ticker": f"N{index:03d}",
+                    "public_featured": True,
                     "earnings_date": "2026-07-25",
                     "days_until": 2,
                     "eps_estimate": 1.0,
@@ -1250,6 +1253,7 @@ def test_manual_earnings_action_works_when_daily_schedule_is_off(
     )
     personal = SimpleNamespace(
         features=SimpleNamespace(catalyst_mode="off"),
+        storage=SimpleNamespace(retention_days=10),
     )
 
     monkeypatch.setattr(
@@ -3537,7 +3541,11 @@ def test_default_task_inventory_and_maintenance_backup(
         worker_tasks.AI_HISTORY_MIN_RETAIN_DAYS,
     )
     result = asyncio.run(maintenance_spec.runner())
-    assert result.status == "idle"
+    # These inventory fixtures contain only `sample`, not Catalyst tables.
+    # Backups succeed, but the real cleanup must report its missing-table failure.
+    assert result.status == "degraded"
+    assert result.error_code == "ai_history_retention_failed"
+    assert result.details["ai_history"]["status"] == "failed"
     assert set(result.details["backed_up"]) == {
         "optix",
         "catalyst-cache",

@@ -6,6 +6,7 @@ import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/hooks/useToast';
 import { watchlistErrorMessage } from '@/api/modules/account';
 import { parseWatchlistInput } from '@/lib/personalWatchlist';
+import { loginReturnState } from '@/lib/loginReturn';
 import Icon from '@/components/icons';
 import IconSwap from '@/components/shared/IconSwap';
 import Spinner from '@/components/shared/Spinner';
@@ -26,7 +27,7 @@ export default function WatchlistToggle({ ticker }: { ticker: string }) {
   /* 与页首「返回」同一副次级按钮：桌面 32px，窄屏和粗指针 44px；已加入时走 aria-pressed 的选中态 */
   const style = 'control-button touch-target';
   if (!canManageWatchlist && !personal.loading && !personal.error) {
-    return <Link className={style} to="/login" state={{ from: location.pathname }}><Icon name="plus" size={15} />{t('登录后加入关注')}</Link>;
+    return <Link className={style} to="/login" state={loginReturnState(location)}><Icon name="plus" size={15} />{t('登录后加入关注')}</Link>;
   }
   const toggle = async () => {
     if (personal.error) { await personal.refresh(); return; }

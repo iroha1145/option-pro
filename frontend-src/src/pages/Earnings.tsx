@@ -383,6 +383,13 @@ export default function Earnings() {
     () => items.find((item) => item.ticker === selectedTicker) ?? null,
     [items, selectedTicker],
   );
+  /* 影响卡能否提交分析：公共重点公司或本账号自选 → true；账号自选还在加载且这行
+     不是公共重点公司 → null（暂时判定不了）；其余 → false。 */
+  const analysisEligible = selectedRow === null
+    ? false
+    : isFeaturedRow(selectedRow, personalTickers)
+      ? true
+      : personal.loading ? null : false;
 
   // 恢复的上一份真实快照要立即可见:骨架只在"什么都没有"时出现。
   // loading && data = 恢复值显示中、后台确认中(页头有明示)。
@@ -698,6 +705,7 @@ export default function Earnings() {
           ) : (
             <ImpactCard
               row={selectedRow}
+              analysisEligible={analysisEligible}
               ticker={selectedTicker}
               calendarRevision={q.data?.asOf ?? refreshStatus}
               onAnalyzed={onReportAnalysis}

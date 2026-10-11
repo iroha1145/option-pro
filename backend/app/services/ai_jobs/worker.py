@@ -91,7 +91,7 @@ async def _stream_claude_with_controls(
     prepared: Any,
 ) -> Any:
     """Bound total runtime and honor cancellation while the lease stays live."""
-    from app.services.ai_jobs.claude_provider import stream_message, stream_market_focus
+    from app.services.ai_jobs.claude_provider import stream_conversation, stream_message
 
     async def started(message_id: str) -> None:
         # This identity is for diagnostics, never a remotely retrievable handle.
@@ -110,8 +110,8 @@ async def _stream_claude_with_controls(
         )
 
     invocation = (
-        stream_market_focus(prepared, on_message_start=started, on_progress=progress)
-        if job["model"] == runtime.SONNET_MODEL and job["job_type"] == "market_focus"
+        stream_conversation(prepared, on_message_start=started, on_progress=progress)
+        if runtime.claude_conversation(job["job_type"], job["model"])
         else stream_message(prepared, on_message_start=started)
     )
     operation = asyncio.create_task(invocation)
@@ -780,6 +780,20 @@ async def process_job(
         # The task's own variant (a Luna news task with an article body never
         # searches) and the job's own model decide whether its stored identity
         # is still current, including the listed predecessor identities.
+        if job["job_type"] == "earnings_impact" and not job.get("earnings_featured_verified"):
+            from app.services.earnings_analysis_scope import (
+                is_featured_company, owner_watchlist_tickers,
+            )
+
+            # Old queue rows have no admission marker. Recheck only their
+            # trusted stored facts and the owner's selections. Paid responses
+            # and receipts returned above must always be settled, regardless
+            # of subsequent changes to eligibility or configuration.
+            if not is_featured_company(payload) and not is_featured_company(
+                payload, personal_tickers=await asyncio.to_thread(owner_watchlist_tickers),
+            ):
+                repository.fail(job["job_id"], owner, "earnings_company_not_featured")
+                return
         current_identity = runtime.schema_identity(
             job["job_type"], model=str(settings.openai_model), payload=payload,
         )

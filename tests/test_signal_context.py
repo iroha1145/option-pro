@@ -577,17 +577,17 @@ def test_result_may_reference_tickers_outside_security_context():
     assert "NVDA" in validated["event_risks"][0]
 
     # 2026-10-10 口径变更：不在上下文代码表里的代码，不在证券语境时按词条放行（原先被拒）；
-    # 在证券语境里照旧要求绑定。
+    # 正文证券语境也不猜测股票身份；结构字段仍绑定本任务。
     assert validate_result(
         "signal_analysis", json.dumps(result, ensure_ascii=False), {"ticker": "AMD"}
     )["event_risks"] == result["event_risks"]
     result["event_risks"] = ["相关新闻显示NVDA股价上涨，对AMD构成参照。"]
-    with pytest.raises(Exception):
-        validate_result(
-            "signal_analysis",
-            json.dumps(result, ensure_ascii=False),
-            {"ticker": "AMD"},
-        )
+    assert validate_result(
+        "signal_analysis", json.dumps(result, ensure_ascii=False), {"ticker": "AMD"},
+    )["event_risks"] == result["event_risks"]
+    result["asset"] = "NVDA"
+    with pytest.raises(ValueError, match="signal_ticker_mismatch"):
+        validate_result("signal_analysis", json.dumps(result), {"ticker": "AMD"})
 
 
 def test_source_binding_covers_context_news_titles():

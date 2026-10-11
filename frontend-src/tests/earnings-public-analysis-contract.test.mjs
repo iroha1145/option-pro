@@ -156,6 +156,9 @@ test('单标的财报任务向访客开放且只使用报告级公开接口', ()
   assert.equal(card.includes('owner / visitor 均可'), true);
   assert.equal(card.includes('earningsApi.reportAnalysis'), true);
   assert.equal(card.includes('earningsApi.requestReportAnalysis'), true);
+  // 确认步骤的模型名来自服务端「尚无分析」409 的响应体，源码里不得写死任何模型名。
+  assert.doesNotMatch(card, /claude[ -](haiku|sonnet|opus)/i);
+  assert.match(card, /aiModelLabel\(runModel\./);
   assert.equal(card.includes('aiJobsApi'), false);
   assert.equal(card.includes('createEarningsImpact'), false);
   assert.equal(card.includes('cancelJob'), false);
@@ -244,4 +247,16 @@ test('财报发布后显示自动重分析、进度和最终锁定状态', () =>
   assert.equal(page.includes('reportAnalysisStates[reportAnalysisKey(row.ticker, row.date)]'), true);
   assert.equal(page.includes('impactReady: analysis.result != null'), true);
   assert.equal(page.includes('onAnalyzed={onReportAnalysis}'), true);
+});
+
+
+test('report model metadata comes from the task envelope and lands on the result', () => {
+  const { normalizeEarningsReportAnalysis } = loadEarningsModule();
+  const report = normalizeEarningsReportAnalysis({ status: 'completed', model: 'claude-haiku-5-5', reasoning: 'high', result: completedResult });
+  assert.equal(report.result.model, 'claude-haiku-5-5');
+  assert.equal(report.result.reasoning, 'high');
+  // 信封没带模型就不显示：不借用当前默认模型。
+  const bare = normalizeEarningsReportAnalysis({ status: 'completed', result: completedResult });
+  assert.equal('model' in bare.result, false);
+  assert.equal('reasoning' in bare.result, false);
 });

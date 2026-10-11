@@ -21,7 +21,7 @@ async function fixture(page, options = {}) {
   state.customer = { access_mode: 'password', logged_in: false, account: { logged_in: true, username: 'alice' } };
   state.visitor = { access_mode: 'password', logged_in: false, account: null };
   page.on('pageerror', error => state.errors.push(error.message));
-  await page.addInitScript(() => localStorage.setItem('optix:locale', 'zh'));
+  await page.addInitScript(locale => localStorage.setItem('optix:locale', locale), options.locale ?? 'zh');
   await page.route('**/*', route => ['127.0.0.1', 'localhost'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url());
@@ -53,6 +53,21 @@ async function fixture(page, options = {}) {
       json = { event: { ...events.find(row => path.endsWith(row.event_id)), score_version: 'detail-v1' }, transitions: [] };
     }
     else if (path === '/api/breakouts/status') json = { enabled: true, market_session: 'regular', last_scan_at: at };
+    else if (path.startsWith('/api/ai/earnings-impact/') && path.includes('/reports/')) {
+      const ticker = path.split('/')[4];
+      if (route.request().method() === 'POST') {
+        if (state.rejectEarnings) return route.fulfill({ status: 409, json: { error: 'earnings_company_not_featured', code: 'earnings_company_not_featured' } });
+        json = { status: 'queued', result: null };
+      } else if (state.analysisRequired) {
+        return route.fulfill({ status: 409, json: { status: 'analysis_required', _report_id: `${ticker}:${tomorrow}`, _report_date: tomorrow,
+          _locked: false, _final: false, _finalization_in_progress: false, ...state.analysisRequired } });
+      } else {
+        const history = state.earningsHistory === ticker;
+        json = { status: state.earningsFailed ? 'failed' : history ? 'completed' : 'not_requested',
+          error_code: state.earningsFailed ? 'provider_error' : null,
+          result: history ? { output_language: 'zh-CN', ticker, summary: '保留的历史财报分析', expectation: '历史业绩预期', impacted: [] } : null };
+      }
+    }
     else if (path === '/api/earnings/upcoming') json = { earnings: ['AAOI', 'CRDO'].map(ticker => ({ ticker, name: ticker, earnings_date: tomorrow, eps_estimate: 1, revenue_estimate: 100000000, market_cap: 1000000000, public_featured: false })), as_of: at, data_limited: false, source_status: 'ok' };
     else if (/^\/api\/stocks\/[^/]+$/.test(path)) json = { ticker: path.split('/').at(-1), name: '本地验收', price: 103, change: 1, change_percent: 1, prev_close: 102, as_of: at };
     else if (path.endsWith('/chart')) json = { ticker: path.split('/')[3], interval: '1d', adjustment: 'raw', bars: Array.from({ length: 60 }, (_, i) => ({ t: new Date(Date.UTC(2026, 6, 1 + i)).toISOString().slice(0, 10), o: 101, h: 105, l: 100, c: 103, v: 1000 })) };
@@ -206,3 +221,116 @@ test('repeated job lookup failures pause and resume the same job without a secon
   expect(state.jobPosts).toBe(1);
   expect(state.errors).toEqual([]);
 });
+
+
+test('non-featured earnings keep historical results without generation or retry requests', async ({ page }) => {
+  const state = await fixture(page, { earningsFailed: true });
+  await page.goto('/earnings');
+  await page.getByRole('tab', { name: /^全部公司/ }).click();
+  const list = page.getByRole('region', { name: '即将公布', exact: true });
+  await list.locator('[role="button"][aria-pressed]').filter({ visible: true }).filter({ hasText: 'CRDO' }).click();
+  const card = page.getByRole('complementary', { name: '财报影响分析', exact: true });
+  await expect(card).toContainText('尚未生成财报影响分析');
+  await expect(card).toContainText('仅重点公司支持财报分析');
+  await expect(card).not.toContainText('分析任务失败');
+  await expect(card.getByRole('button', { name: '生成分析', exact: true })).toHaveCount(0);
+  await expect(card.getByRole('button', { name: '重试', exact: true })).toHaveCount(0);
+  state.earningsFailed = false;
+  state.earningsHistory = 'CRDO';
+  await page.reload();
+  await page.getByRole('tab', { name: /^全部公司/ }).click();
+  await list.locator('[role="button"][aria-pressed]').filter({ visible: true }).filter({ hasText: 'CRDO' }).click();
+  await expect(card).toContainText('保留的历史财报分析');
+  await expect(card).not.toContainText('仅重点公司支持财报分析');
+  expect(state.requests.filter(row => row.path.startsWith('/api/ai/earnings-impact/') && row.method === 'POST')).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
+test('featured earnings generation follows account changes and cannot retain a stale confirmation', async ({ page }) => {
+  // alice is a signed-in customer and AAOI is on her watchlist, so the row is eligible for her.
+  // Visitor AI actions are off by default: only the owner can submit.
+  const state = await fixture(page);
+  await page.goto('/earnings');
+  await page.getByRole('tab', { name: /^全部公司/ }).click();
+  const list = page.getByRole('region', { name: '即将公布', exact: true });
+  const aaoi = list.locator('[role="button"][aria-pressed]').filter({ visible: true }).filter({ hasText: 'AAOI' });
+  const card = page.getByRole('complementary', { name: '财报影响分析', exact: true });
+  const generate = card.getByRole('button', { name: '生成分析', exact: true });
+  const ownerLogin = '请管理员登录后生成分析，已有分析可继续查看';
+  const confirmation = '为 AAOI 生成本次财报分析。';
+  const posts = () => state.requests.filter(row => row.path.startsWith('/api/ai/earnings-impact/') && row.method === 'POST');
+  const signIn = async owner => {
+    state.owner = owner;
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  };
+  await aaoi.click();
+  await expect(card).toContainText(ownerLogin);
+  await expect(generate).toHaveCount(0);
+
+  await signIn(true);
+  await aaoi.click();
+  await generate.click();
+  await expect(card).toContainText(confirmation);
+
+  await signIn(false);
+  await expect(page.getByRole('button', { name: /退出 alice/ })).toBeVisible();
+  await expect(card).toContainText(ownerLogin);
+  await expect(card).not.toContainText(confirmation);
+  await expect(generate).toHaveCount(0);
+
+  await signIn(true);
+  await expect(generate).toBeVisible();
+  await expect(card).not.toContainText(confirmation);
+  await generate.click();
+  await generate.click();
+  await expect(card).toContainText('等待分析');
+  expect(posts()).toHaveLength(1);
+  expect(state.errors).toEqual([]);
+});
+
+test('server eligibility rejection blocks repeated earnings submissions', async ({ page }) => {
+  const state = await fixture(page, { owner: true, rejectEarnings: true });
+  await page.goto('/earnings');
+  const card = page.getByRole('complementary', { name: '财报影响分析', exact: true });
+  await card.getByRole('button', { name: '生成分析', exact: true }).click();
+  await card.getByRole('button', { name: '生成分析', exact: true }).click();
+  await expect(card).toContainText('尚未生成财报影响分析');
+  await expect(card).toContainText('仅重点公司支持财报分析');
+  await expect(card.getByRole('button', { name: '生成分析', exact: true })).toHaveCount(0);
+  expect(state.requests.filter(row => row.path.startsWith('/api/ai/earnings-impact/') && row.method === 'POST')).toHaveLength(1);
+  expect(state.errors).toEqual([]);
+});
+
+test('the confirmation names the model a new request would run, and nothing when the server does not say', async ({ page }) => {
+  const state = await fixture(page, { owner: true, analysisRequired: { model: 'claude-haiku-5-5', reasoning: 'xhigh' } });
+  await page.goto('/earnings');
+  const card = page.getByRole('complementary', { name: '财报影响分析', exact: true });
+  await card.getByRole('button', { name: '生成分析', exact: true }).click();
+  await expect(card).toContainText('为 AAOI 生成本次财报分析。');
+  await expect(card).toContainText('Claude Haiku 5.5 · xhigh');
+  state.analysisRequired = {};
+  await page.reload();
+  await card.getByRole('button', { name: '生成分析', exact: true }).click();
+  await expect(card).toContainText('为 AAOI 生成本次财报分析。');
+  await expect(card).not.toContainText('Claude');
+  await expect(card).not.toContainText('xhigh');
+  expect(state.requests.filter(row => row.path.startsWith('/api/ai/earnings-impact/') && row.method === 'POST')).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
+
+for (const [locale, allCompanies, analysisName, message] of [
+  ['en', /^All companies/, 'Earnings impact analysis', 'Earnings analysis is available only for key companies.'],
+  ['ja', /^全企業/, '決算影響分析', '決算分析は重点企業のみが対象です。'],
+]) {
+  test(`non-featured earnings explain the restriction in ${locale}`, async ({ page }) => {
+    const state = await fixture(page, { locale });
+    await page.goto('/earnings');
+    await page.getByRole('tab', { name: allCompanies }).click();
+    await page.locator('[role="button"][aria-pressed]').filter({ visible: true }).filter({ hasText: 'CRDO' }).click();
+    const card = page.getByRole('complementary', { name: analysisName, exact: true });
+    await expect(card).toContainText(message);
+    expect(state.requests.filter(row => row.path.startsWith('/api/ai/earnings-impact/') && row.method === 'POST')).toEqual([]);
+    expect(state.errors).toEqual([]);
+  });
+}

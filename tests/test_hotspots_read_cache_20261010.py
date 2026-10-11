@@ -230,3 +230,50 @@ def test_focus_cycle_poll_checks_each_paid_result_once(production_cycle, monkeyp
     assert cold == 1
     assert len(calls) == cold
     assert second == first
+
+
+def test_current_hotspot_revision_is_projected_and_bound_once(production_cycle, monkeypatch):
+    _ai, intelligence, _cycle, clock = production_cycle
+    counts = {"bindings": 0, "projection": 0}
+    bindings = intelligence._hotspot_revision_bindings
+    projection = intelligence._hotspots_for_revision
+
+    def counted_bindings(*args, **kwargs):
+        counts["bindings"] += 1
+        return bindings(*args, **kwargs)
+
+    def counted_projection(*args, **kwargs):
+        counts["projection"] += 1
+        return projection(*args, **kwargs)
+
+    monkeypatch.setattr(intelligence, "_hotspot_revision_bindings", counted_bindings)
+    monkeypatch.setattr(intelligence, "_hotspots_for_revision", counted_projection)
+    result = as_visitor(intelligence.hotspots, limit=8, now=clock[0])
+    assert len(result["items"]) == 8
+    assert counts == {"bindings": 1, "projection": 1}
+
+
+def test_retention_keeps_current_focus_receipt_and_inputs(production_cycle):
+    ai, intelligence, cycle, clock = production_cycle
+    before = as_visitor(intelligence.latest_market_focus_cycle, now=clock[0])
+    assert before["status"] == "active"
+    assert before["latest_successful_cycle"]["cycle_id"] == cycle["cycle_id"]
+    later = clock[0] + timedelta(days=11)
+    intelligence.prune_journal(retention_days=10, now=later)
+    from app.worker.tasks import prune_ai_history
+    import asyncio
+    result, error = asyncio.run(prune_ai_history(
+        lambda: ai, retain_days=10, now=later, catalyst_cache_path=intelligence.db_path,
+    ))
+    assert error is None
+    assert ai.get_job(cycle["job_id"]) is not None
+    # The independent retention entry point uses the same publication protection.
+    from app.worker.tasks import MaintenanceTask, RetentionTask
+    backup = MaintenanceTask({"catalyst-cache": intelligence.db_path},
+                             destination=intelligence.db_path.parent / "backups", keep=1)
+    explicit = RetentionTask("test", backup, ai_repository_factory=lambda: ai, now=lambda: later)
+    _, explicit_error = asyncio.run(explicit._prune_ai_history())
+    assert explicit_error is None
+    assert ai.get_job(cycle["job_id"]) is not None
+    after = as_visitor(intelligence.latest_market_focus_cycle, now=clock[0])
+    assert after == before

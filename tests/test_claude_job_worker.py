@@ -72,7 +72,7 @@ def message(*, text=None, stop_reason="end_turn"):
 def install_stream(monkeypatch, response=None):
     calls = []
 
-    async def stream(prepared, *, on_message_start=None):
+    async def stream(prepared, *, on_message_start=None, tool_counts=None):
         calls.append(prepared)
         if on_message_start:
             await on_message_start("msg_claude_test")
@@ -148,7 +148,7 @@ def test_ambiguous_stream_failure_is_never_automatically_retried(tmp_path, monke
     ident = create_job(repo)
     calls = []
 
-    async def stream(prepared, *, on_message_start=None):
+    async def stream(prepared, *, on_message_start=None, tool_counts=None):
         calls.append(1)
         if stage == "after_message":
             await on_message_start("msg_claude_test")
@@ -190,7 +190,7 @@ def test_active_stream_cancellation_and_timeout_keep_unknown_charge(tmp_path, mo
     if action == "timeout":
         config = config.model_copy(update={"openai_background_poll_timeout_seconds": 0.01})
 
-    async def stream(prepared, *, on_message_start=None):
+    async def stream(prepared, *, on_message_start=None, tool_counts=None):
         await on_message_start("msg_claude_test")
         if action == "cancel":
             repo.request_cancel(ident)
@@ -256,8 +256,7 @@ def test_publish_storage_failure_keeps_receipt_for_local_retry(tmp_path, monkeyp
 
 
 @pytest.mark.parametrize("response,code", [
-    (message(text=""), "provider_empty_response"),
-    (message(text="not-json"), "schema_validation_failed"),
+    (message(text='{"ticker":"AAPL"}'), "schema_validation_failed"),
     (message(stop_reason="max_tokens"), "provider_incomplete_max_output_tokens"),
 ])
 def test_unusable_terminal_answer_is_saved_and_charged(tmp_path, monkeypatch, response, code):
@@ -269,6 +268,32 @@ def test_unusable_terminal_answer_is_saved_and_charged(tmp_path, monkeypatch, re
     assert row["error_code"] == code
     assert row["usage_total_tokens"] == 700
     assert repo.get_provider_result(ident) is not None
+
+
+def test_answers_without_final_json_are_nudged_until_the_round_cap(tmp_path, monkeypatch):
+    # An empty reply (xhigh can end the turn with the answer left in thinking)
+    # or prose without JSON earns a nudge, never more than four requests.
+    repo = AIJobRepository(tmp_path / "jobs.db")
+    ident = create_job(repo)
+    calls = []
+
+    async def stream(prepared, *, on_message_start=None, tool_counts=None):
+        calls.append(prepared)
+        message_id = f"msg_claude_test_{len(calls)}"
+        await on_message_start(message_id)
+        text = "" if len(calls) % 2 else "not-json"
+        return message(text=text).model_copy(update={"id": message_id})
+
+    monkeypatch.setattr(claude_provider, "stream_message", stream)
+    asyncio.run(worker.run_once(repo, settings(repo.path), "owner"))
+    row = repo.get_job(ident)
+    receipt = repo.get_provider_result(ident)
+    assert len(calls) == 4
+    assert row["error_code"] == "provider_continuation_limit"
+    assert row["usage_total_tokens"] == 4 * 700
+    assert receipt["request_ids"] == [f"msg_claude_test_{index}" for index in range(1, 5)]
+    assert [item.get("continuation_reason") for item in receipt["rounds"]] == ["incomplete_final_json"] * 4
+    assert calls[1].params["messages"][-1]["role"] == "user"
 
 
 def test_legacy_retrieve_uses_legacy_key_under_claude_settings(tmp_path, monkeypatch):
@@ -417,7 +442,7 @@ def test_configured_claude_slots_stream_together_and_drain_on_cancel(
         active = 0
         peak = 0
 
-        async def stream(payload, *, on_message_start=None):
+        async def stream(payload, *, on_message_start=None, on_progress=None):
             nonlocal active, peak
             ticker = payload["ticker"]
             calls.append(ticker)
@@ -437,6 +462,7 @@ def test_configured_claude_slots_stream_together_and_drain_on_cancel(
                 active -= 1
 
         monkeypatch.setattr(claude_provider, "stream_message", stream)
+        monkeypatch.setattr(claude_provider, "stream_conversation", stream)
         task = asyncio.create_task(worker.run_configured_once(
             repo, config, "pool", personal_config=SimpleNamespace(
                 features=SimpleNamespace(catalyst_mode="scheduled"),
@@ -640,7 +666,7 @@ def test_claim_failure_does_not_cancel_paid_sibling_streams(tmp_path, monkeypatc
         release = asyncio.Event()
         started, cancelled, finished = [], [], []
 
-        async def stream(payload, *, on_message_start=None):
+        async def stream(payload, *, on_message_start=None, on_progress=None):
             ticker = payload["ticker"]
             await on_message_start(f"msg_{ticker}")
             started.append(ticker)
@@ -658,6 +684,7 @@ def test_claim_failure_does_not_cancel_paid_sibling_streams(tmp_path, monkeypatc
                 finished.append(ticker)
 
         monkeypatch.setattr(claude_provider, "stream_message", stream)
+        monkeypatch.setattr(claude_provider, "stream_conversation", stream)
         task = asyncio.create_task(worker.run_configured_once(
             repo, config, "isolation", personal_config=SimpleNamespace(features=SimpleNamespace(catalyst_mode="scheduled")),
         ))

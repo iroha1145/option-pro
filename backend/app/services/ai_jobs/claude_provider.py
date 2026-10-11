@@ -173,8 +173,8 @@ async def stream_message(
                         raise RuntimeError("provider_unknown_server_tool")
                     counts[group] += 1
                     counts["total"] += 1
-                    network_limit = 12 if prepared.params["model"] == "claude-sonnet-5-5" and prepared.diagnostic_task == "ai_jobs:market_focus" else 1
-                    if counts[group] > (2 if group == "code" else network_limit) or counts["total"] > network_limit * 2 + 2:
+                    limits = tool_limits(prepared)
+                    if counts[group] > limits[group] or counts["total"] > limits["total"]:
                         raise RuntimeError("provider_tool_limit_exceeded")
             # SDK accumulation can retain a snapshot even after a premature EOF.
             if not completed:
@@ -400,7 +400,6 @@ def response_tool_evidence(message: Message) -> list[dict[str, str]]:
     return evidence
 
 
-MAX_FOCUS_ROUNDS = 4
 _USAGE_KEYS = (
     "input_tokens", "cached_input_tokens", "cache_creation_input_tokens",
     "cache_creation_5m_input_tokens", "cache_creation_1h_input_tokens",
@@ -425,7 +424,55 @@ class ConversationResult:
     receipt: dict[str, Any]
 
 
-async def stream_market_focus(
+def _claude_earnings(prepared: PreparedMessage) -> bool:
+    from app.services.ai_jobs.runtime import claude_earnings
+
+    return claude_earnings(prepared.diagnostic_task.removeprefix("ai_jobs:"), prepared.params["model"])
+
+
+def tool_limits(prepared: PreparedMessage) -> dict[str, int]:
+    if _claude_earnings(prepared):
+        from app.services.ai_jobs.runtime import EARNINGS_TOOL_LIMITS
+        return dict(EARNINGS_TOOL_LIMITS)
+    network = 12 if prepared.params["model"] == "claude-sonnet-5-5" and prepared.diagnostic_task == "ai_jobs:market_focus" else 1
+    return {"web_search": network, "web_fetch": network, "code": 2, "total": network * 2 + 2}
+
+
+def _final_block_text(blocks: list[Any]) -> str:
+    tool_indices = [index for index, block in enumerate(blocks)
+                    if block.type == "server_tool_use" or block.type.endswith("_tool_result")]
+    if tool_indices:
+        blocks = blocks[max(tool_indices) + 1:]
+    return "".join(block.text for block in blocks if block.type == "text")
+
+
+def _last_earnings_json(text: str) -> str | None:
+    """Read the last complete JSON object, without treating nested values as drafts.
+
+    The model may precede prompt-based JSON with a short explanation or follow
+    it with a citation marker such as ``[1]``; only objects count as answers.
+    Restricted to earnings; local business-schema validation remains upstream.
+    """
+    decoder = json.JSONDecoder()
+    position = 0
+    last: str | None = None
+    while position < len(text):
+        if text[position] not in "{[":
+            position += 1
+            continue
+        try:
+            value, end = decoder.raw_decode(text, position)
+        except ValueError:
+            position += 1
+            continue
+        if isinstance(value, dict):
+            last = text[position:end]
+        # Skip the entire value. Inner arrays/objects are not later answers.
+        position = end
+    return last
+
+
+async def stream_conversation(
     prepared: PreparedMessage,
     *,
     on_message_start: Callable[[str], Awaitable[None]],
@@ -435,9 +482,13 @@ async def stream_market_focus(
 
     Progress is durable before each next request. It deliberately contains no
     thinking or assistant content, so restart cannot replay a paid conversation.
+    Earnings may also continue once an answer arrives without its final JSON.
     """
-    if prepared.params["model"] != "claude-sonnet-5-5" or prepared.diagnostic_task != "ai_jobs:market_focus":
+    from app.services.ai_jobs.runtime import CONVERSATION_MAX_ROUNDS, claude_conversation
+
+    if not claude_conversation(prepared.diagnostic_task.removeprefix("ai_jobs:"), prepared.params["model"]):
         raise ValueError("provider_continuation_not_supported")
+    earnings = _claude_earnings(prepared)
     original_model = prepared.params["model"]
     ceiling = int(prepared.params["max_tokens"])
     messages = deepcopy(prepared.params["messages"])
@@ -445,16 +496,18 @@ async def stream_market_focus(
     rounds: list[dict[str, Any]] = []
     request_ids: list[str] = []
     counts = {"web_search": 0, "web_fetch": 0, "code": 0, "total": 0}
+    container_id: str | None = None
+    conversation_identity = {"job_type": "earnings_impact"} if earnings else {}
 
     async def persist_progress(*, will_continue: bool = False) -> None:
         await on_progress({
             "provider": "anthropic", "model": original_model, "id": request_ids[0],
             "request_ids": list(request_ids), "rounds": deepcopy(rounds),
-            "confirmed_usage": sum_round_usage(rounds),
+            "confirmed_usage": sum_round_usage(rounds), **conversation_identity,
         }, will_continue=will_continue)
 
     async def started(message_id: str) -> None:
-        if not message_id or message_id in request_ids or len(request_ids) >= MAX_FOCUS_ROUNDS:
+        if not message_id or message_id in request_ids or len(request_ids) >= CONVERSATION_MAX_ROUNDS:
             raise RuntimeError("provider_invalid_message_identity")
         if not request_ids:
             await on_message_start(message_id)
@@ -467,15 +520,14 @@ async def stream_market_focus(
             "content": [block for message in completed for block in message.content],
         })
         terminal = error or response_terminal_error(combined)
-        final_blocks = completed[-1].content
-        tool_indices = [index for index, block in enumerate(final_blocks) if block.type == "server_tool_use" or block.type.endswith("_tool_result")]
-        if tool_indices:
-            final_blocks = final_blocks[max(tool_indices) + 1:]
-        final_text = "".join(block.text for block in final_blocks if block.type == "text")
+        final_text = _final_block_text(completed[-1].content)
+        if earnings and not terminal:
+            final_text = _last_earnings_json(final_text) or ""
         if not terminal and not final_text.strip():
             terminal = "provider_empty_response"
         return ConversationResult({
             "provider": "anthropic", "model": original_model, "id": request_ids[0],
+            **conversation_identity,
             "request_ids": list(request_ids), "rounds": deepcopy(rounds),
             "output_text": "" if terminal else final_text,
             "stop_reason": str(combined.stop_reason), "terminal_error": terminal,
@@ -484,7 +536,7 @@ async def stream_market_focus(
             "tool_evidence_version": "v1", "tool_evidence": response_tool_evidence(combined),
         })
 
-    for index in range(MAX_FOCUS_ROUNDS):
+    for index in range(CONVERSATION_MAX_ROUNDS):
         used_output = sum_round_usage(rounds)["output_tokens"]
         if type(used_output) is not int:
             return finish("provider_usage_incomplete")
@@ -492,6 +544,14 @@ async def stream_market_focus(
         if remaining <= 0:
             return finish("provider_incomplete_max_output_tokens")
         params = {**prepared.params, "messages": messages, "max_tokens": remaining}
+        if earnings and index:
+            # One stable explicit point plus one automatically advancing point.
+            # This caches the growing task history without editing signed blocks.
+            # Same 5m TTL as the system marker: a longer automatic entry after
+            # a shorter explicit one is rejected (longer TTLs must come first).
+            params["cache_control"] = {"type": "ephemeral"}
+            if container_id is not None:
+                params["container"] = container_id
         message = await stream_message(replace(prepared, params=params), on_message_start=started, tool_counts=counts)
         if message.model != original_model or not request_ids or message.id != request_ids[-1]:
             raise RuntimeError("provider_model_or_message_mismatch")
@@ -500,25 +560,41 @@ async def stream_market_focus(
         round_usage["code_execution_requests"] = sum(
             block.type == "server_tool_use" and block.name in _CODE_TOOLS for block in message.content
         )
-        rounds.append({"id": message.id, "stop_reason": str(message.stop_reason), "usage": round_usage})
-        await persist_progress()
         combined = message.model_copy(update={"content": [block for item in completed for block in item.content]})
         _, pair_error = _server_pairs(combined)
+        progress_only = False
+        if earnings and message.stop_reason == "end_turn" and not pair_error:
+            progress_only = _last_earnings_json(_final_block_text(message.content)) is None
+        round_record = {"id": message.id, "stop_reason": str(message.stop_reason), "usage": round_usage}
+        if progress_only:
+            # Persist the decision before admission and before any next request.
+            round_record["continuation_reason"] = "incomplete_final_json"
+        rounds.append(round_record)
+        await persist_progress()
         if pair_error and pair_error != "provider_incomplete_tool_result":
             return finish(pair_error)
         consumed_output = sum_round_usage(rounds)["output_tokens"]
         if type(consumed_output) is int and consumed_output > ceiling:
             return finish("provider_incomplete_max_output_tokens")
-        if message.stop_reason != "pause_turn":
+        if earnings:
+            container = getattr(message, "container", None)
+            observed_container = getattr(container, "id", None)
+            if observed_container is not None:
+                if not isinstance(observed_container, str) or not observed_container:
+                    return finish("provider_invalid_container_identity")
+                container_id = observed_container
+        if message.stop_reason != "pause_turn" and not progress_only:
             return finish()
         # Unknown billing or output accounting cannot authorize another request.
         usage = sum_round_usage(rounds)
         if any(type(usage[key]) is not int for key in ("input_tokens", "output_tokens", "cached_input_tokens", "cache_creation_input_tokens", "web_search_requests", "web_fetch_requests")):
             return finish("provider_usage_incomplete")
-        if index == MAX_FOCUS_ROUNDS - 1:
+        if index == CONVERSATION_MAX_ROUNDS - 1:
             return finish("provider_continuation_limit")
         # Preserve SDK content verbatim, including thinking signatures and tool
         # blocks. The next request must continue the same assistant turn.
         await persist_progress(will_continue=True)
         messages = [*messages, {"role": "assistant", "content": message.content}]
+        if progress_only:
+            messages.append({"role": "user", "content": [{"type": "text", "text": "分析尚未交付最终JSON。请完成仍可核验的事项，并按既定结构返回最终JSON；无法取得的资料说明缺口，不得编造。"}]})
     raise AssertionError("unreachable")
