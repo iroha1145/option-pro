@@ -32,16 +32,20 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
   const useLive = preferLiveQuote(quote, isNum(detail?.price) && detail.price > 0, detail?.updatedAt);
   const updatedAt = useLive ? quote?.trade_at : detail?.updatedAt;
   const priceLabel = quote ? displayedQuoteLabel(quote, quoteStatus, useLive || !isNum(detail?.price)) : null;
+  const hasScore = isNum(detail?.strengthScore);
 
   /* 不做入场位移：读取中与读到后是两棵树，页头会重挂，位移动画会在数据到达时再播一遍。 */
   return (
     <header>
+      {/* 第一行的版式与名称长短、有没有评分无关：读取中页头只有代码，读到后名称可长可短，两种情况高度必须一样。
+          名称块占剩余宽度（flex-1），标题固定一行、名称过长就截断（读屏仍读全名）；评分块手机上独占一行，
+          从 sm 起与名称同一行。 */}
       <div className="flex flex-wrap items-center gap-3">
         <TickerLogo ticker={symbol} size={44} />
-        <div className="min-w-0">
-          <h1 className="flex flex-wrap items-baseline gap-x-2.5">
-            <span className="font-display text-[26px] leading-[32px] font-semibold tracking-[-0.02em] text-ink-900">{symbol}</span>
-            <span className="text-body text-ink-500">{detail?.name ?? symbol}</span>
+        <div className="min-w-0 flex-1">
+          <h1 className="flex items-baseline gap-x-2.5">
+            <span className="shrink-0 font-display text-[26px] leading-[32px] font-semibold tracking-[-0.02em] text-ink-900">{symbol}</span>
+            <span className="truncate text-body text-ink-500">{detail?.name ?? symbol}</span>
           </h1>
           {/* 手机上行业徽标与交易时段各占一行，时段读到之前先留出这一行，读到前后页头同高。 */}
           <div className="mt-1 flex flex-col items-start gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
@@ -55,12 +59,14 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
             )}
           </div>
         </div>
-        <div className="ml-auto text-right">
+        {/* 评分块始终占着位置：分数晚到（4 秒补取或下一轮轮询）时页头不能变高。没有分数时整块仍在版面里，
+            只是看不见，读屏跳过。 */}
+        <div className={cn('ml-auto basis-full text-right sm:basis-auto', !hasScore && 'invisible')} aria-hidden={hasScore ? undefined : true}>
           <p className="eyebrow">
             {__t('评分')}
             <InfoHint hint={SCORE_HINTS.strengthComposite} side="bottom" align="end" size={12} className="ml-1" />
           </p>
-          <StrengthBar score={detail?.strengthScore ?? Number.NaN} width={72} className="mt-1.5" />
+          <StrengthBar score={detail?.strengthScore} width={72} className="mt-1.5" />
         </div>
       </div>
 

@@ -213,10 +213,6 @@ class Settings(BaseSettings):
     quotes_release_seconds: int = Field(default=_PERSONAL_CONFIG.quotes.release_seconds, ge=0, le=30, alias="QUOTES_RELEASE_SECONDS")
     massive_api_key: str = Field(default="", alias="MASSIVE_API_KEY")
     massive_base_url: str = Field(default="https://api.massive.com", alias="MASSIVE_BASE_URL")
-    # FMP（Financial Modeling Prep）是可选的第二财报日历来源 + 批量市值来源。
-    # 未配置密钥时所有 FMP 路径都必须干净地短路（不影响启动与刷新）。
-    fmp_api_key: str = Field(default="", alias="FMP_API_KEY")
-    fmp_base_url: AnyHttpUrl = Field(default="https://financialmodelingprep.com", alias="FMP_BASE_URL")
     marketdata_token: str = Field(default="", alias="MARKETDATA_TOKEN")
     marketdata_base_url: AnyHttpUrl = Field(default="https://api.marketdata.app", alias="MARKETDATA_BASE_URL")
 

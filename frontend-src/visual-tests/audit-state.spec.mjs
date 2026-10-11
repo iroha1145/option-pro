@@ -19,9 +19,10 @@ async function fixture(page, options = {}) {
         account: state.customer && !state.expired ? { logged_in: true, username: state.customer } : null } });
     }
     if (path === '/api/access/login') {
-      state.failIdentity = true;
+      state.failIdentity = state.failIdentityAfterLogin ?? true;
       return route.fulfill({ json: { ok: true }, headers: { 'Set-Cookie': 'audit_owner=1; Path=/; HttpOnly; SameSite=Lax' } });
     }
+    if (path === '/api/ai/status' && state.holdCapabilities) { state.capabilityRoutes ??= []; state.capabilityRoutes.push(route); return; }
     if (path === '/api/ai/status') return route.fulfill({ json: { enabled: false } });
     if (path === '/api/runtime-settings') return route.fulfill({ json: { settings: { ai: { manual_analysis_enabled: false } } } });
     if (path === '/api/account/watchlist') return state.expired
@@ -152,5 +153,60 @@ test('login cookie plus failed identity pauses personalized reads and restores o
   // The confirmed principal remounts Home and obtains an owner-tagged response.
   await expect.poll(async () => (await cached(page, '/strength/market'))?.principal).toBe('owner\0');
   expect((await cached(page, '/strength/market')).raw.source).toBe('audit-owner-cookie');
+  expect(state.errors).toEqual([]);
+});
+
+test('login returns to the source page with its query and hash', async ({ page }) => {
+  const state = await fixture(page, { failIdentityAfterLogin: false });
+  const source = '/breakouts?view=history#radar';
+  await page.goto(source);
+  await page.getByRole('link', { name: '登录', exact: true }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await page.getByLabel('用户名', { exact: true }).fill('admin');
+  await page.getByLabel('密码', { exact: true }).fill('audit-password-12345');
+  await page.locator('form').getByRole('button', { name: '登录', exact: true }).click();
+  await expect.poll(() => { const url = new URL(page.url()); return url.pathname + url.search + url.hash; }).toBe(source);
+  await expect(page.getByText('当前会话', { exact: true })).toHaveCount(0);
+  expect(state.errors).toEqual([]);
+});
+
+test('the login notice shows once: not again after a late probe, going back or reloading', async ({ page }) => {
+  // Identity is confirmed while the capability probe is still held, so the early return fires first
+  // and the awaited login result arrives afterwards; neither may add a second notice.
+  const state = await fixture(page, { failIdentityAfterLogin: false, holdCapabilities: true });
+  // Count every notice ever inserted: a visible count would miss a duplicate once the first has timed out.
+  await page.addInitScript(() => {
+    window.__noticesShown = 0;
+    new MutationObserver((records) => {
+      for (const record of records) for (const node of record.addedNodes) {
+        if (node.nodeType === 1 && node.textContent.includes('欢迎回来')) window.__noticesShown += 1;
+      }
+    }).observe(document, { childList: true, subtree: true });
+  });
+  const shown = () => page.evaluate(() => window.__noticesShown);
+  await page.goto('/watchlist');
+  await expect(page.getByRole('heading', { name: '我的关注', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: '登录', exact: true }).click();
+  await page.getByLabel('用户名', { exact: true }).fill('admin');
+  await page.getByLabel('密码', { exact: true }).fill('audit-password-12345');
+  await page.locator('form').getByRole('button', { name: '登录', exact: true }).click();
+  await expect(page).toHaveURL(/\/watchlist$/);
+  await expect(page.getByText('当前会话', { exact: true })).toHaveCount(0);
+  await expect.poll(shown).toBe(1);
+  await expect(page.getByRole('status').filter({ hasText: '欢迎回来' })).toContainText('管理员已登录');
+  await page.getByRole('link', { name: 'Optix Pro 首页', exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+  // The original login result lands now: it must neither navigate back nor add another notice.
+  for (const route of state.capabilityRoutes ?? []) await route.fulfill({ json: { enabled: false } });
+  await page.waitForTimeout(300);
+  await expect(page).toHaveURL(/\/$/);
+  expect(await shown()).toBe(1);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/watchlist$/);
+  expect(await shown()).toBe(1);
+  state.holdCapabilities = false;
+  await page.reload();
+  await expect(page.getByRole('heading', { name: '我的关注', exact: true })).toBeVisible();
+  expect(await shown()).toBe(0);
   expect(state.errors).toEqual([]);
 });

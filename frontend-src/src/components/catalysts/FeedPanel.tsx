@@ -195,7 +195,6 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
   const hiddenCountUnknown = q.data?.hiddenCountUnknown === true;
   const error = q.error;
   const phase = q.data !== null ? 'ready' : error ? 'error' : 'loading';
-  const fading = false;
   const fetchFirst = q.refresh;
   const [loadingMore, setLoadingMore] = useState(false);
   const [moreError, setMoreError] = useState<ApiError | null>(null);
@@ -326,7 +325,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
            新闻就永远不可达。 */
         <>
           <div
-            className={cn('divide-y divide-line transition-opacity duration-fast', fading && 'opacity-0')}
+            className="divide-y divide-line"
             aria-live="polite"
           >
             {items.map((it, i) => (

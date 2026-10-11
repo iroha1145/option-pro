@@ -76,6 +76,11 @@ RECOVERABLE_FAILURE_CODES = frozenset(
     }
 )
 _SCHEDULED_HISTORY_JOB_TYPES = ("news_impact", "market_focus")
+# Completed earnings analyses, and failed ones holding a paid receipt, stay about
+# one reporting quarter. The stock page banner and the earnings cards read the
+# newest completed analysis; deleting it brings back "not generated" and invites
+# a paid re-run.
+EARNINGS_ANALYSIS_RETENTION_DAYS = 120
 _TERMINAL = {
     "completed",
     "failed",
@@ -1753,51 +1758,60 @@ class AIJobRepository:
     def prune_earnings_retention(
         self,
         *,
+        retention_days: int,
         now: datetime | None = None,
-        retention_days: int = 30,
     ) -> int:
-        """Delete terminal earnings inputs and outputs strictly before cutoff."""
+        """Delete settled earnings jobs strictly before their cutoff.
+
+        Completed analyses and failed jobs holding a paid receipt keep
+        ``EARNINGS_ANALYSIS_RETENTION_DAYS``; other settled rows follow
+        ``retention_days``. A job whose report date has not passed is kept
+        whatever its status, or the scheduler would buy it again.
+        """
 
         if isinstance(retention_days, bool) or retention_days < 1:
             raise ValueError("invalid_earnings_retention_days")
         self.ensure_initialized()
         observed = (now or _utcnow()).astimezone(timezone.utc)
-        cutoff = _iso(observed - timedelta(days=retention_days))
-        with self._connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            expired_ids = [
-                str(row["job_id"])
-                for row in connection.execute(
-                    """SELECT job_id FROM ai_jobs
-                       WHERE job_type='earnings_impact'
-                         AND status IN (
-                           'completed','failed','cancelled',
-                           'insufficient_context','budget_blocked'
-                         )
-                         AND COALESCE(completed_at,updated_at,created_at)<?""",
-                    (cutoff,),
-                ).fetchall()
-            ]
-            if not expired_ids:
+        parameters = (
+            _iso(observed - timedelta(days=EARNINGS_ANALYSIS_RETENTION_DAYS)),
+            _iso(observed - timedelta(days=retention_days)),
+            # US market dates trail UTC by up to a day.
+            (observed - timedelta(days=1)).date().isoformat(),
+        )
+        deleted = 0
+        while True:
+            with self._connect() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                expired_ids = [
+                    str(row["job_id"])
+                    for row in connection.execute(
+                        """SELECT job_id FROM ai_jobs
+                           WHERE job_type='earnings_impact'
+                             AND status IN (
+                               'completed','failed','cancelled',
+                               'insufficient_context','budget_blocked'
+                             )
+                             AND COALESCE(completed_at,updated_at,created_at)<CASE
+                               WHEN status='completed'
+                                 OR (status='failed' AND provider_result_json IS NOT NULL)
+                               THEN ? ELSE ? END
+                             AND COALESCE(json_extract(payload_json,'$.earnings_date'),'')<?
+                           LIMIT 500""",
+                        parameters,
+                    ).fetchall()
+                ]
+                if not expired_ids:
+                    connection.commit()
+                    return deleted
+                placeholders = ",".join("?" for _ in expired_ids)
+                for table in ("ai_job_sources", "ai_job_batch_members", "ai_earnings_final_locks", "ai_jobs"):
+                    connection.execute(
+                        f"DELETE FROM {table} WHERE job_id IN ({placeholders})",
+                        expired_ids,
+                    )
                 connection.commit()
-                return 0
-            placeholders = ",".join("?" for _ in expired_ids)
-            params = tuple(expired_ids)
-            connection.execute(
-                f"DELETE FROM ai_job_sources WHERE job_id IN ({placeholders})",
-                params,
-            )
-            connection.execute(
-                f"DELETE FROM ai_earnings_final_locks "
-                f"WHERE job_id IN ({placeholders})",
-                params,
-            )
-            connection.execute(
-                f"DELETE FROM ai_jobs WHERE job_id IN ({placeholders})",
-                params,
-            )
-            connection.commit()
-            return len(expired_ids)
+                deleted += len(expired_ids)
 
     def prune_scheduled_history(
         self,
@@ -1805,6 +1819,7 @@ class AIJobRepository:
         retain_days: int,
         now: datetime | None = None,
         batch_size: int = 500,
+        protected_job_ids: Iterable[str] = (),
     ) -> int:
         """Delete settled news and focus jobs older than ``retain_days``.
 
@@ -1813,9 +1828,8 @@ class AIJobRepository:
         完成时间都要早于截止点，当天才结算的积压任务仍留在当日 token 账里。
         候选在写锁外只读选出；每批一个短写事务，批内按同一条件复核后再删，
         首次清理上万行时其它写入方（认领、入队、取消）仍能在批间拿到写锁。
-        带付费回执（provider_result_json）的失败任务永不删除：被本地校验误判
-        失败的结果只能靠这份回执离线找回（recover_ai_schema_results），备份只留
-        一份时删了就无从恢复。
+        已付费的失败回执也受同一窗口约束；超过窗口且无现存发布引用后，
+        离线恢复能力随回执删除而结束。活动任务与 protected_job_ids 不删除。
         """
 
         if (
@@ -1835,8 +1849,7 @@ class AIJobRepository:
             f"""job_type IN ({",".join("?" for _ in job_types)})
                 AND status IN ({",".join("?" for _ in statuses)})
                 AND created_at<?
-                AND COALESCE(completed_at,updated_at,created_at)<?
-                AND NOT (status='failed' AND provider_result_json IS NOT NULL)"""
+                AND COALESCE(completed_at,updated_at,created_at)<?"""
         )
         settled_parameters = (*job_types, *statuses, cutoff, cutoff)
         with self._connect() as connection:
@@ -1847,6 +1860,8 @@ class AIJobRepository:
                     settled_parameters,
                 ).fetchall()
             ]
+        protected = set(protected_job_ids)
+        expired_ids = [job_id for job_id in expired_ids if job_id not in protected]
         deleted = 0
         for offset in range(0, len(expired_ids), int(batch_size)):
             chunk = expired_ids[offset : offset + int(batch_size)]

@@ -18,7 +18,7 @@ max_concurrency = 4
 execution_mode = "background"
 ```
 
-新闻翻译与分析使用 GPT-5.6 Luna，推理强度默认 `max`，也可以配成 `xhigh` 或 `high`：max 最贵，xhigh、high 依次更省（GPT 模型只放开这三档，Claude 模型只能 `xhigh`）；热点使用 Claude Sonnet 5.5，推理强度为 `xhigh`。财报、期权和信号任务继承 Haiku 配置。首页盘前、盘后研判继续由 `[market_brief]` 的 Opus 5.5、`xhigh` 生成，`code_execution_tool = true`，同时启用搜索与网页抓取。缺少分任务配置的旧配置仍继承全局模型。
+新闻翻译与分析使用 GPT-5.6 Luna，推理强度默认 `max`，也可以配成 `xhigh` 或 `high`：max 最贵，xhigh、high 依次更省（GPT 模型只放开这三档，Claude 模型只能 `xhigh`）；热点使用 Claude Sonnet 5.5，推理强度为 `xhigh`。财报、期权和信号任务继承 Haiku 配置。首页盘前、盘后研判继续由 `[market_brief]` 的 Opus 5.5、`xhigh` 生成，`code_execution_tool = false`，启用搜索与网页抓取（两者自带动态过滤）。缺少分任务配置的旧配置仍继承全局模型。
 
 所有后台分析共用最多 4 个执行槽，OpenAI 任务在其中最多占 1 个；手动和定时任务共同计数。旧 OpenAI 全局配置省略 `max_concurrency` 时仍沿用默认值 1。已经发送的任务按照记录中的模型取回、恢复和结算，不因配置切换重新提交。
 

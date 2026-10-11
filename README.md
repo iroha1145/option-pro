@@ -56,23 +56,20 @@ chmod 600 .env machine.env secrets.env
 - `TRUSTED_PROXY_CIDRS`
 - `DATA_DIR`
 
-`secrets.env` 只保存九项服务端密钥：
+`secrets.env` 只保存八项服务端密钥：
 
 - `ANTHROPIC_API_KEY`
-- `OPENAI_API_KEY`（旧任务取回与回滚兼容）
+- `OPENAI_API_KEY`（新闻分析模型 GPT-5.6 Luna）
 - `FINNHUB_API_KEY`
 - `MARKETDATA_TOKEN`
 - `MASSIVE_API_KEY`
-- `FMP_API_KEY`
 - `FRED_API_KEY`
 - `INTERNAL_API_TOKEN`
 - `APP_PASSWORD_HASH`
 
-进程已经导出的值优先级最高；`.env` 是部署级覆盖文件，只放其他配置文件都没有归属的运维覆盖（例如 `RANGE_PERSISTENCE_VERSION`），`machine.env` 只接收七个机器字段，`secrets.env` 只接收九个密钥。错放到其他文件的字段不会覆盖正式来源。
+进程已经导出的值优先级最高；`.env` 是部署级覆盖文件，只放其他配置文件都没有归属的运维覆盖（例如 `RANGE_PERSISTENCE_VERSION`），`machine.env` 只接收七个机器字段，`secrets.env` 只接收八个密钥。错放到其他文件的字段不会覆盖正式来源。
 
-`FMP_API_KEY`（Financial Modeling Prep）是可选的第二财报日历来源与批量市值来源：
-未配置时财报页完全走 Finnhub 主源，不影响启动与刷新；配置后双日历交叉验证
-（日期冲突显式标注，不静默合并），市值批量补全并持久缓存，由 Worker 低频刷新。
+财报日历使用 Finnhub 与 Yahoo，市值复用持久缓存并由 Massive 少量补缺。
 
 新闻与经济日历默认由 Worker 直接抓取各来源（`[catalyst].news_source = "local"`），只用已有的 `MASSIVE_API_KEY` 与 `FINNHUB_API_KEY`。`MACROLENS_URL` 与 `INTERNAL_API_TOKEN` 只在切回 `macrolens` 回滚时使用，下一个版本随远端同步一起删除；来源清单、切换、回滚与上线手动项见 `docs/catalysts/news-ingest.md`。
 
@@ -84,13 +81,16 @@ chmod 600 .env machine.env secrets.env
 
 ## 模型分析
 
+新闻、焦点历史与突破扫描附件默认保留 10 天；当前页面仍在使用的结果和活动任务保留引用保护。已完成的财报分析和带付费回执的失败财报任务保留 120 天，报告日未过的财报任务不删除。突破库与新闻库每天备份，模型任务库（含付费结果）、账户与运行设置每 6 小时备份。
+
 默认没有模型密钥，因此不会提交付费任务。需要启用时，在服务器上执行：
 
 ```bash
 ./personal.sh secrets set ANTHROPIC_API_KEY
+./personal.sh secrets set OPENAI_API_KEY
 ```
 
-新分析只连接 Anthropic 官方消息接口（Messages API），不接受自定义地址或中转代理。默认参数为：
+Claude 任务只连接 Anthropic 官方消息接口（Messages API），不接受自定义地址或中转代理。默认参数为：
 
 ```toml
 [ai]
@@ -102,7 +102,7 @@ execution_mode = "background"
 
 `background` 表示任务在应用后台排队，工作进程（Worker）通过流式调用取得 Claude 结果；它不表示 Anthropic 提供了可取回的后台响应。分析采用自适应思考（Adaptive Thinking）、`xhigh` 推理强度、严格结构化输出（Strict Structured Outputs），并为重复使用的系统提示设置 5 分钟提示缓存（Prompt Caching）。缓存是否命中以供应商返回的实际用量为准。
 
-`OPENAI_API_KEY` 只用于迁移前已提交任务的取回、取消和回滚，须保留到旧任务处理完毕。旧结果继续记录原来的模型与推理强度，不会改标为 Claude。供应商提交失败后的自动重试固定为零；提交结果不明时停止重复提交，避免再次收费。
+新闻分析使用 GPT-5.6 Luna（`[ai].news_model`），需要 `OPENAI_API_KEY`；同一密钥也用于迁移前已提交 OpenAI 任务的取回、取消和回滚。旧结果继续记录原来的模型与推理强度，不会改标为 Claude。供应商提交失败后的自动重试固定为零；提交结果不明时停止重复提交，避免再次收费。
 
 模型任务保留共享日预算与冷却限制。Claude 手动与定时任务共用 4 个并发名额，可通过 `max_concurrency` 设置为 1 到 4。旧 OpenAI 任务保留手动与定时各 1 个的恢复规则。相同输入会先复用原任务，即使队列已满也不会重复计费；只有新任务在队列饱和时返回 429 和 `Retry-After: 60`。
 
@@ -188,14 +188,13 @@ mode = "private_network"
 ```bash
 ./personal.sh secrets status
 ./personal.sh secrets set ANTHROPIC_API_KEY
+./personal.sh secrets set OPENAI_API_KEY
 ./personal.sh secrets set FINNHUB_API_KEY
 ./personal.sh secrets set MARKETDATA_TOKEN
 ./personal.sh secrets set MASSIVE_API_KEY
-./personal.sh secrets set FMP_API_KEY
 ./personal.sh secrets set FRED_API_KEY
 ./personal.sh secrets set INTERNAL_API_TOKEN
 ./personal.sh secrets set APP_PASSWORD_HASH
-./personal.sh secrets remove OPENAI_API_KEY
 ./personal.sh secrets validate
 ```
 
