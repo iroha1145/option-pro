@@ -7,7 +7,7 @@ options_flow_read、event_risks 等字段模型只能诚实留空。这里把站
 - 每块独立失败：任何一个数据源故障、超时或未配置都不能阻塞手动分析入队，
   缺失的块以 context_status="unavailable" 如实告知模型；
 - 每块有硬条数/字数上限：全部块加核心信号必须稳定落在付费请求
-  60KB(_MAX_UNTRUSTED_JSON_BYTES) 之内，最终兜底由 API 层按序丢块；
+  专用证据预算之内，最终兜底由 API 层按序丢块；
 - 只搬运事实读数与本地已生成的中文摘要，不在这里做任何新的判断。
 """
 
@@ -27,6 +27,7 @@ from app.public_home_snapshot import (
     read_owner_public_home_entry_async,
 )
 from app.services import yahoo
+from app.services import stock_research_context
 from app.services.catalysts.local_intelligence import macro_conditions_context
 from app.services.scoring import compute_market_scores
 from app.services.signals import compute_market_signals
@@ -44,6 +45,7 @@ CONTEXT_BLOCK_KEYS = (
     "market_context",
     "macro_conditions",
     "upcoming_earnings",
+    *stock_research_context.RESEARCH_BLOCK_KEYS,
 )
 
 #: 与公共 feed 的默认窗口一致：匿名条目缓存按 (db_path, window_hours) 键
@@ -255,6 +257,8 @@ def _options_block(symbol: str) -> dict[str, Any] | None:
         return None
     summaries: list[dict[str, Any]] = []
     underlying_price: float | int | None = None
+    observed_times: list[str] = []
+    stale = False
     chain_error: Exception | None = None
     for expiration in expirations:
         try:
@@ -270,6 +274,13 @@ def _options_block(symbol: str) -> dict[str, Any] | None:
         underlying_price = (
             _finite_number(chain.get("underlying_price")) or underlying_price
         )
+        summary["source"] = "Yahoo/yfinance"
+        summary["as_of"] = chain.get("as_of")
+        summary["data_through"] = None
+        summary["stale"] = bool(chain.get("_stale"))
+        if isinstance(chain.get("as_of"), str):
+            observed_times.append(chain["as_of"])
+        stale = stale or bool(chain.get("_stale"))
         summaries.append(summary)
     if chain_error is not None:
         record_fallback_failure(
@@ -283,7 +294,10 @@ def _options_block(symbol: str) -> dict[str, Any] | None:
         atm_iv = None
         record_fallback_failure("signal_context_stock_iv", error, symbol=symbol)
     return {
-        "as_of": datetime.now(timezone.utc).isoformat(),
+        "source": "Yahoo/yfinance",
+        "as_of": max(observed_times) if observed_times else None,
+        "data_through": None,
+        "stale": stale,
         "underlying_price": underlying_price,
         "atm_iv_20_60d": _finite_number(atm_iv),
         "note": "无成交主动方向数据",
@@ -373,6 +387,7 @@ def _news_block(symbol: str) -> tuple[dict[str, Any], list[str]] | None:
         if len(items) >= _NEWS_MAX_ITEMS:
             break
     block = {
+        "source": "published_catalyst_feed",
         "window_hours": _NEWS_WINDOW_HOURS,
         "as_of": payload.get("as_of"),
         "data_through": payload.get("data_through"),
@@ -399,6 +414,10 @@ async def _earnings_block(symbol: str) -> dict[str, Any] | None:
         if not isinstance(row, dict) or row.get("ticker") != symbol:
             continue
         return {
+            "source": "worker_earnings_snapshot",
+            "as_of": payload.get("snapshot_saved_at"),
+            "data_through": row.get("earnings_date"),
+            "stale": not bool(entry.get("fresh")),
             "earnings_date": row.get("earnings_date"),
             "days_until": _finite_number(row.get("days_until")),
             "timing": row.get("timing"),
@@ -425,6 +444,17 @@ async def _isolated(name: str, awaitable: Any) -> Any:
         return None
 
 
+async def _research_block(name: str, loader: Any, symbol: str) -> dict[str, Any]:
+    try:
+        value = await asyncio.to_thread(loader, symbol)
+        if value is not None:
+            return value
+        return {"source": "saved_stock_resource", "as_of": None, "data_through": None, "status": "unavailable", "reason": "no_saved_resource"}
+    except Exception as error:
+        logger.warning("signal research block %s unavailable (%s)", name, type(error).__name__)
+        return {"source": "Yahoo/yfinance", "as_of": None, "data_through": None, "status": "timeout" if isinstance(error, TimeoutError) else "unavailable", "reason": type(error).__name__}
+
+
 async def build_signal_context(symbol: str) -> dict[str, Any]:
     """组装全部上下文块；永不抛异常，缺失块在 status 里如实标注。"""
 
@@ -447,6 +477,10 @@ async def build_signal_context(symbol: str) -> dict[str, Any]:
             _isolated("upcoming_earnings", _earnings_block(symbol))
         ),
     }
+    tasks.update({
+        key: asyncio.create_task(_research_block(key, loader, symbol))
+        for key, loader in stock_research_context.BLOCK_LOADERS.items()
+    })
     _done, pending = await asyncio.wait(
         tasks.values(), timeout=CONTEXT_TIMEOUT_SECONDS
     )
@@ -488,10 +522,12 @@ async def build_signal_context(symbol: str) -> dict[str, Any]:
                 ):
                     context_tickers.append(ticker)
         if value is None:
-            status[key] = "unavailable"
+            status[key] = "timeout" if key in stock_research_context.RESEARCH_BLOCK_KEYS and task in pending else "unavailable"
+            if key in stock_research_context.RESEARCH_BLOCK_KEYS:
+                blocks[key] = {"source": "public_stock_research", "as_of": None, "data_through": None, "status": status[key]}
         else:
             blocks[key] = value
-            status[key] = "ok"
+            status[key] = str(value.get("status") or "ok") if isinstance(value, dict) else "ok"
     return {
         "blocks": blocks,
         "status": status,

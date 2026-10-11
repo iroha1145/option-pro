@@ -797,6 +797,7 @@ def test_standalone_worker_reads_fresh_runtime_controls_each_iteration(
             daily_token_limit=9_000_000,
             manual_analysis_cooldown_seconds=45,
             manual_analysis_enabled=True,
+            stock_analysis_enabled=True,
         ),
         catalyst=SimpleNamespace(scheduled_analysis_enabled=False),
         earnings=SimpleNamespace(scheduled_analysis_enabled=False),
@@ -844,6 +845,7 @@ def test_standalone_worker_reads_fresh_runtime_controls_each_iteration(
         ai_worker.run_configured_once(repository, settings, "standalone")
     )
     effective.ai.manual_analysis_enabled = False
+    effective.ai.stock_analysis_enabled = False
     third = asyncio.run(
         ai_worker.run_configured_once(repository, settings, "standalone")
     )
@@ -1396,7 +1398,7 @@ def test_all_paid_job_prompt_versions_invalidate_legacy_english_cache():
     assert runtime.PROMPT_VERSIONS == {
         "earnings_impact": "earnings-impact-zh-cn-v6",
         "option_alerts": "option-alerts-zh-cn-v4",
-        "signal_analysis": "signal-analysis-zh-cn-v6",
+        "signal_analysis": "signal-analysis-stock-report-zh-cn-v2",
         "news_impact": "news-impact-zh-cn-v7",
         "market_focus": "market-focus-zh-cn-v7",
     }
@@ -1867,6 +1869,8 @@ def test_fresh_database_has_every_column_and_registry_row_production_has(
         "ai-job-provider-progress-v1": "b88558c7a39767b1f90a396a4f0f2be6f1cb104959d8c786441e8fe776bdad4e",
         "shared-model-budget-v1": "021fbead0d453783492065ba6018da75b1931ec34e25b48027c016ce219f6795",
         "ai-job-retry-lineage-index-v1": "4746773a1352dd1dacb3193a95aa276ea6abff4e8afafb118728e70db04ea8c2",
+        "ai-stock-analysis-account-quota-v1": "6d6edbbfecc84d35c53473156f7c3c57e35b719f11b919e136a46ecc275cbb1a",
+        "ai-stock-analysis-account-quota-v2": "1cbd3dfbd0f5da2016a2fefedd1d2f635672413da760c5feace6c730298ebe69",
     }
 
 

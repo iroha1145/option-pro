@@ -60,6 +60,7 @@ def _effective(*, manual: bool, scheduled: bool):
             daily_token_limit=10_000_000,
             manual_analysis_cooldown_seconds=0,
             manual_analysis_enabled=manual,
+            stock_analysis_enabled=manual,
         ),
         catalyst=SimpleNamespace(scheduled_analysis_enabled=scheduled),
         earnings=SimpleNamespace(
@@ -301,13 +302,16 @@ def test_earnings_manual_route_is_independent_from_catalyst_read_only_mode(
     assert repository.health()["pending"] == 1
 
 
-def test_signal_analysis_checks_manual_switch_before_building_evidence(monkeypatch):
+def test_signal_analysis_checks_stock_switch_before_building_evidence(monkeypatch):
     monkeypatch.setattr(
         ai,
         "get_effective_runtime_settings",
         lambda: _effective(manual=False, scheduled=True),
     )
     provider_called = False
+    # Account authentication has its own HTTP checks. This test starts with an
+    # authenticated caller and isolates the paid-work switch before evidence.
+    monkeypatch.setattr(signals, "_analysis_account_id", lambda _request: "test-account")
 
     def signals_provider(_ticker: str):
         nonlocal provider_called
@@ -320,12 +324,13 @@ def test_signal_analysis_checks_manual_switch_before_building_evidence(monkeypat
         asyncio.run(
             signals.stock_ai_analysis(
                 "AAPL",
+                SimpleNamespace(),
                 signals.SignalAnalysisJobCreateRequest(),
             )
         )
 
     assert captured.value.status_code == 409
-    assert captured.value.detail["code"] == "manual_analysis_disabled"
+    assert captured.value.detail["code"] == "stock_analysis_disabled"
     assert provider_called is False
 
 

@@ -28,6 +28,11 @@ def _clear_fallback_diagnostics():
     diagnostics._seen.clear()
 
 
+@pytest.fixture(autouse=True)
+def _offline_research_context(monkeypatch):
+    monkeypatch.setattr(signal_context.stock_research_context, "BLOCK_LOADERS", {})
+
+
 def _chain_fixture() -> dict:
     def contract(strike, volume, oi, iv, mid):
         return {
@@ -484,7 +489,7 @@ def test_payload_merges_context_blocks_and_hash_covers_them():
 
 
 def test_payload_drops_oversized_blocks_in_declared_order():
-    huge = {"items": [{"title": "x" * 60_000}]}
+    huge = {"items": [{"title": "x" * (signals._EVIDENCE_MAX_BYTES + 1)}]}
     context = _context(
         {
             "recent_news": huge,

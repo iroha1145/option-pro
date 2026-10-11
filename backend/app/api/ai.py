@@ -35,6 +35,7 @@ from app.services.ai_jobs.models import (
 from app.services.ai_jobs.repository import AIJobRepository
 from app.services.request_security import request_client_ip
 from app.services.earnings_analysis_scope import is_featured_company
+from app.services.stock_analysis_quota import StockAnalysisQuotaExceeded, public_stock_quota
 from app.services.runtime_settings import (
     RuntimeSettingsStorageError,
     get_effective_runtime_settings,
@@ -181,8 +182,10 @@ def _job_repository() -> AIJobRepository:
     return _job_repository_for_path(str(get_settings().openai_job_db_path))
 
 
-def _require_runtime_capability() -> None:
+def _require_runtime_capability(job_type: str | None = None) -> None:
     settings = get_settings()
+    if job_type is not None:
+        settings = ai_job_runtime.settings_for_job(settings, job_type)
     capability = ai_job_runtime.capability_status(settings)
     if not capability.get("supported"):
         raise HTTPException(
@@ -192,6 +195,20 @@ def _require_runtime_capability() -> None:
                 "message": "Persistent AI analysis is not available",
             },
         )
+
+
+def _require_stock_analysis_enabled() -> None:
+    """Stock reports are independent of the news scheduling/manual switches."""
+    try:
+        effective = get_effective_runtime_settings()
+    except RuntimeSettingsStorageError as exc:
+        raise HTTPException(status_code=503, detail={
+            "code": "runtime_settings_unavailable", "message": "运行设置暂不可用",
+        }) from exc
+    if not effective.ai.stock_analysis_enabled:
+        raise HTTPException(status_code=409, detail={
+            "code": "stock_analysis_disabled", "message": "个股分析已关闭",
+        })
 
 
 def _require_manual_analysis_enabled() -> None:
@@ -267,16 +284,21 @@ def _create_job(
     force_retry: bool = False,
     priority: int = 80,
     earnings_featured_verified: bool = False,
+    stock_analysis_account_id: str | None = None,
 ) -> tuple[dict, bool]:
     # Recheck at the durable enqueue boundary in case the owner changed the
     # switch after the endpoint's initial validation.
-    if job_type == "earnings_impact":
+    if job_type == "signal_analysis":
+        _require_stock_analysis_enabled()
+    elif job_type == "earnings_impact":
         _require_earnings_manual_analysis_enabled()
         if not earnings_featured_verified and not is_featured_company(payload):
             _reject_nonfeatured_earnings()
     else:
         _require_manual_analysis_enabled()
     settings = get_settings()
+    if job_type == "signal_analysis":
+        settings = ai_job_runtime.settings_for_job(settings, job_type)
     # Scheduled work may fill the normal queue. Every entry point here is a
     # manual submission, so it keeps its own reserve above the base ceiling;
     # the earnings reserve is not added on top.
@@ -303,7 +325,15 @@ def _create_job(
             priority=priority,
             force_retry=force_retry,
             earnings_featured_verified=(job_type == "earnings_impact"),
+            stock_analysis_account_id=stock_analysis_account_id,
         )
+    except StockAnalysisQuotaExceeded as exc:
+        raise HTTPException(status_code=429, detail={
+            "code": "stock_analysis_daily_limit",
+            "message": "本时段的个股分析额度已用完，美股收盘后恢复",
+            "reset_at": exc.period.reset_at.isoformat(),
+            "quota": public_stock_quota(exc.period, used=exc.used),
+        }) from exc
     except RuntimeError as exc:
         if str(exc) == "ai_job_queue_full":
             raise HTTPException(
@@ -795,18 +825,18 @@ async def get_ai_job(job_id: Annotated[str, Path(min_length=10, max_length=80)])
     row = _job_repository().get_job(job_id)
     if not row:
         raise HTTPException(status_code=404, detail="AI job not found")
-    if not current_request_is_owner() and row.get("job_type") == "earnings_impact":
-        stamp = row.get("completed_at") or row.get("updated_at") or row.get("created_at")
-        try:
-            observed = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
-        except (TypeError, ValueError):
-            observed = datetime.min.replace(tzinfo=timezone.utc)
-        if observed < datetime.now(timezone.utc) - timedelta(days=30):
-            raise HTTPException(status_code=404, detail="AI job not found")
+    if not current_request_is_owner() and row.get("job_type") != "signal_analysis":
+        # Account sessions can read shared stock reports, never other paid
+        # workflows, raw requests or operational diagnostics.
+        raise HTTPException(status_code=404, detail="AI job not found")
     public = _job_repository().public(row)
     if not current_request_is_owner():
         # 失败诊断细节含模型输出片段，只给 owner 排障用。
         public["error_detail"] = None
+        public["cancellable"] = False
+    if row.get("job_type") == "signal_analysis":
+        from app.services.stock_report_visuals import stock_report_visuals
+        public["visuals"] = stock_report_visuals(row) if public.get("result") is not None else None
     return public
 
 

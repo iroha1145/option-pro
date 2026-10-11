@@ -60,6 +60,11 @@ _PUBLIC_EARNINGS_REPORT_PATH = re.compile(
     r"/reports/\d{4}-\d{2}-\d{2}$",
     re.IGNORECASE,
 )
+_ACCOUNT_STOCK_ANALYSIS_PATH = re.compile(
+    r"^/api/signals/stock/(?:\^[A-Z0-9][A-Z0-9._-]{0,10}|[A-Z0-9][A-Z0-9._-]{0,11})/ai-analysis$",
+    re.IGNORECASE,
+)
+_ACCOUNT_SIGNAL_JOB_PATH = re.compile(r"^/api/ai/jobs/aij_[a-f0-9]{32}$")
 
 
 @contextmanager
@@ -126,6 +131,26 @@ def is_public_earnings_impact_action_path(path: str) -> bool:
 
 def is_public_earnings_ai_read_path(path: str) -> bool:
     return _PUBLIC_EARNINGS_REPORT_PATH.fullmatch(path) is not None
+
+
+def is_stock_analysis_path(path: str) -> bool:
+    return _ACCOUNT_STOCK_ANALYSIS_PATH.fullmatch(path) is not None
+
+
+def is_account_stock_analysis_request(path: str, method: str, *, raw_path: bytes | None = None) -> bool:
+    """Exact account surface; the job read still checks the stored job type."""
+    if raw_path is not None:
+        try:
+            raw = raw_path.decode("ascii")
+        except (UnicodeError, AttributeError):
+            return False
+        if re.search(r"%(?:2f|5c|25|00)", raw, re.IGNORECASE):
+            return False
+    method = method.upper()
+    return bool(
+        (method in {"GET", "HEAD", "POST"} and is_stock_analysis_path(path))
+        or (method in {"GET", "HEAD"} and _ACCOUNT_SIGNAL_JOB_PATH.fullmatch(path))
+    )
 
 
 def _canonical_origin_host(
@@ -545,6 +570,12 @@ async def require_public_read_or_owner_access(
     public_stock_pull = is_stock_pull and (
         runtime.visitor_live_pulls or request_has_account_session(request)
     )
+    account_stock_analysis = (
+        is_account_stock_analysis_request(
+            request.url.path, method, raw_path=request.scope.get("raw_path"),
+        )
+        and request_has_account_session(request)
+    )
     public_sector_refresh = (
         method == "POST" and is_public_sector_iv_refresh_path(request.url.path)
     )
@@ -552,6 +583,7 @@ async def require_public_read_or_owner_access(
         method in {"GET", "HEAD"}
         or public_batch_query
         or public_stock_pull
+        or account_stock_analysis
         or public_sector_refresh
     ):
         owner_access = runtime.request_is_owner(request)
@@ -648,6 +680,14 @@ def require_same_origin_action(request: Request) -> None:
     method = request.method.upper()
     path = request.url.path
     owner_access = bool(getattr(request.state, "owner_access", False))
+    if (
+        not owner_access
+        and is_account_stock_analysis_request(path, method, raw_path=request.scope.get("raw_path"))
+        and request_has_account_session(request)
+    ):
+        if method not in {"GET", "HEAD"}:
+            require_same_origin_json(request)
+        return
     if (
         not owner_access
         and method in {"GET", "HEAD"}

@@ -300,7 +300,7 @@ export default function StockDetail() {
       {/* 行2: 趋势偏向 + 信号(7) · K线结构 + AI 分析(5 竖排)。两列随行拉伸：
           左卡单张自然拉齐；右列由结构卡吸收差额，AI 卡（结果长短不定）贴在列底。 */}
       <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-12">
-        <div className="card-surface p-5 xl:col-span-7">
+        <div className="min-w-0 card-surface p-5 xl:col-span-7">
           <h3 className="mb-4 text-h3 text-ink-900">{__t('趋势偏向与近期信号')}</h3>
           <TrendBiasPanel ticker={detail.ticker} refreshVersion={dataRevision} onPulled={handlePulled} />
           {/* 近期信号：标题已含「近期信号」，这里只用分隔线起段，不再叠一行英文眉题 */}
@@ -308,7 +308,7 @@ export default function StockDetail() {
             <SignalList ticker={detail.ticker} refreshVersion={dataRevision} onPulled={handlePulled} />
           </div>
         </div>
-        <div className="flex flex-col gap-6 xl:col-span-5">
+        <div className="flex min-w-0 flex-col gap-6 xl:col-span-5">
           <div className="card-surface flex-1 p-5">
             <h3 className="text-h3 text-ink-900">{__t('K线结构分析')}</h3>
             {technical ? (

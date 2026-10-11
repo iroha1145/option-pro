@@ -16,6 +16,52 @@ def _owner_request_context():
         yield
 
 
+_TEST_SIGNAL_IDENTITY = {
+    "model": "gpt-5.6-terra",
+    "reasoning": "max",
+    "prompt_version": "test-stock-prompt",
+    "schema_version": "test-stock-schema",
+    "schema_sha256": "a" * 64,
+}
+
+
+@pytest.fixture(autouse=True)
+def _signal_analysis_account_contract(monkeypatch):
+    # These direct-handler tests exercise evidence and duplicate work, not cookies.
+    monkeypatch.setattr(signals, "_analysis_account_id", lambda _request: "account-test")
+    monkeypatch.setattr(signals, "request_is_owner_session", lambda _request: True)
+    monkeypatch.setattr(signals, "_require_stock_analysis_enabled", lambda: None)
+    monkeypatch.setattr(
+        signals,
+        "_signal_analysis_identity",
+        lambda: dict(_TEST_SIGNAL_IDENTITY),
+    )
+
+
+class _SignalRepositoryStub:
+    @staticmethod
+    def stock_analysis_quota(account_id):
+        assert account_id == "account-test"
+        return {
+            "limit": 10, "used": 0, "remaining": 10,
+            "period_start": "2026-10-09T20:00:00+00:00",
+            "reset_at": "2026-10-12T20:00:00+00:00",
+        }
+
+    @staticmethod
+    def shared_signal_analysis(ticker, **identity):
+        assert identity == {
+            **_TEST_SIGNAL_IDENTITY
+        }
+        return None
+
+    @classmethod
+    def stock_analysis_snapshot(cls, account_id, ticker, **identity):
+        shared = cls.shared_signal_analysis(ticker, **identity)
+        return {"quota": cls.stock_analysis_quota(account_id), "shared_job": shared,
+                "cached_job": shared if shared and shared["status"] == "completed" else None}
+
+
 def test_signal_api_rejects_invalid_ticker_before_provider_call(monkeypatch):
     called = False
 
@@ -158,7 +204,7 @@ def test_signal_analysis_explicit_retry_passes_force_to_job_repository(
     monkeypatch,
 ):
     captured = {}
-    monkeypatch.setattr(signals, "_require_runtime_capability", lambda: None)
+    monkeypatch.setattr(signals, "_require_runtime_capability", lambda _job_type=None: None)
     monkeypatch.setattr(
         signals,
         "compute_stock_signals",
@@ -167,7 +213,10 @@ def test_signal_analysis_explicit_retry_passes_force_to_job_repository(
     monkeypatch.setattr(signals, "compute_stock_scores", lambda _data: {})
     monkeypatch.setattr(signals, "build_signal_context", _empty_signal_context)
 
-    def create_job(job_type, payload, *, force_retry=False):
+    def create_job(
+        job_type, payload, *, force_retry=False, stock_analysis_account_id=None
+    ):
+        assert stock_analysis_account_id == "account-test"
         captured.update(
             job_type=job_type,
             payload=payload,
@@ -176,20 +225,17 @@ def test_signal_analysis_explicit_retry_passes_force_to_job_repository(
         return (
             {
                 "job_id": "aij_signal_retry",
+                **_TEST_SIGNAL_IDENTITY,
                 "job_type": "signal_analysis",
                 "status": "pending",
             },
             True,
         )
 
-    class Repository:
+    class Repository(_SignalRepositoryStub):
         @staticmethod
         def public(row, *, cached=False):
             return {**row, "cached": cached}
-
-        @staticmethod
-        def active_for_ticker(_job_type, _ticker):
-            return None
 
     monkeypatch.setattr(signals, "_create_job", create_job)
     monkeypatch.setattr(signals, "_job_repository", Repository)
@@ -197,6 +243,7 @@ def test_signal_analysis_explicit_retry_passes_force_to_job_repository(
     response = asyncio.run(
         signals.stock_ai_analysis(
             "AAPL",
+            _areq(),
             signals.SignalAnalysisJobCreateRequest(force=True),
         )
     )
@@ -223,7 +270,7 @@ def test_signal_analysis_uses_manual_snapshot_and_falls_back_when_live_fails(
         "macd_hist": {"value": 0.2},
     }
     monkeypatch.setattr(signals, "_require_manual_analysis_enabled", lambda: None)
-    monkeypatch.setattr(signals, "_require_runtime_capability", lambda: None)
+    monkeypatch.setattr(signals, "_require_runtime_capability", lambda _job_type=None: None)
     monkeypatch.setattr(
         signals,
         "read_stock_pull_resource",
@@ -243,7 +290,10 @@ def test_signal_analysis_uses_manual_snapshot_and_falls_back_when_live_fails(
     monkeypatch.setattr(signals, "compute_stock_scores", lambda _data: {})
     monkeypatch.setattr(signals, "build_signal_context", _empty_signal_context)
 
-    def create_job(job_type, payload, *, force_retry=False):
+    def create_job(
+        job_type, payload, *, force_retry=False, stock_analysis_account_id=None
+    ):
+        assert stock_analysis_account_id == "account-test"
         captured.update(
             job_type=job_type,
             payload=payload,
@@ -252,20 +302,17 @@ def test_signal_analysis_uses_manual_snapshot_and_falls_back_when_live_fails(
         return (
             {
                 "job_id": "aij_manual_snapshot",
+                **_TEST_SIGNAL_IDENTITY,
                 "job_type": "signal_analysis",
                 "status": "pending",
             },
             True,
         )
 
-    class Repository:
+    class Repository(_SignalRepositoryStub):
         @staticmethod
         def public(row, *, cached=False):
             return {**row, "cached": cached}
-
-        @staticmethod
-        def active_for_ticker(_job_type, _ticker):
-            return None
 
     monkeypatch.setattr(signals, "_create_job", create_job)
     monkeypatch.setattr(signals, "_job_repository", Repository)
@@ -275,6 +322,7 @@ def test_signal_analysis_uses_manual_snapshot_and_falls_back_when_live_fails(
             asyncio.run(
                 signals.stock_ai_analysis(
                     "AAOI",
+                    _areq(),
                     signals.SignalAnalysisJobCreateRequest(),
                 )
             )
@@ -287,6 +335,7 @@ def test_signal_analysis_uses_manual_snapshot_and_falls_back_when_live_fails(
     response = asyncio.run(
         signals.stock_ai_analysis(
             "AAOI",
+            _areq(),
             signals.SignalAnalysisJobCreateRequest(),
         )
     )
@@ -306,12 +355,13 @@ def test_signal_analysis_reuses_the_active_job_instead_of_double_paying(
 
     active_row = {
         "job_id": "aij_active_one",
+        **_TEST_SIGNAL_IDENTITY,
         "job_type": "signal_analysis",
         "status": "in_progress",
     }
     created = []
     monkeypatch.setattr(signals, "_require_manual_analysis_enabled", lambda: None)
-    monkeypatch.setattr(signals, "_require_runtime_capability", lambda: None)
+    monkeypatch.setattr(signals, "_require_runtime_capability", lambda _job_type=None: None)
     monkeypatch.setattr(signals, "build_signal_context", _empty_signal_context)
     monkeypatch.setattr(
         signals,
@@ -323,7 +373,10 @@ def test_signal_analysis_reuses_the_active_job_instead_of_double_paying(
         signals, "read_stock_pull_resource", lambda _s, _r: None
     )
 
-    def create_job(job_type, payload, *, force_retry=False):
+    def create_job(
+        job_type, payload, *, force_retry=False, stock_analysis_account_id=None
+    ):
+        assert stock_analysis_account_id == "account-test"
         created.append(payload)
         return (
             {
@@ -334,14 +387,16 @@ def test_signal_analysis_reuses_the_active_job_instead_of_double_paying(
             True,
         )
 
-    class Repository:
+    class Repository(_SignalRepositoryStub):
         @staticmethod
         def public(row, *, cached=False):
             return {**row, "cached": cached}
 
         @staticmethod
-        def active_for_ticker(job_type, ticker):
-            assert job_type == "signal_analysis"
+        def shared_signal_analysis(ticker, **identity):
+            assert identity == {
+                **_TEST_SIGNAL_IDENTITY
+            }
             assert ticker == "AMD"
             return active_row
 
@@ -351,6 +406,7 @@ def test_signal_analysis_reuses_the_active_job_instead_of_double_paying(
     reused = asyncio.run(
         signals.stock_ai_analysis(
             "AMD",
+            _areq(),
             signals.SignalAnalysisJobCreateRequest(),
         )
     )
@@ -361,15 +417,13 @@ def test_signal_analysis_reuses_the_active_job_instead_of_double_paying(
     forced = asyncio.run(
         signals.stock_ai_analysis(
             "AMD",
+            _areq(),
             signals.SignalAnalysisJobCreateRequest(force=True),
         )
     )
     assert forced.status_code == 202
-    assert forced.headers["Location"].endswith("aij_new_two")
-    assert len(created) == 1
-    assert created[0]["context_status"] == {
-        key: "unavailable" for key in signals.CONTEXT_BLOCK_KEYS
-    }
+    assert forced.headers["Location"].endswith("aij_active_one")
+    assert created == [], "force must also reuse shared active work without a second charge"
 
 
 def test_signal_analysis_drops_context_when_the_payload_is_too_large(
@@ -377,7 +431,7 @@ def test_signal_analysis_drops_context_when_the_payload_is_too_large(
 ):
     attempts = []
     monkeypatch.setattr(signals, "_require_manual_analysis_enabled", lambda: None)
-    monkeypatch.setattr(signals, "_require_runtime_capability", lambda: None)
+    monkeypatch.setattr(signals, "_require_runtime_capability", lambda _job_type=None: None)
     monkeypatch.setattr(
         signals,
         "compute_stock_signals",
@@ -397,7 +451,10 @@ def test_signal_analysis_drops_context_when_the_payload_is_too_large(
 
     monkeypatch.setattr(signals, "build_signal_context", context_with_blocks)
 
-    def create_job(job_type, payload, *, force_retry=False):
+    def create_job(
+        job_type, payload, *, force_retry=False, stock_analysis_account_id=None
+    ):
+        assert stock_analysis_account_id == "account-test"
         attempts.append(payload)
         if len(attempts) == 1:
             raise ValueError("ai_job_payload_too_large")
@@ -410,14 +467,10 @@ def test_signal_analysis_drops_context_when_the_payload_is_too_large(
             True,
         )
 
-    class Repository:
+    class Repository(_SignalRepositoryStub):
         @staticmethod
         def public(row, *, cached=False):
             return {**row, "cached": cached}
-
-        @staticmethod
-        def active_for_ticker(_job_type, _ticker):
-            return None
 
     monkeypatch.setattr(signals, "_create_job", create_job)
     monkeypatch.setattr(signals, "_job_repository", Repository)
@@ -425,6 +478,7 @@ def test_signal_analysis_drops_context_when_the_payload_is_too_large(
     response = asyncio.run(
         signals.stock_ai_analysis(
             "AMD",
+            _areq(),
             signals.SignalAnalysisJobCreateRequest(),
         )
     )

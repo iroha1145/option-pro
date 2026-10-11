@@ -133,7 +133,7 @@ function MobileDockContent({ onHeightChange }: MobileDockProps) {
           雷达与其余入口同级同色，不再做中央凸起圆钮。 */}
       <nav
         ref={dockRef}
-        className="glass fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[60] mx-auto flex min-h-16 max-w-md items-stretch rounded-lg border border-line px-1.5 shadow-dock xl:hidden"
+        className="glass mobile-nav-glass fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[60] mx-auto flex min-h-16 max-w-md items-stretch rounded-lg border border-line px-1.5 shadow-dock xl:hidden"
         aria-label={t('移动端导航')}
       >
         {/* layoutRoot：Dock 是 fixed 容器，投影坐标必须收进条内（beUI Dock / tabs） */}

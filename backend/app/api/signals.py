@@ -19,12 +19,17 @@ from app.api.ai import (
     _job_repository,
     _require_manual_analysis_enabled,
     _require_runtime_capability,
+    _require_stock_analysis_enabled,
 )
+from app.config import get_settings
+from app.services.ai_jobs import runtime as ai_job_runtime
+from app.services.runtime_settings import get_effective_runtime_settings, RuntimeSettingsStorageError
 from app.services.utils import sanitize as _sanitize
 from app.access import (
     current_request_is_owner,
     public_snapshot_unavailable,
     require_same_origin_action,
+    request_is_owner_session,
 )
 from app.personal_config import get_personal_config
 from app.services.http_read_cache import respond_with_snapshot, snapshot_version_key
@@ -55,10 +60,8 @@ class SignalAnalysisJobCreateRequest(StrictModel):
     force: StrictBool = False
 
 
-# 同票单飞的检查与创建之间隔着读快照、组证据包（最长约 10 秒）等多次 await；
-# 证据包含动态上下文，request_hash 每次都不同，仓库去重挡不住，并发两次点击
-# 会生成两单付费任务（2026-09-25 审计）。生产只有一个 uvicorn 进程，进程内按票
-# 加锁即可。弱引用字典让空闲的锁随用随收，不随历史票数增长。
+# 进程内按票合并证据采集，仓库事务另行保证跨进程的共享任务与账号额度。
+# 弱引用字典让空闲的锁随用随收，不随历史票数增长。
 _SIGNAL_ANALYSIS_LOCKS: "weakref.WeakValueDictionary[str, asyncio.Lock]" = (
     weakref.WeakValueDictionary()
 )
@@ -77,9 +80,9 @@ def today_str() -> str:
 
 
 #: 证据包（不含哈希字段）允许的最大规范化字节数。低于入队与提交共用的
-#: 60KB(runtime._MAX_UNTRUSTED_JSON_BYTES，按转义后计)，留出封装余量；
+#: 个股专用240KB上限（按转义后计），留出封装余量；
 #: 超限时按 CONTEXT_BLOCK_KEYS 顺序整块丢弃并在 context_status 里标注。
-_EVIDENCE_MAX_BYTES = 52_000
+_EVIDENCE_MAX_BYTES = 220_000
 
 
 def _canonical_evidence_bytes(evidence: dict) -> bytes:
@@ -362,36 +365,93 @@ async def stock_signals(ticker: str):
         raise HTTPException(503, "Stock signals are currently unavailable") from exc
 
 
+def _analysis_account_id(http_request: Request) -> str:
+    from app.api.accounts import require_personal_account
+    return str(require_personal_account(http_request).user_id)
+
+
+def _signal_analysis_identity() -> dict:
+    settings = ai_job_runtime.settings_for_job(get_settings(), "signal_analysis")
+    schema_version, schema_sha256 = ai_job_runtime.schema_identity("signal_analysis", model=settings.openai_model)
+    return {
+        "model": settings.openai_model,
+        "reasoning": settings.openai_reasoning,
+        "prompt_version": ai_job_runtime.PROMPT_VERSIONS["signal_analysis"],
+        "schema_version": schema_version,
+        "schema_sha256": schema_sha256,
+    }
+
+
+def _public_signal_analysis(row: dict, *, cached: bool = False) -> dict:
+    from app.services.stock_report_visuals import stock_report_visuals
+    public = _job_repository().public(row, cached=cached)
+    public["visuals"] = stock_report_visuals(row) if public.get("result") is not None else None
+    if not current_request_is_owner():
+        public["error_detail"] = None
+        public["cancellable"] = False
+    return public
+
+
+@router.get("/stock/{ticker}/ai-analysis")
+async def get_stock_ai_analysis(ticker: str, http_request: Request):
+    account_id = _analysis_account_id(http_request)
+    symbol = _normalize_ticker(ticker)
+    repository = _job_repository()
+    snapshot = await asyncio.to_thread(repository.stock_analysis_snapshot, account_id, symbol, **_signal_analysis_identity())
+    quota, shared = snapshot["quota"], snapshot["shared_job"]
+    latest = await asyncio.to_thread(repository.latest_completed, "signal_analysis", symbol)
+    active = shared if shared and shared["status"] in {"pending", "queued", "in_progress"} else None
+    if snapshot["cached_job"]:
+        latest = snapshot["cached_job"]
+    try:
+        enabled = bool(get_effective_runtime_settings().ai.stock_analysis_enabled)
+    except RuntimeSettingsStorageError as exc:
+        raise HTTPException(status_code=503, detail={"code": "runtime_settings_unavailable"}) from exc
+    return {
+        "schema_version": "stock-analysis-view-v1",
+        "ticker": symbol,
+        "enabled": enabled,
+        "can_generate": enabled and quota["remaining"] > 0 and shared is None,
+        "quota": quota,
+        "cache_reset_at": quota["reset_at"],
+        "latest_job_cached": snapshot["cached_job"] is not None,
+        "active_job": _public_signal_analysis(active) if active else None,
+        "latest_job": _public_signal_analysis(latest, cached=snapshot["cached_job"] is not None) if latest else None,
+    }
+
+
 @router.post(
     "/stock/{ticker}/ai-analysis",
     dependencies=[Depends(require_same_origin_action)],
 )
 async def stock_ai_analysis(
     ticker: str,
+    http_request: Request,
     request: SignalAnalysisJobCreateRequest = Body(
         default_factory=SignalAnalysisJobCreateRequest
     ),
 ):
     """Snapshot deterministic evidence and queue the paid model work."""
 
-    _require_manual_analysis_enabled()
-    _require_runtime_capability()
+    account_id = _analysis_account_id(http_request)
+    _require_stock_analysis_enabled()
+    _require_runtime_capability("signal_analysis")
+    if request.force and not request_is_owner_session(http_request):
+        raise HTTPException(status_code=403, detail={"code": "owner_access_required", "message": "仅站主可强制重试"})
     symbol = _normalize_ticker(ticker)
     async with _signal_analysis_lock(symbol):
-        return await _queue_signal_analysis(symbol, force=request.force)
+        return await _queue_signal_analysis(symbol, force=request.force, account_id=account_id)
 
 
-async def _queue_signal_analysis(symbol: str, *, force: bool) -> JSONResponse:
-    # 证据包含动态上下文块后，同票重复提交的 request_hash 几乎必然不同，
-    # 仓库级哈希去重挡不住重复付费。非 force 提交先复用在跑任务。仓库调用是
-    # 同步 SQLite 事务，放到线程里跑，写锁等待不卡事件循环。
-    active = await asyncio.to_thread(
-        _job_repository().active_for_ticker,
-        "signal_analysis",
-        symbol,
-    )
-    if active is not None and not force:
-        public = _job_repository().public(active, cached=False)
+async def _queue_signal_analysis(symbol: str, *, force: bool, account_id: str) -> JSONResponse:
+    # 先复用同股票、同模型配置的共享报告；最终额度与创建在仓库事务内重查。
+    # 同步仓库调用在线程中运行，写锁等待不会阻塞其他请求。
+    repository = _job_repository()
+    snapshot = await asyncio.to_thread(repository.stock_analysis_snapshot, account_id, symbol, **_signal_analysis_identity())
+    quota, active = snapshot["quota"], snapshot["shared_job"]
+    if active is not None:
+        public = _public_signal_analysis(active, cached=active["status"] == "completed")
+        public["quota"] = quota
         return JSONResponse(
             public,
             status_code=202,
@@ -400,6 +460,12 @@ async def _queue_signal_analysis(symbol: str, *, force: bool) -> JSONResponse:
                 "Retry-After": "2",
             },
         )
+    if quota["remaining"] == 0:
+        raise HTTPException(status_code=429, detail={
+            "code": "stock_analysis_daily_limit",
+            "message": "本时段的个股分析额度已用完，美股收盘后恢复",
+            "reset_at": quota["reset_at"], "quota": quota,
+        })
     try:
         signals, saved, snapshot_source = (
             await _owner_stock_signal_evidence(symbol)
@@ -446,6 +512,7 @@ async def _queue_signal_analysis(symbol: str, *, force: bool) -> JSONResponse:
                     **evidence_kwargs,
                 ),
                 force_retry=force,
+                stock_analysis_account_id=account_id,
             )
         except ValueError as exc:
             if str(exc) != "ai_job_payload_too_large":
@@ -457,6 +524,7 @@ async def _queue_signal_analysis(symbol: str, *, force: bool) -> JSONResponse:
                 "signal_analysis",
                 _signal_analysis_payload(symbol, signals, scores, **evidence_kwargs),
                 force_retry=force,
+                stock_analysis_account_id=account_id,
             )
     except ValueError as exc:
         if str(exc) == "ai_job_payload_too_large":
@@ -465,10 +533,11 @@ async def _queue_signal_analysis(symbol: str, *, force: bool) -> JSONResponse:
                 detail="Signal snapshot is too large for AI analysis",
             ) from exc
         raise
-    public = _job_repository().public(
+    public = _public_signal_analysis(
         row,
         cached=(not created and row["status"] == "completed"),
     )
+    public["quota"] = await asyncio.to_thread(repository.stock_analysis_quota, account_id)
     return JSONResponse(
         public,
         status_code=202,

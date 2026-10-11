@@ -70,6 +70,9 @@ class RuntimeAISettings(_StrictModel):
         le=100_000_000,
     )
     manual_analysis_enabled: bool = False
+    # Stock reports have their own one-per-account/market-close allowance;
+    # pausing scheduled news or other manual tasks must not disable them.
+    stock_analysis_enabled: bool = True
     manual_analysis_cooldown_seconds: int = Field(default=30, ge=0, le=86_400)
 
 
@@ -143,6 +146,7 @@ class RuntimeAISettingsPatch(_StrictModel):
         le=100_000_000,
     )
     manual_analysis_enabled: Optional[bool] = None
+    stock_analysis_enabled: Optional[bool] = None
     manual_analysis_cooldown_seconds: Optional[int] = Field(
         default=None,
         ge=0,

@@ -162,3 +162,13 @@ test('historical jobs keep their identity and absent usage is not guessed', () =
   assert.equal(unknown.reasoning, undefined);
   assert.deepEqual(unknown.usage, {});
 });
+
+test('actual completion time is preserved separately from later update time; missing completion stays unknown', () => {
+  const raw = { job_id: 'job-completed', job_type: 'signal_analysis', status: 'completed', updated_at: '2026-10-11T20:00:00Z', completed_at: '2026-10-10T20:00:00Z' };
+  const job = normalizeAiJob(raw);
+  assert.equal(job.updatedAt, raw.updated_at);
+  assert.equal(job.completedAt, raw.completed_at);
+  const { completed_at, ...legacy } = raw;
+  assert.equal(normalizeAiJob(legacy).completedAt, null);
+  assert.equal(normalizeAiJob({ ...raw, completed_at: 'not-a-time' }).completedAt, null);
+});

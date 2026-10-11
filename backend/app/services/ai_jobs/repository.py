@@ -15,6 +15,12 @@ from urllib.parse import quote, urlsplit
 
 from app.failure_diagnostics import record_fallback_failure
 from app.json_validation import canonical_json_text
+from app.services.stock_analysis_quota import (
+    STOCK_ANALYSIS_PERIOD_LIMIT,
+    StockAnalysisQuotaExceeded,
+    public_stock_quota,
+    stock_analysis_period,
+)
 from app.services.model_budget import (
     SharedModelBudget,
     JOB_MODELS,
@@ -266,6 +272,40 @@ _PROVIDER_PROGRESS_SCHEMA_CHECKSUM = hashlib.sha256(
     _PROVIDER_PROGRESS_SCHEMA_SQL.encode("utf-8")
 ).hexdigest()
 
+_STOCK_QUOTA_SCHEMA_VERSION = "ai-stock-analysis-account-quota-v1"
+_STOCK_QUOTA_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS ai_stock_analysis_allowances (
+    account_id TEXT NOT NULL,
+    period_start TEXT NOT NULL,
+    reset_at TEXT NOT NULL,
+    job_id TEXT UNIQUE REFERENCES ai_jobs(job_id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(account_id, period_start)
+);
+CREATE INDEX IF NOT EXISTS idx_ai_signal_analysis_ticker
+ON ai_jobs(upper(json_extract(payload_json,'$.ticker')), created_at DESC)
+WHERE job_type='signal_analysis';
+"""
+_STOCK_QUOTA_SCHEMA_CHECKSUM = hashlib.sha256(
+    _STOCK_QUOTA_SCHEMA_SQL.encode("utf-8")
+).hexdigest()
+
+# Keep the v1 registry checksum and all consumed records. The new slot is
+# defaulted to 1 so old writers also remain compatible with the expanded key.
+_STOCK_QUOTA_V2_SCHEMA_VERSION = "ai-stock-analysis-account-quota-v2"
+_STOCK_QUOTA_V2_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS ai_stock_analysis_allowances (
+    account_id TEXT NOT NULL,
+    period_start TEXT NOT NULL,
+    reset_at TEXT NOT NULL,
+    job_id TEXT UNIQUE REFERENCES ai_jobs(job_id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL,
+    use_number INTEGER NOT NULL DEFAULT 1 CHECK(use_number BETWEEN 1 AND 10),
+    PRIMARY KEY(account_id, period_start, use_number)
+);
+"""
+_STOCK_QUOTA_V2_SCHEMA_CHECKSUM = hashlib.sha256(_STOCK_QUOTA_V2_SCHEMA_SQL.encode("utf-8")).hexdigest()
+
 # retry_of_job_id references ai_jobs(job_id) and foreign keys are enforced, so
 # deleting a job looks up its retry children. Unindexed, every deleted row
 # scanned the whole table: one 500-row history prune batch held the write lock
@@ -356,10 +396,10 @@ def _minimum_task_token_reservation(*, model: str | None = None) -> int:
     return minimum_token_reservation(model=model)
 
 
-def _bounded_provider_input(payload: dict[str, Any]) -> str:
+def _bounded_provider_input(payload: dict[str, Any], *, job_type: str | None = None) -> str:
     from app.services.ai_jobs.runtime import _bounded_untrusted_json
 
-    return _bounded_untrusted_json(payload)
+    return _bounded_untrusted_json(payload, job_type=job_type)
 
 
 def _reservation_released(
@@ -666,6 +706,19 @@ class AIJobRepository:
                 "INSERT OR IGNORE INTO ai_job_schema(version,checksum,applied_at) VALUES(?,?,?)",
                 (_PROVIDER_PROGRESS_SCHEMA_VERSION, _PROVIDER_PROGRESS_SCHEMA_CHECKSUM, _iso()),
             )
+            stock_quota_schema = connection.execute(
+                "SELECT checksum FROM ai_job_schema WHERE version=?",
+                (_STOCK_QUOTA_SCHEMA_VERSION,),
+            ).fetchone()
+            if stock_quota_schema is not None and stock_quota_schema["checksum"] != _STOCK_QUOTA_SCHEMA_CHECKSUM:
+                raise RuntimeError("ai_stock_quota_schema_checksum_mismatch")
+            for statement in _statements(_STOCK_QUOTA_SCHEMA_SQL):
+                connection.execute(statement)
+            connection.execute(
+                "INSERT OR IGNORE INTO ai_job_schema(version,checksum,applied_at) VALUES(?,?,?)",
+                (_STOCK_QUOTA_SCHEMA_VERSION, _STOCK_QUOTA_SCHEMA_CHECKSUM, _iso()),
+            )
+            self._initialize_stock_quota_v2(connection)
             connection.execute(_AI_JOB_SOURCES_TABLE_SQL)
             source_schema = connection.execute(
                 "SELECT checksum FROM ai_job_schema WHERE version=?",
@@ -804,6 +857,31 @@ class AIJobRepository:
             connection.commit()
 
     @staticmethod
+    def _initialize_stock_quota_v2(connection: sqlite3.Connection) -> None:
+        registered = connection.execute(
+            "SELECT checksum FROM ai_job_schema WHERE version=?", (_STOCK_QUOTA_V2_SCHEMA_VERSION,),
+        ).fetchone()
+        if registered and registered["checksum"] != _STOCK_QUOTA_V2_SCHEMA_CHECKSUM:
+            raise RuntimeError("ai_stock_quota_schema_checksum_mismatch")
+        columns = connection.execute("PRAGMA table_info(ai_stock_analysis_allowances)").fetchall()
+        if "use_number" not in {row["name"] for row in columns}:
+            connection.execute("ALTER TABLE ai_stock_analysis_allowances RENAME TO ai_stock_analysis_allowances_v1")
+            connection.execute(_STOCK_QUOTA_V2_SCHEMA_SQL)
+            connection.execute("""INSERT INTO ai_stock_analysis_allowances
+                (account_id,period_start,reset_at,job_id,created_at,use_number)
+                SELECT account_id,period_start,reset_at,job_id,created_at,1
+                FROM ai_stock_analysis_allowances_v1""")
+            connection.execute("DROP TABLE ai_stock_analysis_allowances_v1")
+        columns = connection.execute("PRAGMA table_info(ai_stock_analysis_allowances)").fetchall()
+        primary_key = [row["name"] for row in sorted(columns, key=lambda row: row["pk"]) if row["pk"]]
+        if primary_key != ["account_id", "period_start", "use_number"]:
+            raise RuntimeError("ai_stock_quota_schema_invalid")
+        connection.execute(
+            "INSERT OR IGNORE INTO ai_job_schema(version,checksum,applied_at) VALUES(?,?,?)",
+            (_STOCK_QUOTA_V2_SCHEMA_VERSION, _STOCK_QUOTA_V2_SCHEMA_CHECKSUM, _iso()),
+        )
+
+    @staticmethod
     def _ensure_indexes(connection: sqlite3.Connection) -> None:
         for statement in _AI_JOBS_INDEX_STATEMENTS:
             connection.execute(statement)
@@ -821,12 +899,12 @@ class AIJobRepository:
         return raw
 
     @staticmethod
-    def _canonical_payload(payload: dict[str, Any]) -> str:
+    def _canonical_payload(payload: dict[str, Any], *, job_type: str | None = None) -> str:
         # 入队直接用提交时的口径（转义 <> 之后 60,000 字节）。两个上限不一致
         # 时，夹在中间的 payload 能入队、提交时却终态 ai_input_too_large，
         # 调用方按 ai_job_payload_too_large 做的降级也接不住（2026-09-25 审计）。
         try:
-            _bounded_provider_input(payload)
+            _bounded_provider_input(payload, job_type=job_type)
         except ValueError as exc:
             if str(exc) != "ai_input_too_large":
                 raise
@@ -1018,9 +1096,16 @@ class AIJobRepository:
         batch_id: str | None = None,
         batch_position: int | None = None,
         earnings_featured_verified: bool = False,
+        stock_analysis_account_id: str | None = None,
     ) -> tuple[dict[str, Any], bool]:
         if execution_mode != "background":
             raise ValueError("background_execution_required")
+        if stock_analysis_account_id is not None and (
+            job_type != "signal_analysis" or submission_source != "manual"
+            or not isinstance(stock_analysis_account_id, str)
+            or not 1 <= len(stock_analysis_account_id) <= 120
+        ):
+            raise ValueError("invalid_stock_analysis_account")
         if submission_source not in {"manual", "scheduled"}:
             raise ValueError("invalid_submission_source")
         if type(earnings_featured_verified) is not bool or (
@@ -1041,7 +1126,7 @@ class AIJobRepository:
         elif batch_position is not None:
             raise ValueError("invalid_ai_job_batch")
         self.ensure_initialized()
-        payload_json = self._canonical_payload(payload)
+        payload_json = self._canonical_payload(payload, job_type=job_type)
         request_hash = self._request_hash(
             job_type,
             payload_json,
@@ -1086,6 +1171,27 @@ class AIJobRepository:
         now = _iso()
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            stock_period = None
+            if stock_analysis_account_id is not None:
+                observed = _utcnow()
+                now = _iso(observed)
+                stock_period = stock_analysis_period(observed)
+                # This lookup shares the same write transaction as allowance
+                # consumption and insertion. Separate processes/devices cannot
+                # create two paid jobs for one ticker or exceed one account's limit.
+                shared = self._shared_signal_analysis(
+                    connection, str(payload.get("ticker", "")),
+                    model=model, reasoning=reasoning, prompt_version=prompt_version,
+                    schema_version=schema_version, schema_sha256=schema_sha256,
+                    since=stock_period.key, until=stock_period.reset_at.isoformat(),
+                )
+                if shared is not None:
+                    connection.commit()
+                    return shared, False
+                spent = self._stock_allowance_used(connection, stock_analysis_account_id, stock_period.key)
+                if spent >= STOCK_ANALYSIS_PERIOD_LIMIT:
+                    connection.rollback()
+                    raise StockAnalysisQuotaExceeded(stock_period, used=spent)
             matches = [
                 dict(row)
                 for row in connection.execute(
@@ -1247,12 +1353,21 @@ class AIJobRepository:
                     )
                     for row in meaningful_latest
                 )
-                if (
-                    force_retry
-                    and not unknown_exists
-                    and not settled_result_exists
-                    and not unresolved_submission_exists
+                # A new close period can request fresh research even when the
+                # saved market packet has not changed. Completed reports from
+                # this period were already returned by the shared lookup above.
+                new_stock_period = stock_period is not None and bool(meaningful_latest) and all(
+                    row["status"] not in {"pending", "queued", "in_progress"}
+                    and (_parse_time(row["created_at"]) or stock_period.start) < stock_period.start
+                    for row in meaningful_latest
+                )
+                requested_retry = (
+                    (force_retry or stock_period is not None)
+                    and (stock_period is not None or not settled_result_exists)
                     and retryable_latest
+                )
+                if not unknown_exists and not unresolved_submission_exists and (
+                    requested_retry or new_stock_period
                 ):
                     active = int(
                         connection.execute(
@@ -1291,6 +1406,8 @@ class AIJobRepository:
                         earnings_featured_verified=earnings_featured_verified,
                     )
                     decorated = self._decorate_earnings_row(connection, row)
+                    if stock_period is not None:
+                        self._spend_stock_allowance(connection, stock_analysis_account_id, stock_period, row["job_id"], now)
                     connection.commit()
                     return decorated, True
                 # 与 get_job 同一口径补上终稿锁与「终稿进行中」：202 响应直接
@@ -1343,8 +1460,82 @@ class AIJobRepository:
                 earnings_featured_verified=earnings_featured_verified,
             )
             decorated = self._decorate_earnings_row(connection, row)
+            if stock_period is not None:
+                self._spend_stock_allowance(connection, stock_analysis_account_id, stock_period, row["job_id"], now)
             connection.commit()
             return decorated, True
+
+    @staticmethod
+    def _spend_stock_allowance(connection, account_id, period, job_id, now) -> None:
+        connection.execute(
+            """INSERT INTO ai_stock_analysis_allowances
+               (account_id,period_start,reset_at,job_id,created_at,use_number) VALUES(?,?,?,?,?,?)""",
+            (account_id, period.key, period.reset_at.isoformat(), job_id, now,
+             AIJobRepository._stock_allowance_used(connection, account_id, period.key) + 1),
+        )
+
+    @staticmethod
+    def _shared_signal_analysis(
+        connection, ticker: str, *, model: str, reasoning: str,
+        prompt_version: str, schema_version: str, schema_sha256: str, since: str, until: str | None = None, completed_only: bool = False,
+    ) -> dict[str, Any] | None:
+        rows = connection.execute(
+            """SELECT j.*,s.submission_source FROM ai_jobs AS j
+               JOIN ai_job_sources AS s ON s.job_id=j.job_id
+               WHERE j.job_type='signal_analysis'
+                 AND upper(json_extract(j.payload_json,'$.ticker'))=?
+                 AND j.model=? AND j.reasoning=? AND j.prompt_version=?
+                 AND j.schema_version=? AND j.schema_sha256=?
+                 AND ((?=0 AND j.status IN ('pending','queued','in_progress'))
+                      OR (j.status='completed' AND julianday(j.created_at)>=julianday(?)
+                          AND (? IS NULL OR julianday(j.created_at)<=julianday(?))))
+               ORDER BY CASE WHEN j.status='completed' THEN 1 ELSE 0 END,
+                        j.created_at DESC LIMIT 20""",
+            (ticker.upper(), model, reasoning, prompt_version, schema_version, schema_sha256, int(completed_only), since, until, until),
+        ).fetchall()
+        for raw in rows:
+            row = dict(raw)
+            if row["status"] == "completed":
+                created_at, boundary = _parse_time(row.get("created_at")), _parse_time(since)
+                # SQLite's date arithmetic rounds submillisecond values; use
+                # the exact instants for the close boundary after narrowing.
+                if created_at is None or boundary is None or created_at < boundary or (until is not None and created_at >= _parse_time(until)):
+                    continue
+            if row["status"] != "completed" or AIJobRepository._completed_result_state(row) != "invalid":
+                return row
+        return None
+
+    def shared_signal_analysis(self, ticker: str, **identity) -> dict[str, Any] | None:
+        self.ensure_initialized()
+        with self._connect() as connection:
+            return self._shared_signal_analysis(connection, ticker, **identity)
+
+    @staticmethod
+    def _stock_allowance_used(connection, account_id: str, period_start: str) -> int:
+        return connection.execute(
+            "SELECT COUNT(*) FROM ai_stock_analysis_allowances WHERE account_id=? AND period_start=?",
+            (account_id, period_start),
+        ).fetchone()[0]
+
+    def stock_analysis_quota(self, account_id: str, *, now: datetime | None = None) -> dict:
+        self.ensure_initialized()
+        period = stock_analysis_period(now or _utcnow())
+        with self._connect() as connection:
+            used = self._stock_allowance_used(connection, account_id, period.key)
+        return public_stock_quota(period, used=used)
+
+    def stock_analysis_snapshot(self, account_id: str, ticker: str, **identity) -> dict:
+        self.ensure_initialized()
+        with self._connect() as connection:
+            connection.execute("BEGIN")
+            period = stock_analysis_period(_utcnow())
+            quota = public_stock_quota(period, used=self._stock_allowance_used(connection, account_id, period.key))
+            bounds = {"since": period.key, "until": period.reset_at.isoformat()}
+            shared = self._shared_signal_analysis(connection, ticker, **identity, **bounds)
+            cached = shared if shared and shared["status"] == "completed" else self._shared_signal_analysis(
+                connection, ticker, **identity, **bounds, completed_only=True,
+            )
+            return {"quota": quota, "shared_job": shared, "cached_job": cached}
 
     @staticmethod
     def _request_hash_source_legacy(
@@ -2471,7 +2662,9 @@ class AIJobRepository:
         if not ((receipt["provider"] == "anthropic" and _uses_claude(receipt["model"]))
                 or (receipt["provider"] == "openai" and receipt["model"] == "gpt-5.6-luna")):
             raise ValueError("ai_job_provider_receipt_invalid")
-        if "job_type" in receipt and (receipt["job_type"] != "earnings_impact" or receipt["provider"] != "anthropic"):
+        if "job_type" in receipt and (receipt["job_type"] not in {"earnings_impact", "signal_analysis"} or receipt["provider"] != "anthropic"):
+            raise ValueError("ai_job_provider_receipt_invalid")
+        if receipt.get("job_type") == "signal_analysis" and receipt["model"] != "claude-sonnet-5-5":
             raise ValueError("ai_job_provider_receipt_invalid")
         if receipt["provider"] == "openai":
             calls = receipt.get("openai_web_calls")
@@ -2561,7 +2754,7 @@ class AIJobRepository:
     def _round_allows_continuation(value: dict[str, Any], item: dict[str, Any]) -> bool:
         return item.get("stop_reason") == "pause_turn" or (
             _uses_claude(value.get("model"))
-            and value.get("job_type") == "earnings_impact"
+            and value.get("job_type") in {"earnings_impact", "signal_analysis"}
             and item.get("stop_reason") == "end_turn"
             and item.get("continuation_reason") == "incomplete_final_json"
         )
@@ -2580,7 +2773,7 @@ class AIJobRepository:
         for index, item in enumerate(rounds):
             if (not isinstance(item, dict) or not {"id", "stop_reason", "usage"} <= set(item)
                     or set(item) - {"id", "stop_reason", "usage", "continuation_reason"}
-                    or ("continuation_reason" in item and not (_uses_claude(value.get("model")) and value.get("job_type") == "earnings_impact" and item["stop_reason"] == "end_turn" and item["continuation_reason"] == "incomplete_final_json"))
+                    or ("continuation_reason" in item and not (_uses_claude(value.get("model")) and value.get("job_type") in {"earnings_impact", "signal_analysis"} and item["stop_reason"] == "end_turn" and item["continuation_reason"] == "incomplete_final_json"))
                     or item["id"] != request_ids[index]
                     or (index < len(request_ids) - 1 and not AIJobRepository._round_allows_continuation(value, item))):
                 raise ValueError("ai_job_provider_rounds_invalid")
@@ -2602,7 +2795,9 @@ class AIJobRepository:
         if (not isinstance(progress, dict) or not fields <= set(progress) or set(progress) - fields - {"job_type"}
                 or progress["provider"] != "anthropic" or not _uses_claude(progress["model"])):
             raise ValueError("ai_job_provider_progress_invalid")
-        if "job_type" in progress and progress["job_type"] != "earnings_impact":
+        if "job_type" in progress and progress["job_type"] not in {"earnings_impact", "signal_analysis"}:
+            raise ValueError("ai_job_provider_progress_invalid")
+        if progress.get("job_type") == "signal_analysis" and progress["model"] != "claude-sonnet-5-5":
             raise ValueError("ai_job_provider_progress_invalid")
         AIJobRepository._validate_provider_rounds(progress, complete=False)
         value = canonical_json_text(progress)
@@ -3044,6 +3239,17 @@ class AIJobRepository:
             payload = json.loads(str(current["payload_json"]))
         except (KeyError, TypeError, json.JSONDecodeError) as exc:
             raise RuntimeError("ai_job_recovery_payload_invalid") from exc
+        receipt = None
+        external_source_texts = ()
+        if claude_result or current.get("provider_result_json"):
+            receipt = self.get_provider_result(job_id)
+            if receipt is None or receipt.get("terminal_error"):
+                raise RuntimeError("ai_job_recovery_rejected")
+            if current["job_type"] == "signal_analysis":
+                if receipt.get("stop_reason") != "end_turn":
+                    raise RuntimeError("ai_job_recovery_rejected")
+                from app.services.ai_jobs.stock_report import successful_web_evidence
+                external_source_texts = tuple(item["title"] for item in successful_web_evidence(receipt.get("tool_evidence")))
         # Recovery applies the same limits as the original completion did.
         validated = validate_result(
             str(current["job_type"]),
@@ -3055,12 +3261,12 @@ class AIJobRepository:
             ),
             payload,
             schema_version=current.get("schema_version"),
+            external_source_texts=external_source_texts,
         )
-        if claude_result or current.get("provider_result_json"):
-            receipt = self.get_provider_result(job_id)
-            if receipt is None or receipt.get("terminal_error"):
-                raise RuntimeError("ai_job_recovery_rejected")
-            from app.services.ai_jobs.runtime import receipt_result
+        if receipt is not None:
+            from app.services.ai_jobs.runtime import enforce_new_output_limits, receipt_result
+            if current["job_type"] == "signal_analysis":
+                enforce_new_output_limits(current, json.dumps(validated, ensure_ascii=False), payload)
             original_result = receipt_result(receipt, str(current["job_type"]), payload)
             if validated != original_result:
                 raise RuntimeError("ai_job_recovery_result_mismatch")
@@ -3471,6 +3677,26 @@ class AIJobRepository:
         except (KeyError, TypeError, json.JSONDecodeError):
             payload = {}
         result = json.loads(row["result_json"]) if row.get("result_json") else None
+        # Validate the durable receipt before using its source titles in text
+        # validation. Model-written citations never establish their own origin.
+        validated_receipt = None
+        if row.get("provider_result_json"):
+            try:
+                receipt = json.loads(row["provider_result_json"])
+                AIJobRepository._provider_receipt_json(receipt)
+                if (receipt["model"] != row.get("model")
+                        or receipt["id"] != row.get("anthropic_message_id" if receipt["provider"] == "anthropic" else "openai_response_id")
+                        or receipt.get("job_type", row.get("job_type")) != row.get("job_type")):
+                    raise ValueError("ai_job_provider_result_identity_mismatch")
+                validated_receipt = receipt
+            except (TypeError, ValueError) as exc:
+                record_fallback_failure("ai_job_provider_result_hidden", exc)
+        stock_web_evidence = []
+        external_source_texts = ()
+        if row.get("job_type") == "signal_analysis" and validated_receipt is not None:
+            from app.services.ai_jobs.stock_report import successful_web_evidence
+            stock_web_evidence = successful_web_evidence(validated_receipt.get("tool_evidence"))
+            external_source_texts = tuple(item["title"] for item in stock_web_evidence)
         legacy_output_hidden = False
         if result is not None:
             try:
@@ -3484,7 +3710,17 @@ class AIJobRepository:
                     ),
                     payload,
                     validator=validate_result,
+                    external_source_texts=external_source_texts,
                 )
+                if row.get("job_type") == "signal_analysis":
+                    from app.services.ai_jobs.stock_report import REPORT_SCHEMA_NAME, validate_stock_report_evidence
+                    if row.get("schema_version") == REPORT_SCHEMA_NAME and result.get("report") is None:
+                        raise ValueError("stock_report_required")
+                    if result.get("report") is not None:
+                        if (validated_receipt is None or validated_receipt.get("terminal_error") is not None
+                                or validated_receipt.get("stop_reason") != "end_turn"):
+                            raise ValueError("stock_report_tool_receipt_missing")
+                        validate_stock_report_evidence(result, payload, stock_web_evidence)
             except (TypeError, ValueError) as exc:
                 # 规则收紧后旧的付费结果会被隐藏；不留记录时只能重取响应现场
                 # 复现（2026-08-13 「焦点周期没东西」就难在这里）。
@@ -3547,21 +3783,20 @@ class AIJobRepository:
         )
         payload["evidence_sources"] = []
         payload["usage"].update({field: None for field in _TOOL_USAGE_FIELDS})
-        validated_receipt = None
-        if row.get("provider_result_json"):
-            try:
-                receipt = json.loads(row["provider_result_json"])
-                AIJobRepository._provider_receipt_json(receipt)
-                if (receipt["model"] != row.get("model")
-                        or receipt["id"] != row.get("anthropic_message_id" if receipt["provider"] == "anthropic" else "openai_response_id")):
-                    raise ValueError("ai_job_provider_result_identity_mismatch")
-                validated_receipt = receipt
-                payload["evidence_sources"] = receipt.get("evidence_sources", [])
-                payload["usage"].update({
-                    field: receipt["usage"].get(field) for field in _TOOL_USAGE_FIELDS
-                })
-            except (TypeError, ValueError) as exc:
-                record_fallback_failure("ai_job_provider_result_hidden", exc)
+        if validated_receipt is not None:
+            payload["evidence_sources"] = validated_receipt.get("evidence_sources", [])
+            payload["usage"].update({
+                field: validated_receipt["usage"].get(field) for field in _TOOL_USAGE_FIELDS
+            })
+        if row.get("job_type") == "signal_analysis" and isinstance(result, dict) and result.get("report") is not None:
+            cited = {url for section in result["report"]["sections"] for url in section["source_urls"]}
+            sources = {}
+            for item in stock_web_evidence:
+                if item["url"] in cited:
+                    sources.setdefault(item["url"], {"title": item["title"], "url": item["url"], "type": item["tool_name"]})
+            payload["evidence_sources"] = list(sources.values())[:10]
+        elif row.get("job_type") == "signal_analysis" and legacy_output_hidden:
+            payload["evidence_sources"] = []
         if (row.get("job_type") == "market_focus"
                 and payload_source.get("verification_version") == "web-evidence-v1"):
             # Never expose mixed-event prose or self-reported verification as a

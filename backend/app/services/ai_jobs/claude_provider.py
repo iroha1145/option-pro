@@ -95,7 +95,7 @@ def prepare_message(
         "system": [{
             "type": "text",
             "text": instructions + (_TOOL_INSTRUCTIONS if tools else ""),
-            "cache_control": {"type": "ephemeral", "ttl": "5m"},
+            "cache_control": {"type": "ephemeral", "ttl": "1h" if job_type == "signal_analysis" and getattr(settings, "openai_model", MODEL) == "claude-sonnet-5-5" else "5m"},
         }],
         "messages": [{
             "role": "user",
@@ -450,6 +450,9 @@ def _claude_earnings(prepared: PreparedMessage) -> bool:
 
 
 def tool_limits(prepared: PreparedMessage) -> dict[str, int]:
+    if prepared.params["model"] == "claude-sonnet-5-5" and prepared.diagnostic_task == "ai_jobs:signal_analysis":
+        from app.services.ai_jobs.stock_report import TOOL_LIMITS
+        return dict(TOOL_LIMITS)
     if _claude_earnings(prepared):
         from app.services.ai_jobs.runtime import EARNINGS_TOOL_LIMITS
         return dict(EARNINGS_TOOL_LIMITS)
@@ -474,7 +477,7 @@ def _last_earnings_json(text: str) -> str | None:
 
     The model may precede prompt-based JSON with a short explanation or follow
     it with a citation marker such as ``[1]``; only objects count as answers.
-    Restricted to earnings; local business-schema validation remains upstream.
+    Used by earnings and stock reports; business-schema validation is upstream.
     """
     decoder = json.JSONDecoder()
     position = 0
@@ -505,13 +508,15 @@ async def stream_conversation(
 
     Progress is durable before each next request. It deliberately contains no
     thinking or assistant content, so restart cannot replay a paid conversation.
-    Earnings may also continue once an answer arrives without its final JSON.
+    Earnings and stock reports may continue if final JSON is still missing.
     """
     from app.services.ai_jobs.runtime import CONVERSATION_MAX_ROUNDS, claude_conversation
 
     if not claude_conversation(prepared.diagnostic_task.removeprefix("ai_jobs:"), prepared.params["model"]):
         raise ValueError("provider_continuation_not_supported")
     earnings = _claude_earnings(prepared)
+    stock = prepared.params["model"] == "claude-sonnet-5-5" and prepared.diagnostic_task == "ai_jobs:signal_analysis"
+    prompt_json = earnings or stock
     original_model = prepared.params["model"]
     ceiling = int(prepared.params["max_tokens"])
     messages = deepcopy(prepared.params["messages"])
@@ -520,7 +525,7 @@ async def stream_conversation(
     request_ids: list[str] = []
     counts = {"web_search": 0, "web_fetch": 0, "code": 0, "total": 0}
     container_id: str | None = None
-    conversation_identity = {"job_type": "earnings_impact"} if earnings else {}
+    conversation_identity = {"job_type": "earnings_impact"} if earnings else {"job_type": "signal_analysis"} if stock else {}
 
     async def persist_progress(*, will_continue: bool = False) -> None:
         await on_progress({
@@ -544,7 +549,7 @@ async def stream_conversation(
         })
         terminal = error or response_terminal_error(combined)
         final_text = _final_block_text(completed[-1].content)
-        if earnings and not terminal:
+        if prompt_json and not terminal:
             final_text = _last_earnings_json(final_text) or ""
         if not terminal and not final_text.strip():
             terminal = "provider_empty_response"
@@ -567,12 +572,12 @@ async def stream_conversation(
         if remaining <= 0:
             return finish("provider_incomplete_max_output_tokens")
         params = {**prepared.params, "messages": messages, "max_tokens": remaining}
-        if earnings and index:
-            # One stable explicit point plus one automatically advancing point.
-            # This caches the growing task history without editing signed blocks.
-            # Same 5m TTL as the system marker: a longer automatic entry after
-            # a shorter explicit one is rejected (longer TTLs must come first).
-            params["cache_control"] = {"type": "ephemeral"}
+        if prompt_json and index:
+            # Earnings also cache their growing 5m history. Stock reports keep
+            # only the shared 1h system/schema marker, leaving dynamic inputs
+            # outside that explicit prefix. Signed blocks stay unchanged.
+            if earnings:
+                params["cache_control"] = {"type": "ephemeral"}
             if container_id is not None:
                 params["container"] = container_id
         message = await stream_message(replace(prepared, params=params), on_message_start=started, tool_counts=counts)
@@ -586,7 +591,7 @@ async def stream_conversation(
         combined = message.model_copy(update={"content": [block for item in completed for block in item.content]})
         _, pair_error = _server_pairs(combined)
         progress_only = False
-        if earnings and message.stop_reason == "end_turn" and not pair_error:
+        if prompt_json and message.stop_reason == "end_turn" and not pair_error:
             progress_only = _last_earnings_json(_final_block_text(message.content)) is None
         round_record = {"id": message.id, "stop_reason": str(message.stop_reason), "usage": round_usage}
         if progress_only:
@@ -602,7 +607,7 @@ async def stream_conversation(
         if (type(consumed_output) is int and consumed_output > ceiling
                 and (message.stop_reason == "pause_turn" or progress_only)):
             return finish("provider_incomplete_max_output_tokens")
-        if earnings:
+        if prompt_json:
             container = getattr(message, "container", None)
             observed_container = getattr(container, "id", None)
             if observed_container is not None:

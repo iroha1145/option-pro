@@ -123,7 +123,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
   };
 
   return (
-    <header className="glass sticky top-0 z-50 border-b border-line">
+    <header className="glass mobile-nav-glass sticky top-0 z-50 border-b border-line">
       <div className="mx-auto flex h-12 max-w-shell items-center gap-3 px-4 md:h-16 md:gap-5 md:px-8">
         {/* Logo */}
         <Link to="/" className="flex shrink-0 items-center gap-2.5" aria-label={t("Optix Pro 首页")}>
