@@ -3,7 +3,8 @@
  * viewBox 24 · stroke 1.6 · round 端点/接合 · currentColor
  * 允许 ≤0.3px 手绘抖动；主体落在 20×20 安全区。
  */
-import type { ReactElement, SVGProps } from 'react';
+import { Children, Fragment, useCallback, useEffect, useRef, type ReactElement, type ReactNode, type SVGProps } from 'react';
+import '../styles/icon-motion.css';
 
 export type IconName =
   | 'radar' | 'crosshair' | 'candle' | 'layers' | 'calendar-spark' | 'bolt' | 'star-line'
@@ -18,6 +19,10 @@ export type IconName =
 interface IconProps extends SVGProps<SVGSVGElement> {
   name: IconName;
   size?: number;
+  /** Opt in to a single local response from an enclosing icon-motion-trigger. */
+  motion?: boolean;
+  /** A brief response for selection managed outside DOM focus, such as a command list. */
+  motionActive?: boolean;
 }
 
 const PATHS: Record<IconName, ReactElement> = {
@@ -277,7 +282,112 @@ const PATHS: Record<IconName, ReactElement> = {
   ),
 };
 
-export function Icon({ name, size = 18, ...rest }: IconProps) {
+const MOTION_NAMES = new Set<IconName>([
+  'search', 'sliders', 'star-line', 'radar', 'candle', 'layers', 'calendar-spark',
+  'bolt', 'wallet-gauge', 'filter-funnel', 'refresh', 'sun-bmo', 'moon-amc', 'menu',
+]);
+
+function motionPaths(name: IconName) {
+  // Keep each slider's interrupted rail and knob together: moving only the knob
+  // would reveal a gap in the hand-drawn rail. All coordinates stay unchanged.
+  if (name === 'sliders') {
+    return <>
+      <g data-icon-part="0"><path d="M4.4 7h8.3M16.7 7h2.9" /><circle cx="14.7" cy="7" r="2" /></g>
+      <g data-icon-part="1"><path d="M4.4 12h2.9M11.3 12h8.3" /><circle cx="9.3" cy="12" r="2" /></g>
+      <g data-icon-part="2"><path d="M4.4 17h6.3M14.7 17h4.9" /><circle cx="12.7" cy="17" r="2" /></g>
+    </>;
+  }
+  if (name === 'menu') {
+    return <>
+      <g data-icon-part="0"><path d="M4 7.2h16" /></g>
+      <g data-icon-part="1"><path d="M4 12h16" /></g>
+      <g data-icon-part="2"><path d="M4 16.8h10" /></g>
+    </>;
+  }
+  const drawing = PATHS[name];
+  const parts = drawing.type === Fragment
+    ? (drawing as ReactElement<{ children: ReactNode }>).props.children
+    : drawing;
+  return Children.toArray(parts).map((part, index) => (
+    <g key={index} data-icon-part={index}>{part}</g>
+  ));
+}
+
+export function Icon({ name, size = 18, motion = false, motionActive = false, ref, ...rest }: IconProps) {
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const playRef = useRef<(() => void) | null>(null);
+  const attachRef = useCallback((node: SVGSVGElement | null) => {
+    svgRef.current = node;
+    const cleanup = typeof ref === 'function' ? ref(node) : undefined;
+    if (ref && typeof ref !== 'function') ref.current = node;
+    return () => {
+      svgRef.current = null;
+      if (typeof cleanup === 'function') cleanup();
+      else if (typeof ref === 'function') ref(null);
+      else if (ref) ref.current = null;
+    };
+  }, [ref]);
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!motion || !MOTION_NAMES.has(name) || !svg) return;
+    // Retain finished CSSAnimation objects as browsers may omit them from
+    // getAnimations() once their no-fill effect has ended. No timers or state.
+    let previousAnimations: CSSAnimation[] = [];
+    const play = () => {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        || svg.closest(':disabled, [disabled], [aria-disabled="true"]')) return;
+      const current = svg.getAnimations({ subtree: true }).filter((animation): animation is CSSAnimation => (
+        animation instanceof CSSAnimation
+        && animation.effect instanceof KeyframeEffect
+        && animation.effect.target instanceof SVGGElement
+        && animation.effect.target.parentNode === svg
+        && animation.effect.target.hasAttribute('data-icon-part')
+      ));
+      // A staggered part can finish before its neighbour. Keep its completed
+      // object for the next gesture instead of replacing the cache with only
+      // the still-running subset returned by getAnimations().
+      previousAnimations = [...new Set([...previousAnimations, ...current])]
+        .filter(animation => animation.playState !== 'idle');
+      // Pointer entry, focus and press can arrive during the same gesture.
+      // Let it complete instead of snapping every part back to its first frame.
+      if (previousAnimations.some(animation => animation.playState === 'running')) return;
+      for (const animation of previousAnimations) {
+        // CSS cancels these objects when disabled or reduced motion is enabled.
+        if (animation.playState === 'idle') continue;
+        animation.currentTime = 0;
+        animation.play();
+      }
+    };
+    playRef.current = play;
+    const trigger = svg.closest('.icon-motion-trigger');
+    const pointerEnter = (event: Event) => {
+      if ((event as PointerEvent).pointerType === 'mouse'
+        && window.matchMedia('(hover: hover) and (pointer: fine)').matches) play();
+    };
+    const pointerDown = () => play();
+    const focus = () => { if (trigger?.matches(':focus-visible')) play(); };
+    const keyDown = (event: Event) => {
+      const key = event as KeyboardEvent;
+      if (!key.repeat && (key.key === 'Enter' || key.key === ' ')) play();
+    };
+    trigger?.addEventListener('pointerenter', pointerEnter);
+    trigger?.addEventListener('pointerdown', pointerDown);
+    trigger?.addEventListener('focus', focus);
+    trigger?.addEventListener('keydown', keyDown);
+    return () => {
+      trigger?.removeEventListener('pointerenter', pointerEnter);
+      trigger?.removeEventListener('pointerdown', pointerDown);
+      trigger?.removeEventListener('focus', focus);
+      trigger?.removeEventListener('keydown', keyDown);
+      playRef.current = null;
+    };
+  }, [motion, name]);
+
+  useEffect(() => {
+    if (motion && motionActive) playRef.current?.();
+  }, [motion, motionActive, name]);
+
   return (
     <svg
       width={size}
@@ -290,8 +400,11 @@ export function Icon({ name, size = 18, ...rest }: IconProps) {
       strokeLinejoin="round"
       aria-hidden="true"
       {...rest}
+      ref={motion ? attachRef : ref}
+      data-icon-motion={motion ? name : undefined}
+      data-motion-active={motion && motionActive ? 'true' : undefined}
     >
-      {PATHS[name]}
+      {motion && MOTION_NAMES.has(name) ? motionPaths(name) : PATHS[name]}
     </svg>
   );
 }
