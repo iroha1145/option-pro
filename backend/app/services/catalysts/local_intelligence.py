@@ -1180,6 +1180,50 @@ def _awaiting_analysis(item: Mapping[str, Any]) -> bool:
     return _published_analysis(item) is None and item.get("analysis_status") != "skipped"
 
 
+def _job_status_at(
+    job: Mapping[str, Any],
+    *,
+    link_created_at: Any,
+    as_of: datetime,
+) -> tuple[str, bool] | None:
+    """A linked job's status at ``as_of`` and whether its row moved after it.
+
+    None when the job did not exist yet. A row updated after ``as_of`` holds a
+    later transition; only whether the job had been submitted by then is known.
+    """
+
+    created_at = _parse_time(str(job.get("created_at") or link_created_at))
+    if created_at is None or created_at > as_of:
+        return None
+    updated_at = _parse_time(str(job.get("updated_at") or ""))
+    if updated_at is not None and updated_at > as_of:
+        submitted_at = _parse_time(str(job.get("submitted_at") or ""))
+        submitted = submitted_at is not None and submitted_at <= as_of
+        return ("in_progress" if submitted else "pending"), True
+    return str(job.get("status")), False
+
+
+def _with_job_status(item: dict[str, Any], job_status: str | None) -> dict[str, Any]:
+    """The owner's view of an item that has no published analysis.
+
+    Visitors see not_requested (or skipped). The owner sees the status of the
+    linked job that existed at as_of; a completed job whose result is not
+    published reads as pending. A changed item is a copy, so the shared item
+    may come from the visitor cache.
+    """
+
+    status = "not_requested" if job_status is None else job_status
+    if status == "completed":
+        status = "pending"
+    if status == "not_requested":
+        return item
+    owned = dict(item)
+    owned["analysis_status"] = status
+    # The skip reason only explains an item nobody asked to analyze.
+    owned.pop("analysis_skip_reason", None)
+    return owned
+
+
 def _sha(value: Any) -> str:
     return hashlib.sha256(_json(value).encode("utf-8")).hexdigest()
 
@@ -1746,6 +1790,12 @@ def _market_focus_payload_has_waiting_placeholder(
     return False
 
 
+# What _has_current_job_identity and _job_status_at read from a job row.
+_JOB_STATE_COLUMNS = (
+    "j.job_id,j.job_type,j.status,j.model,j.reasoning,j.execution_mode,"
+    "j.prompt_version,j.schema_version,j.schema_sha256,"
+    "j.created_at,j.updated_at,j.submitted_at"
+)
 # Full rows of the window's news and focus jobs, in index order (no sort).
 _FULL_JOB_SNAPSHOT_SQL = """SELECT j.*,COALESCE(s.submission_source,'manual')
           AS submission_source
@@ -2487,15 +2537,21 @@ class LocalCatalystIntelligence:
         news_ids: Iterable[int] | None = None,
         created_since: datetime | None = None,
         input_only: bool = False,
+        state_only: bool = False,
     ) -> dict[str, dict[str, Any]]:
         """Read current Catalyst AI rows before taking the Catalyst write lock.
 
         ``created_since`` bounds the full-history scan; it must come from the
         AI store's own clock because that clock stamps ``created_at``.
+        ``state_only`` reads just what a job's identity check and its status
+        at a point in time need (_JOB_STATE_COLUMNS), never payloads, results
+        or provider receipts.
         """
 
-        if input_only and job_ids is None:
-            raise ValueError("input_only requires explicit job_ids")
+        if (input_only or state_only) and job_ids is None:
+            raise ValueError("input_only and state_only require explicit job_ids")
+        if input_only and state_only:
+            raise ValueError("input_only and state_only are mutually exclusive")
         if job_ids is not None and news_ids is not None:
             raise ValueError("job_ids and news_ids are mutually exclusive")
         if created_since is not None and (
@@ -2544,7 +2600,11 @@ class LocalCatalystIntelligence:
             elif requested_ids is not None:
                 # Fixed private projection: coverage reads never load provider
                 # receipts or result bodies for the whole recent-cycle window.
-                columns = "j.job_id,j.job_type,j.status,j.payload_json" if input_only else "j.*"
+                columns = (
+                    "j.job_id,j.job_type,j.status,j.payload_json" if input_only
+                    else _JOB_STATE_COLUMNS if state_only
+                    else "j.*"
+                )
                 rows = []
                 for offset in range(0, len(requested_ids), 500):
                     chunk = requested_ids[offset : offset + 500]
@@ -2637,9 +2697,10 @@ class LocalCatalystIntelligence:
         *,
         expected_type: Literal["news_impact", "market_focus"],
         expected_schema: tuple[str, str] | None = None,
-        identities: dict[Any, tuple[str, str]] | None = None,
+        identities: dict[tuple[str, str | None, str | None], tuple[str, str]] | None = None,
     ) -> bool:
-        """``identities`` memoizes each model's schema identity within one pass."""
+        """``identities`` memoizes schema identities within one pass; see
+        ai_runtime.schema_identity_current."""
 
         if row is None or row.get("job_type") != expected_type:
             return False
@@ -2649,14 +2710,6 @@ class LocalCatalystIntelligence:
             if model == (self.model if expected_type == "news_impact" else self.focus_model)
             else None
         )
-        if current_identity is None and identities is not None:
-            if model not in identities:
-                identities[model] = (
-                    ai_runtime.schema_identity(expected_type, model=model)
-                    if model is not None
-                    else ai_runtime.schema_identity(expected_type)
-                )
-            current_identity = identities[model]
         schema_matches = ai_runtime.schema_identity_current(
             expected_type,
             row.get("prompt_version"),
@@ -2664,6 +2717,7 @@ class LocalCatalystIntelligence:
             row.get("schema_sha256"),
             current_identity=current_identity,
             model=model,
+            identities=identities,
         )
         supported_prompts = (
             ai_runtime.NEWS_READABLE_PROMPT_VERSIONS
@@ -2880,7 +2934,7 @@ class LocalCatalystIntelligence:
         # The identity hash rebuilds the runtime request each time; every job
         # of a model shares it within this pass (the policy table cannot move
         # mid-call).
-        identities: dict[Any, tuple[str, str]] = {}
+        identities: dict[tuple[str, str | None, str | None], tuple[str, str]] = {}
         for job in jobs:
             candidate = dict(job)
             if not self._has_current_job_identity(
@@ -2940,20 +2994,15 @@ class LocalCatalystIntelligence:
         public = self._identity_public_job(job, expected_type="news_impact")
         if job is None or public is None:
             return None, None
-        created_at = _parse_time(str(job.get("created_at") or link_created_at))
-        if created_at is None or created_at > as_of:
+        state = _job_status_at(job, link_created_at=link_created_at, as_of=as_of)
+        if state is None:
             return None, None
-        updated_at = _parse_time(str(job.get("updated_at") or ""))
-        if updated_at is not None and updated_at > as_of:
-            submitted_at = _parse_time(str(job.get("submitted_at") or ""))
+        status, moved = state
+        if moved:
             projected = dict(public)
             projected.update(
                 {
-                    "status": (
-                        "in_progress"
-                        if submitted_at is not None and submitted_at <= as_of
-                        else "pending"
-                    ),
+                    "status": status,
                     "completed_at": None,
                     "error_code": None,
                     "result": None,
@@ -4473,25 +4522,22 @@ class LocalCatalystIntelligence:
         window_hours: int | None = None,
         want_items: bool = False,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]] | None]:
-        """Return (rows, anonymous items or None) on top of _active_revisions.
+        """Return (rows, shared items or None) on top of _active_revisions.
 
-        Anonymous item payloads are deterministic per row set, so they ride
-        the same cache entry. Owner reads always get items=None and rebuild
-        with live job state; so do historical (non-cacheable) reads.
+        Shared item payloads (``_published_item``) are deterministic per row
+        set, so they ride the same cache entry. They carry no job state, so
+        owner reads use them too and ``_window_items`` layers live job state
+        on top. Historical (non-cacheable) reads get items=None.
 
         Rows and items are shared with the cache entry: callers only read
         them and copy the items they return (one page instead of the window).
-        A complete anonymous hot hit fingerprints once and returns rows and
+        A complete hot hit fingerprints once and returns rows and
         items of the same locked entry, so they cannot come from different
         store versions. Incomplete or missing entries fall through to the
         original slow path (which fingerprints again after the query).
         """
         key = self._revision_cache_key(as_of=as_of, window_hours=window_hours)
-        if (
-            want_items
-            and key is not None
-            and not current_request_is_owner()
-        ):
+        if want_items and key is not None:
             with _REVISION_CACHE_LOCK:
                 cached = _REVISION_CACHE.get(key)
                 maybe_complete = (
@@ -4512,9 +4558,7 @@ class LocalCatalystIntelligence:
         rows, source_cursor = self._active_revisions_tracked(
             connection, as_of=as_of, window_hours=window_hours, shared=True
         )
-        if not want_items:
-            return rows, None
-        if key is None or current_request_is_owner():
+        if not want_items or key is None:
             return rows, None
         store_cursor = (
             _revision_store_cursor(connection) if source_cursor is not None else None
@@ -4534,7 +4578,7 @@ class LocalCatalystIntelligence:
             ):
                 return rows, cached["anon_items"]
         built_items = [
-            self._item(connection, row, as_of=as_of, jobs=None)
+            self._published_item(connection, row, as_of=as_of)
             for row in rows
         ]
         if source_cursor is not None and source_cursor == store_cursor:
@@ -4554,7 +4598,7 @@ class LocalCatalystIntelligence:
         return rows, built_items
 
     def _anon_items_usable(self, cached: Mapping[str, Any]) -> bool:
-        """Cached anonymous items match the row set and this skip setting.
+        """Cached shared items match the row set and this skip setting.
 
         Their analysis status depends on scheduled_skip_template_commentary,
         and the cache key covers only the database and the window.
@@ -5277,14 +5321,104 @@ class LocalCatalystIntelligence:
             connection.commit()
         return int(changed)
 
+    def _window_items(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        as_of: datetime,
+        window_hours: int,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Window rows and their items as this reader sees them.
+
+        Everyone shares the store-derived items (cached for near-now reads).
+        An owner also sees each unpublished item's job status, read from the
+        AI store on every call: one snapshot of the jobs those items link to,
+        state columns only, and one schema identity per model and variant.
+        """
+
+        rows, items = self._active_revision_bundle(
+            connection, as_of=as_of, window_hours=window_hours, want_items=True,
+        )
+        if items is None:
+            items = [self._published_item(connection, row, as_of=as_of) for row in rows]
+        if not current_request_is_owner():
+            return rows, items
+        jobs = self._ai_job_snapshot_or_empty(
+            "catalyst_feed_ai_jobs",
+            job_ids=(
+                str(row["analysis_job_id"])
+                for row, item in zip(rows, items)
+                if item["analysis"] is None and row.get("analysis_job_id") is not None
+            ),
+            state_only=True,
+        )[0]
+        identities: dict[tuple[str, str | None, str | None], tuple[str, str]] = {}
+        return rows, [
+            item
+            if item["analysis"] is not None
+            else _with_job_status(
+                item,
+                self._window_job_status(row, as_of=as_of, jobs=jobs, identities=identities),
+            )
+            for row, item in zip(rows, items)
+        ]
+
+    def _window_job_status(
+        self,
+        row: Mapping[str, Any],
+        *,
+        as_of: datetime,
+        jobs: Mapping[str, dict[str, Any]],
+        identities: dict[tuple[str, str | None, str | None], tuple[str, str]],
+    ) -> str | None:
+        """The status ``_linked_news_job_at`` reports for a window row.
+
+        Window rows carry their latest visible link. Only the status is used
+        here, so the public job projection is not built: its status is the
+        stored one, which the ai_jobs CHECK constraint keeps in AIJobStatus.
+        """
+
+        job_id = row.get("analysis_job_id")
+        link_created_at = row.get("analysis_job_created_at")
+        if job_id is None or link_created_at is None:
+            return None
+        job = jobs.get(str(job_id))
+        if job is None or not self._has_current_job_identity(
+            job, expected_type="news_impact", identities=identities,
+        ):
+            return None
+        state = _job_status_at(job, link_created_at=link_created_at, as_of=as_of)
+        return None if state is None else state[0]
+
     def _item(
         self,
         connection: sqlite3.Connection,
         row: dict[str, Any],
         *,
         as_of: datetime,
-        jobs: Mapping[str, dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
+        """One item as this reader sees it (the news detail read)."""
+
+        item = self._published_item(connection, row, as_of=as_of)
+        if item["analysis"] is not None or not current_request_is_owner():
+            return item
+        job_public, _detail_job = self._linked_news_job_at(connection, row, as_of=as_of)
+        return _with_job_status(item, str(job_public.get("status")) if job_public else None)
+
+    def _published_item(
+        self,
+        connection: sqlite3.Connection,
+        row: dict[str, Any],
+        *,
+        as_of: datetime,
+    ) -> dict[str, Any]:
+        """The item every reader shares: a pure function of the catalyst store.
+
+        Job state is not part of it. Owners see an unpublished item's job
+        status layered on top (``_with_job_status``), so these items can be
+        cached against the store cursor alone.
+        """
+
         result, available, current, input_context = self._analysis_state_for_revision(
             connection,
             row,
@@ -5305,28 +5439,14 @@ class LocalCatalystIntelligence:
                 analysis_model, analysis_reasoning = stored_model, stored_reasoning
                 analysis_sources = stored_sources if isinstance(stored_sources, list) else []
         article = _available_article(row, as_of=as_of)
-        # Published analysis determines the item status below. Its linked job
-        # may be a newer attempt, but that state is only needed by detail reads.
-        if result is None and current_request_is_owner():
-            job_public, _detail_job = self._linked_news_job_at(
-                connection,
-                row,
-                as_of=as_of,
-                jobs=jobs,
-            )
-            status = str(
-                job_public.get("status") if job_public else "not_requested"
-            )
-        else:
-            # Visitors do not expose queue state; published owner items are
-            # marked completed below without projecting an unused job result.
-            status = "not_requested"
+        # Published analysis determines the item status. Its linked job may be
+        # a newer attempt, but that state is only needed by detail reads.
         if result is not None:
             # A kept paid result that fails the current contract is hidden by
             # the public boundary; its status must say so for status filters.
             status = "completed" if current else "pending"
-        elif status == "completed":
-            status = "pending"
+        else:
+            status = "not_requested"
         # Never requested and never scheduled: not an item waiting for analysis.
         skip_reason = (
             self._analysis_skip_reason(row) if status == "not_requested" else None
@@ -5607,31 +5727,9 @@ class LocalCatalystIntelligence:
             as_of = parsed_anchor
         anchor = _iso(as_of)
         with self._connect() as connection:
-            rows, cached_items = self._active_revision_bundle(
-                connection,
-                as_of=as_of,
-                window_hours=window_hours,
-                want_items=True,
+            rows, items = self._window_items(
+                connection, as_of=as_of, window_hours=window_hours,
             )
-            if cached_items is not None:
-                items = cached_items
-            else:
-                jobs = (
-                    self._ai_job_snapshot_or_empty(
-                        "catalyst_feed_ai_jobs",
-                        job_ids=(
-                            str(row["analysis_job_id"])
-                            for row in rows
-                            if row.get("analysis_job_id") is not None
-                        ),
-                    )[0]
-                    if current_request_is_owner()
-                    else None
-                )
-                items = [
-                    self._item(connection, row, as_of=as_of, jobs=jobs)
-                    for row in rows
-                ]
             data_through = self._data_through(connection)
             theme_member_ids = (
                 self._theme_member_news_ids(connection, theme)
@@ -5798,31 +5896,9 @@ class LocalCatalystIntelligence:
         min_abs_impact = kwargs.get("min_abs_impact")
         multi_source_only = bool(kwargs.get("multi_source_only", False))
         with self._connect() as connection:
-            rows, cached_items = self._active_revision_bundle(
-                connection,
-                as_of=as_of,
-                window_hours=window_hours,
-                want_items=True,
+            rows, items = self._window_items(
+                connection, as_of=as_of, window_hours=window_hours,
             )
-            if cached_items is not None:
-                items = cached_items
-            else:
-                jobs = (
-                    self._ai_job_snapshot_or_empty(
-                        "catalyst_feed_ai_jobs",
-                        job_ids=(
-                            str(row["analysis_job_id"])
-                            for row in rows
-                            if row.get("analysis_job_id") is not None
-                        ),
-                    )[0]
-                    if current_request_is_owner()
-                    else None
-                )
-                items = [
-                    self._item(connection, row, as_of=as_of, jobs=jobs)
-                    for row in rows
-                ]
             data_through = self._data_through(connection)
         rows_by_news_id = {
             int(row["news_id"]): row

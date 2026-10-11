@@ -49,6 +49,9 @@ const QUERY_CONFIG: Record<string, QueryConfig> = {
   '/strength/market': { ttlMs: 30_000, persist: true, maxRestoreAgeMs: 3 * DAY_MS },
   '/signals/market': { ttlMs: 30_000, persist: true, maxRestoreAgeMs: 3 * DAY_MS },
   '/earnings/upcoming': { ttlMs: 60_000, persist: true, maxRestoreAgeMs: 7 * DAY_MS },
+  // 首页财报卡的几行。不持久化：首页不做冷启动恢复（加载中一律显示骨架），存了
+  // 也没人读。在 /earnings/upcoming 前缀下，财报页刷新的失效会连带清掉它。
+  '/earnings/upcoming/highlights': { ttlMs: 60_000 },
   '/sectors': { ttlMs: 120_000, persist: true, maxRestoreAgeMs: 7 * DAY_MS },
   '/macro/conditions': { ttlMs: 60_000, persist: true, maxRestoreAgeMs: 30 * DAY_MS },
   '/market-brief/latest': { ttlMs: 60_000, persist: true, maxRestoreAgeMs: 3 * DAY_MS },

@@ -41,9 +41,11 @@ Object.assign(breakoutsApi, {
     ? { items: [{ ...historySeed, ticker: 'HIS2', event_id: 'history-2' }], nextCursor: null, hasMore: false, total: null, page: 2 }
     : { items: [{ ...historySeed, ticker: 'HIS1', event_id: 'history-1' }, { ...historySeed, ticker: 'CUR1', event_id: 'history-duplicate' }], nextCursor: 'next', hasMore: true, total: null, page: 1 },
 });
-Object.assign(earningsApi, { upcoming: async () => ({ items: Array.from({ length: 8 }, (_, i) => ({
+// 首页读 homeHighlights，财报页读 upcoming；两者给同一份 8 行，首页只显示前 6 行（E0–E5）。
+const earningsRows = async () => ({ items: Array.from({ length: 8 }, (_, i) => ({
   ticker: `E${i}`, name: `Earnings ${i}`, date: `2099-01-${String(i + 1).padStart(2, '0')}`, timing: 'bmo',
-})) }) });
+})) });
+Object.assign(earningsApi, { upcoming: earningsRows, homeHighlights: earningsRows });
 
 export function StatusHarness() {
   const [tickers, setTickers] = useState(['AAPL', 'MSFT']);

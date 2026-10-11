@@ -645,8 +645,13 @@ class PersonalCatalystService:
         return None
 
     def _verified_news_job_row(
-        self, job_id: str
+        self,
+        job_id: str,
+        *,
+        identities: dict[tuple[str, str | None, str | None], tuple[str, str]] | None = None,
     ) -> dict[str, Any] | None:
+        """The stored news job when its identity is current; ``identities``
+        memoizes schema identities for one pass (schema_identity_current)."""
         if not self._ai_store_ready():
             return None
         if hasattr(self.ai_repository, "path"):
@@ -672,7 +677,6 @@ class PersonalCatalystService:
             row = self.ai_repository.get_job(job_id)
         if row is None or row.get("job_type") != "news_impact":
             return None
-        current_identity = ai_runtime.schema_identity("news_impact", model=row.get("model"))
         if (
             not ai_runtime.analysis_identity_supported(row.get("model"), row.get("reasoning"))
             or row.get("execution_mode") != "background"
@@ -682,8 +686,8 @@ class PersonalCatalystService:
                 row.get("prompt_version"),
                 row.get("schema_version"),
                 row.get("schema_sha256"),
-                current_identity=current_identity,
                 model=row.get("model"),
+                identities=identities,
             )
         ):
             return None
@@ -751,8 +755,9 @@ class PersonalCatalystService:
         job_id: str,
         *,
         as_of: datetime,
+        identities: dict[tuple[str, str | None, str | None], tuple[str, str]] | None = None,
     ) -> tuple[dict[str, Any] | None, str | None]:
-        row = self._verified_news_job_row(job_id)
+        row = self._verified_news_job_row(job_id, identities=identities)
         if row is None:
             return None, "pending"
         observed = as_of.astimezone(timezone.utc)
@@ -987,10 +992,15 @@ class PersonalCatalystService:
             snapshots: dict[
                 tuple[int, int, str], dict[str, Any] | None
             ] = {}
+            identities: dict[tuple[str, str | None, str | None], tuple[str, str]] = {}
             if links is not None:
                 for candidate in projected_items:
                     identity = self._news_identity(candidate)
                     if identity is None:
+                        continue
+                    if candidate is not detail_item and candidate.get("analysis") is not None:
+                        # A list item with a published analysis keeps its
+                        # status, and only the detail item reports its job.
                         continue
                     job_id = links.get(identity)
                     if job_id is None:
@@ -1006,6 +1016,7 @@ class PersonalCatalystService:
                         job, status_override = self._project_news_job_as_of(
                             job_id,
                             as_of=observed,
+                            identities=identities,
                         )
                     snapshots[identity] = job
                     if candidate.get("analysis") is None and status_override:

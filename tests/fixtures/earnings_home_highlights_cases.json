@@ -1,0 +1,75 @@
+{
+  "about": "首页「财报临近」选行口径的共用夹具：后端 _home_highlight_rows（tests/test_earnings_home_highlights.py）与前端 selectHomeEarnings、改版前首页的浏览器端排序（frontend-src/tests/home-earnings-highlights.test.mjs）对同一份数据逐行比对。pool 即 GET /api/stocks/watchlist 对所有主体投影的默认关注池。",
+  "pool": ["AAPL", "MSFT", "NVDA", "SPY"],
+  "cases": [
+    {
+      "name": "重点在前、过去日期剔除、关注池提升、缺失或非正市值排同日最后、并列保持原顺序、次日补行",
+      "market_date": "2026-07-22",
+      "limit": 6,
+      "rows": [
+        {"ticker": "PAST1", "earnings_date": "2026-07-19", "public_featured": true, "market_cap": 4000000000000},
+        {"ticker": "PAST2", "earnings_date": "2026-07-21", "public_featured": true, "market_cap": 3500000000000},
+        {"ticker": "AAOI", "earnings_date": "2026-07-22", "public_featured": false, "market_cap": 5000000000},
+        {"ticker": "AMZN", "earnings_date": "2026-07-22", "public_featured": true, "market_cap": 2500000000000},
+        {"ticker": "CAPZERO", "earnings_date": "2026-07-22", "public_featured": true, "market_cap": 0},
+        {"ticker": "GOOGL", "earnings_date": "2026-07-22", "public_featured": true, "market_cap": 3000000000000},
+        {"ticker": "NOCAP1", "earnings_date": "2026-07-22", "public_featured": true, "market_cap": null},
+        {"ticker": "TSLA", "earnings_date": "2026-07-22", "public_featured": true, "market_cap": 500000000000},
+        {"ticker": "ZZZZ", "earnings_date": "2026-07-22", "public_featured": false, "market_cap": 9000000000000},
+        {"ticker": "", "earnings_date": "2026-07-22", "public_featured": true, "market_cap": 9900000000000},
+        {"ticker": "INTC", "earnings_date": "2026-07-23", "public_featured": true, "market_cap": 100000000000},
+        {"ticker": "MSFT", "earnings_date": "2026-07-23", "public_featured": false, "market_cap": 1000000000},
+        {"ticker": "NODATE", "earnings_date": null, "public_featured": true, "market_cap": 9800000000000},
+        {"ticker": "SMALL", "earnings_date": "2026-07-23", "public_featured": false, "market_cap": 200000000},
+        {"ticker": "TIEB", "earnings_date": "2026-07-24", "public_featured": true, "market_cap": 100000000000},
+        {"ticker": "TIEA", "earnings_date": "2026-07-24", "public_featured": true, "market_cap": 100000000000},
+        {"ticker": "NOCAPB", "earnings_date": "2026-07-24", "public_featured": true, "market_cap": null},
+        {"ticker": "NOCAPA", "earnings_date": "2026-07-24", "public_featured": true, "market_cap": null},
+        {"ticker": "BIGNF", "earnings_date": "2026-07-24", "public_featured": false, "market_cap": 8000000000000},
+        {"ticker": "LATE", "earnings_date": "2026-07-27", "public_featured": true, "market_cap": 2000000000000}
+      ],
+      "expected": {
+        "highlights": ["GOOGL", "AMZN", "TSLA", "CAPZERO", "NOCAP1", "INTC", "MSFT", "TIEB", "TIEA", "NOCAPB", "NOCAPA"],
+        "today": ["GOOGL", "AMZN", "TSLA", "CAPZERO", "NOCAP1", "INTC"],
+        "tomorrow": ["INTC", "MSFT", "TIEB", "TIEA", "NOCAPB", "NOCAPA"]
+      }
+    },
+    {
+      "name": "重点公司不足时普通公司补足，同市值并列保持原顺序，次日可用行不足 limit",
+      "market_date": "2026-07-22",
+      "limit": 6,
+      "rows": [
+        {"ticker": "PASTN", "earnings_date": "2026-07-20", "public_featured": false, "market_cap": 1000000000000},
+        {"ticker": "N1", "earnings_date": "2026-07-22", "public_featured": false, "market_cap": null},
+        {"ticker": "N3", "earnings_date": "2026-07-22", "public_featured": false, "market_cap": 3000000000},
+        {"ticker": "N2", "earnings_date": "2026-07-22", "public_featured": false, "market_cap": 3000000000},
+        {"ticker": "N4", "earnings_date": "2026-07-23", "public_featured": false, "market_cap": 70000000000},
+        {"ticker": "F1", "earnings_date": "2026-07-25", "public_featured": true, "market_cap": 1000000000000},
+        {"ticker": "SPY", "earnings_date": "2026-07-26", "public_featured": false, "market_cap": null}
+      ],
+      "expected": {
+        "highlights": ["F1", "SPY", "N3", "N2", "N1", "N4"],
+        "today": ["F1", "SPY", "N3", "N2", "N1", "N4"],
+        "tomorrow": ["F1", "SPY", "N4"]
+      }
+    },
+    {
+      "name": "limit 不是 6 时补行同样成立",
+      "market_date": "2026-07-22",
+      "limit": 2,
+      "rows": [
+        {"ticker": "A1", "earnings_date": "2026-07-22", "public_featured": true, "market_cap": 900000000000},
+        {"ticker": "A2", "earnings_date": "2026-07-22", "public_featured": true, "market_cap": 800000000000},
+        {"ticker": "A3", "earnings_date": "2026-07-22", "public_featured": true, "market_cap": 700000000000},
+        {"ticker": "B1", "earnings_date": "2026-07-23", "public_featured": true, "market_cap": 10000000000},
+        {"ticker": "B2", "earnings_date": "2026-07-23", "public_featured": false, "market_cap": 9000000000000},
+        {"ticker": "C1", "earnings_date": "2026-07-24", "public_featured": true, "market_cap": 50000000000}
+      ],
+      "expected": {
+        "highlights": ["A1", "A2", "B1", "C1"],
+        "today": ["A1", "A2"],
+        "tomorrow": ["B1", "C1"]
+      }
+    }
+  ]
+}

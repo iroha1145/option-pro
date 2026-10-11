@@ -76,7 +76,7 @@ function responseFor(pathname) {
       delayed_tickers: [],
     };
   }
-  if (pathname === "/api/earnings/upcoming") return { earnings: [] };
+  if (pathname === "/api/earnings/upcoming" || pathname === "/api/earnings/upcoming/highlights") return { earnings: [] };
   if (pathname === "/api/options/unusual") return { results: [], attempted: 0, as_of: NOW };
   // 新 Watchlist 页额外轮询的两个公共只读端点（旧 spec 无；形状按契约信封给最小值）
   if (pathname === "/api/signals/market") return { by_type: [], total_today: 0 };

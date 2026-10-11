@@ -61,6 +61,36 @@ export function isFeaturedRow(
   return personalTickers.has(row.ticker.toUpperCase());
 }
 
+/**
+ * 首页「财报临近」的选行规则。线上由后端 GET /earnings/upcoming/highlights 执行
+ * （backend/app/api/earnings.py 的 _home_highlight_rows，两边对同一份夹具逐行比对），
+ * 这里给演示模式用：
+ * - 只取 today（纽约日）及以后；
+ * - 重点公司（公共标注 ∪ 关注池）在前 → 日期升序 → 市值降序，缺失排后；并列保持原顺序；
+ * - 前 limit 行之后，补上「明天起」前 limit 行里还缺的几行：首页跨过纽约午夜、
+ *   滤掉今天的行以后，仍能补满到和整份日历现算相同的几行。
+ */
+export function selectHomeEarnings<T extends EarningsItem>(
+  items: readonly T[],
+  today: string,
+  pool: ReadonlySet<string>,
+  limit: number,
+): T[] {
+  const rank = (row: T) => (isFeaturedRow(row as EarningsRow, pool) ? 0 : 1);
+  const ordered = items
+    .filter((row) => row.date >= today)
+    .sort((a, b) => {
+      const featured = rank(a) - rank(b);
+      if (featured !== 0) return featured;
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return (exNum(b as EarningsRow, 'marketCap') ?? -1) - (exNum(a as EarningsRow, 'marketCap') ?? -1);
+    });
+  const head = ordered.slice(0, limit);
+  const tomorrow = addDays(today, 1);
+  const carried = head.filter((row) => row.date >= tomorrow).length;
+  return [...head, ...ordered.slice(limit).filter((row) => row.date >= tomorrow).slice(0, limit - carried)];
+}
+
 /** 默认选中策略（原 Earnings.tsx pickDefault，抽出以便按模式复用与测试） */
 export function pickDefaultEarningsRow(rows: EarningsRow[]): EarningsRow | null {
   return (
