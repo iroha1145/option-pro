@@ -1,4 +1,5 @@
-// 个股页头的评分块：没有分数时也留在版面里（看不见、读屏跳过），分数晚到不会把页头撑高、整页下移。
+// 个股页头：评分块没有分数时也留在版面里（看不见、读屏跳过），分数晚到不会把页头撑高、整页下移；
+// 小指标组各项预留常见读数的宽度、时段指示灯等详情读到后再出现，数据到达时可见元素不横向挪位。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -9,14 +10,16 @@ import { cn } from '../src/lib/utils.ts';
 
 const file = fileURLToPath(new URL('../src/components/detail/PriceHeader.tsx', import.meta.url));
 const jsx = (type, props, key) => ({ type, props, key });
+const market = { value: null }; // what the market-status poll returns; null until a test sets it
 const imports = {
   'react/jsx-runtime': { jsx, jsxs: jsx },
   '@/components/shared/SoftBadge': { default: 'SoftBadge' },
+  '@/components/shared/SameWidth': { default: 'SameWidth' },
   '@/hooks/useLiveQuote': { useLiveQuote: () => null, useQuoteStatus: () => ({}) },
   '@/components/shared/LiveQuote': { LivePrice: 'LivePrice' },
-  '@/lib/liveQuotes': { displayedQuoteLabel: () => null, preferLiveQuote: () => false },
+  '@/lib/liveQuotes': { displayedQuoteLabel: () => null, preferLiveQuote: () => false, delayedSessionLabel: (session) => `${session} · delayed 15 min` },
   '@/api/modules/market': { marketApi: { status: () => Promise.resolve(null) } },
-  '@/hooks/usePolling': { usePolling: () => ({ data: null }) },
+  '@/hooks/usePolling': { usePolling: () => ({ data: market.value }) },
   '@/lib/utils': { cn },
   '@/lib/format': { fmtCompact: String, fmtTimeHHMMSS: String },
   '@/components/shared/TickerLogo': { default: 'TickerLogo' },
@@ -107,6 +110,51 @@ test('the stats group joins the price row only from lg, so the loaded header is 
     assert.ok(classes.includes('w-full'), 'full width below lg: a line of its own next to a price of any width');
     assert.ok(classes.includes('lg:w-auto'), 'content width from lg up, beside the price');
     assert.deepEqual(classes.filter((name) => /^(?:sm:)?w-/.test(name) && name !== 'w-full'), [], 'no sm-level width that lets it share the price row');
+  }
+});
+
+const statsOf = (detail) => find(PriceHeader({ symbol: 'NVDA', detail }), (node) => node.props?.['data-price-header-stats'] !== undefined);
+const valueCell = (item) => find(item, (node) => node.type === 'dd').props.children;
+
+test('each stats item reserves the width of its widest common reading, so data arriving neither widens an item nor moves the group', () => {
+  // Measured in zh/en/ja on the live preview: "—" -> "19.0M" / "$2.10B" / "19:59:00 · 休市" made the group 73 px wider (the right-aligned
+  // group's left edge moved left by that much) and pushed the quote-time item 30 px right at 660 px.
+  for (const detail of [undefined, { ticker: 'NVDA', price: 188.12, volume: 1234567, marketCap: 4.5e12 }]) {
+    const [volume, cap, quote] = statsOf(detail).props.children;
+    for (const [item, widest] of [[volume, '888.8M'], [cap, '$888.88B']]) {
+      const cell = valueCell(item);
+      assert.equal(cell.type, 'SameWidth');
+      assert.deepEqual(JSON.parse(JSON.stringify(cell.props.samples)), [widest]); // digits are tabular, so all eights is the widest reading of that length
+      assert.equal(cell.props.sampleClassName, 'max-sm:hidden'); // phones: a two-column grid sets the width, nothing to reserve
+    }
+    const line = valueCell(quote);
+    assert.equal(line.type, 'SameWidth');
+    assert.equal(line.props.sampleClassName, 'max-sm:hidden');
+    // the delayed wordings visitors read most: pre-market, regular hours, after-hours, each behind the widest time
+    const wordings = line.props.samples.map((sample) => sample.props.children[1]);
+    assert.deepEqual([...wordings].sort(), [' · postmarket · delayed 15 min', ' · premarket · delayed 15 min', ' · regular · delayed 15 min']);
+    for (const sample of line.props.samples) assert.equal(sample.props.children[0].props.children, '00:00:00');
+    // The time has its own cell on every width, so "—" turning into 19:59:00 never pushes the wording after it.
+    const [timeCell, wording] = line.props.children;
+    assert.equal(timeCell.type, 'SameWidth');
+    assert.equal(timeCell.props.sampleClassName, undefined);
+    assert.equal(timeCell.props.samples[0].props.children, '00:00:00');
+    assert.match(wording.props.className, /\btext-ink-500\b/);
+  }
+});
+
+test('the session LED waits for the detail from sm up: the sector badge changes width when the detail arrives and would push it', () => {
+  market.value = { session: 'regular', label: '盘中' };
+  try {
+    const ledOf = (detail) => find(PriceHeader({ symbol: 'NVDA', detail }), (node) => node.type === 'SessionLED');
+    const waiting = ledOf(undefined).props.className;
+    assert.match(waiting, /(^|\s)sm:invisible(\s|$)/); // keeps its place, not painted
+    assert.doesNotMatch(waiting, /(^|\s)invisible/); // phones: the LED sits on its own row below the badge and is shown as before
+    for (const detail of [{ ticker: 'NVDA', sector: 'Semiconductors' }, { ticker: 'NVDA' }]) {
+      assert.doesNotMatch(ledOf(detail).props.className ?? '', /invisible/);
+    }
+  } finally {
+    market.value = null;
   }
 });
 
