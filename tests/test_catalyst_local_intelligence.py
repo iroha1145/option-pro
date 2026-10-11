@@ -356,7 +356,7 @@ def test_v2_local_database_adds_v3_result_audit_tables_without_rewriting_history
         ("optix-local-catalyst-store-version-v1",),
         ("optix-local-catalyst-timestamps-v1",),
         ("optix-local-catalyst-v2",),
-        ("optix-local-catalyst-v7",),
+        ("optix-local-catalyst-v8",),
         ("optix-verified-focus-publication-v1",),
     ]
     assert "catalyst_local_analysis_result_audit" in tables
@@ -402,11 +402,41 @@ def test_v4_local_database_gains_audit_job_index_without_checksum_conflict(
             ).fetchall()
         }
     assert rows["optix-local-catalyst-v4"] == "legacy-checksum"
-    assert "optix-local-catalyst-v7" in rows
+    assert "optix-local-catalyst-v8" in rows
     assert "idx_local_analysis_result_audit_job" in indexes
     # INDEXED BY 的查询在升级后的库上必须可编译可执行（空结果合法）。
     payload = intelligence.feed(window_hours=72, limit=12)
     assert payload["items"] == []
+
+
+def test_v7_store_gains_event_group_index_and_keeps_its_registry_row(tmp_path):
+    """Production went v7 -> v8 only to add this index (deleting event groups
+    checks the hotspot-item foreign key, and without it every deleted group
+    scanned all items). The v7 row stays; v8 is added beside it."""
+
+    _etl, _ai, intelligence = _stack(tmp_path)
+    intelligence.initialize()
+    with sqlite3.connect(intelligence.db_path) as connection:
+        connection.execute("DROP INDEX idx_local_hotspot_items_event_group")
+        connection.execute("DELETE FROM catalyst_local_schema WHERE version='optix-local-catalyst-v8'")
+        connection.execute(
+            """INSERT INTO catalyst_local_schema(version,checksum,applied_at)
+               VALUES('optix-local-catalyst-v7',
+                      '2ccd6bdb3c2d02df4df5b7333105cd995b2e104a172cc4453dd00737532987a2',?)""",
+            (_iso(datetime.now(timezone.utc)),),
+        )
+        connection.commit()
+
+    intelligence.initialize()
+
+    with sqlite3.connect(intelligence.db_path) as connection:
+        versions = {row[0] for row in connection.execute("SELECT version FROM catalyst_local_schema")}
+        columns = [
+            row[2]
+            for row in connection.execute("PRAGMA index_info(idx_local_hotspot_items_event_group)")
+        ]
+    assert {"optix-local-catalyst-v7", "optix-local-catalyst-v8"} <= versions
+    assert columns == ["event_group_id", "event_group_version"]
 
 
 def test_fresh_store_registry_matches_production(tmp_path):
@@ -424,8 +454,8 @@ def test_fresh_store_registry_matches_production(tmp_path):
             ).fetchall()
         )
     assert versions == {
-        "optix-local-catalyst-v7": (
-            "2ccd6bdb3c2d02df4df5b7333105cd995b2e104a172cc4453dd00737532987a2"
+        "optix-local-catalyst-v8": (
+            "30e2fc7a18d552fe5f6034d071c083fe20dfed9bea7959cf908480e5505e7b0b"
         ),
         "optix-local-catalyst-timestamps-v1": (
             "a3afed8ff2311b1b73691d2a7e9d4cb4ec512a48400e38cc356b7760c99a6edd"
