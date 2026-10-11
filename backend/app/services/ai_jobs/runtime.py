@@ -1177,6 +1177,7 @@ def _claude_token_cost_microusd(usage: Mapping[str, Any], *, model: str | None) 
         (output_tokens, _CLAUDE_OUTPUT_MICROUSD_PER_MILLION),
     )
     if model == SONNET_MODEL:
+        # Sonnet 5.5 官方价（美元每百万 tokens，2026-10-11 核对 platform.claude.com/docs/en/about-claude/pricing）：输入 2、读缓存 0.10（输入价的 0.05 倍，不是通用的 0.1 倍）、5 分钟写入 2.50、1 小时写入 4、输出 10。
         charges = tuple(zip((ordinary, cached_tokens, five_minute, one_hour, output_tokens), (2_000_000, 100_000, 2_500_000, 4_000_000, 10_000_000)))
     return sum(
         _ceil_token_cost_microusd(tokens, rate * multiplier)
