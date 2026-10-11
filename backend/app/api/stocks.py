@@ -3880,6 +3880,31 @@ async def _coalesced_stock_chart_pull(
     return await asyncio.shield(task)
 
 
+def _saved_signal_benchmark(stock_chart: dict[str, Any]):
+    """Read existing SPY bars only when their price basis matches the stock."""
+    import pandas as pd
+
+    saved = read_stock_pull_resource("SPY", "daily_chart")
+    payload = saved.get("payload") if isinstance(saved, dict) else None
+    if not isinstance(payload, dict):
+        return None
+    stock_massive = stock_chart.get("price_provider") == "Massive"
+    benchmark_massive = payload.get("price_provider") == "Massive"
+    # Both Massive chart modes are split-adjusted. Yahoo's adjusted mode also
+    # adjusts dividends, so its raw chart cannot substitute for that history.
+    if stock_massive != benchmark_massive:
+        return None
+    if not benchmark_massive and payload.get("price_adjustment") != "adjusted":
+        return None
+    bars = payload.get("bars")
+    if not isinstance(bars, list) or not bars:
+        return None
+    return pd.DataFrame(
+        {"Close": [bar.get("c") for bar in bars]},
+        index=pd.to_datetime([bar["t"] for bar in bars], unit="s", utc=True),
+    )
+
+
 async def _pull_stock_data_once(
     symbol: str,
     *,
@@ -3975,6 +4000,18 @@ async def _pull_stock_data_once(
                     background_options: dict[str, Any] = {}
                     if not include_options:
                         benchmark = signal_provider.cached_adjusted_history("SPY")
+                        # The worker's SPY process cache expires after five
+                        # minutes and is not shared with the API process. Reuse
+                        # its durable daily bundle before declaring the
+                        # benchmark absent; this must never start a data pull.
+                        from app.services.daily_returns import aligned_benchmark_return
+
+                        if (
+                            benchmark is None
+                            or "Close" not in benchmark
+                            or aligned_benchmark_return(frame["Close"], benchmark["Close"], 20) is None
+                        ):
+                            benchmark = _saved_signal_benchmark(chart_payload)
                         background_options = {
                             "include_options": False,
                             "spy_history": benchmark if benchmark is not None else pd.DataFrame(),

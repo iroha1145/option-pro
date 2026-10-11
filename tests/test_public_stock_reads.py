@@ -153,6 +153,66 @@ def test_background_pull_never_fetches_benchmark_or_options_and_keeps_partial(
         assert read_stock_pull_resource("AAOI", "signals", path=path) is None
 
 
+@pytest.mark.parametrize(
+    ("benchmark_provider", "missing_last", "expected_relative"),
+    [("Massive", False, True), ("Yahoo/yfinance", False, False), ("Massive", True, False)],
+)
+@pytest.mark.parametrize("stale_process_cache", [False, True])
+def test_background_pull_reuses_matching_saved_benchmark_without_network(
+    monkeypatch, benchmark_provider, missing_last, expected_relative, stale_process_cache,
+):
+    import pandas as pd
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Background signals started a benchmark or options request")
+
+    async def overview(symbol):
+        return _overview(symbol)
+
+    async def chart(symbol, range_key, adjustment):
+        return {**_chart(symbol, adjustment=adjustment), "price_provider": "Massive"}
+
+    benchmark = {**_chart("SPY", price=200), "price_provider": benchmark_provider}
+    if missing_last:
+        benchmark["bars"] = benchmark["bars"][:-1]
+    write_stock_pull_resources(
+        "SPY", {"daily_chart": (benchmark, time.time() - 60)},
+        path=public_stock_snapshot_path("SPY"),
+    )
+    # Simulate a cache still within its TTL but lacking the stock's latest
+    # session. The saved bundle must also recover this case without refetching.
+    stale_bars = benchmark["bars"][:-1]
+    if stale_process_cache:
+        signal_service._cache["hist:SPY:1y"] = (
+            datetime.now(timezone.utc) + timedelta(minutes=5),
+            pd.DataFrame({"Close": [bar["c"] for bar in stale_bars]},
+                         index=pd.to_datetime([bar["t"] for bar in stale_bars], unit="s", utc=True)),
+        )
+    monkeypatch.setattr(stocks, "_stock_overview_impl", overview)
+    monkeypatch.setattr(stocks, "_stock_chart_impl", chart)
+    monkeypatch.setattr(signal_service, "_history", forbidden)
+    monkeypatch.setattr(signal_service, "compute_stock_signals", forbidden)
+    monkeypatch.setattr(yahoo, "get_stock_iv", forbidden)
+    path = public_stock_snapshot_path("AAOI")
+    result = asyncio.run(stocks._pull_stock_data_once(
+        "AAOI", snapshot_path=path, include_options=False,
+    ))
+    assert result["status"] == "completed"
+    payload = read_stock_pull_resource("AAOI", "signals", path=path)["payload"]
+    assert payload["atm_iv_percent"]["value"] is None
+    relative = payload["relative_strength_spy"]["value"]
+    if expected_relative:
+        stock_return = 179 / 159 - 1
+        benchmark_return = 279 / 259 - 1
+        assert relative == pytest.approx((stock_return - benchmark_return) * 100, abs=0.01)
+        scores = signals_api.compute_stock_scores(payload)
+        assert scores["top_active_weight"] == 0.5
+        assert scores["bottom_active_weight"] == 0.5
+        assert signals_api._trend_bias(payload)["missing_components"] == []
+    else:
+        assert relative is None
+
+
 def test_same_snapshot_updates_freshness_when_market_phase_changes(monkeypatch):
     now = time.time()
     saved = now - 600

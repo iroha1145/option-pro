@@ -740,7 +740,7 @@ def _schema_identity(
         stock = claude_stock_report(job_type, model)
         identity["claude_features"] = {
             "contract": (
-                "sonnet-stock-report-conversation-v1" if stock else
+                "sonnet-stock-report-drain-request-budget-continuation-v2" if stock else
                 "claude-earnings-conversation-last-json-container-v1"
                 if earnings
                 else "sonnet-verified-web-evidence-v1"

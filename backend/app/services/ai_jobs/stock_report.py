@@ -18,8 +18,9 @@ LOCAL_EVIDENCE_BLOCKS = (
     "market_context", "macro_conditions", "upcoming_earnings",
 )
 TOOL_MAX_USES = {"web_search": 6, "web_fetch": 4, "code": 2}
-# Permit the provider's first max_uses_exceeded result to complete normally;
-# a further call is stopped locally, without silently retrying paid work.
+# Reservation allowances include a web max_uses_exceeded result. Native
+# operations are already running when streamed: receive the current request,
+# then enforce TOOL_MAX_USES before authorizing any paid continuation.
 TOOL_LIMITS = {name: uses + 1 for name, uses in TOOL_MAX_USES.items()}
 TOOL_LIMITS["code"] = TOOL_MAX_USES["code"]  # Code has no provider max_uses guard.
 TOOL_LIMITS["total"] = sum(TOOL_LIMITS.values())
