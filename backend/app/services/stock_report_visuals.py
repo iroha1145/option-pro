@@ -155,9 +155,9 @@ def stock_report_visuals(row: dict) -> dict | None:
     price_rows.sort(key=lambda item: item["label"])
     volume_rows.sort(key=lambda item: item["label"])
     if _usd(price_currency):
-        add("price_history", "历史收盘价", "line", "usd", price_rows, _caption(prices, through=price_rows[-1]["label"] if price_rows else None, detail="保存的逐日价格；不含模型推算"))
+        add("price_history", "历史收盘价", "line", "usd", price_rows, _caption(prices, through=price_rows[-1]["label"] if price_rows else None, detail="逐日收盘价"))
     elif price_rows:
-        notes.append("历史行情的币种未确认美元，金额图表未显示。")
+        notes.append("历史行情非美元计价，未生成收盘价图表。")
 
     financials = usable("financials")
     revenue_rows = []
@@ -170,9 +170,9 @@ def stock_report_visuals(row: dict) -> dict | None:
     revenue_rows.sort(key=lambda item: item["label"])
     income_meta = {**financials, "as_of": _dict(financials.get("component_as_of")).get("quarterly_income") or financials.get("as_of")}
     if _usd(financials.get("currency")):
-        add("quarterly_revenue", "季度收入", "bar", "usd", revenue_rows, _caption(income_meta, through=revenue_rows[-1]["label"] if revenue_rows else None, detail="财报期末日期；金额为美元原值"))
+        add("quarterly_revenue", "季度收入", "bar", "usd", revenue_rows, _caption(income_meta, through=revenue_rows[-1]["label"] if revenue_rows else None, detail="财报期末数据"))
     elif revenue_rows:
-        notes.append("财务报表的币种未确认美元，季度收入图表未显示。")
+        notes.append("财务报表非美元计价，未生成季度收入图表。")
 
     scores = _dict(payload.get("scores"))
     score_rows = []
@@ -181,8 +181,8 @@ def stock_report_visuals(row: dict) -> dict | None:
         # The persisted scoring contract is a bounded 0–100 scale.
         if value is not None and 0 <= value <= 100:
             score_rows.append({"label": label, "value": value, "evidence_id": f"scores.{key}"})
-    add("structure_scores", "技术结构评分", "bar", "score", score_rows, _caption({"source": payload.get("evidence_source"), "as_of": as_of, "stale": payload.get("evidence_stale")}, detail="站内规则评分，范围0—100"))
-    add("daily_volume", "日成交量", "line", "shares", volume_rows, _caption(prices, through=volume_rows[-1]["label"] if volume_rows else None, detail="单位为股；零成交量保留"))
+    add("structure_scores", "技术结构评分", "bar", "score", score_rows, _caption({"source": payload.get("evidence_source"), "as_of": as_of, "stale": payload.get("evidence_stale")}, detail="评分区间 0–100"))
+    add("daily_volume", "日成交量", "line", "shares", volume_rows, _caption(prices, through=volume_rows[-1]["label"] if volume_rows else None, detail="单位：股"))
 
     analyst = usable("analyst_consensus")
     targets = _dict(analyst.get("targets"))
@@ -192,9 +192,9 @@ def stock_report_visuals(row: dict) -> dict | None:
         if value is not None and value >= 0:
             target_rows.append({"label": label, "value": value, "evidence_id": f"analyst_consensus.targets.{key}"})
     if _usd(analyst.get("currency")):
-        add("analyst_targets", "分析师目标价", "bar", "usd", target_rows, _caption(analyst, detail="供应商汇总的目标价，不是模型预测"))
+        add("analyst_targets", "分析师目标价", "bar", "usd", target_rows, _caption(analyst, detail="机构综合目标价"))
     elif target_rows:
-        notes.append("分析师目标价的币种未确认美元，金额图表未显示。")
+        notes.append("分析师目标价非美元计价，未生成目标价图表。")
 
     earnings = usable("earnings_history")
     surprise_rows = []
@@ -207,7 +207,7 @@ def stock_report_visuals(row: dict) -> dict | None:
             if period and surprise is not None:
                 surprise_rows.append({"label": period[:10], "value": surprise, "evidence_id": f"earnings_history.items.{index}.surprise_pct"})
     surprise_rows.sort(key=lambda item: item["label"])
-    add("earnings_surprise", "盈利超预期比例", "bar", "ratio", surprise_rows, _caption(earnings, through=surprise_rows[-1]["label"] if surprise_rows else None, detail="保留供应商原始比例，0.1代表10%；不进行百分数换算"))
+    add("earnings_surprise", "盈利超预期比例", "bar", "ratio", surprise_rows, _caption(earnings, through=surprise_rows[-1]["label"] if surprise_rows else None, detail="业绩超预期幅度（小数）"))
     if not charts:
-        notes.append("保存的资料不足以生成图表，请参阅资料覆盖情况。")
+        notes.append("暂无足够数据生成图表。")
     return {"version": _VERSION, "as_of": as_of, "charts": charts, "coverage": coverage, "notes": notes}

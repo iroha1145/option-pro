@@ -156,9 +156,9 @@ function legacyBody(result: unknown): string {
     [t('期权关键位置'), levels.options_levels], [t('期权看涨依据'), flow.bullish_flow_evidence],
     [t('期权看跌依据'), flow.bearish_flow_evidence], [t('期权方向未明'), flow.unknown_or_neutral_flow], [t('期权资料限制'), flow.warnings]);
   const scores: [string, unknown][] = [
-    [t('趋势判断把握'), raw.trend_bias_confidence], [t('顶部风险把握'), raw.top_risk_confidence],
-    [t('底部机会把握'), raw.bottom_opportunity_confidence], [t('回调机会质量'), raw.dip_buy_quality],
-    [t('跌破风险'), raw.breakdown_risk], [t('资料质量'), raw.data_quality], [t('期权判断把握'), flow.confidence],
+    [t('趋势判断置信度'), raw.trend_bias_confidence], [t('顶部风险置信度'), raw.top_risk_confidence],
+    [t('底部机会置信度'), raw.bottom_opportunity_confidence], [t('回调机会质量'), raw.dip_buy_quality],
+    [t('跌破风险'), raw.breakdown_risk], [t('资料质量'), raw.data_quality], [t('期权判断置信度'), flow.confidence],
   ];
   const scoreList = scores.flatMap(([label, value]) => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100 ? [`${label}: ${value}/100`] : []);
   const bias: Record<string, string> = {

@@ -167,7 +167,7 @@ function SignedInAnalysis({ ticker, isOwner }: { ticker: string; isOwner: boolea
       <p>{t('今日剩余 {remaining}/{limit} 次 · 所有股票共用', { remaining: view.quota.remaining, limit: view.quota.limit })}</p>
       <p>{view.cacheResetAt
         ? t('额度与报告缓存于 {time} 刷新', { time: timeLabel(view.cacheResetAt) })
-        : t('下次重置 {time} · 按美股实际收盘时间', { time: timeLabel(view.quota.resetAt) })}</p>
+        : t('下次重置 {time} · 美股收盘时', { time: timeLabel(view.quota.resetAt) })}</p>
       <p>{t('查看已有共享报告不扣次数')}</p>
     </div>}
     {view?.latestJobCached && reportJob && !running && <p className="mt-2 text-caption text-ink-500">{t('本时段已有共享报告')}</p>}
@@ -175,7 +175,7 @@ function SignedInAnalysis({ ticker, isOwner }: { ticker: string; isOwner: boolea
     {view && !view.enabled && <p className="mt-2 text-caption text-ink-500">{t('个股分析已关闭')}</p>}
     {readError && <p className="mt-3 text-caption text-danger-700" role="status">{readError} <button onClick={() => void refresh()} disabled={refreshing} className="text-ai-600">{t('重试')}</button></p>}
     {confirming && <div className="mt-3 rounded-md bg-ai-50 px-3 py-2.5">
-      <p className="text-caption text-ink-600">{t('生成公开股票研究报告，使用今日 1 次额度。已有同次报告会直接读取。')}</p>
+      <p className="text-caption text-ink-600">{t('生成个股深度研究报告，将使用今日 1 次额度。')}</p>
       <div className="mt-2 flex gap-2"><button onClick={() => void onGenerate()} disabled={!canGenerate} className="btn-ai disabled:opacity-50">{t('生成分析')}</button><button onClick={() => setConfirming(false)} className="control-button">{t('取消')}</button></div>
     </div>}
     {starting && <p className="mt-3 text-caption text-ink-500" role="status">{t('正在创建分析任务…')}</p>}
@@ -198,7 +198,6 @@ function SignedInAnalysis({ ticker, isOwner }: { ticker: string; isOwner: boolea
       {isOwner && job?.errorDetail && <span className="mt-1 block break-all text-micro text-ink-400">{job.errorDetail}</span>}
     </p>}
     {reportJob && <div className="mt-3 overflow-hidden rounded-md border border-ai-600/25 bg-ai-50">
-      <p className="border-b border-ai-600/15 px-3.5 py-2 text-micro text-ink-500">{t('在报告内上下滚动，查看全文与图表')}</p>
       <div
         data-stock-report-scroll=""
         role="region"
