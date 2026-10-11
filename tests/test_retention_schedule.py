@@ -384,6 +384,29 @@ def test_daily_cache_backup_and_six_hour_account_backup_survive_restart(tmp_path
     assert set(asyncio.run(task(full_cycle_per_call=True)()).details["backed_up"]) == {"optix", "accounts", "runtime-settings"}
 
 
+def test_daily_backup_stays_daily_when_copies_finish_after_the_cycle_starts(tmp_path):
+    # Each clock read is a minute later, so every copy is stamped after its
+    # cycle started. A strict 24 h check slid the daily copy to every 30 h.
+    clock = {"now": NOW}
+
+    def now() -> datetime:
+        clock["now"] += timedelta(minutes=1)
+        return clock["now"]
+
+    labels = ("optix", "catalyst-cache", "ai-jobs")
+    databases = {label: _database(tmp_path / f"{label}.db") for label in labels}
+    task = MaintenanceTask(databases, destination=tmp_path / "backups", keep=7, now=now)
+    copied: dict[str, list[int]] = {label: [] for label in labels}
+    for cycle in range(9):
+        clock["now"] = NOW + timedelta(hours=6 * cycle)
+        for label in asyncio.run(task()).details["backed_up"]:
+            copied[label].append(cycle)
+
+    assert copied["optix"] == copied["catalyst-cache"] == [0, 4, 8]
+    # ai-jobs.db holds paid model results: it keeps the six-hour cadence.
+    assert copied["ai-jobs"] == list(range(9))
+
+
 def test_daily_cache_backup_failure_retries_without_waiting_a_day(tmp_path):
     clock = {"now": NOW}
     broken = tmp_path / "optix.db"

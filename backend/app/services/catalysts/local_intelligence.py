@@ -155,7 +155,7 @@ _HOTSPOT_PRUNE_BATCH_REVISIONS = 50
 # reconcile 只读新闻保留期内创建的 news/focus 任务：更早的任务所指的修订已随
 # 日志修剪，读进来只会每 120 秒把整段历史重校验一遍。保留期以 prune_journal
 # 收到的实际配置为准，首轮修剪前按配置默认值；余量吸收 web 与 worker 的时钟差。
-_DEFAULT_NEWS_RETENTION_DAYS = 10
+from app.personal_config import DEFAULT_RETENTION_DAYS as _DEFAULT_NEWS_RETENTION_DAYS
 _AI_JOB_SNAPSHOT_MARGIN = timedelta(days=1)
 # 新闻付费载荷的字节预算。上游 summary 最长 20 万字符、source_tickers 最多
 # 500 项，原样入队会超过 ai_jobs 的入队上限：create_job 与 runtime 提交同一

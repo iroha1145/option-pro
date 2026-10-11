@@ -734,6 +734,7 @@ def test_earnings_analysis_task_queues_only_new_reports_within_5_days(
     )
     personal = SimpleNamespace(
         features=SimpleNamespace(catalyst_mode="off"),
+        storage=SimpleNamespace(retention_days=10),
     )
 
     async def builder(_today):
@@ -1250,6 +1251,7 @@ def test_manual_earnings_action_works_when_daily_schedule_is_off(
     )
     personal = SimpleNamespace(
         features=SimpleNamespace(catalyst_mode="off"),
+        storage=SimpleNamespace(retention_days=10),
     )
 
     monkeypatch.setattr(

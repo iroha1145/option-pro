@@ -192,8 +192,7 @@ _EARNINGS_ROW_FIELDS = {
     "expected_move_method",
     "expected_move_status",
 }
-_EARNINGS_CALENDAR_SOURCES = {"yahoo", "finnhub_calendar", "fmp_calendar"}
-_EARNINGS_MARKET_CAP_SOURCES = {"yahoo_info", "fmp_profile", "massive_reference"}
+_EARNINGS_MARKET_CAP_SOURCES = {"yahoo_info", "massive_reference"}
 _EARNINGS_EXPECTED_MOVE_SOURCES = {
     "Yahoo/yfinance options",
     "MarketData.app options",
@@ -777,57 +776,13 @@ def _valid_earnings_featured_fields(row: Mapping[str, Any]) -> bool:
 
 
 def _valid_earnings_calendar_fields(row: Mapping[str, Any]) -> bool:
-    """日历来源与日期冲突必须可识别，不允许静默覆盖。"""
+    """每行只有一个日历来源；三个日历字段保持固定取值，旧快照照常可读。"""
 
-    sources = row.get("calendar_sources")
-    status = row.get("calendar_date_status")
-    conflict = row.get("calendar_conflict")
-    if (
-        not isinstance(sources, list)
-        or not sources
-        or len(set(sources)) != len(sources)
-        or not set(sources).issubset(_EARNINGS_CALENDAR_SOURCES)
-    ):
-        return False
-    if status not in {"single_source", "confirmed", "conflict"}:
-        return False
-    if status in {"confirmed", "conflict"} and len(sources) < 2:
-        return False
-    if status == "single_source" and len(sources) != 1:
-        return False
-    if status != "conflict":
-        return conflict is None
-    if not isinstance(conflict, Mapping) or not conflict:
-        return False
-    for key, value in conflict.items():
-        if key not in _EARNINGS_CALENDAR_SOURCES or key not in sources:
-            return False
-        period_conflict = False
-        if isinstance(value, Mapping):
-            # Date-only conflicts keep their original string shape. A same-day
-            # fiscal-period conflict must carry the secondary report identity.
-            if set(value) != {"earnings_date", "quarter", "year"}:
-                return False
-            for field, low, high in (("quarter", 1, 4), ("year", 1900, 2200)):
-                other = value.get(field)
-                if other is not None and (
-                    isinstance(other, bool) or not isinstance(other, int)
-                    or not low <= other <= high
-                ):
-                    return False
-                if other is not None and row.get(field) is not None and other != row[field]:
-                    period_conflict = True
-            conflict_date = value.get("earnings_date")
-        else:
-            conflict_date = value
-        try:
-            date.fromisoformat(str(conflict_date))
-        except ValueError:
-            return False
-        # A conflict needs an actual date or known fiscal-period disagreement.
-        if str(conflict_date) == str(row.get("earnings_date")) and not period_conflict:
-            return False
-    return True
+    return (
+        row.get("calendar_sources") in (["yahoo"], ["finnhub_calendar"])
+        and row.get("calendar_date_status") == "single_source"
+        and row.get("calendar_conflict") is None
+    )
 
 
 def _valid_earnings_estimate_sources(row: Mapping[str, Any]) -> bool:
@@ -838,7 +793,7 @@ def _valid_earnings_estimate_sources(row: Mapping[str, Any]) -> bool:
     if not isinstance(sources, Mapping):
         return False
     allowed_fields = {"eps_estimate", "revenue_estimate", "eps_high", "eps_low"}
-    allowed_sources = {"calendar", "earnings_dates", "finnhub_calendar", "fmp_calendar"}
+    allowed_sources = {"calendar", "earnings_dates", "finnhub_calendar"}
     if any(
         field not in allowed_fields or row.get(field) is None
         or not isinstance(source, str) or source not in allowed_sources
@@ -876,10 +831,10 @@ def _validate_earnings(payload: Mapping[str, Any]) -> bool:
         or not isinstance(succeeded, int)
         or not 1 <= succeeded == len(rows) <= attempted <= 10_000
         or not isinstance(providers, list)
-        or not 1 <= len(providers) <= 3
+        or not 1 <= len(providers) <= 2
         or not all(isinstance(item, str) for item in providers)
         or len(set(providers)) != len(providers)
-        or not set(providers).issubset({"Finnhub", "Yahoo Finance", "FMP"})
+        or not set(providers).issubset({"Finnhub", "Yahoo Finance"})
         or not _valid_iso_timestamp(payload.get("as_of"))
     ):
         return False
@@ -927,19 +882,18 @@ def _validate_earnings(payload: Mapping[str, Any]) -> bool:
             )
             or not isinstance(row.get("sector"), str)
             or row.get("earnings_date_source")
-            not in {"calendar", "earnings_dates", "finnhub_calendar", "fmp_calendar"}
+            not in {"calendar", "earnings_dates", "finnhub_calendar"}
             or row.get("estimate_source")
             not in {
                 None,
                 "calendar",
                 "earnings_dates",
                 "finnhub_calendar",
-                "fmp_calendar",
                 "mixed",
             }
             or not _valid_earnings_estimate_sources(row)
             or row.get("actual_source")
-            not in {None, "earnings_dates", "finnhub_calendar", "fmp_calendar"}
+            not in {None, "earnings_dates", "finnhub_calendar"}
             or row.get("release_status")
             not in {"scheduled", "released", "reported_pending_actual"}
             or actual_present != (row.get("release_status") == "released")
@@ -1011,13 +965,11 @@ def _validate_earnings(payload: Mapping[str, Any]) -> bool:
             return False
         if row.get("earnings_date_source") == "finnhub_calendar":
             contributing_providers.add("Finnhub")
-        elif row.get("earnings_date_source") == "fmp_calendar":
-            contributing_providers.add("FMP")
         else:
             contributing_providers.add("Yahoo Finance")
         for source in (row.get("estimate_sources") or {}).values():
             contributing_providers.add({
-                "finnhub_calendar": "Finnhub", "fmp_calendar": "FMP",
+                "finnhub_calendar": "Finnhub",
                 "calendar": "Yahoo Finance", "earnings_dates": "Yahoo Finance",
             }[source])
     failed_symbols = payload.get("failed_symbols")

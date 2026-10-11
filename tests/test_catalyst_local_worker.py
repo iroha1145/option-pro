@@ -115,6 +115,13 @@ def test_local_round_collects_reconciles_and_prunes_without_macrolens(tmp_path):
     assert result.details["streams"]["calendar"]["snapshot_written"] is True
     assert result.details["local_intelligence"]["ingested"] == 3
     assert result.details["journal_prune"]["pruned_ingest_rows"] == 0
+    # Every prune counter stays visible, the last hotspot and event-group ones too.
+    assert {
+        "pruned_focus_cycles",
+        "pruned_hotspot_revisions",
+        "pruned_hotspot_items",
+        "pruned_event_groups",
+    } <= set(result.details["journal_prune"])
     assert "errors" not in result.details
     assert sorted(feeds.calls) == ["forexfactory", "massive"]
     with sqlite3.connect(tmp_path / "catalyst-cache.db") as connection:

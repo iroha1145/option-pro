@@ -127,8 +127,9 @@ def test_request_shape_follows_the_documented_parameters() -> None:
     # 顶层自动缓存固定 5 分钟：1 小时断点在前、5 分钟尾巴在后是允许的顺序，反过来会被拒。
     assert built["cache_control"] == {"type": "ephemeral"}
     assert built["messages"] == [{"role": "user", "content": [{"type": "text", "text": "证据"}]}]
+    # 20260209 版网页工具自带动态过滤，默认不另开独立代码执行。
     assert [tool["type"] for tool in built["tools"]] == [
-        "web_search_20260209", "web_fetch_20260209", "code_execution_20260521",
+        "web_search_20260209", "web_fetch_20260209",
     ]
     assert built["tools"][0]["user_location"] == {"type": "approximate", "country": "US", "timezone": "America/New_York"}
     assert built["tools"][0]["max_uses"] == CONFIG.web_search_max_uses
@@ -235,7 +236,8 @@ def test_code_execution_survives_continuation_and_has_no_separate_tool_charge() 
         message(paused, stop_reason="pause_turn"),
         message([returned, json_text()], message_id="msg_2"),
     ])
-    result = runtime.invoke(client, request(), config=CONFIG)
+    with_code = replace(CONFIG, code_execution_tool=True)
+    result = runtime.invoke(client, request(with_code), config=with_code)
     assert result.error_code is None and result.parsed == SAMPLE_RESULT
     assert result.usage["code_execution_requests"] == 1
     assert result.continuation_count == 1

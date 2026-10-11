@@ -60,7 +60,7 @@ class BriefRunConfig:
     web_search_max_uses: int = 10
     web_fetch_max_uses: int = 8
     web_fetch_max_content_tokens: int = 12_000
-    code_execution_tool: bool = True
+    code_execution_tool: bool = False
     refusal_fallback: bool = False
     request_timeout_seconds: float = 1500.0
     evidence_max_bytes: int = 56_000
