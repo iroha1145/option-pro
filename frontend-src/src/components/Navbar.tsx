@@ -181,10 +181,10 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
           <button
             onClick={onOpenPalette}
             /* 一级入口收成 6 项后 xl 不再拥挤，文字搜索框从 md 起常显（此前 xl–2xl 只留图标）。 */
-            className="touch-target hidden h-8 w-44 items-center gap-2 rounded-pill border border-line bg-card px-3.5 text-caption text-ink-400 transition-[border-color,box-shadow,color] duration-fast hover:border-line-strong hover:text-ink-500 focus-visible:border-brand-500 focus-visible:shadow-focus-ring md:flex 2xl:w-[220px]"
+            className="icon-motion-trigger touch-target hidden h-8 w-44 items-center gap-2 rounded-pill border border-line bg-card px-3.5 text-caption text-ink-400 transition-[border-color,box-shadow,color] duration-fast hover:border-line-strong hover:text-ink-500 focus-visible:border-brand-500 focus-visible:shadow-focus-ring md:flex 2xl:w-[220px]"
             aria-label={t("搜索代码或功能")}
           >
-            <Icon name="search" size={14} />
+            <Icon name="search" size={14} motion />
             <span className="flex-1 truncate text-left">{t('搜索代码或功能…')}</span>
             <kbd className="flex items-center gap-0.5 font-mono text-micro text-ink-400">
               <Icon name="command" size={11} />K
@@ -192,11 +192,11 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
           </button>
           <button
             onClick={onOpenPalette}
-            className="touch-target header-action md:hidden"
+            className="icon-motion-trigger touch-target header-action md:hidden"
             aria-label={t("搜索")}
           >
             <span className="header-chip">
-              <Icon name="search" size={15} />
+              <Icon name="search" size={15} motion />
             </span>
           </button>
 

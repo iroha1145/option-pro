@@ -12,6 +12,8 @@
  * - 枚举走白名单，认不出的值回落到该枚举自己的「不明」成员；证据充分度认不出时为 null
  *   （界面显「—」），不回落成「低」——那等于替模型下了一个判断；
  * - 外部来源只保留 http(s) 链接，链接来自联网检索结果，不能原样信任。
+ * - visuals（首页图表数据）逐项校验：id 形状、标签、有限且在合理范围内的数值；不合格的行丢掉，
+ *   一张图没有合格的行就是 null，不补值。
  */
 import { isMock, mockOr, postCreate } from '../client';
 import { registryGet, restorePersistedQuery } from '../queryRegistry';
@@ -130,6 +132,28 @@ export interface BriefSource {
   title: string | null;
 }
 
+/** 图表的一行：证据 id、程序给的中文标签（界面经 t() 翻译）、数值。 */
+export interface BriefChartRow {
+  id: string;
+  label: string;
+  value: number;
+}
+
+/**
+ * 首页图表数据（brief.visuals）。后端读取时从该次运行的证据包现算
+ * （backend/app/services/market_brief/visuals.py），只有标签、数字和日期；各图独立，缺了是 null。
+ */
+export interface MarketBriefVisuals {
+  /** 美股指数当日涨跌幅（%）。 */
+  market: { asOf: string | null; stale: boolean; rows: BriefChartRow[] } | null;
+  /** 行业 ETF 站上 50 日均线的只数：above / total，expected 是应有只数。 */
+  breadth: { above: number; total: number; expected: number; asOf: string | null; stale: boolean } | null;
+  /** 报告引用的主题相对标普 500 的一个月超额收益（百分点）。 */
+  sectors: { servedSession: string | null; rows: BriefChartRow[] } | null;
+  /** 宏观各模块分位分数（0–100）。 */
+  macro: { dataThrough: string | null; rows: BriefChartRow[] } | null;
+}
+
 export interface MarketBrief {
   runId: string | null;
   tradingDate: string | null;
@@ -142,6 +166,8 @@ export interface MarketBrief {
   externalSources: BriefSource[];
   validationWarnings: string[];
   webSearchCount: number | null;
+  /** 没有可画的图时为 null，界面显示文字版。 */
+  visuals: MarketBriefVisuals | null;
 }
 
 /**
@@ -315,6 +341,71 @@ function mapSources(value: unknown): BriefSource[] {
   });
 }
 
+/* 与 visuals.py 同一套边界：超出范围的读数当坏数据丢掉。 */
+const INDEX_IDS = new Set(['idx:^GSPC', 'idx:^IXIC', 'idx:^DJI', 'idx:^RUT']);
+const THEME_ID = /^theme:[A-Za-z0-9_.-]{1,90}$/;
+const MACRO_ID = /^macro:[A-Za-z0-9_.-]{1,90}$/;
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const STAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+const MAX_INDEX_CHANGE = 30;
+const MAX_THEME_EXCESS = 300;
+const MAX_CHART_ROWS = 12;
+const MAX_LABEL_CHARS = 40;
+const MAX_BREADTH_TOTAL = 100;
+
+function dateText(r: Rec, key: string): string | null {
+  const value = text(r, key);
+  if (!value || !(DAY.test(value) || STAMP.test(value))) return null;
+  return Number.isFinite(Date.parse(value)) ? value : null;
+}
+
+function wholeCount(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function chartRows(value: unknown, accepts: (id: string) => boolean, low: number, high: number): BriefChartRow[] {
+  const seen = new Set<string>();
+  return rows(value)
+    .flatMap((row) => {
+      const id = text(row, 'id');
+      const label = text(row, 'label');
+      const number = row.value;
+      if (!id || !accepts(id) || seen.has(id) || !label || label.length > MAX_LABEL_CHARS) return [];
+      if (typeof number !== 'number' || !Number.isFinite(number) || number < low || number > high) return [];
+      seen.add(id);
+      return [{ id, label, value: number }];
+    })
+    .slice(0, MAX_CHART_ROWS);
+}
+
+export function mapVisuals(value: unknown): MarketBriefVisuals | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  const r = value as Rec;
+  const marketIn = asRec(r.market);
+  const marketRows = chartRows(marketIn.rows, (id) => INDEX_IDS.has(id), -MAX_INDEX_CHANGE, MAX_INDEX_CHANGE);
+  const sectorsIn = asRec(r.sectors);
+  const sectorRows = chartRows(sectorsIn.rows, (id) => THEME_ID.test(id), -MAX_THEME_EXCESS, MAX_THEME_EXCESS);
+  const macroIn = asRec(r.macro);
+  const macroRows = chartRows(macroIn.rows, (id) => MACRO_ID.test(id), 0, 100);
+  const breadthIn = asRec(r.breadth);
+  const above = wholeCount(breadthIn.above);
+  const total = wholeCount(breadthIn.total);
+  const expected = wholeCount(breadthIn.expected);
+  const breadthValid = above !== null && total !== null && expected !== null
+    && total > 0 && total <= expected && expected <= MAX_BREADTH_TOTAL && above <= total;
+  const visuals: MarketBriefVisuals = {
+    market: marketRows.length
+      ? { asOf: dateText(marketIn, 'as_of'), stale: marketIn.stale === true, rows: marketRows }
+      : null,
+    breadth: breadthValid
+      ? { above, total, expected, asOf: dateText(breadthIn, 'as_of'), stale: breadthIn.stale === true }
+      : null,
+    sectors: sectorRows.length ? { servedSession: dateText(sectorsIn, 'served_session'), rows: sectorRows } : null,
+    macro: macroRows.length ? { dataThrough: dateText(macroIn, 'data_through'), rows: macroRows } : null,
+  };
+  return visuals.market || visuals.breadth || visuals.sectors || visuals.macro ? visuals : null;
+}
+
 function mapBrief(value: unknown): MarketBrief | null {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
   const r = value as Rec;
@@ -336,6 +427,7 @@ function mapBrief(value: unknown): MarketBrief | null {
     externalSources: mapSources(r.external_sources),
     validationWarnings: texts(r.validation_warnings),
     webSearchCount: pickN(r, 'web_search_count'),
+    visuals: mapVisuals(r.visuals),
   };
 }
 

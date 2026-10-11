@@ -115,12 +115,12 @@ function MobileDockContent({ onHeightChange }: MobileDockProps) {
         )}
         <Link
           to={item.path}
-          className="relative z-10 flex min-h-[44px] min-w-0 flex-1 flex-col items-center justify-center gap-1 py-2 transition-transform duration-fast active:scale-[0.96]"
+          className="icon-motion-trigger relative z-10 flex min-h-[44px] min-w-0 flex-1 flex-col items-center justify-center gap-1 py-2 transition-transform duration-fast active:scale-[0.96]"
           aria-label={item.label}
           aria-current={navAriaCurrent(location.pathname, item.group)}
           {...routeIntentHandlers(item.path)}
         >
-          <Icon name={item.icon} size={19} className={cn('shrink-0', active ? 'text-brand-600' : 'text-ink-400')} />
+          <Icon name={item.icon} motion motionActive={active} size={19} className={cn('shrink-0', active ? 'text-brand-600' : 'text-ink-400')} />
           <span className={cn('w-full text-center text-tag leading-tight [overflow-wrap:anywhere]', active ? 'font-medium text-brand-600' : 'text-ink-500')}>{item.label}</span>
         </Link>
       </div>
@@ -145,11 +145,11 @@ function MobileDockContent({ onHeightChange }: MobileDockProps) {
             )}
             <button
               onClick={() => setMoreOpen(true)}
-              className="relative z-10 flex min-h-[44px] min-w-0 w-full flex-col items-center justify-center gap-1 py-2 transition-transform duration-fast active:scale-[0.96]"
+              className="icon-motion-trigger relative z-10 flex min-h-[44px] min-w-0 w-full flex-col items-center justify-center gap-1 py-2 transition-transform duration-fast active:scale-[0.96]"
               aria-label={t('更多')}
               aria-current={moreActive ? 'page' : undefined}
             >
-              <Icon name="menu" size={19} className={cn('shrink-0', moreActive ? 'text-brand-600' : 'text-ink-400')} />
+              <Icon name="menu" motion motionActive={moreOpen} size={19} className={cn('shrink-0', moreActive ? 'text-brand-600' : 'text-ink-400')} />
               <span className={cn('w-full text-center text-tag leading-tight [overflow-wrap:anywhere]', moreActive ? 'font-medium text-brand-600' : 'text-ink-500')}>{t('更多')}</span>
             </button>
           </div>
@@ -205,12 +205,12 @@ function MobileDockContent({ onHeightChange }: MobileDockProps) {
                     onFocus={() => prefetchRouteOnIntent(m.path)}
                     aria-current={isNavPathActive(location.pathname, m.path) ? 'page' : undefined}
                     className={cn(
-                      'flex w-full items-center gap-3 rounded-md px-3 py-3 text-left transition-[transform,background-color] hover:bg-paper-2 active:bg-line/60',
+                      'icon-motion-trigger flex w-full items-center gap-3 rounded-md px-3 py-3 text-left transition-[transform,background-color] hover:bg-paper-2 active:bg-line/60',
                       isNavPathActive(location.pathname, m.path) && 'bg-brand-50 text-brand-700',
                     )}
                   >
                     <span className="flex size-9 items-center justify-center rounded-md border border-line bg-card-warm text-brand-600">
-                      <Icon name={m.icon} size={17} />
+                      <Icon name={m.icon} motion size={17} />
                     </span>
                     <span className="flex-1 text-body-s font-medium text-ink-800">{m.label}</span>
                     {isNavPathActive(location.pathname, m.path) ? (

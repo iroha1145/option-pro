@@ -32,6 +32,8 @@ export const COMPANIES: Dict = {
   '房地产': ['Real Estate', '不動産'],
   '加密相关': ['Crypto-related', '暗号資産関連'],
   '中概 ADR': ['China ADRs', '中国 ADR'],
+  /* 证据包给模型的主题名（evidence.py 的 _PROSE_SAFE_THEME_NAMES），首页报告的主题图表照用 */
+  '中概股': ['China ADRs', '中国 ADR'],
   '电信': ['Telecom', '通信'],
   '工业制造': ['Industrial manufacturing', '資本財'],
   '宽基 ETF': ['Broad-market ETFs', '市場全体型 ETF'],
