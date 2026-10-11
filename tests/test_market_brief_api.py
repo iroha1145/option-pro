@@ -210,18 +210,22 @@ def test_the_owner_reads_the_owner_projection(store: FakeStore) -> None:
     assert [call["owner"] for call in store.latest_calls] == [False, True]
 
 
-def test_the_byte_cache_key_follows_the_next_slot_and_latest_attempt() -> None:
+def test_the_byte_cache_key_follows_the_next_slot_latest_attempt_and_visuals() -> None:
     base = copy.deepcopy(SAMPLE)
     moved = copy.deepcopy(SAMPLE)
     moved["next_slot"] = {"slot": "post_close", "at": "2026-10-09T20:30:00Z"}
     attempted = copy.deepcopy(SAMPLE)
     attempted["latest_attempt"] = {"run_id": "mb_x", "status": "failed"}
+    # 图表取自运行记录文件：同一份研判的记录被清理后 visuals 变成 null，字节缓存不能再送旧图。
+    pruned = copy.deepcopy(SAMPLE)
+    pruned["brief"]["visuals"] = None
     keys = {
         market_brief_api._latest_version_key(payload, owner=False)
-        for payload in (base, moved, attempted)
+        for payload in (base, moved, attempted, pruned)
     }
-    assert len(keys) == 3
+    assert len(keys) == 4
     assert market_brief_api._latest_version_key(base, owner=True) not in keys
+    assert market_brief_api._latest_version_key(copy.deepcopy(SAMPLE), owner=False) == market_brief_api._latest_version_key(base, owner=False)
 
 
 def test_history_is_public_and_bounded(store: FakeStore) -> None:

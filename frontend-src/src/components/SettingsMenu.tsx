@@ -29,7 +29,7 @@ const COLOR_OPTIONS: { value: ColorMode; label: string }[] = [
 
 /* touch-target：手机上原来在「更多」抽屉里的是 44px 高的分段控件，挪进菜单后不能变矮 */
 const ITEM_CLASS =
-  'touch-target flex w-full items-center gap-2 rounded-xs px-2 py-1.5 text-left text-body-s transition-colors duration-fast focus-visible:bg-paper-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600';
+  'icon-motion-trigger touch-target flex w-full items-center gap-2 rounded-xs px-2 py-1.5 text-left text-body-s transition-colors duration-fast focus-visible:bg-paper-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600';
 
 export default function SettingsMenu({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
@@ -112,10 +112,10 @@ export default function SettingsMenu({ className }: { className?: string }) {
         aria-label={t('显示设置')}
         title={t('显示设置')}
         /* 外层是透明触控区（手机 44px），看得见的 32px 按钮在 .header-chip；展开态由 aria-expanded 着色 */
-        className="touch-target header-action"
+        className="icon-motion-trigger touch-target header-action"
       >
         <span className="header-chip">
-          <Icon name="sliders" size={15} />
+          <Icon name="sliders" size={15} motion />
         </span>
       </button>
       {mounted && (
@@ -168,7 +168,7 @@ export default function SettingsMenu({ className }: { className?: string }) {
                   onClick={() => choose(() => setThemePreference(option.value))}
                   className={cn(ITEM_CLASS, active ? 'text-brand-600' : 'text-ink-700 hover:bg-paper-2')}
                 >
-                  <Icon name={option.icon} size={14} className="w-5 shrink-0 text-ink-400" />
+                  <Icon name={option.icon} motion size={14} className="w-5 shrink-0 text-ink-400" />
                   <span className="flex-1">{option.label}</span>
                   {active && <Icon name="check" size={13} className="shrink-0" />}
                 </button>

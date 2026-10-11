@@ -109,7 +109,7 @@ _FOCUS_WAITING_PLACEHOLDERS = frozenset(
 _LEGACY_PLACEHOLDER_INPUT_ERROR = "legacy_placeholder_input_hidden"
 AMBIGUOUS_TICKERS = frozenset({"AI", "ON", "CAT"})
 TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-^]{0,11}$")
-SCHEMA_VERSION = "optix-local-catalyst-v7"
+SCHEMA_VERSION = "optix-local-catalyst-v8"
 NEWS_RESULT_CONTRACT_ID = (
     "news-impact-result:"
     f"{ai_runtime.RESULT_VALIDATION_CONTRACT_VERSION}:"
@@ -313,6 +313,11 @@ CREATE TABLE IF NOT EXISTS catalyst_local_hotspot_items (
     FOREIGN KEY(event_group_id,event_group_version)
       REFERENCES catalyst_local_event_groups(event_group_id,event_group_version)
 );
+-- 删事件组时，外键检查要按 (event_group_id,event_group_version) 查热点条目；
+-- 两条唯一索引都以 prepared_revision 开头，用不上，没有这条索引就会每删一组
+-- 全表扫一遍条目。2026-10-11 首次按 10 天修剪要删 5.9 万组，卡了二十多分钟。
+CREATE INDEX IF NOT EXISTS idx_local_hotspot_items_event_group
+  ON catalyst_local_hotspot_items(event_group_id,event_group_version);
 
 CREATE TABLE IF NOT EXISTS catalyst_local_focus_cycles (
     cycle_id TEXT PRIMARY KEY,

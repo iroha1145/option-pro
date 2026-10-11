@@ -139,11 +139,13 @@ def _latest_version_key(payload: Mapping[str, Any], *, owner: bool) -> str:
     run_id = brief.get("run_id") if isinstance(brief, Mapping) else None
     # next_slot 按读取时刻计算、latest_attempt 随失败的运行变化：两者都进键，
     # 否则字节缓存会在同一份研判下继续送出过期的「下一份」时间与尝试状态。
+    # visuals 取自运行记录文件而不是 latest.json，记录被清理后会变成 null，也进键。
     dynamic = json.dumps(
         [
             payload.get("status"),
             payload.get("next_slot"),
             payload.get("latest_attempt"),
+            brief.get("visuals") if isinstance(brief, Mapping) else None,
         ],
         sort_keys=True,
         ensure_ascii=False,

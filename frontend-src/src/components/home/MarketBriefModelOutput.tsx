@@ -1,98 +1,54 @@
-import { Component, lazy, Suspense, useMemo, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router';
+/**
+ * 报告正文：有图表数据（brief.visuals）时显示图文版，否则显示原有文字版（children）。
+ *
+ * 图文版是 marketBriefReport.ts 拼好的静态 HTML/CSS，写进本组件自己的 Shadow DOM：
+ * - 在 useLayoutEffect 里同步写入，和卡片其余部分同一帧排版、上屏，之后高度不再变。
+ *   PR #253 的 iframe 要先显示文字、就绪后再换成框架，换的那一下会把下面的卡片推走。
+ * - 生产页面的 CSP（script-src 'self'）会被 srcdoc 沙箱框架继承，Websandbox 的内联启动脚本
+ *   在生产里跑不起来。图文版本来就不需要脚本：完成态协议里 jsFunctions、jsExpressions 不为空
+ *   就退回文字版。
+ * - 样式封在影子根里；颜色读宿主的 CSS 变量（自定义属性穿过影子边界继承），深浅色与涨跌配色
+ *   切换时即时生效，不用重新生成内容。同一份内容轮询回来不重写，展开的明细不会被收起。
+ */
+import { Component, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react';
 import { isMock } from '@/api/client';
 import type { MarketBrief } from '@/api/modules/marketBrief';
-import MenuSelect from '@/components/shared/MenuSelect';
-import { useAppearance } from '@/hooks/useAppearance';
-import { useColorMode } from '@/hooks/useColorMode';
-import { t } from '@/i18n/core';
-import { createMarketBriefOpenUIPreview } from '@/mocks/marketBriefOpenUI';
-import { SERVER_BRIEF_ARCHIVE } from '@/mocks/marketBriefServerArchive';
-import { useMarketBriefArchiveSelection } from './marketBriefPreview';
+import { normalizeOpenGenUIContent } from '@/components/open-intelligent-ui/schema';
+import { createMarketBriefReport } from './marketBriefReport';
 
-const OpenIntelligentUIOutput = lazy(() => import('../open-intelligent-ui/renderer'));
-
-class ReportRendererBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
+class ReportBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
   render() { return this.state.failed ? this.props.fallback : this.props.children; }
 }
 
-// Only selected presentation tokens cross into the opaque report frame.
-const REPORT_TOKENS = {
-  ink: '--ink-900',
-  body: '--ink-600',
-  muted: '--ink-500',
-  paper: '--card',
-  soft: '--paper-2',
-  line: '--line',
-  brand: '--brand-600',
-  up: '--up-700',
-  down: '--down-700',
-  warn: '--warn-700',
-  ok: '--ok-700',
-  'radius-control': '--r-control',
-  'radius-pill': '--r-pill',
-} as const;
-
-function reportThemeCss(): string {
-  if (typeof document === 'undefined') return '';
-  const style = getComputedStyle(document.documentElement);
-  return `:root{${Object.entries(REPORT_TOKENS)
-    .map(([name, token]) => `--report-${name}:${style.getPropertyValue(token).trim()};`)
-    .join('')}--report-radius-card:18px;--report-font:${getComputedStyle(document.body).fontFamily};}`;
+function ShadowReport({ html, css }: { html: string; css: string }) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    // StrictMode 与热更新会重复执行这段：已有影子根就复用（attachShadow 不能调两次）。
+    const root = host.shadowRoot ?? host.attachShadow({ mode: 'open' });
+    root.innerHTML = `<style>${css.replace(/<\/style/gi, '<\\/style')}</style>${html}`;
+  }, [html, css]);
+  return <div ref={hostRef} className="mt-3" data-market-brief-report="" />;
 }
 
-/** Changes only the model narrative; the card, coverage and sources stay with the host. */
-export default function MarketBriefModelOutput({ brief, children }: {
+export default function MarketBriefModelOutput({ brief, year, children }: {
   brief: MarketBrief;
+  year?: string;
   children: ReactNode;
 }) {
-  useAppearance();
-  useColorMode();
-  const [params, setParams] = useSearchParams();
-  const archive = useMarketBriefArchiveSelection();
-  // A local mock preview is explicitly requested by the URL. Never substitute it in live mode.
-  const preview = import.meta.env.DEV && isMock
-    && params.get('report') === 'openui';
-  const content = useMemo(
-    () => preview ? createMarketBriefOpenUIPreview(brief, archive?.visuals) : null,
-    [preview, brief, archive],
-  );
+  const report = useMemo(() => {
+    const content = normalizeOpenGenUIContent(createMarketBriefReport(brief, { demo: isMock, year }));
+    if (!content?.html || content.jsFunctions || content.jsExpressions?.length) return null;
+    return { html: content.html.join(''), css: content.css ?? '' };
+  }, [brief, year]);
 
-  if (!content) return children;
-  // 只在预览时读主题样式；生产里卡片每次渲染都走上面的 return，不碰 getComputedStyle。
-  const themeCss = reportThemeCss();
+  if (!report) return children;
   return (
-    <>
-      {archive && (
-        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-caption text-ink-500">
-          <span>{t('服务器研判存档')}</span>
-          <MenuSelect
-            ariaLabel={t('服务器研判存档')}
-            value={archive.runId}
-            className="max-w-full"
-            triggerClassName="min-h-10 rounded-[10px] border-line px-3 py-2 text-ink-800"
-            options={SERVER_BRIEF_ARCHIVE.map(item => ({ value: item.runId, label: item.label }))}
-            onChange={runId => {
-              const next = new URLSearchParams(params);
-              next.set('run', runId);
-              setParams(next, { replace: true, preventScrollReset: true });
-            }}
-          />
-          <span>{t('原文保留 · 图表取自同次证据')}</span>
-        </div>
-      )}
-      <ReportRendererBoundary key={brief.runId} fallback={children}>
-        <Suspense fallback={children}>
-          <OpenIntelligentUIOutput
-            content={content}
-            fallback={children}
-            title={t('市场报告图文正文')}
-            themeCss={themeCss}
-          />
-        </Suspense>
-      </ReportRendererBoundary>
-    </>
+    <ReportBoundary key={brief.runId} fallback={children}>
+      <ShadowReport html={report.html} css={report.css} />
+    </ReportBoundary>
   );
 }

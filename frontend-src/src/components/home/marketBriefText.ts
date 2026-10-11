@@ -320,8 +320,8 @@ export interface CoverageItem {
   warn?: boolean;
 }
 
-/** 日期按字符串原样取（日线批次、宏观快照只有日期），ISO 时刻换成美东。 */
-function throughStamp(raw: string, year?: string): { sortKey: string; text: string } | null {
+/** 日期按字符串原样取（日线批次、宏观快照只有日期），ISO 时刻换成美东。覆盖条与图文版的图注共用。 */
+export function throughStamp(raw: string, year?: string): { sortKey: string; text: string } | null {
   if (DAY_ONLY.test(raw)) return { sortKey: `${raw} 00:00`, text: shortDate(raw, year) };
   const day = fmtNyDayKey(raw);
   if (!day) return null;

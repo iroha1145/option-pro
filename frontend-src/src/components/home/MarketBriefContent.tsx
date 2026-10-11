@@ -1,6 +1,7 @@
 /**
  * 「市场报告」正文：覆盖条 → 一句话结论 → 四段（xl 两列）→ 复盘与外部来源（可折叠）→ 口径说明。
- * 模型写的正文原样显示、不经 t()；缺字段显「—」。
+ * 模型写的正文原样显示、不经 t()；缺字段显「—」。有图表数据时，结论与四段换成图文版
+ * （MarketBriefModelOutput），覆盖条、复盘、来源与口径说明不变。
  */
 import { useId, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
@@ -157,7 +158,7 @@ export default function MarketBriefContent({ brief, year }: { brief: MarketBrief
         </div>
       )}
 
-      <MarketBriefModelOutput brief={brief}>
+      <MarketBriefModelOutput brief={brief} year={year}>
       <div className="mt-3 flex flex-wrap items-start gap-x-4 gap-y-2">
         <p className={cn('min-w-0 flex-1 basis-[22rem] break-words text-h2', result.headline ? 'text-ink-900' : 'text-ink-400')}>
           {result.headline ?? MISSING}
