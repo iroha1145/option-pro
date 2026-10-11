@@ -705,27 +705,44 @@ def test_initialize_is_idempotent_and_versions_its_own_schema(tmp_path):
 def test_orphaned_private_rows_follow_the_journal_prune(tmp_path):
     feeds = Feeds()
     clock = Clock(T0)
-    collector = _collector(tmp_path, feeds, clock)
+    collector = _collector(tmp_path, feeds, clock, "massive", "google_news_stocks")
     feeds.batches["massive"] = NewsBatch(
         (_item("m1", "Old headline to prune"), _item("m2", "Recent headline to keep"))
     )
     _round(collector)
+    # Eleven days on, the ten-day journal prune has removed the first story.
+    clock.advance(days=11)
     with sqlite3.connect(collector.repository.path) as connection:
         connection.execute("DELETE FROM macrolens_etl_news WHERE news_id=1")
 
-    # 两个判重键、模糊池与条目各一行；观察记录留到保留期满。
-    assert collector.prune_orphans(retention_days=30) == 4
-    assert _query(collector.repository, "SELECT news_id FROM catalyst_ingest_items") == [(2,)]
-    observations = "SELECT news_id FROM catalyst_ingest_observations ORDER BY news_id"
-    assert _query(collector.repository, observations) == [(1,), (2,)]
+    # Its dedupe rows outlive the story: 30 days from first sight.
+    assert collector.prune_orphans(retention_days=10) == 0
+    items = "SELECT news_id FROM catalyst_ingest_items ORDER BY news_id"
+    assert _query(collector.repository, items) == [(1,), (2,)]
 
-    # The feed still lists the pruned story: it is recognised, not minted again.
-    clock.advance(minutes=10)
+    # The same feed and another source still list it; neither mints it again.
+    feeds.batches["google_news_stocks"] = NewsBatch(
+        (
+            _item(
+                "g1",
+                "Old headline to prune",
+                source="google/Example",
+                url="https://news.example/m1?utm_source=feed",
+            ),
+        )
+    )
     assert _round(collector, force=True).metrics["new"] == 0
 
-    clock.advance(days=31)
-    assert collector.prune_orphans(retention_days=30) == 1
-    assert _query(collector.repository, observations) == [(2,)]
+    clock.advance(days=20)
+    # Two dedupe keys, the title, the item and the first observation.
+    assert collector.prune_orphans(retention_days=10) == 5
+    assert _query(collector.repository, items) == [(2,)]
+    observations = """SELECT source_key,news_id FROM catalyst_ingest_observations
+                      ORDER BY source_key,news_id"""
+    assert _query(collector.repository, observations) == [
+        ("google_news_stocks", 1),
+        ("massive", 2),
+    ]
 
 
 def test_collected_news_is_ingested_as_revisions_by_local_intelligence(tmp_path):

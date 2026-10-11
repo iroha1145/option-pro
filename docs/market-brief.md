@@ -43,7 +43,7 @@
 | `grace_minutes` | `150` | 开窗后允许补跑的时长（30–600） |
 | `web_search_max_uses` / `web_fetch_max_uses` | `10` / `8` | 服务端联网工具每次请求的调用上限（0–20） |
 | `web_fetch_max_content_tokens` | `12000` | 单次抓取网页的内容上限 |
-| `code_execution_tool` | `true` | 独立代码执行，与网页搜索和抓取同时启用 |
+| `code_execution_tool` | `false` | 独立代码执行。20260209 版网页搜索与抓取自带动态过滤，默认不另开 |
 | `refusal_fallback` | `false` | 模型拒答时的回退，默认关 |
 | `structured_output` | `false` | 默认把 JSON Schema 附在固定系统提示词中，并在本地校验完整结果；开启后增加供应商结构约束，内容与证据校验仍然保留 |
 | `prompt_cache_ttl` | `5m` | 系统提示词显式缓存断点的 TTL（`5m` / `1h`）；顶层自动缓存固定 5 分钟。两份研判相隔数小时，只有缓存有效期内、前缀相同的续跑或手动重跑可能命中缓存 |
