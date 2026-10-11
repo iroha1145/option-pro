@@ -14,6 +14,11 @@
   --duration-medium: 350ms;  /* panel close, toast close */
   --duration-slow: 400ms;  /* panel open, skeleton content reveal, input clear */
   --duration-very-slow: 500ms;  /* emphasis moments, badge appear, text reveal, success check */
+  /* Icon gestures: the longer cycle is visual feedback and never delays clicks. */
+  --icon-gesture-dur: 900ms;
+  --icon-gesture-emphasis-dur: 1000ms;
+  --icon-gesture-quick-dur: 800ms;
+  --icon-gesture-stagger: 100ms;
   /* Easings */
   --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);  /* modal/dropdown/panel open + close, page slide, resize, position change */
   --ease-in-out: ease-in-out;  /* icon swap, text swap, text reveal, skeleton reveal */

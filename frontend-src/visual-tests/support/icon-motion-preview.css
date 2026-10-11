@@ -1,0 +1,46 @@
+.motion-preview { max-width: 1080px; margin: auto; padding: 0 36px; color: var(--ink-900); }
+.preview-header { display: flex; justify-content: space-between; align-items: center; min-height: 88px; border-bottom: 1px solid var(--line); }
+.preview-brand { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 650; }
+.preview-brand img { width: 30px; height: 30px; }
+.dark .preview-brand img { filter: brightness(0) invert(1); }
+.preview-intro { max-width: 670px; padding: 64px 0 38px; }
+.preview-eyebrow { color: var(--brand-600); font-size: 12px; letter-spacing: .1em; margin-bottom: 16px; }
+.preview-intro h1 { font-size: clamp(34px, 5vw, 52px); line-height: 1.25; letter-spacing: -.045em; font-weight: 600; margin-bottom: 22px; }
+.preview-intro > p:not(.preview-eyebrow) { font-size: 15px; line-height: 1.9; color: var(--ink-500); }
+.preview-intro a:not(.preview-control) { color: var(--ink-900); text-decoration: underline; text-underline-offset: 4px; }
+.preview-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 24px 0 14px; }
+.preview-control { display: inline-flex; justify-content: center; align-items: center; gap: 9px; min-height: 42px; padding: 9px 16px; background: var(--card); border: 1px solid var(--line-strong); border-radius: 999px; font-size: 13px; color: var(--ink-700); }
+.preview-control:hover { background: var(--paper-2); }
+.preview-primary { color: var(--on-action); background: var(--action); border-color: var(--action); }
+.preview-primary:hover { background: var(--action-hover); }
+.preview-intro .preview-note { font-size: 12px !important; color: var(--ink-400); }
+.preview-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line); }
+.preview-item { padding: 30px 20px; border-bottom: 1px solid var(--line); }
+.preview-item h2 { font-size: 15px; font-weight: 600; margin: 20px 0 6px; }
+.preview-item > p { font-size: 12px; color: var(--ink-500); line-height: 1.8; }
+.preview-comparison { display: flex; align-items: center; gap: 24px; }
+.preview-static, .preview-play { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 82px; padding: 18px 0 12px; }
+.preview-static { color: var(--ink-400); }
+.preview-play { color: var(--ink-700); border-radius: 12px; background: var(--paper-2); }
+.preview-play:hover { color: var(--brand-600); background: var(--brand-50); }
+.preview-static span, .preview-play span { font-size: 11px; }
+.preview-divider { color: var(--ink-300); font-size: 14px; }
+.preview-context { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; padding: 48px 0; align-items: center; }
+.preview-context h2 { font-size: 23px; margin-bottom: 14px; font-weight: 600; }
+.preview-context p:not(.preview-eyebrow) { font-size: 13px; line-height: 1.9; color: var(--ink-500); }
+.preview-samples { display: flex; align-items: center; flex-direction: column; gap: 20px; }
+.preview-dock { display: flex; justify-content: space-around; width: 100%; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 7px; }
+.preview-dock button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 10px 4px; border-radius: 12px; font-size: 11px; color: var(--ink-500); }
+.preview-dock button[aria-pressed="true"] { color: var(--brand-600); background: var(--brand-50); }
+.preview-footer { border-top: 1px solid var(--line); padding: 24px 0 36px; font-size: 12px; color: var(--ink-400); }
+.motion-preview :is(button, a):focus-visible { outline: 2px solid var(--brand-600); outline-offset: 4px; }
+@media (max-width: 700px) {
+  .motion-preview { padding: 0 20px; }
+  .preview-intro { padding-top: 40px; }
+  .preview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .preview-item { padding: 24px 5px; }
+  .preview-comparison { gap: 7px; justify-content: space-between; }
+  .preview-static, .preview-play { width: 62px; }
+  .preview-context { grid-template-columns: 1fr; gap: 24px; }
+}
+@media (max-width: 359px) { .preview-grid { grid-template-columns: 1fr; } .preview-comparison { justify-content: flex-start; gap: 24px; } }

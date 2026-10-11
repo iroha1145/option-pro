@@ -101,6 +101,9 @@ jobs:
       - name: Verify production EPS chunk failure recovery
         run: npm --prefix frontend-src run test:eps-chart
 
+      - name: Verify icon gestures, repeated input and reduced motion
+        run: npm --prefix frontend-src run test:icon-motion
+
       - name: Verify customer chart periods with real account sessions
         run: npm --prefix frontend-src run test:customer-charts
 
@@ -334,6 +337,7 @@ jobs:
             frontend-src/test-results/customer-charts/**
             frontend-src/test-results/audit/**
             frontend-src/test-results/audit-fixes/**
+            frontend-src/test-results/icon-motion/**
             frontend-src/test-results/screener/**
             frontend-src/test-results/screener-report/**
             frontend-src/test-results/screener-evidence/**
