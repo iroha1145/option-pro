@@ -476,8 +476,7 @@ class EarningsAnalysisTask:
                 details={"result": "not_scheduled", "queued": 0},
             )
 
-        analysis_settings = ai_runtime.settings_for_job(self._settings, "earnings_impact")
-        capability = ai_runtime.capability_status(analysis_settings)
+        capability = ai_runtime.capability_status(self._settings)
         if not bool(capability.get("supported")):
             return TaskResult(
                 status="disabled",
@@ -564,7 +563,7 @@ class EarningsAnalysisTask:
         )
 
         schema_version, schema_sha256 = ai_runtime.schema_identity(
-            "earnings_impact", model=analysis_settings.openai_model,
+            "earnings_impact", model=self._settings.openai_model,
         )
         queued = 0
         existing = 0
@@ -702,9 +701,9 @@ class EarningsAnalysisTask:
                     repository.create_job,
                     job_type="earnings_impact",
                     payload=payload,
-                    model=analysis_settings.openai_model,
-                    reasoning=analysis_settings.openai_reasoning,
-                    execution_mode=analysis_settings.openai_execution_mode,
+                    model=self._settings.openai_model,
+                    reasoning=self._settings.openai_reasoning,
+                    execution_mode=self._settings.openai_execution_mode,
                     prompt_version=ai_runtime.PROMPT_VERSIONS["earnings_impact"],
                     schema_version=schema_version,
                     schema_sha256=schema_sha256,

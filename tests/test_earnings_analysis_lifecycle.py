@@ -169,9 +169,12 @@ def test_final_requires_comparable_actual_and_estimate() -> None:
 
 
 def test_post_release_prompt_requires_actual_vs_estimate_comparison() -> None:
+    # The OpenAI rollback prompt; Claude's stage-independent earnings prompt
+    # is covered in test_earnings_claude_runtime.py.
     prepared = runtime.build_runtime_request(
         "earnings_impact",
         _final_payload(),
+        model=runtime.OFFICIAL_OPENAI_MODEL,
     )
     assert "逐项比较输入中的actual与estimate" in prepared.instructions
     assert "不得继续使用“假设超预期”" in prepared.instructions
@@ -411,7 +414,7 @@ def test_report_action_uses_server_snapshot_and_hides_job_capabilities(
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     monkeypatch.setattr(ai, "_job_repository", lambda: repository)
     monkeypatch.setattr(ai, "get_settings", lambda: _settings(repository.path))
-    monkeypatch.setattr(ai, "_require_runtime_capability", lambda _job_type=None: None)
+    monkeypatch.setattr(ai, "_require_runtime_capability", lambda: None)
 
     async def snapshot():
         return {
@@ -780,7 +783,7 @@ def test_public_report_action_retries_retryable_terminal_job(
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     monkeypatch.setattr(ai, "_job_repository", lambda: repository)
     monkeypatch.setattr(ai, "get_settings", lambda: _settings(repository.path))
-    monkeypatch.setattr(ai, "_require_runtime_capability", lambda _job_type=None: None)
+    monkeypatch.setattr(ai, "_require_runtime_capability", lambda: None)
 
     async def snapshot():
         return {

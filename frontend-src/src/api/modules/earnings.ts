@@ -136,8 +136,6 @@ function pickOptionalBool(
 export function normalizeLiveEarningsImpact(body: unknown): EarningsImpactResult {
   const row = asRec(body);
   const outputLanguage = pickS(row, 'outputLanguage', 'output_language');
-  const model = pickS(row, 'model', '_model', 'analysis_model');
-  const reasoning = pickS(row, 'reasoning', '_reasoning', 'analysis_reasoning');
   const ticker = pickS(row, 'ticker');
   const summary = pickS(row, 'summary');
   const expectation = pickS(row, 'expectation');
@@ -187,8 +185,6 @@ export function normalizeLiveEarningsImpact(body: unknown): EarningsImpactResult
 
   return {
     outputLanguage: 'zh-CN',
-    ...(model ? { model } : {}),
-    ...(reasoning ? { reasoning } : {}),
     ticker: ticker.toUpperCase(),
     summary,
     expectation,
@@ -216,15 +212,17 @@ export function normalizeEarningsReportAnalysis(body: unknown): EarningsReportAn
   ) === true;
   const reportId = pickS(row, 'reportId', 'report_id', '_report_id');
   const reportDate = pickS(row, 'reportDate', 'report_date', '_report_date');
+  // 模型与思考强度属于任务信封，不在 result 里；只在有结果时挂到 result 上展示。
+  const model = pickS(row, 'model');
+  const reasoning = pickS(row, 'reasoning');
   const rawResult = asRec(row.result);
   let result: EarningsImpactResult | null = null;
   if (Object.keys(rawResult).length > 0) {
     const normalized = normalizeLiveEarningsImpact(rawResult);
     result = {
       ...normalized,
-      // 已存结果自己的模型优先；仅接收报告接口附带的真实任务元数据。
-      ...(normalized.model || !pickS(row, 'model') ? {} : { model: pickS(row, 'model')! }),
-      ...(normalized.reasoning || !pickS(row, 'reasoning') ? {} : { reasoning: pickS(row, 'reasoning')! }),
+      ...(model ? { model } : {}),
+      ...(reasoning ? { reasoning } : {}),
       ...(analysisStage ? { analysisStage } : {}),
       ...(locked ? { locked: true } : {}),
       ...(final ? { final: true } : {}),

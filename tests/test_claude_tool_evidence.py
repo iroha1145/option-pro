@@ -62,7 +62,7 @@ def test_pause_continues_original_content_and_sums_complete_receipts(monkeypatch
     async def started(ident): first_ids.append(ident)
     async def record(snapshot, **options): progress.append((copy.deepcopy(snapshot),options))
     monkeypatch.setattr(provider,'stream_message',stream)
-    result=asyncio.run(provider.stream_market_focus(_prepared(),on_message_start=started,on_progress=record)).receipt
+    result=asyncio.run(provider.stream_conversation(_prepared(),on_message_start=started,on_progress=record)).receipt
     assert first_ids==['msg_one']
     assert calls[1]['messages'][-1]['content']==paused.content
     assert calls[1]['max_tokens']==90
@@ -86,7 +86,7 @@ def test_failed_continuation_keeps_confirmed_round_and_next_identity(monkeypatch
     async def record(snapshot, **kw): progress.append(copy.deepcopy(snapshot))
     monkeypatch.setattr(provider,'stream_message',stream)
     with pytest.raises(type(failure)):
-        asyncio.run(provider.stream_market_focus(_prepared(),on_message_start=noop,on_progress=record))
+        asyncio.run(provider.stream_conversation(_prepared(),on_message_start=noop,on_progress=record))
     assert progress[-1]['request_ids']==['msg_1','msg_2']
     assert len(progress[-1]['rounds'])==1 and progress[-1]['confirmed_usage']['total_tokens']==110
 
@@ -99,10 +99,10 @@ def test_continuation_round_cap_and_total_output_are_hard_limits(monkeypatch):
         return _round(f'msg_{len(calls)}')
     async def noop(*args,**kwargs): pass
     monkeypatch.setattr(provider,'stream_message',stream)
-    result=asyncio.run(provider.stream_market_focus(_prepared(),on_message_start=noop,on_progress=noop)).receipt
+    result=asyncio.run(provider.stream_conversation(_prepared(),on_message_start=noop,on_progress=noop)).receipt
     assert len(calls)==4 and result['terminal_error']=='provider_continuation_limit'
     calls.clear()
-    result=asyncio.run(provider.stream_market_focus(_prepared(10),on_message_start=noop,on_progress=noop)).receipt
+    result=asyncio.run(provider.stream_conversation(_prepared(10),on_message_start=noop,on_progress=noop)).receipt
     assert len(calls)==1 and result['terminal_error']=='provider_incomplete_max_output_tokens'
 
 
@@ -208,5 +208,5 @@ def test_continuation_admission_failure_never_starts_next_request(monkeypatch):
         if will_continue: raise RuntimeError('continuation budget admission denied')
     monkeypatch.setattr(provider,'stream_message',stream)
     with pytest.raises(RuntimeError,match='admission denied'):
-        asyncio.run(provider.stream_market_focus(_prepared(),on_message_start=noop,on_progress=record))
+        asyncio.run(provider.stream_conversation(_prepared(),on_message_start=noop,on_progress=record))
     assert len(calls)==1 and confirmed[-1]['confirmed_usage']['total_tokens']==110

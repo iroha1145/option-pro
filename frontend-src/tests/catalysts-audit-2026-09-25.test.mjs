@@ -1481,12 +1481,17 @@ test('2-C 合并窗口到期时页面隐藏：变更提示留到回到前台再�
 
 /* ---------------- 财报卡 ---------------- */
 
-function impactHarness({ reportAnalysis, requestReportAnalysis }) {
+function impactHarness({ reportAnalysis, requestReportAnalysis, eligible = true, access: accessOverrides = {} }) {
   const clock = fakeClock();
   const runner = createReactStub();
   const toasts = [];
   const analyzed = [];
   const reads = [];
+  // 默认是已确认的 owner；客户、匿名访客等身份由 access 覆盖，测试里可原地改后 rerender。
+  const access = {
+    isOwner: true, isCustomer: false, username: null, aiReason: null,
+    aiEnabled: true, aiAvailable: true, aiPending: false, ...accessOverrides,
+  };
   const Card = compile('components/earnings/ImpactCard.tsx', {
     react: runner.React,
     'react/jsx-runtime': passthroughJsx,
@@ -1496,7 +1501,7 @@ function impactHarness({ reportAnalysis, requestReportAnalysis }) {
       reportAnalysis: (...args) => { reads.push(args); return reportAnalysis(reads.length); },
       requestReportAnalysis: (...args) => requestReportAnalysis(...args),
     } },
-    '@/hooks/useAccess': { useAccess: () => ({ isOwner: true, aiEnabled: true, aiAvailable: true, aiPending: false }) },
+    '@/hooks/useAccess': { useAccess: () => access },
     '@/hooks/useToast': { useToast: () => ({
       error: (title, body) => toasts.push(['error', title, body]),
       success: (title, body) => toasts.push(['success', title, body]),
@@ -1520,9 +1525,9 @@ function impactHarness({ reportAnalysis, requestReportAnalysis }) {
     document: { visibilityState: 'visible' },
     Date: clock.Date,
   }).default;
-  const props = { ticker: 'NVDA', analysisEligible: true, row: { date: '2026-09-24', publicFeatured: true }, calendarRevision: 1, onAnalyzed: (ticker, value) => analyzed.push([ticker, value]) };
+  const props = { ticker: 'NVDA', analysisEligible: eligible, row: { date: '2026-09-24' }, calendarRevision: 1, onAnalyzed: (ticker, value) => analyzed.push([ticker, value]) };
   const read = runner.mount(() => Card(props));
-  return { clock, toasts, analyzed, reads, tree: () => read(), unmount: () => runner.unmount() };
+  return { clock, toasts, analyzed, reads, props, access, rerender: runner.rerender, tree: () => read(), unmount: () => runner.unmount() };
 }
 
 const reportState = (partial = {}) => ({
@@ -1652,6 +1657,203 @@ test('财报卡：进行中带认不出的码不说「没有完成」；终态�
   assert.match(text, /这次分析没有完成/);
   assert.doesNotMatch(text, /同时进行的分析过多/);
   failed.unmount();
+});
+
+/* ---- 财报卡：生成资格（重点公司）、账号限制与确认步骤的模型名 ---- */
+
+const analysisRequiredError = (payload) => new TestApiError(409, 'analysis_required', { payload });
+const dumpOf = (h) => JSON.stringify(h.tree());
+/* 打开确认步骤（第一次点击），返回确认框里的「生成分析」按钮。 */
+function openConfirm(h) {
+  findButton(h.tree(), '生成分析').props.onClick();
+  return findNode(h.tree(), (node) => node.type === 'button' && textOf(node).trim() === '生成分析' && node.props.disabled === false);
+}
+
+test('财报卡：确认步骤只显示服务端 409 响应体给出的模型，缺失时什么都不写', async () => {
+  const h = impactHarness({
+    reportAnalysis: async () => { throw analysisRequiredError({ status: 'analysis_required', model: 'claude-haiku-5-5', reasoning: 'xhigh' }); },
+    requestReportAnalysis: async () => reportState(),
+  });
+  await h.clock.advance(0);
+  assert.doesNotMatch(dumpOf(h), /Claude|xhigh/, '还没进入确认步骤时不显示模型');
+  openConfirm(h);
+  assert.match(textOf(h.tree()), /为 NVDA 生成本次财报分析。\s*Claude Haiku 5\.5 · xhigh/);
+  h.unmount();
+
+  for (const payload of [undefined, {}, { status: 'analysis_required' }, { model: '  ', reasoning: 'xhigh' }, { model: 7, reasoning: 'xhigh' }]) {
+    const unknown = impactHarness({
+      reportAnalysis: async () => { throw analysisRequiredError(payload); },
+      requestReportAnalysis: async () => reportState(),
+    });
+    await unknown.clock.advance(0);
+    openConfirm(unknown);
+    assert.match(textOf(unknown.tree()), /为 NVDA 生成本次财报分析。/);
+    assert.doesNotMatch(dumpOf(unknown), /Claude|GPT|xhigh/, `payload ${JSON.stringify(payload)} 没有可用模型，不得显示任何模型名`);
+    unknown.unmount();
+  }
+
+  const partial = impactHarness({
+    reportAnalysis: async () => { throw analysisRequiredError({ model: 'claude-sonnet-5-5' }); },
+    requestReportAnalysis: async () => reportState(),
+  });
+  await partial.clock.advance(0);
+  openConfirm(partial);
+  assert.match(textOf(partial.tree()), /Claude Sonnet 5\.5/);
+  assert.doesNotMatch(dumpOf(partial), /·/, '只有模型没有思考强度时只显示模型');
+  partial.unmount();
+});
+
+test('财报卡：409 里的模型不会越过之后读到的状态，失败后重试的确认步骤不沿用旧模型', async () => {
+  const h = impactHarness({
+    reportAnalysis: async (round) => {
+      if (round === 1) throw analysisRequiredError({ status: 'analysis_required', model: 'claude-haiku-5-5', reasoning: 'xhigh' });
+      return reportState({ status: 'failed', errorCode: 'provider_error' });
+    },
+    requestReportAnalysis: async () => reportState(),
+  });
+  await h.clock.advance(0);
+  h.props.calendarRevision = 2;
+  h.rerender();
+  await h.clock.advance(0);
+  assert.equal(h.reads.length, 2);
+  assert.match(textOf(h.tree()), /分析任务失败/);
+  findButton(h.tree(), '重试').props.onClick();
+  openConfirm(h);
+  assert.match(textOf(h.tree()), /为 NVDA 生成本次财报分析。/);
+  assert.doesNotMatch(dumpOf(h), /Claude|xhigh/);
+  h.unmount();
+});
+
+test('财报卡：资格待定先只放标题，之后补上说明或换成生成引导，不出骨架也不重读', async () => {
+  const h = impactHarness({
+    reportAnalysis: async () => { throw analysisRequiredError({ status: 'analysis_required' }); },
+    requestReportAnalysis: async () => reportState(),
+    eligible: null,
+  });
+  await h.clock.advance(0);
+  assert.equal(h.reads.length, 1);
+  assert.match(dumpOf(h), /尚未生成财报影响分析/);
+  assert.doesNotMatch(dumpOf(h), /仅重点公司支持财报分析|财报影响分析加载中/);
+  assert.equal(findButton(h.tree(), '生成分析'), null, '资格待定时不给生成入口');
+
+  h.props.analysisEligible = false;
+  h.rerender();
+  assert.match(dumpOf(h), /仅重点公司支持财报分析/);
+  assert.doesNotMatch(dumpOf(h), /财报影响分析加载中/);
+  assert.equal(findButton(h.tree(), '生成分析'), null);
+
+  h.props.analysisEligible = true;
+  h.rerender();
+  assert.ok(findButton(h.tree(), '生成分析'), '自选加载完确认是重点公司后换成生成引导');
+  assert.doesNotMatch(dumpOf(h), /仅重点公司支持财报分析|财报影响分析加载中/);
+  await h.clock.advance(0);
+  assert.equal(h.reads.length, 1, '资格变化不改变报告级 GET 返回的内容，不得再读一次');
+  h.unmount();
+});
+
+test('财报卡：非重点公司的失败任务只给说明、没有重试；已有结果不带任何资格提示', async () => {
+  for (const [eligible, status] of [[false, 'failed'], [false, 'cancelled'], [null, 'failed']]) {
+    const h = impactHarness({
+      reportAnalysis: async () => reportState({ status, errorCode: 'provider_error' }),
+      requestReportAnalysis: async () => reportState(),
+      eligible,
+    });
+    await h.clock.advance(0);
+    assert.equal(findButton(h.tree(), '重试'), null, `${status} / eligible=${eligible}`);
+    assert.equal(findButton(h.tree(), '生成分析'), null);
+    if (eligible === false) {
+      assert.match(dumpOf(h), /尚未生成财报影响分析[\s\S]*仅重点公司支持财报分析/);
+      assert.doesNotMatch(dumpOf(h), /分析任务失败|分析任务已取消/);
+    } else {
+      assert.match(textOf(h.tree()), /分析任务失败/, '资格待定时先照常显示失败原因，只是不给重试');
+      assert.doesNotMatch(dumpOf(h), /仅重点公司支持财报分析/);
+    }
+    h.unmount();
+  }
+
+  const done = impactHarness({
+    reportAnalysis: async () => reportState({ status: 'completed', result: impactResult }),
+    requestReportAnalysis: async () => reportState(),
+    eligible: false,
+  });
+  await done.clock.advance(0);
+  assert.match(dumpOf(done), /财报摘要/);
+  assert.doesNotMatch(dumpOf(done), /仅重点公司支持财报分析|尚未生成财报影响分析/);
+  done.unmount();
+});
+
+test('财报卡：已登录的普通客户在访客 AI 动作关闭时只看到管理员登录说明；匿名访客与 owner 不受影响', async () => {
+  const notRequired = () => { throw analysisRequiredError({ status: 'analysis_required' }); };
+  const customer = impactHarness({
+    reportAnalysis: notRequired,
+    requestReportAnalysis: async () => reportState(),
+    access: { isOwner: false, isCustomer: true, username: 'alice', aiReason: 'owner_login_required', aiEnabled: false, aiAvailable: false },
+  });
+  await customer.clock.advance(0);
+  assert.match(dumpOf(customer), /尚未生成财报影响分析[\s\S]*请管理员登录后生成分析，已有分析可继续查看/);
+  assert.equal(findButton(customer.tree(), '生成分析'), null);
+  customer.unmount();
+
+  const customerFailed = impactHarness({
+    reportAnalysis: async () => reportState({ status: 'cancelled' }),
+    requestReportAnalysis: async () => reportState(),
+    access: { isOwner: false, isCustomer: true, username: 'alice', aiReason: 'owner_login_required', aiEnabled: false, aiAvailable: false },
+  });
+  await customerFailed.clock.advance(0);
+  assert.match(textOf(customerFailed.tree()), /分析任务已取消/);
+  assert.doesNotMatch(textOf(customerFailed.tree()), /可以重新生成分析/, '不能生成的账号不被告知可以重新生成');
+  assert.equal(findButton(customerFailed.tree(), '重试'), null);
+  customerFailed.unmount();
+
+  for (const access of [
+    { isOwner: false, isCustomer: false, username: null, aiReason: 'owner_login_required', aiEnabled: false, aiAvailable: false },
+    { isOwner: true, isCustomer: true, username: 'alice', aiReason: null },
+  ]) {
+    const h = impactHarness({ reportAnalysis: notRequired, requestReportAnalysis: async () => reportState(), access });
+    await h.clock.advance(0);
+    assert.ok(findButton(h.tree(), '生成分析'), JSON.stringify(access));
+    assert.doesNotMatch(dumpOf(h), /请管理员登录后生成分析/);
+    h.unmount();
+  }
+});
+
+test('财报卡：身份变化会关掉已打开的确认步骤，换回原身份也不会留着旧的确认', async () => {
+  const h = impactHarness({
+    reportAnalysis: async () => { throw analysisRequiredError({ status: 'analysis_required' }); },
+    requestReportAnalysis: async () => reportState(),
+  });
+  await h.clock.advance(0);
+  openConfirm(h);
+  assert.match(textOf(h.tree()), /为 NVDA 生成本次财报分析。/);
+
+  Object.assign(h.access, { isOwner: false, isCustomer: true, username: 'alice', aiReason: 'owner_login_required', aiEnabled: false, aiAvailable: false });
+  h.rerender();
+  await h.clock.advance(0);
+  assert.match(dumpOf(h), /请管理员登录后生成分析，已有分析可继续查看/);
+  assert.equal(findButton(h.tree(), '生成分析'), null);
+
+  Object.assign(h.access, { isOwner: true, isCustomer: false, username: null, aiReason: null, aiEnabled: true, aiAvailable: true });
+  h.rerender();
+  await h.clock.advance(0);
+  assert.ok(findButton(h.tree(), '生成分析'), '换回 owner 后是普通的生成入口');
+  assert.doesNotMatch(textOf(h.tree()), /为 NVDA 生成本次财报分析。/, '旧的确认步骤不得留到新身份');
+  h.unmount();
+});
+
+test('财报卡：提交被 earnings_company_not_featured 拒绝后换成说明，之后不再提交', async () => {
+  let posts = 0;
+  const h = impactHarness({
+    reportAnalysis: async () => { throw analysisRequiredError({ status: 'analysis_required' }); },
+    requestReportAnalysis: async () => { posts += 1; throw new TestApiError(409, 'not featured', { bizCode: 'earnings_company_not_featured' }); },
+  });
+  await h.clock.advance(0);
+  openConfirm(h).props.onClick();
+  await settle();
+  assert.equal(posts, 1);
+  assert.match(dumpOf(h), /仅重点公司支持财报分析/);
+  assert.equal(findButton(h.tree(), '生成分析'), null);
+  assert.equal(h.reads.length, 1);
+  h.unmount();
 });
 
 test('visual-tests 桩的任务响应改成真实形状：不再带 news_id 与 progress', () => {

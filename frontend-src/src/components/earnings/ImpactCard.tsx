@@ -8,6 +8,7 @@ import SoftBadge, { type BadgeTone } from '@/components/shared/SoftBadge';
  *  - 已缓存 → 真实契约结果（摘要 / 预期 / 关联标的）
  *  - 409 analysis_required → owner / visitor 均可「生成分析」→ 报告级状态退避轮询 [2,3,5,8,10]s
  *    （只读取状态和结果，不向 visitor 暴露任务编号、费用或取消能力）
+ *  - 只有重点公司可以生成；非重点公司不提供生成与重试，已有结果照常展示
  *  - 财报发布后由后台自动重分析；最终结果锁定，界面不再提供重复请求入口
  *  - 无论生成开关是否开启都先读取缓存；owner 的运行开关不限制 visitor 读取公开入口
  * 纪律：不展示后端契约没有的推导指标
@@ -197,8 +198,11 @@ type Phase =
 interface ImpactCardProps {
   ticker: string | null;
   row?: EarningsRow | null;
-  /** 重点公司标注与当前账号自选的并集；缺失资格时不提交。 */
-  analysisEligible: boolean;
+  /**
+   * 这行财报能否提交分析：true = 重点公司（公共标注或本账号自选）；
+   * false = 不是；null = 不是公共重点公司，且本账号的自选还在加载，暂时无法判定。
+   */
+  analysisEligible: boolean | null;
   onAnalyzed: (ticker: string, analysis: EarningsReportAnalysis) => void;
   /** 日历快照修订（asOf / 刷新状态）。刷新后必须重新读报告级分析。 */
   calendarRevision?: string | null;
@@ -214,8 +218,21 @@ function reportAnalysisNeedsPolling(value: EarningsReportAnalysis | null): boole
   return isActive(normalizedStage(value.status)) || value.finalizationInProgress;
 }
 
+/**
+ * 「尚无分析」409 响应体里附带的、新请求将使用的模型与思考强度。
+ * 服务端配置无效时这两个字段会缺失，此时返回 null，界面不显示任何模型名。
+ */
+function requestedRunModel(payload: unknown): { model: string; reasoning: string | null } | null {
+  if (payload === null || typeof payload !== 'object') return null;
+  const body = payload as Record<string, unknown>;
+  const model = typeof body.model === 'string' ? body.model.trim() : '';
+  if (!model) return null;
+  const reasoning = typeof body.reasoning === 'string' ? body.reasoning.trim() : '';
+  return { model, reasoning: reasoning || null };
+}
+
 export default function ImpactCard({ ticker, row, analysisEligible, onAnalyzed, calendarRevision, className }: ImpactCardProps) {
-  const { isOwner, username, aiEnabled, aiAvailable, aiPending } = useAccess();
+  const { isOwner, isCustomer, username, aiReason, aiEnabled, aiAvailable, aiPending } = useAccess();
   const { openTicker } = useShell();
   const toast = useToast();
   const reportDate = row?.date ?? null;
@@ -227,8 +244,16 @@ export default function ImpactCard({ ticker, row, analysisEligible, onAnalyzed, 
   const [analysis, setAnalysis] = useState<EarningsReportAnalysis | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [confirming, setConfirming] = useState(false);
+  /* 服务端用 earnings_company_not_featured 拒绝过提交：换行或换账号之前不再提交。 */
   const [eligibilityDenied, setEligibilityDenied] = useState(false);
-  const canAnalyze = analysisEligible && !eligibilityDenied;
+  /* 新请求将使用的模型，只来自「尚无分析」409 的响应体；读不到就不显示，绝不写死模型名。 */
+  const [runModel, setRunModel] = useState<{ model: string; reasoning: string | null } | null>(null);
+  const notFeatured = analysisEligible === false || eligibilityDenied;
+  const eligibilityPending = analysisEligible === null && !eligibilityDenied;
+  /* 已登录的普通客户在访客 AI 动作关闭（默认）时提交会得到 401 owner_login_required。
+     匿名访客不算：他们保持原样，401 后落到「访客暂时无法生成分析」。 */
+  const accountBlocked = isCustomer && !isOwner && aiReason === 'owner_login_required';
+  const canSubmit = analysisEligible === true && !eligibilityDenied && !accountBlocked;
   const [pollAttempt, setPollAttempt] = useState(0);
   /* 5 分钟自动查询用完：停表并给出手动重新查询，不能再说「会自动显示」（审计 FE-8）。 */
   const [pollPaused, setPollPaused] = useState(false);
@@ -262,6 +287,7 @@ export default function ImpactCard({ ticker, row, analysisEligible, onAnalyzed, 
 
     setAnalysis(resolvedAnalysis);
     setImpact(resolvedResult);
+    setRunModel(null);
     setPollNotice(null);
     pollRetryAfterRef.current = null;
     setErrorMsg(analysisErrorText(resolvedAnalysis.errorCode, normalizedStage(resolvedAnalysis.status)));
@@ -326,14 +352,12 @@ export default function ImpactCard({ ticker, row, analysisEligible, onAnalyzed, 
           setPollNotice(__t('暂时读不到最新状态，正在自动重试'));
           return null;
         }
-        if (err?.bizCode === 'earnings_company_not_featured') {
-          setEligibilityDenied(true);
-          setPhase('needs-analysis');
-        } else if (err?.bizCode === 'earnings_analysis_locked') {
+        if (err?.bizCode === 'earnings_analysis_locked') {
           setPhase('final-locked');
         } else if (err?.bizCode === 'earnings_finalization_in_progress') {
           setPhase('finalizing');
         } else if (err && (err.code === 409 || err.bizCode === 'analysis_required')) {
+          setRunModel(requestedRunModel(err.payload));
           setPhase(isOwner && !aiAvailable ? 'locked-ai' : 'needs-analysis');
         } else if (err && err.code === 401) {
           setErrorMsg(__t('访客暂时无法生成分析'));
@@ -372,7 +396,6 @@ export default function ImpactCard({ ticker, row, analysisEligible, onAnalyzed, 
     aiPending,
     isOwner,
     username,
-    analysisEligible,
   ].join('|');
   const [prevContextKey, setPrevContextKey] = useState(contextKey);
   if (contextKey !== prevContextKey) {
@@ -383,6 +406,7 @@ export default function ImpactCard({ ticker, row, analysisEligible, onAnalyzed, 
     setAnalysis(null);
     setConfirming(false);
     setEligibilityDenied(false);
+    setRunModel(null);
     setPollAttempt(0);
     setPollPaused(false);
     setPollNotice(null);
@@ -405,7 +429,7 @@ export default function ImpactCard({ ticker, row, analysisEligible, onAnalyzed, 
     if (!ticker || aiPending) return;
     const id = window.setTimeout(() => void loadImpact(ticker), 0);
     return () => window.clearTimeout(id);
-  }, [ticker, calendarRevision, aiEnabled, aiAvailable, aiPending, isOwner, username, analysisEligible, loadImpact]);
+  }, [ticker, calendarRevision, aiEnabled, aiAvailable, aiPending, isOwner, username, loadImpact]);
 
   /* 排队、分析或自动终版期间只轮询报告级 GET。 */
   const shouldPoll = reportAnalysisNeedsPolling(analysis);
@@ -468,7 +492,7 @@ export default function ImpactCard({ ticker, row, analysisEligible, onAnalyzed, 
   const [submitting, setSubmitting] = useState(false);
   const startJob = async () => {
     if (
-      !canAnalyze
+      !canSubmit
       || !ticker
       || !reportDate
       || phase === 'finalizing'
@@ -526,6 +550,7 @@ export default function ImpactCard({ ticker, row, analysisEligible, onAnalyzed, 
   };
 
   const jobCancelled = ['cancelled', 'canceled'].includes(normalizedStage(analysis?.status));
+  const runModelLabel = runModel ? aiModelLabel(runModel.model, runModel.reasoning) : null;
 
   return (
     <aside className={cn('card-surface self-start overflow-hidden', className)} aria-label={__t("财报影响分析")}>
@@ -538,11 +563,6 @@ export default function ImpactCard({ ticker, row, analysisEligible, onAnalyzed, 
           transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
           className="p-5"
         >
-          {ticker && !canAnalyze && phase !== 'loading' && (
-            <p className="mb-3 rounded-md border border-line bg-paper-2 px-3 py-2 text-caption leading-5 text-ink-500" role="status">
-              {__t('仅重点公司支持财报分析')}
-            </p>
-          )}
           {/* ---------- 未选标的 ---------- */}
           {phase === 'idle' && (
             <div className="flex flex-col items-center py-10 text-center">
@@ -643,8 +663,31 @@ export default function ImpactCard({ ticker, row, analysisEligible, onAnalyzed, 
             </div>
           )}
 
+          {/* ---------- 非重点公司：不提供生成与重试；已有结果在 ready 阶段照常展示，不带这句说明 ---------- */}
+          {(phase === 'needs-analysis' || phase === 'job-failed') && notFeatured && (
+            <LockedPanel
+              iconClass="text-ink-400"
+              title={__t('尚未生成财报影响分析')}
+              description={__t('仅重点公司支持财报分析')}
+            />
+          )}
+
+          {/* ---------- 409：本账号自选还在加载，暂时判定不了：先只放标题，之后补上说明或换成生成引导 ---------- */}
+          {phase === 'needs-analysis' && eligibilityPending && (
+            <LockedPanel iconClass="text-ink-400" title={__t('尚未生成财报影响分析')} />
+          )}
+
+          {/* ---------- 409：已登录的普通客户，访客 AI 动作关闭，只能请管理员生成 ---------- */}
+          {phase === 'needs-analysis' && !notFeatured && !eligibilityPending && accountBlocked && (
+            <LockedPanel
+              iconClass="text-ink-400"
+              title={__t('尚未生成财报影响分析')}
+              description={__t('请管理员登录后生成分析，已有分析可继续查看')}
+            />
+          )}
+
           {/* ---------- 409：公开生成引导 ---------- */}
-          {phase === 'needs-analysis' && canAnalyze && (
+          {phase === 'needs-analysis' && canSubmit && (
             <div className="flex flex-col items-center py-8 text-center">
               <span className="flex size-12 items-center justify-center rounded-lg bg-ai-50 text-ai-600">
                 <AnalysisIcon size={22} />
@@ -657,7 +700,7 @@ export default function ImpactCard({ ticker, row, analysisEligible, onAnalyzed, 
                 <div className="mt-4 w-full rounded-md border border-ai-600/30 bg-ai-50 p-3 text-left">
                   <p className="text-caption text-ink-600">
                     {__t('为 {ticker} 生成本次财报分析。', { ticker })}
-                    <span className="mt-1 block text-micro text-ink-500">Claude Sonnet 5.5 · xhigh</span>
+                    {runModelLabel && <span className="mt-1 block text-micro text-ink-500">{runModelLabel}</span>}
                   </p>
                   <div className="mt-2.5 flex gap-2">
                     <button
@@ -718,12 +761,12 @@ export default function ImpactCard({ ticker, row, analysisEligible, onAnalyzed, 
           )}
 
           {/* ---------- 任务失败：原因 + 重试 ---------- */}
-          {phase === 'job-failed' && canAnalyze && (
+          {phase === 'job-failed' && !notFeatured && (
             <div>
               {jobCancelled ? (
                 <div className="rounded-md border border-line bg-paper-2 p-3">
                   <p className="text-caption text-ink-700">{__t('分析任务已取消')}</p>
-                  <p className="mt-0.5 text-micro text-ink-500">{__t('可以重新生成分析')}</p>
+                  {canSubmit && <p className="mt-0.5 text-micro text-ink-500">{__t('可以重新生成分析')}</p>}
                 </div>
               ) : (
                 <div className="rounded-md border border-danger-600/30 bg-danger-50 p-3">
@@ -731,7 +774,7 @@ export default function ImpactCard({ ticker, row, analysisEligible, onAnalyzed, 
                   <p className="mt-0.5 text-micro text-ink-500">{errorMsg || __t('未知原因')}</p>
                 </div>
               )}
-              {analysis?.errorCode !== 'submission_outcome_unknown' && <button
+              {canSubmit && analysis?.errorCode !== 'submission_outcome_unknown' && <button
                 onClick={() => setPhase('needs-analysis')}
                 className="control-button mt-3"
               >
@@ -887,14 +930,14 @@ function Section({ children }: { children: ReactNode }) {
 }
 
 /* ---------------- 锁定态面板 ---------------- */
-function LockedPanel({ title, description, iconClass }: { title: string; description: string; iconClass?: string }) {
+function LockedPanel({ title, description, iconClass }: { title: string; description?: string; iconClass?: string }) {
   return (
     <div className="flex flex-col items-center py-10 text-center">
       <span className={cn('flex size-12 items-center justify-center rounded-lg border border-line bg-card-warm', iconClass)}>
         <AnalysisIcon size={22} />
       </span>
       <h3 className="mt-3 text-h3 text-ink-800">{title}</h3>
-      <p className="mt-1 max-w-[260px] text-caption text-ink-500">{description}</p>
+      {description && <p className="mt-1 max-w-[260px] text-caption text-ink-500">{description}</p>}
     </div>
   );
 }

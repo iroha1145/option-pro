@@ -91,7 +91,7 @@ async def _stream_claude_with_controls(
     prepared: Any,
 ) -> Any:
     """Bound total runtime and honor cancellation while the lease stays live."""
-    from app.services.ai_jobs.claude_provider import stream_message, stream_market_focus, stream_earnings
+    from app.services.ai_jobs.claude_provider import stream_conversation, stream_message
 
     async def started(message_id: str) -> None:
         # This identity is for diagnostics, never a remotely retrievable handle.
@@ -110,10 +110,8 @@ async def _stream_claude_with_controls(
         )
 
     invocation = (
-        stream_market_focus(prepared, on_message_start=started, on_progress=progress)
-        if job["model"] == runtime.SONNET_MODEL and job["job_type"] == "market_focus"
-        else stream_earnings(prepared, on_message_start=started, on_progress=progress)
-        if job["model"] == runtime.SONNET_EARNINGS_MODEL and job["job_type"] == "earnings_impact"
+        stream_conversation(prepared, on_message_start=started, on_progress=progress)
+        if runtime.claude_conversation(job["job_type"], job["model"])
         else stream_message(prepared, on_message_start=started)
     )
     operation = asyncio.create_task(invocation)

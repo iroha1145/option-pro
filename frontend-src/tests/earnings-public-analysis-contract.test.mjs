@@ -156,8 +156,9 @@ test('单标的财报任务向访客开放且只使用报告级公开接口', ()
   assert.equal(card.includes('owner / visitor 均可'), true);
   assert.equal(card.includes('earningsApi.reportAnalysis'), true);
   assert.equal(card.includes('earningsApi.requestReportAnalysis'), true);
-  assert.equal(card.includes('Claude Sonnet 5.5 · xhigh'), true);
-  assert.equal(card.includes('Claude Opus 5.5 · xhigh'), false);
+  // 确认步骤的模型名来自服务端「尚无分析」409 的响应体，源码里不得写死任何模型名。
+  assert.doesNotMatch(card, /claude[ -](haiku|sonnet|opus)/i);
+  assert.match(card, /aiModelLabel\(runModel\./);
   assert.equal(card.includes('aiJobsApi'), false);
   assert.equal(card.includes('createEarningsImpact'), false);
   assert.equal(card.includes('cancelJob'), false);
@@ -249,21 +250,13 @@ test('财报发布后显示自动重分析、进度和最终锁定状态', () =>
 });
 
 
-test('historical earnings keep actual model metadata without borrowing the current model', () => {
-  const normalize = loadImpactNormalizer();
-  const historical = normalize({ ...completedResult, _model: 'claude-haiku-5-5', _reasoning: 'high' });
-  assert.equal(historical.model, 'claude-haiku-5-5');
-  assert.equal(historical.reasoning, 'high');
-  assert.equal('model' in normalize(completedResult), false);
-});
-
-
-test('report model metadata uses persisted task identity and preserves result metadata', () => {
+test('report model metadata comes from the task envelope and lands on the result', () => {
   const { normalizeEarningsReportAnalysis } = loadEarningsModule();
   const report = normalizeEarningsReportAnalysis({ status: 'completed', model: 'claude-haiku-5-5', reasoning: 'high', result: completedResult });
   assert.equal(report.result.model, 'claude-haiku-5-5');
   assert.equal(report.result.reasoning, 'high');
-  const own = normalizeEarningsReportAnalysis({ status: 'completed', model: 'claude-sonnet-5-5', reasoning: 'xhigh', result: { ...completedResult, model: 'historical-model', reasoning: 'low' } });
-  assert.equal(own.result.model, 'historical-model');
-  assert.equal(own.result.reasoning, 'low');
+  // 信封没带模型就不显示：不借用当前默认模型。
+  const bare = normalizeEarningsReportAnalysis({ status: 'completed', result: completedResult });
+  assert.equal('model' in bare.result, false);
+  assert.equal('reasoning' in bare.result, false);
 });

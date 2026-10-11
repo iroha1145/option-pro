@@ -112,7 +112,7 @@ function mountCard(t, h, confirmation, ticker = 'NVDA') {
   }
   imports['@/components/shared/Skeleton'] = { SkeletonText: 'SkeletonText' };
   const Card = compile('components/earnings/ImpactCard.tsx', imports, h.env).default;
-  const props = { ticker, analysisEligible: ticker !== null, row: ticker ? { date: '2026-09-14', publicFeatured: true } : null, calendarRevision: 1, onAnalyzed: noop };
+  const props = { ticker, analysisEligible: ticker !== null, row: ticker ? { date: '2026-09-14' } : null, calendarRevision: 1, onAnalyzed: noop };
   const read = runner.mount(() => Card(props));
   t.after(() => runner.unmount());
   return { read, rerender: runner.rerender, reads: () => reads };

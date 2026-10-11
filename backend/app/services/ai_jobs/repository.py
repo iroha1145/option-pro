@@ -437,7 +437,9 @@ def _settled_budget_charge_microusd(
     *,
     fallback_microusd: int,
     model: str | None = None,
+    rounds: Any = None,
 ) -> int:
+    """``rounds`` are a continued Claude conversation's requests, priced one by one."""
     from app.services.ai_jobs.runtime import settled_usage_cost_microusd
 
     return settled_usage_cost_microusd(
@@ -445,6 +447,7 @@ def _settled_budget_charge_microusd(
         usage,
         fallback_microusd=fallback_microusd,
         model=model,
+        rounds=rounds if isinstance(rounds, list) else None,
     )
 
 
@@ -485,11 +488,13 @@ def _backfilled_budget_charge(missing: Mapping[str, Any]) -> int | None:
     # The receipt carries tool counters that have no separate SQL
     # columns. Recalculate from that durable evidence, not an
     # incomplete token-only projection after process restart.
+    rounds = None
     if missing["provider_result_json"]:
         try:
             receipt = json.loads(missing["provider_result_json"])
             receipt_usage = receipt.get("usage") if isinstance(receipt, dict) else None
             usage = dict(receipt_usage) if isinstance(receipt_usage, dict) else {}
+            rounds = receipt.get("rounds") if isinstance(receipt, dict) else None
         except (TypeError, ValueError):
             usage = {}
     elif _confirmed_unbilled_claude_row(missing):
@@ -518,6 +523,7 @@ def _backfilled_budget_charge(missing: Mapping[str, Any]) -> int | None:
             usage,
             fallback_microusd=reservation,
             model=str(missing["model"]),
+            rounds=rounds,
         )
         if has_terminal_usage
         else reservation
@@ -2447,7 +2453,7 @@ class AIJobRepository:
         if not ((receipt["provider"] == "anthropic" and _uses_claude(receipt["model"]))
                 or (receipt["provider"] == "openai" and receipt["model"] == "gpt-5.6-luna")):
             raise ValueError("ai_job_provider_receipt_invalid")
-        if "job_type" in receipt and (receipt["job_type"] != "earnings_impact" or receipt["model"] != "claude-sonnet-5-5" or receipt["provider"] != "anthropic"):
+        if "job_type" in receipt and (receipt["job_type"] != "earnings_impact" or receipt["provider"] != "anthropic"):
             raise ValueError("ai_job_provider_receipt_invalid")
         if receipt["provider"] == "openai":
             calls = receipt.get("openai_web_calls")
@@ -2536,7 +2542,7 @@ class AIJobRepository:
     @staticmethod
     def _round_allows_continuation(value: dict[str, Any], item: dict[str, Any]) -> bool:
         return item.get("stop_reason") == "pause_turn" or (
-            value.get("model") == "claude-sonnet-5-5"
+            _uses_claude(value.get("model"))
             and value.get("job_type") == "earnings_impact"
             and item.get("stop_reason") == "end_turn"
             and item.get("continuation_reason") == "incomplete_final_json"
@@ -2556,7 +2562,7 @@ class AIJobRepository:
         for index, item in enumerate(rounds):
             if (not isinstance(item, dict) or not {"id", "stop_reason", "usage"} <= set(item)
                     or set(item) - {"id", "stop_reason", "usage", "continuation_reason"}
-                    or ("continuation_reason" in item and not (value.get("model") == "claude-sonnet-5-5" and value.get("job_type") == "earnings_impact" and item["stop_reason"] == "end_turn" and item["continuation_reason"] == "incomplete_final_json"))
+                    or ("continuation_reason" in item and not (_uses_claude(value.get("model")) and value.get("job_type") == "earnings_impact" and item["stop_reason"] == "end_turn" and item["continuation_reason"] == "incomplete_final_json"))
                     or item["id"] != request_ids[index]
                     or (index < len(request_ids) - 1 and not AIJobRepository._round_allows_continuation(value, item))):
                 raise ValueError("ai_job_provider_rounds_invalid")
@@ -2578,7 +2584,7 @@ class AIJobRepository:
         if (not isinstance(progress, dict) or not fields <= set(progress) or set(progress) - fields - {"job_type"}
                 or progress["provider"] != "anthropic" or not _uses_claude(progress["model"])):
             raise ValueError("ai_job_provider_progress_invalid")
-        if "job_type" in progress and (progress["job_type"] != "earnings_impact" or progress["model"] != "claude-sonnet-5-5"):
+        if "job_type" in progress and progress["job_type"] != "earnings_impact":
             raise ValueError("ai_job_provider_progress_invalid")
         AIJobRepository._validate_provider_rounds(progress, complete=False)
         value = canonical_json_text(progress)
@@ -2639,7 +2645,7 @@ class AIJobRepository:
             held = int(row["budget_charge_microusd"] or 0)
             confirmed = _settled_budget_charge_microusd(
                 str(row["job_type"]), progress["confirmed_usage"],
-                fallback_microusd=held, model=str(row["model"]),
+                fallback_microusd=held, model=str(row["model"]), rounds=progress["rounds"],
             )
             needed = confirmed + (
                 _task_budget_reservation_microusd(str(row["job_type"]), model=str(row["model"]))
@@ -2761,7 +2767,7 @@ class AIJobRepository:
             charge = _settled_budget_charge_microusd(
                 str(row["job_type"]), usage,
                 fallback_microusd=int(row["budget_charge_microusd"] or 0),
-                model=str(row["model"]),
+                model=str(row["model"]), rounds=receipt.get("rounds"),
             )
             connection.execute(
                 """UPDATE ai_jobs SET anthropic_message_id=?,provider_result_json=?,
@@ -2894,13 +2900,16 @@ class AIJobRepository:
             if current is None:
                 connection.rollback()
                 raise RuntimeError("ai_job_completion_rejected")
+            rounds = None
             if current["provider_result_json"]:
-                usage = json.loads(current["provider_result_json"])["usage"]
+                stored = json.loads(current["provider_result_json"])
+                usage, rounds = stored["usage"], stored.get("rounds")
             budget_charge_microusd = _settled_budget_charge_microusd(
                 str(current["job_type"]),
                 usage,
                 fallback_microusd=int(current["budget_charge_microusd"] or 0),
                 model=str(current["model"]),
+                rounds=rounds,
             )
             updated = connection.execute(
                 """
@@ -3215,11 +3224,11 @@ class AIJobRepository:
             if current is None:
                 connection.rollback()
                 raise RuntimeError("ai_job_lease_lost")
-            usage_values = (
-                json.loads(current["provider_result_json"])["usage"]
-                if current["provider_result_json"]
-                else dict(usage or {})
+            stored = (
+                json.loads(current["provider_result_json"])
+                if current["provider_result_json"] else None
             )
+            usage_values = stored["usage"] if stored else dict(usage or {})
             has_reported_usage = any(
                 usage_values.get(field) is not None
                 for field in (
@@ -3259,6 +3268,7 @@ class AIJobRepository:
                     usage_values,
                     fallback_microusd=budget_charge_microusd,
                     model=str(current["model"]),
+                    rounds=stored.get("rounds") if stored else None,
                 )
             elif confirmed_without_usage or _reservation_released(
                 "failed",
@@ -3333,11 +3343,11 @@ class AIJobRepository:
             if current is None:
                 connection.commit()
                 return
-            usage_values = (
-                json.loads(current["provider_result_json"])["usage"]
-                if current["provider_result_json"]
-                else dict(usage or {})
+            stored = (
+                json.loads(current["provider_result_json"])
+                if current["provider_result_json"] else None
             )
+            usage_values = stored["usage"] if stored else dict(usage or {})
             budget_charge_microusd = int(
                 current["budget_charge_microusd"] or 0
             )
@@ -3347,6 +3357,7 @@ class AIJobRepository:
                     usage_values,
                     fallback_microusd=budget_charge_microusd,
                     model=str(current["model"]),
+                    rounds=stored.get("rounds") if stored else None,
                 )
             elif _reservation_released(
                 "cancelled",

@@ -58,12 +58,17 @@ def payload(ticker="SMALL", **values):
     )
 
 
+MODEL = runtime.OFFICIAL_CLAUDE_MODEL
+# A held charge for paid work whose outcome is unknown: one Haiku reservation.
+HELD = runtime.budget_reservation_microusd("earnings_impact", model=MODEL)
+
+
 def create_job(repo, ticker="SMALL", *, verified=False):
     data = payload(ticker)
-    version, digest = runtime.schema_identity("earnings_impact", model=runtime.SONNET_EARNINGS_MODEL)
+    version, digest = runtime.schema_identity("earnings_impact", model=MODEL)
     return repo.create_job(
         job_type="earnings_impact", payload=data,
-        model=runtime.SONNET_EARNINGS_MODEL, reasoning="xhigh", execution_mode="background",
+        model=MODEL, reasoning="xhigh", execution_mode="background",
         prompt_version=runtime.PROMPT_VERSIONS["earnings_impact"],
         schema_version=version, schema_sha256=digest, max_queued=200,
         earnings_featured_verified=verified,
@@ -78,7 +83,7 @@ def response(ticker="SMALL"):
                       "direction": "mixed", "reason": "供应链需求可能受到影响。"}],
     }
     return Message(
-        id="msg_featured_test", type="message", role="assistant", model=runtime.SONNET_EARNINGS_MODEL,
+        id="msg_featured_test", type="message", role="assistant", model=MODEL,
         stop_reason="end_turn", content=[{"type": "text", "text": json.dumps(result, ensure_ascii=False)}],
         usage={"input_tokens": 100, "output_tokens": 20, "cache_creation_input_tokens": 0,
                "cache_read_input_tokens": 0,
@@ -125,16 +130,21 @@ def post(client, ticker="SMALL", **kwargs):
 
 
 @pytest.mark.parametrize("ticker", ["AAPL", "LARGE"])
-def test_public_featured_uses_sonnet_and_stores_private_admission_metadata(api_context, ticker):
+def test_public_featured_uses_the_configured_model_and_stores_private_admission_metadata(api_context, ticker):
     client, repo, _store, _rows = api_context
+    configured = settings(repo.path)
+    required = client.get(f"/api/ai/earnings-impact/{ticker}/reports/{REPORT_DATE}?year=2026&quarter=3")
+    # The confirmation step names the model a new request would run with.
+    assert required.status_code == 409 and required.json()["status"] == "analysis_required"
+    assert (required.json()["model"], required.json()["reasoning"]) == (configured.openai_model, configured.openai_reasoning)
     result = post(client, ticker)
     assert result.status_code == 202
     saved = repo.latest_for_ticker("earnings_impact", ticker)
-    assert (saved["model"], saved["reasoning"]) == (runtime.SONNET_EARNINGS_MODEL, "xhigh")
+    assert (saved["model"], saved["reasoning"]) == (configured.openai_model, configured.openai_reasoning)
     assert saved["earnings_featured_verified"] == 1
     assert "earnings_featured_verified" not in saved["payload_json"]
     assert not {"earnings_featured_verified", "job_id", "usage", "budget_charge_usd"} & result.json().keys()
-    assert result.json()["model"] == runtime.SONNET_EARNINGS_MODEL
+    assert result.json()["model"] == configured.openai_model
 
 
 def test_nonfeatured_and_forged_eligibility_cannot_enqueue(api_context):
@@ -176,7 +186,7 @@ def test_watchlist_eligibility_is_current_account_only_and_keeps_deduplication(a
     assert second["job_id"] == first["job_id"]
     assert second["request_hash"] == first["request_hash"]
     assert repo.health()["pending"] == 1
-    prepared = runtime.prepare_claude(runtime.settings_for_job(settings(repo.path), "earnings_impact"), "earnings_impact", json.loads(second["payload_json"]))
+    prepared = runtime.prepare_claude(settings(repo.path), "earnings_impact", json.loads(second["payload_json"]))
     serialized = json.dumps(prepared.params, ensure_ascii=False)
     for private in (alice.account.user_id, bob.account.user_id, "earnings_featured_verified"):
         assert private not in serialized
@@ -217,7 +227,7 @@ def test_bulk_analysis_excludes_nonfeatured_and_other_accounts_watchlists(api_co
     assert result.details["skipped_nonfeatured"] == 2
     for ticker in ("AAPL", "LARGE", "OWN"):
         saved = repo.latest_for_ticker("earnings_impact", ticker)
-        assert saved["model"] == runtime.SONNET_EARNINGS_MODEL
+        assert saved["model"] == settings(repo.path).openai_model
         assert saved["earnings_featured_verified"] == 1
     assert repo.latest_for_ticker("earnings_impact", "OTHER") is None
     assert repo.latest_for_ticker("earnings_impact", "SMALL") is None
@@ -255,13 +265,14 @@ def test_verified_or_legacy_featured_job_reaches_provider(api_context, monkeypat
         await on_message_start(reply.id)
         return reply
 
-    monkeypatch.setattr(claude_provider, "stream_earnings", stream)
+    monkeypatch.setattr(claude_provider, "stream_conversation", stream)
     assert asyncio.run(worker.run_once(repo, settings(repo.path), "worker")) == 1
     saved = repo.get_job(job["job_id"])
     assert saved["status"] == "completed", saved["error_code"]
     assert len(calls) == 1
     assert saved["attempt_count"] == 1
-    assert saved["budget_charge_microusd"] == 400
+    # 100 input tokens at $0.10 and 20 output tokens at $0.50 per million.
+    assert saved["budget_charge_microusd"] == 10 + 10
     assert repo.get_provider_result(job["job_id"])["id"] == "msg_featured_test"
 
 
@@ -273,22 +284,23 @@ def test_nonfeatured_paid_receipt_still_completes_and_remains_publicly_readable(
         connection.execute(
             """UPDATE ai_jobs SET status='in_progress',submission_started_at=?,submitted_at=?,
                anthropic_message_id=?,provider_result_json=?,budget_charge_microusd=? WHERE job_id=?""",
-            (storage._iso(), storage._iso(), receipt["id"], json.dumps(receipt), 4_513_216, job["job_id"]),
+            (storage._iso(), storage._iso(), receipt["id"], json.dumps(receipt), HELD, job["job_id"]),
         )
 
     async def forbidden(*_args, **_kwargs):
         pytest.fail("a persisted paid receipt must never generate another request")
 
-    monkeypatch.setattr(claude_provider, "stream_earnings", forbidden)
+    monkeypatch.setattr(claude_provider, "stream_conversation", forbidden)
+    monkeypatch.setattr(claude_provider, "stream_message", forbidden)
     assert asyncio.run(worker.run_once(repo, settings(repo.path), "worker")) == 1
     saved = repo.get_job(job["job_id"])
     assert saved["status"] == "completed"
     assert saved["earnings_featured_verified"] == 0
-    assert saved["budget_charge_microusd"] == 400
+    assert saved["budget_charge_microusd"] == 10 + 10
     historical = client.get(f"/api/ai/earnings-impact/SMALL/reports/{REPORT_DATE}?year=2026&quarter=3")
     assert historical.status_code == 200
     assert historical.json()["result"]["ticker"] == "SMALL"
-    assert historical.json()["model"] == runtime.SONNET_EARNINGS_MODEL
+    assert historical.json()["model"] == MODEL
     assert post(client).status_code == 409
 
 
@@ -297,8 +309,8 @@ def test_nonfeatured_unknown_submission_is_not_reclassified_or_resubmitted(api_c
     job, _ = create_job(repo)
     with sqlite3.connect(repo.path) as connection:
         connection.execute(
-            "UPDATE ai_jobs SET status='in_progress',submission_started_at=?,budget_charge_microusd=4513216 WHERE job_id=?",
-            (storage._iso(), job["job_id"]),
+            "UPDATE ai_jobs SET status='in_progress',submission_started_at=?,budget_charge_microusd=? WHERE job_id=?",
+            (storage._iso(), HELD, job["job_id"]),
         )
 
     def forbidden(*_args, **_kwargs):
@@ -308,7 +320,7 @@ def test_nonfeatured_unknown_submission_is_not_reclassified_or_resubmitted(api_c
     assert asyncio.run(worker.run_once(repo, settings(repo.path), "worker")) == 1
     saved = repo.get_job(job["job_id"])
     assert saved["error_code"] == "submission_outcome_unknown"
-    assert saved["budget_charge_microusd"] == 4_513_216
+    assert saved["budget_charge_microusd"] == HELD
 
 
 def test_featured_threshold_and_unknown_market_cap():

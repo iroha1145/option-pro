@@ -1276,7 +1276,7 @@ def test_earnings_impact_still_needs_one_company_besides_itself():
 def test_earnings_contract_change_moves_the_schema_identity():
     schema_name, digest = runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
     schema = json.loads(runtime._validation_schema_json("earnings_impact"))
-    instructions = runtime.build_runtime_request("earnings_impact", {}).instructions
+    instructions = runtime.build_runtime_request("earnings_impact", {}, model="gpt-5.6-terra").instructions
 
     assert schema_name == "earnings_impact_zh_cn_v5"
     assert digest != "65c6fcf4ec95e4fff55b5767f43a1a593492edcc05366c9da42161f0390a5f5b"

@@ -1416,13 +1416,14 @@ def test_post_release_earnings_instructions_change_only_with_the_prompt_version(
     The post-release branch reaches the model through the same job type, so
     queued jobs and stored results would not notice an edit to it. Pinning the
     text to the prompt version makes such an edit fail here until
-    PROMPT_VERSIONS["earnings_impact"] is bumped along with it.
+    PROMPT_VERSIONS["earnings_impact"] is bumped along with it. This is the
+    OpenAI prompt; Claude's earnings prompt does not vary by stage.
     """
 
     digests = {
         stage: hashlib.sha256(
             runtime.build_runtime_request(
-                "earnings_impact", {"analysis_stage": stage}
+                "earnings_impact", {"analysis_stage": stage}, model=runtime.OFFICIAL_OPENAI_MODEL,
             ).instructions.encode("utf-8")
         ).hexdigest()[:16]
         for stage in ("pre_release", "post_release_manual", "post_release_final")

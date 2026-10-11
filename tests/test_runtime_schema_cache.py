@@ -41,7 +41,7 @@ def _identity_the_long_way(job_type: str, *, model: str) -> str:
     derivation, so agreeing with it is evidence and not a tautology.
     """
 
-    request = rt.build_runtime_request(job_type, {})
+    request = rt.build_runtime_request(job_type, {}, model=model)
     payload = {
         "instructions": request.instructions,
         "result_validation_contract": rt.RESULT_VALIDATION_CONTRACT_VERSION,
@@ -51,7 +51,7 @@ def _identity_the_long_way(job_type: str, *, model: str) -> str:
         "schema_name": request.schema_name,
         "max_input_tokens": rt.max_input_tokens_for(job_type, model=model),
         "max_output_tokens": rt.max_output_tokens_for(job_type, model=model),
-        "max_tool_calls": rt.max_tool_calls_for(job_type),
+        "max_tool_calls": rt.max_tool_calls_for(job_type, model=model),
         "use_web_search": request.use_web_search,
     }
     raw = json.dumps(

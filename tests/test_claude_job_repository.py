@@ -26,7 +26,7 @@ def accounting(monkeypatch):
         calls.append(("tokens", model))
         return 1000 if model == CLAUDE else 2000
 
-    def settle(job_type, usage, *, fallback_microusd, model=None):
+    def settle(job_type, usage, *, fallback_microusd, model=None, rounds=None):
         calls.append(("settle", model))
         return 90 if model == CLAUDE else 180
 
@@ -262,7 +262,7 @@ def test_optional_cache_usage_remains_unknown_in_receipt(tmp_path, accounting, m
         "cache_creation_5m_input_tokens": None, "cache_creation_1h_input_tokens": None,
     })
 
-    def conservative(job_type, usage, *, fallback_microusd, model=None):
+    def conservative(job_type, usage, *, fallback_microusd, model=None, rounds=None):
         assert usage["cached_input_tokens"] is None
         return fallback_microusd
 
@@ -300,7 +300,7 @@ def test_tool_receipt_publishes_bounded_sources_and_usage_without_raw_content(tm
     ]
     value["usage"].update(web_search_requests=1, web_fetch_requests=1, code_execution_requests=None)
 
-    def settle(job_type, usage, *, fallback_microusd, model=None):
+    def settle(job_type, usage, *, fallback_microusd, model=None, rounds=None):
         assert usage["web_search_requests"] == 1
         assert usage["web_fetch_requests"] == 1
         assert usage["code_execution_requests"] is None

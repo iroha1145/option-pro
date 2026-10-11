@@ -483,10 +483,7 @@ def test_definitive_worker_rejection_remains_free_after_repository_restart(tmp_p
         openai_job_db_path=repo.path, anthropic_api_key="test-key",
         openai_model=HAIKU_MODEL, openai_reasoning="xhigh",
         openai_manual_cooldown_seconds=0,
-    ).model_copy(update={
-        # This fixture verifies a historical Haiku request rejection.
-        "openai_earnings_model": HAIKU_MODEL, "openai_earnings_reasoning": "xhigh",
-    })
+    )
 
     class Rejected(Exception):
         pass

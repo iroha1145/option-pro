@@ -109,10 +109,6 @@ def prepare_message(
         params["system"][0]["text"] += _PROMPT_JSON_INSTRUCTIONS + json.dumps(
             output_format["schema"], ensure_ascii=False, separators=(",", ":"),
         )
-    if params["model"] == "claude-sonnet-5-5" and job_type == "earnings_impact":
-        # A long xhigh turn can outlast 5m. Keep only the useful stable prefix
-        # cached initially; company input gains a breakpoint only on continuation.
-        params["system"][0]["cache_control"]["ttl"] = "1h"
     return PreparedMessage(
         api_key=key,
         timeout_seconds=float(settings.openai_timeout_seconds),
@@ -404,7 +400,6 @@ def response_tool_evidence(message: Message) -> list[dict[str, str]]:
     return evidence
 
 
-MAX_FOCUS_ROUNDS = 4
 _USAGE_KEYS = (
     "input_tokens", "cached_input_tokens", "cache_creation_input_tokens",
     "cache_creation_5m_input_tokens", "cache_creation_1h_input_tokens",
@@ -429,8 +424,14 @@ class ConversationResult:
     receipt: dict[str, Any]
 
 
+def _claude_earnings(prepared: PreparedMessage) -> bool:
+    from app.services.ai_jobs.runtime import claude_earnings
+
+    return claude_earnings(prepared.diagnostic_task.removeprefix("ai_jobs:"), prepared.params["model"])
+
+
 def tool_limits(prepared: PreparedMessage) -> dict[str, int]:
-    if prepared.params["model"] == "claude-sonnet-5-5" and prepared.diagnostic_task == "ai_jobs:earnings_impact":
+    if _claude_earnings(prepared):
         from app.services.ai_jobs.runtime import EARNINGS_TOOL_LIMITS
         return dict(EARNINGS_TOOL_LIMITS)
     network = 12 if prepared.params["model"] == "claude-sonnet-5-5" and prepared.diagnostic_task == "ai_jobs:market_focus" else 1
@@ -446,11 +447,11 @@ def _final_block_text(blocks: list[Any]) -> str:
 
 
 def _last_earnings_json(text: str) -> str | None:
-    """Read the last complete JSON value, without treating nested values as drafts.
+    """Read the last complete JSON object, without treating nested values as drafts.
 
-    Sonnet may precede prompt-based JSON with a short explanation. Restrict this
-    recovery to earnings; local business-schema validation remains upstream.
-    https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5
+    The model may precede prompt-based JSON with a short explanation or follow
+    it with a citation marker such as ``[1]``; only objects count as answers.
+    Restricted to earnings; local business-schema validation remains upstream.
     """
     decoder = json.JSONDecoder()
     position = 0
@@ -464,24 +465,14 @@ def _last_earnings_json(text: str) -> str | None:
         except ValueError:
             position += 1
             continue
-        last = text[position:end] if isinstance(value, dict) else None
+        if isinstance(value, dict):
+            last = text[position:end]
         # Skip the entire value. Inner arrays/objects are not later answers.
         position = end
     return last
 
 
-async def stream_earnings(
-    prepared: PreparedMessage,
-    *,
-    on_message_start: Callable[[str], Awaitable[None]],
-    on_progress: Callable[..., Awaitable[None]],
-) -> ConversationResult:
-    if prepared.params["model"] != "claude-sonnet-5-5" or prepared.diagnostic_task != "ai_jobs:earnings_impact":
-        raise ValueError("provider_continuation_not_supported")
-    return await _stream_conversation(prepared, on_message_start=on_message_start, on_progress=on_progress)
-
-
-async def stream_market_focus(
+async def stream_conversation(
     prepared: PreparedMessage,
     *,
     on_message_start: Callable[[str], Awaitable[None]],
@@ -491,14 +482,13 @@ async def stream_market_focus(
 
     Progress is durable before each next request. It deliberately contains no
     thinking or assistant content, so restart cannot replay a paid conversation.
+    Earnings may also continue once an answer arrives without its final JSON.
     """
-    if prepared.params["model"] != "claude-sonnet-5-5" or prepared.diagnostic_task != "ai_jobs:market_focus":
+    from app.services.ai_jobs.runtime import CONVERSATION_MAX_ROUNDS, claude_conversation
+
+    if not claude_conversation(prepared.diagnostic_task.removeprefix("ai_jobs:"), prepared.params["model"]):
         raise ValueError("provider_continuation_not_supported")
-    return await _stream_conversation(prepared, on_message_start=on_message_start, on_progress=on_progress)
-
-
-async def _stream_conversation(prepared: PreparedMessage, *, on_message_start: Callable[[str], Awaitable[None]], on_progress: Callable[..., Awaitable[None]]) -> ConversationResult:
-    earnings = prepared.diagnostic_task == "ai_jobs:earnings_impact"
+    earnings = _claude_earnings(prepared)
     original_model = prepared.params["model"]
     ceiling = int(prepared.params["max_tokens"])
     messages = deepcopy(prepared.params["messages"])
@@ -517,7 +507,7 @@ async def _stream_conversation(prepared: PreparedMessage, *, on_message_start: C
         }, will_continue=will_continue)
 
     async def started(message_id: str) -> None:
-        if not message_id or message_id in request_ids or len(request_ids) >= MAX_FOCUS_ROUNDS:
+        if not message_id or message_id in request_ids or len(request_ids) >= CONVERSATION_MAX_ROUNDS:
             raise RuntimeError("provider_invalid_message_identity")
         if not request_ids:
             await on_message_start(message_id)
@@ -546,7 +536,7 @@ async def _stream_conversation(prepared: PreparedMessage, *, on_message_start: C
             "tool_evidence_version": "v1", "tool_evidence": response_tool_evidence(combined),
         })
 
-    for index in range(MAX_FOCUS_ROUNDS):
+    for index in range(CONVERSATION_MAX_ROUNDS):
         used_output = sum_round_usage(rounds)["output_tokens"]
         if type(used_output) is not int:
             return finish("provider_usage_incomplete")
@@ -557,7 +547,9 @@ async def _stream_conversation(prepared: PreparedMessage, *, on_message_start: C
         if earnings and index:
             # One stable explicit point plus one automatically advancing point.
             # This caches the growing task history without editing signed blocks.
-            params["cache_control"] = {"type": "ephemeral", "ttl": "1h"}
+            # Same 5m TTL as the system marker: a longer automatic entry after
+            # a shorter explicit one is rejected (longer TTLs must come first).
+            params["cache_control"] = {"type": "ephemeral"}
             if container_id is not None:
                 params["container"] = container_id
         message = await stream_message(replace(prepared, params=params), on_message_start=started, tool_counts=counts)
@@ -597,7 +589,7 @@ async def _stream_conversation(prepared: PreparedMessage, *, on_message_start: C
         usage = sum_round_usage(rounds)
         if any(type(usage[key]) is not int for key in ("input_tokens", "output_tokens", "cached_input_tokens", "cache_creation_input_tokens", "web_search_requests", "web_fetch_requests")):
             return finish("provider_usage_incomplete")
-        if index == MAX_FOCUS_ROUNDS - 1:
+        if index == CONVERSATION_MAX_ROUNDS - 1:
             return finish("provider_continuation_limit")
         # Preserve SDK content verbatim, including thinking signatures and tool
         # blocks. The next request must continue the same assistant turn.

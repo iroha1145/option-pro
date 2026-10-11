@@ -181,10 +181,8 @@ def _job_repository() -> AIJobRepository:
     return _job_repository_for_path(str(get_settings().openai_job_db_path))
 
 
-def _require_runtime_capability(job_type: str | None = None) -> None:
+def _require_runtime_capability() -> None:
     settings = get_settings()
-    if job_type is not None:
-        settings = ai_job_runtime.settings_for_job(settings, job_type)
     capability = ai_job_runtime.capability_status(settings)
     if not capability.get("supported"):
         raise HTTPException(
@@ -259,7 +257,7 @@ def _require_manual_submission() -> None:
 
 def _require_earnings_manual_submission() -> None:
     _require_earnings_manual_analysis_enabled()
-    _require_runtime_capability("earnings_impact")
+    _require_runtime_capability()
 
 
 def _create_job(
@@ -278,7 +276,7 @@ def _create_job(
             _reject_nonfeatured_earnings()
     else:
         _require_manual_analysis_enabled()
-    settings = ai_job_runtime.settings_for_job(get_settings(), job_type)
+    settings = get_settings()
     # Scheduled work may fill the normal queue. Every entry point here is a
     # manual submission, so it keeps its own reserve above the base ceiling;
     # the earnings reserve is not added on top.
@@ -672,6 +670,7 @@ async def earnings_report_impact(
     repository = _job_repository()
     row = repository.latest_for_report(ticker, report_id)
     if row is None:
+        settings = get_settings()
         return JSONResponse(
             {
                 "status": "analysis_required",
@@ -680,6 +679,10 @@ async def earnings_report_impact(
                 "_locked": False,
                 "_final": False,
                 "_finalization_in_progress": False,
+                # What a new request for this report would run with, for the
+                # confirmation step; finished jobs report their own model.
+                "model": settings.openai_model,
+                "reasoning": settings.openai_reasoning,
             },
             status_code=409,
         )
