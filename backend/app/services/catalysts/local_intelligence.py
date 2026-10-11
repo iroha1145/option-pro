@@ -12,9 +12,9 @@ import sqlite3
 import threading
 import time
 import uuid
-from collections import Counter
+from collections import Counter, OrderedDict
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -184,6 +184,12 @@ _QUALITY_BACKFILL_BATCH = 5_000
 # results every sync slot; both are pure functions of their stored inputs.
 _PUBLIC_JOB_MEMO_ENTRIES = 20_000
 _NEWS_AUDIT_MEMO_ENTRIES = 50_000
+# Every hotspot read re-checks the paid receipt of each covering cycle; the
+# check is a pure function of the job's result and receipt bytes, model,
+# message id and the cycle payload (see _verified_focus_paid_result).
+_FOCUS_PAID_RESULT_ENTRIES = 256
+_focus_paid_results: OrderedDict[tuple[Any, ...], tuple[bool, Any]] = OrderedDict()
+_focus_paid_results_lock = threading.Lock()
 # 旧库升级时给热点条目补上计划级分数列（v6）。定义与 _SCHEMA 里的建表语句一致。
 _HOTSPOT_ITEM_SCORE_COLUMNS = (
     (
@@ -4058,9 +4064,53 @@ class LocalCatalystIntelligence:
     def _verified_focus_paid_result(job: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
         """Validate the saved paid receipt without publishing or changing it.
 
-        Every hotspot read re-checks the newest covering cycles. The two full
-        result validations are remembered per process by their exact bytes and
-        payload; receipt identity and evidence are still checked on each call.
+        Every hotspot read re-checks the newest covering cycles. The check
+        reads only the job's result and receipt bytes, model and message id
+        and the payload, and no clock or other state, so its outcome is
+        remembered per process by that exact content; a rejection is raised
+        again. Each caller gets its own copy of an accepted result. Any other
+        bytes, even a reformatted receipt, are checked again.
+        """
+        receipt = job.get("provider_result_json")
+        try:
+            if receipt is not None and not isinstance(receipt, (str, bytes)):
+                raise TypeError("receipt_not_keyed")
+            key = (
+                hashlib.sha256(str(job.get("result_json") or "").encode("utf-8")).digest(),
+                None if receipt is None else (isinstance(receipt, str), hashlib.sha256(
+                    receipt.encode("utf-8") if isinstance(receipt, str) else receipt,
+                ).digest()),
+                job.get("model"),
+                job.get("anthropic_message_id"),
+                _sha(payload),
+            )
+            hash(key)
+        except (TypeError, ValueError):
+            return LocalCatalystIntelligence._check_focus_paid_result(job, payload)
+        with _focus_paid_results_lock:
+            outcome = _focus_paid_results.get(key)
+            if outcome is not None:
+                _focus_paid_results.move_to_end(key)
+        if outcome is None:
+            try:
+                outcome = (True, LocalCatalystIntelligence._check_focus_paid_result(job, payload))
+            except (KeyError, TypeError, ValueError) as error:
+                outcome = (False, error)
+            with _focus_paid_results_lock:
+                _focus_paid_results[key] = outcome
+                while len(_focus_paid_results) > _FOCUS_PAID_RESULT_ENTRIES:
+                    _focus_paid_results.popitem(last=False)
+        accepted, value = outcome
+        if not accepted:
+            raise value.with_traceback(None)
+        return copy.deepcopy(value)
+
+    @staticmethod
+    def _check_focus_paid_result(job: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+        """The uncached check behind _verified_focus_paid_result.
+
+        The two full result validations are remembered on their own by their
+        exact bytes and payload (validate_result_cached).
         """
         result = validate_result_cached(
             "market_focus", str(job.get("result_json") or ""), payload, validator=validate_result,
@@ -6165,35 +6215,60 @@ class LocalCatalystIntelligence:
                         (revision["prepared_revision"], cutoff, floor),
                     )
                 }
+                # Each cycle's payload JSON is parsed per cycle (window_cycles,
+                # coverage) instead of per cycle and candidate, and the
+                # newest-round ranking sorts identifiers only; the stored texts
+                # are joined back for the winning rows, and only the columns
+                # read below. Both costs grew with every verified round in the
+                # window. The expressions are unchanged and still evaluated by
+                # SQLite, so its comparison and affinity rules decide coverage
+                # as before.
                 publications = connection.execute(
-                    "WITH candidates AS (" + candidates_sql + """), ranked AS (
-                           SELECT p.*,c.cycle_id AS covered_cycle_id,
-                                  c.payload_json AS bound_payload_json,c.result_json AS bound_result_json,
-                                  c.job_id AS bound_job_id,c.input_hash AS bound_input_hash,
-                                  c.prepared_revision AS bound_prepared_revision,c.snapshot_as_of AS bound_snapshot_as_of,
-                                  n.event_group_id AS candidate_id,n.event_group_version AS candidate_version,n.ordinal,
-                                  ROW_NUMBER() OVER (PARTITION BY n.event_group_id ORDER BY
-                                      c.snapshot_as_of DESC,c.created_at DESC,c.cycle_id DESC) AS newest
+                    "WITH candidates AS (" + candidates_sql + """), window_cycles AS MATERIALIZED (
+                           SELECT c.cycle_id,c.snapshot_as_of,c.created_at,
+                                  focus_input_intact(c.cycle_id) AS input_intact,
+                                  json_extract(
+                                      CASE WHEN json_valid(c.payload_json) THEN c.payload_json ELSE '{}' END,
+                                      '$.verification_version') AS input_verification_version
                            FROM catalyst_local_focus_cycles c INDEXED BY idx_local_focus_latest
-                           LEFT JOIN catalyst_local_verified_focus_publications p ON p.cycle_id=c.cycle_id
-                           CROSS JOIN candidates n
                            WHERE c.created_at>=? AND c.created_at<=? AND c.snapshot_as_of<=?
-                             AND (p.published_at IS NULL OR p.published_at<=?)
                              AND c.completed_at<=? AND c.status='completed'
-                             AND (NOT focus_input_intact(c.cycle_id) OR json_extract(
-                                 CASE WHEN json_valid(c.payload_json) THEN c.payload_json ELSE '{}' END,
-                                 '$.verification_version')=?)
-                             AND (
-                                 NOT focus_input_intact(c.cycle_id)
-                                 OR EXISTS (
-                                     SELECT 1 FROM json_each(
-                                         CASE WHEN json_valid(c.payload_json) THEN c.payload_json ELSE '{}' END,
-                                         '$.events') input_event
-                                     WHERE json_extract(CASE WHEN input_event.type='object' THEN input_event.value ELSE '{}' END,
-                                                        '$.event_group_id')=n.event_group_id
-                                 )
-                             )
-                       ) SELECT * FROM ranked WHERE newest=1 ORDER BY ordinal""",
+                       ), coverage AS MATERIALIZED (
+                           SELECT w.cycle_id,json_extract(
+                                      CASE WHEN input_event.type='object' THEN input_event.value ELSE '{}' END,
+                                      '$.event_group_id') AS event_group_id
+                           FROM window_cycles w
+                           JOIN catalyst_local_focus_cycles c ON c.cycle_id=w.cycle_id,
+                                json_each(
+                                    CASE WHEN json_valid(c.payload_json) THEN c.payload_json ELSE '{}' END,
+                                    '$.events') input_event
+                           WHERE w.input_intact
+                       ), ranked AS (
+                           SELECT w.cycle_id,p.rowid AS publication_rowid,
+                                  n.event_group_id,n.event_group_version,n.ordinal,
+                                  ROW_NUMBER() OVER (PARTITION BY n.event_group_id ORDER BY
+                                      w.snapshot_as_of DESC,w.created_at DESC,w.cycle_id DESC) AS newest
+                           FROM window_cycles w
+                           LEFT JOIN catalyst_local_verified_focus_publications p ON p.cycle_id=w.cycle_id
+                           CROSS JOIN candidates n
+                           WHERE (p.published_at IS NULL OR p.published_at<=?)
+                             AND (NOT w.input_intact OR w.input_verification_version=?)
+                             AND (NOT w.input_intact OR EXISTS (
+                                 SELECT 1 FROM coverage v
+                                 WHERE v.cycle_id=w.cycle_id AND v.event_group_id=n.event_group_id
+                             ))
+                       ) SELECT p.cycle_id,p.job_id,p.prepared_revision,p.snapshot_as_of,
+                                p.input_hash,p.result_sha256,p.hotspot_items_json,
+                                c.cycle_id AS covered_cycle_id,
+                                c.payload_json AS bound_payload_json,c.result_json AS bound_result_json,
+                                c.job_id AS bound_job_id,c.input_hash AS bound_input_hash,
+                                c.prepared_revision AS bound_prepared_revision,c.snapshot_as_of AS bound_snapshot_as_of,
+                                r.event_group_id AS candidate_id,r.event_group_version AS candidate_version,
+                                r.ordinal,r.newest
+                         FROM ranked r
+                         JOIN catalyst_local_focus_cycles c ON c.cycle_id=r.cycle_id
+                         LEFT JOIN catalyst_local_verified_focus_publications p ON p.rowid=r.publication_rowid
+                         WHERE r.newest=1 ORDER BY r.ordinal""",
                     (revision["prepared_revision"], cutoff, floor, floor, cutoff, cutoff, cutoff, cutoff, FOCUS_VERIFICATION_VERSION),
                 ).fetchall()
         jobs, _available = self._ai_job_snapshot_or_empty(
@@ -6248,7 +6323,9 @@ class LocalCatalystIntelligence:
                     if original_revision not in original_revisions:
                         with self._connect() as connection:
                             bindings = self._hotspot_revision_bindings(connection, original_revision)
-                        _, prepared = self._hotspots_for_revision(original_revision, limit=100)
+                            _, prepared = self._hotspots_for_revision(
+                                original_revision, limit=100, connection=connection,
+                            )
                         original_revisions[original_revision] = (bindings, prepared)
                     bindings, prepared = original_revisions[original_revision]
                     expected = self._verified_hotspot_items(result, prepared)
@@ -6528,8 +6605,10 @@ class LocalCatalystIntelligence:
         revision: int,
         *,
         limit: int,
+        connection: sqlite3.Connection | None = None,
     ) -> tuple[sqlite3.Row | None, list[dict[str, Any]]]:
-        with self._connect() as connection:
+        """``connection`` lets a caller that already holds one read through it."""
+        with nullcontext(connection) if connection is not None else self._connect() as connection:
             revision_row = connection.execute(
                 """SELECT * FROM catalyst_local_hotspot_revisions
                    WHERE prepared_revision=?""",

@@ -154,6 +154,7 @@ def counting_validator(monkeypatch, module) -> list[str]:
 
     monkeypatch.setattr(module, "validate_result", counting)
     models_module._result_verdicts.clear()
+    local_module._focus_paid_results.clear()
     return calls
 
 
