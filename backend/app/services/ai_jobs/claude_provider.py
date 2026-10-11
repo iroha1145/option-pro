@@ -175,7 +175,11 @@ async def stream_message(
                     counts[group] += 1
                     counts["total"] += 1
                     limits = tool_limits(prepared)
-                    if counts[group] > limits[group] or counts["total"] > limits["total"]:
+                    # These events describe work already running upstream, not
+                    # a client-side execution approval. Stock reports drain the
+                    # paid request and apply their budget before a continuation,
+                    # preserving the final answer and authoritative usage.
+                    if not _stock_report(prepared) and (counts[group] > limits[group] or counts["total"] > limits["total"]):
                         raise RuntimeError("provider_tool_limit_exceeded")
             # SDK accumulation can retain a snapshot even after a premature EOF.
             if not completed:
@@ -449,6 +453,10 @@ def _claude_earnings(prepared: PreparedMessage) -> bool:
     return claude_earnings(prepared.diagnostic_task.removeprefix("ai_jobs:"), prepared.params["model"])
 
 
+def _stock_report(prepared: PreparedMessage) -> bool:
+    return prepared.params["model"] == "claude-sonnet-5-5" and prepared.diagnostic_task == "ai_jobs:signal_analysis"
+
+
 def tool_limits(prepared: PreparedMessage) -> dict[str, int]:
     if prepared.params["model"] == "claude-sonnet-5-5" and prepared.diagnostic_task == "ai_jobs:signal_analysis":
         from app.services.ai_jobs.stock_report import TOOL_LIMITS
@@ -515,7 +523,7 @@ async def stream_conversation(
     if not claude_conversation(prepared.diagnostic_task.removeprefix("ai_jobs:"), prepared.params["model"]):
         raise ValueError("provider_continuation_not_supported")
     earnings = _claude_earnings(prepared)
-    stock = prepared.params["model"] == "claude-sonnet-5-5" and prepared.diagnostic_task == "ai_jobs:signal_analysis"
+    stock = _stock_report(prepared)
     prompt_json = earnings or stock
     original_model = prepared.params["model"]
     ceiling = int(prepared.params["max_tokens"])
@@ -525,6 +533,7 @@ async def stream_conversation(
     request_ids: list[str] = []
     counts = {"web_search": 0, "web_fetch": 0, "code": 0, "total": 0}
     container_id: str | None = None
+    stock_remaining: dict[str, int] | None = None
     conversation_identity = {"job_type": "earnings_impact"} if earnings else {"job_type": "signal_analysis"} if stock else {}
 
     async def persist_progress(*, will_continue: bool = False) -> None:
@@ -572,6 +581,11 @@ async def stream_conversation(
         if remaining <= 0:
             return finish("provider_incomplete_max_output_tokens")
         params = {**prepared.params, "messages": messages, "max_tokens": remaining}
+        if stock_remaining is not None:
+            params["tools"] = deepcopy(prepared.params.get("tools", []))
+            for tool in params["tools"]:
+                if tool["name"] in {"web_search", "web_fetch"}:
+                    tool["max_uses"] = stock_remaining[tool["name"]]
         if prompt_json and index:
             # Earnings also cache their growing 5m history. Stock reports keep
             # only the shared 1h system/schema marker, leaving dynamic inputs
@@ -620,6 +634,28 @@ async def stream_conversation(
         usage = sum_round_usage(rounds)
         if any(type(usage[key]) is not int for key in ("input_tokens", "output_tokens", "cached_input_tokens", "cache_creation_input_tokens", "web_search_requests", "web_fetch_requests")):
             return finish("provider_usage_incomplete")
+        if stock:
+            from app.services.ai_jobs.stock_report import TOOL_MAX_USES
+
+            # Count all observed native operations, including internally
+            # generated code. They are not separately approved client calls.
+            # Failed attempts also consume the local continuation allowance;
+            # provider billing counters can never enlarge that allowance.
+            observed = {name: 0 for name in TOOL_MAX_USES}
+            for block in combined.content:
+                if block.type == "server_tool_use":
+                    group = "code" if block.name in _CODE_TOOLS else block.name
+                    if group in observed:
+                        observed[group] += 1
+            stock_remaining = {
+                name: limit - max(observed[name], usage[f"{name}_requests"])
+                if name != "code" else limit - observed[name]
+                for name, limit in TOOL_MAX_USES.items()
+            }
+            # Never send a new paid request with a zero/negative allowance.
+            # A completed answer above was accepted before this admission check.
+            if any(value <= 0 for value in stock_remaining.values()):
+                return finish("provider_tool_limit_exceeded")
         if index == CONVERSATION_MAX_ROUNDS - 1:
             return finish("provider_continuation_limit")
         # Preserve SDK content verbatim, including thinking signatures and tool
