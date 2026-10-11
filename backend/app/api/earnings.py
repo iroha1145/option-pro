@@ -669,30 +669,12 @@ def _normalize_earnings_output_row(value: Mapping[str, Any]) -> dict[str, Any]:
         for reason in (value.get("featured_reasons") or [])
         if reason in {"market_cap", "earnings_pool"}
     ]
-    calendar_sources = [
-        source
-        for source in (value.get("calendar_sources") or [])
-        if source in {"yahoo", "finnhub_calendar", "fmp_calendar"}
-    ]
-    if not calendar_sources:
-        # 单一来源的行也要有可追溯的日历来源标注。
-        date_source = value.get("earnings_date_source")
-        calendar_sources = [
-            "fmp_calendar"
-            if date_source == "fmp_calendar"
-            else "finnhub_calendar"
-            if date_source == "finnhub_calendar"
-            else "yahoo"
-        ]
-    calendar_date_status = value.get("calendar_date_status")
-    if calendar_date_status not in {"single_source", "confirmed", "conflict"}:
-        calendar_date_status = (
-            "confirmed" if len(calendar_sources) > 1 else "single_source"
-        )
-    calendar_conflict = (
-        value.get("calendar_conflict")
-        if calendar_date_status == "conflict"
-        else None
+    # 日历只剩 Finnhub 与 Yahoo，每行恰好一个来源。三个日历字段保留固定取值，
+    # 快照结构不变，旧快照照常可读。
+    calendar_source = (
+        "finnhub_calendar"
+        if value.get("earnings_date_source") == "finnhub_calendar"
+        else "yahoo"
     )
     normalized = {
         "ticker": str(value.get("ticker") or "").strip().upper(),
@@ -731,9 +713,9 @@ def _normalize_earnings_output_row(value: Mapping[str, Any]) -> dict[str, Any]:
         "observed_at": value.get("observed_at"),
         "public_featured": bool(value.get("public_featured")),
         "featured_reasons": featured_reasons,
-        "calendar_sources": calendar_sources,
-        "calendar_date_status": calendar_date_status,
-        "calendar_conflict": calendar_conflict,
+        "calendar_sources": [calendar_source],
+        "calendar_date_status": "single_source",
+        "calendar_conflict": None,
         "expected_move_pct": expected_move,
         "expected_move_expiration": (
             value.get("expected_move_expiration")
@@ -1173,9 +1155,6 @@ async def _build_upcoming_earnings(today: date):
     }
     for row in earnings_by_ticker.values():
         _set_estimate_sources(row, _estimate_sources(row))
-        row["calendar_sources"] = ["yahoo"]
-        row["calendar_date_status"] = "single_source"
-        row["calendar_conflict"] = None
     observed_at = datetime.now(MARKET_TZ).isoformat()
     for ticker, finnhub in finnhub_selected.items():
         existing = dict(earnings_by_ticker.get(ticker, {}))
@@ -1207,9 +1186,6 @@ async def _build_upcoming_earnings(today: date):
             "release_status": release_status,
             "source_status": "active",
             "observed_at": observed_at,
-            "calendar_sources": ["finnhub_calendar"],
-            "calendar_date_status": "single_source",
-            "calendar_conflict": None,
             **(
                 {
                     "expected_move_pct": None,

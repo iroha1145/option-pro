@@ -1,6 +1,6 @@
 """Counterexamples from the second review of the 2026-10-10 AI fixes (head 414be099).
 
-These historical examples remain exercised under the v5 text policy.
+These historical examples remain exercised under the 2026-10-11 text policy.
 Prose does not guess ticker identity; explicit numeric code labels, whole-text
 language checks and structured bindings retain their checks.
 """

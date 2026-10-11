@@ -143,6 +143,11 @@ TITLE_WINDOW = timedelta(hours=36)
 MAX_BACKOFF = timedelta(hours=1)
 MAX_SOURCES_PER_ITEM = 500
 MAX_TICKERS_PER_ITEM = 100
+# Dedupe rows of news the journal prune removed stay this long after first
+# sight. Google News searches and the Wall St. Breakfast feed list a story for
+# weeks; once these rows go, the next listing mints it again, and an item with
+# no publication time would then look new and be analysed again.
+DEDUPE_KEEP_DAYS = 30
 _ONE_MICROSECOND = timedelta(microseconds=1)
 _SOURCE_SPECS = {spec.key: spec for spec in (*NEWS_SOURCES, CALENDAR_SOURCE)}
 _PRIVATE_TABLES_BY_NEWS_ID = (
@@ -1164,18 +1169,27 @@ class NewsCollector:
     def prune_orphans(self, *, retention_days: int) -> int:
         """Drop private rows of news the journal prune removed from the mirror.
 
-        Observations of such news stay until the retention period has passed
-        since they were made: an old story a feed keeps listing is then still
-        recognised as seen instead of being minted again after every prune.
+        They stay until ``DEDUPE_KEEP_DAYS`` (at least the retention period)
+        after the story was first seen, and observations as long after they
+        were made: an old story a feed keeps listing is then still recognised
+        as seen instead of being minted again after every prune.
         """
 
-        cutoff = utc_micros(self._clock() - timedelta(days=retention_days))
+        cutoff = utc_micros(
+            self._clock() - timedelta(days=max(retention_days, DEDUPE_KEEP_DAYS))
+        )
         removed = 0
         with self.repository.transaction() as connection:
+            # catalyst_ingest_items goes last: the other tables read its ages.
             for table in _PRIVATE_TABLES_BY_NEWS_ID:
                 removed += connection.execute(
-                    f"DELETE FROM {table} WHERE news_id NOT IN "
-                    "(SELECT news_id FROM macrolens_etl_news)"
+                    f"""DELETE FROM {table}
+                        WHERE news_id NOT IN (SELECT news_id FROM macrolens_etl_news)
+                          AND news_id NOT IN (
+                              SELECT news_id FROM catalyst_ingest_items
+                              WHERE first_seen_at>=?
+                          )""",
+                    (cutoff,),
                 ).rowcount
             removed += connection.execute(
                 """DELETE FROM catalyst_ingest_observations

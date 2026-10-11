@@ -189,7 +189,7 @@ def test_missing_expected_move_does_not_affect_featured(isolated_build) -> None:
 # ── 市值缓存与来源优先级 ─────────────────────────────────────
 
 
-@pytest.mark.parametrize("source", ["massive_reference", "fmp_profile"])
+@pytest.mark.parametrize("source", ["massive_reference", "yahoo_info"])
 def test_market_cap_cache_roundtrip_and_fresh_hit(tmp_path, monkeypatch, source) -> None:
     from app.services import massive
 
@@ -734,6 +734,13 @@ def test_snapshot_validator_rejects_watchlist_reason_and_bad_conflict(
     tampered = json.loads(json.dumps(payload))
     tampered["earnings"][0]["calendar_date_status"] = "conflict"
     tampered["earnings"][0]["calendar_conflict"] = None
+    with pytest.raises(ValueError):
+        validate_public_home_payload("earnings", tampered)
+
+    # 日历每行只有一个来源；两来源「确认」的行不会再生成，出现即拒绝
+    tampered = json.loads(json.dumps(payload))
+    tampered["earnings"][0]["calendar_sources"] = ["yahoo", "finnhub_calendar"]
+    tampered["earnings"][0]["calendar_date_status"] = "confirmed"
     with pytest.raises(ValueError):
         validate_public_home_payload("earnings", tampered)
 

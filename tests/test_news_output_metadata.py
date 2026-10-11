@@ -100,7 +100,7 @@ def test_paid_news_recovery_preserves_receipt_usage_and_charge(tmp_path, monkeyp
 
     repo = AIJobRepository(tmp_path / 'jobs.db')
     payload = {**_news_payload(), 'article_status': 'unavailable'}
-    version, digest = ('news_impact_zh_cn_v6', '68b3095ba0f47e559a5a7edd3daf6b091350546961ce398368684143bbb76a4a')
+    version, digest = runtime.schema_identity('news_impact')
     job, _ = repo.create_job(job_type='news_impact', payload=payload, model='claude-haiku-5-5', reasoning='xhigh', execution_mode='background', prompt_version=runtime.PROMPT_VERSIONS['news_impact'], schema_version=version, schema_sha256=digest, max_queued=10)
     ident = job['job_id']
     repo.claim_due('owner', 60)
@@ -127,9 +127,15 @@ def test_paid_news_recovery_preserves_receipt_usage_and_charge(tmp_path, monkeyp
     assert json.loads(after['result_json'])['uncertainty_notes'] == ['正文正文状态为不可用，未读到全文。']
 
 
-@pytest.mark.parametrize(("text", "expected"), [
-    ("输入article.truncated为true，正文已截断。", "输入新闻正文是否截断为是，正文已截断。"),
-    ("输入article.truncated为false，正文未截断。", "输入新闻正文是否截断为否，正文未截断。"),
-])
-def test_nested_news_metadata_is_normalized_locally(text, expected):
-    assert check(text, article_status="available", article={"status": "available", "text": "已取得新闻节选。", "truncated": True, "source_url": "https://example.com/news", "fetched_at": "2026-10-11T00:00:00Z"})["uncertainty_notes"] == [expected]
+_TRUNCATED_ARTICLE = {"status": "available", "text": "已取得新闻节选。", "truncated": True, "source_url": "https://example.com/news", "fetched_at": "2026-10-11T00:00:00Z"}
+
+
+def test_nested_news_metadata_is_normalized_locally():
+    result = check("输入article.truncated显示正文已截断。", article_status="available", article=_TRUNCATED_ARTICLE)
+    assert result["uncertainty_notes"] == ["输入新闻正文是否截断显示正文已截断。"]
+
+
+@pytest.mark.parametrize("text", ["输入article.truncated为true，正文已截断。", "输入article.truncated为false，正文未截断。"])
+def test_raw_true_and_false_are_not_translated_into_chinese(text):
+    with pytest.raises(ValueError, match="english_prose_not_allowed"):
+        check(text, article_status="available", article=_TRUNCATED_ARTICLE)

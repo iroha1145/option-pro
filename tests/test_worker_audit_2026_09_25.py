@@ -1232,11 +1232,13 @@ def test_retention_prunes_scheduled_ai_history_with_the_news_window(
     calls: list[tuple[int, object]] = []
 
     class Backup:
+        databases: dict[str, Path] = {}
+
         async def __call__(self) -> TaskResult:
             return TaskResult(status="idle", details={"backed_up": ["ai-jobs"], "failed": []})
 
     class AIRepository:
-        def prune_scheduled_history(self, *, retain_days: int, now=None) -> int:
+        def prune_scheduled_history(self, *, retain_days: int, now=None, protected_job_ids=()) -> int:
             calls.append((retain_days, now))
             return 5
 

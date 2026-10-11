@@ -76,6 +76,11 @@ RECOVERABLE_FAILURE_CODES = frozenset(
     }
 )
 _SCHEDULED_HISTORY_JOB_TYPES = ("news_impact", "market_focus")
+# Completed earnings analyses, and failed ones holding a paid receipt, stay about
+# one reporting quarter. The stock page banner and the earnings cards read the
+# newest completed analysis; deleting it brings back "not generated" and invites
+# a paid re-run.
+EARNINGS_ANALYSIS_RETENTION_DAYS = 120
 _TERMINAL = {
     "completed",
     "failed",
@@ -1717,16 +1722,27 @@ class AIJobRepository:
     def prune_earnings_retention(
         self,
         *,
+        retention_days: int,
         now: datetime | None = None,
-        retention_days: int = 10,
     ) -> int:
-        """Delete terminal earnings inputs and outputs strictly before cutoff."""
+        """Delete settled earnings jobs strictly before their cutoff.
+
+        Completed analyses and failed jobs holding a paid receipt keep
+        ``EARNINGS_ANALYSIS_RETENTION_DAYS``; other settled rows follow
+        ``retention_days``. A job whose report date has not passed is kept
+        whatever its status, or the scheduler would buy it again.
+        """
 
         if isinstance(retention_days, bool) or retention_days < 1:
             raise ValueError("invalid_earnings_retention_days")
         self.ensure_initialized()
         observed = (now or _utcnow()).astimezone(timezone.utc)
-        cutoff = _iso(observed - timedelta(days=retention_days))
+        parameters = (
+            _iso(observed - timedelta(days=EARNINGS_ANALYSIS_RETENTION_DAYS)),
+            _iso(observed - timedelta(days=retention_days)),
+            # US market dates trail UTC by up to a day.
+            (observed - timedelta(days=1)).date().isoformat(),
+        )
         deleted = 0
         while True:
             with self._connect() as connection:
@@ -1740,9 +1756,13 @@ class AIJobRepository:
                                'completed','failed','cancelled',
                                'insufficient_context','budget_blocked'
                              )
-                             AND COALESCE(completed_at,updated_at,created_at)<?
+                             AND COALESCE(completed_at,updated_at,created_at)<CASE
+                               WHEN status='completed'
+                                 OR (status='failed' AND provider_result_json IS NOT NULL)
+                               THEN ? ELSE ? END
+                             AND COALESCE(json_extract(payload_json,'$.earnings_date'),'')<?
                            LIMIT 500""",
-                        (cutoff,),
+                        parameters,
                     ).fetchall()
                 ]
                 if not expired_ids:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from fastapi import FastAPI, HTTPException
@@ -15,7 +15,11 @@ from app.access import request_owner_access_context
 from app.api import ai, earnings
 from app.services.ai_jobs import runtime
 from app.services.ai_jobs.models import normalize_earnings_analysis_payload
-from app.services.ai_jobs.repository import AIJobRepository
+from app.services.ai_jobs import repository as repo_mod
+from app.services.ai_jobs.repository import (
+    EARNINGS_ANALYSIS_RETENTION_DAYS,
+    AIJobRepository,
+)
 from app.worker.tasks import EarningsAnalysisTask
 
 
@@ -344,23 +348,43 @@ def test_final_failure_does_not_lock_and_exact_retry_is_allowed(tmp_path) -> Non
     assert retry["retry_of_job_id"] == first["job_id"]
 
 
+def _stamp(value: datetime) -> str:
+    return value.isoformat().replace("+00:00", "Z")
+
+
+def _set_times(repository: AIJobRepository, job_id: str, at: datetime) -> None:
+    with repository._connect() as connection:
+        connection.execute(
+            """UPDATE ai_jobs SET completed_at=?,updated_at=?,created_at=?
+               WHERE job_id=?""",
+            (_stamp(at), _stamp(at), _stamp(at), job_id),
+        )
+        connection.commit()
+
+
 def test_retention_deletes_only_strictly_older_terminal_rows_and_sources(
     tmp_path,
 ) -> None:
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     now = datetime(2026, 8, 22, 12, tzinfo=timezone.utc)
     cutoff = now - timedelta(days=10)
+    analysis_cutoff = now - timedelta(days=EARNINGS_ANALYSIS_RETENTION_DAYS)
 
     old, _ = _create(repository, _final_payload("AAPL"))
     claimed = repository.claim_due("old-final", 60)
     repository.complete(claimed["job_id"], "old-final", _result("AAPL"), {})
+    kept, _ = _create(repository, _final_payload("MSFT"))
+    claimed = repository.claim_due("kept-final", 60)
+    repository.complete(claimed["job_id"], "kept-final", _result("MSFT"), {})
 
-    exact_payload = normalize_earnings_analysis_payload(
-        {"ticker": "MSFT", "earnings_date": "2026-07-22"},
-        analysis_stage="pre_release",
-    )
-    exact, _ = _create(repository, exact_payload)
-    repository.request_cancel(exact["job_id"])
+    cancelled = {}
+    for ticker in ("AMZN", "GOOGL"):
+        payload = normalize_earnings_analysis_payload(
+            {"ticker": ticker, "earnings_date": "2026-07-22"},
+            analysis_stage="pre_release",
+        )
+        cancelled[ticker], _ = _create(repository, payload)
+        repository.request_cancel(cancelled[ticker]["job_id"])
 
     active_payload = normalize_earnings_analysis_payload(
         {"ticker": "NVDA", "earnings_date": "2026-07-22"},
@@ -368,30 +392,26 @@ def test_retention_deletes_only_strictly_older_terminal_rows_and_sources(
     )
     active, _ = _create(repository, active_payload)
 
-    old_stamp = (cutoff - timedelta(microseconds=1)).isoformat().replace(
-        "+00:00", "Z"
-    )
-    exact_stamp = cutoff.isoformat().replace("+00:00", "Z")
+    just_past = timedelta(microseconds=1)
+    _set_times(repository, old["job_id"], analysis_cutoff - just_past)
+    _set_times(repository, kept["job_id"], cutoff - just_past)
+    _set_times(repository, cancelled["AMZN"]["job_id"], cutoff - just_past)
+    _set_times(repository, cancelled["GOOGL"]["job_id"], cutoff)
     with repository._connect() as connection:
         connection.execute(
-            """UPDATE ai_jobs SET completed_at=?,updated_at=?,created_at=?
+            """UPDATE ai_jobs SET completed_at=NULL,updated_at=?,created_at=?
                WHERE job_id=?""",
-            (old_stamp, old_stamp, old_stamp, old["job_id"]),
-        )
-        connection.execute(
-            """UPDATE ai_jobs SET completed_at=?,updated_at=?,created_at=?
-               WHERE job_id=?""",
-            (exact_stamp, exact_stamp, exact_stamp, exact["job_id"]),
-        )
-        connection.execute(
-            """UPDATE ai_jobs SET updated_at=?,created_at=? WHERE job_id=?""",
-            (old_stamp, old_stamp, active["job_id"]),
+            (_stamp(analysis_cutoff), _stamp(analysis_cutoff), active["job_id"]),
         )
         connection.commit()
 
-    assert repository.prune_earnings_retention(now=now) == 1
+    # A completed analysis keeps its longer window; a resultless row follows
+    # [storage].retention_days. Both cutoffs are strict.
+    assert repository.prune_earnings_retention(retention_days=10, now=now) == 2
     assert repository.get_job(old["job_id"]) is None
-    assert repository.get_job(exact["job_id"]) is not None
+    assert repository.get_job(cancelled["AMZN"]["job_id"]) is None
+    assert repository.get_job(kept["job_id"]) is not None
+    assert repository.get_job(cancelled["GOOGL"]["job_id"]) is not None
     assert repository.get_job(active["job_id"]) is not None
     with repository._connect() as connection:
         assert connection.execute(
@@ -402,6 +422,154 @@ def test_retention_deletes_only_strictly_older_terminal_rows_and_sources(
             "SELECT 1 FROM ai_earnings_final_locks WHERE job_id=?",
             (old["job_id"],),
         ).fetchone() is None
+
+
+def test_lookahead_beyond_retention_does_not_buy_the_analysis_again(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A 14-day lookahead outlives [storage].retention_days.
+
+    The preliminary analysis is eleven days old when the report is three days
+    out. Pruning it at ten days made the scheduler pay for it a second time.
+    """
+
+    clock = {"now": datetime(2026, 7, 1, 13, tzinfo=timezone.utc)}
+    start = clock["now"]
+    monkeypatch.setattr(repo_mod, "_utcnow", lambda: clock["now"])
+    monkeypatch.setattr(
+        runtime,
+        "capability_status",
+        lambda _settings: {"supported": True, "status": "supported"},
+    )
+    report_date = date(2026, 7, 15)
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+
+    async def builder(today):
+        return {
+            "data_limited": False,
+            "source_status": "active",
+            "earnings": [
+                {
+                    "ticker": "AAPL",
+                    "name": "Apple",
+                    "earnings_date": report_date.isoformat(),
+                    "days_until": (report_date - today).days,
+                    "eps_estimate": 1.4,
+                }
+            ],
+        }
+
+    task = EarningsAnalysisTask(
+        "lookahead-14",
+        settings=_settings(repository.path),
+        repository=repository,
+        builder=builder,
+        runtime_settings_reader=lambda: SimpleNamespace(
+            ai=SimpleNamespace(manual_analysis_enabled=True),
+            earnings=SimpleNamespace(
+                scheduled_analysis_enabled=True,
+                lookahead_days=14,
+            ),
+        ),
+        today=lambda: clock["now"].date(),
+        now=lambda: clock["now"],
+    )
+
+    assert asyncio.run(task()).details["queued"] == 1
+    claimed = repository.claim_due("lookahead-worker", 60)
+    repository.complete(claimed["job_id"], "lookahead-worker", _result("AAPL"), {})
+
+    for days in (11, 14):
+        clock["now"] = start + timedelta(days=days)
+        later = asyncio.run(task())
+        assert later.details["queued"] == 0
+        assert later.details["existing"] == 1
+    with repository._connect() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM ai_jobs").fetchone()[0] == 1
+
+
+def test_newest_completed_analysis_is_still_readable_at_day_thirty(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = {"now": datetime(2026, 7, 24, 13, tzinfo=timezone.utc)}
+    start = clock["now"]
+    monkeypatch.setattr(repo_mod, "_utcnow", lambda: clock["now"])
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    payload = _final_payload("AAPL")
+    completed, _ = _create(repository, payload)
+    claimed = repository.claim_due("final-worker", 60)
+    repository.complete(claimed["job_id"], "final-worker", _result("AAPL"), {})
+
+    failed = {}
+    for ticker in ("MSFT", "NVDA"):
+        failed[ticker], _ = _create(repository, _final_payload(ticker))
+    with repository._connect() as connection:
+        connection.execute(
+            """UPDATE ai_jobs SET status='failed',error_code='schema_validation_failed',
+                      completed_at=?,provider_result_json='{"content":[]}'
+               WHERE job_id=?""",
+            (_stamp(start), failed["MSFT"]["job_id"]),
+        )
+        connection.execute(
+            """UPDATE ai_jobs SET status='failed',error_code='provider_failed',completed_at=?
+               WHERE job_id=?""",
+            (_stamp(start), failed["NVDA"]["job_id"]),
+        )
+        connection.commit()
+
+    clock["now"] = start + timedelta(days=30)
+    # Only the failure without a paid receipt goes after ten days.
+    assert repository.prune_earnings_retention(retention_days=10, now=clock["now"]) == 1
+    assert repository.get_job(failed["NVDA"]["job_id"]) is None
+    assert repository.get_job(failed["MSFT"]["job_id"]) is not None
+    # The stock page banner and the report card both still find it.
+    banner = repository.latest_completed("earnings_impact", "AAPL", report_id=payload["report_id"])
+    card = repository.latest_for_report(
+        "AAPL", payload["report_id"], status="completed", now=clock["now"],
+    )
+    assert banner is not None and banner["job_id"] == completed["job_id"]
+    assert card is not None and card["job_id"] == completed["job_id"]
+
+    clock["now"] = start + timedelta(days=EARNINGS_ANALYSIS_RETENTION_DAYS, seconds=1)
+    assert repository.prune_earnings_retention(retention_days=10, now=clock["now"]) == 2
+    assert repository.get_job(completed["job_id"]) is None
+
+
+def test_job_for_an_upcoming_report_is_never_pruned(tmp_path) -> None:
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    now = datetime(2026, 8, 22, 12, tzinfo=timezone.utc)
+    jobs = {}
+    for ticker, report_date in (
+        ("AAPL", "2026-08-29"),
+        ("MSFT", "2026-08-22"),
+        # US market dates trail UTC, so yesterday in UTC still counts as today.
+        ("NVDA", "2026-08-21"),
+        ("AMZN", "2026-08-20"),
+    ):
+        payload = normalize_earnings_analysis_payload(
+            {"ticker": ticker, "earnings_date": report_date},
+            analysis_stage="pre_release",
+        )
+        jobs[ticker], _ = _create(repository, payload)
+    with repository._connect() as connection:
+        connection.execute(
+            "UPDATE ai_jobs SET status='completed' WHERE job_id=?",
+            (jobs["AAPL"]["job_id"],),
+        )
+        connection.execute(
+            "UPDATE ai_jobs SET status='cancelled' WHERE job_id!=?",
+            (jobs["AAPL"]["job_id"],),
+        )
+        connection.commit()
+    for job in jobs.values():
+        _set_times(repository, job["job_id"], now - timedelta(days=200))
+
+    assert repository.prune_earnings_retention(retention_days=10, now=now) == 1
+    assert repository.get_job(jobs["AMZN"]["job_id"]) is None
+    for ticker in ("AAPL", "MSFT", "NVDA"):
+        assert repository.get_job(jobs[ticker]["job_id"]) is not None, ticker
 
 
 def test_report_action_uses_server_snapshot_and_hides_job_capabilities(

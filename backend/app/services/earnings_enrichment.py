@@ -34,8 +34,7 @@ from app.services.quote_quality import quality_mid
 _SYMBOL_RE = re.compile(r"^[A-Z][A-Z0-9.-]{0,11}$")
 
 MARKET_CAP_CACHE_FILENAME = "earnings-market-caps-v1.json"
-# fmp_profile is a historical saved value, never produced by the current worker.
-_MARKET_CAP_SOURCES = ("yahoo_info", "fmp_profile", "massive_reference")
+_MARKET_CAP_SOURCES = ("yahoo_info", "massive_reference")
 _MASSIVE_DETAIL_BUDGET = 40
 
 REPORT_PERIOD_CACHE_FILENAME = "earnings-report-periods-v1.json"

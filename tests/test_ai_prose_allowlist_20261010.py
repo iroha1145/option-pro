@@ -6,7 +6,7 @@ fragment ``'a'``), and ``HMO`` and ``D部分`` (Medicare Part D) in one summary.
 The recovery dry run over failed jobs since 10-03 showed the same long tail:
 single letters, CNBC, MHz, III, SUV, REIT, ESG, FCC, NBC and LSEG.
 
-The v5 update retains these examples while dropping prose ticker inference.
+The 2026-10-11 policy keeps these examples while dropping prose ticker inference.
 Whole-text language checks and explicit numeric code labels remain checked.
 """
 
