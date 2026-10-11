@@ -594,7 +594,7 @@ def test_claude_schema_identity_tracks_json_protocol_without_changing_openai(mon
     monkeypatch.setattr(runtime.json, "dumps", capture)
     runtime.schema_identity("earnings_impact", model="claude-haiku-5-5")
     runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
-    assert identities[0]["claude_features"]["contract"] == "haiku-native-tools-prompt-json-v3"
+    assert identities[0]["claude_features"]["contract"] == "claude-earnings-conversation-last-json-container-v1"
     assert "claude_features" not in identities[1]
 
 

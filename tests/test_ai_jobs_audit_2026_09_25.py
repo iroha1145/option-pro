@@ -1275,7 +1275,7 @@ def test_earnings_impact_still_needs_one_company_besides_itself():
 def test_earnings_contract_change_moves_the_schema_identity():
     schema_name, digest = runtime.schema_identity("earnings_impact", model="gpt-5.6-terra")
     schema = json.loads(runtime._validation_schema_json("earnings_impact"))
-    instructions = runtime.build_runtime_request("earnings_impact", {}).instructions
+    instructions = runtime.build_runtime_request("earnings_impact", {}, model="gpt-5.6-terra").instructions
 
     assert schema_name == "earnings_impact_zh_cn_v5"
     assert digest != "65c6fcf4ec95e4fff55b5767f43a1a593492edcc05366c9da42161f0390a5f5b"
@@ -1734,7 +1734,7 @@ def test_schema_checksums_are_pinned_to_their_versions():
         ),
     }
     assert observed == {
-        "ai-jobs-v5": "2f06c215736fe635b8d29792bbb4eacd0c875a80a2357434bd4372893fb9ef74",
+        "ai-jobs-v6": "da5c8079317c409f65f27cdff0b93d844c60c55e8d3cfb755a968488e912cdb8",
         "ai-job-sources-v1": (
             "1dc4fa74c9dfdad32936cd896d2422d18d771700b52d4779144bdfa2ac843feb"
         ),

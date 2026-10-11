@@ -1,4 +1,5 @@
 import { deferred } from './helpers/deferred.mjs';
+import * as aiModelLabels from '../src/lib/aiModelLabel.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -103,6 +104,7 @@ function mountCard(t, h, confirmation, ticker = 'NVDA') {
     '@/api/modules/earnings': { earningsApi: { reportAnalysis: async () => { reads++; return report; } } },
     '@/hooks/useAccess': { useAccess: h.access }, '@/hooks/useToast': { useToast: () => toast },
     '@/hooks/useShell': { useShell: () => shell }, '@/lib/utils': { cn: (...xs) => xs.join(' ') },
+    '@/lib/aiModelLabel': aiModelLabels,
     './types': { exNum: () => null },
   };
   for (const name of ['@/components/shared/AnalysisIcon', '@/components/shared/SoftBadge', '@/components/icons', '@/components/shared/SourceNote', './PulseDot']) {
@@ -110,7 +112,7 @@ function mountCard(t, h, confirmation, ticker = 'NVDA') {
   }
   imports['@/components/shared/Skeleton'] = { SkeletonText: 'SkeletonText' };
   const Card = compile('components/earnings/ImpactCard.tsx', imports, h.env).default;
-  const props = { ticker, row: ticker ? { date: '2026-09-14' } : null, calendarRevision: 1, onAnalyzed: noop };
+  const props = { ticker, analysisEligible: ticker !== null, row: ticker ? { date: '2026-09-14' } : null, calendarRevision: 1, onAnalyzed: noop };
   const read = runner.mount(() => Card(props));
   t.after(() => runner.unmount());
   return { read, rerender: runner.rerender, reads: () => reads };

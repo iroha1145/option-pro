@@ -445,6 +445,9 @@ class EarningsAnalysisTask:
             normalize_earnings_analysis_payload,
         )
         from app.services.runtime_settings import RuntimeSettingsStorageError
+        from app.services.earnings_analysis_scope import (
+            is_featured_company, owner_watchlist_tickers,
+        )
 
         try:
             effective = await self._effective_settings()
@@ -522,9 +525,16 @@ class EarningsAnalysisTask:
             else []
         )
         lookahead_days = int(effective.earnings.lookahead_days)
+        personal_tickers = await _call_local(owner_watchlist_tickers)
         eligible: list[dict[str, Any]] = []
+        skipped_nonfeatured = 0
         for value in rows:
             if not isinstance(value, Mapping):
+                continue
+            if not is_featured_company(
+                value, personal_tickers=personal_tickers, personal_config=self._personal_config,
+            ):
+                skipped_nonfeatured += 1
                 continue
             try:
                 days_until = int(value.get("days_until"))
@@ -707,6 +717,7 @@ class EarningsAnalysisTask:
                         else ai_runtime.EARNINGS_PRE_RELEASE_PRIORITY
                     ),
                     force_retry=retry_failed_report,
+                    earnings_featured_verified=True,
                 )
             except RuntimeError as exc:
                 if str(exc) == "ai_job_queue_full":
@@ -738,6 +749,7 @@ class EarningsAnalysisTask:
             "queued": queued,
             "existing": existing,
             "invalid": invalid,
+            "skipped_nonfeatured": skipped_nonfeatured,
             "skipped_final_pre_release_active": skipped_final_pre_release_active,
             "pre_release_active_limit": (
                 ai_runtime.EARNINGS_PRE_RELEASE_ACTIVE_LIMIT

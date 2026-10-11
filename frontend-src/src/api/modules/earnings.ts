@@ -19,6 +19,8 @@ export interface EarningsImpactItem {
 
 export interface EarningsImpactResult {
   outputLanguage: 'zh-CN';
+  model?: string;
+  reasoning?: string;
   ticker: string;
   summary: string;
   expectation: string;
@@ -210,12 +212,17 @@ export function normalizeEarningsReportAnalysis(body: unknown): EarningsReportAn
   ) === true;
   const reportId = pickS(row, 'reportId', 'report_id', '_report_id');
   const reportDate = pickS(row, 'reportDate', 'report_date', '_report_date');
+  // 模型与思考强度属于任务信封，不在 result 里；只在有结果时挂到 result 上展示。
+  const model = pickS(row, 'model');
+  const reasoning = pickS(row, 'reasoning');
   const rawResult = asRec(row.result);
   let result: EarningsImpactResult | null = null;
   if (Object.keys(rawResult).length > 0) {
     const normalized = normalizeLiveEarningsImpact(rawResult);
     result = {
       ...normalized,
+      ...(model ? { model } : {}),
+      ...(reasoning ? { reasoning } : {}),
       ...(analysisStage ? { analysisStage } : {}),
       ...(locked ? { locked: true } : {}),
       ...(final ? { final: true } : {}),

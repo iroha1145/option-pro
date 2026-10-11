@@ -173,9 +173,12 @@ def test_final_requires_comparable_actual_and_estimate() -> None:
 
 
 def test_post_release_prompt_requires_actual_vs_estimate_comparison() -> None:
+    # The OpenAI rollback prompt; Claude's stage-independent earnings prompt
+    # is covered in test_earnings_claude_runtime.py.
     prepared = runtime.build_runtime_request(
         "earnings_impact",
         _final_payload(),
+        model=runtime.OFFICIAL_OPENAI_MODEL,
     )
     assert "逐项比较输入中的actual与estimate" in prepared.instructions
     assert "不得继续使用“假设超预期”" in prepared.instructions
@@ -733,6 +736,7 @@ def test_queue_reserves_are_tiered_and_keep_a_hard_total_cap(
             "earnings": [
                 {
                     "ticker": "PRE",
+                    "public_featured": True,
                     "name": "Pre release",
                     "earnings_date": "2026-07-25",
                     "days_until": 1,
@@ -760,6 +764,7 @@ def test_queue_reserves_are_tiered_and_keep_a_hard_total_cap(
         payload = normalize_earnings_analysis_payload(
             {
                 "ticker": f"M{index:03d}",
+                "market_cap": 20_000_000_000,
                 "earnings_date": "2026-07-23",
                 "eps_estimate": 1.0,
                 "eps_actual": 1.1,
@@ -781,6 +786,7 @@ def test_queue_reserves_are_tiered_and_keep_a_hard_total_cap(
     overflow_payload = normalize_earnings_analysis_payload(
         {
             "ticker": "M999",
+            "market_cap": 20_000_000_000,
             "earnings_date": "2026-07-23",
             "eps_estimate": 1.0,
             "eps_actual": 1.1,
@@ -803,6 +809,7 @@ def test_queue_reserves_are_tiered_and_keep_a_hard_total_cap(
             "earnings": [
                 {
                     "ticker": f"F{index:03d}",
+                    "public_featured": True,
                     "name": f"Final {index}",
                     "earnings_date": "2026-07-23",
                     "days_until": -1,
@@ -882,6 +889,7 @@ def test_saturated_base_queue_processes_same_day_final_before_pre_release(
             "earnings": [
                 {
                     "ticker": "AAA",
+                    "public_featured": True,
                     "name": "Unreleased first alphabetically",
                     "earnings_date": "2026-07-24",
                     "days_until": 0,
@@ -889,6 +897,7 @@ def test_saturated_base_queue_processes_same_day_final_before_pre_release(
                 },
                 {
                     "ticker": "ZZZ",
+                    "public_featured": True,
                     "name": "Released final",
                     "earnings_date": "2026-07-24",
                     "days_until": 0,

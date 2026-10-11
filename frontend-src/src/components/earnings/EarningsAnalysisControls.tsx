@@ -135,7 +135,7 @@ export default function EarningsAnalysisControls({
       });
       setDoc(next);
       setError(null);
-      toast.success(nextEnabled ? t('每日自动分析已开启') : t('每日自动分析已关闭'), t('自动分析未来 5 天内的财报'));
+      toast.success(nextEnabled ? t('每日自动分析已开启') : t('每日自动分析已关闭'), t('自动分析未来 5 天内重点公司的财报'));
     } catch (cause) {
       if (cause instanceof ApiError && cause.code === 409) {
         toast.error(t('设置已更新，请重试'), t('已重新读取最新设置'));
@@ -245,7 +245,7 @@ export default function EarningsAnalysisControls({
                   </SoftBadge>
                 </div>
                 <p className="mt-1 text-micro leading-5 text-ink-400">
-                  {t('为未来 5 天内的财报安排分析，同一份财报不会重复安排。')}
+                  {t('为未来 5 天内重点公司的财报安排分析，同一份财报不会重复安排。')}
                 </p>
               </div>
             </div>
@@ -273,7 +273,7 @@ export default function EarningsAnalysisControls({
                 type="button"
                 onClick={() => void runNow()}
                 disabled={!taskReady || running}
-                title={!taskReady ? t('财报分析服务暂不可用') : t('分析未来 5 天内尚未安排分析的财报')}
+                title={!taskReady ? t('财报分析服务暂不可用') : t('分析未来 5 天内重点公司尚未安排分析的财报')}
                 aria-busy={running}
                 className="btn-ai"
               >
