@@ -6,6 +6,9 @@ import * as fx2 from '@/mocks/fixtures2';
 import type { EarningsItem } from '../types';
 import { t } from '../../i18n/core.ts';
 
+/** 首页「财报临近」显示的行数：请求的 limit 与页面截取共用。 */
+export const HOME_EARNINGS_ROWS = 6;
+
 export type EarningsImpactRelation = 'competitor' | 'supplier' | 'customer' | 'etf' | 'opposing';
 export type EarningsImpactDirection = 'bullish' | 'bearish' | 'mixed';
 
@@ -309,6 +312,24 @@ export const earningsApi = {
         refreshRetryAfterSeconds: null,
       }),
       () => registryGet('/earnings/upcoming').then(mapUpcomingPayload),
+    ),
+  /**
+   * 首页「财报临近」：服务器按首页口径排好、截短的几行（规则见
+   * components/earnings/types.ts 的 selectHomeEarnings），顶层元数据与 upcoming()
+   * 相同；首页不再为 6 行下载整份日历。
+   */
+  homeHighlights: (): Promise<EarningsCalendarResult> =>
+    mockOr(
+      () => ({
+        items: fx2.getHomeEarningsHighlights(HOME_EARNINGS_ROWS),
+        dataLimited: false,
+        sourceStatus: 'active',
+        providers: [t('本地演示数据')],
+        asOf: new Date().toISOString(),
+        refreshStatus: null,
+        refreshRetryAfterSeconds: null,
+      }),
+      () => registryGet(`/earnings/upcoming/highlights?limit=${HOME_EARNINGS_ROWS}`).then(mapUpcomingPayload),
     ),
   refresh: (): Promise<EarningsCalendarResult> =>
     // 契约：owner+SO → {earnings:[...], refresh_status∈refreshed|cooldown|failed_stale}

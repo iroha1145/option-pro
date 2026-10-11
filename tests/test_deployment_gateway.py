@@ -1026,6 +1026,9 @@ def test_production_validation_errors_never_echo_submitted_password() -> None:
         ("GET", "/api/options/NVDA/chain", True),
         ("GET", "/api/options/NVDA/expirations", True),
         ("GET", "/api/earnings/upcoming", True),
+        ("GET", "/api/earnings/upcoming/highlights", True),
+        ("POST", "/api/earnings/upcoming/highlights", False),
+        ("GET", "/api/earnings/upcoming/highlights/extra", False),
         ("GET", "/api/sectors/technology/iv-ranking", True),
         ("GET", "/api/market/status", True),
         # 首页研判：读最新一份与历史对访客开放，状态与手动补发只给 Owner。
@@ -1170,6 +1173,7 @@ def test_public_catalyst_reads_do_not_consume_the_provider_work_budget(
         ("GET", "/api/strength/scan", True),
         ("GET", "/api/breakouts/tickers/AAOI", True),
         ("GET", "/api/earnings/upcoming", True),
+        ("GET", "/api/earnings/upcoming/highlights", True),
         ("GET", "/api/signals/market", True),
         ("GET", "/api/catalysts/feed", True),
         ("GET", "/api/catalysts/updates", True),

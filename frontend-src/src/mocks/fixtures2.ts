@@ -4,6 +4,8 @@ import { ApiError } from '@/api/client';
 import { Rng, round2, round4 } from './rng';
 import { NEWS_SOURCES, NEWS_TEMPLATES, SECTORS, TICKER_POOL } from './data';
 import { SIGNAL_LABELS, getMarketStatus, getStockChartEx, getStockDetail } from './fixtures';
+import { etToday, selectHomeEarnings } from '@/components/earnings/types';
+import { DEFAULT_WATCHLIST_TICKERS } from '@/lib/personalWatchlist';
 import type {
   AiJob,
   BreakoutEvent,
@@ -716,6 +718,11 @@ export function getEarningsUpcoming(): EarningsItemEx[] {
 
 export function refreshEarningsUpcoming(): EarningsItem[] {
   return getEarningsUpcoming();
+}
+
+/** 首页「财报临近」：演示 GET /earnings/upcoming/highlights（纽约日、默认关注池，规则同后端）。 */
+export function getHomeEarningsHighlights(limit: number): EarningsItemEx[] {
+  return selectHomeEarnings(getEarningsUpcoming(), etToday(), new Set(DEFAULT_WATCHLIST_TICKERS), limit);
 }
 
 /** 连锁反应关系图谱（真实风格供应链叙事） */

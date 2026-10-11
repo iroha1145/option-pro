@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+from collections import OrderedDict
 from datetime import date, datetime, timedelta
 import math
 import sqlite3
 import re
 import time
-from typing import Any, Mapping
+from typing import Any, Mapping, NamedTuple
 from zoneinfo import ZoneInfo
 
 import httpx
 import yfinance as yf
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.access import (
     current_request_is_owner,
@@ -59,6 +60,7 @@ EARNINGS_TICKERS = [
 from app.services import earnings_enrichment
 from app.services.http_read_cache import respond_with_snapshot, snapshot_version_key
 from app.services.utils import sanitize as _sanitize
+from app.services.watchlist_scope import DEFAULT_WATCHLIST_TICKERS
 
 MARKET_TZ = ZoneInfo("America/New_York")
 MAX_EARNINGS_LOOKAHEAD_DAYS = 180
@@ -776,38 +778,49 @@ def _expected_move_for_report(
         return {"expected_move_status": "unavailable:provider_error"}
 
 
-@router.get("/upcoming")
-async def upcoming_earnings(request: Request):
-    """Serve the published earnings snapshot with conditional-GET support.
+_UPCOMING_CACHE_CONTROL = "private, max-age=60, stale-while-revalidate=600"
 
-    The worker owns publication; ordinary GETs (owner included) never start a
-    provider scan in password mode — POST /upcoming/refresh is the explicit
-    rebuild. The 4MB body is served from the serialized-bytes cache with a
-    strong ETag, so a repeat visit costs a 304 instead of a re-encode.
+
+class _UpcomingSource(NamedTuple):
+    payload: Any
+    # None when the bytes have no stable version (a fresh build, or no as_of).
+    version_key: str | None
+    # The New York date the calendar is for: its cache key / snapshot date.
+    market_date: date
+    # True when this request built the calendar (private_network owner miss).
+    built: bool
+
+
+async def _upcoming_source() -> _UpcomingSource:
+    """Pick the calendar an ordinary GET may serve to the current principal.
+
+    /upcoming and /upcoming/highlights both read through here, so they cannot
+    disagree on who sees what or how fresh it is. The worker owns publication;
+    ordinary GETs (owner included) never start a provider scan in password
+    mode — POST /upcoming/refresh is the explicit rebuild.
     """
     today = _market_today()
     key = f"earnings:upcoming:{today.isoformat()}"
-    owner = current_request_is_owner()
-    cache_control = "private, max-age=60, stale-while-revalidate=600"
-    if not owner:
+    if not current_request_is_owner():
         # Snapshot-only, and deliberately off the owner's process-cache key:
         # a visitor must never observe the owner's live rebuild before the
         # worker publishes it (identity is part of every cache scope).
         now = time.time()
+        parameters = public_home_resource_parameters("earnings", now=now)
         payload = await read_public_home_resource_async(
             "earnings",
-            parameters=public_home_resource_parameters("earnings", now=now),
+            parameters=parameters,
             now=now,
         )
         if payload is None:
             raise public_snapshot_unavailable(key)
-        return await respond_with_snapshot(
-            request,
+        return _UpcomingSource(
             payload,
-            version_key=snapshot_version_key(
+            snapshot_version_key(
                 "earnings", "public", payload.get("snapshot_saved_at")
             ),
-            cache_control=cache_control,
+            date.fromisoformat(parameters["market_date"]),
+            False,
         )
     config = get_personal_config()
     if config.access.mode == "password":
@@ -817,46 +830,192 @@ async def upcoming_earnings(request: Request):
         # （审计 P2-04）。序列化成本由字节缓存按 saved_at 版本键承担。
         now = time.time()
         interval = float(config.public_home.earnings_seconds)
+        parameters = public_home_resource_parameters("earnings", now=now)
         disk_entry = await read_owner_public_home_entry_async(
             "earnings",
-            parameters=public_home_resource_parameters("earnings", now=now),
+            parameters=parameters,
             fresh_for_seconds=interval,
             now=now,
         )
-        if disk_entry is not None:
-            return await respond_with_snapshot(
-                request,
-                disk_entry["payload"],
-                version_key=snapshot_version_key(
-                    "earnings",
-                    "owner",
-                    disk_entry["saved_at"],
-                    bool(disk_entry["fresh"]),
-                ),
-                cache_control=cache_control,
-            )
-        # No published snapshot at all: stay honest and unavailable instead
-        # of letting an ordinary page read trigger a ~67-ticker provider scan.
-        raise public_snapshot_unavailable(key)
+        if disk_entry is None:
+            # No published snapshot at all: stay honest and unavailable instead
+            # of letting an ordinary page read trigger a ~67-ticker provider scan.
+            raise public_snapshot_unavailable(key)
+        return _UpcomingSource(
+            disk_entry["payload"],
+            snapshot_version_key(
+                "earnings",
+                "owner",
+                disk_entry["saved_at"],
+                bool(disk_entry["fresh"]),
+            ),
+            date.fromisoformat(parameters["market_date"]),
+            False,
+        )
     cached = cache.get(key)
     if cached is not None:
         # private_network 现算路径的进程缓存命中。基础 payload 不含请求域
         # 字段，as_of 每次构建唯一，(key, as_of) 稳定决定字节（审计 P2-01）。
         stamp = cached.get("as_of") if isinstance(cached, dict) else None
-        return await respond_with_snapshot(
-            request,
+        return _UpcomingSource(
             cached,
-            version_key=(
+            (
                 snapshot_version_key("earnings", "owner-live", key, stamp)
                 if stamp
                 else None
             ),
-            cache_control=cache_control,
+            today,
+            False,
         )
-    return await cache.get_or_set(
+    payload = await cache.get_or_set(
         key,
         3600,
         lambda: _build_upcoming_earnings(today),
+    )
+    return _UpcomingSource(payload, None, today, True)
+
+
+@router.get("/upcoming")
+async def upcoming_earnings(request: Request):
+    """Serve the published earnings snapshot with conditional-GET support.
+
+    The 4MB body is served from the serialized-bytes cache with a strong ETag,
+    so a repeat visit costs a 304 instead of a re-encode.
+    """
+    source = await _upcoming_source()
+    if source.built:
+        return source.payload
+    return await respond_with_snapshot(
+        request,
+        source.payload,
+        version_key=source.version_key,
+        cache_control=_UPCOMING_CACHE_CONTROL,
+    )
+
+
+# 首页「财报临近」卡片只显示几行：由这里按首页口径截好，首页不必再下载整份
+# 日历（三千多家公司、约 4MB）再在浏览器里排序。
+HOME_HIGHLIGHT_DEFAULT_LIMIT = 6
+HOME_HIGHLIGHT_MAX_LIMIT = 20
+# 首页的关注池。首页的 poolTickers 来自不带 tickers 的 GET /api/stocks/watchlist，
+# 该接口对访客、登录客户和站长一律只投影这几只（stocks.watchlist →
+# scope_watchlist）；账号自选只进首页「关注动态」（useHomeMovers），不进财报卡。
+_HOME_HIGHLIGHT_POOL = frozenset(DEFAULT_WATCHLIST_TICKERS)
+_HOME_HIGHLIGHT_MEMO_SIZE = 8
+_home_highlight_memo: OrderedDict[str, dict[str, Any]] = OrderedDict()
+
+
+def _home_highlight_rows(
+    rows: list[Any],
+    *,
+    market_date: date,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Order the calendar the way the Home card used to in the browser.
+
+    Same rule Home.tsx applied to mapUpcoming's rows: drop rows without a
+    ticker or date and rows dated before ``market_date``; featured first
+    (``public_featured`` is true, or the ticker is in the starter pool), then
+    date ascending, then market cap descending with a missing or non-positive
+    cap last. Both sorts are stable, so ties keep the calendar's own order.
+
+    The first ``limit`` rows answer today. After them come the rows that
+    complete tomorrow's top ``limit``: the card re-filters by its own New York
+    date every minute, so a page left open past midnight drops today's rows
+    and still shows the rows the old full-list filter showed.
+    """
+    today = market_date.isoformat()
+    ranked: list[tuple[tuple[int, str, float], dict[str, Any]]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        ticker = row.get("ticker")
+        day = row.get("earnings_date")
+        if not (isinstance(ticker, str) and ticker and isinstance(day, str) and day):
+            continue
+        if day < today:
+            continue
+        cap = _to_optional_float(row.get("market_cap"))
+        featured = (
+            row.get("public_featured") is True
+            or ticker.upper() in _HOME_HIGHLIGHT_POOL
+        )
+        rank = -cap if cap is not None and cap > 0 else 1.0
+        ranked.append(((0 if featured else 1, day, rank), row))
+    ranked.sort(key=lambda item: item[0])
+    ordered = [row for _, row in ranked]
+    head = ordered[:limit]
+    tomorrow = (market_date + timedelta(days=1)).isoformat()
+    carried = sum(1 for row in head if row["earnings_date"] >= tomorrow)
+    tail = [row for row in ordered[limit:] if row["earnings_date"] >= tomorrow]
+    return head + tail[: limit - carried]
+
+
+def _home_highlights_payload(
+    payload: Mapping[str, Any],
+    *,
+    market_date: date,
+    limit: int,
+) -> dict[str, Any]:
+    rows = payload.get("earnings")
+    return {
+        **{key: value for key, value in payload.items() if key != "earnings"},
+        "earnings": _home_highlight_rows(
+            rows if isinstance(rows, list) else [],
+            market_date=market_date,
+            limit=limit,
+        ),
+        "market_date": market_date.isoformat(),
+        "limit": limit,
+    }
+
+
+@router.get("/upcoming/highlights")
+async def upcoming_earnings_highlights(
+    request: Request,
+    limit: int = Query(
+        HOME_HIGHLIGHT_DEFAULT_LIMIT,
+        ge=1,
+        le=HOME_HIGHLIGHT_MAX_LIMIT,
+    ),
+):
+    """Serve only the rows the Home card shows, cut from /upcoming's calendar.
+
+    Same source, cache key, access rules and Cache-Control as /upcoming (see
+    ``_upcoming_source``), so it adds no provider work and shows a visitor
+    nothing /upcoming would not. The body keeps /upcoming's top-level fields,
+    replaces ``earnings`` with ``_home_highlight_rows`` (at most 2 × limit
+    rows) and records the ``market_date`` and ``limit`` it was cut for.
+    """
+    source = await _upcoming_source()
+    version_key = (
+        snapshot_version_key(
+            "earnings-highlights",
+            source.version_key,
+            source.market_date.isoformat(),
+            limit,
+        )
+        if source.version_key is not None
+        else None
+    )
+    payload = (
+        _home_highlight_memo.get(version_key) if version_key is not None else None
+    )
+    if payload is None:
+        payload = _home_highlights_payload(
+            source.payload,
+            market_date=source.market_date,
+            limit=limit,
+        )
+        if version_key is not None:
+            _home_highlight_memo[version_key] = payload
+            while len(_home_highlight_memo) > _HOME_HIGHLIGHT_MEMO_SIZE:
+                _home_highlight_memo.popitem(last=False)
+    return await respond_with_snapshot(
+        request,
+        payload,
+        version_key=version_key,
+        cache_control=_UPCOMING_CACHE_CONTROL,
     )
 
 

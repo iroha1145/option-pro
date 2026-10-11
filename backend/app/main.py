@@ -292,6 +292,8 @@ _PUBLIC_READ_API_PATHS = {
     "/api/stocks/search",
     "/api/stocks/data/status",
     "/api/earnings/upcoming",
+    # 首页财报卡的几行：与 /upcoming 同一份快照、同一套访问规则，只是截短。
+    "/api/earnings/upcoming/highlights",
     "/api/sectors",
     "/api/market/indices",
     "/api/market/status",
