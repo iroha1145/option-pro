@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
+from functools import lru_cache
 import hashlib
 import ipaddress
 import json
@@ -308,6 +309,24 @@ def response_terminal_error(message: Message) -> str | None:
 
 
 def _public_source_url(value: Any) -> str | None:
+    """The public http(s) form of a source URL, or None when it has none.
+
+    A pure parse of the text, remembered for exact ``str`` inputs: hotspot
+    reads compare the same few hundred source URLs on every request. The
+    URLs are untrusted (model citations, fetched pages), so the memo is
+    bounded; anything that is not exactly a ``str`` is parsed each time.
+    """
+    if type(value) is str:
+        return _public_source_url_text(value)
+    return _parse_public_source_url(value)
+
+
+@lru_cache(maxsize=4096)
+def _public_source_url_text(value: str) -> str | None:
+    return _parse_public_source_url(value)
+
+
+def _parse_public_source_url(value: Any) -> str | None:
     if not isinstance(value, str) or len(value) > 2048 or any(ord(char) <= 32 for char in value):
         return None
     try:
