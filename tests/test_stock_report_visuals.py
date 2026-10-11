@@ -31,11 +31,24 @@ def test_reads_saved_prices_dates_and_independent_financial_periods():
     assert "999999" not in json.dumps(value)
 
 
-@pytest.mark.parametrize("currency", [None, "EUR", "JPY", "currency units"])
+@pytest.mark.parametrize("currency", [None, "", " ", 123, "EUR", "JPY", "currency units"])
 def test_unknown_or_non_dollar_currency_never_becomes_usd(currency):
     value = stock_report_visuals(saved({"price_history": {"currency": currency, "bars": [{"t": 1767225600, "c": 10}]}, "financials": {"currency": currency, "quarterly": [{"period_end": "2026-06-30", "revenue": 100}]}}))
     assert value["charts"] == []
     assert len(value["notes"]) == 3
+
+
+@pytest.mark.parametrize("currency", [None, "", " ", 123, "currency units"])
+def test_unconfirmed_currency_notes_do_not_assert_foreign_currency(currency):
+    value = stock_report_visuals(saved({
+        "price_history": {"currency": currency, "bars": [{"t": 1767225600, "c": 10}]},
+        "financials": {"currency": currency, "quarterly": [{"period_end": "2026-06-30", "revenue": 100}]},
+        "analyst_consensus": {"currency": currency, "targets": {"mean": 20}},
+    }))
+    assert value["charts"] == []
+    currency_notes = value["notes"][:-1]
+    assert len(currency_notes) == 3
+    assert all("未确认美元计价" in note and "非美元" not in note for note in currency_notes)
 
 
 def test_quote_currency_fallback_does_not_override_explicit_foreign_currency():

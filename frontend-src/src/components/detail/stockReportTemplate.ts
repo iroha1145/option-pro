@@ -139,7 +139,7 @@ function chartHtml(chart: StockReportChart): string {
       return `<div class="bar-row tone-${appearance.tone}${appearance.meaning ? ' has-meaning' : ''}"><span class="bar-label">${esc(row.label)}${appearance.meaning ? `<small>${esc(appearance.meaning)}</small>` : ''}</span><div class="track" aria-hidden="true"><i style="left:${Math.min(zero, end).toFixed(3)}%;width:${Math.abs(end - zero).toFixed(3)}%"></i></div><b>${esc(chartNumber(row.value))}</b></div>`;
     }).join('')}</div>`;
   }
-  return `<figure class="tone-${chartTone(chart)}"><figcaption><strong>${esc(chart.title)}</strong><span>${esc(evidenceTimeLabel(chart.caption))}</span></figcaption>${picture}${table}</figure>`;
+  return `<figure class="tone-${chartTone(chart)}"><figcaption><strong>${esc(chart.title)} · ${esc(unitLabel(chart.unit))}</strong><span>${esc(evidenceTimeLabel(chart.caption))}</span></figcaption>${picture}${table}</figure>`;
 }
 /** Old persisted reports remain readable; display their actual fields, without invented charts. */
 function legacyBody(result: unknown): string {

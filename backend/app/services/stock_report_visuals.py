@@ -157,7 +157,7 @@ def stock_report_visuals(row: dict) -> dict | None:
     if _usd(price_currency):
         add("price_history", "历史收盘价", "line", "usd", price_rows, _caption(prices, through=price_rows[-1]["label"] if price_rows else None, detail="逐日收盘价"))
     elif price_rows:
-        notes.append("历史行情非美元计价，未生成收盘价图表。")
+        notes.append("历史行情未确认美元计价，未生成收盘价图表。")
 
     financials = usable("financials")
     revenue_rows = []
@@ -172,7 +172,7 @@ def stock_report_visuals(row: dict) -> dict | None:
     if _usd(financials.get("currency")):
         add("quarterly_revenue", "季度收入", "bar", "usd", revenue_rows, _caption(income_meta, through=revenue_rows[-1]["label"] if revenue_rows else None, detail="财报期末数据"))
     elif revenue_rows:
-        notes.append("财务报表非美元计价，未生成季度收入图表。")
+        notes.append("财务报表未确认美元计价，未生成季度收入图表。")
 
     scores = _dict(payload.get("scores"))
     score_rows = []
@@ -194,7 +194,7 @@ def stock_report_visuals(row: dict) -> dict | None:
     if _usd(analyst.get("currency")):
         add("analyst_targets", "分析师目标价", "bar", "usd", target_rows, _caption(analyst, detail="机构综合目标价"))
     elif target_rows:
-        notes.append("分析师目标价非美元计价，未生成目标价图表。")
+        notes.append("分析师目标价未确认美元计价，未生成目标价图表。")
 
     earnings = usable("earnings_history")
     surprise_rows = []

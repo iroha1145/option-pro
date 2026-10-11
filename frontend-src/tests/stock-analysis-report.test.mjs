@@ -29,10 +29,21 @@ const visuals = () => ({ version: 'stock-report-visuals-v1', as_of: '2026-10-09T
 const html = (data) => data.html.join('');
 test('large chart labels fit narrow cards while the source table retains original amounts', () => {
   const data = visuals();
-  data.charts = [{ id: 'revenue', title: '收入', caption: '美元原值', kind: 'bar', unit: 'usd', rows: [{ label: '2026-06-30', value: 11536000000 }] }];
+  data.charts = [{ id: 'quarterly_revenue', title: '季度收入', caption: '来源：雅虎财经（Yahoo Finance）；资料截至：2026-06-30；财报期末数据', kind: 'bar', unit: 'usd', rows: [{ label: '2026-06-30', value: 11536000000 }] }];
   const content = html(report.createStockAnalysisReport(result(), data));
   assert.match(content, /<b>115\.36亿<\/b>/);
   assert.match(content, /<td>11,536,000,000<\/td>/);
+});
+test('chart units are visible in the heading without opening source details or relying on captions', () => {
+  for (const [id, unit, label] of [['quarterly_revenue', 'usd', '美元'], ['analyst_targets', 'usd', '美元'], ['daily_volume', 'shares', '股'], ['structure_scores', 'score', '分'], ['earnings_surprise', 'ratio', '比例']]) {
+    const data = visuals();
+    data.charts = [{ id, title: '图表', caption: '来源：已保存的市场数据；资料截至：2026-06-30', kind: 'bar', unit, rows: [{ label: '2026-06-30', value: 10 }] }];
+    const content = html(report.createStockAnalysisReport(result(), data));
+    const heading = content.match(/<figcaption>(.*?)<\/figcaption>/s)?.[1];
+    assert.ok(heading?.includes(`<strong>图表 · ${label}</strong>`), `${id} must show its unit outside collapsed details`);
+    assert.match(content, /<b>10<\/b>/);
+    assert.match(content, /<td>10<\/td>/);
+  }
 });
 test('source times show the New York instant without changing reporting dates or prose', () => {
   assert.equal(report.evidenceTimeLabel('财报期 2026-06-30'), '财报期 2026-06-30');
