@@ -18,7 +18,7 @@ import type { BreakoutSignal, EarningsItem, IndexQuote, MarketSession, Watchlist
 import { marketApi } from '@/api/modules/market';
 import { signalsApi } from '@/api/modules/signals';
 import { breakoutsApi } from '@/api/modules/breakouts';
-import { earningsApi } from '@/api/modules/earnings';
+import { earningsApi, HOME_EARNINGS_ROWS } from '@/api/modules/earnings';
 import { stocksApi } from '@/api/modules/stocks';
 import { marketPulseApi } from '@/components/market/api';
 import { regimeMean } from '@/lib/regime';
@@ -43,7 +43,6 @@ import StockDataCoverage from '@/components/shared/StockDataCoverage';
 import SessionLED from '@/components/shared/SessionLED';
 import SoftBadge from '@/components/shared/SoftBadge';
 import { strengthBarClass } from '@/lib/strengthColor';
-import { exNum, isFeaturedRow, type EarningsRow } from '@/components/earnings/types';
 import ChangeBadge from '@/components/shared/ChangeBadge';
 import IndexCard, { IndexCardSkeleton } from '@/components/shared/IndexCard';
 import TickerLogo from '@/components/shared/TickerLogo';
@@ -222,7 +221,7 @@ export default function Home() {
   const regimeQ = usePolling(() => marketPulseApi.regime(), 300_000);
   const signalsQ = usePolling(() => signalsApi.market(), 300_000);
   const breakoutsQ = usePolling(() => breakoutsApi.current(), 300_000);
-  const earningsQ = usePolling(() => earningsApi.upcoming(), 300_000);
+  const earningsQ = usePolling(() => earningsApi.homeHighlights(), 300_000);
   const watchlistQ = usePolling(() => stocksApi.watchlist(true), 300_000);
   const moverQ = useHomeMovers(watchlistQ);
   const ctaQ = usePolling(() => marketApi.ctaTrend(), 300_000);
@@ -261,29 +260,12 @@ export default function Home() {
       }).format(new Date(nowMinute)),
     [nowMinute],
   );
-  /* 排序复用财报页的重点口径（publicFeatured ∪ 公共关注池）：重点公司优先 →
-     日期升序 → 市值降序 → 普通公司补足。此前同日内部沿用上游顺序，数千家
-     覆盖里的小公司会排在大型公司前面（审计首页问题 4）。 */
-  const poolTickers = useMemo(
-    () => new Set((watchlistQ.data ?? []).map((item) => item.ticker.toUpperCase())),
-    [watchlistQ.data],
-  );
+  /* 排序在服务器上按首页口径做好（重点公司优先 → 日期升序 → 市值降序 → 普通公司
+     补足，见 earningsApi.homeHighlights），这里不再排序，只按纽约日滤一次再截 6 行。
+     接口在 6 行之后多带了次日起的候选行，跨过午夜滤掉今天的行后仍能补满。 */
   const earnings = useMemo(
-    () =>
-      (earningsQ.data?.items ?? [])
-        .filter((it) => it.date >= nyToday)
-        .slice()
-        .sort((a, b) => {
-          const ra = a as EarningsRow;
-          const rb = b as EarningsRow;
-          const fa = isFeaturedRow(ra, poolTickers) ? 0 : 1;
-          const fb = isFeaturedRow(rb, poolTickers) ? 0 : 1;
-          if (fa !== fb) return fa - fb;
-          if (a.date !== b.date) return a.date.localeCompare(b.date);
-          return (exNum(rb, 'marketCap') ?? -1) - (exNum(ra, 'marketCap') ?? -1);
-        })
-        .slice(0, 6),
-    [earningsQ.data, nyToday, poolTickers],
+    () => (earningsQ.data?.items ?? []).filter((it) => it.date >= nyToday).slice(0, HOME_EARNINGS_ROWS),
+    [earningsQ.data, nyToday],
   );
 
   /* 关注池异动使用当前主体的成员；访客使用公共池。按 |changePct| 降序前 6，缺失排最后。 */
