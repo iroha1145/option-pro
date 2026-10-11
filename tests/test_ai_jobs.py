@@ -1870,6 +1870,7 @@ def test_fresh_database_has_every_column_and_registry_row_production_has(
         "shared-model-budget-v1": "021fbead0d453783492065ba6018da75b1931ec34e25b48027c016ce219f6795",
         "ai-job-retry-lineage-index-v1": "4746773a1352dd1dacb3193a95aa276ea6abff4e8afafb118728e70db04ea8c2",
         "ai-stock-analysis-account-quota-v1": "6d6edbbfecc84d35c53473156f7c3c57e35b719f11b919e136a46ecc275cbb1a",
+        "ai-stock-analysis-account-quota-v2": "1cbd3dfbd0f5da2016a2fefedd1d2f635672413da760c5feace6c730298ebe69",
     }
 
 

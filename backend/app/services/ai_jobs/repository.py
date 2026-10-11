@@ -16,6 +16,7 @@ from urllib.parse import quote, urlsplit
 from app.failure_diagnostics import record_fallback_failure
 from app.json_validation import canonical_json_text
 from app.services.stock_analysis_quota import (
+    STOCK_ANALYSIS_PERIOD_LIMIT,
     StockAnalysisQuotaExceeded,
     public_stock_quota,
     stock_analysis_period,
@@ -288,6 +289,22 @@ WHERE job_type='signal_analysis';
 _STOCK_QUOTA_SCHEMA_CHECKSUM = hashlib.sha256(
     _STOCK_QUOTA_SCHEMA_SQL.encode("utf-8")
 ).hexdigest()
+
+# Keep the v1 registry checksum and all consumed records. The new slot is
+# defaulted to 1 so old writers also remain compatible with the expanded key.
+_STOCK_QUOTA_V2_SCHEMA_VERSION = "ai-stock-analysis-account-quota-v2"
+_STOCK_QUOTA_V2_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS ai_stock_analysis_allowances (
+    account_id TEXT NOT NULL,
+    period_start TEXT NOT NULL,
+    reset_at TEXT NOT NULL,
+    job_id TEXT UNIQUE REFERENCES ai_jobs(job_id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL,
+    use_number INTEGER NOT NULL DEFAULT 1 CHECK(use_number BETWEEN 1 AND 10),
+    PRIMARY KEY(account_id, period_start, use_number)
+);
+"""
+_STOCK_QUOTA_V2_SCHEMA_CHECKSUM = hashlib.sha256(_STOCK_QUOTA_V2_SCHEMA_SQL.encode("utf-8")).hexdigest()
 
 # retry_of_job_id references ai_jobs(job_id) and foreign keys are enforced, so
 # deleting a job looks up its retry children. Unindexed, every deleted row
@@ -701,6 +718,7 @@ class AIJobRepository:
                 "INSERT OR IGNORE INTO ai_job_schema(version,checksum,applied_at) VALUES(?,?,?)",
                 (_STOCK_QUOTA_SCHEMA_VERSION, _STOCK_QUOTA_SCHEMA_CHECKSUM, _iso()),
             )
+            self._initialize_stock_quota_v2(connection)
             connection.execute(_AI_JOB_SOURCES_TABLE_SQL)
             source_schema = connection.execute(
                 "SELECT checksum FROM ai_job_schema WHERE version=?",
@@ -837,6 +855,31 @@ class AIJobRepository:
             )
             initialize_model_budget_schema(connection)
             connection.commit()
+
+    @staticmethod
+    def _initialize_stock_quota_v2(connection: sqlite3.Connection) -> None:
+        registered = connection.execute(
+            "SELECT checksum FROM ai_job_schema WHERE version=?", (_STOCK_QUOTA_V2_SCHEMA_VERSION,),
+        ).fetchone()
+        if registered and registered["checksum"] != _STOCK_QUOTA_V2_SCHEMA_CHECKSUM:
+            raise RuntimeError("ai_stock_quota_schema_checksum_mismatch")
+        columns = connection.execute("PRAGMA table_info(ai_stock_analysis_allowances)").fetchall()
+        if "use_number" not in {row["name"] for row in columns}:
+            connection.execute("ALTER TABLE ai_stock_analysis_allowances RENAME TO ai_stock_analysis_allowances_v1")
+            connection.execute(_STOCK_QUOTA_V2_SCHEMA_SQL)
+            connection.execute("""INSERT INTO ai_stock_analysis_allowances
+                (account_id,period_start,reset_at,job_id,created_at,use_number)
+                SELECT account_id,period_start,reset_at,job_id,created_at,1
+                FROM ai_stock_analysis_allowances_v1""")
+            connection.execute("DROP TABLE ai_stock_analysis_allowances_v1")
+        columns = connection.execute("PRAGMA table_info(ai_stock_analysis_allowances)").fetchall()
+        primary_key = [row["name"] for row in sorted(columns, key=lambda row: row["pk"]) if row["pk"]]
+        if primary_key != ["account_id", "period_start", "use_number"]:
+            raise RuntimeError("ai_stock_quota_schema_invalid")
+        connection.execute(
+            "INSERT OR IGNORE INTO ai_job_schema(version,checksum,applied_at) VALUES(?,?,?)",
+            (_STOCK_QUOTA_V2_SCHEMA_VERSION, _STOCK_QUOTA_V2_SCHEMA_CHECKSUM, _iso()),
+        )
 
     @staticmethod
     def _ensure_indexes(connection: sqlite3.Connection) -> None:
@@ -1135,23 +1178,20 @@ class AIJobRepository:
                 stock_period = stock_analysis_period(observed)
                 # This lookup shares the same write transaction as allowance
                 # consumption and insertion. Separate processes/devices cannot
-                # create two paid jobs for one ticker or spend one account twice.
+                # create two paid jobs for one ticker or exceed one account's limit.
                 shared = self._shared_signal_analysis(
                     connection, str(payload.get("ticker", "")),
                     model=model, reasoning=reasoning, prompt_version=prompt_version,
                     schema_version=schema_version, schema_sha256=schema_sha256,
-                    since=stock_period.key,
+                    since=stock_period.key, until=stock_period.reset_at.isoformat(),
                 )
                 if shared is not None:
                     connection.commit()
                     return shared, False
-                spent = connection.execute(
-                    "SELECT 1 FROM ai_stock_analysis_allowances WHERE account_id=? AND period_start=?",
-                    (stock_analysis_account_id, stock_period.key),
-                ).fetchone()
-                if spent is not None:
+                spent = self._stock_allowance_used(connection, stock_analysis_account_id, stock_period.key)
+                if spent >= STOCK_ANALYSIS_PERIOD_LIMIT:
                     connection.rollback()
-                    raise StockAnalysisQuotaExceeded(stock_period)
+                    raise StockAnalysisQuotaExceeded(stock_period, used=spent)
             matches = [
                 dict(row)
                 for row in connection.execute(
@@ -1429,14 +1469,15 @@ class AIJobRepository:
     def _spend_stock_allowance(connection, account_id, period, job_id, now) -> None:
         connection.execute(
             """INSERT INTO ai_stock_analysis_allowances
-               (account_id,period_start,reset_at,job_id,created_at) VALUES(?,?,?,?,?)""",
-            (account_id, period.key, period.reset_at.isoformat(), job_id, now),
+               (account_id,period_start,reset_at,job_id,created_at,use_number) VALUES(?,?,?,?,?,?)""",
+            (account_id, period.key, period.reset_at.isoformat(), job_id, now,
+             AIJobRepository._stock_allowance_used(connection, account_id, period.key) + 1),
         )
 
     @staticmethod
     def _shared_signal_analysis(
         connection, ticker: str, *, model: str, reasoning: str,
-        prompt_version: str, schema_version: str, schema_sha256: str, since: str,
+        prompt_version: str, schema_version: str, schema_sha256: str, since: str, until: str | None = None, completed_only: bool = False,
     ) -> dict[str, Any] | None:
         rows = connection.execute(
             """SELECT j.*,s.submission_source FROM ai_jobs AS j
@@ -1445,11 +1486,12 @@ class AIJobRepository:
                  AND upper(json_extract(j.payload_json,'$.ticker'))=?
                  AND j.model=? AND j.reasoning=? AND j.prompt_version=?
                  AND j.schema_version=? AND j.schema_sha256=?
-                 AND (j.status IN ('pending','queued','in_progress')
-                      OR (j.status='completed' AND julianday(j.created_at)>=julianday(?)))
+                 AND ((?=0 AND j.status IN ('pending','queued','in_progress'))
+                      OR (j.status='completed' AND julianday(j.created_at)>=julianday(?)
+                          AND (? IS NULL OR julianday(j.created_at)<=julianday(?))))
                ORDER BY CASE WHEN j.status='completed' THEN 1 ELSE 0 END,
                         j.created_at DESC LIMIT 20""",
-            (ticker.upper(), model, reasoning, prompt_version, schema_version, schema_sha256, since),
+            (ticker.upper(), model, reasoning, prompt_version, schema_version, schema_sha256, int(completed_only), since, until, until),
         ).fetchall()
         for raw in rows:
             row = dict(raw)
@@ -1457,7 +1499,7 @@ class AIJobRepository:
                 created_at, boundary = _parse_time(row.get("created_at")), _parse_time(since)
                 # SQLite's date arithmetic rounds submillisecond values; use
                 # the exact instants for the close boundary after narrowing.
-                if created_at is None or boundary is None or created_at < boundary:
+                if created_at is None or boundary is None or created_at < boundary or (until is not None and created_at >= _parse_time(until)):
                     continue
             if row["status"] != "completed" or AIJobRepository._completed_result_state(row) != "invalid":
                 return row
@@ -1468,15 +1510,32 @@ class AIJobRepository:
         with self._connect() as connection:
             return self._shared_signal_analysis(connection, ticker, **identity)
 
+    @staticmethod
+    def _stock_allowance_used(connection, account_id: str, period_start: str) -> int:
+        return connection.execute(
+            "SELECT COUNT(*) FROM ai_stock_analysis_allowances WHERE account_id=? AND period_start=?",
+            (account_id, period_start),
+        ).fetchone()[0]
+
     def stock_analysis_quota(self, account_id: str, *, now: datetime | None = None) -> dict:
         self.ensure_initialized()
         period = stock_analysis_period(now or _utcnow())
         with self._connect() as connection:
-            used = connection.execute(
-                "SELECT 1 FROM ai_stock_analysis_allowances WHERE account_id=? AND period_start=?",
-                (account_id, period.key),
-            ).fetchone() is not None
+            used = self._stock_allowance_used(connection, account_id, period.key)
         return public_stock_quota(period, used=used)
+
+    def stock_analysis_snapshot(self, account_id: str, ticker: str, **identity) -> dict:
+        self.ensure_initialized()
+        with self._connect() as connection:
+            connection.execute("BEGIN")
+            period = stock_analysis_period(_utcnow())
+            quota = public_stock_quota(period, used=self._stock_allowance_used(connection, account_id, period.key))
+            bounds = {"since": period.key, "until": period.reset_at.isoformat()}
+            shared = self._shared_signal_analysis(connection, ticker, **identity, **bounds)
+            cached = shared if shared and shared["status"] == "completed" else self._shared_signal_analysis(
+                connection, ticker, **identity, **bounds, completed_only=True,
+            )
+            return {"quota": quota, "shared_job": shared, "cached_job": cached}
 
     @staticmethod
     def _request_hash_source_legacy(

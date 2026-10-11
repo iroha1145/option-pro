@@ -4,6 +4,18 @@
 import type { Dict } from './types';
 
 export const DETAIL: Dict = {
+  '额度与报告缓存于 {time} 刷新': ['Quota and report cache reset at {time}', '利用枠とレポートのキャッシュは{time}に更新'],
+  '当前显示历史报告，缓存已失效': ['Showing a past report; its cache has expired', '過去のレポートを表示中です。キャッシュの有効期限は切れています'],
+  '回调买点弱': ['Weak pullback setup', '押し目の条件が弱い'],
+  '回调承接一般': ['Modest support on pullbacks', '押し目での買い支えは並み'],
+  '趋势回调买点中等': ['Moderate trend-pullback setup', 'トレンド中の押し目条件は中程度'],
+  '高质量趋势回调': ['High-quality trend pullback', '質の高いトレンド中の押し目'],
+  '综合资料质量': ['Overall data quality', '総合的な資料品質'],
+  '超出预期': ['Above expectations', '予想を上回る'],
+  '低于预期': ['Below expectations', '予想を下回る'],
+  '符合预期': ['In line with expectations', '予想通り'],
+  '在报告内上下滚动，查看全文与图表': ['Scroll within the report to read the full text and charts', 'レポート内を上下にスクロールして全文とチャートを確認'],
+  '股票分析报告': ['Stock analysis report', '個別銘柄の分析レポート'],
   '更多图表': ['More charts', 'その他のチャート'],
   '报告完成时间 {time}': ['Report completed: {time}', 'レポート完了日時：{time}'],
   '报告更新时间 {time}': ['Report updated: {time}', 'レポート更新日時：{time}'],

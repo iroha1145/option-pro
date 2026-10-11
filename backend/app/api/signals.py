@@ -370,7 +370,7 @@ def _analysis_account_id(http_request: Request) -> str:
     return str(require_personal_account(http_request).user_id)
 
 
-def _signal_analysis_identity(*, since: str) -> dict:
+def _signal_analysis_identity() -> dict:
     settings = ai_job_runtime.settings_for_job(get_settings(), "signal_analysis")
     schema_version, schema_sha256 = ai_job_runtime.schema_identity("signal_analysis", model=settings.openai_model)
     return {
@@ -379,7 +379,6 @@ def _signal_analysis_identity(*, since: str) -> dict:
         "prompt_version": ai_job_runtime.PROMPT_VERSIONS["signal_analysis"],
         "schema_version": schema_version,
         "schema_sha256": schema_sha256,
-        "since": since,
     }
 
 
@@ -398,15 +397,12 @@ async def get_stock_ai_analysis(ticker: str, http_request: Request):
     account_id = _analysis_account_id(http_request)
     symbol = _normalize_ticker(ticker)
     repository = _job_repository()
-    quota = await asyncio.to_thread(repository.stock_analysis_quota, account_id)
-    shared = await asyncio.to_thread(
-        repository.shared_signal_analysis, symbol,
-        **_signal_analysis_identity(since=quota["period_start"]),
-    )
+    snapshot = await asyncio.to_thread(repository.stock_analysis_snapshot, account_id, symbol, **_signal_analysis_identity())
+    quota, shared = snapshot["quota"], snapshot["shared_job"]
     latest = await asyncio.to_thread(repository.latest_completed, "signal_analysis", symbol)
     active = shared if shared and shared["status"] in {"pending", "queued", "in_progress"} else None
-    if shared and shared["status"] == "completed":
-        latest = shared
+    if snapshot["cached_job"]:
+        latest = snapshot["cached_job"]
     try:
         enabled = bool(get_effective_runtime_settings().ai.stock_analysis_enabled)
     except RuntimeSettingsStorageError as exc:
@@ -417,8 +413,10 @@ async def get_stock_ai_analysis(ticker: str, http_request: Request):
         "enabled": enabled,
         "can_generate": enabled and quota["remaining"] > 0 and shared is None,
         "quota": quota,
+        "cache_reset_at": quota["reset_at"],
+        "latest_job_cached": snapshot["cached_job"] is not None,
         "active_job": _public_signal_analysis(active) if active else None,
-        "latest_job": _public_signal_analysis(latest, cached=True) if latest else None,
+        "latest_job": _public_signal_analysis(latest, cached=snapshot["cached_job"] is not None) if latest else None,
     }
 
 
@@ -449,8 +447,8 @@ async def _queue_signal_analysis(symbol: str, *, force: bool, account_id: str) -
     # 先复用同股票、同模型配置的共享报告；最终额度与创建在仓库事务内重查。
     # 同步仓库调用在线程中运行，写锁等待不会阻塞其他请求。
     repository = _job_repository()
-    quota = await asyncio.to_thread(repository.stock_analysis_quota, account_id)
-    active = await asyncio.to_thread(repository.shared_signal_analysis, symbol, **_signal_analysis_identity(since=quota["period_start"]))
+    snapshot = await asyncio.to_thread(repository.stock_analysis_snapshot, account_id, symbol, **_signal_analysis_identity())
+    quota, active = snapshot["quota"], snapshot["shared_job"]
     if active is not None:
         public = _public_signal_analysis(active, cached=active["status"] == "completed")
         public["quota"] = quota

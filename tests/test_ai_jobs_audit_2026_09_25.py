@@ -1334,10 +1334,10 @@ def _signal_stubs(monkeypatch, repository, counter):
     monkeypatch.setattr(signals, "_analysis_account_id", lambda _request: "account-audit-test")
     monkeypatch.setattr(signals, "request_is_owner_session", lambda _request: True)
     version, digest = runtime.schema_identity("signal_analysis", model="gpt-5.6-terra")
-    monkeypatch.setattr(signals, "_signal_analysis_identity", lambda *, since: {
+    monkeypatch.setattr(signals, "_signal_analysis_identity", lambda: {
         "model": "gpt-5.6-terra", "reasoning": "max",
         "prompt_version": runtime.PROMPT_VERSIONS["signal_analysis"],
-        "schema_version": version, "schema_sha256": digest, "since": since,
+        "schema_version": version, "schema_sha256": digest,
     })
     monkeypatch.setattr(signals, "_require_runtime_capability", lambda _job_type=None: None)
     monkeypatch.setattr(
@@ -1431,15 +1431,15 @@ def test_signal_repository_calls_run_off_the_event_loop(tmp_path, monkeypatch):
     loop_threads: list[int] = []
     call_threads: dict[str, int] = {}
     real_create = signals._create_job
-    real_shared = repository.shared_signal_analysis
+    real_shared = repository.stock_analysis_snapshot
     real_quota = repository.stock_analysis_quota
 
     def create_job(*args, **kwargs):
         call_threads["create_job"] = threading.get_ident()
         return real_create(*args, **kwargs)
 
-    def shared_signal_analysis(*args, **kwargs):
-        call_threads["shared_signal_analysis"] = threading.get_ident()
+    def stock_analysis_snapshot(*args, **kwargs):
+        call_threads["stock_analysis_snapshot"] = threading.get_ident()
         return real_shared(*args, **kwargs)
 
     def stock_analysis_quota(*args, **kwargs):
@@ -1447,7 +1447,7 @@ def test_signal_repository_calls_run_off_the_event_loop(tmp_path, monkeypatch):
         return real_quota(*args, **kwargs)
 
     monkeypatch.setattr(signals, "_create_job", create_job)
-    monkeypatch.setattr(repository, "shared_signal_analysis", shared_signal_analysis)
+    monkeypatch.setattr(repository, "stock_analysis_snapshot", stock_analysis_snapshot)
     monkeypatch.setattr(repository, "stock_analysis_quota", stock_analysis_quota)
 
     async def run():
@@ -1459,7 +1459,7 @@ def test_signal_repository_calls_run_off_the_event_loop(tmp_path, monkeypatch):
         )
 
     assert asyncio.run(run()).status_code == 202
-    assert set(call_threads) == {"create_job", "shared_signal_analysis", "stock_analysis_quota"}
+    assert set(call_threads) == {"create_job", "stock_analysis_snapshot", "stock_analysis_quota"}
     assert loop_threads[0] not in set(call_threads.values())
 
 

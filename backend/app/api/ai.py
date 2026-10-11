@@ -332,7 +332,7 @@ def _create_job(
             "code": "stock_analysis_daily_limit",
             "message": "本时段的个股分析额度已用完，美股收盘后恢复",
             "reset_at": exc.period.reset_at.isoformat(),
-            "quota": public_stock_quota(exc.period, used=True),
+            "quota": public_stock_quota(exc.period, used=exc.used),
         }) from exc
     except RuntimeError as exc:
         if str(exc) == "ai_job_queue_full":

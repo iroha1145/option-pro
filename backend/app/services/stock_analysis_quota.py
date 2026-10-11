@@ -1,4 +1,4 @@
-"""One new stock analysis per account between consecutive US market closes."""
+"""Ten new stock analyses per account between consecutive US market closes."""
 
 from __future__ import annotations
 
@@ -11,6 +11,8 @@ from app.services.market_calendar import (
     market_datetime,
     next_trading_day,
 )
+
+STOCK_ANALYSIS_PERIOD_LIMIT = 10
 
 
 @dataclass(frozen=True)
@@ -38,16 +40,19 @@ def stock_analysis_period(now: datetime | None = None) -> StockAnalysisPeriod:
 
 
 class StockAnalysisQuotaExceeded(RuntimeError):
-    def __init__(self, period: StockAnalysisPeriod):
+    def __init__(self, period: StockAnalysisPeriod, *, used: int = STOCK_ANALYSIS_PERIOD_LIMIT):
         super().__init__("stock_analysis_daily_limit")
         self.period = period
+        self.used = used
 
 
-def public_stock_quota(period: StockAnalysisPeriod, *, used: bool) -> dict:
+def public_stock_quota(period: StockAnalysisPeriod, *, used: int) -> dict:
+    if type(used) is not int or used < 0:
+        raise ValueError("stock analysis usage must be a nonnegative integer")
     return {
-        "limit": 1,
-        "used": int(used),
-        "remaining": int(not used),
+        "limit": STOCK_ANALYSIS_PERIOD_LIMIT,
+        "used": used,
+        "remaining": max(0, STOCK_ANALYSIS_PERIOD_LIMIT - used),
         "period_start": period.key,
         "reset_at": period.reset_at.isoformat(),
     }

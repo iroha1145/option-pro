@@ -5,14 +5,16 @@ import ts from 'typescript';
 const source = fs.readFileSync(new URL('../src/components/detail/AiAnalysisCard.tsx', import.meta.url), 'utf8');
 const interpolate = (key, params = {}) => key.replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? `{${name}}`));
 const done = { id: 'saved-report', kind: 'signal-analysis', status: 'succeeded', progress: null, createdAt: '', updatedAt: '2026-10-10T20:00:00Z', result: { summary: '公开报告原文' }, model: 'claude-sonnet-5-5', reasoning: 'xhigh', usage: { input_tokens: 4, cached_input_tokens: 2, output_tokens: null } };
-const quota = { limit: 1, used: 1, remaining: 0, resetAt: '2026-10-12T20:00:00Z', periodStart: '2026-10-09T20:00:00Z' };
+const quota = { limit: 10, used: 10, remaining: 0, resetAt: '2026-10-12T20:00:00Z', periodStart: '2026-10-09T20:00:00Z' };
 function harness({ access, response, read, originalGet } = {}) {
   let cursor = 0, tree, identity = access ?? { isOwner: false, isSignedIn: true, username: 'customer', loading: false }, hookJob = null;
   const slots = [], effects = []; let signedComponent; let creates = 0, reads = 0, cancels = 0;
   const original = { document: globalThis.document, window: globalThis.window, setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout };
   globalThis.document = { hidden: false, addEventListener() {}, removeEventListener() {} };
   globalThis.window = { location: { pathname: '/stock/AAPL', search: '' }, addEventListener() {}, removeEventListener() {} };
-  globalThis.setTimeout = () => 1; globalThis.clearTimeout = () => {};
+  const timers = new Map(); let timerId = 0;
+  globalThis.setTimeout = callback => { timers.set(++timerId, callback); return timerId; };
+  globalThis.clearTimeout = id => { timers.delete(id); };
   const changed = (prev, next) => !prev || prev.length !== next.length || next.some((value, i) => !Object.is(value, prev[i]));
   const hooks = {
     useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = typeof initial === 'function' ? initial() : initial; return [slots[i], v => { slots[i] = typeof v === 'function' ? v(slots[i]) : v; }]; },
@@ -60,6 +62,7 @@ function harness({ access, response, read, originalGet } = {}) {
   };
   return { render, nodes, text, setAccess: value => { identity = value; }, get componentKey() { return signedComponent?.key; }, get creates() { return creates; }, get reads() { return reads; }, get cancels() { return cancels; }, get adopted() { return adopted; },
     async settle() { for (let i = 0; i < 4; i++) { await Promise.resolve(); render(); } },
+    fireReset() { const callbacks = [...timers.values()]; timers.clear(); callbacks.forEach(callback => callback()); },
     close() { for (const slot of slots) slot?.cleanup?.(); Object.assign(globalThis, original); },
   };
 }
@@ -73,10 +76,49 @@ test('zero quota keeps shared report readable, disables creation, and reports re
   const h = harness({ response: { ticker: 'AAPL', enabled: true, canGenerate: false, quota, activeJob: null, latestJob: done } });
   try {
     h.render(); await h.settle();
-    assert.match(h.text(), /今日剩余 0\/1 次/); assert.match(h.text(), /查看已有共享报告不扣次数/);
+    assert.match(h.text(), /今日剩余 0\/10 次/); assert.match(h.text(), /查看已有共享报告不扣次数/);
     const report = h.nodes().find(node => node.type === 'report'); assert.equal(report.props.result.summary, '公开报告原文');
     const button = h.nodes().find(node => node.type === 'button' && node.props.children === '重新分析'); assert.equal(button.props.disabled, true);
     assert.match(h.text(), /xhigh/); assert.match(h.text(), /缓存读取用量/); assert.doesNotMatch(h.text(), /输出用量/); assert.equal(h.creates, 0);
+  } finally { h.close(); }
+});
+test('the shared close-time refresh restores ten uses and expires the prior report without submitting a new task', async () => {
+  const resetAt = new Date(Date.now() + 60_000).toISOString();
+  let response = { ticker: 'AAPL', enabled: true, canGenerate: false, quota: { ...quota, resetAt }, latestJob: done, activeJob: null, latestJobCached: true, cacheResetAt: resetAt };
+  const h = harness({ read: async () => response });
+  try {
+    h.render(); await h.settle();
+    assert.match(h.text(), /今日剩余 0\/10 次/); assert.match(h.text(), /本时段已有共享报告/);
+    assert.match(h.text(), /额度与报告缓存于/);
+    const nextClose = new Date(Date.parse(resetAt) + 86400000).toISOString();
+    response = { ...response, canGenerate: true, quota: { ...quota, used: 0, remaining: 10, periodStart: resetAt, resetAt: nextClose }, latestJobCached: false, cacheResetAt: nextClose };
+    h.fireReset(); await h.settle();
+    assert.match(h.text(), /今日剩余 10\/10 次/); assert.match(h.text(), /当前显示历史报告，缓存已失效/);
+    assert.doesNotMatch(h.text(), /本时段已有共享报告/);
+    assert.equal(h.nodes().find(node => node.type === 'button' && node.props.children === '重新分析').props.disabled, false);
+    assert.ok(h.nodes().some(node => node.type === 'report')); assert.equal(h.creates, 0);
+  } finally { h.close(); }
+});
+test('remaining uses from one to ten allow a new report when the server says the cache expired', async () => {
+  for (const remaining of [1, 9, 10]) {
+    const h = harness({ response: { ticker: 'AAPL', enabled: true, canGenerate: true, quota: { ...quota, used: 10 - remaining, remaining }, activeJob: null, latestJob: done, latestJobCached: false, cacheResetAt: quota.resetAt } });
+    try {
+      h.render(); await h.settle();
+      assert.equal(h.nodes().find(node => node.type === 'button' && node.props.children === '重新分析').props.disabled, false);
+      assert.ok(h.text().includes(`今日剩余 ${remaining}/10 次`));
+    } finally { h.close(); }
+  }
+});
+test('a quota snapshot arriving after its reset boundary schedules one fresh read', async () => {
+  const resetAt = new Date(Date.now() - 1000).toISOString();
+  const h = harness({ response: { ticker: 'AAPL', enabled: true, canGenerate: false, quota: { ...quota, resetAt }, activeJob: null, latestJob: done, latestJobCached: true, cacheResetAt: resetAt } });
+  try {
+    h.render(); await h.settle();
+    const before = h.reads;
+    h.fireReset(); await h.settle();
+    assert.equal(h.reads, before + 1); assert.equal(h.creates, 0);
+    h.fireReset(); await h.settle();
+    assert.equal(h.reads, before + 1, 'an unchanged reset timestamp must not cause a polling loop');
   } finally { h.close(); }
 });
 test('restored shared active task keeps last report and only owner sees cancellation', async () => {

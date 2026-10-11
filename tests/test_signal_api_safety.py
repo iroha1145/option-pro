@@ -34,7 +34,7 @@ def _signal_analysis_account_contract(monkeypatch):
     monkeypatch.setattr(
         signals,
         "_signal_analysis_identity",
-        lambda *, since: {**_TEST_SIGNAL_IDENTITY, "since": since},
+        lambda: dict(_TEST_SIGNAL_IDENTITY),
     )
 
 
@@ -43,7 +43,7 @@ class _SignalRepositoryStub:
     def stock_analysis_quota(account_id):
         assert account_id == "account-test"
         return {
-            "limit": 1, "used": 0, "remaining": 1,
+            "limit": 10, "used": 0, "remaining": 10,
             "period_start": "2026-10-09T20:00:00+00:00",
             "reset_at": "2026-10-12T20:00:00+00:00",
         }
@@ -51,9 +51,15 @@ class _SignalRepositoryStub:
     @staticmethod
     def shared_signal_analysis(ticker, **identity):
         assert identity == {
-            **_TEST_SIGNAL_IDENTITY, "since": "2026-10-09T20:00:00+00:00"
+            **_TEST_SIGNAL_IDENTITY
         }
         return None
+
+    @classmethod
+    def stock_analysis_snapshot(cls, account_id, ticker, **identity):
+        shared = cls.shared_signal_analysis(ticker, **identity)
+        return {"quota": cls.stock_analysis_quota(account_id), "shared_job": shared,
+                "cached_job": shared if shared and shared["status"] == "completed" else None}
 
 
 def test_signal_api_rejects_invalid_ticker_before_provider_call(monkeypatch):
@@ -389,7 +395,7 @@ def test_signal_analysis_reuses_the_active_job_instead_of_double_paying(
         @staticmethod
         def shared_signal_analysis(ticker, **identity):
             assert identity == {
-                **_TEST_SIGNAL_IDENTITY, "since": "2026-10-09T20:00:00+00:00"
+                **_TEST_SIGNAL_IDENTITY
             }
             assert ticker == "AMD"
             return active_row

@@ -559,14 +559,18 @@ export function getStockAnalysisView(ticker: string, signal?: AbortSignal): Prom
   const symbol = quoteSymbol(ticker);
   return mockOr(
     async () => {
-      const used: 0 | 1 = mockStockUsed.has(mockStockPrincipal()) ? 1 : 0;
-      const id = mockStockJobs.get(symbol);
-      const job = id ? fx2.getAiJob(id) : null;
-      return { ticker: symbol, enabled: true, canGenerate: used === 0 && !job,
-        quota: { limit: 1, used, remaining: used === 0 ? 1 : 0,
+      refreshMockStockPeriod();
+      const used = mockStockUsed.get(mockStockPrincipal()) ?? 0;
+      const saved = mockStockJobs.get(symbol);
+      const job = saved ? fx2.getAiJob(saved.id) : null;
+      const running = !!job && !['succeeded', 'failed', 'cancelled'].includes(job.status);
+      const cached = job?.status === 'succeeded' && saved?.periodStart === mockStockPeriodStart;
+      return { ticker: symbol, enabled: true, canGenerate: used < 10 && !running && !cached,
+        quota: { limit: 10, used, remaining: 10 - used,
           resetAt: mockStockResetAt, periodStart: mockStockPeriodStart },
-        activeJob: job && !['succeeded', 'failed', 'cancelled'].includes(job.status) ? job : null,
-        latestJob: job?.status === 'succeeded' ? job : null };
+        activeJob: running ? job : null,
+        latestJob: job?.status === 'succeeded' ? job : null,
+        latestJobCached: cached, cacheResetAt: mockStockResetAt };
     },
     async () => {
       const view = parseStockAnalysisView(await get(`/signals/stock/${encodeURIComponent(symbol)}/ai-analysis`, { signal }), symbol);
@@ -575,10 +579,17 @@ export function getStockAnalysisView(ticker: string, signal?: AbortSignal): Prom
     },
   );
 }
-const mockStockJobs = new Map<string, string>();
-const mockStockUsed = new Set<string>();
-const mockStockPeriodStart = new Date().toISOString();
-const mockStockResetAt = new Date(Date.now() + 86400000).toISOString();
+const mockStockJobs = new Map<string, { id: string; periodStart: string }>();
+const mockStockUsed = new Map<string, number>();
+let mockStockPeriodStart = new Date().toISOString();
+let mockStockResetAt = new Date(Date.now() + 86400000).toISOString();
+/** Demo clock only; live quota and cache share the server's exchange calendar. */
+function refreshMockStockPeriod() {
+  if (Date.now() < Date.parse(mockStockResetAt)) return;
+  mockStockPeriodStart = new Date().toISOString();
+  mockStockResetAt = new Date(Date.now() + 86400000).toISOString();
+  mockStockUsed.clear();
+}
 function mockStockPrincipal(): string {
   const access = mockAccess();
   if (access.role !== 'owner' && !access.accountUsername) throw new ApiError(401, __t('请先登录'), { bizCode: 'account_login_required' });
@@ -590,17 +601,21 @@ export function createSignalAnalysisJob(ticker: string): Promise<AiJob> {
   const symbol = quoteSymbol(ticker);
   return mockOr(
     () => {
+      refreshMockStockPeriod();
       if (!fx.hasTicker(symbol)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: symbol }));
       const d = fx.getStockDetail(symbol);
       const b = fx.getStockTrendBias(symbol);
       const text = stockAnalysisFixture(symbol, d.price, d.ivPercentile, b.scores, b.trend_bias_score, b.trend_bias_label);
       const principal = mockStockPrincipal();
       const existing = mockStockJobs.get(symbol);
-      if (existing) return fx2.getAiJob(existing);
-      if (mockStockUsed.has(principal)) throw new ApiError(429, __t('今日分析额度已用完，额度重置后再试'), { bizCode: 'stock_analysis_daily_limit' });
+      const saved = existing ? fx2.getAiJob(existing.id) : null;
+      if (saved && (!['succeeded', 'failed', 'cancelled'].includes(saved.status)
+        || (saved.status === 'succeeded' && existing?.periodStart === mockStockPeriodStart))) return saved;
+      const used = mockStockUsed.get(principal) ?? 0;
+      if (used >= 10) throw new ApiError(429, __t('今日分析额度已用完，额度重置后再试'), { bizCode: 'stock_analysis_daily_limit' });
       const job = fx2.createAiJob('signal-analysis' as AiJob['kind'], text);
-      mockStockJobs.set(symbol, job.id);
-      mockStockUsed.add(principal);
+      mockStockJobs.set(symbol, { id: job.id, periodStart: mockStockPeriodStart });
+      mockStockUsed.set(principal, used + 1);
       return job;
     },
     // 契约：登录主体+同源请求 → 202 + Location（job_id 可能仅在 Location 头）

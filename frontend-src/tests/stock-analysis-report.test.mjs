@@ -76,7 +76,7 @@ test('visuals enforce finite values, known units and bounded line/bar payloads',
   assert.equal(parsed.charts.length, 6); assert.equal(parsed.charts[0].rows.length, 250); assert.equal(parsed.charts[1].rows.length, 16);
   data.charts = [data.charts[0], data.charts[0]]; assert.equal(report.parseStockVisuals(data).charts.length, 1);
 });
-const quota = { limit: 1, used: 1, remaining: 0, period_start: '2026-10-09T20:00:00Z', reset_at: '2026-10-12T20:00:00Z' };
+const quota = { limit: 10, used: 10, remaining: 0, period_start: '2026-10-09T20:00:00Z', reset_at: '2026-10-12T20:00:00Z' };
 const saved = { job_id: 'job-saved', job_type: 'signal_analysis', status: 'completed', result: result(), visuals: visuals() };
 test('exhausted quota retains shared completed report and activity; invalid ticker/version/quota fail closed', () => {
   const body = { schema_version: 'stock-analysis-view-v1', ticker: 'AAPL', enabled: true, can_generate: false, quota, latest_job: saved, active_job: { ...saved, job_id: 'job-active', status: 'running', result: null } };
@@ -89,6 +89,32 @@ test('exhausted quota retains shared completed report and activity; invalid tick
   assert.equal(bad.canGenerate, false); assert.equal(bad.quota, null); assert.ok(bad.latestJob);
   const wrongAsset = view.parseStockAnalysisView({ ...body, latest_job: { ...saved, result: { asset: 'MSFT', summary: 'wrong' } } }, 'AAPL');
   assert.equal(wrongAsset.latestJob, null);
+});
+test('ten-use quota accepts every valid remaining count and rejects corrupt counters', () => {
+  const body = { schema_version: 'stock-analysis-view-v1', ticker: 'AAPL', enabled: true, can_generate: true, latest_job: saved, latest_job_cached: false, cache_reset_at: quota.reset_at };
+  for (let used = 0; used <= 10; used++) {
+    const parsed = view.parseStockAnalysisView({ ...body, quota: { ...quota, used, remaining: 10 - used } }, 'AAPL');
+    assert.equal(parsed.quota.used, used);
+    assert.equal(parsed.quota.remaining, 10 - used);
+    assert.equal(parsed.canGenerate, used < 10);
+    assert.equal(parsed.cacheResetAt, quota.reset_at);
+  }
+  for (const invalid of [
+    { limit: 1, used: 0, remaining: 1 }, { limit: 10, used: -1, remaining: 11 },
+    { limit: 10, used: 11, remaining: -1 }, { limit: 10, used: 1.5, remaining: 8.5 },
+    { limit: 10, used: 5, remaining: 6 }, { limit: 10, used: '0', remaining: 10 },
+  ]) {
+    const parsed = view.parseStockAnalysisView({ ...body, quota: { ...quota, ...invalid } }, 'AAPL');
+    assert.equal(parsed.quota, null); assert.equal(parsed.canGenerate, false); assert.equal(parsed.cacheResetAt, null);
+    assert.ok(parsed.latestJob, 'corrupt quota must not hide a valid historical report');
+  }
+});
+test('only a confirmed current report with the shared reset timestamp is shown as cached', () => {
+  const body = { schema_version: 'stock-analysis-view-v1', ticker: 'AAPL', enabled: true, can_generate: false, quota, latest_job: saved, latest_job_cached: true, cache_reset_at: quota.reset_at };
+  assert.equal(view.parseStockAnalysisView(body, 'AAPL').latestJobCached, true);
+  for (const changed of [{ latest_job_cached: false }, { cache_reset_at: '2026-10-13T20:00:00Z' }, { latest_job: null }]) {
+    assert.equal(view.parseStockAnalysisView({ ...body, ...changed }, 'AAPL').latestJobCached, false);
+  }
 });
 
 test('absolute 0–100 score bars draw 10 and 20 as ten and twenty percent, never full width', () => {
@@ -110,6 +136,46 @@ test('score line charts also keep the absolute scale', () => {
   const content = report.createStockAnalysisReport(result(), data);
   assert.match(html(content), /points="30\.00,138\.00 570\.00,126\.00"/);
   assert.match(html(content), /y="18">100<\/text>/);
+});
+test('risk and opportunity colors follow their own score bands and retain readable meanings', () => {
+  const cases = [
+    ['top_score', 29, 'positive', '顶部风险低'], ['top_score', 30, 'caution', '正常震荡风险'],
+    ['top_score', 50, 'caution', '需要停止追高'], ['top_score', 65, 'negative', '阶段性顶部风险高'],
+    ['top_score', 80, 'negative', '极端过热，等待反转确认'],
+    ['bottom_score', 29, 'neutral', '没有底部迹象'], ['bottom_score', 30, 'caution', '可能只是超跌'],
+    ['bottom_score', 50, 'caution', '开始出现底部条件'], ['bottom_score', 65, 'positive', '阶段性底部概率较高'],
+    ['bottom_score', 80, 'caution', '恐慌释放充分，仍需价格确认'],
+    ['dip_buy_quality', 29, 'negative', '回调买点弱'], ['dip_buy_quality', 30, 'caution', '回调承接一般'],
+    ['dip_buy_quality', 50, 'caution', '趋势回调买点中等'], ['dip_buy_quality', 70, 'positive', '高质量趋势回调'],
+    ['data_quality', 100, 'price', '综合资料质量'],
+  ];
+  for (const [key, value, tone, meaning] of cases) {
+    const data = visuals();
+    data.charts = [{ id: 'structure_scores', title: '评分', caption: '0–100 分', kind: 'bar', unit: 'score', rows: [{ label: 'Translated label', evidence_id: `scores.${key}`, value }] }];
+    const output = html(report.createStockAnalysisReport(result(), data));
+    assert.match(output, new RegExp(`class="bar-row tone-${tone} has-meaning"`), `${key} ${value}`);
+    assert.ok(output.includes(`<small>${meaning}</small>`));
+  }
+  const data = visuals();
+  data.charts = [{ id: 'structure_scores', title: '评分', caption: '0–100 分', kind: 'bar', unit: 'score', rows: [{ label: '顶部结构分数', evidence_id: 'unrecognized', value: 90 }] }];
+  assert.match(html(report.createStockAnalysisReport(result(), data)), /class="bar-row tone-neutral"/);
+});
+test('chart categories stay neutral to magnitude, while earnings surprise distinguishes both directions and zero', () => {
+  const categories = { price_history: 'price', quarterly_revenue: 'revenue', daily_volume: 'volume', analyst_targets: 'estimate' };
+  for (const [id, tone] of Object.entries(categories)) {
+    const data = visuals();
+    data.charts = [{ id, title: 'title', caption: 'source', kind: 'bar', unit: 'usd', rows: [{ label: 'negative', value: -10 }, { label: 'positive', value: 100 }] }];
+    const output = html(report.createStockAnalysisReport(result(), data));
+    assert.match(output, new RegExp(`<figure class="tone-${tone}">`));
+    assert.equal([...output.matchAll(new RegExp(`class="bar-row tone-${tone}"`, 'g'))].length, 2);
+    assert.doesNotMatch(output, /has-meaning/);
+  }
+  const data = visuals();
+  data.charts = [{ id: 'earnings_surprise', title: '盈利超预期比例', caption: 'ratio', kind: 'bar', unit: 'ratio', rows: [{ label: 'below', value: -0.1 }, { label: 'above', value: 0.1 }, { label: 'equal', value: 0 }] }];
+  const output = html(report.createStockAnalysisReport(result(), data));
+  assert.match(output, /tone-negative has-meaning"><span class="bar-label">below<small>低于预期/);
+  assert.match(output, /tone-positive has-meaning"><span class="bar-label">above<small>超出预期/);
+  assert.match(output, /tone-neutral has-meaning"><span class="bar-label">equal<small>符合预期/);
 });
 test('every backend coverage status is readable and unknown internal values are hidden', () => {
   const statuses = { available: '可用', ok: '可用', missing: '缺失', stale: '已过期', partial: '部分资料', unavailable: '暂无资料', timeout: '资料读取超时', not_applicable: '不适用', omitted_size: '因资料过长已省略' };

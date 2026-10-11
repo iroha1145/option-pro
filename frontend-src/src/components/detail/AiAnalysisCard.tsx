@@ -100,7 +100,9 @@ function SignedInAnalysis({ ticker, isOwner }: { ticker: string; isOwner: boolea
     const resetAt = view?.quota?.resetAt;
     const wait = resetAt ? Date.parse(resetAt) - Date.now() : NaN;
     // The server is the time authority; a local clock only schedules a fresh read.
-    const timer = Number.isFinite(wait) && wait > 0 && wait < 2147483000 ? setTimeout(reread, wait + 500) : null;
+    // A response can arrive just after its close boundary; schedule one reread
+    // then as well, so an exhausted prior-period quota cannot remain stuck.
+    const timer = Number.isFinite(wait) && wait < 2147483000 ? setTimeout(reread, Math.max(500, wait + 500)) : null;
     return () => { window.removeEventListener('focus', reread); document.removeEventListener('visibilitychange', reread); if (timer) clearTimeout(timer); };
   }, [refresh, view?.quota?.resetAt]);
   const running = active(job);
@@ -163,10 +165,13 @@ function SignedInAnalysis({ ticker, isOwner }: { ticker: string; isOwner: boolea
     {loading && <p className="mt-3 text-caption text-ink-500" role="status">{t('正在读取股票报告')}</p>}
     {view?.quota && <div className="mt-3 text-micro leading-relaxed text-ink-500">
       <p>{t('今日剩余 {remaining}/{limit} 次 · 所有股票共用', { remaining: view.quota.remaining, limit: view.quota.limit })}</p>
-      <p>{t('下次重置 {time} · 按美股实际收盘时间', { time: timeLabel(view.quota.resetAt) })}</p>
+      <p>{view.cacheResetAt
+        ? t('额度与报告缓存于 {time} 刷新', { time: timeLabel(view.cacheResetAt) })
+        : t('下次重置 {time} · 按美股实际收盘时间', { time: timeLabel(view.quota.resetAt) })}</p>
       <p>{t('查看已有共享报告不扣次数')}</p>
     </div>}
-    {view?.enabled && !view.canGenerate && view.quota?.remaining === 1 && reportJob && !running && <p className="mt-2 text-caption text-ink-500">{t('本时段已有共享报告')}</p>}
+    {view?.latestJobCached && reportJob && !running && <p className="mt-2 text-caption text-ink-500">{t('本时段已有共享报告')}</p>}
+    {view?.cacheResetAt && !view.latestJobCached && reportJob && !running && <p className="mt-2 text-caption text-ink-500">{t('当前显示历史报告，缓存已失效')}</p>}
     {view && !view.enabled && <p className="mt-2 text-caption text-ink-500">{t('个股分析已关闭')}</p>}
     {readError && <p className="mt-3 text-caption text-danger-700" role="status">{readError} <button onClick={() => void refresh()} disabled={refreshing} className="text-ai-600">{t('重试')}</button></p>}
     {confirming && <div className="mt-3 rounded-md bg-ai-50 px-3 py-2.5">
@@ -192,7 +197,16 @@ function SignedInAnalysis({ ticker, isOwner }: { ticker: string; isOwner: boolea
       {(queryIssue === 'paused' || queryIssue === 'blocked') && <button onClick={resume} className="ml-2 text-ai-600">{t('继续查询原任务')}</button>}
       {isOwner && job?.errorDetail && <span className="mt-1 block break-all text-micro text-ink-400">{job.errorDetail}</span>}
     </p>}
-    {reportJob && <div className="mt-3 rounded-md border border-ai-600/25 bg-ai-50 px-3.5 py-3">
+    {reportJob && <div className="mt-3 overflow-hidden rounded-md border border-ai-600/25 bg-ai-50">
+      <p className="border-b border-ai-600/15 px-3.5 py-2 text-micro text-ink-500">{t('在报告内上下滚动，查看全文与图表')}</p>
+      <div
+        data-stock-report-scroll=""
+        role="region"
+        aria-label={t('股票分析报告')}
+        tabIndex={0}
+        className="overflow-y-auto overscroll-contain px-3.5 py-3 [scrollbar-gutter:stable]"
+        style={{ maxHeight: 'clamp(260px, 55dvh, 440px)' }}
+      >
       {running && <p className="mb-3 text-micro text-ink-500">{t('正在生成新分析，保留上一份报告')}</p>}
       <StockAnalysisReport result={reportJob.result} visuals={reportJob.visuals} fallback={<p className="text-body-s leading-relaxed text-ink-800 whitespace-pre-wrap">{summary ?? t('分析已完成，暂无摘要')}</p>} />
       {reportJob.model?.trim() && <p className="mt-3 break-words text-micro text-ink-400">{aiModelLabel(reportJob.model, reportJob.reasoning)}</p>}
@@ -201,6 +215,7 @@ function SignedInAnalysis({ ticker, isOwner }: { ticker: string; isOwner: boolea
         : t('报告更新时间 {time}', { time: timeLabel(reportJob.updatedAt) })}</p>}
       {displayedUsage.length > 0 && <details className="mt-2 text-micro text-ink-500"><summary className="cursor-pointer">{t('模型与缓存用量')}</summary><div className="mt-1">{displayedUsage.map(([key, label]) => <p key={key}>{label}: {usage![key]!.toLocaleString(localeTag())}</p>)}</div></details>}
       <AnalysisSources sources={reportJob.evidenceSources} />
+      </div>
     </div>}
   </div>;
 }
