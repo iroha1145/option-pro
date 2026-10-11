@@ -90,8 +90,10 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
             basis={__t('较昨收')}
           />
         </div>
-        {/* 手机上报价时间单独一行，读到后的长说明不会把这一组从一行挤成两行。 */}
-        <dl className="grid w-full grid-cols-2 items-end gap-x-7 gap-y-3 pb-1.5 sm:flex sm:w-auto sm:flex-wrap" data-price-header-stats="">
+        {/* 手机上报价时间单独一行，读到后的长说明不会把这一组从一行挤成两行。
+            从 lg 起这一组才与价格同一行；sm 到 lg 之间（w-full）它另起一行：能不能并排取决于读到的数据，
+            读取中价格与涨跌只有「—」放得下，读到后变宽就掉到价格下面，页头会在数据到达时变高。 */}
+        <dl className="grid w-full grid-cols-2 items-end gap-x-7 gap-y-3 pb-1.5 sm:flex sm:flex-wrap lg:w-auto" data-price-header-stats="">
           <div className="min-w-0">
             <dt className="text-micro text-ink-400">{__t('成交量')}</dt>
             <dd className="mt-0.5 text-body-s text-ink-900 tnum">{compactOr(detail?.volume)}</dd>
