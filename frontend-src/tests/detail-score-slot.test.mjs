@@ -92,6 +92,24 @@ test('the first row does not depend on the name: one-line title, score block on 
   }
 });
 
+test('the stats group joins the price row only from md, so the loaded header is never taller than the skeleton', () => {
+  // The real price and change are wider than the skeleton's dashes. If the stats group could share the price row below md, it would fit
+  // while loading and drop under the price once the data arrived (+63 px at 640-672 px). So below md it is always a full row of its own.
+  const details = [
+    undefined,
+    { ticker: 'NVDA', name: 'NVIDIA Corporation', price: 188.12, change: 2.3, changePct: 1.2, volume: 1234567, marketCap: 4.5e12, strengthScore: 72.5 },
+  ];
+  for (const detail of details) {
+    const tree = PriceHeader({ symbol: 'NVDA', detail });
+    const stats = find(tree, (node) => node.props?.['data-price-header-stats'] !== undefined);
+    assert.ok(stats, 'stats group missing');
+    const classes = stats.props.className.split(/\s+/);
+    assert.ok(classes.includes('w-full'), 'full width below md: a line of its own next to a price of any width');
+    assert.ok(classes.includes('md:w-auto'), 'content width from md up, beside the price');
+    assert.deepEqual(classes.filter((name) => /^(?:sm:)?w-/.test(name) && name !== 'w-full'), [], 'no sm-level width that lets it share the price row');
+  }
+});
+
 test('a score of zero is still a score', () => {
   const slot = slotOf({ symbol: 'NVDA', detail: { ticker: 'NVDA', strengthScore: 0 } });
   assert.doesNotMatch(slot.props.className, /\binvisible\b/);
