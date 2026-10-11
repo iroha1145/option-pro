@@ -131,6 +131,13 @@ AI_TASK_MAX_OUTPUT_TOKENS: dict[str, int] = {
 CLAUDE_TASK_MAX_OUTPUT_TOKENS = {
     job_type: 65_536 for job_type in AI_TASK_MAX_OUTPUT_TOKENS
 }
+# Sonnet 联网核验热点：xhigh 思考之外，最终 JSON 要给每个输入事件（最多 20 条新闻、
+# 20 条日历）各写一条核验，65,536 不够（2026-10-11 aij_b4dc17c2 累计输出 66,912，
+# 其中思考 32,217，整单作废）。改用 Sonnet 5.5 单次请求的输出上限 128,000。模型看
+# 不到这个上限，它只决定截断点：每单最坏多付 62,464 个输出 token（约 0.62 美元），
+# 预留从约 4.51 美元升到约 4.89 美元。改动会移动核实热点的任务身份，上一版列在
+# _IDENTITY_PREDECESSORS。
+SONNET_FOCUS_MAX_OUTPUT_TOKENS = 128_000
 # Admission allowance for native tool work, not a provider-enforced token cap.
 # Server-side iterations can re-read context; actual usage must never be clipped
 # to this allowance when it settles. Output, search/fetch counts and wall time
@@ -204,7 +211,9 @@ LEGACY_FOCUS_OPENAI_IDENTITY = ("market_focus_zh_cn_v5", "6c3d008c66678f7729b5f6
 LEGACY_VERIFIED_FOCUS_IDENTITY = ("market_focus_verified_zh_cn_v1", "0fb6fd7a1481f1da7a9b369b626e1736828b5ba0e934824f7a905c22646e8495")
 FOCUS_CLAUDE_IDENTITY = ("market_focus_zh_cn_v6", "e95c0b1b35cc10087760a99391f1ea9e7d7dd7730290110eff414016a0a069a2")
 FOCUS_OPENAI_IDENTITY = ("market_focus_zh_cn_v6", "6fefeec2b2b09a751e0c341911741a503d1a507385d611c4afa689a4cf405cd3")
-VERIFIED_FOCUS_IDENTITY = ("market_focus_verified_zh_cn_v2", "aae4f97495d407b14dfbb685ca2b5d8cc82c70f8bfb4eae8938cec719d8e696d")
+# 2026-10-10 至 10-11：核实热点输出上限 65,536（SONNET_FOCUS_MAX_OUTPUT_TOKENS 之前）。
+VERIFIED_FOCUS_65K_IDENTITY = ("market_focus_verified_zh_cn_v2", "aae4f97495d407b14dfbb685ca2b5d8cc82c70f8bfb4eae8938cec719d8e696d")
+VERIFIED_FOCUS_IDENTITY = ("market_focus_verified_zh_cn_v2", "b40394467f8a064651e05fbb8eb1097337cea5e14987d863f7653ffbc2074bdb")
 # 2026-10-10 的资源策略变化（OpenAI 新闻与财报输出上限 32,768→65,536，Luna
 # 联网改为只在缺正文时启用；之后联网上限 3 次改 1 次，摘要够长时不联网）没有
 # 改结果结构。只按「确切的现行身份 → 上一版身份」放行：待处理任务按现行策略
@@ -223,7 +232,9 @@ _IDENTITY_PREDECESSORS: dict[tuple[str, str], frozenset[tuple[str, str]]] = {
     OPENAI_EARNINGS_IDENTITY: frozenset({LEGACY_OPENAI_EARNINGS_IDENTITY}),
     FOCUS_CLAUDE_IDENTITY: frozenset({LEGACY_FOCUS_CLAUDE_IDENTITY}),
     FOCUS_OPENAI_IDENTITY: frozenset({LEGACY_FOCUS_OPENAI_IDENTITY}),
-    VERIFIED_FOCUS_IDENTITY: frozenset({LEGACY_VERIFIED_FOCUS_IDENTITY}),
+    # 2026-10-11 只抬了输出上限：65,536 版的待处理任务按新上限提交，已完成的周期与
+    # 已发布的核实热点照常可读；更早的 v1 身份仍一并放行。
+    VERIFIED_FOCUS_IDENTITY: frozenset({VERIFIED_FOCUS_65K_IDENTITY, LEGACY_VERIFIED_FOCUS_IDENTITY}),
 }
 # Failures a scheduler may retry on its own, at most SCHEDULED_MAX_ATTEMPTS
 # executions per item. Anything else (schema or binding failures, oversized
@@ -941,6 +952,8 @@ def _client(settings: Any) -> Any:
 
 
 def max_output_tokens_for(job_type: str, *, model: str | None = None) -> int:
+    if model == SONNET_MODEL and job_type == "market_focus":
+        return SONNET_FOCUS_MAX_OUTPUT_TOKENS
     try:
         policy = (
             CLAUDE_TASK_MAX_OUTPUT_TOKENS

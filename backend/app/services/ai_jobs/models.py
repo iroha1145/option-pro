@@ -2941,6 +2941,20 @@ class MarketFocusResult(SimplifiedChineseResult):
     no_new_material_catalyst: StrictBool
     insufficient_context: StrictBool
 
+    @model_validator(mode="before")
+    @classmethod
+    def take_input_hash_from_payload(cls, value: Any, info: ValidationInfo) -> Any:
+        # input_hash 是 64 位十六进制摘要，模型照抄时会漏位或改错一位（2026-10-11
+        # Sonnet 核实周期 aij_28555a65 因此整轮作废）。结果一律改用本任务载荷里的值，
+        # 在字段校验之前替换，模型漏写时也补上。cycle_id 与 as_of 仍在 validate_result
+        # 里比对，把结果绑定到本轮周期。提示词仍要求原样复制：改提示词会移动任务身份。
+        # 载荷自身的摘要不合规时不替换，留给 validate_job_payload 判载荷无效。
+        context = info.context if isinstance(info.context, dict) else {}
+        expected = context.get("focus_input_hash")
+        if isinstance(value, dict) and isinstance(expected, str) and _SHA256.fullmatch(expected.strip()):
+            return {**value, "input_hash": expected.strip()}
+        return value
+
     @field_validator("summary_zh", "market_summary", mode="before")
     @classmethod
     def translate_bound_macro_status(cls, value: Any, info: ValidationInfo) -> Any:
@@ -3608,6 +3622,7 @@ def validate_result(
                 and isinstance(payload.get("macro_conditions"), dict)
                 else None
             ),
+            "focus_input_hash": payload.get("input_hash") if job_type == "market_focus" else None,
         },
     )
     data = result.model_dump(mode="json")
@@ -3661,8 +3676,7 @@ def validate_result(
         expected_as_of = str(payload["as_of"]).strip()
         if _aware_utc_instant(data["as_of"]) != _aware_utc_instant(expected_as_of):
             raise ValueError("market_focus_as_of_mismatch")
-        if data["input_hash"] != str(payload["input_hash"]).strip():
-            raise ValueError("market_focus_input_hash_mismatch")
+        # input_hash 已在字段校验前改用载荷值（MarketFocusResult.take_input_hash_from_payload）。
         allowed_event_ids = {
             str(event_id).strip()
             for event_id in payload["allowed_event_group_ids"]

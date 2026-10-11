@@ -434,8 +434,12 @@ def tool_limits(prepared: PreparedMessage) -> dict[str, int]:
     if _claude_earnings(prepared):
         from app.services.ai_jobs.runtime import EARNINGS_TOOL_LIMITS
         return dict(EARNINGS_TOOL_LIMITS)
-    network = 12 if prepared.params["model"] == "claude-sonnet-5-5" and prepared.diagnostic_task == "ai_jobs:market_focus" else 1
-    return {"web_search": network, "web_fetch": network, "code": 2, "total": network * 2 + 2}
+    if prepared.params["model"] == "claude-sonnet-5-5" and prepared.diagnostic_task == "ai_jobs:market_focus":
+        # One call above the web tools' max_uses (12) and the prompt's two code
+        # runs, as for earnings: the provider's max_uses_exceeded result, not a
+        # mid-stream abort whose billing is unknown, stops the first extra call.
+        return {"web_search": 13, "web_fetch": 13, "code": 3, "total": 29}
+    return {"web_search": 1, "web_fetch": 1, "code": 2, "total": 4}
 
 
 def _final_block_text(blocks: list[Any]) -> str:
@@ -574,7 +578,10 @@ async def stream_conversation(
         if pair_error and pair_error != "provider_incomplete_tool_result":
             return finish(pair_error)
         consumed_output = sum_round_usage(rounds)["output_tokens"]
-        if type(consumed_output) is int and consumed_output > ceiling:
+        # Server tool iterations can run a request past its max_tokens. Past the
+        # ceiling only another request is refused: a finished answer is paid for.
+        if (type(consumed_output) is int and consumed_output > ceiling
+                and (message.stop_reason == "pause_turn" or progress_only)):
             return finish("provider_incomplete_max_output_tokens")
         if earnings:
             container = getattr(message, "container", None)

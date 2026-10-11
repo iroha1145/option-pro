@@ -424,7 +424,8 @@ def test_bound_macro_translation_preserves_field_type_and_nonempty_checks(field,
     ("field", "value", "error"),
     [
         ("cycle_id", "different-cycle", "market_focus_cycle_mismatch"),
-        ("input_hash", "b" * 64, "market_focus_input_hash_mismatch"),
+        # input_hash is taken from the payload since 2026-10-11, see
+        # test_focus_cycle_reliability_20261011.py.
         ("as_of", "2026-07-15T13:00:00Z", "market_focus_as_of_mismatch"),
     ],
 )
@@ -1999,7 +2000,7 @@ def test_news_result_allows_an_empty_verified_ticker_set():
     assert validated["affected_stocks"] == []
 
 
-def test_market_focus_rejects_unlisted_event_ticker_and_input_hash():
+def test_market_focus_rejects_unlisted_event_and_ticker():
     event_result = _market_focus_result()
     event_result["dominant_events"][0]["event_group_id"] = "invented-event"
     with pytest.raises(ValueError, match="market_focus_event_binding_mismatch"):
@@ -2018,14 +2019,15 @@ def test_market_focus_rejects_unlisted_event_ticker_and_input_hash():
             _market_focus_payload(),
         )
 
+    # A mistyped input_hash is replaced by the payload value since 2026-10-11.
     hash_result = _market_focus_result()
     hash_result["input_hash"] = "b" * 64
-    with pytest.raises(ValueError, match="market_focus_input_hash_mismatch"):
-        validate_result(
-            "market_focus",
-            json.dumps(hash_result, ensure_ascii=False),
-            _market_focus_payload(),
-        )
+    checked = validate_result(
+        "market_focus",
+        json.dumps(hash_result, ensure_ascii=False),
+        _market_focus_payload(),
+    )
+    assert checked["input_hash"] == _market_focus_payload()["input_hash"]
 
 
 def test_runtime_uses_fixed_model_reasoning_background_and_per_task_limits(tmp_path):

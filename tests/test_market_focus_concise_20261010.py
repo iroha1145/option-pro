@@ -484,8 +484,10 @@ def test_identity_bump_allows_only_the_exact_previous_identities():
 def test_identity_predecessors_stop_at_the_next_policy_change(monkeypatch):
     monkeypatch.setitem(runtime.CLAUDE_TASK_MAX_OUTPUT_TOKENS, "market_focus", 16_384)
     monkeypatch.setitem(runtime.AI_TASK_MAX_OUTPUT_TOKENS, "market_focus", 16_384)
+    monkeypatch.setattr(runtime, "SONNET_FOCUS_MAX_OUTPUT_TOKENS", 16_384)
     for model, legacy in (
         (runtime.SONNET_MODEL, runtime.LEGACY_VERIFIED_FOCUS_IDENTITY),
+        (runtime.SONNET_MODEL, runtime.VERIFIED_FOCUS_65K_IDENTITY),
         ("claude-haiku-5-5", runtime.LEGACY_FOCUS_CLAUDE_IDENTITY),
         ("gpt-5.6-terra", runtime.LEGACY_FOCUS_OPENAI_IDENTITY),
     ):
@@ -512,6 +514,8 @@ def _engine_stub():
 
 @pytest.mark.parametrize(("prompt_version", "identity", "current", "recoverable"), [
     ("market-focus-zh-cn-v7", runtime.VERIFIED_FOCUS_IDENTITY, True, True),
+    # 2026-10-11 只抬了 Sonnet 输出上限，65,536 版身份照常放行。
+    ("market-focus-zh-cn-v7", runtime.VERIFIED_FOCUS_65K_IDENTITY, True, True),
     (LEGACY_PROMPT, runtime.LEGACY_VERIFIED_FOCUS_IDENTITY, True, True),
     # 升级前就不算现行的 v6 任务，升级后也不会被重新放行。
     (LEGACY_PROMPT, ("market_focus_verified_zh_cn_v1", "0" * 64), False, False),
