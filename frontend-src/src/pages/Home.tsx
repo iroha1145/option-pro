@@ -764,7 +764,7 @@ function RadarSignalRow({ signal: s, index: i }: { signal: BreakoutSignal; index
         <span className="shrink-0 text-micro text-ink-400 xl:justify-self-end xl:[grid-area:time]">{fmtRelative(s.at)}</span>
         <GrowStrength score={s.strengthScore} delay={staggerDelay(i)} className="ml-auto shrink-0 xl:ml-0 xl:justify-self-end xl:[grid-area:bar]" />
       </span>
-      <span className="flex items-center justify-end gap-2 [grid-area:quote] max-[374px]:flex-col max-[374px]:items-end max-[374px]:gap-1 xl:contents">
+      <span className="flex items-center justify-end gap-2 [grid-area:quote] max-[375px]:flex-col max-[375px]:items-end max-[375px]:gap-1 xl:contents">
         {/* 窄屏限宽：「暂无新成交 · 最后报价 日期」折到价格下方两行，不把代码挤出格。
             375 以下价格列并排涨跌徽章要 217px，代码格被压没、标签画到代码上：徽章改叠在价格下方。 */}
         <span className="min-w-0 max-w-[8.5rem] text-right text-caption text-ink-800 tnum xl:max-w-none xl:justify-self-end xl:[grid-area:price]">
@@ -809,11 +809,11 @@ function EarningsAnchorRow({ item: it, todayKey }: { item: EarningsItem; todayKe
       </p>
       <span className="flex shrink-0 items-center gap-1.5">
         {eps !== null && (
-          <span className="hidden text-micro text-ink-500 tnum sm:block lg:hidden xl:block">
+          <span className="hidden whitespace-nowrap text-micro text-ink-500 tnum sm:block lg:hidden xl:block">
             {t('EPS 预期 {v}', { v: eps.toFixed(2) })}
           </span>
         )}
-        <span className="rounded-md bg-paper-2 px-2 py-1 text-micro text-ink-600">
+        <span className="whitespace-nowrap rounded-md bg-paper-2 px-2 py-1 text-micro text-ink-600">
           {it.timing === 'bmo' ? t('盘前') : it.timing === 'amc' ? t('盘后') : t('时间待定')}
         </span>
       </span>

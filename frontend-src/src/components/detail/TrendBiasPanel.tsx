@@ -159,7 +159,7 @@ export default function TrendBiasPanel({
           const v = data.scores[key];
           return (
             <div key={key} className="flex items-center gap-3">
-              <span className="w-8 shrink-0 text-caption text-ink-500">{label}</span>
+              <span className="w-20 shrink-0 text-caption text-ink-500">{label}</span>
               <span className="h-1.5 flex-1 overflow-hidden rounded-pill bg-line" role="presentation">
                 <span
                   className={cn(

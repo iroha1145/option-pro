@@ -115,7 +115,7 @@ export default function SignalList({
               <p className="text-micro text-ink-400">{fmtRelative(e.at)}</p>
             </div>
             {meta && (
-              <span className={cn('rounded-xs px-1.5 py-0.5 text-micro font-medium', meta.cls)}>{meta.text}</span>
+              <span className={cn('shrink-0 whitespace-nowrap rounded-xs px-1.5 py-0.5 text-micro font-medium', meta.cls)}>{meta.text}</span>
             )}
           </div>
         );

@@ -29,14 +29,19 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
     {loading ? <p className="mt-3 text-caption text-ink-500">{t('正在确认登录状态')}</p>
       : identityUnavailable ? <p className="mt-3 text-caption text-ink-500">{t('暂时无法确认登录状态')}</p>
       : <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-dashed border-line-strong bg-card-warm px-3 py-2.5">
-        <p className="text-caption text-ink-500">{t('登录后可用模型分析')}</p>
-        <Link to="/login" state={loginReturnState(window.location)} className="shrink-0 text-caption font-medium text-brand-600 hover:text-brand-700">{t('去登录')}</Link>
+        <p className="min-w-0 text-caption text-ink-500">{t('登录后可用模型分析')}</p>
+        <Link to="/login" state={loginReturnState(window.location)} className="shrink-0 whitespace-nowrap text-caption font-medium text-brand-600 hover:text-brand-700">{t('去登录')}</Link>
       </div>}
   </div>;
   return <SignedInAnalysis key={`${isOwner ? 'owner' : 'customer'}:${username ?? ''}:${ticker}`} ticker={ticker} isOwner={isOwner} />;
 }
 function CardTitle({ ticker }: { ticker: string }) {
-  return <h3 className="flex items-center gap-2 text-h3 text-ink-900"><Icon name="spark-ai" size={16} className="text-ai-600" />{isIndexSymbol(ticker) ? t('AI 指数分析') : t('AI 股票分析')}</h3>;
+  return (
+    <h3 className="flex min-w-0 items-center gap-2 text-h3 text-ink-900">
+      <Icon name="spark-ai" size={16} className="shrink-0 text-ai-600" />
+      <span className="truncate">{isIndexSymbol(ticker) ? t('AI 指数分析') : t('AI 股票分析')}</span>
+    </h3>
+  );
 }
 function SignedInAnalysis({ ticker, isOwner }: { ticker: string; isOwner: boolean }) {
   const { job, error, queryIssue, starting, start, cancel, resume, adopt, clear } = useAiJob();
@@ -160,7 +165,7 @@ function SignedInAnalysis({ ticker, isOwner }: { ticker: string; isOwner: boolea
   const displayedUsage = usageLabels.filter(([key]) => typeof usage?.[key] === 'number');
   return <div className="card-surface p-5">
     <div className="flex items-center justify-between gap-3"><CardTitle ticker={ticker} />
-      {!running && !starting && !confirming && <button onClick={() => setConfirming(true)} disabled={!canGenerate} className="btn-ai disabled:cursor-not-allowed disabled:opacity-50">{reportJob ? t('重新分析') : t('生成分析')}</button>}
+      {!running && !starting && !confirming && <button onClick={() => setConfirming(true)} disabled={!canGenerate} className="btn-ai shrink-0 whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50">{reportJob ? t('重新分析') : t('生成分析')}</button>}
     </div>
     {loading && <p className="mt-3 text-caption text-ink-500" role="status">{t('正在读取股票报告')}</p>}
     {view?.quota && <div className="mt-3 text-micro leading-relaxed text-ink-500">
@@ -176,15 +181,15 @@ function SignedInAnalysis({ ticker, isOwner }: { ticker: string; isOwner: boolea
     {readError && <p className="mt-3 text-caption text-danger-700" role="status">{readError} <button onClick={() => void refresh()} disabled={refreshing} className="text-ai-600">{t('重试')}</button></p>}
     {confirming && <div className="mt-3 rounded-md bg-ai-50 px-3 py-2.5">
       <p className="text-caption text-ink-600">{t('生成个股深度研究报告，将使用今日 1 次额度。')}</p>
-      <div className="mt-2 flex gap-2"><button onClick={() => void onGenerate()} disabled={!canGenerate} className="btn-ai disabled:opacity-50">{t('生成分析')}</button><button onClick={() => setConfirming(false)} className="control-button">{t('取消')}</button></div>
+      <div className="mt-2 flex flex-wrap gap-2"><button onClick={() => void onGenerate()} disabled={!canGenerate} className="btn-ai shrink-0 whitespace-nowrap disabled:opacity-50">{t('生成分析')}</button><button onClick={() => setConfirming(false)} className="control-button shrink-0 whitespace-nowrap">{t('取消')}</button></div>
     </div>}
     {starting && <p className="mt-3 text-caption text-ink-500" role="status">{t('正在创建分析任务…')}</p>}
     {running && job && <div className="mt-3">
       <div className="flex items-center justify-between gap-3 text-caption text-ink-500">
-        <ThinkingLabel live={!(queryIssue === 'paused' || queryIssue === 'blocked' || job.cancelRequested)}>
+        <ThinkingLabel live={!(queryIssue === 'paused' || queryIssue === 'blocked' || job.cancelRequested)} className="min-w-0 truncate whitespace-nowrap">
           {queryIssue === 'paused' || queryIssue === 'blocked' ? t('任务状态待确认') : job.cancelRequested ? t('已请求取消') : job.status === 'queued' ? t('排队中…') : job.progress === null ? t('模型分析中…') : t('模型分析中 {pct}%', { pct: Math.round(job.progress) })}
         </ThinkingLabel>
-        {isOwner && <button onClick={() => void cancel()} disabled={job.cancelRequested} className="shrink-0 text-ink-400 hover:text-ink-600 disabled:opacity-50">{t('取消分析')}</button>}
+        {isOwner && <button onClick={() => void cancel()} disabled={job.cancelRequested} className="shrink-0 whitespace-nowrap text-ink-400 hover:text-ink-600 disabled:opacity-50">{t('取消分析')}</button>}
       </div>
       {deferral && <p className="mt-1 text-micro text-ink-400">{deferral}</p>}
       {job.progress !== null && <div className="mt-1.5 h-1 overflow-hidden rounded-pill bg-line"><div className="h-full bg-ai-600 transition-[width] duration-ui ease-paper" style={{ width: `${job.progress}%` }} /></div>}
