@@ -68,6 +68,9 @@ export function InsightValue({
 }) {
   const hasChange = typeof change === 'number' && Number.isFinite(change);
   const tone = toneOf(change ?? changePct);
+  /* 大号读数读到之前不渲染涨跌徽标和涨跌额，读到后价格变宽、两者插到基准前面，基准会被推走 240px 以上。
+     所以 sm 以上读到之前基准占位但不可见，读到后在最终位置出现；手机上它独占一行不会被推动，照常显示。 */
+  const basisPending = size === 'xl' && changePct === undefined && !hasChange;
   return (
     <div className={cn('flex flex-wrap items-baseline gap-x-2.5 gap-y-1', className)}>
       <span
@@ -94,7 +97,7 @@ export function InsightValue({
         </span>
       )}
       {/* 大号读数在手机上把比较基准放到下一行：价格、涨跌额读到后变宽，基准留在同一行会被推走或折行 */}
-      {basis && <span className={cn('text-micro text-ink-400', size === 'xl' && 'max-sm:basis-full')}>{basis}</span>}
+      {basis && <span className={cn('text-micro text-ink-400', size === 'xl' && 'max-sm:basis-full', basisPending && 'sm:invisible')}>{basis}</span>}
     </div>
   );
 }
