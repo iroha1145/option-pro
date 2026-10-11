@@ -5,6 +5,7 @@ import { BusyIcon } from '@/components/shared/IconSwap';
 import '@/styles/transitions-root.css';
 import '@/index.css';
 import '@/styles/transitions-catalog.css';
+import '@/styles/icon-motion.css';
 import './icon-motion-preview.css';
 
 const examples: { name: IconName; label: string; description: string }[] = [

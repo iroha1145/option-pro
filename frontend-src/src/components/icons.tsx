@@ -4,7 +4,6 @@
  * 允许 ≤0.3px 手绘抖动；主体落在 20×20 安全区。
  */
 import { Children, Fragment, useCallback, useEffect, useRef, type ReactElement, type ReactNode, type SVGProps } from 'react';
-import '../styles/icon-motion.css';
 
 export type IconName =
   | 'radar' | 'crosshair' | 'candle' | 'layers' | 'calendar-spark' | 'bolt' | 'star-line'
