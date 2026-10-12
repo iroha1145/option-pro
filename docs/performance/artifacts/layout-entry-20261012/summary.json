@@ -1,0 +1,58 @@
+[
+  {
+    "bundle": "baseline",
+    "reduced": "no-preference",
+    "cases": 9,
+    "rootDisplacementPx": [
+      8
+    ],
+    "buttonDisplacementPx": [
+      8.0
+    ],
+    "buttonCenterHits": 63,
+    "samples": 63,
+    "maxHorizontalOverflowPx": 0
+  },
+  {
+    "bundle": "baseline",
+    "reduced": "reduce",
+    "cases": 9,
+    "rootDisplacementPx": [
+      0
+    ],
+    "buttonDisplacementPx": [
+      0
+    ],
+    "buttonCenterHits": 63,
+    "samples": 63,
+    "maxHorizontalOverflowPx": 0
+  },
+  {
+    "bundle": "candidate",
+    "reduced": "no-preference",
+    "cases": 9,
+    "rootDisplacementPx": [
+      0
+    ],
+    "buttonDisplacementPx": [
+      0.0
+    ],
+    "buttonCenterHits": 63,
+    "samples": 63,
+    "maxHorizontalOverflowPx": 0
+  },
+  {
+    "bundle": "candidate",
+    "reduced": "reduce",
+    "cases": 9,
+    "rootDisplacementPx": [
+      0
+    ],
+    "buttonDisplacementPx": [
+      0
+    ],
+    "buttonCenterHits": 63,
+    "samples": 63,
+    "maxHorizontalOverflowPx": 0
+  }
+]

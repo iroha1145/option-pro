@@ -1,0 +1,837 @@
+{
+  "sqlite_version": "3.40.1",
+  "clock": "2026-10-12T11:00:00+00:00",
+  "repository_source_sha256": "df875f30d51cad205369ad7858996113d2776bea17432d819a039d859e445d67",
+  "repository_source_path": "/app/backend/app/services/ai_jobs/repository.py",
+  "input_database_sha256": "484d606854e63b6d374f7305106ca6e0b6e9173c7dded977f1e42f4e0ce58deb",
+  "cases": [
+    {
+      "dataset": "actual",
+      "source_counts": [
+        [
+          "manual",
+          44
+        ],
+        [
+          "scheduled",
+          8536
+        ]
+      ],
+      "old": {
+        "value": null,
+        "p50_ms": 1.1386442929506302,
+        "max_ms": 1.6179773956537247,
+        "raw_ms": [
+          1.6179773956537247,
+          1.166531816124916,
+          1.1291969567537308,
+          1.1421609669923782,
+          1.1338088661432266,
+          1.1406783014535904,
+          1.1214278638362885,
+          1.1395961046218872,
+          1.1300425976514816,
+          1.141425222158432,
+          1.1218544095754623,
+          1.1509750038385391,
+          1.1223796755075455,
+          1.1396221816539764,
+          1.120859757065773,
+          1.1497698724269867,
+          1.1205561459064484,
+          1.140480861067772,
+          1.1313538998365402,
+          1.1401046067476273,
+          1.1218003928661346,
+          1.1386442929506302,
+          1.1302828788757324,
+          1.140393316745758,
+          1.1211521923542023
+        ]
+      },
+      "new": {
+        "value": null,
+        "p50_ms": 0.1787133514881134,
+        "max_ms": 0.6137900054454803,
+        "raw_ms": [
+          0.6137900054454803,
+          0.1974198967218399,
+          0.18373504281044006,
+          0.1806151121854782,
+          0.1808255910873413,
+          0.18061138689517975,
+          0.1782979816198349,
+          0.1787133514881134,
+          0.1791771501302719,
+          0.1888759434223175,
+          0.17901696264743805,
+          0.17946027219295502,
+          0.17824769020080566,
+          0.17852149903774261,
+          0.17837248742580414,
+          0.178460031747818,
+          0.1796633005142212,
+          0.17830170691013336,
+          0.17786771059036255,
+          0.17744861543178558,
+          0.17854757606983185,
+          0.178411602973938,
+          0.17846189439296722,
+          0.17833150923252106,
+          0.17891265451908112
+        ]
+      },
+      "old_vm_steps": 26607,
+      "new_vm_steps": 2143,
+      "old_plan": [
+        [
+          5,
+          0,
+          0,
+          "SEARCH s"
+        ],
+        [
+          9,
+          0,
+          0,
+          "SEARCH j USING INDEX sqlite_autoindex_ai_jobs_1 (job_id=?)"
+        ]
+      ],
+      "new_plan": [
+        [
+          2,
+          0,
+          0,
+          "CO-ROUTINE recent"
+        ],
+        [
+          7,
+          2,
+          0,
+          "SCAN j USING INDEX idx_ai_jobs_manual_cooldown"
+        ],
+        [
+          21,
+          0,
+          0,
+          "SCAN recent"
+        ],
+        [
+          25,
+          0,
+          0,
+          "CORRELATED SCALAR SUBQUERY 2"
+        ],
+        [
+          30,
+          25,
+          0,
+          "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)"
+        ],
+        [
+          51,
+          0,
+          0,
+          "USE TEMP B-TREE FOR ORDER BY"
+        ]
+      ],
+      "fallback_plan": [
+        [
+          5,
+          0,
+          0,
+          "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)"
+        ],
+        [
+          9,
+          0,
+          0,
+          "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+        ]
+      ],
+      "new_indexes_bytes": [
+        [
+          "idx_ai_job_sources_lane_job",
+          483328
+        ],
+        [
+          "idx_ai_jobs_manual_cooldown",
+          569344
+        ],
+        [
+          "idx_ai_jobs_manual_paid_cover",
+          794624
+        ]
+      ],
+      "initial_bytes": 80277504,
+      "index_create_ms": 127.81651504337788,
+      "business_tables_unchanged": true,
+      "table_summaries": {
+        "ai_earnings_final_locks": {
+          "rows": 82,
+          "sha256": "4c246bb7c53a3513c2d93fbce479ca6107656359e2186185318a117c1de9d2ca"
+        },
+        "ai_job_batch_members": {
+          "rows": 8039,
+          "sha256": "29229c0245d7d6f3ed797699639b25ea0cefc52d0e346cf6b8e7bacf2461b24a"
+        },
+        "ai_job_provider_progress": {
+          "rows": 17,
+          "sha256": "21e16fbff2833c2919051b5637850d3da8d87859dced47543051d626515302c6"
+        },
+        "ai_job_sources": {
+          "rows": 8580,
+          "sha256": "bc0833ea12473e06ad0a657de28165c89c6358c268a927ffc22decacb948ba57"
+        },
+        "ai_jobs": {
+          "rows": 8580,
+          "sha256": "10a3ae96d3c00b4acd0dc0e357d0ab1d5a5a0b34fc686bb44c40bacbac65391b"
+        },
+        "ai_stock_analysis_allowances": {
+          "rows": 4,
+          "sha256": "3af5f629d6615795b11673b20acbad66e6a7b714e64b1bd992db9b14afa583e4"
+        },
+        "model_budget_bootstrap": {
+          "rows": 5,
+          "sha256": "13ab68c42894acc5106f362df8a983800a7a91ec8b50c691f60cd5afe4cbcb7b"
+        },
+        "model_budget_brief_requests": {
+          "rows": 4,
+          "sha256": "2537365f1302b570cbb1c52971d9fa438f2b589d5a97b7521a7526664074ac7d"
+        }
+      },
+      "schema_column_counts": {
+        "ai_earnings_final_locks": 7,
+        "ai_job_batch_members": 4,
+        "ai_job_provider_progress": 3,
+        "ai_job_schema": 3,
+        "ai_job_sources": 3,
+        "ai_jobs": 43,
+        "ai_stock_analysis_allowances": 6,
+        "model_budget_bootstrap": 4,
+        "model_budget_brief_requests": 10
+      },
+      "exclusion_checks": 20,
+      "raw_latest_timestamp_matches": true,
+      "integrity": "ok"
+    },
+    {
+      "dataset": "manual",
+      "source_counts": [
+        [
+          "manual",
+          8580
+        ]
+      ],
+      "old": {
+        "value": null,
+        "p50_ms": 34.920843318104744,
+        "max_ms": 37.1104646474123,
+        "raw_ms": [
+          36.9600523263216,
+          34.973349422216415,
+          34.83107127249241,
+          34.920843318104744,
+          34.891361370682716,
+          34.869758412241936,
+          34.83450040221214,
+          35.037992522120476,
+          34.856706857681274,
+          34.872058779001236,
+          34.86943617463112,
+          34.884458407759666,
+          34.84824299812317,
+          34.86785292625427,
+          34.872109070420265,
+          34.86941196024418,
+          34.93904322385788,
+          35.52764095366001,
+          36.851003766059875,
+          37.1104646474123,
+          35.56405566632748,
+          35.29822081327438,
+          35.942964255809784,
+          36.00350767374039,
+          35.871805623173714
+        ]
+      },
+      "new": {
+        "value": null,
+        "p50_ms": 0.14484301209449768,
+        "max_ms": 0.40570273995399475,
+        "raw_ms": [
+          0.40570273995399475,
+          0.1657344400882721,
+          0.1476667821407318,
+          0.2100542187690735,
+          0.14484301209449768,
+          0.18214061856269836,
+          0.15942752361297607,
+          0.16898661851882935,
+          0.14274753630161285,
+          0.1417100429534912,
+          0.14146417379379272,
+          0.1422334462404251,
+          0.1421663910150528,
+          0.143418088555336,
+          0.14170072972774506,
+          0.14306791126728058,
+          0.14275126159191132,
+          0.15629269182682037,
+          0.15342235565185547,
+          0.14247000217437744,
+          0.16869232058525085,
+          0.16830302774906158,
+          0.141877681016922,
+          0.16906671226024628,
+          0.1425277441740036
+        ]
+      },
+      "old_vm_steps": 179910,
+      "new_vm_steps": 1876,
+      "old_plan": [
+        [
+          5,
+          0,
+          0,
+          "SEARCH s"
+        ],
+        [
+          9,
+          0,
+          0,
+          "SEARCH j USING INDEX sqlite_autoindex_ai_jobs_1 (job_id=?)"
+        ]
+      ],
+      "new_plan": [
+        [
+          2,
+          0,
+          0,
+          "CO-ROUTINE recent"
+        ],
+        [
+          7,
+          2,
+          0,
+          "SCAN j USING INDEX idx_ai_jobs_manual_cooldown"
+        ],
+        [
+          21,
+          0,
+          0,
+          "SCAN recent"
+        ],
+        [
+          25,
+          0,
+          0,
+          "CORRELATED SCALAR SUBQUERY 2"
+        ],
+        [
+          30,
+          25,
+          0,
+          "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)"
+        ],
+        [
+          51,
+          0,
+          0,
+          "USE TEMP B-TREE FOR ORDER BY"
+        ]
+      ],
+      "fallback_plan": [
+        [
+          5,
+          0,
+          0,
+          "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)"
+        ],
+        [
+          9,
+          0,
+          0,
+          "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+        ]
+      ],
+      "new_indexes_bytes": [
+        [
+          "idx_ai_job_sources_lane_job",
+          458752
+        ],
+        [
+          "idx_ai_jobs_manual_cooldown",
+          569344
+        ],
+        [
+          "idx_ai_jobs_manual_paid_cover",
+          794624
+        ]
+      ],
+      "initial_bytes": 80277504,
+      "index_create_ms": 108.59923623502254,
+      "business_tables_unchanged": true,
+      "table_summaries": {
+        "ai_earnings_final_locks": {
+          "rows": 82,
+          "sha256": "4c246bb7c53a3513c2d93fbce479ca6107656359e2186185318a117c1de9d2ca"
+        },
+        "ai_job_batch_members": {
+          "rows": 8039,
+          "sha256": "29229c0245d7d6f3ed797699639b25ea0cefc52d0e346cf6b8e7bacf2461b24a"
+        },
+        "ai_job_provider_progress": {
+          "rows": 17,
+          "sha256": "21e16fbff2833c2919051b5637850d3da8d87859dced47543051d626515302c6"
+        },
+        "ai_job_sources": {
+          "rows": 8580,
+          "sha256": "c9c59c125c4edda6f39d6a05e7b26c8944932046e54bf66ed043c7d42f0efd46"
+        },
+        "ai_jobs": {
+          "rows": 8580,
+          "sha256": "10a3ae96d3c00b4acd0dc0e357d0ab1d5a5a0b34fc686bb44c40bacbac65391b"
+        },
+        "ai_stock_analysis_allowances": {
+          "rows": 4,
+          "sha256": "3af5f629d6615795b11673b20acbad66e6a7b714e64b1bd992db9b14afa583e4"
+        },
+        "model_budget_bootstrap": {
+          "rows": 5,
+          "sha256": "13ab68c42894acc5106f362df8a983800a7a91ec8b50c691f60cd5afe4cbcb7b"
+        },
+        "model_budget_brief_requests": {
+          "rows": 4,
+          "sha256": "2537365f1302b570cbb1c52971d9fa438f2b589d5a97b7521a7526664074ac7d"
+        }
+      },
+      "schema_column_counts": {
+        "ai_earnings_final_locks": 7,
+        "ai_job_batch_members": 4,
+        "ai_job_provider_progress": 3,
+        "ai_job_schema": 3,
+        "ai_job_sources": 3,
+        "ai_jobs": 43,
+        "ai_stock_analysis_allowances": 6,
+        "model_budget_bootstrap": 4,
+        "model_budget_brief_requests": 10
+      },
+      "exclusion_checks": 20,
+      "raw_latest_timestamp_matches": true,
+      "integrity": "ok"
+    },
+    {
+      "dataset": "manual3",
+      "source_counts": [
+        [
+          "manual",
+          25740
+        ]
+      ],
+      "old": {
+        "value": null,
+        "p50_ms": 103.04572619497776,
+        "max_ms": 107.12398029863834,
+        "raw_ms": [
+          107.12398029863834,
+          103.34541834890842,
+          103.20822149515152,
+          103.36755961179733,
+          102.97995619475842,
+          103.04572619497776,
+          103.12113910913467,
+          102.96579636633396,
+          102.87184081971645,
+          102.9043011367321,
+          102.9460784047842,
+          103.17406989634037,
+          103.15374471247196,
+          103.60133275389671,
+          103.26146520674229,
+          102.17307135462761,
+          101.72268003225327,
+          102.7040183544159,
+          102.52873972058296,
+          103.9449218660593,
+          105.14077916741371,
+          103.51100005209446,
+          102.37770527601242,
+          102.0063366740942,
+          101.89831629395485
+        ]
+      },
+      "new": {
+        "value": null,
+        "p50_ms": 0.15306472778320312,
+        "max_ms": 0.4583355039358139,
+        "raw_ms": [
+          0.4583355039358139,
+          0.1621730625629425,
+          0.15832483768463135,
+          0.15488825738430023,
+          0.15459954738616943,
+          0.15476159751415253,
+          0.15317648649215698,
+          0.15321187674999237,
+          0.15306472778320312,
+          0.1526232808828354,
+          0.15341676771640778,
+          0.15269778668880463,
+          0.15328265726566315,
+          0.15317462384700775,
+          0.15236809849739075,
+          0.15244260430335999,
+          0.1524742692708969,
+          0.15241652727127075,
+          0.1526959240436554,
+          0.1524854451417923,
+          0.15292130410671234,
+          0.15249289572238922,
+          0.1527201384305954,
+          0.15301071107387543,
+          0.18692389130592346
+        ]
+      },
+      "old_vm_steps": 539670,
+      "new_vm_steps": 1876,
+      "old_plan": [
+        [
+          5,
+          0,
+          0,
+          "SEARCH s"
+        ],
+        [
+          9,
+          0,
+          0,
+          "SEARCH j USING INDEX sqlite_autoindex_ai_jobs_1 (job_id=?)"
+        ]
+      ],
+      "new_plan": [
+        [
+          2,
+          0,
+          0,
+          "CO-ROUTINE recent"
+        ],
+        [
+          7,
+          2,
+          0,
+          "SCAN j USING INDEX idx_ai_jobs_manual_cooldown"
+        ],
+        [
+          21,
+          0,
+          0,
+          "SCAN recent"
+        ],
+        [
+          25,
+          0,
+          0,
+          "CORRELATED SCALAR SUBQUERY 2"
+        ],
+        [
+          30,
+          25,
+          0,
+          "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)"
+        ],
+        [
+          51,
+          0,
+          0,
+          "USE TEMP B-TREE FOR ORDER BY"
+        ]
+      ],
+      "fallback_plan": [
+        [
+          5,
+          0,
+          0,
+          "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)"
+        ],
+        [
+          9,
+          0,
+          0,
+          "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+        ]
+      ],
+      "new_indexes_bytes": [
+        [
+          "idx_ai_job_sources_lane_job",
+          1478656
+        ],
+        [
+          "idx_ai_jobs_manual_cooldown",
+          1826816
+        ],
+        [
+          "idx_ai_jobs_manual_paid_cover",
+          2498560
+        ]
+      ],
+      "initial_bytes": 236646400,
+      "index_create_ms": 333.4563635289669,
+      "business_tables_unchanged": true,
+      "table_summaries": {
+        "ai_earnings_final_locks": {
+          "rows": 82,
+          "sha256": "4c246bb7c53a3513c2d93fbce479ca6107656359e2186185318a117c1de9d2ca"
+        },
+        "ai_job_batch_members": {
+          "rows": 8039,
+          "sha256": "29229c0245d7d6f3ed797699639b25ea0cefc52d0e346cf6b8e7bacf2461b24a"
+        },
+        "ai_job_provider_progress": {
+          "rows": 17,
+          "sha256": "21e16fbff2833c2919051b5637850d3da8d87859dced47543051d626515302c6"
+        },
+        "ai_job_sources": {
+          "rows": 25740,
+          "sha256": "bb1fd814ab9f39e32633b4900be4dfee6af557d2231f00f2e472cd40053d9597"
+        },
+        "ai_jobs": {
+          "rows": 25740,
+          "sha256": "c990ddb8238493ae75838ac894e0603ba809cc27c4590915a526ce630c9cdfab"
+        },
+        "ai_stock_analysis_allowances": {
+          "rows": 4,
+          "sha256": "3af5f629d6615795b11673b20acbad66e6a7b714e64b1bd992db9b14afa583e4"
+        },
+        "model_budget_bootstrap": {
+          "rows": 5,
+          "sha256": "13ab68c42894acc5106f362df8a983800a7a91ec8b50c691f60cd5afe4cbcb7b"
+        },
+        "model_budget_brief_requests": {
+          "rows": 4,
+          "sha256": "2537365f1302b570cbb1c52971d9fa438f2b589d5a97b7521a7526664074ac7d"
+        }
+      },
+      "schema_column_counts": {
+        "ai_earnings_final_locks": 7,
+        "ai_job_batch_members": 4,
+        "ai_job_provider_progress": 3,
+        "ai_job_schema": 3,
+        "ai_job_sources": 3,
+        "ai_jobs": 43,
+        "ai_stock_analysis_allowances": 6,
+        "model_budget_bootstrap": 4,
+        "model_budget_brief_requests": 10
+      },
+      "exclusion_checks": 20,
+      "raw_latest_timestamp_matches": true,
+      "integrity": "ok"
+    },
+    {
+      "dataset": "scheduled",
+      "source_counts": [
+        [
+          "scheduled",
+          8580
+        ]
+      ],
+      "old": {
+        "value": null,
+        "p50_ms": 1.0249819606542587,
+        "max_ms": 1.088842749595642,
+        "raw_ms": [
+          1.088842749595642,
+          1.0257977992296219,
+          1.0354258120059967,
+          1.0260194540023804,
+          1.0238755494356155,
+          1.025460660457611,
+          1.0351240634918213,
+          1.0243263095617294,
+          1.0249130427837372,
+          1.024000346660614,
+          1.0331850498914719,
+          1.024097204208374,
+          1.0247044265270233,
+          1.034419983625412,
+          1.0251756757497787,
+          1.0234415531158447,
+          1.024298369884491,
+          1.0366011410951614,
+          1.0248087346553802,
+          1.0268036276102066,
+          1.0249819606542587,
+          1.032017171382904,
+          1.0237134993076324,
+          1.0236408561468124,
+          1.0238997638225555
+        ]
+      },
+      "new": {
+        "value": null,
+        "p50_ms": 0.12199766933917999,
+        "max_ms": 0.46806037425994873,
+        "raw_ms": [
+          0.46806037425994873,
+          0.1352541148662567,
+          0.12616068124771118,
+          0.12459792196750641,
+          0.12338720262050629,
+          0.12250803411006927,
+          0.12236833572387695,
+          0.12293271720409393,
+          0.1216493546962738,
+          0.12226030230522156,
+          0.13782456517219543,
+          0.12199766933917999,
+          0.1214202493429184,
+          0.12154318392276764,
+          0.12072548270225525,
+          0.12332014739513397,
+          0.121288001537323,
+          0.12220814824104309,
+          0.12195296585559845,
+          0.12173131108283997,
+          0.12149102985858917,
+          0.12168101966381073,
+          0.12180209159851074,
+          0.1211259514093399,
+          0.12170709669589996
+        ]
+      },
+      "old_vm_steps": 25754,
+      "new_vm_steps": 1439,
+      "old_plan": [
+        [
+          5,
+          0,
+          0,
+          "SEARCH s"
+        ],
+        [
+          9,
+          0,
+          0,
+          "SEARCH j USING INDEX sqlite_autoindex_ai_jobs_1 (job_id=?)"
+        ]
+      ],
+      "new_plan": [
+        [
+          2,
+          0,
+          0,
+          "CO-ROUTINE recent"
+        ],
+        [
+          7,
+          2,
+          0,
+          "SCAN j USING INDEX idx_ai_jobs_manual_cooldown"
+        ],
+        [
+          21,
+          0,
+          0,
+          "SCAN recent"
+        ],
+        [
+          25,
+          0,
+          0,
+          "CORRELATED SCALAR SUBQUERY 2"
+        ],
+        [
+          30,
+          25,
+          0,
+          "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)"
+        ],
+        [
+          51,
+          0,
+          0,
+          "USE TEMP B-TREE FOR ORDER BY"
+        ]
+      ],
+      "fallback_plan": [
+        [
+          5,
+          0,
+          0,
+          "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)"
+        ],
+        [
+          9,
+          0,
+          0,
+          "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+        ]
+      ],
+      "new_indexes_bytes": [
+        [
+          "idx_ai_job_sources_lane_job",
+          483328
+        ],
+        [
+          "idx_ai_jobs_manual_cooldown",
+          569344
+        ],
+        [
+          "idx_ai_jobs_manual_paid_cover",
+          794624
+        ]
+      ],
+      "initial_bytes": 80277504,
+      "index_create_ms": 125.53469277918339,
+      "business_tables_unchanged": true,
+      "table_summaries": {
+        "ai_earnings_final_locks": {
+          "rows": 82,
+          "sha256": "4c246bb7c53a3513c2d93fbce479ca6107656359e2186185318a117c1de9d2ca"
+        },
+        "ai_job_batch_members": {
+          "rows": 8039,
+          "sha256": "29229c0245d7d6f3ed797699639b25ea0cefc52d0e346cf6b8e7bacf2461b24a"
+        },
+        "ai_job_provider_progress": {
+          "rows": 17,
+          "sha256": "21e16fbff2833c2919051b5637850d3da8d87859dced47543051d626515302c6"
+        },
+        "ai_job_sources": {
+          "rows": 8580,
+          "sha256": "8d3bce33f74adf91906c60fbcc302079121274118d0ea16965359d4ba4290992"
+        },
+        "ai_jobs": {
+          "rows": 8580,
+          "sha256": "10a3ae96d3c00b4acd0dc0e357d0ab1d5a5a0b34fc686bb44c40bacbac65391b"
+        },
+        "ai_stock_analysis_allowances": {
+          "rows": 4,
+          "sha256": "3af5f629d6615795b11673b20acbad66e6a7b714e64b1bd992db9b14afa583e4"
+        },
+        "model_budget_bootstrap": {
+          "rows": 5,
+          "sha256": "13ab68c42894acc5106f362df8a983800a7a91ec8b50c691f60cd5afe4cbcb7b"
+        },
+        "model_budget_brief_requests": {
+          "rows": 4,
+          "sha256": "2537365f1302b570cbb1c52971d9fa438f2b589d5a97b7521a7526664074ac7d"
+        }
+      },
+      "schema_column_counts": {
+        "ai_earnings_final_locks": 7,
+        "ai_job_batch_members": 4,
+        "ai_job_provider_progress": 3,
+        "ai_job_schema": 3,
+        "ai_job_sources": 3,
+        "ai_jobs": 43,
+        "ai_stock_analysis_allowances": 6,
+        "model_budget_bootstrap": 4,
+        "model_budget_brief_requests": 10
+      },
+      "exclusion_checks": 20,
+      "raw_latest_timestamp_matches": true,
+      "integrity": "ok"
+    }
+  ]
+}

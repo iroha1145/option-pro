@@ -80,8 +80,8 @@ def test_stopped_pool_uses_shared_single_slot():
     asyncio.run(run())
 
 
-@pytest.mark.parametrize("mode,slots", [("hotspots", 8), ("feed", 1), ("fallback", 1)])
-def test_two_thousand_requests_have_bounded_waiters_and_cancellation_recovers(mode, slots):
+@pytest.mark.parametrize("mode,slots,waiting", [("hotspots", 8, 64), ("feed", 1, 96), ("fallback", 1, 96)])
+def test_two_thousand_requests_have_bounded_waiters_and_cancellation_recovers(mode, slots, waiting):
     async def run():
         app = SimpleNamespace(state=SimpleNamespace(
             hotspot_read_pool=SimpleNamespace(available=mode != "fallback")))
@@ -108,7 +108,7 @@ def test_two_thousand_requests_have_bounded_waiters_and_cancellation_recovers(mo
                 "path": "/api/catalysts/" + path}, None, send)
             return messages
         tasks = [asyncio.create_task(request(i)) for i in range(2000)]
-        accepted = slots + 64
+        accepted = slots + waiting
         for _ in range(1000):
             if len(statuses) == 2000 - accepted and active == slots:
                 break
@@ -166,13 +166,13 @@ def test_admission_overflow_keeps_gateway_security_and_cache_headers(monkeypatch
         gateway = main._GatewayMiddleware(inner, access_runtime=runtime)
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=gateway),
                                       base_url="http://localhost") as client:
-            tasks = [asyncio.create_task(client.get("/api/catalysts/hotspots")) for _ in range(65)]
+            tasks = [asyncio.create_task(client.get("/api/catalysts/hotspots")) for _ in range(97)]
             for _ in range(1000):
                 gate = gateway.catalyst_read_admission._limiters.get(asyncio.get_running_loop())
-                if gate is not None and gate.entered == 65:
+                if gate is not None and gate.entered == 97:
                     break
                 await asyncio.sleep(.001)
-            assert gate.entered == 65
+            assert gate.entered == 97
             response = await client.get("/api/catalysts/hotspots")
             assert response.status_code == 429
             assert response.headers["retry-after"] == "1"
@@ -181,4 +181,51 @@ def test_admission_overflow_keeps_gateway_security_and_cache_headers(monkeypatch
             assert response.headers["cache-control"] == "private, no-store"
             release.set()
             assert all(response.status_code == 200 for response in await asyncio.gather(*tasks))
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("mode", ["feed", "stopped_pool", "missing_pool"])
+@pytest.mark.parametrize("burst", [80, 97, 98])
+def test_shared_gate_accepts_eighty_and_rejects_only_above_ninety_seven(mode, burst):
+    async def run():
+        pool = None if mode == "missing_pool" else SimpleNamespace(available=mode == "feed")
+        app = SimpleNamespace(state=SimpleNamespace(hotspot_read_pool=pool))
+        release = asyncio.Event()
+        active = 0
+        statuses = []
+
+        async def inner(scope, receive, send):
+            nonlocal active
+            active += 1
+            try:
+                await release.wait()
+                await JSONResponse({"ok": True})(scope, receive, send)
+            finally:
+                active -= 1
+
+        admission = CatalystReadAdmission(inner)
+
+        async def request(index):
+            # Pool fallback shares a single bound across both read paths.
+            kind = "feed" if mode == "feed" or index % 2 else "hotspots"
+            async def send(message):
+                if message["type"] == "http.response.start":
+                    statuses.append(message["status"])
+            await admission({"type": "http", "method": "GET", "app": app,
+                "path": "/api/catalysts/" + kind}, None, send)
+
+        tasks = [asyncio.create_task(request(i)) for i in range(burst)]
+        for _ in range(1000):
+            gate = admission._limiters.get(asyncio.get_running_loop())
+            if gate is not None and gate.entered == min(burst, 97) and active == 1 and len(statuses) == max(0, burst - 97):
+                break
+            await asyncio.sleep(.001)
+        assert gate.entered == min(burst, 97)
+        assert active == 1
+        assert statuses == [429] * max(0, burst - 97)
+        assert not admission._hotspot_limiters
+        release.set()
+        await asyncio.gather(*tasks)
+        assert statuses.count(200) == min(burst, 97)
+        assert gate.entered == active == 0
     asyncio.run(run())

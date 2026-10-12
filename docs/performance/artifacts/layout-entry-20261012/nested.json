@@ -1,0 +1,313 @@
+{
+  "results": [
+    {
+      "width": 320,
+      "reduced": "no-preference",
+      "animationCount": 4,
+      "transition": "grid-template-rows 0.25s cubic-bezier(0.22, 1, 0.36, 1)",
+      "expanded": "true",
+      "samples": [
+        {
+          "ms": 0,
+          "height": 0,
+          "grid": "0px",
+          "opacity": "0"
+        },
+        {
+          "ms": 50,
+          "height": 110.53125,
+          "grid": "74.4922px",
+          "opacity": "0.673978"
+        },
+        {
+          "ms": 100,
+          "height": 150.40625,
+          "grid": "137.938px",
+          "opacity": "0.917147"
+        },
+        {
+          "ms": 150,
+          "height": 161.3203125,
+          "grid": "158.68px",
+          "opacity": "0.983675"
+        },
+        {
+          "ms": 200,
+          "height": 163.7578125,
+          "grid": "163.516px",
+          "opacity": "0.998524"
+        },
+        {
+          "ms": 250,
+          "height": 164,
+          "grid": "164px",
+          "opacity": "1"
+        },
+        {
+          "ms": 300,
+          "height": 164,
+          "grid": "164px",
+          "opacity": "1"
+        }
+      ]
+    },
+    {
+      "width": 320,
+      "reduced": "reduce",
+      "animationCount": 0,
+      "transition": "none",
+      "expanded": "true",
+      "samples": [
+        {
+          "ms": 0,
+          "height": 164,
+          "grid": "164px",
+          "opacity": "1"
+        },
+        {
+          "ms": 50,
+          "height": 164,
+          "grid": "164px",
+          "opacity": "1"
+        },
+        {
+          "ms": 100,
+          "height": 164,
+          "grid": "164px",
+          "opacity": "1"
+        },
+        {
+          "ms": 150,
+          "height": 164,
+          "grid": "164px",
+          "opacity": "1"
+        },
+        {
+          "ms": 200,
+          "height": 164,
+          "grid": "164px",
+          "opacity": "1"
+        },
+        {
+          "ms": 250,
+          "height": 164,
+          "grid": "164px",
+          "opacity": "1"
+        },
+        {
+          "ms": 300,
+          "height": 164,
+          "grid": "164px",
+          "opacity": "1"
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "reduced": "no-preference",
+      "animationCount": 4,
+      "transition": "grid-template-rows 0.25s cubic-bezier(0.22, 1, 0.36, 1)",
+      "expanded": "true",
+      "samples": [
+        {
+          "ms": 0,
+          "height": 0,
+          "grid": "0px",
+          "opacity": "0"
+        },
+        {
+          "ms": 50,
+          "height": 98.3984375,
+          "grid": "66.3125px",
+          "opacity": "0.673978"
+        },
+        {
+          "ms": 100,
+          "height": 133.8984375,
+          "grid": "122.797px",
+          "opacity": "0.917147"
+        },
+        {
+          "ms": 150,
+          "height": 143.609375,
+          "grid": "141.258px",
+          "opacity": "0.983675"
+        },
+        {
+          "ms": 200,
+          "height": 145.78125,
+          "grid": "145.562px",
+          "opacity": "0.998524"
+        },
+        {
+          "ms": 250,
+          "height": 146,
+          "grid": "146px",
+          "opacity": "1"
+        },
+        {
+          "ms": 300,
+          "height": 146,
+          "grid": "146px",
+          "opacity": "1"
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "reduced": "reduce",
+      "animationCount": 0,
+      "transition": "none",
+      "expanded": "true",
+      "samples": [
+        {
+          "ms": 0,
+          "height": 146,
+          "grid": "146px",
+          "opacity": "1"
+        },
+        {
+          "ms": 50,
+          "height": 146,
+          "grid": "146px",
+          "opacity": "1"
+        },
+        {
+          "ms": 100,
+          "height": 146,
+          "grid": "146px",
+          "opacity": "1"
+        },
+        {
+          "ms": 150,
+          "height": 146,
+          "grid": "146px",
+          "opacity": "1"
+        },
+        {
+          "ms": 200,
+          "height": 146,
+          "grid": "146px",
+          "opacity": "1"
+        },
+        {
+          "ms": 250,
+          "height": 146,
+          "grid": "146px",
+          "opacity": "1"
+        },
+        {
+          "ms": 300,
+          "height": 146,
+          "grid": "146px",
+          "opacity": "1"
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "reduced": "no-preference",
+      "animationCount": 4,
+      "transition": "grid-template-rows 0.25s cubic-bezier(0.22, 1, 0.36, 1)",
+      "expanded": "true",
+      "samples": [
+        {
+          "ms": 0,
+          "height": 0,
+          "grid": "0px",
+          "opacity": "0"
+        },
+        {
+          "ms": 50,
+          "height": 98.3984375,
+          "grid": "66.3125px",
+          "opacity": "0.673978"
+        },
+        {
+          "ms": 100,
+          "height": 133.8984375,
+          "grid": "122.797px",
+          "opacity": "0.917147"
+        },
+        {
+          "ms": 150,
+          "height": 143.609375,
+          "grid": "141.258px",
+          "opacity": "0.983675"
+        },
+        {
+          "ms": 200,
+          "height": 145.78125,
+          "grid": "145.562px",
+          "opacity": "0.998524"
+        },
+        {
+          "ms": 250,
+          "height": 146,
+          "grid": "146px",
+          "opacity": "1"
+        },
+        {
+          "ms": 300,
+          "height": 146,
+          "grid": "146px",
+          "opacity": "1"
+        }
+      ]
+    },
+    {
+      "width": 1440,
+      "reduced": "reduce",
+      "animationCount": 0,
+      "transition": "none",
+      "expanded": "true",
+      "samples": [
+        {
+          "ms": 0,
+          "height": 146,
+          "grid": "146px",
+          "opacity": "1"
+        },
+        {
+          "ms": 50,
+          "height": 146,
+          "grid": "146px",
+          "opacity": "1"
+        },
+        {
+          "ms": 100,
+          "height": 146,
+          "grid": "146px",
+          "opacity": "1"
+        },
+        {
+          "ms": 150,
+          "height": 146,
+          "grid": "146px",
+          "opacity": "1"
+        },
+        {
+          "ms": 200,
+          "height": 146,
+          "grid": "146px",
+          "opacity": "1"
+        },
+        {
+          "ms": 250,
+          "height": 146,
+          "grid": "146px",
+          "opacity": "1"
+        },
+        {
+          "ms": 300,
+          "height": 146,
+          "grid": "146px",
+          "opacity": "1"
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "failed": []
+}

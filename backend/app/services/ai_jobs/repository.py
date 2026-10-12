@@ -349,6 +349,70 @@ _BUDGET_READ_INDEX_CHECKSUM = hashlib.sha256(
 ).hexdigest()
 
 
+# Keep the same lexical timestamp ordering as MAX, including legacy values.
+# Recent terminal paid jobs can then be checked for a manual source without
+# loading every historical manual job (and its payload) from ai_jobs.
+_MANUAL_COOLDOWN_INDEX_VERSION = "ai-job-manual-cooldown-index-v1"
+_MANUAL_COOLDOWN_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_ai_jobs_manual_cooldown
+ON ai_jobs(COALESCE(completed_at,submission_started_at) DESC,job_id)
+WHERE submission_started_at IS NOT NULL
+  AND status IN ('completed','failed','cancelled','insufficient_context','budget_blocked');
+CREATE INDEX IF NOT EXISTS idx_ai_job_sources_lane_job
+ON ai_job_sources(submission_source,job_id);
+CREATE INDEX IF NOT EXISTS idx_ai_jobs_manual_paid_cover
+ON ai_jobs(job_id,submission_started_at,completed_at)
+WHERE submission_started_at IS NOT NULL
+  AND status IN ('completed','failed','cancelled','insufficient_context','budget_blocked');
+"""
+_MANUAL_COOLDOWN_INDEX_CHECKSUM = hashlib.sha256(
+    _MANUAL_COOLDOWN_INDEX_SQL.encode("utf-8")
+).hexdigest()
+
+# 64 is a work bound, not a time cutoff: scheduled-only recent history costs
+# at most this many index entries before the manual-source fallback. A manual
+# match in this ordered prefix is also the global latest manual timestamp;
+# anything outside the prefix sorts no later, including tied legacy strings.
+# SQLite 3.40 otherwise prefers the status/due index and sorts all terminal
+# payload rows. Require the time index; older read-only stores fall back below.
+_MANUAL_COOLDOWN_SQL = """
+WITH recent AS (
+    SELECT j.job_id,COALESCE(j.completed_at,j.submission_started_at) AS latest_at
+    FROM ai_jobs AS j INDEXED BY idx_ai_jobs_manual_cooldown
+    WHERE j.submission_started_at IS NOT NULL
+      AND j.status IN ('completed','failed','cancelled',
+                       'insufficient_context','budget_blocked')
+      AND (?1 IS NULL OR j.job_id<>?1)
+    ORDER BY COALESCE(j.completed_at,j.submission_started_at) DESC
+    LIMIT 64
+)
+SELECT recent.latest_at FROM recent
+WHERE EXISTS (
+      SELECT 1 FROM ai_job_sources AS s
+      WHERE s.job_id=recent.job_id AND s.submission_source='manual'
+  )
+ORDER BY recent.latest_at DESC
+LIMIT 1
+"""
+_MANUAL_COOLDOWN_FALLBACK_SQL = """
+SELECT MAX(COALESCE(j.completed_at,j.submission_started_at))
+FROM ai_job_sources AS s
+CROSS JOIN ai_jobs AS j ON j.job_id=s.job_id
+WHERE s.submission_source='manual'
+  AND j.submission_started_at IS NOT NULL
+  AND j.status IN ('completed','failed','cancelled',
+                   'insufficient_context','budget_blocked')
+  AND (?1 IS NULL OR j.job_id<>?1)
+"""
+# SQLite 3.45 can choose a full source-table traversal for the MAX query,
+# even when the manual lane is empty. Keep work proportional to manual rows.
+_MANUAL_COOLDOWN_INDEXED_FALLBACK_SQL = _MANUAL_COOLDOWN_FALLBACK_SQL.replace(
+    "FROM ai_job_sources AS s",
+    "FROM ai_job_sources AS s INDEXED BY idx_ai_job_sources_lane_job",
+)
+
+
+
 def _public_evidence_url(value: Any) -> bool:
     if (not isinstance(value, str) or not 1 <= len(value) <= 2048
             or any(ord(char) <= 32 or ord(char) == 127 for char in value)):
@@ -859,6 +923,18 @@ class AIJobRepository:
             connection.execute(
                 "INSERT OR IGNORE INTO ai_job_schema(version,checksum,applied_at) VALUES(?,?,?)",
                 (_BUDGET_READ_INDEX_VERSION, _BUDGET_READ_INDEX_CHECKSUM, _iso()),
+            )
+            cooldown_index = connection.execute(
+                "SELECT checksum FROM ai_job_schema WHERE version=?",
+                (_MANUAL_COOLDOWN_INDEX_VERSION,),
+            ).fetchone()
+            if cooldown_index is not None and cooldown_index["checksum"] != _MANUAL_COOLDOWN_INDEX_CHECKSUM:
+                raise RuntimeError("ai_job_manual_cooldown_index_checksum_mismatch")
+            for statement in _statements(_MANUAL_COOLDOWN_INDEX_SQL):
+                connection.execute(statement)
+            connection.execute(
+                "INSERT OR IGNORE INTO ai_job_schema(version,checksum,applied_at) VALUES(?,?,?)",
+                (_MANUAL_COOLDOWN_INDEX_VERSION, _MANUAL_COOLDOWN_INDEX_CHECKSUM, _iso()),
             )
             # Rows from before source-aware identities cannot be classified.
             # Keep those conservative: only the manual switch may release them.
@@ -2312,19 +2388,36 @@ class AIJobRepository:
 
         if int(cooldown_seconds) <= 0:
             return None
-        row = connection.execute(
-            """
-            SELECT MAX(COALESCE(j.completed_at,j.submission_started_at))
-            FROM ai_job_sources AS s
-            CROSS JOIN ai_jobs AS j ON j.job_id=s.job_id
-            WHERE s.submission_source='manual'
-              AND j.submission_started_at IS NOT NULL
-              AND j.status IN ('completed','failed','cancelled',
-                               'insufficient_context','budget_blocked')
-              AND (?1 IS NULL OR j.job_id<>?1)
-            """,
-            (exclude_job_id,),
-        ).fetchone()
+        try:
+            row = connection.execute(
+                _MANUAL_COOLDOWN_SQL,
+                (exclude_job_id,),
+            ).fetchone()
+        except sqlite3.OperationalError as exc:
+            # Read-only callers may open a store before its additive migration.
+            # Do not turn missing tables, locks or an unusable index into a
+            # silent retry: only absence of this exact optional index qualifies.
+            if str(exc) != "no such index: idx_ai_jobs_manual_cooldown":
+                raise
+            row = None
+        if row is None:
+            # Bound the extra work when recent jobs are all scheduled. The
+            # source and paid-cover indexes keep the fallback on small index
+            # pages, proportional to manual jobs rather than their payloads,
+            # while the common manual case only visits the recent index slice.
+            try:
+                row = connection.execute(
+                    _MANUAL_COOLDOWN_INDEXED_FALLBACK_SQL,
+                    (exclude_job_id,),
+                ).fetchone()
+            except sqlite3.OperationalError as exc:
+                # Preserve reads of stores predating this optional index only.
+                if str(exc) != "no such index: idx_ai_job_sources_lane_job":
+                    raise
+                row = connection.execute(
+                    _MANUAL_COOLDOWN_FALLBACK_SQL,
+                    (exclude_job_id,),
+                ).fetchone()
         latest_at = _parse_time(row[0]) if row is not None else None
         if latest_at is None:
             return None

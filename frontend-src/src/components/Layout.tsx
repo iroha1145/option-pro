@@ -1,6 +1,6 @@
 /**
  * Layout（design.md §7）
- * sticky Header + IndexTape + 内容槽（<Outlet/>，page-fade 转场）+ Footer
+ * sticky Header + IndexTape + 内容槽（<Outlet/>，位置固定）+ Footer
  * 全局：命令面板（⌘K）、移动 Dock、Toast。
  *
  * v2：个股详情从右侧抽屉改为 /stock/:ticker 全屏整页（参考日股工作台），
@@ -97,14 +97,9 @@ export default function Layout() {
         )}
         {/* 主区至少一屏高：页面骨架比真实内容矮时，页脚也停在首屏以外，内容长高时不会被看见下移。 */}
         <main id="main-content" tabIndex={-1} className="mx-auto min-h-[100dvh] w-full max-w-shell flex-1 scroll-mt-24 px-4 pt-6 md:px-8 md:pt-8">
-          {/* page-fade 转场改纯 CSS（enter 240ms opacity + translateY(6px)）。
-              原先 AnimatePresence mode="wait" + initial opacity:0 意味着新页面
-              「默认不可见、靠一帧 JS 动画亮起来」——催化这类重页面在低端手机上
-              挂载时主线程被塞死，动画迟迟不跑，用户看到的就是内容已挂载的全白
-              页（手机菜单进催化白屏的根因之二）。CSS 动画基态即可见：动画只
-              描述过渡，被饿死时最坏也只是直接出现。代价是去掉了 120ms 的退场
-              淡出。 */}
-          <div key={pageKey} className="page-enter">
+          {/* 整页保持最终坐标，不让入场 transform 搬动按钮或改变 fixed 子元素的定位容器。
+              保留 pageKey：切换路由或身份时仍销毁旧页面状态。 */}
+          <div key={pageKey}>
             {/* 按路由重建的错误边界:页面崩溃显示错误卡而非白屏,切页自动复位 */}
             <RouteErrorBoundary>
               <Suspense fallback={<PageFallback />}>

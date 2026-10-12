@@ -1,0 +1,583 @@
+{
+  "repository_source_sha256": "df875f30d51cad205369ad7858996113d2776bea17432d819a039d859e445d67",
+  "test_source_sha256": "c6c55a2683656ad232c1a6ae81db49adf2d81ae59fbc575b0f0e386a91aad4d4",
+  "ci_sqlite_version_verified": false,
+  "replication_versions": [
+    {
+      "sqlite": "3.40.1",
+      "passed": 71,
+      "measurements": [
+        {
+          "sqlite_version": "3.40.1",
+          "history_size": 20000,
+          "distribution": "manual",
+          "old_steps": 460030,
+          "new_steps": 1876,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "CORRELATED SCALAR SUBQUERY 2",
+            "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.40.1",
+          "history_size": 20000,
+          "distribution": "mixed",
+          "old_steps": 220030,
+          "new_steps": 1652,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "CORRELATED SCALAR SUBQUERY 2",
+            "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.40.1",
+          "history_size": 20000,
+          "distribution": "scheduled",
+          "old_steps": 60014,
+          "new_steps": 1439,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "CORRELATED SCALAR SUBQUERY 2",
+            "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.40.1",
+          "history_size": 20000,
+          "distribution": "old_manual",
+          "old_steps": 53,
+          "new_steps": 1455,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "CORRELATED SCALAR SUBQUERY 2",
+            "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.40.1",
+          "history_size": 20000,
+          "distribution": "old_many_manual",
+          "old_steps": 435630,
+          "new_steps": 318238,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "CORRELATED SCALAR SUBQUERY 2",
+            "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.40.1",
+          "history_size": 40000,
+          "distribution": "manual",
+          "old_steps": 920030,
+          "new_steps": 1876,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "CORRELATED SCALAR SUBQUERY 2",
+            "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.40.1",
+          "history_size": 40000,
+          "distribution": "mixed",
+          "old_steps": 440030,
+          "new_steps": 1652,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "CORRELATED SCALAR SUBQUERY 2",
+            "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.40.1",
+          "history_size": 40000,
+          "distribution": "scheduled",
+          "old_steps": 120014,
+          "new_steps": 1439,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "CORRELATED SCALAR SUBQUERY 2",
+            "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.40.1",
+          "history_size": 40000,
+          "distribution": "old_manual",
+          "old_steps": 53,
+          "new_steps": 1455,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "CORRELATED SCALAR SUBQUERY 2",
+            "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.40.1",
+          "history_size": 40000,
+          "distribution": "old_many_manual",
+          "old_steps": 875630,
+          "new_steps": 638238,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "CORRELATED SCALAR SUBQUERY 2",
+            "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        }
+      ],
+      "log_sha256": "f550dde6713aa14683dea93ca3524a4645adde81379d5e48266a6341c77f2f5a"
+    },
+    {
+      "sqlite": "3.45.1",
+      "passed": 71,
+      "measurements": [
+        {
+          "sqlite_version": "3.45.1",
+          "history_size": 20000,
+          "distribution": "manual",
+          "old_steps": 460051,
+          "new_steps": 1880,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "CORRELATED SCALAR SUBQUERY 2",
+            "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.45.1",
+          "history_size": 20000,
+          "distribution": "mixed",
+          "old_steps": 220051,
+          "new_steps": 1656,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "CORRELATED SCALAR SUBQUERY 2",
+            "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.45.1",
+          "history_size": 20000,
+          "distribution": "scheduled",
+          "old_steps": 60035,
+          "new_steps": 1472,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "CORRELATED SCALAR SUBQUERY 2",
+            "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.45.1",
+          "history_size": 20000,
+          "distribution": "old_manual",
+          "old_steps": 74,
+          "new_steps": 1488,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "CORRELATED SCALAR SUBQUERY 2",
+            "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.45.1",
+          "history_size": 20000,
+          "distribution": "old_many_manual",
+          "old_steps": 435651,
+          "new_steps": 318271,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "CORRELATED SCALAR SUBQUERY 2",
+            "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.45.1",
+          "history_size": 40000,
+          "distribution": "manual",
+          "old_steps": 920051,
+          "new_steps": 1880,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "CORRELATED SCALAR SUBQUERY 2",
+            "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.45.1",
+          "history_size": 40000,
+          "distribution": "mixed",
+          "old_steps": 440051,
+          "new_steps": 1656,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "CORRELATED SCALAR SUBQUERY 2",
+            "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.45.1",
+          "history_size": 40000,
+          "distribution": "scheduled",
+          "old_steps": 120035,
+          "new_steps": 1472,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "CORRELATED SCALAR SUBQUERY 2",
+            "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.45.1",
+          "history_size": 40000,
+          "distribution": "old_manual",
+          "old_steps": 74,
+          "new_steps": 1488,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "CORRELATED SCALAR SUBQUERY 2",
+            "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.45.1",
+          "history_size": 40000,
+          "distribution": "old_many_manual",
+          "old_steps": 875651,
+          "new_steps": 638271,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "CORRELATED SCALAR SUBQUERY 2",
+            "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        }
+      ],
+      "log_sha256": "7c80addc1b1257302c1e5cc5f22828bea73cf1df1b2e3e1b9b1b36d38e5b6dc0"
+    },
+    {
+      "sqlite": "3.53.3",
+      "passed": 71,
+      "measurements": [
+        {
+          "sqlite_version": "3.53.3",
+          "history_size": 20000,
+          "distribution": "manual",
+          "old_steps": 420079,
+          "new_steps": 37,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "SEARCH s EXISTS USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=? AND job_id=?)"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.53.3",
+          "history_size": 20000,
+          "distribution": "mixed",
+          "old_steps": 200055,
+          "new_steps": 37,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "SEARCH s EXISTS USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=? AND job_id=?)"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.53.3",
+          "history_size": 20000,
+          "distribution": "scheduled",
+          "old_steps": 38,
+          "new_steps": 903,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "SEARCH s EXISTS USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=? AND job_id=?)"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.53.3",
+          "history_size": 20000,
+          "distribution": "old_manual",
+          "old_steps": 75,
+          "new_steps": 919,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "SEARCH s EXISTS USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=? AND job_id=?)"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.53.3",
+          "history_size": 20000,
+          "distribution": "old_many_manual",
+          "old_steps": 416479,
+          "new_steps": 317734,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "SEARCH s EXISTS USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=? AND job_id=?)"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.53.3",
+          "history_size": 40000,
+          "distribution": "manual",
+          "old_steps": 840079,
+          "new_steps": 37,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "SEARCH s EXISTS USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=? AND job_id=?)"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.53.3",
+          "history_size": 40000,
+          "distribution": "mixed",
+          "old_steps": 400055,
+          "new_steps": 37,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "SEARCH s EXISTS USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=? AND job_id=?)"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.53.3",
+          "history_size": 40000,
+          "distribution": "scheduled",
+          "old_steps": 38,
+          "new_steps": 903,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "SEARCH s EXISTS USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=? AND job_id=?)"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.53.3",
+          "history_size": 40000,
+          "distribution": "old_manual",
+          "old_steps": 75,
+          "new_steps": 919,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "SEARCH s EXISTS USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=? AND job_id=?)"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        },
+        {
+          "sqlite_version": "3.53.3",
+          "history_size": 40000,
+          "distribution": "old_many_manual",
+          "old_steps": 836479,
+          "new_steps": 637734,
+          "plan": [
+            "CO-ROUTINE recent",
+            "SCAN j USING INDEX idx_ai_jobs_manual_cooldown",
+            "SCAN recent",
+            "SEARCH s EXISTS USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=? AND job_id=?)"
+          ],
+          "fallback_plan": [
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)",
+            "SEARCH j USING INDEX idx_ai_jobs_manual_paid_cover (job_id=? AND submission_started_at>?)"
+          ]
+        }
+      ],
+      "log_sha256": "644a31a1b91226cf6ef8d5fb890fd90db97d0f4861dc0f0b2b2a7c29f860ec4a"
+    }
+  ],
+  "related_tests": {
+    "sqlite": "3.45.1",
+    "passed": 855,
+    "log_sha256": "4cf566789c6b27353047e7139b62e19348e0ec3bd5b2aee6379038a370f6463b"
+  }
+}

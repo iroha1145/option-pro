@@ -347,7 +347,7 @@ test('route content changes identity only for pathname or principal, not a same-
   const read = runner.mount(Layout);
   const findContent = node => {
     if (!node || typeof node !== 'object') return null;
-    if (node.props?.className === 'page-enter') return node;
+    if (node.type === 'main' && node.props?.id === 'main-content') return node.props.children;
     for (const child of [node.props?.children].flat(Infinity)) {
       const content = findContent(child);
       if (content) return content;
