@@ -319,15 +319,19 @@ test('the confirmation names the model a new request would run, and nothing when
 });
 
 
-for (const [locale, allCompanies, analysisName, message] of [
-  ['en', /^All companies/, 'Earnings impact analysis', 'Earnings analysis is available only for key companies.'],
-  ['ja', /^全企業/, '決算影響分析', '決算分析は重点企業のみが対象です。'],
+for (const [locale, allCompanies, listName, analysisName, message] of [
+  ['en', /^All companies/, 'Upcoming earnings', 'Earnings impact analysis', 'Earnings analysis is available only for key companies.'],
+  ['ja', /^全企業/, '決算発表予定', '決算影響分析', '決算分析は重点企業のみが対象です。'],
 ]) {
   test(`non-featured earnings explain the restriction in ${locale}`, async ({ page }) => {
     const state = await fixture(page, { locale });
     await page.goto('/earnings');
     await page.getByRole('tab', { name: allCompanies }).click();
-    await page.locator('[role="button"][aria-pressed]').filter({ visible: true }).filter({ hasText: 'CRDO' }).click();
+    const list = page.getByRole('region', { name: listName, exact: true });
+    const company = list.getByRole('button', { name: /^CRDO(?:\s|$)/ }).and(list.locator('[aria-pressed]'));
+    await expect(company).toHaveCount(1);
+    await company.click();
+    await expect(company).toHaveAttribute('aria-pressed', 'true');
     const card = page.getByRole('complementary', { name: analysisName, exact: true });
     await expect(card).toContainText(message);
     expect(state.requests.filter(row => row.path.startsWith('/api/ai/earnings-impact/') && row.method === 'POST')).toEqual([]);
