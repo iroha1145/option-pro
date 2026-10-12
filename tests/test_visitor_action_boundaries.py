@@ -284,11 +284,7 @@ def test_visitor_cold_sector_iv_queues_without_provider_calls(
 
     async def scenario():
         with request_owner_access_context(False):
-            return await sectors._request_iv_payload(
-                sector_id,
-                public_client_id="203.0.113.9",
-                visitor_live_allowed=False,
-            )
+            return await sectors._request_iv_payload(sector_id)
 
     payload = asyncio.run(scenario())
     assert payload["source_status"] == "insufficient_data"

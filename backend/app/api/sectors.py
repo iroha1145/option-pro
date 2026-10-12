@@ -654,14 +654,10 @@ def _bounded_snapshot(payload: dict[str, Any] | None, now: float) -> dict[str, A
 
 async def _request_iv_payload(
     sector_id: str,
-    *,
-    public_client_id: str | None = None,
-    visitor_live_allowed: bool = False,
 ) -> dict[str, Any]:
     """Read saved data and register bounded demand; HTTP never calls providers.
 
-    Legacy keyword arguments remain accepted for internal callers. Access level
-    does not change sector IV visibility or refresh eligibility.
+    Access level does not change sector IV visibility or refresh eligibility.
     """
     from app.services.sector_iv_refresh import default_store
 

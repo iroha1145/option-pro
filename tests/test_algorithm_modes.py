@@ -32,7 +32,6 @@ def test_explicit_production_is_not_overwritten_by_admin_a0() -> None:
     resolution = resolve_screener_algorithm(
         requested=PRODUCTION_ALGORITHM,
         admin_default=A0_ALGORITHM,
-        explicit_request=True,
     )
     assert resolution.effective == EOD_LIMITED_V1
     assert resolution.source == "request"
@@ -105,7 +104,7 @@ def test_saved_user_production_survives_admin_default_change() -> None:
 
 def test_explicit_a0_uses_replacement_engine_for_mid_view() -> None:
     resolution = resolve_screener_algorithm(
-        requested=A0_ALGORITHM, timeframe="mid", profile="balanced", explicit_request=True,
+        requested=A0_ALGORITHM, timeframe="mid", profile="balanced",
     )
     assert resolution.effective == EOD_LIMITED_V1
     assert resolution.resolved_timeframe == "mid"
@@ -124,7 +123,7 @@ def test_admin_a0_with_incompatible_old_client_falls_back() -> None:
 
 def test_explicit_eod_with_all_timeframe_uses_mid() -> None:
     resolution = resolve_screener_algorithm(
-        requested=EOD_LIMITED_V1, timeframe="all", profile="balanced", explicit_request=True,
+        requested=EOD_LIMITED_V1, timeframe="all", profile="balanced",
     )
     assert resolution.effective == EOD_LIMITED_V1
     assert resolution.resolved_timeframe == "mid"
@@ -173,7 +172,6 @@ def test_explicit_eod_mid_resolves() -> None:
         requested=EOD_LIMITED_V1,
         timeframe="mid",
         profile="balanced",
-        explicit_request=True,
     )
     assert resolution.effective == EOD_LIMITED_V1
     assert resolution.version == "eod-limited-v1.7"

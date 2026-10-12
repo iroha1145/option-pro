@@ -19,4 +19,8 @@ def static_cache_control(path: str, status: int) -> str:
         return "no-store"
     if path.startswith("/assets/"):
         return "public, max-age=31536000, immutable"
+    if path.startswith("/static/company-logos/"):
+        # Company logos change rarely (the bundled set ships with releases);
+        # cache for a day and allow a week of stale serving.
+        return "public, max-age=86400, stale-while-revalidate=604800"
     return "public, max-age=300, stale-while-revalidate=60"
