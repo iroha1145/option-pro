@@ -1,4 +1,4 @@
-"""Keep the two expensive catalyst reads from competing on the shared host."""
+"""Bound expensive catalyst reads and their waiting queue on the shared host."""
 from __future__ import annotations
 
 import asyncio
@@ -18,7 +18,8 @@ _CATALYST_READ_PATHS = frozenset({
     "/api/catalysts/hotspots",
 })
 _CATALYST_READ_CONCURRENCY = 1
-_CATALYST_READ_WAITING = 64
+_CATALYST_READ_WAITING = 96
+_HOTSPOT_READ_WAITING = 64
 
 
 @dataclass
@@ -29,7 +30,11 @@ class _ReadGate:
 
 
 class CatalystReadAdmission:
-    """Admit target reads after gateway checks, sharing one slot per loop."""
+    """Share one execution slot and 96 waiters for feed and pool fallback.
+
+    An available hotspot pool has its own eight slots and 64 waiters. Gateway
+    checks run before admission, and each event loop owns its own gates.
+    """
 
     def __init__(self, app):
         self.app = app
@@ -54,7 +59,8 @@ class CatalystReadAdmission:
         gate = limiters.get(loop)
         if gate is None:
             slots = HOTSPOT_READ_WORKERS if process_read else _CATALYST_READ_CONCURRENCY
-            gate = _ReadGate(anyio.CapacityLimiter(slots), slots + _CATALYST_READ_WAITING)
+            waiting = _HOTSPOT_READ_WAITING if process_read else _CATALYST_READ_WAITING
+            gate = _ReadGate(anyio.CapacityLimiter(slots), slots + waiting)
             limiters[loop] = gate
         # Check and increment before the first await: all requests on this
         # event loop observe one bound, including tasks waiting for a slot.

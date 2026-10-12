@@ -1,0 +1,1196 @@
+{
+  "routes": [
+    {
+      "width": 320,
+      "reduced": "no-preference",
+      "path": "/screener",
+      "frames": [
+        {
+          "ms": 0,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 9.899999999999977,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 17.399999999999977,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 26.5,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 34.89999999999998,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 42.5,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 51.299999999999955,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 58.299999999999955,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 66.69999999999993,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 75,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 84.10000000000002,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 92.10000000000002,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 100.69999999999993,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 109.10000000000002,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 117.19999999999993,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 127,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 134.19999999999993,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 143.39999999999998,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 151.79999999999995,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 159.29999999999995,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 168.69999999999993,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 175.89999999999998,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 185.39999999999998,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 193.39999999999998,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 200.80000000000007,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 209.4999999999999,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 218.60000000000002,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 226.80000000000007,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 235.19999999999993,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 242.10000000000002,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 250.4999999999999,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 260.19999999999993,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 266.9,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 277.19999999999993,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 285.19999999999993,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 292.4,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 300.30000000000007,
+          "heading": "条件选股",
+          "rootY": 109,
+          "transform": "none",
+          "button": "扫描记录",
+          "buttonY": 156
+        }
+      ],
+      "overflow": -11
+    },
+    {
+      "width": 320,
+      "reduced": "reduce",
+      "path": "/screener",
+      "frames": [
+        {
+          "ms": 0,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 9.299999999999955,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 15.899999999999977,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 26.100000000000023,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 34.10000000000002,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 40.799999999999955,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 49.299999999999955,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 59,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 67.5,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 75.79999999999995,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 82.5,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 92.89999999999998,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 100.79999999999995,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 107.60000000000002,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 117.79999999999995,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 125.89999999999998,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 133.29999999999995,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 142.79999999999995,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 149.29999999999995,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 159.39999999999998,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 165.9999999999999,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 176.30000000000007,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 184.19999999999993,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 192.69999999999993,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 200.9999999999999,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 209.30000000000007,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 217.69999999999993,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 226.10000000000002,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 233.39999999999998,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 242.80000000000007,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 249.4999999999999,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 259.4999999999999,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 267.80000000000007,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 276.1,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 283.9,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 292.9999999999999,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 299.6,
+          "heading": "条件选股",
+          "rootY": 109,
+          "transform": "none",
+          "button": "扫描记录",
+          "buttonY": 156
+        },
+        {
+          "ms": 309.30000000000007,
+          "heading": "条件选股",
+          "rootY": 109,
+          "transform": "none",
+          "button": "扫描记录",
+          "buttonY": 156
+        }
+      ],
+      "overflow": -11
+    },
+    {
+      "width": 390,
+      "reduced": "no-preference",
+      "path": "/screener",
+      "frames": [
+        {
+          "ms": 0,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 8.299999999999955,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 16.699999999999932,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 25,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 33.19999999999993,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 41.799999999999955,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 50,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 58.39999999999998,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 66.79999999999995,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 75.10000000000002,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 83.39999999999998,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 90.79999999999995,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 100,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 106.89999999999998,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 117.10000000000002,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 125.10000000000002,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 133.5,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 141.29999999999995,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 150.39999999999998,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 156.89999999999998,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 165.39999999999998,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 175.4999999999999,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 183.4999999999999,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 191.89999999999998,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 200.19999999999993,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 208.60000000000002,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 216.9999999999999,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 223.60000000000002,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 233.89999999999998,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 241.89999999999998,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 250.30000000000007,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 258.69999999999993,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 266.9999999999999,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 275.30000000000007,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 283.69999999999993,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 291.9999999999999,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 299.30000000000007,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 308.80000000000007,
+          "heading": "条件选股",
+          "rootY": 109,
+          "transform": "none",
+          "button": "扫描记录",
+          "buttonY": 156
+        }
+      ],
+      "overflow": -11
+    },
+    {
+      "width": 390,
+      "reduced": "reduce",
+      "path": "/screener",
+      "frames": [
+        {
+          "ms": 0,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 8.399999999999977,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 16.700000000000045,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 25,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 33.39999999999998,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 41.700000000000045,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 50.10000000000002,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 57,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 66.79999999999995,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 75.10000000000002,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 83.5,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 91.79999999999995,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 99.70000000000005,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 107.60000000000002,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 115.70000000000005,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 123.5,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 133.89999999999998,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 141.79999999999995,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 149,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 158.4000000000001,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 166.79999999999995,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 175.29999999999995,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 183.5999999999999,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 190.4000000000001,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 200.5999999999999,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 207.0999999999999,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 217.20000000000005,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 225.20000000000005,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 233.5999999999999,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 242,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 249.79999999999995,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 258.79999999999995,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 267,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 275.4000000000001,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 282.5999999999999,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 292.4000000000001,
+          "rootY": 109,
+          "transform": "none"
+        },
+        {
+          "ms": 300.29999999999995,
+          "heading": "条件选股",
+          "rootY": 109,
+          "transform": "none",
+          "button": "扫描记录",
+          "buttonY": 156
+        }
+      ],
+      "overflow": -11
+    },
+    {
+      "width": 1440,
+      "reduced": "no-preference",
+      "path": "/screener",
+      "frames": [
+        {
+          "ms": 0,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 8.299999999999955,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 16.69999999999999,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 24.599999999999966,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 32.89999999999998,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 41.799999999999955,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 50.099999999999966,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 58.39999999999998,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 66,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 73.5,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 82.89999999999998,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 91.89999999999998,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 100.10000000000002,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 107.79999999999995,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 115.89999999999998,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 125.19999999999993,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 131.89999999999998,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 140.69999999999993,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 149.60000000000002,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 158.69999999999993,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 165.19999999999993,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 174.60000000000002,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 182.39999999999998,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 192.19999999999993,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 200.19999999999993,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 208.60000000000002,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 216.5,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 225.29999999999995,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 233.69999999999993,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 240.5,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 250.69999999999993,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 257.9,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 266.5,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 273.69999999999993,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 283.69999999999993,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 290.79999999999995,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 300.69999999999993,
+          "heading": "条件选股",
+          "rootY": 133,
+          "transform": "none",
+          "button": "扫描记录",
+          "buttonY": 136
+        }
+      ],
+      "overflow": -11
+    },
+    {
+      "width": 1440,
+      "reduced": "reduce",
+      "path": "/screener",
+      "frames": [
+        {
+          "ms": 0,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 8.400000000000091,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 15.700000000000045,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 25.300000000000068,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 33.200000000000045,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 40.30000000000007,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 50.5,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 57.5,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 65.30000000000007,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 75.5,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 83.40000000000009,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 91.10000000000002,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 98.70000000000005,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 108.80000000000007,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 115.40000000000009,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 125.30000000000007,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 132.60000000000002,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 142.20000000000005,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 150.20000000000005,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 157.29999999999995,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 166.20000000000005,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 175.5,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 183.60000000000014,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 192,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 200.4000000000001,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 208.70000000000005,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 216.10000000000014,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 225.4000000000001,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 233.70000000000005,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 242.10000000000014,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 249.20000000000005,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 258.10000000000014,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 266.10000000000014,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 274.70000000000005,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 282.4000000000001,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 292.5,
+          "rootY": 133,
+          "transform": "none"
+        },
+        {
+          "ms": 300.4000000000001,
+          "heading": "条件选股",
+          "rootY": 133,
+          "transform": "none",
+          "button": "扫描记录",
+          "buttonY": 136
+        }
+      ],
+      "overflow": -11
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "failed": []
+}

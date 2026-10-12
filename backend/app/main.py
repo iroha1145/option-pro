@@ -121,6 +121,37 @@ class _ExactTrustedHostMiddleware:
         await self.app(scope, receive, send)
 
 
+async def _await_lifespan_work(*work):
+    """Drain non-cancellable thread work before startup/shutdown can finish."""
+    pending = asyncio.gather(*work, return_exceptions=True)
+    try:
+        results = await asyncio.shield(pending)
+    except asyncio.CancelledError:
+        while not pending.done():
+            try:
+                await asyncio.shield(pending)
+            except asyncio.CancelledError:
+                continue
+        raise
+    for result in results:
+        if isinstance(result, BaseException):
+            raise result
+
+
+def _prepare_existing_catalyst_jobs(path):
+    from app.failure_diagnostics import record_fallback_failure
+    from app.services.ai_jobs.repository import AIJobRepository
+    import sqlite3
+
+    try:
+        if path is not None and Path(path).is_file():
+            AIJobRepository(path).ensure_initialized()
+    except (OSError, sqlite3.Error, RuntimeError, TypeError, ValueError) as error:
+        # Public reads already tolerate an unavailable analysis store. Warmup
+        # must not turn that degradation into an application startup failure.
+        record_fallback_failure("catalyst_job_startup", error)
+
+
 @asynccontextmanager
 async def _lifespan(application: FastAPI):
     from app.config import get_settings
@@ -147,24 +178,30 @@ async def _lifespan(application: FastAPI):
     application.state.hotspot_read_pool = None
     try:
         if get_personal_config().features.catalyst_mode != "off":
-            await asyncio.to_thread(hotspot_reads.start)
+            job_db_path = getattr(configuration, "openai_job_db_path", None)
+            await _await_lifespan_work(
+                asyncio.to_thread(hotspot_reads.start),
+                asyncio.to_thread(_prepare_existing_catalyst_jobs, job_db_path),
+            )
             application.state.hotspot_read_pool = hotspot_reads
         await stocks.start_company_logo_client()
         await hub.start()
         yield
     finally:
         application.state.hotspot_read_pool = None
-        await asyncio.to_thread(hotspot_reads.close)
         try:
-            await hub.close()
+            await _await_lifespan_work(asyncio.to_thread(hotspot_reads.close))
         finally:
             try:
-                await stocks.close_company_logo_client()
+                await hub.close()
             finally:
                 try:
-                    massive.close()
+                    await stocks.close_company_logo_client()
                 finally:
-                    application.state.quote_hub = None
+                    try:
+                        massive.close()
+                    finally:
+                        application.state.quote_hub = None
 
 
 app = FastAPI(
