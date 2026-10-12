@@ -27,9 +27,13 @@ from app.access import (
 )
 from app.services.catalysts.config import CatalystSettings, get_catalyst_settings
 from app.services.catalysts.economic_calendar_actuals import enrich_recent_actuals
+from app.services.catalysts.hotspot_reads import hotspot_read_pool_context
 from app.services.catalysts.read_updates import catalyst_update_response
 from app.services.catalysts.errors import CatalystError
-from app.services.catalysts.personal_service import PersonalCatalystService
+from app.services.catalysts.personal_service import (
+    PersonalCatalystService,
+    feed_read_slot,
+)
 
 
 _MAX_CATALYST_BODY_BYTES = 32 * 1024
@@ -206,6 +210,7 @@ def _raise_safe(error: CatalystError) -> None:
         "invalid_refresh_type": 422,
         "invalid_idempotency_key": 422,
         "ai_job_queue_full": 429,
+        "feed_read_in_progress": 429,
         "daily_job_limit_reached": 429,
         "daily_budget_usd_reached": 429,
         "daily_output_token_limit_reached": 429,
@@ -299,25 +304,27 @@ def catalyst_feed(
     )
     _require_public_query_bound("limit", limit, _PUBLIC_MAX_FEED_LIMIT)
     try:
-        return service.feed(
-            as_of=as_of or _now(),
-            window_hours=window_hours,
-            limit=limit,
-            cursor=cursor,
-            ticker=_ticker(ticker) if ticker else None,
-            source=source,
-            classification=classification,
-            analysis_status=analysis_status,
-            min_confidence=min_confidence,
-            include_unanalyzed=include_unanalyzed,
-            min_abs_impact=min_abs_impact,
-            include_neutral=include_neutral,
-            horizon=horizon,
-            mechanism=mechanism,
-            multi_source_only=multi_source_only,
-            theme=theme,
-            page_mode=page_mode,
-        )
+        # 并发 1 的读准入（原网关中间件的语义，挪到服务层；拿不到槽位即 429）。
+        with feed_read_slot():
+            return service.feed(
+                as_of=as_of or _now(),
+                window_hours=window_hours,
+                limit=limit,
+                cursor=cursor,
+                ticker=_ticker(ticker) if ticker else None,
+                source=source,
+                classification=classification,
+                analysis_status=analysis_status,
+                min_confidence=min_confidence,
+                include_unanalyzed=include_unanalyzed,
+                min_abs_impact=min_abs_impact,
+                include_neutral=include_neutral,
+                horizon=horizon,
+                mechanism=mechanism,
+                multi_source_only=multi_source_only,
+                theme=theme,
+                page_mode=page_mode,
+            )
     except CatalystError as error:
         _raise_safe(error)
 
@@ -480,10 +487,18 @@ def catalyst_hotspot_status(
 
 @router.get("/hotspots")
 def catalyst_hotspots(
+    request: Request,
     limit: int = Query(default=20, ge=1, le=100),
     service: PersonalCatalystService = Depends(_service),
 ) -> dict:
-    return service.hotspots(limit=limit)
+    # 读进程池的绑定原来在网关中间件里；中间件删除后由路由入口绑定，语义
+    # 不变：池不可用（未启动/已关闭）时回退进程内读。超并发由进程池自身
+    # 拒绝（hotspot_read_workers_busy），服务层落成 cache_unavailable 载荷。
+    pool = getattr(request.app.state, "hotspot_read_pool", None)
+    if pool is not None and not pool.available:
+        pool = None
+    with hotspot_read_pool_context(pool):
+        return service.hotspots(limit=limit)
 
 
 @router.get("/market-focus-cycles/latest")

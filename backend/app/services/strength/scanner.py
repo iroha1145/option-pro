@@ -275,7 +275,7 @@ _FALLBACK_REQUEST_TIMEOUT_SECONDS = 6.0
 
 def _download_marketdata_history(tickers: list[str], period: str) -> tuple[pd.DataFrame, list[str], list[str]]:
     settings = get_settings()
-    token = settings.marketdata_token.strip()
+    token = settings.marketdata_token.get_secret_value().strip()
     if not token:
         return pd.DataFrame(), [], tickers
 
@@ -375,7 +375,7 @@ def _download_stooq_history(tickers: list[str], period: str) -> tuple[pd.DataFra
 
 def _download_finnhub_history(tickers: list[str], period: str) -> tuple[pd.DataFrame, list[str], list[str]]:
     settings = get_settings()
-    token = (settings.finnhub_api_key or "").strip()
+    token = settings.finnhub_api_key.get_secret_value().strip()
     if not token:
         return pd.DataFrame(), [], tickers
 

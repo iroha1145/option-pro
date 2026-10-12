@@ -4,6 +4,7 @@ from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
 import pytest
+from pydantic import SecretStr
 
 from app.services import earnings_enrichment as enrich, massive
 
@@ -73,7 +74,7 @@ def _move(monkeypatch: pytest.MonkeyPatch, provider: str, quotes: list[tuple]) -
 
     monkeypatch.setattr(enrich.httpx, "Client", Client)
     monkeypatch.setattr(enrich, "get_settings", lambda: SimpleNamespace(
-        marketdata_token="fixture", marketdata_base_url="https://marketdata.test",
+        marketdata_token=SecretStr("fixture"), marketdata_base_url="https://marketdata.test",
     ))
     return enrich._marketdata_expected_move("TEST", TODAY, TODAY, "bmo")
 

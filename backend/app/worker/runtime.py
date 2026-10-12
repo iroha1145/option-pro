@@ -177,7 +177,10 @@ class WorkerSupervisor:
 
     # One read of queued manual actions and wake probes serves every loop;
     # this bounds how long a queued owner action waits to be claimed.
-    DEMAND_POLL_SECONDS = 0.5
+    # 2s keeps the claim latency human-instant while halving SQLite reads
+    # versus the original 0.5s poll; the loop never terminates, so the
+    # cheaper cadence matters for a battery/idle footprint.
+    DEMAND_POLL_SECONDS = 2.0
 
     def __init__(
         self,

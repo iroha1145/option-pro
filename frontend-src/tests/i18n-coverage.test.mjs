@@ -272,6 +272,20 @@ if (mocksGaps.length > 0) {
 }
 
 // ── 语言切换器确实挂在导航上 ─────────────────────────────────────────────
+/**
+ * 上面的源码扫描整体排除了 src/i18n/**（词典文件里全是按设计不包 t() 的译文
+ * 字面量，收进来会被 CJK 检查全部误报），但 core.ts 的 applyHtmlLang 里有一处
+ * 真实的 t() 调用（document.title）因此无人看守。单独断言：core.ts 里的每一处
+ * 字面 t() 调用都必须在词典里有条目。
+ */
+test('i18n/core.ts literal t() calls (document.title) are covered by the dictionary', async () => {
+  const core = await readFile(path.join(srcDir, 'i18n', 'core.ts'), 'utf8');
+  const calls = [...core.matchAll(/(?:^|[^\w.])(?:t|__t)\(\s*'([^']+)'/g)].map((m) => m[1]);
+  assert.ok(calls.length > 0, 'core.ts 应至少有一处字面 t() 调用（document.title）——若已重构请同步更新本断言');
+  const missing = calls.filter((msgid) => !merged.has(msgid));
+  assert.deepEqual(missing, [], `core.ts 的 t() 调用缺词典条目：${missing.join(', ')}`);
+});
+
 test('watchlist and smart-drawing copy stays natural in EN/JA', () => {
   const remaining = merged.get('还有 {n} 只');
   assert.equal(remaining?.en, '{n} more');

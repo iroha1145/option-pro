@@ -159,7 +159,6 @@ def test_historical_overlay_keeps_scanner_fallback_instead_of_relabeling_a0() ->
         requested=A0_ALGORITHM,
         timeframe="all",
         profile="balanced",
-        explicit_request=True,
     )
     from dataclasses import replace
     resolution = replace(resolution, effective=A0_ALGORITHM)

@@ -24,6 +24,7 @@ from typing import Any, Awaitable, Callable, Mapping
 from urllib.parse import urljoin, urlsplit
 
 import httpx
+from pydantic import SecretStr
 
 from app.services.finnhub_budget import (
     async_reserve_finnhub_request,
@@ -746,7 +747,8 @@ def build_news_fetchers(settings: Any, client: httpx.AsyncClient) -> dict[str, N
     """Fetchers for every news source whose credentials are configured."""
 
     fetchers: dict[str, NewsFetch] = {}
-    massive_key = str(getattr(settings, "massive_api_key", "") or "").strip()
+    # SecretStr（真实 Settings）与缺省 getattr 都归一成裸 str 再判空。
+    massive_key = getattr(settings, "massive_api_key", SecretStr("")).get_secret_value().strip()
     if massive_key:
         fetchers["massive"] = partial(
             fetch_massive,
@@ -754,7 +756,7 @@ def build_news_fetchers(settings: Any, client: httpx.AsyncClient) -> dict[str, N
             api_key=massive_key,
             base_url=str(settings.massive_base_url).rstrip("/"),
         )
-    finnhub_key = str(getattr(settings, "finnhub_api_key", "") or "").strip()
+    finnhub_key = getattr(settings, "finnhub_api_key", SecretStr("")).get_secret_value().strip()
     if finnhub_key:
         for category in FINNHUB_CATEGORIES:
             fetchers[f"finnhub_{category}"] = partial(

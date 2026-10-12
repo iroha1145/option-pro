@@ -523,7 +523,7 @@ def test_a_request_queued_during_the_first_round_wakes_the_loop_right_after_it(
 
     asyncio.run(scenario())
 
-    # Picked up within a watcher poll or two of the round ending (0.5s each in
+    # Picked up within a watcher poll or two of the round ending (2s each in
     # production), not at the next 120s slot.
     assert reads_at["second_round_start"] - reads_at["first_round_end"] <= 2
 

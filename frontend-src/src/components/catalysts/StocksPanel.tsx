@@ -160,7 +160,7 @@ export default function StocksPanel({ filters }: { filters: CatalystFilters; ref
             <span className="order-last w-full min-w-0 sm:order-none sm:min-w-[180px] sm:flex-1">
               <NetImpactBar value={r.netImpact} analyzed={r.analyzed} />
             </span>
-            <span className="hidden items-center gap-1 text-micro tnum md:flex" title={t("利多 / 利空 / 中性")}>
+            <span className="hidden items-center gap-1 text-micro tnum md:flex md:w-28 md:shrink-0" title={t("利多 / 利空 / 中性")}>
               <SoftBadge tone="up">{r.bullish}</SoftBadge>
               <span className="text-ink-400">/</span>
               <SoftBadge tone="down">{r.bearish}</SoftBadge>
@@ -187,17 +187,19 @@ export default function StocksPanel({ filters }: { filters: CatalystFilters; ref
   return (
     <div className="card-surface overflow-hidden">
       <CatalystCacheStatus {...cacheStatusProps(q)} />
-      <div className="hidden grid-cols-none items-center border-b border-line px-5 py-2.5 sm:flex">
-        <p className="w-40 eyebrow">{t('代码')}</p>
+      {/* 列头与数据行同一把尺：gap-x-4 对 gap-x-4，列宽类一一对应（审计：表头
+          此前无 gap 且残留死类 grid-cols-none，「多/空/中」列无宽，列缘整体错位）。 */}
+      <div className="hidden items-center gap-x-4 border-b border-line px-5 py-2.5 sm:flex">
+        <p className="w-40 shrink-0 eyebrow">{t('代码')}</p>
         <p className="min-w-[180px] flex-1 eyebrow">
           {t('净影响')}
           <InfoHint hint={SCORE_HINTS.netImpact} side="bottom" size={11} className="ml-1" />
         </p>
-        <p className="hidden eyebrow md:block">{t('多/空/中')}</p>
-        <p className="hidden w-14 text-right eyebrow sm:block">{t('来源')}</p>
-        <p className="hidden w-16 text-right eyebrow lg:block">{t('最新')}</p>
-        <p className="w-12 text-right eyebrow">{t('消息')}</p>
-        <span className="w-3.5" />
+        <p className="hidden w-28 shrink-0 eyebrow md:block">{t('多/空/中')}</p>
+        <p className="hidden w-14 shrink-0 text-right eyebrow sm:block">{t('来源')}</p>
+        <p className="hidden w-16 shrink-0 text-right eyebrow lg:block">{t('最新')}</p>
+        <p className="w-12 shrink-0 text-right eyebrow">{t('消息')}</p>
+        <span className="w-3.5 shrink-0" />
       </div>
       {content}
     </div>

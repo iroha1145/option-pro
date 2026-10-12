@@ -643,7 +643,11 @@ export default function Watchlist() {
                   event.stopPropagation();
                   void onRemoveTicker(r.ticker);
                 }}
-                className="inline-flex size-7 items-center justify-center rounded-pill border border-line bg-card text-ink-400 opacity-0 transition-[opacity,color] duration-fast hover:border-danger-600/40 hover:text-danger-600 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 group-hover:opacity-100 disabled:cursor-wait disabled:opacity-40"
+                /* opacity-0 不影响命中测试：必须同步 pointer-events-none，否则这颗
+                   隐形 × 在 iPad 上不可见却可命中，点行尾空白就变成静默删除。
+                   触屏没有 hover，永远进不了 group-hover —— 无 hover 环境改为常驻可见。
+                   （与上方 WatchCard 删除钮同一写法。） */
+                className="pointer-events-none inline-flex size-7 items-center justify-center rounded-pill border border-line bg-card text-ink-400 opacity-0 transition-[opacity,color] duration-fast hover:border-danger-600/40 hover:text-danger-600 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 group-hover:pointer-events-auto group-hover:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100 disabled:cursor-wait disabled:opacity-40"
               >
                 <Icon name="x" size={13} />
               </button>

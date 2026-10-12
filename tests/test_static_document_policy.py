@@ -62,21 +62,21 @@ def test_missing_asset_returns_uncacheable_404_not_the_page_shell(tmp_path, meth
 
 
 @pytest.mark.parametrize("method", ["GET", "HEAD"])
-def test_password_visitors_can_read_real_company_logo_with_short_cache(tmp_path, method):
-    source = Path(__file__).resolve().parents[1] / "frontend-src/public/static/company-logos/TSLA.png"
+def test_password_visitors_can_read_real_company_logo_with_long_cache(tmp_path, method):
+    source = Path(__file__).resolve().parents[1] / "frontend-src/public/static/company-logos/TSLA.webp"
     image = source.read_bytes()
-    target = tmp_path / "static/company-logos/TSLA.png"
+    target = tmp_path / "static/company-logos/TSLA.webp"
     target.parent.mkdir(parents=True)
     target.write_bytes(image)
 
     with _client(tmp_path) as client:
-        response = client.request(method, "/static/company-logos/TSLA.png")
+        response = client.request(method, "/static/company-logos/TSLA.webp")
 
     assert response.status_code == 200
-    assert response.headers["content-type"] == "image/png"
+    assert response.headers["content-type"] == "image/webp"
     assert int(response.headers["content-length"]) == len(image)
     assert response.content == (image if method == "GET" else b"")
-    assert response.headers["cache-control"] == "public, max-age=300, stale-while-revalidate=60"
+    assert response.headers["cache-control"] == "public, max-age=86400, stale-while-revalidate=604800"
 
 
 def test_existing_hashed_asset_and_304_keep_long_cache_policy(tmp_path):

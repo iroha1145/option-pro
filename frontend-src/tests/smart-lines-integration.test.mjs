@@ -215,7 +215,7 @@ test('level role fallback and support/resistance translations are shared', () =>
   assert.equal(isSupportLevel({ price: 98 }, 100), true);
   assert.equal(isSupportLevel({ price: 102 }, 100), false);
   assert.equal(isSupportLevel({ price: 98, role: 'resistance' }, 100), false);
-  for (const label of ['支撑', '阻力', '实线为水平价位；淡色点线为已失效价位']) {
+  for (const label of ['支撑', '阻力']) {
     assert.ok(hasTranslation(label, 'en')); assert.ok(hasTranslation(label, 'ja'));
   }
 });

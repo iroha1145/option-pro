@@ -87,7 +87,7 @@ export default function WatchlistManager({ tickers, maxTickers, busy, onSave, on
             <label className="text-caption text-ink-700" htmlFor={`${id}-input`}>{t('添加股票代码')}</label>
             <textarea ref={inputRef} id={`${id}-input`} value={input} onChange={(event) => { setInput(event.target.value); setError(''); }} disabled={busy}
               rows={2} maxLength={2000} placeholder="AAPL, MSFT, NVDA, SPY" aria-describedby={`${id}-hint`}
-              className="mt-2 w-full resize-y rounded-md border border-line-strong bg-paper px-3 py-2 tnum text-body-s uppercase text-ink-800 outline-none focus:border-brand-600 focus:shadow-focus-ring disabled:opacity-50" />
+              className="mt-2 w-full resize-y rounded-md border border-line-strong bg-paper px-3 py-2 tnum text-body-s uppercase text-ink-800 outline-none focus:border-brand-600 focus:shadow-focus-ring disabled:opacity-50 max-md:text-[16px]" />
             <p id={`${id}-hint`} className="mt-1 text-caption text-ink-400">{t('用逗号、空格或换行分隔，重复代码会自动合并。')}</p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button className={secondary} onClick={() => append(input)} disabled={busy || !input.trim()}><Icon name="plus" size={15} />{t('加入列表')}</button>

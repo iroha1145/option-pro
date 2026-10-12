@@ -3585,7 +3585,7 @@ def test_default_task_inventory_and_maintenance_backup(
     )
     assert password_public_home.enabled is True
 
-    worker_settings.massive_api_key = "configured-for-test"
+    worker_settings.massive_api_key = SecretStr("configured-for-test")
     massive_specs = build_default_tasks("inventory", settings=worker_settings)
     massive_directory = next(
         spec for spec in massive_specs if spec.name == "stock_directory"

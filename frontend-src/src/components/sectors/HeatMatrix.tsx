@@ -7,7 +7,7 @@
  * （±6% / ±12% / ±18%）。
  * 1280 以上分两栏、按列读名次，更窄时单栏。数量不论多少都不会留下残行。
  */
-import { useMemo, type CSSProperties, type ReactNode } from 'react';
+import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { DUR_UI, EASE_PAPER, GROW_X } from '@/lib/motion';
@@ -97,13 +97,20 @@ function HeatRow({
   const tone = hasReturn ? heatTone(value, sector.period) : undefined;
   const length = hasReturn ? (Math.abs(value) / scale.extent) * 100 : 0;
   const leader = sector.leaders[0] ?? null;
+  /* 板块明细 popover 桌面靠 group-hover 展开；触屏没有 hover，改为点按行切换
+     （行本身的选择语义不变，peek 只在 hover:none 下让 popover 常驻显示）。 */
+  const [peek, setPeek] = useState(false);
 
   return (
     <motion.div layout="position" transition={{ duration: DUR_UI, ease: EASE_PAPER }}>
       <button
         type="button"
-        onClick={onToggle}
+        onClick={() => {
+          onToggle();
+          setPeek((v) => !v);
+        }}
         aria-pressed={selected}
+        aria-expanded={peek}
         aria-label={
           hasReturn
             ? t('{name}{period}平均收益 {ret}%，平均评分 {strength}', { name: sector.name, period: periodLabel(sector.period), ret: sector.avgReturn?.toFixed(2), strength: sector.avgStrength ?? t('暂无') })
@@ -160,7 +167,10 @@ function HeatRow({
         </span>
         <span
           role="tooltip"
-          className="cloud-popover pointer-events-none absolute -top-1.5 left-10 z-30 hidden w-52 -translate-y-full p-2.5 text-left md:group-hover:block md:group-focus-visible:block"
+          className={cn(
+            'cloud-popover pointer-events-none absolute -top-1.5 left-10 z-30 hidden w-52 -translate-y-full p-2.5 text-left md:group-hover:block md:group-focus-visible:block',
+            peek && 'md:[@media(hover:none)]:block',
+          )}
         >
           <span className="eyebrow block">{sector.name}</span>
           <span className="mt-1.5 block space-y-1 text-micro">

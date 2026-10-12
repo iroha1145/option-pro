@@ -12,6 +12,7 @@ deployment, would be the one user unable to keep a watchlist.
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 import math
@@ -52,6 +53,8 @@ _LOGIN_FAILURE_WINDOW_SECONDS = 15 * 60
 _LOGIN_COOLDOWN_SECONDS = 5 * 60
 _RATE_BUCKET_LIMIT = 4096
 
+_logger = logging.getLogger(__name__)
+
 _rate_lock = threading.Lock()
 _register_hits: dict[str, list[float]] = {}
 _login_failures: dict[str, tuple[int, float, float]] = {}
@@ -75,11 +78,13 @@ def _client_key(request: Request) -> str:
 
 
 def _prune(bucket: dict, now: float) -> None:
-    """Drop expired entries, then evict the oldest if still over capacity.
+    """Drop expired entries, then evict the oldest evictable ones if still over capacity.
 
     Clearing the whole table at the threshold wiped every visitor's cooldown at
     once, which is exactly the state an attacker wants: fill the table, and the
-    next insert resets everyone's failure count.
+    next insert resets everyone's failure count. 冷却中的登录失败条目同样不
+    参与淘汰——挤掉它们等于让 IP 泛洪重置别人的冷却（2026-10-12 审计 B1）；
+    没有可淘汰条目时由 login_attempt 对陌生来源 fail-closed。
     """
 
     if len(bucket) < _RATE_BUCKET_LIMIT:
@@ -87,13 +92,27 @@ def _prune(bucket: dict, now: float) -> None:
     for key, value in list(bucket.items()):
         if _entry_expired(value, now):
             del bucket[key]
-    overflow = len(bucket) - _RATE_BUCKET_LIMIT + 1
+    evictable = [
+        key for key, value in bucket.items() if not _entry_in_cooldown(value, now)
+    ]
+    overflow = min(len(evictable), len(bucket) - _RATE_BUCKET_LIMIT + 1)
     if overflow <= 0:
         return
-    for key, _ in sorted(bucket.items(), key=lambda item: _entry_last_seen(item[1]))[
-        :overflow
-    ]:
+    for key, _ in sorted(
+        ((key, bucket[key]) for key in evictable),
+        key=lambda item: _entry_last_seen(item[1]),
+    )[:overflow]:
         del bucket[key]
+
+
+def _entry_in_cooldown(value: object, now: float) -> bool:
+    """登录失败桶里 blocked_until 未到的条目；注册桶的时间戳列表没有冷却态。"""
+
+    return (
+        isinstance(value, tuple)
+        and len(value) == 3
+        and float(value[2]) > now
+    )
 
 
 def _entry_last_seen(value: object) -> float:
@@ -155,6 +174,22 @@ def login_attempt(request: Request) -> Iterator[None]:
     now = time.time()
     with _rate_lock:
         _prune(_login_failures, now)
+        if key not in _login_failures and len(_login_failures) >= _RATE_BUCKET_LIMIT:
+            # 桶里全是冷却中的条目（泛洪特征）：对新来源 fail-closed，
+            # 不淘汰他人的冷却记录（2026-10-12 审计 B1，与 owner 登录一致）。
+            bucket_retry_after = max(
+                1,
+                int(min(entry[2] for entry in _login_failures.values()) - now) + 1,
+            )
+            _logger.warning(
+                "account login failure bucket saturated with active cooldowns; "
+                "rejecting login from a new source"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail={"code": "login_cooldown", "message": "登录尝试过多，请稍后再试"},
+                headers={"Retry-After": str(bucket_retry_after)},
+            )
         _count, _started_at, blocked_until = _login_failures.get(key, (0, now, 0.0))
         retry_after = (
             max(1, int(blocked_until - now) + 1)

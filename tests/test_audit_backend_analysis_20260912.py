@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import pytest
+from pydantic import SecretStr
 
 from app.api import earnings
 from app.public_home_snapshot import create_public_home_entry, validate_public_home_payload
@@ -164,7 +165,7 @@ def test_finnhub_duplicate_date_cannot_merge_different_quarter_records(monkeypat
             return Response()
     async def reserve(*_args, **_kwargs):
         return True
-    monkeypatch.setattr(earnings, "get_settings", lambda: SimpleNamespace(finnhub_api_key="fixture", finnhub_base_url="https://fixture.invalid"))
+    monkeypatch.setattr(earnings, "get_settings", lambda: SimpleNamespace(finnhub_api_key=SecretStr("fixture"), finnhub_base_url="https://fixture.invalid"))
     monkeypatch.setattr(earnings.httpx, "AsyncClient", lambda **_: Client())
     monkeypatch.setattr(earnings, "async_reserve_finnhub_request", reserve)
     result = asyncio.run(earnings._fetch_finnhub_earnings(TODAY))

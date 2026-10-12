@@ -6,6 +6,7 @@ import types
 
 import httpx
 import pytest
+from pydantic import SecretStr
 
 from app.services import massive
 
@@ -251,7 +252,7 @@ def test_unconfigured_get_raises_without_network(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(
         massive,
         "get_settings",
-        lambda: types.SimpleNamespace(massive_api_key="", massive_base_url="https://api.massive.com"),
+        lambda: types.SimpleNamespace(massive_api_key=SecretStr(""), massive_base_url="https://api.massive.com"),
     )
     assert massive.configured() is False
     with pytest.raises(massive.MassiveError) as exc_info:
@@ -272,7 +273,7 @@ def test_get_fails_fast_when_provider_concurrency_gate_is_busy(
         massive,
         "get_settings",
         lambda: types.SimpleNamespace(
-            massive_api_key="configured-for-test",
+            massive_api_key=SecretStr("configured-for-test"),
             massive_base_url="https://api.massive.com",
         ),
     )
@@ -330,7 +331,7 @@ def mock_transport(monkeypatch: pytest.MonkeyPatch):
         massive,
         "get_settings",
         lambda: types.SimpleNamespace(
-            massive_api_key="configured-for-test",
+            massive_api_key=SecretStr("configured-for-test"),
             massive_base_url="https://api.massive.com",
         ),
     )

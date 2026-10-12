@@ -16,6 +16,14 @@ from pydantic import (
     model_validator,
 )
 
+from app.deployment_boundary import (
+    # 私有网段包络的单源（部署边界校验也用它）：本模块按原名 import 成
+    # _PRIVATE_NETWORK_ENVELOPES 别名，两处判定永不漂移。方向选择：
+    # deployment_boundary 只依赖标准库与 idna，是更底层模块；反向 import
+    # 会把 pydantic 拖进部署边界校验。
+    _TRUSTED_PROXY_ENVELOPES as _PRIVATE_NETWORK_ENVELOPES,
+)
+
 try:
     import tomllib
 except ModuleNotFoundError:  # Python 3.10 compatibility for legacy deploy checks.
@@ -42,18 +50,6 @@ OPENAI_REASONING_EFFORTS = ("max", "xhigh", "high")
 #: ``[storage].retention_days``). Completed earnings analyses are kept longer;
 #: see ``EARNINGS_ANALYSIS_RETENTION_DAYS`` in the AI job repository.
 DEFAULT_RETENTION_DAYS = 10
-_PRIVATE_NETWORK_ENVELOPES = tuple(
-    ipaddress.ip_network(value)
-    for value in (
-        "127.0.0.0/8",
-        "10.0.0.0/8",
-        "172.16.0.0/12",
-        "192.168.0.0/16",
-        "100.64.0.0/10",
-        "::1/128",
-        "fc00::/7",
-    )
-)
 
 
 class StrictConfigModel(BaseModel):

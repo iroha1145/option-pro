@@ -38,7 +38,7 @@ def _settings(tmp_path, *, fred: str = "") -> SimpleNamespace:
         breakout_db_path=tmp_path / "optix.db",
         optix_backup_dir=tmp_path / "backups",
         personal_etl_enabled=False,
-        massive_api_key="",
+        massive_api_key=SecretStr(""),
     )
 
 

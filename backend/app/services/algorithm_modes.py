@@ -189,7 +189,6 @@ def resolve_screener_algorithm(
     admin_default: Any = None,
     timeframe: Any = "all",
     profile: Any = "balanced",
-    explicit_request: bool = False,
     timeframe_omitted: bool = False,
 ) -> AlgorithmResolution:
     requested_id = canonicalize_screener_algorithm(requested, allow_follow=True)

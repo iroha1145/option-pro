@@ -349,7 +349,7 @@ def test_maintenance_and_retention_back_up_the_macro_database(tmp_path) -> None:
         breakout_db_path=tmp_path / "optix.db",
         optix_backup_dir=tmp_path / "backups",
         personal_etl_enabled=False,
-        massive_api_key="",
+        massive_api_key=SecretStr(""),
     )
     specs = build_default_tasks("macro-backup", settings=settings)
     maintenance = next(spec for spec in specs if spec.name == "maintenance")

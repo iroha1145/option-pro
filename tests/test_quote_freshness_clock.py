@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 import pytest
+from pydantic import SecretStr
 
 from app.services import earnings_enrichment as enrich
 from app.services import massive
@@ -63,7 +64,7 @@ def test_providers_keep_valid_same_day_straddle(
         result = enrich._massive_expected_move("TEST", date(2026, 9, 10), NOW.date(), "amc")
     else:
         monkeypatch.setattr(enrich, "get_settings", lambda: SimpleNamespace(
-            marketdata_token="isolated-test-token", marketdata_base_url="https://marketdata.example",
+            marketdata_token=SecretStr("isolated-test-token"), marketdata_base_url="https://marketdata.example",
         ))
         calls = []
 

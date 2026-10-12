@@ -14,6 +14,7 @@ import pandas as pd
 import pytest
 import httpx
 from fastapi import HTTPException
+from pydantic import SecretStr
 
 from app.api import market, signals as signals_api, strength as strength_api
 from tests.http_response_support import anonymous_get_request as _areq
@@ -550,7 +551,7 @@ def test_bounded_fallback_fetch_limits_concurrency_and_breaks_on_failures() -> N
 def test_finnhub_fallback_keeps_token_out_of_url_query(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
     settings = SimpleNamespace(
-        finnhub_api_key="secret-token",
+        finnhub_api_key=SecretStr("secret-token"),
         finnhub_base_url="https://finnhub.example/api/v1",
     )
 
@@ -591,7 +592,7 @@ def test_finnhub_fallback_keeps_token_out_of_url_query(monkeypatch: pytest.Monke
 def test_marketdata_fallback_keeps_token_out_of_url_query(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
     settings = SimpleNamespace(
-        marketdata_token="secret-token",
+        marketdata_token=SecretStr("secret-token"),
         marketdata_base_url="https://marketdata.example",
     )
 
@@ -636,7 +637,7 @@ def test_marketdata_fallback_httpx_logs_omit_token(
 ) -> None:
     sentinel = "marketdata-log-sentinel"
     settings = SimpleNamespace(
-        marketdata_token=sentinel,
+        marketdata_token=SecretStr(sentinel),
         marketdata_base_url="https://marketdata.example",
     )
     real_client = httpx.Client

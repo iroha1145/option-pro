@@ -30,3 +30,11 @@ node_modules
 **/playwright-report
 dist
 build
+
+# Local-only research, docs, and sources the image never COPYs
+research/
+docs/
+evidence/
+reference-designs/
+tests/
+frontend-src/

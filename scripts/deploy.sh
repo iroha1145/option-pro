@@ -250,7 +250,9 @@ main() {
     compose build --pull backend
     validate_runtime_boundary
 
-    if ! compose up -d --no-build --force-recreate --remove-orphans --wait --wait-timeout 180; then
+    # worker 的 stop_grace_period 是 7500s（docker-compose.yml），长任务停机
+    # 可能远超 180s；等待预算对齐到 7800s（7500 + 300 余量），避免误报失败。
+    if ! compose up -d --no-build --force-recreate --remove-orphans --wait --wait-timeout 7800; then
         compose ps >&2 || true
         compose logs --tail=200 backend worker >&2 || true
         exit 1

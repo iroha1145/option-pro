@@ -13,7 +13,7 @@ import { useQuoteSymbols } from '@/hooks/useLiveQuote';
  * 旧抽屉形态已撤：全站 openTicker 一律导航到本页（审计 #12 的任务丢失
  * 问题随抽屉一并消失——本页不再有按 tab 卸载的区块）。
  */
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { usePolling } from '@/hooks/usePolling';
 import EmptyState from '@/components/shared/EmptyState';
@@ -32,14 +32,17 @@ import TechnicalPanel, { TechnicalPanelSkeleton } from '@/components/detail/Tech
 import StructurePanel from '@/components/detail/StructurePanel';
 import TrendBiasPanel from '@/components/detail/TrendBiasPanel';
 import SignalList from '@/components/detail/SignalList';
-import OptionsPanel from '@/components/detail/OptionsPanel';
-import NewsPanel from '@/components/detail/NewsPanel';
 import AiAnalysisCard from '@/components/detail/AiAnalysisCard';
 import ManualStockPull from '@/components/detail/ManualStockPull';
 import KeyStats from '@/components/detail/KeyStats';
 import { pageRegionProps } from '@/lib/pageRegion';
 import { loginReturnState } from '@/lib/loginReturn';
 import { t, t as __t } from '../i18n/core.ts';
+
+/* 行4/行5 在视口下方，期权链与新闻面板懒加载：首屏不必等这两块的代码。
+   AI 卡持有付费任务轮询、常驻挂载，不在懒加载范围。 */
+const OptionsPanel = lazy(() => import('@/components/detail/OptionsPanel'));
+const NewsPanel = lazy(() => import('@/components/detail/NewsPanel'));
 
 export default function StockDetail() {
   const { ticker = '' } = useParams();
@@ -354,13 +357,17 @@ export default function StockDetail() {
       {/* 行4: 期权链 */}
       <div className="card-surface mt-6 p-5">
         <h3 className="mb-4 text-h3 text-ink-900">{__t('期权报价')}</h3>
-        <OptionsPanel key={detail.ticker} ticker={detail.ticker} />
+        <Suspense fallback={<SkeletonBlock className="h-64 w-full rounded-md" />}>
+          <OptionsPanel key={detail.ticker} ticker={detail.ticker} />
+        </Suspense>
       </div>
 
       {/* 行5: 相关新闻 */}
       <div className="card-surface mt-6 p-5">
         <h3 className="mb-4 text-h3 text-ink-900">{__t('相关消息')}</h3>
-        <NewsPanel ticker={detail.ticker} />
+        <Suspense fallback={<SkeletonText lines={4} />}>
+          <NewsPanel ticker={detail.ticker} />
+        </Suspense>
       </div>
 
     </div>

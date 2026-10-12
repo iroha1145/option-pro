@@ -81,7 +81,7 @@ class MassiveError(RuntimeError):
 
 
 def configured() -> bool:
-    return bool(get_settings().massive_api_key)
+    return bool(get_settings().massive_api_key.get_secret_value())
 
 
 def to_symbol(ticker: str) -> str | None:
@@ -154,7 +154,7 @@ def _retry_after_seconds(response: httpx.Response) -> float | None:
 
 def _get(path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
     settings = get_settings()
-    key = settings.massive_api_key
+    key = settings.massive_api_key.get_secret_value()
     if not key:
         raise MassiveError("MASSIVE_API_KEY is not configured", code="not_configured")
     acquired = _request_gate.acquire(timeout=_REQUEST_GATE_TIMEOUT)

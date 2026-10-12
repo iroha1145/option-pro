@@ -127,7 +127,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
               value={filters.ticker}
               onChange={(e) => set({ ticker: e.target.value.toUpperCase().replace(/[^A-Z0-9.^-]/g, '').slice(0, 12) })}
               placeholder={t("股票代码")}
-              className="h-8 w-28 rounded-md border border-line bg-card pl-7 pr-2 tnum text-caption text-ink-800 placeholder:text-ink-400 focus:border-brand-400 focus:outline-none"
+              className="h-8 w-28 rounded-md border border-line bg-card pl-7 pr-2 tnum text-caption text-ink-800 placeholder:text-ink-400 focus:border-brand-400 focus:outline-none max-md:text-[16px]"
               aria-label={t("按股票代码筛选")}
             />
           </div>

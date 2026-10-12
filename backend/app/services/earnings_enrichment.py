@@ -627,7 +627,7 @@ def _marketdata_expected_move(
     timing: str | None,
 ) -> dict[str, Any]:
     settings = get_settings()
-    token = str(settings.marketdata_token or "").strip()
+    token = settings.marketdata_token.get_secret_value().strip()
     if not token:
         return _failure("not_configured")
     base_url = str(settings.marketdata_base_url).rstrip("/")

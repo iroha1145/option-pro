@@ -1,184 +1,112 @@
+"""Service-layer admission for the two expensive catalyst reads.
+
+The ASGI CatalystReadAdmission middleware was removed (2026-10-12 audit B9):
+/api/catalysts/feed concurrency is bounded by a non-blocking
+threading.BoundedSemaphore(1) in the service layer, and /api/catalysts/hotspots
+binds the read-process pool at the route entry, letting the pool itself reject
+over-subscription.
+"""
 from __future__ import annotations
 
-import asyncio
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
 import pytest
-from starlette.responses import JSONResponse
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from app.catalyst_read_admission import CatalystReadAdmission
+from app.access import request_owner_access_context
+from app.api import catalysts as catalyst_api
+from app.services.catalysts.errors import CatalystError
 from app.services.catalysts.hotspot_reads import current_hotspot_read_pool
+from app.services.catalysts.personal_service import feed_read_slot
 
 
-def test_pool_splits_eight_hotspots_from_one_feed_and_cancel_retains_slots():
-    async def run():
-        pool = SimpleNamespace(available=True)
-        app = SimpleNamespace(state=SimpleNamespace(hotspot_read_pool=pool))
-        release = asyncio.Event()
-        active = {"feed": 0, "hotspots": 0}
-        peak = dict(active)
-        completed = []
-        async def inner(scope, receive, send):
-            kind = scope["path"].rsplit("/", 1)[-1]
-            active[kind] += 1
-            peak[kind] = max(peak[kind], active[kind])
-            assert current_hotspot_read_pool() is (pool if kind == "hotspots" else None)
+@pytest.fixture(autouse=True)
+def _owner_request_context():
+    with request_owner_access_context(True):
+        yield
+
+
+def test_feed_read_slot_is_non_blocking_and_reusable_after_release() -> None:
+    with feed_read_slot():
+        with pytest.raises(CatalystError) as caught:
+            with feed_read_slot():
+                pass
+        assert caught.value.code == "feed_read_in_progress"
+        assert caught.value.retryable is True
+        assert caught.value.retry_after_seconds == 1
+        assert caught.value.counts_for_circuit is False
+    # 释放后立即可再次获取。
+    with feed_read_slot():
+        pass
+
+
+def test_feed_route_returns_429_while_a_read_holds_the_slot() -> None:
+    entered = threading.Event()
+    release = threading.Event()
+
+    class SlowService:
+        def feed(self, **kwargs):
+            entered.set()
+            assert release.wait(2), "test did not release the slow read"
+            return {"status": "ok", "items": []}
+
+    app = FastAPI()
+    app.include_router(catalyst_api.router)
+    app.dependency_overrides[catalyst_api._service] = lambda: SlowService()
+    with TestClient(app, base_url="http://localhost") as client:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            slow = pool.submit(client.get, "/api/catalysts/feed")
             try:
-                await release.wait()
-                completed.append(scope["number"])
+                assert entered.wait(2), "first feed read did not start"
+                busy = client.get("/api/catalysts/feed")
+                assert busy.status_code == 429
+                assert busy.headers["retry-after"] == "1"
+                assert busy.json()["detail"]["code"] == "feed_read_in_progress"
             finally:
-                active[kind] -= 1
-        admission = CatalystReadAdmission(inner)
-        def request(kind, number):
-            return asyncio.create_task(admission({"type": "http", "method": "GET",
-                "path": f"/api/catalysts/{kind}", "app": app, "number": number}, None, None))
-        workers = [request("hotspots", i) for i in range(8)] + [request("feed", 8)]
-        for _ in range(100):
-            if active == {"feed": 1, "hotspots": 8}:
-                break
-            await asyncio.sleep(.001)
-        assert active == {"feed": 1, "hotspots": 8}
-        queued = request("hotspots", 9)
-        queued_feed = request("feed", 10)
-        for _ in range(5):
-            workers[0].cancel()
-            await asyncio.sleep(.001)
-        assert not workers[0].done()
-        assert not queued.done() and not queued_feed.done()
-        queued.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await queued
-        assert active == {"feed": 1, "hotspots": 8}
-        release.set()
-        with pytest.raises(asyncio.CancelledError):
-            await workers[0]
-        await asyncio.gather(*workers[1:], queued_feed)
-        await request("hotspots", 11)
-        assert 9 not in completed and 11 in completed
-        assert peak == {"feed": 1, "hotspots": 8}
-        assert active == {"feed": 0, "hotspots": 0}
-        assert current_hotspot_read_pool() is None
-    asyncio.run(run())
+                release.set()
+            assert slow.result().status_code == 200
+    # 慢读结束后准入恢复。
+    assert client.get("/api/catalysts/feed").status_code == 200
 
 
-def test_stopped_pool_uses_shared_single_slot():
-    async def run():
-        app = SimpleNamespace(state=SimpleNamespace(hotspot_read_pool=SimpleNamespace(available=False)))
-        active = peak = 0
-        async def inner(scope, receive, send):
-            nonlocal active, peak
-            assert current_hotspot_read_pool() is None
-            active += 1
-            peak = max(active, peak)
-            await asyncio.sleep(.005)
-            active -= 1
-        admission = CatalystReadAdmission(inner)
-        await asyncio.gather(*(admission({"type": "http", "method": "GET", "app": app,
-            "path": "/api/catalysts/" + ("feed" if i % 2 else "hotspots")}, None, None)
-            for i in range(10)))
-        assert peak == 1
-    asyncio.run(run())
+def _hotspots_app(observed: list) -> FastAPI:
+    class StubService:
+        def hotspots(self, *, limit):
+            observed.append(current_hotspot_read_pool())
+            return {"status": "ok", "items": []}
+
+    app = FastAPI()
+    app.include_router(catalyst_api.router)
+    app.dependency_overrides[catalyst_api._service] = lambda: StubService()
+    return app
 
 
-@pytest.mark.parametrize("mode,slots", [("hotspots", 8), ("feed", 1), ("fallback", 1)])
-def test_two_thousand_requests_have_bounded_waiters_and_cancellation_recovers(mode, slots):
-    async def run():
-        app = SimpleNamespace(state=SimpleNamespace(
-            hotspot_read_pool=SimpleNamespace(available=mode != "fallback")))
-        release = asyncio.Event()
-        active = 0
-        statuses = []
-        async def inner(scope, receive, send):
-            nonlocal active
-            active += 1
-            try:
-                await release.wait()
-                await JSONResponse({"ok": True})(scope, receive, send)
-            finally:
-                active -= 1
-        admission = CatalystReadAdmission(inner)
-        async def request(index):
-            path = mode if mode != "fallback" else ("feed" if index % 2 else "hotspots")
-            messages = []
-            async def send(message):
-                messages.append(message)
-                if message["type"] == "http.response.start":
-                    statuses.append(message["status"])
-            await admission({"type": "http", "method": "GET", "app": app,
-                "path": "/api/catalysts/" + path}, None, send)
-            return messages
-        tasks = [asyncio.create_task(request(i)) for i in range(2000)]
-        accepted = slots + 64
-        for _ in range(1000):
-            if len(statuses) == 2000 - accepted and active == slots:
-                break
-            await asyncio.sleep(.001)
-        assert statuses == [429] * (2000 - accepted)
-        assert active == slots
-        gates = admission._hotspot_limiters if mode == "hotspots" else admission._limiters
-        gate = gates[asyncio.get_running_loop()]
-        assert gate.entered == accepted
-        if mode == "fallback":
-            assert len(admission._hotspot_limiters) == 0
-        # Cancel ten queued requests and repeatedly cancel one active request.
-        for task in tasks[slots:slots + 10]:
-            task.cancel()
-        await asyncio.gather(*tasks[slots:slots + 10], return_exceptions=True)
-        assert gate.entered == accepted - 10
-        for _ in range(3):
-            tasks[0].cancel()
-            await asyncio.sleep(.001)
-        assert not tasks[0].done() and gate.entered == accepted - 10
-        replacements = [asyncio.create_task(request(2000 + i)) for i in range(10)]
-        await asyncio.sleep(.01)
-        assert gate.entered == accepted
-        release.set()
-        result = await asyncio.gather(*tasks, *replacements, return_exceptions=True)
-        assert sum(isinstance(value, asyncio.CancelledError) for value in result) == 11
-        assert gate.entered == 0 and active == 0
-        rejected = next(value for value in result if isinstance(value, list)
-                        and value[0]["status"] == 429)
-        assert (b"retry-after", b"1") in rejected[0]["headers"]
-        assert b'"error":"rate_limited"' in rejected[1]["body"]
-        statuses.clear()
-        await asyncio.gather(*(request(i) for i in range(50)))
-        assert statuses == [200] * 50
-        assert gate.entered == 0
-    asyncio.run(run())
+def test_hotspots_route_binds_the_available_read_pool() -> None:
+    observed = []
+    app = _hotspots_app(observed)
+    pool = SimpleNamespace(available=True)
+    app.state.hotspot_read_pool = pool
+    with TestClient(app, base_url="http://localhost") as client:
+        assert client.get("/api/catalysts/hotspots").status_code == 200
+    assert observed == [pool]
+    # 路由返回后上下文不泄漏。
+    assert current_hotspot_read_pool() is None
 
 
-def test_admission_overflow_keeps_gateway_security_and_cache_headers(monkeypatch):
-    import httpx
-    from fastapi import FastAPI
-    from app import main
+def test_hotspots_route_falls_back_to_inline_read_without_a_pool() -> None:
+    # 池不可用（已停止/未启动）时如实回退进程内读，与原中间件语义一致。
+    observed = []
+    app = _hotspots_app(observed)
+    app.state.hotspot_read_pool = SimpleNamespace(available=False)
+    with TestClient(app, base_url="http://localhost") as client:
+        assert client.get("/api/catalysts/hotspots").status_code == 200
+    assert observed == [None]
 
-    monkeypatch.setattr(main, "_rl_buckets", {})
-    monkeypatch.setattr(main, "_RL_MARKET_READ_LIMIT", 10000)
-    async def run():
-        inner = FastAPI()
-        release = asyncio.Event()
-        @inner.get("/api/catalysts/hotspots")
-        async def read():
-            await release.wait()
-            return {"ok": True}
-        runtime = SimpleNamespace(mode="private", visitor_ai_actions=False,
-            visitor_live_pulls=False, request_is_owner=lambda request: True)
-        gateway = main._GatewayMiddleware(inner, access_runtime=runtime)
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=gateway),
-                                      base_url="http://localhost") as client:
-            tasks = [asyncio.create_task(client.get("/api/catalysts/hotspots")) for _ in range(65)]
-            for _ in range(1000):
-                gate = gateway.catalyst_read_admission._limiters.get(asyncio.get_running_loop())
-                if gate is not None and gate.entered == 65:
-                    break
-                await asyncio.sleep(.001)
-            assert gate.entered == 65
-            response = await client.get("/api/catalysts/hotspots")
-            assert response.status_code == 429
-            assert response.headers["retry-after"] == "1"
-            assert response.headers["x-content-type-options"] == "nosniff"
-            assert response.headers["x-frame-options"] == "DENY"
-            assert response.headers["cache-control"] == "private, no-store"
-            release.set()
-            assert all(response.status_code == 200 for response in await asyncio.gather(*tasks))
-    asyncio.run(run())
+    observed.clear()
+    app = _hotspots_app(observed)
+    with TestClient(app, base_url="http://localhost") as client:
+        assert client.get("/api/catalysts/hotspots").status_code == 200
+    assert observed == [None]

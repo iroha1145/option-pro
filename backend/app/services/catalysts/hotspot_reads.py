@@ -1,4 +1,4 @@
-"""Eight bounded, disposable spawn workers for local hotspot reads only.
+"""Two bounded, disposable spawn workers for local hotspot reads only.
 
 HTTP ownership and availability checks stay in the web process. A worker is
 leased for exactly one read, with no internal submission queue. Only primitive
@@ -19,7 +19,11 @@ import time
 from types import SimpleNamespace
 from urllib.parse import parse_qs, unquote, urlsplit
 
-HOTSPOT_READ_WORKERS = 8
+#: 个人部署的 hotspots 读者只有 owner 与几位朋友：2 个 spawn 子进程足够覆盖
+#: 并发（原值 8 的每个子进程都重新 import 大模块，常驻数百 MB）。池满时第
+#: 三个并发读在 read() 处如实报 hotspot_read_workers_busy，由服务层落成
+#: cache_unavailable 载荷，下一次轮询自愈。
+HOTSPOT_READ_WORKERS = 2
 _START_TIMEOUT_SECONDS = 20.0
 _READ_TIMEOUT_SECONDS = 30.0
 _STOP_TIMEOUT_SECONDS = .5
@@ -212,8 +216,8 @@ class HotspotReadPool:
                 raise
 
     def read(self, request: HotspotRead):
-        # No waiting futures or unbounded queue. The gateway admits eight
-        # hotspot requests; unexpected direct over-submission fails locally.
+        # No waiting futures or unbounded queue. The pool itself is the
+        # concurrency bound; direct over-submission fails locally.
         with self._lock:
             if self._closed or not self._started:
                 raise sqlite3.OperationalError("hotspot_read_worker_unavailable")

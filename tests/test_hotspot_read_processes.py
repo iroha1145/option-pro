@@ -42,7 +42,7 @@ def pool():
     result = reads.HotspotReadPool()
     result.start()
     processes = [w.process for w in result._workers]
-    assert len({p.pid for p in processes}) == 8
+    assert len({p.pid for p in processes}) == reads.HOTSPOT_READ_WORKERS
     assert all(p.is_alive() for p in processes)
     try:
         yield result
@@ -217,15 +217,15 @@ def test_crash_timeout_recovery_bounded_admission_and_shutdown(monkeypatch):
         third = pool.read("ok")["pid"]
         assert third != second
         processes.append(pool._workers[0].process)
-        with ThreadPoolExecutor(max_workers=8) as threads:
-            futures = [threads.submit(pool.read, "brief") for _ in range(8)]
+        with ThreadPoolExecutor(max_workers=reads.HOTSPOT_READ_WORKERS) as threads:
+            futures = [threads.submit(pool.read, "brief") for _ in range(reads.HOTSPOT_READ_WORKERS)]
             deadline = time.monotonic() + 2
             while not all(w.leased for w in pool._workers):
                 assert time.monotonic() < deadline
                 time.sleep(.001)
             with pytest.raises(sqlite3.OperationalError, match="busy"):
                 pool.read("ok")
-            assert len({f.result()["pid"] for f in futures}) == 8
+            assert len({f.result()["pid"] for f in futures}) == reads.HOTSPOT_READ_WORKERS
         # Close while requests are still active: their leases fail promptly.
         with ThreadPoolExecutor(max_workers=1) as threads:
             future = threads.submit(pool.read, "hang")
