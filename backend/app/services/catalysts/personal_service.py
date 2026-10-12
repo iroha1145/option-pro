@@ -62,7 +62,7 @@ def feed_read_slot() -> Iterator[None]:
     if not _FEED_READ_SLOTS.acquire(blocking=False):
         raise CatalystError(
             "feed_read_in_progress",
-            "Catalyst feed is busy; retry shortly",
+            "动态数据读取中，请稍后重试",
             retryable=True,
             retry_after_seconds=1,
             counts_for_circuit=False,
