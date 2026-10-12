@@ -238,6 +238,53 @@ function verifyApplicationShell(): Plugin {
   };
 }
 
+/**
+ * Preload the deferred-but-universal chunks from the HTML head.
+ *
+ * app-shell and page-shared are loaded by *every* page, yet index.html can only
+ * reference the entry: both chunks sit behind dynamic imports (app-shell waits
+ * for prepareI18n), so their URLs are discovered only after the entry has
+ * downloaded and executed -- a full serial round trip on first paint. A
+ * modulepreload link starts the fetch during the entry's own download without
+ * changing evaluation order: the dynamic imports in main.tsx still gate
+ * execution, preload only moves the bytes earlier.
+ *
+ * The crossorigin attribute matches Vite's own runtime preload helper, which
+ * sets `link.crossOrigin = ""`; anonymous CORS mode is what the module loader
+ * uses, and a mismatched credentials mode would make the preload ineligible
+ * for reuse (double download).
+ *
+ * Missing chunks are a build-time error, not a silent skip: the preload list
+ * is a contract about which chunks every visitor needs.
+ */
+function preloadUniversalChunks(): Plugin {
+  const UNIVERSAL_CHUNKS = ['app-shell', 'page-shared'];
+  let fileNames: string[] = [];
+  return {
+    name: 'optix-preload-universal-chunks',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      // User plugins run before vite:build-html, so these names are recorded
+      // before transformIndexHtml needs them.
+      fileNames = UNIVERSAL_CHUNKS.map((name) => {
+        const chunk = Object.values(bundle).find(
+          (asset) => asset.type === 'chunk' && asset.name === name,
+        );
+        if (!chunk) this.error(`Universal chunk "${name}" was not emitted; the preload contract is stale.`);
+        return chunk.fileName;
+      });
+    },
+    transformIndexHtml() {
+      if (!fileNames.length) this.error('Universal chunk file names are unknown at HTML transform time.');
+      return fileNames.map((fileName) => ({
+        tag: 'link',
+        attrs: { rel: 'modulepreload', crossorigin: true, href: `/${fileName}` },
+        injectTo: 'head' as const,
+      }));
+    },
+  };
+}
+
 function epsChartChunk(): Plugin {
   let build = false;
   let referenceId = '';
@@ -301,7 +348,7 @@ export default defineConfig(() => {
     // /stock/assets/*（网关对带扩展名路径如实 404）——硬刷新详情页直接白屏。
     // 详情页改为全屏整页后深链/刷新是常规路径，与 JP 站同口径改为绝对根。
     base: '/',
-    plugins: [react(), stripMocksFromLiveBuild(live), epsChartChunk(), verifyApplicationShell()],
+    plugins: [react(), stripMocksFromLiveBuild(live), epsChartChunk(), verifyApplicationShell(), preloadUniversalChunks()],
     build: {
       rollupOptions: {
         output: { manualChunks: applicationManualChunks(), onlyExplicitManualChunks: true },

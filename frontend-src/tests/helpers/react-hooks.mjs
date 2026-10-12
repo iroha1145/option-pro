@@ -108,6 +108,14 @@ export function createReactStub() {
       if (changed && !record.dirty) record.dirty = true;
       if (record.deps !== undefined && !changed) record.dirty = record.dirty && true;
     },
+    /* React.lazy 桩：懒加载组件在测试里以空渲染占位——异步装载与分块
+       不在本 stub 的职责内；调用点（如 Layout 的命令面板）本就按
+       「未打开不渲染」门控，占位组件不会被真正执行。 */
+    lazy() {
+      return function LazyComponentStub() { return null; };
+    },
+    /* Suspense 桩：jsx 桩只按 type 建对象、从不调用，这里提供标识即可。 */
+    Suspense: 'Suspense',
   };
 
   return {

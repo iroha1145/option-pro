@@ -45,7 +45,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  */
 const QUERY_CONFIG: Record<string, QueryConfig> = {
   '/market/status': { ttlMs: 15_000 },
-  '/market/indices': { ttlMs: 30_000, persist: true, maxRestoreAgeMs: 3 * DAY_MS },
+  // 两个消费方（首页 indicesQ、Layout IndexTape）都按 60s 轮询：TTL 30s 会让每次
+  // 轮询都穿透缓存，一页双挂载就是每分钟 2 次真实请求。55s 略小于轮询间隔即可合流。
+  '/market/indices': { ttlMs: 55_000, persist: true, maxRestoreAgeMs: 3 * DAY_MS },
   '/strength/market': { ttlMs: 30_000, persist: true, maxRestoreAgeMs: 3 * DAY_MS },
   '/signals/market': { ttlMs: 30_000, persist: true, maxRestoreAgeMs: 3 * DAY_MS },
   '/earnings/upcoming': { ttlMs: 60_000, persist: true, maxRestoreAgeMs: 7 * DAY_MS },

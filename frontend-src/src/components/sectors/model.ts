@@ -9,7 +9,7 @@ import type {
   SectorStrengthLeader,
   SectorStrengthRow,
 } from '@/api/modules/sectors';
-import { heatColor } from '@/lib/chart';
+import { heatColor } from '@/lib/heatColor';
 import type { MacroFitDriver } from '@/lib/macroFit';
 import { t } from '../../i18n/core.ts';
 

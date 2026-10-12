@@ -6,7 +6,7 @@
  * v2：个股详情从右侧抽屉改为 /stock/:ticker 全屏整页（参考日股工作台），
  * openTicker 一律导航——抽屉基座与 StockDrawerBody 已随之撤除。
  */
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Outlet, useLocation, useNavigate, useNavigationType } from 'react-router';
 import Navbar from '@/components/Navbar';
 import IndexTape from '@/components/IndexTape';
@@ -16,7 +16,6 @@ import RouteErrorBoundary from '@/components/shared/RouteErrorBoundary';
 import PageFallback from '@/components/shared/PageFallback';
 import StatusNotice from '@/components/shared/StatusNotice';
 import MobileDock from '@/components/MobileDock';
-import CommandPalette from '@/components/CommandPalette';
 import { pushRecent } from '@/lib/recentTickers';
 import { ShellContext } from '@/hooks/useShell';
 import { useAccess } from '@/hooks/useAccess';
@@ -24,6 +23,10 @@ import { isMock } from '@/api/client';
 import { afterLoadIdle } from '@/lib/afterLoadIdle';
 import { prefetchRouteOnIntent } from '@/lib/prefetchRouteChunk';
 import { t as __t } from '../i18n/core.ts';
+
+/* 命令面板（531 行）只在 ⌘K/点击时才用，懒加载；首次打开后常驻挂载，
+   退场动画与内部状态依赖 open 语义的连续渲染，不能随关闭卸载。 */
+const CommandPalette = lazy(() => import('@/components/CommandPalette'));
 
 export default function Layout() {
   const location = useLocation();
@@ -35,9 +38,14 @@ export default function Layout() {
   const pageKey = JSON.stringify([location.pathname, role, username]);
   const previousPathname = useRef(location.pathname);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // 首次打开后才挂载懒加载的面板本体；⌘K 监听就在本组件，打开语义不变。
+  const [paletteMounted, setPaletteMounted] = useState(false);
   const [dockHeight, setDockHeight] = useState(64);
 
-  const openPalette = useCallback(() => setPaletteOpen(true), []);
+  const openPalette = useCallback(() => {
+    setPaletteMounted(true);
+    setPaletteOpen(true);
+  }, []);
   const openTicker = useCallback((ticker: string) => {
     const symbol = ticker.toUpperCase();
     pushRecent(symbol);
@@ -70,7 +78,10 @@ export default function Layout() {
       if (e.defaultPrevented || e.isComposing || e.keyCode === 229 || e.altKey || e.shiftKey) return;
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        if (!e.repeat) setPaletteOpen((v) => !v);
+        if (!e.repeat) {
+          setPaletteMounted(true);
+          setPaletteOpen((v) => !v);
+        }
       }
     };
     window.addEventListener('keydown', onKey);
@@ -128,12 +139,16 @@ export default function Layout() {
         <MobileDock onHeightChange={setDockHeight} />
       </div>
 
-      <CommandPalette
-        open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
-        onOpenTicker={openTicker}
-        onForceRefresh={() => navigate('/watchlist?force=1')}
-      />
+      {paletteMounted && (
+        <Suspense fallback={null}>
+          <CommandPalette
+            open={paletteOpen}
+            onClose={() => setPaletteOpen(false)}
+            onOpenTicker={openTicker}
+            onForceRefresh={() => navigate('/watchlist?force=1')}
+          />
+        </Suspense>
+      )}
     </ShellContext.Provider>
   );
 }
