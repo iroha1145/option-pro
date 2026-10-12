@@ -116,7 +116,7 @@ export default function ScanHistoryPopover({ history }: { history: ScanHistoryEn
                       {h.summary}
                     </span>
                     <SoftBadge tone="brand" className="shrink-0">
-                      {h.count} {t('只')}
+                      {h.count} {t('只', { n: h.count })}
                     </SoftBadge>
                   </li>
                 ))}

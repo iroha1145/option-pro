@@ -289,7 +289,7 @@ export default function SecurityDiagnostics({ profile, timeframe, publicationKey
             <span className="mb-1 block">{t('证券代码')}</span>
             <input value={fixedTicker || input} onChange={(event) => { if (!fixedTicker) { seq.current += 1; setPending(null); setResult(null); setFailure(null); setInput(event.target.value); } }} readOnly={Boolean(fixedTicker)}
               autoComplete="off" spellCheck={false} maxLength={32} placeholder={t('例如 AAPL，未上榜也可查询')}
-              className="h-11 w-full rounded-md border border-line-strong bg-card px-3 tnum text-body-s text-ink-800 outline-none transition-[box-shadow,border-color] duration-fast focus:border-brand-600 focus:shadow-focus-ring" />
+              className="h-11 w-full rounded-md border border-line-strong bg-card px-3 tnum text-body-s text-ink-800 outline-none transition-[box-shadow,border-color] duration-fast focus:border-brand-600 focus:shadow-focus-ring max-md:text-[16px]" />
           </label>
           <button type="submit" disabled={loading} aria-busy={loading} className="btn-primary"><TextSwap swapKey={loading ? 'busy' : 'idle'}>{loading ? t('查询中') : t('查询诊断')}</TextSwap></button>
         </form>

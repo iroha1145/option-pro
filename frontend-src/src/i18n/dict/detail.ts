@@ -105,7 +105,7 @@ export const DETAIL: Dict = {
   '指数不适用公司新闻与财报摘要': ['Company news and earnings summaries do not apply to indices', '指数には企業ニュースと決算要約は適用されません'],
   '当前新闻按公司归集；市场新闻可在新闻页查看。': ['News is grouped by company. Browse market news on the News page.', 'ニュースは企業別に集計されます。市場ニュースはニュースページで確認できます。'],
   '更新该指数的最新价格、日线与技术指标': ["Update this index's latest price, daily bars, and technical indicators", "この指数の最新相場・日足・テクニカル指標を更新します"],
-  'AI 指数分析': ['AI index analysis', 'AI 指数分析'],
+  'AI 指数分析': ['AI index analysis', 'AIによる指数分析'],
   "分析该指数的技术信号和市场资料，使用 1 次分析额度。": ["Analyze this index's technical signals and market data. Counts as 1 analysis toward your quota.", "指数のテクニカルシグナルと市場データを分析します。分析枠を1回分使用します。"],
   '期权数据准备中': ['Preparing options data', 'オプションデータを準備中'],
   "期权数据正在更新，请稍后重试": ["Options data is updating. Try again shortly.", "オプションデータを更新中です。しばらくしてから再試行してください。"],

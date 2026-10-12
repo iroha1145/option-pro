@@ -124,7 +124,7 @@ function PriceInput({
           const n = Number(t);
           onCommit(t === '' || !Number.isFinite(n) ? null : n);
         }}
-        className="screener-price-input h-8 w-[88px] rounded-md border border-line/70 bg-paper-2/50 pl-6 pr-2 text-caption text-ink-800 tnum placeholder:text-ink-400 hover:border-line-strong focus-visible:border-brand-400"
+        className="screener-price-input h-8 w-[88px] rounded-md border border-line/70 bg-paper-2/50 pl-6 pr-2 text-caption text-ink-800 tnum placeholder:text-ink-400 hover:border-line-strong focus-visible:border-brand-400 max-md:text-[16px]"
       />
     </div>
   );
@@ -185,7 +185,7 @@ export function ScanButton({
           <>
             <Icon name="crosshair" size={16} />
             <span className="text-body-s font-medium">{__t('开始扫描')}</span>
-            <span className="text-micro text-on-accent tnum">≈<span className="inline-block min-w-[4ch] text-center">{universeCount ?? '—'}</span> {__t('只')}</span>
+            <span className="text-micro text-on-accent tnum">≈<span className="inline-block min-w-[4ch] text-center">{universeCount ?? '—'}</span> {__t('只', { n: universeCount ?? undefined })}</span>
           </>
         )}
       </span>

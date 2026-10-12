@@ -164,11 +164,15 @@ module.exports = {
         chip: 'var(--chip-shadow)',
       },
       fontFamily: {
-        /* v8：display 换系统 sans 栈（与 sans 相同但独立变量保留，大标不再用衬线） */
-        display: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', '"PingFang SC"', '"Hiragino Sans GB"', '"Noto Sans SC"', '"Microsoft YaHei UI"', 'sans-serif'],
+        /* v8：display 换系统 sans 栈（与 sans 相同但独立变量保留，大标不再用衬线）。
+           CJK 回退顺序按「系统原生优先」：macOS/iOS 中文（苹方、冬青 GB）→ 日文
+           （冬青 Hiragino Sans）→ Noto → Windows 中文（雅黑 UI/雅黑）→ Windows 日文
+           （Yu Gothic、Meiryo）。雅黑必须排在 Yu Gothic/Meiryo 之前——Win10+ 中文
+           机器也可能装有日文字体，先命中日文会套用到共用汉字的日式字形。 */
+        display: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', '"PingFang SC"', '"Hiragino Sans GB"', '"Hiragino Sans"', '"Noto Sans SC"', '"Microsoft YaHei UI"', '"Microsoft YaHei"', '"Yu Gothic"', '"Meiryo"', 'sans-serif'],
         /* 衬线只保留给新闻原文摘要这类「编辑式引文」：font-quote。模型与系统生成的文字用无衬线。 */
         quote: ['Georgia', '"Songti SC"', '"Noto Serif SC"', 'serif'],
-        sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', '"PingFang SC"', '"Hiragino Sans GB"', '"Noto Sans SC"', '"Microsoft YaHei UI"', 'sans-serif'],
+        sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', '"PingFang SC"', '"Hiragino Sans GB"', '"Hiragino Sans"', '"Noto Sans SC"', '"Microsoft YaHei UI"', '"Microsoft YaHei"', '"Yu Gothic"', '"Meiryo"', 'sans-serif'],
         mono: ['ui-monospace', 'SFMono-Regular', '"SF Mono"', 'Menlo', 'Consolas', '"Liberation Mono"', 'monospace'],
       },
       fontSize: {

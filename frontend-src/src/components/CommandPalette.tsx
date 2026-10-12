@@ -381,7 +381,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                   setActive(0);
                 }}
                 placeholder={__t("搜索股票代码、名称或功能…")}
-                className="h-full min-w-0 w-0 flex-1 bg-transparent text-body text-ink-800 outline-none placeholder:text-ink-400 focus-visible:!shadow-none"
+                className="h-full min-w-0 w-0 flex-1 bg-transparent text-body text-ink-800 outline-none placeholder:text-ink-400 focus-visible:!shadow-none max-md:text-[16px]"
                 role="combobox"
                 aria-expanded={open}
                 aria-autocomplete="list"

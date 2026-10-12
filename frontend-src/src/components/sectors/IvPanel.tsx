@@ -257,7 +257,8 @@ export default function IvPanel({
                     {r.atmIv !== null ? `${r.atmIv.toFixed(1)}%` : <span className="text-ink-400">—</span>}
                   </td>
                   <td className="py-2 pl-2">
-                    <span className="inline-flex size-7 items-center justify-center rounded-xs border border-line bg-card text-ink-400 opacity-0 transition-opacity duration-fast group-hover:opacity-100">
+                    {/* 触屏没有 hover，箭头常驻可见（否则行尾看似空白却可点） */}
+                    <span className="inline-flex size-7 items-center justify-center rounded-xs border border-line bg-card text-ink-400 opacity-0 transition-opacity duration-fast group-hover:opacity-100 [@media(hover:none)]:opacity-100">
                       <Icon name="arrow-up-right" size={13} />
                     </span>
                   </td>

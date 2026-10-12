@@ -908,7 +908,7 @@ export default function Screener() {
             ) : scanState === 'done' || (scanState === 'error' && rows) ? (
               <>
                 <h2 className="font-display text-[18px] leading-[24px] text-ink-900">
-                  {__t('命中')} <span className="tnum">{hitCount}</span> {__t('只')}
+                  {__t('命中')} <span className="tnum">{hitCount}</span> {__t('只', { n: hitCount })}
                 </h2>
                 <span className="text-caption text-ink-400 tnum">{__t('耗时')} {(scanDurationMs / 1000).toFixed(1)}s</span>
                 {scanPhase === 'queued' && <SoftBadge>{__t('排队中')}</SoftBadge>}

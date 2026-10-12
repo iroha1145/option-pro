@@ -56,10 +56,6 @@ export const SCREENER: Dict = {
     'この順位では売買代金の算出基準を確認できないため、この条件は適用されません。',
   ],
   '跟随默认': ['Follow default', 'デフォルトに従う'],
-  '收盘技术（受限）快照正在后台生成，请稍候。': [
-    'The limited EOD snapshot is being prepared in the background. Please wait.',
-    '制限付き終値スナップショットをバックグラウンドで生成しています。しばらくお待ちください。',
-  ],
   '结果类别': ['Result set', '結果の種類'],
   '合格候选': ["Eligible candidates", "適格候補"],
   '历史示例': ['Historical example', '履歴サンプル'],
@@ -197,10 +193,6 @@ export const SCREENER: Dict = {
   '也可选择预设策略开始扫描': ['Or start from a preset strategy', 'またはプリセット戦略を選んで開始'],
   '扫描数据不可用': ['Scan data unavailable', 'スキャンデータが利用できません'],
   '排序数据准备中': ['Preparing ranking data', '並び替えデータを準備中'],
-  '中长期趋势排序正在后台生成，请稍候。': [
-    'Mid/long-term ranking is being generated in the background. Please wait.',
-    '中長期トレンド順位をバックグラウンドで生成しています。しばらくお待ちください。',
-  ],
   '上次成功扫描于': ['Last successful scan at', '前回の成功したスキャン：'],
   '没有符合条件的股票': ['No matches for the current filters', '現在の条件に一致する銘柄がありません'],
   '放宽筛选条件，或移除部分条件后重试': ['Try broadening your filters, or remove some of them.', '条件を緩めるか、一部の絞り込みを解除してみてください。'],

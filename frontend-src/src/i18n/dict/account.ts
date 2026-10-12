@@ -62,7 +62,6 @@ export const ACCOUNT: Dict = {
     'Too many sign-up attempts. Try again shortly.',
     '登録リクエストが多すぎます。しばらくしてから再試行してください。',
   ],
-  '登录需要 HTTPS': ['Sign-in requires HTTPS.', 'ログインには HTTPS が必要です。'],
   '请通过 HTTPS 加密网址登录': ['Open the secure https:// address to sign in.', 'HTTPS で暗号化された URL からログインしてください。'],
   '用户名或密码不正确': ['Incorrect username or password.', 'ユーザー名またはパスワードが正しくありません。'],
   '服务暂时不可用，稍后重试': [

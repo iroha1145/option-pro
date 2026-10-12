@@ -6,7 +6,7 @@
  * 错误形状统一 { code, message }；503 → UI 显示「快照不可用」空态。
  */
 
-import { t } from '../i18n/core.ts';
+import { getLocale, t } from '../i18n/core.ts';
 import { apiHeaders, bufferExistingResponse, fetchBuffered, MAX_RESPONSE_BYTES, parseRetryAfter, ResponseLimitError, TransportTimeoutError } from './transport.ts';
 export type ApiMode = 'mock' | 'live';
 
@@ -44,6 +44,9 @@ export class ApiError extends Error implements ApiErrorShape {
 }
 
 const BASE = '/api';
+
+/** 后端错误 message 按契约是中文原文；非中文界面裸显前据此回退到通用译文。 */
+const HAN = /[一-鿿]/;
 
 /**
  * 任一主体（管理员或客户）会话失效（审计 P1-08）。
@@ -415,6 +418,10 @@ export async function requestRaw(path: string, init?: RequestOptions): Promise<R
     if (res.status === 401 && bizCode && PRINCIPAL_INVALID_CODES.has(bizCode)) {
       notifyPrincipalInvalid();
     }
+    /* 后端 message 按契约是中文原文：非中文界面不能裸显（防护口径同
+       modules/account.ts 与 aiJobNormalize.ts——那里挡模块层已知错误，
+       这里挡 requestRaw 统一错误出口的其余全部直渲点）。 */
+    if (getLocale() !== 'zh' && HAN.test(message)) message = t('请稍后再试');
     throw new ApiError(res.status, message, { bizCode, retryable, retryAfter, payload });
   }
   return res;
