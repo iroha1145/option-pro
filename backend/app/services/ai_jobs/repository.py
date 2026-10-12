@@ -404,6 +404,13 @@ WHERE s.submission_source='manual'
                    'insufficient_context','budget_blocked')
   AND (?1 IS NULL OR j.job_id<>?1)
 """
+# SQLite 3.45 can choose a full source-table traversal for the MAX query,
+# even when the manual lane is empty. Keep work proportional to manual rows.
+_MANUAL_COOLDOWN_INDEXED_FALLBACK_SQL = _MANUAL_COOLDOWN_FALLBACK_SQL.replace(
+    "FROM ai_job_sources AS s",
+    "FROM ai_job_sources AS s INDEXED BY idx_ai_job_sources_lane_job",
+)
+
 
 
 def _public_evidence_url(value: Any) -> bool:
@@ -2398,10 +2405,19 @@ class AIJobRepository:
             # source and paid-cover indexes keep the fallback on small index
             # pages, proportional to manual jobs rather than their payloads,
             # while the common manual case only visits the recent index slice.
-            row = connection.execute(
-                _MANUAL_COOLDOWN_FALLBACK_SQL,
-                (exclude_job_id,),
-            ).fetchone()
+            try:
+                row = connection.execute(
+                    _MANUAL_COOLDOWN_INDEXED_FALLBACK_SQL,
+                    (exclude_job_id,),
+                ).fetchone()
+            except sqlite3.OperationalError as exc:
+                # Preserve reads of stores predating this optional index only.
+                if str(exc) != "no such index: idx_ai_job_sources_lane_job":
+                    raise
+                row = connection.execute(
+                    _MANUAL_COOLDOWN_FALLBACK_SQL,
+                    (exclude_job_id,),
+                ).fetchone()
         latest_at = _parse_time(row[0]) if row is not None else None
         if latest_at is None:
             return None

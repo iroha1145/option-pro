@@ -124,13 +124,14 @@ def measured(conn, operation):
 
 
 @pytest.mark.parametrize("distribution", ["manual", "mixed", "scheduled", "old_manual", "old_many_manual"])
-def test_large_history_query_plan_and_bounded_work(distribution):
+@pytest.mark.parametrize("history_size", [20_000, 40_000])
+def test_large_history_query_plan_and_bounded_work(distribution, history_size):
     with database() as conn:
         jobs, sources = [], []
-        for i in range(20_000):
-            stamp = storage._iso(NOW - timedelta(seconds=20_000 - i))
+        for i in range(history_size):
+            stamp = storage._iso(NOW - timedelta(seconds=history_size - i))
             jobs.append((str(i), "completed", stamp, stamp, '{"body":"' + "x" * 4096 + '"}'))
-            lane = "manual" if distribution == "manual" or (distribution == "mixed" and i % 2) or (distribution == "old_manual" and i == 0) or (distribution == "old_many_manual" and i < 19_800) else "scheduled"
+            lane = "manual" if distribution == "manual" or (distribution == "mixed" and i % 2) or (distribution == "old_manual" and i == 0) or (distribution == "old_many_manual" and i < history_size - 200) else "scheduled"
             sources.append((str(i), lane))
         conn.executemany("INSERT INTO ai_jobs(job_id,status,submission_started_at,completed_at,payload_json) VALUES(?,?,?,?,?)", jobs)
         conn.executemany("INSERT INTO ai_job_sources VALUES(?,?)", sources)
@@ -141,20 +142,32 @@ def test_large_history_query_plan_and_bounded_work(distribution):
         assert not any("TEMP B-TREE" in row[3] for row in conn.execute("EXPLAIN QUERY PLAN " + storage._MANUAL_COOLDOWN_SQL, (None,))
                        if row[1] == plan_parent(conn)), plan
         assert not any(detail == "SCAN j" for detail in plan), plan
-        assert any("COVERING INDEX idx_ai_job_sources_lane_job" in detail for detail in plan), plan
+        # SQLite 3.45.1 prefers the job_id primary-key index here; newer
+        # planners prefer the covering lane/job index. Both are one keyed
+        # lookup per candidate, with at most 64 candidates. Reject a source
+        # scan, but do not require one planner's choice of equivalent indexes.
+        source_lookups = [detail for detail in plan if detail.startswith("SEARCH s ")]
+        assert len(source_lookups) == 1, plan
+        assert source_lookups[0].replace(" EXISTS", "") in {
+            "SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=? AND job_id=?)",
+            "SEARCH s USING INDEX sqlite_autoindex_ai_job_sources_1 (job_id=?)",
+        }, plan
+        assert not any(detail.startswith("SCAN s") for detail in plan), plan
         # Compare with the old query before adding the fallback cover index.
         conn.execute("DROP INDEX idx_ai_jobs_manual_paid_cover")
         before, old_steps = measured(conn, lambda: old_result(conn, None))
         cover_statement = next(statement for statement in storage._statements(storage._MANUAL_COOLDOWN_INDEX_SQL)
                                if "idx_ai_jobs_manual_paid_cover" in statement)
         conn.execute(cover_statement)
-        fallback_plan = [row[3] for row in conn.execute("EXPLAIN QUERY PLAN " + storage._MANUAL_COOLDOWN_FALLBACK_SQL, (None,))]
+        fallback_plan = [row[3] for row in conn.execute("EXPLAIN QUERY PLAN " + storage._MANUAL_COOLDOWN_INDEXED_FALLBACK_SQL, (None,))]
         assert any("idx_ai_jobs_manual_paid_cover" in detail for detail in fallback_plan), fallback_plan
+        assert any("SEARCH s USING COVERING INDEX idx_ai_job_sources_lane_job (submission_source=?)" == detail
+                   for detail in fallback_plan), fallback_plan
         # SQLite calls this USING INDEX because status is proved by its partial
         # predicate. Inspect bytecode as well: there must be no table Column
         # opcode that would load ai_jobs payload pages.
         root = conn.execute("SELECT rootpage FROM sqlite_master WHERE name='ai_jobs'").fetchone()[0]
-        bytecode = conn.execute("EXPLAIN " + storage._MANUAL_COOLDOWN_FALLBACK_SQL, (None,)).fetchall()
+        bytecode = conn.execute("EXPLAIN " + storage._MANUAL_COOLDOWN_INDEXED_FALLBACK_SQL, (None,)).fetchall()
         table_cursors = {row[2] for row in bytecode if row[1] == "OpenRead" and row[3] == root}
         assert not any(row[1] == "Column" and row[2] in table_cursors for row in bytecode)
         after, new_steps = measured(conn, lambda: AIJobRepository._manual_cooldown_until(conn, now_dt=NOW, cooldown_seconds=30))
@@ -168,7 +181,7 @@ def test_large_history_query_plan_and_bounded_work(distribution):
             assert new_steps < 4000, (distribution, old_steps, new_steps, plan)
         if distribution in {"manual", "mixed"}:
             assert new_steps * 50 < old_steps
-        print(dict(distribution=distribution, old_steps=old_steps, new_steps=new_steps, plan=plan, fallback_plan=fallback_plan))
+        print(dict(sqlite_version=sqlite3.sqlite_version, history_size=history_size, distribution=distribution, old_steps=old_steps, new_steps=new_steps, plan=plan, fallback_plan=fallback_plan))
 
 
 def test_registered_migration_preserves_nonempty_rows_and_rejects_corruption(tmp_path):
@@ -280,4 +293,35 @@ def test_corrupt_database_error_is_not_hidden(tmp_path):
     path.write_bytes(b"not a SQLite database" * 32)
     with AIJobRepository(path)._connect_read_only() as conn:
         with pytest.raises(sqlite3.DatabaseError, match="file is not a database"):
+            AIJobRepository._manual_cooldown_until(conn, now_dt=NOW, cooldown_seconds=30)
+
+
+@pytest.mark.parametrize("missing_mask", range(1, 8))
+def test_each_missing_optional_index_combination_keeps_read_semantics(missing_mask):
+    with database() as conn:
+        insert(conn, "manual", completed="2026-10-12T08:19:59Z")
+        for i in range(70):
+            insert(conn, f"scheduled-{i}", completed="2099-01-01T00:00:00Z", lane="scheduled")
+        for bit, name in enumerate(("idx_ai_jobs_manual_cooldown",
+                                    "idx_ai_job_sources_lane_job",
+                                    "idx_ai_jobs_manual_paid_cover")):
+            if missing_mask & (1 << bit):
+                conn.execute(f"DROP INDEX {name}")
+        version = conn.execute("PRAGMA schema_version").fetchone()[0]
+        changes = conn.total_changes
+        assert_same(conn)
+        assert_same(conn, "manual")
+        assert_same(conn, "scheduled-0")
+        assert conn.total_changes == changes
+        assert conn.execute("PRAGMA schema_version").fetchone()[0] == version
+
+
+def test_unusable_source_index_error_is_not_hidden():
+    with database() as conn:
+        insert(conn, "manual")
+        for i in range(70):
+            insert(conn, f"scheduled-{i}", completed="2099-01-01T00:00:00Z", lane="scheduled")
+        conn.execute("DROP INDEX idx_ai_job_sources_lane_job")
+        conn.execute("CREATE INDEX idx_ai_job_sources_lane_job ON ai_job_sources(job_id) WHERE submission_source='scheduled'")
+        with pytest.raises(sqlite3.OperationalError, match="no query solution"):
             AIJobRepository._manual_cooldown_until(conn, now_dt=NOW, cooldown_seconds=30)
