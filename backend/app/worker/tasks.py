@@ -15,6 +15,8 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Mapping, Sequence
 
+from pydantic import SecretStr
+
 from app.access import bind_trusted_system_task
 from app.failure_diagnostics import record_fallback_failure
 from app.data_paths import get_data_paths
@@ -4289,7 +4291,10 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
             "stock_directory",
             stock_directory,
             interval_seconds=86_400.0,
-            enabled=bool(getattr(settings, "massive_api_key", "")),
+            # 密钥字段是 SecretStr（SecretStr("") 也为真值），先取裸值再判空。
+            enabled=bool(
+                getattr(settings, "massive_api_key", SecretStr("")).get_secret_value()
+            ),
             timeout_seconds=900.0,
             failure_backoff_seconds=300.0,
             max_backoff_seconds=3600.0,

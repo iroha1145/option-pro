@@ -216,7 +216,7 @@ def test_market_brief_is_part_of_the_worker_inventory(tmp_path) -> None:
         breakout_db_path=tmp_path / "optix.db",
         optix_backup_dir=tmp_path / "backups",
         personal_etl_enabled=False,
-        massive_api_key="",
+        massive_api_key=SecretStr(""),
     )
     specs = build_default_tasks("market-brief", settings=settings)
     assert {spec.name for spec in specs} == set(DEFAULT_TASK_NAMES)

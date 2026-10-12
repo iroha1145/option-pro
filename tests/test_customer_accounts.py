@@ -3,9 +3,10 @@ from __future__ import annotations
 import hashlib
 import ipaddress
 import sqlite3
+import time
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from app.access import request_owner_access_context, require_public_read_or_owner_access
@@ -733,6 +734,49 @@ def test_bucket_overflow_of_live_entries_drops_the_oldest_only() -> None:
     assert "live0" in bucket, "the newest entry must be kept"
     oldest = f"live{accounts_api._RATE_BUCKET_LIMIT - 1}"
     assert oldest not in bucket, "eviction must start from the oldest entry"
+
+
+def test_bucket_overflow_never_evicts_active_cooldowns() -> None:
+    """A bucket full of live cooldowns stays intact (2026-10-12 audit B1).
+
+    Evicting a cooling entry would let an IP flood reset someone else's
+    cooldown, so pruning refuses to touch them entirely.
+    """
+
+    now = 1_000_000.0
+    bucket: dict[str, tuple[int, float, float]] = {
+        f"flood{index}": (10, now, now + 300 + index)
+        for index in range(accounts_api._RATE_BUCKET_LIMIT)
+    }
+
+    accounts_api._prune(bucket, now)
+
+    assert len(bucket) == accounts_api._RATE_BUCKET_LIMIT
+
+
+def test_login_bucket_full_of_cooldowns_fails_closed_for_new_sources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = time.time()
+    monkeypatch.setattr(accounts_api, "_client_key", lambda request: "new-source")
+    try:
+        with accounts_api._rate_lock:
+            accounts_api._login_failures.update(
+                {
+                    f"flood{index}": (10, now, now + 300 + index)
+                    for index in range(accounts_api._RATE_BUCKET_LIMIT)
+                }
+            )
+        with pytest.raises(HTTPException) as caught:
+            with accounts_api.login_attempt(object()):
+                pass
+        assert caught.value.status_code == 429
+        assert caught.value.detail["code"] == "login_cooldown"
+        assert int(caught.value.headers["Retry-After"]) >= 300
+        # 没有任何冷却记录被挤掉。
+        assert len(accounts_api._login_failures) == accounts_api._RATE_BUCKET_LIMIT
+    finally:
+        accounts_api.reset_rate_limits()
 
 
 # ---------------- atomic watchlist removal and undo ----------------

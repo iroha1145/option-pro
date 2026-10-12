@@ -245,7 +245,8 @@ def test_initialize_is_idempotent_and_enables_wal_fk(store: AccountStore) -> Non
         }
         assert "account_chart_drawings" in names
         assert "account_chart_drawing_scopes" in names
-    # New connections from the store always set WAL + FK.
+    # New connections from the store report WAL (set once by initialize();
+    # the mode is a persistent property of the database file) + FK.
     with store._connect() as connection:
         journal = connection.execute("PRAGMA journal_mode").fetchone()[0]
         fks = connection.execute("PRAGMA foreign_keys").fetchone()[0]

@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from starlette.requests import Request
 from starlette.middleware.gzip import GZipMiddleware
 import pytest
+from pydantic import SecretStr
 
 from app.access import OWNER_COOKIE_NAME, OwnerAccessRuntime, hash_owner_password, require_public_read_or_owner_access
 from app.api import quotes
@@ -49,7 +50,7 @@ def make_app(*, public=False, enabled=True, key="test-finnhub-key"):
     app.state.access_runtime = runtime
     app.state.quote_settings = SimpleNamespace(
         quotes_enabled=enabled, quotes_public_enabled=public, quotes_signals_enabled=True,
-        finnhub_api_key=key, quotes_max_symbols=50,
+        finnhub_api_key=SecretStr(key), quotes_max_symbols=50,
     )
     hub = FakeHub()
     app.state.quote_hub = hub

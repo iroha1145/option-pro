@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Mapping, Sequence
+import threading
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from functools import lru_cache
 from pathlib import Path
@@ -45,6 +47,31 @@ from .news_collector import source_health
 
 _HOTSPOT_PROJECTION_SCAN_LIMIT = 100
 _INTERACTIVE_MODES = frozenset({"manual", "scheduled"})
+
+# /api/catalysts/feed 的读准入：原网关 CatalystReadAdmission 中间件删除后
+# （2026-10-12 审计 B9），feed 唯一的昂贵本地读由这里限到并发 1。feed 路由是
+# sync def、跑在线程池里，非阻塞获取不会卡事件循环；拿不到就如实 429，
+# 不排队等待。ticker/batch 走 service.feed 之外的入口，不受这个槽位约束。
+_FEED_READ_SLOTS = threading.BoundedSemaphore(1)
+
+
+@contextmanager
+def feed_read_slot() -> Iterator[None]:
+    """/api/catalysts/feed 的并发准入：拿到才读，拿不到立即 429。"""
+
+    if not _FEED_READ_SLOTS.acquire(blocking=False):
+        raise CatalystError(
+            "feed_read_in_progress",
+            "Catalyst feed is busy; retry shortly",
+            retryable=True,
+            retry_after_seconds=1,
+            counts_for_circuit=False,
+        )
+    try:
+        yield
+    finally:
+        _FEED_READ_SLOTS.release()
+
 _LOCAL_STORE_RUNTIME_CODES = frozenset(
     {
         "ai_job_insert_failed",

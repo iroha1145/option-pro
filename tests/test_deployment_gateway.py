@@ -496,7 +496,9 @@ def test_password_login_sets_strict_server_only_cookie_and_unlocks_owner_routes(
         }
 
 
-def test_a_new_owner_login_invalidates_the_previous_session() -> None:
+def test_owner_logins_coexist_across_session_slots() -> None:
+    """多槽位会话（2026-10-12 审计 B2）：第二次登录不再踢掉第一次。"""
+
     app = _test_app(_runtime("password"))
     with (
         TestClient(app, base_url="https://testserver") as first,
@@ -506,7 +508,86 @@ def test_a_new_owner_login_invalidates_the_previous_session() -> None:
         assert first.get("/api/value").status_code == 200
         _login(second)
         assert second.get("/api/value").status_code == 200
-        assert first.get("/api/value").status_code == 401
+        assert first.get("/api/value").status_code == 200
+        # 登出只清当前 token：second 退出后 first 的会话保持有效。
+        assert second.post(
+            "/api/access/logout", json={}, headers=_action_headers()
+        ).status_code == 200
+        assert second.get("/api/value").status_code == 401
+        assert first.get("/api/value").status_code == 200
+
+
+def test_owner_sessions_evict_the_earliest_slot_beyond_the_cap() -> None:
+    now = [1_000.0]
+    runtime = _runtime("password", clock=lambda: now[0])
+    tokens = [
+        runtime.login(PASSWORD, client_key="127.0.0.1").session_token
+        for _ in range(access_module._OWNER_SESSION_SLOTS)
+    ]
+    assert all(runtime.session_valid(token) for token in tokens)
+    # 第 9 个登录淘汰最早过期（最先登录）的槽位，其余会话不受影响。
+    later = runtime.login(PASSWORD, client_key="127.0.0.1").session_token
+    assert not runtime.session_valid(tokens[0])
+    assert all(runtime.session_valid(token) for token in tokens[1:])
+    assert runtime.session_valid(later)
+
+
+def test_login_bucket_eviction_spares_active_cooldowns() -> None:
+    now = [1_000.0]
+    runtime = _runtime("password", clock=lambda: now[0])
+    with runtime._lock:
+        # 一个活跃冷却 + 填满桶的过期失败记录。
+        runtime._login_failures["victim"] = (
+            5,
+            now[0],
+            now[0] + access_module._LOGIN_COOLDOWN_SECONDS,
+        )
+        stale_start = now[0] - access_module._LOGIN_FAILURE_WINDOW_SECONDS - 1
+        for index in range(access_module._LOGIN_FAILURE_BUCKET_LIMIT):
+            runtime._login_failures[f"stale{index}"] = (1, stale_start - index, 0.0)
+        runtime._prune_login_failures(now[0])
+        assert "victim" in runtime._login_failures
+        assert len(runtime._login_failures) < access_module._LOGIN_FAILURE_BUCKET_LIMIT
+
+
+def test_login_bucket_full_of_cooldowns_fails_closed_for_new_sources(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    now = [1_000.0]
+    runtime = _runtime("password", clock=lambda: now[0])
+    with runtime._lock:
+        for index in range(access_module._LOGIN_FAILURE_BUCKET_LIMIT):
+            runtime._login_failures[f"flood{index}"] = (5, now[0], now[0] + 30 + index)
+    with caplog.at_level("WARNING", logger="app.access"):
+        with pytest.raises(LoginRejected) as rejected:
+            runtime.login(PASSWORD, client_key="203.0.113.66")
+    assert rejected.value.code == "login_cooldown"
+    # Retry-After 报最早一个槽位释放的时刻。
+    assert rejected.value.retry_after == 30
+    # 没有任何冷却记录被泛洪挤掉。
+    assert len(runtime._login_failures) == access_module._LOGIN_FAILURE_BUCKET_LIMIT
+    assert "bucket saturated" in caplog.text
+
+
+def test_app_commit_headers_only_accompany_owner_sessions() -> None:
+    """X-App-Version/X-App-Commit 只附带在 owner 会话响应上（审计 B6）。"""
+
+    app = _test_app(_runtime("password"))
+    with TestClient(app, base_url="https://testserver") as client:
+        denied = client.get("/api/value")
+        assert denied.status_code == 401
+        assert "x-app-commit" not in denied.headers
+        assert "x-app-version" not in denied.headers
+        # 匿名公开读与匿名健康探针同样不带部署指纹。
+        public = client.get("/api/market/status")
+        assert public.status_code == 200
+        assert "x-app-commit" not in public.headers
+        assert "x-app-commit" not in client.get("/health").headers
+        _login(client)
+        owner = client.get("/api/value")
+        assert owner.status_code == 200
+        assert "x-app-commit" in owner.headers
+        assert "x-app-version" in owner.headers
 
 
 def test_logout_invalidates_the_owner_session() -> None:

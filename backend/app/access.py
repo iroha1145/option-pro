@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import ipaddress
+import logging
 import os
 import re
 import secrets
@@ -43,6 +44,8 @@ _LOGIN_FAILURE_LIMIT = 5
 _LOGIN_FAILURE_WINDOW_SECONDS = 5 * 60
 _LOGIN_COOLDOWN_SECONDS = 30
 _LOGIN_FAILURE_BUCKET_LIMIT = 256
+#: Owner 会话槽位上限：几台常用设备同时在线，不再互踢；超出时淘汰最早过期者。
+_OWNER_SESSION_SLOTS = 8
 _DEFAULT_ORIGIN_PORTS = {"http": 80, "https": 443}
 _REQUEST_OWNER_ACCESS: ContextVar[bool | None] = ContextVar(
     "optix_request_owner_access",
@@ -65,6 +68,12 @@ _ACCOUNT_STOCK_ANALYSIS_PATH = re.compile(
     re.IGNORECASE,
 )
 _ACCOUNT_SIGNAL_JOB_PATH = re.compile(r"^/api/ai/jobs/aij_[a-f0-9]{32}$")
+
+_logger = logging.getLogger(__name__)
+
+#: request.state 上账号会话 memo 的「未解析」哨兵：None 本身是有效缓存值
+#: （匿名/会话无效），不能用 None 当缺省。
+_ACCOUNT_SESSION_UNSET = object()
 
 
 @contextmanager
@@ -125,12 +134,13 @@ def is_public_sector_iv_refresh_path(path: str) -> bool:
     return _PUBLIC_SECTOR_IV_REFRESH_PATH.fullmatch(path) is not None
 
 
-def is_public_earnings_impact_action_path(path: str) -> bool:
-    return _PUBLIC_EARNINGS_REPORT_PATH.fullmatch(path) is not None
-
-
 def is_public_earnings_ai_read_path(path: str) -> bool:
     return _PUBLIC_EARNINGS_REPORT_PATH.fullmatch(path) is not None
+
+
+# 与 is_public_earnings_ai_read_path 是同一条财报公共路径；读（GET）与动作
+# （POST 提交）两个调用方各自保留语义化名字，实现单源，避免两份判定漂移。
+is_public_earnings_impact_action_path = is_public_earnings_ai_read_path
 
 
 def is_stock_analysis_path(path: str) -> bool:
@@ -302,8 +312,9 @@ class OwnerAccessRuntime:
         self._password_hash = password_hash.strip()
         self._clock = clock
         self._lock = threading.Lock()
-        self._session_digest: bytes | None = None
-        self._session_expires_at = 0.0
+        # 多槽位会话：digest -> expires_at。owner 的手机与电脑可同时在线、
+        # 互不踢掉；超上限时淘汰最早过期的槽位，过期条目随访问惰性清理。
+        self._sessions: dict[bytes, float] = {}
         self._login_failures: dict[str, tuple[int, float, float]] = {}
         self._login_in_flight: set[str] = set()
 
@@ -366,11 +377,15 @@ class OwnerAccessRuntime:
         digest = hashlib.sha256(token.encode("utf-8")).digest()
         now = self._clock()
         with self._lock:
-            if self._session_digest is None or self._session_expires_at <= now:
-                self._session_digest = None
-                self._session_expires_at = 0.0
-                return False
-            return hmac.compare_digest(digest, self._session_digest)
+            for stored in [
+                stored
+                for stored, expires_at in self._sessions.items()
+                if expires_at <= now
+            ]:
+                self._sessions.pop(stored, None)
+            return any(
+                hmac.compare_digest(digest, stored) for stored in self._sessions
+            )
 
     def _prune_login_failures(self, now: float) -> None:
         stale_before = now - _LOGIN_FAILURE_WINDOW_SECONDS
@@ -381,11 +396,20 @@ class OwnerAccessRuntime:
         ]:
             self._login_failures.pop(key, None)
         if len(self._login_failures) >= _LOGIN_FAILURE_BUCKET_LIMIT:
-            oldest = min(
-                self._login_failures,
-                key=lambda key: self._login_failures[key][1],
-            )
-            self._login_failures.pop(oldest, None)
+            # 只淘汰已离开冷却的条目：把还在冷却中的记录挤掉，等于让 IP 泛洪
+            # 重置别人的冷却（2026-10-12 审计 B1）。没有可淘汰条目时由
+            # login() 对陌生来源 fail-closed。
+            evictable = [
+                key
+                for key, (_count, _started_at, blocked_until) in self._login_failures.items()
+                if blocked_until <= now
+            ]
+            if evictable:
+                oldest = min(
+                    evictable,
+                    key=lambda key: self._login_failures[key][1],
+                )
+                self._login_failures.pop(oldest, None)
 
     def login(self, password: str, *, client_key: str) -> LoginResult:
         if self.mode != "password":
@@ -393,6 +417,29 @@ class OwnerAccessRuntime:
         now = self._clock()
         with self._lock:
             self._prune_login_failures(now)
+            if (
+                client_key not in self._login_failures
+                and len(self._login_failures) >= _LOGIN_FAILURE_BUCKET_LIMIT
+            ):
+                # 桶里全是冷却中的条目（典型 IP 泛洪特征）：对新来源
+                # fail-closed，不淘汰别人的冷却记录。Retry-After 报最早
+                # 一个槽位释放的时刻。
+                retry_after = max(
+                    1,
+                    int(
+                        min(
+                            blocked_until
+                            for (_count, _started_at, blocked_until) in self._login_failures.values()
+                        )
+                        - now
+                        + 0.999
+                    ),
+                )
+                _logger.warning(
+                    "owner login failure bucket saturated with active cooldowns; "
+                    "rejecting login from a new source"
+                )
+                raise LoginRejected("login_cooldown", retry_after=retry_after)
             count, started_at, blocked_until = self._login_failures.get(
                 client_key, (0, now, 0.0)
             )
@@ -439,8 +486,19 @@ class OwnerAccessRuntime:
             self._login_failures.pop(client_key, None)
             token = secrets.token_urlsafe(32)
             expires_at = now + OWNER_SESSION_SECONDS
-            self._session_digest = hashlib.sha256(token.encode("utf-8")).digest()
-            self._session_expires_at = expires_at
+            digest = hashlib.sha256(token.encode("utf-8")).digest()
+            for stored in [
+                stored for stored, exp in self._sessions.items() if exp <= now
+            ]:
+                self._sessions.pop(stored, None)
+            while len(self._sessions) >= _OWNER_SESSION_SLOTS:
+                # 全部槽位都未过期才走到这里：淘汰最早过期的那一个，
+                # 其余会话不受影响。
+                self._sessions.pop(
+                    min(self._sessions, key=lambda stored: self._sessions[stored]),
+                    None,
+                )
+            self._sessions[digest] = expires_at
             return LoginResult(session_token=token, expires_at=expires_at)
 
     def logout(self, token: str) -> None:
@@ -448,11 +506,13 @@ class OwnerAccessRuntime:
             return
         digest = hashlib.sha256(token.encode("utf-8")).digest()
         with self._lock:
-            if self._session_digest is not None and hmac.compare_digest(
-                digest, self._session_digest
-            ):
-                self._session_digest = None
-                self._session_expires_at = 0.0
+            # 登出只清当前 token 的槽位，其余设备上的会话保持有效。
+            for stored in [
+                stored
+                for stored in self._sessions
+                if hmac.compare_digest(digest, stored)
+            ]:
+                self._sessions.pop(stored, None)
 
 
 @lru_cache(maxsize=1)
@@ -534,16 +594,35 @@ def request_account_session(request: Request):
     冒充 Request 直调路由函数（没有 .cookies），必须把它们保持在「匿名」
     语义而不是炸 AttributeError。
     账号面在 app.api.accounts（它反向依赖本模块），这里延迟导入避免环。
+
+    一次请求内只解析一次：网关、准入依赖与路由体共享 request.state 上的
+    memo（与 request_is_owner_session 的 owner_access memo 同一思路），
+    不再每层各开一次 SQLite 连接。None 也缓存——同一会话在单个请求里
+    不会由坏变好。
     """
 
+    state = getattr(request, "state", None)
+    cached = (
+        getattr(state, "account_session", _ACCOUNT_SESSION_UNSET)
+        if state is not None
+        else _ACCOUNT_SESSION_UNSET
+    )
+    if cached is not _ACCOUNT_SESSION_UNSET:
+        return cached
     try:
         from app.api.accounts import current_account
 
-        return current_account(request)
+        account = current_account(request)
     except Exception as exc:
         # Also hides a real account-store failure; leave a trace of it.
         record_fallback_failure("account_session_lookup", exc)
-        return None
+        account = None
+    try:
+        request.state.account_session = account
+    except AttributeError:
+        # SimpleNamespace 假 Request 没有 .state，退化为每次重新解析。
+        pass
+    return account
 
 
 def request_has_account_session(request: Request) -> bool:

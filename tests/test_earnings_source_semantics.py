@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pandas as pd
 import pytest
+from pydantic import SecretStr
 
 from app.access import request_owner_access_context
 from app.api import earnings
@@ -218,7 +219,7 @@ def test_finnhub_fetch_accepts_valid_symbols_outside_curated_yahoo_list(
         earnings,
         "get_settings",
         lambda: SimpleNamespace(
-            finnhub_api_key="test-token",
+            finnhub_api_key=SecretStr("test-token"),
             finnhub_base_url="https://finnhub.example/api/v1",
         ),
     )
@@ -305,7 +306,7 @@ def test_finnhub_saturated_week_splits_to_days_and_keeps_google_actual(
         earnings,
         "get_settings",
         lambda: SimpleNamespace(
-            finnhub_api_key="test-token",
+            finnhub_api_key=SecretStr("test-token"),
             finnhub_base_url="https://finnhub.example/api/v1",
         ),
     )
@@ -394,7 +395,7 @@ def test_finnhub_daily_hard_cap_is_reported_as_truncated(
         earnings,
         "get_settings",
         lambda: SimpleNamespace(
-            finnhub_api_key="test-token",
+            finnhub_api_key=SecretStr("test-token"),
             finnhub_base_url="https://finnhub.example/api/v1",
         ),
     )
@@ -420,7 +421,7 @@ def test_finnhub_unconfigured_returns_explicit_unavailable_status(
         earnings,
         "get_settings",
         lambda: SimpleNamespace(
-            finnhub_api_key="",
+            finnhub_api_key=SecretStr(""),
             finnhub_base_url="https://finnhub.example/api/v1",
         ),
     )
@@ -485,7 +486,7 @@ def test_finnhub_failures_return_explicit_status(
         earnings,
         "get_settings",
         lambda: SimpleNamespace(
-            finnhub_api_key="test-token",
+            finnhub_api_key=SecretStr("test-token"),
             finnhub_base_url="https://finnhub.example/api/v1",
         ),
     )
@@ -535,7 +536,7 @@ def test_finnhub_truncation_is_reported_and_degrades_final_calendar(
         earnings,
         "get_settings",
         lambda: SimpleNamespace(
-            finnhub_api_key="test-token",
+            finnhub_api_key=SecretStr("test-token"),
             finnhub_base_url="https://finnhub.example/api/v1",
         ),
     )

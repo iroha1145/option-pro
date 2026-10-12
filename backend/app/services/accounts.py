@@ -536,11 +536,12 @@ class AccountStore:
     def _connect(self) -> Iterator[sqlite3.Connection]:
         # ``with connection`` only commits or rolls back; closing here keeps a
         # traceback that references the frame from holding the file open.
+        # journal_mode=WAL 是库文件的持久属性，只在 initialize() 设一次；
+        # 这里不再重复设置（每次连接都设会让每次会话解析多一次文件锁往返）。
         self.path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self.path, timeout=10.0)
         try:
             connection.row_factory = sqlite3.Row
-            connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("PRAGMA busy_timeout=10000")
             connection.execute("PRAGMA foreign_keys=ON")
             with connection:
@@ -555,6 +556,7 @@ class AccountStore:
             if self._initialized:
                 return
             with self._connect() as connection:
+                connection.execute("PRAGMA journal_mode=WAL")
                 connection.executescript(_SCHEMA)
                 self._migrate_chart_drawings(connection)
                 connection.commit()

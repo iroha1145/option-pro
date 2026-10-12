@@ -354,7 +354,7 @@ async def _fetch_finnhub_earnings(today: date) -> dict[str, Any]:
     """Fetch a bounded US earnings calendar; Yahoo remains a supplement."""
 
     settings = get_settings()
-    token = str(settings.finnhub_api_key or "").strip()
+    token = settings.finnhub_api_key.get_secret_value().strip()
     if not token:
         return _finnhub_fetch_result(
             configured=False,

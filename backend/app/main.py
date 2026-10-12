@@ -45,7 +45,6 @@ from app.access import (
     require_public_read_or_owner_access,
     require_same_origin_action,
 )
-from app.catalyst_read_admission import CatalystReadAdmission
 from app.deployment_boundary import canonicalize_hostname
 from app.document_policy import is_stock_document_path, static_cache_control
 from app.request_limits import BodyRejected, ClientDisconnected, bounded_api_receive
@@ -567,7 +566,6 @@ class _GatewayMiddleware:
     ):
         self.app = app
         self.access_runtime = access_runtime or _ACCESS_RUNTIME
-        self.catalyst_read_admission = CatalystReadAdmission(app)
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -593,8 +591,12 @@ class _GatewayMiddleware:
                 )
                 headers["Cross-Origin-Opener-Policy"] = "same-origin"
                 headers["X-XSS-Protection"] = "0"
-                headers["X-App-Version"] = _APP_VERSION
-                headers["X-App-Commit"] = _APP_COMMIT
+                if owner_access:
+                    # 部署指纹只给已认证的 owner：匿名响应（含 401/403）不再
+                    # 附带 commit/版本（2026-10-12 审计 B6）。/health /ready
+                    # 响应体里的 app_commit 保留——deploy.sh 与 CI 靠它校验。
+                    headers["X-App-Version"] = _APP_VERSION
+                    headers["X-App-Commit"] = _APP_COMMIT
                 if _scope_is_https(scope):
                     headers["Strict-Transport-Security"] = "max-age=31536000"
 
@@ -650,11 +652,13 @@ class _GatewayMiddleware:
             not publicly_available
             and not owner_access
             and (is_stock_pull_post or is_account_stock_analysis)
-            and request_has_account_session(owner_request)
         ):
             # 手动拉取对登录客户开放（仅匿名保持只读）。账号 cookie 只在
             # 「即将被拒的拉取 POST」上才解析，不给全站请求加数据库查找。
-            publicly_available = True
+            # resolve_session 是同步 SQLite 读，挪到线程池，不在事件循环上跑；
+            # 结果写进 request.state memo，下游准入依赖与路由体直接复用。
+            if await asyncio.to_thread(request_has_account_session, owner_request):
+                publicly_available = True
 
         if (
             method != "OPTIONS"
@@ -743,9 +747,7 @@ class _GatewayMiddleware:
                 )
 
         with request_owner_access_context(owner_access):
-            return await self.catalyst_read_admission(
-                scope, receive, send_with_response_headers
-            )
+            return await self.app(scope, receive, send_with_response_headers)
 
 
 app.add_middleware(_GatewayMiddleware, access_runtime=_ACCESS_RUNTIME)

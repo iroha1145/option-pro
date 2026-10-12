@@ -21,6 +21,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
+from pydantic import SecretStr
 import pytest
 
 from app.services import finnhub_budget
@@ -542,11 +543,11 @@ def test_fetchers_exist_only_for_configured_credentials():
         async with http_client() as client:
             return set(build_news_fetchers(settings, client))
 
-    keyless = SimpleNamespace(massive_api_key="", finnhub_api_key="")
+    keyless = SimpleNamespace(massive_api_key=SecretStr(""), finnhub_api_key=SecretStr(""))
     keyed = SimpleNamespace(
-        massive_api_key="m",
+        massive_api_key=SecretStr("m"),
         massive_base_url=MASSIVE_BASE,
-        finnhub_api_key="f",
+        finnhub_api_key=SecretStr("f"),
         finnhub_base_url=FINNHUB_BASE,
     )
 

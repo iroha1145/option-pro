@@ -205,7 +205,7 @@ class Settings(BaseSettings):
     # is deliberately no FRED_BASE_URL setting and no proxy switch; tests
     # replace the network with an injected transport instead.
     fred_api_key: SecretStr = Field(default=SecretStr(""), alias="FRED_API_KEY")
-    finnhub_api_key: str = Field(default="", alias="FINNHUB_API_KEY")
+    finnhub_api_key: SecretStr = Field(default=SecretStr(""), alias="FINNHUB_API_KEY")
     finnhub_base_url: AnyHttpUrl = Field(default="https://finnhub.io/api/v1", alias="FINNHUB_BASE_URL")
     quotes_enabled: bool = Field(default=_PERSONAL_CONFIG.quotes.enabled, alias="QUOTES_ENABLED")
     quotes_public_enabled: bool = Field(default=_PERSONAL_CONFIG.quotes.public_enabled, alias="QUOTES_PUBLIC_ENABLED")
@@ -213,9 +213,9 @@ class Settings(BaseSettings):
     quotes_max_symbols: int = Field(default=_PERSONAL_CONFIG.quotes.max_symbols, ge=4, le=50, alias="QUOTES_MAX_SYMBOLS")
     quotes_publish_interval_ms: int = Field(default=_PERSONAL_CONFIG.quotes.publish_interval_ms, ge=100, le=1000, alias="QUOTES_PUBLISH_INTERVAL_MS")
     quotes_release_seconds: int = Field(default=_PERSONAL_CONFIG.quotes.release_seconds, ge=0, le=30, alias="QUOTES_RELEASE_SECONDS")
-    massive_api_key: str = Field(default="", alias="MASSIVE_API_KEY")
+    massive_api_key: SecretStr = Field(default=SecretStr(""), alias="MASSIVE_API_KEY")
     massive_base_url: str = Field(default="https://api.massive.com", alias="MASSIVE_BASE_URL")
-    marketdata_token: str = Field(default="", alias="MARKETDATA_TOKEN")
+    marketdata_token: SecretStr = Field(default=SecretStr(""), alias="MARKETDATA_TOKEN")
     marketdata_base_url: AnyHttpUrl = Field(default="https://api.marketdata.app", alias="MARKETDATA_BASE_URL")
 
     model_config = SettingsConfigDict(

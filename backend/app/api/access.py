@@ -5,7 +5,6 @@ from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
-from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.access import (
@@ -21,52 +20,11 @@ from app.access import (
 )
 
 
-_MAX_LOGIN_BODY_BYTES = 4 * 1024
-
-
-class _BoundedLoginRoute(APIRoute):
-    """Reject oversized login bodies before JSON or model parsing."""
-
-    def get_route_handler(self):
-        original_handler = super().get_route_handler()
-
-        async def bounded_handler(request: Request):
-            content_length = request.headers.get("content-length")
-            if content_length:
-                try:
-                    length = int(content_length)
-                    if length < 0:
-                        raise ValueError
-                    if length > _MAX_LOGIN_BODY_BYTES:
-                        raise HTTPException(
-                            status_code=413,
-                            detail="Login request body is too large",
-                        )
-                except ValueError as exc:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Invalid Content-Length",
-                    ) from exc
-            chunks: list[bytes] = []
-            total = 0
-            async for chunk in request.stream():
-                total += len(chunk)
-                if total > _MAX_LOGIN_BODY_BYTES:
-                    raise HTTPException(
-                        status_code=413,
-                        detail="Login request body is too large",
-                    )
-                chunks.append(chunk)
-            request._body = b"".join(chunks)
-            return await original_handler(request)
-
-        return bounded_handler
-
-
+# 登录体限界只有一层：网关对 /api/access/login 按 _CREDENTIAL_BODY_PATHS 做
+# 4KB 限界（app.main 的 bounded_api_receive），路由层不再重复。
 router = APIRouter(
     prefix="/api/access",
     tags=["access"],
-    route_class=_BoundedLoginRoute,
 )
 
 

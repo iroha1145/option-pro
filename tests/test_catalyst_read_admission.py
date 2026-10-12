@@ -77,11 +77,6 @@ async def _wait_entered(entered):
     raise AssertionError("worker did not start")
 
 
-async def _cancelled(task):
-    with pytest.raises(asyncio.CancelledError):
-        await task
-
-
 def test_shared_sync_body_limit_context_errors_and_two_loops():
     app, counts, _, _ = _gateway()
     async def run():
@@ -107,7 +102,9 @@ def test_shared_sync_body_limit_context_errors_and_two_loops():
             hidden = await client.get("/__bench/admission", headers={"x-owner": "yes"})
             assert hidden.status_code == 404
     asyncio.run(guest())
-    assert counts == {"active": 0, "peak": 1, "completed": 27}
+    # 并发串行化已随 CatalystReadAdmission 中间件移入服务层（feed 信号量 +
+    # hotspots 进程池），网关不再排队；这里只断言全部请求完成且无残留。
+    assert counts["active"] == 0 and counts["completed"] == 27
     assert current_request_is_owner() is False
 
 
@@ -136,26 +133,5 @@ def test_gateway_rejections_body_checks_and_bypass_do_not_queue(monkeypatch):
     asyncio.run(run())
 
 
-def test_queued_cancel_never_executes_and_active_cancel_retains_slot():
-    app, counts, entered, release = _gateway()
-    async def run():
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://localhost", headers={"x-owner": "yes"}) as client:
-            active = asyncio.create_task(client.get("/api/catalysts/feed", params={"number": 200}))
-            await _wait_entered(entered)
-            queued = asyncio.create_task(client.get("/api/catalysts/hotspots", params={"number": 1}))
-            await asyncio.sleep(.01)
-            queued.cancel()
-            await _cancelled(queued)
-            active.cancel()
-            # A second cancellation must still not free the active worker slot.
-            await asyncio.sleep(.01)
-            active.cancel()
-            next_request = asyncio.create_task(client.get("/api/catalysts/hotspots", params={"number": 2}))
-            await asyncio.sleep(.02)
-            assert counts["active"] == 1 and counts["completed"] == 0
-            assert not active.done() and not next_request.done()
-            release.set()
-            await _cancelled(active)
-            assert (await next_request).status_code == 200
-            assert counts == {"active": 0, "peak": 1, "completed": 2}
-    asyncio.run(run())
+# 排队/取消补偿语义属于已删除的 CatalystReadAdmission 中间件（2026-10-12
+# 审计 B9），对应覆盖由 test_catalyst_process_admission.py 的服务层测试接管。

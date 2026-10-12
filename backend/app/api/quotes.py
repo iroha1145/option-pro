@@ -48,7 +48,7 @@ def realtime_visible(request: Request | None = None, *, signals: bool = False) -
 
     settings = _settings(request)
     flag = "quotes_signals_enabled" if signals else "quotes_enabled"
-    if not getattr(settings, flag, False) or not str(settings.finnhub_api_key or "").strip():
+    if not getattr(settings, flag, False) or not settings.finnhub_api_key.get_secret_value().strip():
         return False
     if getattr(settings, "quotes_public_enabled", False):
         return True
@@ -94,7 +94,7 @@ def _same_origin_stream(request: Request) -> None:
 def _status(request: Request) -> dict[str, Any]:
     settings = _settings(request)
     enabled = bool(getattr(settings, "quotes_enabled", False))
-    configured = bool(str(settings.finnhub_api_key or "").strip())
+    configured = bool(settings.finnhub_api_key.get_secret_value().strip())
     return {
         "enabled": enabled,
         "configured": configured,
