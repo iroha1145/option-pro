@@ -776,63 +776,15 @@ def _eod_unavailable_detail(
     }
 
 
-def _read_eod_limited_snapshot(
-    *,
-    parameters: dict[str, Any],
-    list_kind: str,
-    resolution: Any | None,
-    track: str = "all",
-) -> tuple[dict[str, Any], float, bool]:
-    from app.services.eod_limited import (
-        LIST_KIND_COMPOSITE,
-        LIST_KIND_OBSERVATION,
-        PURPOSE_LIVE,
-        PURPOSE_SYNTHETIC,
-        RESEARCH_SEALED_SESSION,
-    )
+def _project_eod_selection(
+    scored: dict[str, Any], parameters: dict[str, Any], kind: str, track: str,
+) -> dict[str, Any]:
+    """Build a deterministic read-only selection; freshness is attached per read."""
+    from app.services.eod_limited import LIST_KIND_COMPOSITE
     from app.services.eod_limited.project import empty_eligible_reason, project_strength_payload
-    from app.services.eod_limited.store import read_batch, variant_from_batch, snapshot_path
     from app.services.eod_limited.universe import FUND_SCOPE_ALL
-    from app.services.research_eod_v1.calendar_asof import settled_eod_session
 
-    kind = list_kind if list_kind in {LIST_KIND_OBSERVATION, LIST_KIND_COMPOSITE} else LIST_KIND_OBSERVATION
-    # Rows and their publication clock must come from one atomic file read.
-    batch = read_batch() or {}
-    scored = variant_from_batch(batch, str(parameters["profile"]), str(parameters["timeframe"]))
-    if scored is None:
-        raise HTTPException(status_code=503, detail=_eod_unavailable_detail())
     payload = project_strength_payload(scored, parameters=parameters, list_kind=kind)
-    session = str(payload.get("served_session") or "")
-    if session == RESEARCH_SEALED_SESSION.isoformat():
-        payload["historical_example"] = True
-        payload["purpose"] = payload.get("purpose") if payload.get("purpose") != PURPOSE_LIVE else "historical_example"
-    saved_at = batch.get("published_at")
-    if not isinstance(saved_at, (int, float)) or not math.isfinite(float(saved_at)) or float(saved_at) <= 0:
-        try:
-            saved_at = snapshot_path().stat().st_mtime
-        except OSError:
-            saved_at = time.time()
-    saved_at = float(saved_at)
-    purpose = str(payload.get("purpose") or "")
-    synthetic = bool(payload.get("synthetic") or purpose == PURPOSE_SYNTHETIC)
-    historical = bool(payload.get("historical_example") or purpose != PURPOSE_LIVE)
-    stale = False
-    stale_reason = None
-    source_status = "active"
-    if synthetic:
-        source_status = "historical"
-    elif historical:
-        source_status = "historical"
-    elif purpose == PURPOSE_LIVE and session:
-        try:
-            calendar = settled_eod_session(datetime.now(timezone.utc))
-            served = datetime.strptime(session, "%Y-%m-%d").date()
-            if served < calendar:
-                stale = True
-                source_status = "stale"
-                stale_reason = "newer_session_available"
-        except ValueError:
-            source_status = "unknown"
     sector_id = parameters.get("sector_id")
     min_price = float(parameters.get("min_price") or 0)
     served_key = "composite_rows" if kind == LIST_KIND_COMPOSITE else "observation_rows"
@@ -882,6 +834,68 @@ def _read_eod_limited_snapshot(
     payload["results"] = payload["rows"]
     payload["count"] = len(payload["rows"])
     payload["filter_support"] = {"min_price": True, "min_avg_dollar_volume": False, "track": True}
+    return sanitize(payload)
+
+
+def _read_eod_limited_snapshot(
+    *,
+    parameters: dict[str, Any],
+    list_kind: str,
+    resolution: Any | None,
+    track: str = "all",
+) -> tuple[dict[str, Any], float, bool]:
+    from app.services.eod_limited import (
+        LIST_KIND_COMPOSITE,
+        LIST_KIND_OBSERVATION,
+        PURPOSE_LIVE,
+        PURPOSE_SYNTHETIC,
+        RESEARCH_SEALED_SESSION,
+    )
+    from app.services.eod_limited.store import read_batch, variant_from_batch, snapshot_path
+    from app.services.research_eod_v1.calendar_asof import settled_eod_session
+
+    kind = list_kind if list_kind in {LIST_KIND_OBSERVATION, LIST_KIND_COMPOSITE} else LIST_KIND_OBSERVATION
+    # Rows and their publication clock must come from one atomic file read.
+    batch = read_batch() or {}
+    scored = variant_from_batch(batch, str(parameters["profile"]), str(parameters["timeframe"]))
+    if scored is None:
+        raise HTTPException(status_code=503, detail=_eod_unavailable_detail())
+    from app.services.eod_limited.read_projection import projections
+    projection_key = json.dumps([parameters, kind, track], sort_keys=True, separators=(",", ":"))
+    payload = projections.read(
+        batch, projection_key, lambda: _project_eod_selection(scored, parameters, kind, track),
+    )
+    session = str(payload.get("served_session") or "")
+    if session == RESEARCH_SEALED_SESSION.isoformat():
+        payload["historical_example"] = True
+        payload["purpose"] = payload.get("purpose") if payload.get("purpose") != PURPOSE_LIVE else "historical_example"
+    saved_at = batch.get("published_at")
+    if not isinstance(saved_at, (int, float)) or not math.isfinite(float(saved_at)) or float(saved_at) <= 0:
+        try:
+            saved_at = snapshot_path().stat().st_mtime
+        except OSError:
+            saved_at = time.time()
+    saved_at = float(saved_at)
+    purpose = str(payload.get("purpose") or "")
+    synthetic = bool(payload.get("synthetic") or purpose == PURPOSE_SYNTHETIC)
+    historical = bool(payload.get("historical_example") or purpose != PURPOSE_LIVE)
+    stale = False
+    stale_reason = None
+    source_status = "active"
+    if synthetic:
+        source_status = "historical"
+    elif historical:
+        source_status = "historical"
+    elif purpose == PURPOSE_LIVE and session:
+        try:
+            calendar = settled_eod_session(datetime.now(timezone.utc))
+            served = datetime.strptime(session, "%Y-%m-%d").date()
+            if served < calendar:
+                stale = True
+                source_status = "stale"
+                stale_reason = "newer_session_available"
+        except ValueError:
+            source_status = "unknown"
     saved_iso = datetime.fromtimestamp(saved_at, timezone.utc).isoformat()
     payload.update(
         {
@@ -901,7 +915,7 @@ def _read_eod_limited_snapshot(
     )
     if stale_reason:
         payload["stale_reason"] = stale_reason
-    return sanitize(_overlay_algorithm_metadata(payload, resolution)), saved_at, stale
+    return _overlay_algorithm_metadata(payload, resolution), saved_at, stale
 
 
 async def _scan_snapshot_payload(
@@ -1041,11 +1055,14 @@ async def scan(
     ranking_algorithm: Annotated[Optional[str], Query()] = None,
     list_kind: Annotated[str, Query()] = "observation",
     track: Annotated[str, Query(pattern="^(stock|etf|all)$")] = "stock",
+    compact: bool = False,
 ):
     """Read a matching Strength Radar snapshot produced by the worker.
 
     ``track`` ranks stocks and funds separately (v1.6): the default list holds
     common stocks and ADRs only; ``etf`` returns the fund list, ``all`` both.
+    ``compact`` omits the two full auxiliary row lists, preserving the selected
+    top rows and all whole-universe counts. The default response is unchanged.
     """
     requested = _unwrap_query_value(ranking_algorithm)
     raw_timeframe = _unwrap_query_value(timeframe)
@@ -1120,6 +1137,9 @@ async def scan(
             status_code=503,
             detail=strength_variant_unavailable_detail(demand),
         ) from exc
+    if compact:
+        payload = {key: value for key, value in payload.items()
+                   if key not in {"observation_rows", "composite_rows"}}
     record_screener_resolution(
         resolution,
         fallback_reason=payload.get("fallback_reason"),
@@ -1129,6 +1149,7 @@ async def scan(
         payload,
         version_key=snapshot_version_key(
             "strength_scan",
+            compact,
             saved_at,
             stale,
             payload.get("source_status"),
@@ -1231,7 +1252,11 @@ async def stock(ticker: str, profile: str = Query("balanced", pattern="^(conserv
     payload = await _public_strength_snapshot(profile=profile)
     symbol = ticker.upper().strip()
     # observation_rows contains the full published selection before top slicing.
-    for row in payload.get("observation_rows") or payload.get("rows") or []:
+    index = getattr(payload, "ticker_rows", None)
+    candidates = ([index[symbol]] if symbol in index else []) if index is not None else (
+        payload.get("observation_rows") or payload.get("rows") or []
+    )
+    for row in candidates:
         if isinstance(row, dict) and row.get("ticker") == symbol:
             context = await asyncio.to_thread(read_context_snapshot)
             return sanitize({

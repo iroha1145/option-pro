@@ -18,9 +18,10 @@ export default function ThinkingLabel({
   live?: boolean;
   className?: string;
 }) {
-  if (!live) return <span className={className}>{children}</span>;
+  const textClass = cn('text-caption text-ai-600', className);
+  if (!live) return <span className={textClass}>{children}</span>;
   return (
-    <span className={cn('t-shimmer is-ai', className)} data-text={children}>
+    <span className={cn('t-shimmer is-ai', textClass)} data-text={children}>
       {children}
     </span>
   );

@@ -285,6 +285,7 @@ def _create_job(
     priority: int = 80,
     earnings_featured_verified: bool = False,
     stock_analysis_account_id: str | None = None,
+    stock_analysis_retry_job_id: str | None = None,
 ) -> tuple[dict, bool]:
     # Recheck at the durable enqueue boundary in case the owner changed the
     # switch after the endpoint's initial validation.
@@ -326,7 +327,12 @@ def _create_job(
             force_retry=force_retry,
             earnings_featured_verified=(job_type == "earnings_impact"),
             stock_analysis_account_id=stock_analysis_account_id,
+            stock_analysis_retry_job_id=stock_analysis_retry_job_id,
         )
+    except ValueError as exc:
+        if str(exc) == "stock_analysis_retry_not_current":
+            raise HTTPException(409, detail={"code": "stock_analysis_retry_not_current"}) from exc
+        raise
     except StockAnalysisQuotaExceeded as exc:
         raise HTTPException(status_code=429, detail={
             "code": "stock_analysis_daily_limit",

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import hashlib
 import json as _json_mod
 import os as _os
@@ -43,6 +45,7 @@ from app.access import (
     require_public_read_or_owner_access,
     require_same_origin_action,
 )
+from app.catalyst_read_admission import CatalystReadAdmission
 from app.deployment_boundary import canonicalize_hostname
 from app.document_policy import is_stock_document_path, static_cache_control
 from app.request_limits import BodyRejected, ClientDisconnected, bounded_api_receive
@@ -123,6 +126,8 @@ async def _lifespan(application: FastAPI):
     from app.config import get_settings
     from app.services import massive
     from app.services.realtime_quotes import QuoteHub
+    from app.services.catalysts.hotspot_reads import HotspotReadPool
+    from app.personal_config import get_personal_config
 
     configuration = get_settings()
     application.state.quote_settings = configuration
@@ -138,11 +143,18 @@ async def _lifespan(application: FastAPI):
         trade_handler=radar.handle_trade if radar is not None and configuration.quotes_signals_enabled else None,
     )
     application.state.quote_hub = hub
+    hotspot_reads = HotspotReadPool()
+    application.state.hotspot_read_pool = None
     try:
+        if get_personal_config().features.catalyst_mode != "off":
+            await asyncio.to_thread(hotspot_reads.start)
+            application.state.hotspot_read_pool = hotspot_reads
         await stocks.start_company_logo_client()
         await hub.start()
         yield
     finally:
+        application.state.hotspot_read_pool = None
+        await asyncio.to_thread(hotspot_reads.close)
         try:
             await hub.close()
         finally:
@@ -555,6 +567,7 @@ class _GatewayMiddleware:
     ):
         self.app = app
         self.access_runtime = access_runtime or _ACCESS_RUNTIME
+        self.catalyst_read_admission = CatalystReadAdmission(app)
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -730,7 +743,9 @@ class _GatewayMiddleware:
                 )
 
         with request_owner_access_context(owner_access):
-            return await self.app(scope, receive, send_with_response_headers)
+            return await self.catalyst_read_admission(
+                scope, receive, send_with_response_headers
+            )
 
 
 app.add_middleware(_GatewayMiddleware, access_runtime=_ACCESS_RUNTIME)

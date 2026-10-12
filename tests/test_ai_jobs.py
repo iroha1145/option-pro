@@ -1869,6 +1869,8 @@ def test_fresh_database_has_every_column_and_registry_row_production_has(
         "ai-job-provider-progress-v1": "b88558c7a39767b1f90a396a4f0f2be6f1cb104959d8c786441e8fe776bdad4e",
         "shared-model-budget-v1": "021fbead0d453783492065ba6018da75b1931ec34e25b48027c016ce219f6795",
         "ai-job-retry-lineage-index-v1": "4746773a1352dd1dacb3193a95aa276ea6abff4e8afafb118728e70db04ea8c2",
+        "ai-job-payload-lookups-v1": "ec892d9db6ace5bf7ce4f52a3975e6978d73110bc9e4fb060889c9fdef982d4c",
+        "ai-job-budget-reads-v1": "de6dc06e5eb860264dda93fbdbf10bda4dabf6d53fb08d53e84cf096ee24297c",
         "ai-stock-analysis-account-quota-v1": "6d6edbbfecc84d35c53473156f7c3c57e35b719f11b919e136a46ecc275cbb1a",
         "ai-stock-analysis-account-quota-v2": "1cbd3dfbd0f5da2016a2fefedd1d2f635672413da760c5feace6c730298ebe69",
     }

@@ -2011,7 +2011,8 @@ def test_manual_force_does_not_create_job_when_strict_snapshot_is_busy(
     )
     intelligence.reconcile()
 
-    def strict_snapshot_busy(*, allow_write_contention=True):
+    def strict_snapshot_busy(*, allow_write_contention=True, news_ids=None):
+        assert news_ids == [20]
         assert allow_write_contention is False
         raise sqlite3.OperationalError("database is locked")
 
@@ -6728,7 +6729,7 @@ def test_public_ticker_batch_scans_the_news_window_once(
 ) -> None:
     _etl, _ai, intelligence = _stack(tmp_path)
     observed = datetime(2030, 7, 16, 18, 35, tzinfo=timezone.utc)
-    original = intelligence._active_revisions_tracked
+    original = intelligence._active_revisions_query
     calls = 0
 
     def counted_active_revisions(*args, **kwargs):
@@ -6738,7 +6739,7 @@ def test_public_ticker_batch_scans_the_news_window_once(
 
     monkeypatch.setattr(
         intelligence,
-        "_active_revisions_tracked",
+        "_active_revisions_query",
         counted_active_revisions,
     )
 
@@ -6794,18 +6795,15 @@ def test_directional_batch_keeps_only_the_requested_tickers_nonzero_impact(
     ]
     monkeypatch.setattr(
         intelligence,
-        "_active_revisions_tracked",
-        lambda *_args, **_kwargs: (
-            [
-                {
-                    "index": index,
-                    "news_id": items[index]["news_id"],
-                    "source_count": 1,
-                }
-                for index in range(3)
-            ],
-            None,
-        ),
+        "_active_revisions_query",
+        lambda *_args, **_kwargs: [
+            {
+                "index": index,
+                "news_id": items[index]["news_id"],
+                "source_count": 1,
+            }
+            for index in range(3)
+        ],
     )
     monkeypatch.setattr(intelligence, "_ai_job_snapshot", lambda **_kwargs: {})
     monkeypatch.setattr(

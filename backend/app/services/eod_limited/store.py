@@ -17,6 +17,10 @@ from app.services.snapshot_read_cache import FingerprintedFileCache
 
 from . import PURPOSE_LIVE
 
+class BatchDocument(dict):
+    """An immutable-by-contract document whose derived caches may hold weak refs."""
+
+
 BATCH_NAME = "batch.json"
 _batch_documents = FingerprintedFileCache("eod_market", max_paths=2, max_bytes=256 * 1024 * 1024)
 
@@ -81,7 +85,7 @@ def read_batch(root: Path | None = None) -> dict[str, Any] | None:
     path = snapshot_path(root)
     def decode(raw: bytes) -> dict[str, Any] | None:
         payload = json.loads(raw)
-        return payload if isinstance(payload, dict) else None
+        return BatchDocument(payload) if isinstance(payload, dict) else None
     return _batch_documents.read(path, decode)
 
 
@@ -96,6 +100,10 @@ def publish_batch(
         body["published_at"] = body.get("published_at") or time.time()
         body["integrity"] = "complete"
         _atomic_write(snapshot_path(root), body)
+        # Atomic replacement makes the cached previous document obsolete.
+        # The worker otherwise retains that parsed full-market batch until
+        # another read, even after the scoring job has released its locals.
+        _batch_documents.invalidate(snapshot_path(root))
         return {
             "ok": True,
             "served_session": body.get("served_session"),

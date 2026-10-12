@@ -198,3 +198,13 @@ test('every backend coverage status is readable and unknown internal values are 
   for (const expected of Object.values(statuses)) assert.ok(output.includes(expected));
   assert.match(output, /状态未知/); assert.doesNotMatch(output, /internal-error-detail|not_applicable|omitted_size/);
 });
+
+test('stock view keeps a failed current receipt separate from the last successful report', () => {
+  const body = { schema_version: 'stock-analysis-view-v1', ticker: 'AAPL', enabled: true, can_generate: false, can_retry: true,
+    quota: { ...quota, used: 1, remaining: 9 }, latest_job: saved,
+    current_job: { ...saved, job_id: 'failed-current', status: 'failed', result: null, error_code: 'provider_empty_response' } };
+  const parsed = view.parseStockAnalysisView(body, 'AAPL');
+  assert.equal(parsed.currentJob.id, 'failed-current'); assert.equal(parsed.currentJob.status, 'failed');
+  assert.equal(parsed.currentJob.error, 'provider_empty_response'); assert.equal(parsed.latestJob.id, 'job-saved');
+  assert.equal(parsed.canGenerate, false); assert.equal(parsed.canRetry, true);
+});

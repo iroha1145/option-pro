@@ -74,9 +74,9 @@ function SignedInAnalysis({ ticker, isOwner }: { ticker: string; isOwner: boolea
       setReadError(null);
       if (initialRef.current) {
         initialRef.current = false;
-        adopt(next.activeJob ?? next.latestJob);
-      } else if (next.activeJob) {
-        adopt(next.activeJob);
+        adopt(next.activeJob ?? next.currentJob ?? next.latestJob);
+      } else if (next.activeJob ?? next.currentJob) {
+        adopt(next.activeJob ?? next.currentJob ?? null);
       }
     } catch (issue) {
       if (!aliveRef.current || generation !== readGenerationRef.current) return;
@@ -111,14 +111,15 @@ function SignedInAnalysis({ ticker, isOwner }: { ticker: string; isOwner: boolea
     return () => { window.removeEventListener('focus', reread); document.removeEventListener('visibilitychange', reread); if (timer) clearTimeout(timer); };
   }, [refresh, view?.quota?.resetAt]);
   const running = active(job);
-  const completedJob = job?.status === 'succeeded' ? job : null;
+  const completedJob = job?.status === 'succeeded' && job.result != null ? job : null;
   const latest = view?.latestJob ?? null;
   const reportJob = latest && (!completedJob || Date.parse(latest.updatedAt) >= Date.parse(completedJob.updatedAt)) ? latest : completedJob;
   const summary = reportJob ? aiJobResultSummary(reportJob.result) : null;
-  const canGenerate = !!view?.enabled && !!view.canGenerate && !running && !starting && !loading && !refreshing && !readError;
+  const retryJob = view?.canRetry ? view.currentJob : null;
+  const canGenerate = !!view?.enabled && (!!view.canGenerate || !!retryJob) && !running && !starting && !loading && !refreshing && !readError;
   const create = async () => {
     setSubmitError(null);
-    try { return await createSignalAnalysisJob(ticker); }
+    try { return await createSignalAnalysisJob(ticker, retryJob?.id); }
     catch (issue) {
       if (aliveRef.current && issue instanceof ApiError && issue.bizCode === 'stock_analysis_daily_limit') {
         setSubmitError(t('今日分析额度已用完，额度重置后再试'));
@@ -132,7 +133,8 @@ function SignedInAnalysis({ ticker, isOwner }: { ticker: string; isOwner: boolea
     await start(create);
     if (aliveRef.current) void refresh();
   };
-  const canReadOriginal = job?.status === 'failed' && job.error === 'submission_outcome_unknown' && !!job.id;
+  const unresolvedFailure = job?.status === 'failed' && !view?.canRetry;
+  const canReadOriginal = job?.status === 'failed' && !view?.canRetry && !!job.id;
   const rereadOriginal = async () => {
     if (!canReadOriginal || !job || readingOriginal) return;
     const id = job.id;
@@ -165,7 +167,7 @@ function SignedInAnalysis({ ticker, isOwner }: { ticker: string; isOwner: boolea
   const displayedUsage = usageLabels.filter(([key]) => typeof usage?.[key] === 'number');
   return <div className="card-surface p-5">
     <div className="flex items-center justify-between gap-3"><CardTitle ticker={ticker} />
-      {!running && !starting && !confirming && <button onClick={() => setConfirming(true)} disabled={!canGenerate} className="btn-ai shrink-0 whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50">{reportJob ? t('重新分析') : t('生成分析')}</button>}
+      {!running && !starting && !confirming && !unresolvedFailure && <button onClick={() => setConfirming(true)} disabled={!canGenerate} className="btn-ai shrink-0 whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50">{retryJob ? t('重试分析') : reportJob ? t('重新分析') : t('生成分析')}</button>}
     </div>
     {loading && <p className="mt-3 text-caption text-ink-500" role="status">{t('正在读取股票报告')}</p>}
     {view?.quota && <div className="mt-3 text-micro leading-relaxed text-ink-500">
@@ -180,10 +182,10 @@ function SignedInAnalysis({ ticker, isOwner }: { ticker: string; isOwner: boolea
     {view && !view.enabled && <p className="mt-2 text-caption text-ink-500">{t('个股分析已关闭')}</p>}
     {readError && <p className="mt-3 text-caption text-danger-700" role="status">{readError} <button onClick={() => void refresh()} disabled={refreshing} className="text-ai-600">{t('重试')}</button></p>}
     {confirming && <div className="mt-3 rounded-md bg-ai-50 px-3 py-2.5">
-      <p className="text-caption text-ink-600">{t('生成个股深度研究报告，将使用今日 1 次额度。')}</p>
+      <p className="text-caption text-ink-600">{retryJob ? t('上次分析未完成。确认重试将再使用今日 1 次额度。') : t('生成个股深度研究报告，将使用今日 1 次额度。')}</p>
       <div className="mt-2 flex flex-wrap gap-2"><button onClick={() => void onGenerate()} disabled={!canGenerate} className="btn-ai shrink-0 whitespace-nowrap disabled:opacity-50">{t('生成分析')}</button><button onClick={() => setConfirming(false)} className="control-button shrink-0 whitespace-nowrap">{t('取消')}</button></div>
     </div>}
-    {starting && <p className="mt-3 text-caption text-ink-500" role="status">{t('正在创建分析任务…')}</p>}
+    {starting && <p className="mt-3" role="status"><ThinkingLabel live={false}>{t('正在创建分析任务…')}</ThinkingLabel></p>}
     {running && job && <div className="mt-3">
       <div className="flex items-center justify-between gap-3 text-caption text-ink-500">
         <ThinkingLabel live={!(queryIssue === 'paused' || queryIssue === 'blocked' || job.cancelRequested)} className="min-w-0 truncate whitespace-nowrap">

@@ -140,6 +140,8 @@ export const DETAIL: Dict = {
   '当前只有筛选结果里的基础行情，日线与技术指标按实际情况显示': ['Only the basic quote from the screener result is available. Daily bars and technical indicators appear where available.', '現在はスクリーナー結果の基礎的な相場データのみです。日足とテクニカル指標は取得できた分だけ表示します。'],
 
   /* src/components/detail/AiAnalysisCard.tsx */
+  '重试分析': ['Retry analysis', '分析を再試行'],
+  '上次分析未完成。确认重试将再使用今日 1 次额度。': ['The previous analysis did not complete. Confirming this retry will use one more analysis from today’s allowance.', '前回の分析は完了しませんでした。再試行すると、本日の利用回数をもう1回使用します。'],
   'AI 股票分析': ['AI stock analysis', 'AI 株式分析'],
   '去登录': ['Sign in', 'ログイン'],
   '排队中…': ['Queued…', 'キュー待ち…'],

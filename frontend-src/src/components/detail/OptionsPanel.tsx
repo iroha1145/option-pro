@@ -150,7 +150,7 @@ function AiOptionInsight({
       )}
 
       {!job && starting && (
-        <p className="mt-2.5 text-caption text-ink-500">{t('正在准备分析…')}</p>
+        <p className="mt-2.5"><ThinkingLabel live={false}>{t('正在准备分析…')}</ThinkingLabel></p>
       )}
       {!job && confirming && (
         <div className="mt-2.5">
@@ -193,7 +193,6 @@ function AiOptionInsight({
         <div className="mt-2.5">
           <div className="flex items-center justify-between text-caption text-ink-500">
             <span className="flex items-center gap-1.5">
-              <span className="size-1.5 animate-led-pulse rounded-full bg-ai-600" />
               <ThinkingLabel live={!(queryIssue === 'paused' || queryIssue === 'blocked' || job.cancelRequested)}>
                 {queryIssue === 'paused' || queryIssue === 'blocked' ? t('任务状态待确认') : job.cancelRequested
                   ? t('已请求取消')

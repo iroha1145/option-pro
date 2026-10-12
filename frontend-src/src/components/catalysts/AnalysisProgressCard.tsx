@@ -1,3 +1,4 @@
+import ThinkingLabel from '@/components/shared/ThinkingLabel';
 import AnalysisIcon from '@/components/shared/AnalysisIcon';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
@@ -116,11 +117,9 @@ function OwnerAnalysisProgressCard() {
             {t('分析进度')}
           </h3>
           <div className="mt-1.5 flex items-center gap-2">
-            <Led
-              tone={processing ? 'ai' : validating ? 'warn' : progress.total > 0 ? 'ok' : 'muted'}
-              pulse={processing}
-            />
-            <p className="text-body-s font-medium text-ink-800">{progressHeadline(progress)}</p>
+            {processing || validating
+              ? <ThinkingLabel live={processing && progress.inProgress > 0}>{progressHeadline(progress)}</ThinkingLabel>
+              : <p className="text-body-s font-medium text-ink-800">{progressHeadline(progress)}</p>}
           </div>
         </div>
         <p className="text-micro text-ink-400 tnum">

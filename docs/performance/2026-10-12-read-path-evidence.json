@@ -1,0 +1,2589 @@
+{
+  "baseline_commit": "96993fb1d24bbce6b50f0681e8b4a74315ba1a8b",
+  "candidate_backend_archive_sha256": "c4d11ac6f19b88d5d5282c257cfc04ab2b5d7182fc75f39dc92e284f310b38e7",
+  "conditions": {
+    "target_host": "Intel Xeon E5-2670; 32 logical CPUs; 31.38 GiB RAM",
+    "cpu_quota": "none; matches production",
+    "memory_limit": "none; matches production",
+    "pids_limit": 512,
+    "tmpfs_bytes": 134217728,
+    "http_processes": 1,
+    "hotspot_read_processes": 8,
+    "production_config_sha256": "0dbe19d024c86a001420ebb21705fe206a5a8ede65c8a667c5d444d2a7280609",
+    "candidate_uid_gid": "100:101 matches production; baseline used root for private copies",
+    "image": "sha256:8976b95b1dca5a744949a1f50ba77b07bf67ad1c625b3b3859e50bd641ef90cf",
+    "network": "none; loopback clients inside isolated containers; quotes and external providers disabled",
+    "role": "owner explicitly bound by benchmark wrapper under actual password-mode configuration",
+    "fixed_clock": "2026-10-12T02:25:00Z",
+    "request_timeout_seconds": 30,
+    "rate_limit_exception": "per-IP buckets disabled in isolated wrapper; production admission limits retained",
+    "os_page_cache_not_flushed": true,
+    "deployment_performed": false,
+    "database_pair": "same sequential online backups; not globally atomic across the two databases",
+    "news_latency_includes": "HTTP body and client JSON canonical hash",
+    "strength_latency_includes": "HTTP body read; raw hash in workload; JSON/gzip processing after timing"
+  },
+  "budget_validation": {
+    "original_checksum_equal": true,
+    "new_indexes_bytes": 294912,
+    "rows": 8475,
+    "integrity": "ok"
+  },
+  "news_query_projection": [
+    {
+      "variant": "baseline",
+      "run": "1",
+      "cases": {
+        "2026-10-12T02:25:00+00:00": {
+          "row_count": 1203,
+          "sha256": "f2e14231859b137d1c25ec717f7a5c83f4e92f97a3adc67e4564edc5fdc00bff",
+          "median": {
+            "wall_ms": 129.54935804009438,
+            "cpu_ms": 129.54390900000013
+          },
+          "first_query": {
+            "wall_ms": 136.10618747770786,
+            "cpu_ms": 136.0040060000003
+          }
+        },
+        "2026-10-11T05:00:00+00:00": {
+          "row_count": 2048,
+          "sha256": "f836d937a5d89dabba48ec08e3bd9a698ffa6393d26df5d78d894e0e4534e26b",
+          "median": {
+            "wall_ms": 206.66140504181385,
+            "cpu_ms": 206.64701299999956
+          },
+          "first_query": {
+            "wall_ms": 210.48335544764996,
+            "cpu_ms": 210.45702600000027
+          }
+        }
+      }
+    },
+    {
+      "variant": "experiment",
+      "run": "2",
+      "cases": {
+        "2026-10-12T02:25:00+00:00": {
+          "row_count": 1203,
+          "sha256": "f2e14231859b137d1c25ec717f7a5c83f4e92f97a3adc67e4564edc5fdc00bff",
+          "median": {
+            "wall_ms": 109.22122839838266,
+            "cpu_ms": 109.22074849999986
+          },
+          "first_query": {
+            "wall_ms": 121.07313424348831,
+            "cpu_ms": 120.98630600000027
+          }
+        },
+        "2026-10-11T05:00:00+00:00": {
+          "row_count": 2048,
+          "sha256": "f836d937a5d89dabba48ec08e3bd9a698ffa6393d26df5d78d894e0e4534e26b",
+          "median": {
+            "wall_ms": 191.37224648147821,
+            "cpu_ms": 191.36297950000002
+          },
+          "first_query": {
+            "wall_ms": 191.71015731990337,
+            "cpu_ms": 191.70304000000016
+          }
+        }
+      }
+    },
+    {
+      "variant": "experiment",
+      "run": "3",
+      "cases": {
+        "2026-10-12T02:25:00+00:00": {
+          "row_count": 1203,
+          "sha256": "f2e14231859b137d1c25ec717f7a5c83f4e92f97a3adc67e4564edc5fdc00bff",
+          "median": {
+            "wall_ms": 108.92846621572971,
+            "cpu_ms": 108.92617149999984
+          },
+          "first_query": {
+            "wall_ms": 119.96150389313698,
+            "cpu_ms": 119.87278400000001
+          }
+        },
+        "2026-10-11T05:00:00+00:00": {
+          "row_count": 2048,
+          "sha256": "f836d937a5d89dabba48ec08e3bd9a698ffa6393d26df5d78d894e0e4534e26b",
+          "median": {
+            "wall_ms": 191.34945049881935,
+            "cpu_ms": 191.32635599999935
+          },
+          "first_query": {
+            "wall_ms": 191.45694561302662,
+            "cpu_ms": 191.44857200000052
+          }
+        }
+      }
+    },
+    {
+      "variant": "baseline",
+      "run": "4",
+      "cases": {
+        "2026-10-12T02:25:00+00:00": {
+          "row_count": 1203,
+          "sha256": "f2e14231859b137d1c25ec717f7a5c83f4e92f97a3adc67e4564edc5fdc00bff",
+          "median": {
+            "wall_ms": 117.09952633827925,
+            "cpu_ms": 117.08780500000016
+          },
+          "first_query": {
+            "wall_ms": 134.32708010077477,
+            "cpu_ms": 134.224911
+          }
+        },
+        "2026-10-11T05:00:00+00:00": {
+          "row_count": 2048,
+          "sha256": "f836d937a5d89dabba48ec08e3bd9a698ffa6393d26df5d78d894e0e4534e26b",
+          "median": {
+            "wall_ms": 205.88248129934072,
+            "cpu_ms": 205.87418900000023
+          },
+          "first_query": {
+            "wall_ms": 211.70913614332676,
+            "cpu_ms": 211.70033500000153
+          }
+        }
+      }
+    }
+  ],
+  "frontend": {
+    "tests_passed": 1392,
+    "typecheck": "pass",
+    "lint_errors": 0,
+    "existing_lint_warnings": 2,
+    "formal_live_build_sync": "byte-identical",
+    "indices_requests_in_300_seconds": 7,
+    "indices_initial_pair_gap_ms": 46,
+    "indices_subsequent_interval_seconds": 60,
+    "watchlist_50_rows_viewports": [
+      320,
+      390
+    ],
+    "screener_compact_rows": 120,
+    "screener_compact_pages": 6
+  },
+  "news": [
+    {
+      "source_file": "target-baseline-http-feed.json",
+      "label": "baseline",
+      "case": "feed",
+      "concurrency": 1,
+      "count": 20,
+      "duration_seconds": 2.8309740740805864,
+      "statuses": {
+        "200": 20
+      },
+      "p50_ms": 138.96601554006338,
+      "p95_ms": 145.22225679829717,
+      "p99_ms": 146.50232100859284,
+      "complete_response_sha256": [
+        "023356c0ad963e95b8b385d1dd567ed347338ef8ae7bbca42adf92bd0f0a4010"
+      ],
+      "response_bytes": [
+        283203
+      ],
+      "response_items": [
+        47
+      ],
+      "first": {
+        "status": 200,
+        "ms": 1319.4165173918009,
+        "bytes": 283203,
+        "sha256": "023356c0ad963e95b8b385d1dd567ed347338ef8ae7bbca42adf92bd0f0a4010",
+        "items": 47
+      }
+    },
+    {
+      "source_file": "target-baseline-http-feed.json",
+      "label": "baseline",
+      "case": "feed",
+      "concurrency": 10,
+      "count": 50,
+      "duration_seconds": 7.377427311614156,
+      "statuses": {
+        "200": 50
+      },
+      "p50_ms": 1547.8054573759437,
+      "p95_ms": 1752.6724482886493,
+      "p99_ms": 1809.2980276979504,
+      "complete_response_sha256": [
+        "023356c0ad963e95b8b385d1dd567ed347338ef8ae7bbca42adf92bd0f0a4010"
+      ],
+      "response_bytes": [
+        283203
+      ],
+      "response_items": [
+        47
+      ],
+      "first": {
+        "status": 200,
+        "ms": 1319.4165173918009,
+        "bytes": 283203,
+        "sha256": "023356c0ad963e95b8b385d1dd567ed347338ef8ae7bbca42adf92bd0f0a4010",
+        "items": 47
+      }
+    },
+    {
+      "source_file": "target-baseline-http-feed.json",
+      "label": "baseline",
+      "case": "feed",
+      "concurrency": 50,
+      "count": 100,
+      "duration_seconds": 18.855313507840037,
+      "statuses": {
+        "200": 100
+      },
+      "p50_ms": 8285.89902073145,
+      "p95_ms": 11614.332994725555,
+      "p99_ms": 11938.851572405547,
+      "complete_response_sha256": [
+        "023356c0ad963e95b8b385d1dd567ed347338ef8ae7bbca42adf92bd0f0a4010"
+      ],
+      "response_bytes": [
+        283203
+      ],
+      "response_items": [
+        47
+      ],
+      "first": {
+        "status": 200,
+        "ms": 1319.4165173918009,
+        "bytes": 283203,
+        "sha256": "023356c0ad963e95b8b385d1dd567ed347338ef8ae7bbca42adf92bd0f0a4010",
+        "items": 47
+      }
+    },
+    {
+      "source_file": "target-final8-http-feed.json",
+      "label": "final8",
+      "case": "feed",
+      "concurrency": 1,
+      "count": 20,
+      "duration_seconds": 1.5665491595864296,
+      "statuses": {
+        "200": 20
+      },
+      "p50_ms": 76.43826398998499,
+      "p95_ms": 82.64875411987305,
+      "p99_ms": 82.80625492334366,
+      "complete_response_sha256": [
+        "023356c0ad963e95b8b385d1dd567ed347338ef8ae7bbca42adf92bd0f0a4010"
+      ],
+      "response_bytes": [
+        283203
+      ],
+      "response_items": [
+        47
+      ],
+      "first": {
+        "status": 200,
+        "ms": 1188.4587928652763,
+        "bytes": 283203,
+        "sha256": "023356c0ad963e95b8b385d1dd567ed347338ef8ae7bbca42adf92bd0f0a4010",
+        "items": 47
+      }
+    },
+    {
+      "source_file": "target-final8-http-feed.json",
+      "label": "final8",
+      "case": "feed",
+      "concurrency": 10,
+      "count": 50,
+      "duration_seconds": 3.5423956010490656,
+      "statuses": {
+        "200": 50
+      },
+      "p50_ms": 702.7617087587714,
+      "p95_ms": 708.3594963885844,
+      "p99_ms": 711.365755032748,
+      "complete_response_sha256": [
+        "023356c0ad963e95b8b385d1dd567ed347338ef8ae7bbca42adf92bd0f0a4010"
+      ],
+      "response_bytes": [
+        283203
+      ],
+      "response_items": [
+        47
+      ],
+      "first": {
+        "status": 200,
+        "ms": 1188.4587928652763,
+        "bytes": 283203,
+        "sha256": "023356c0ad963e95b8b385d1dd567ed347338ef8ae7bbca42adf92bd0f0a4010",
+        "items": 47
+      }
+    },
+    {
+      "source_file": "target-final8-http-feed.json",
+      "label": "final8",
+      "case": "feed",
+      "concurrency": 50,
+      "count": 100,
+      "duration_seconds": 8.68720711581409,
+      "statuses": {
+        "200": 100
+      },
+      "p50_ms": 4244.6768609806895,
+      "p95_ms": 4338.6286076158285,
+      "p99_ms": 4348.6389569193125,
+      "complete_response_sha256": [
+        "023356c0ad963e95b8b385d1dd567ed347338ef8ae7bbca42adf92bd0f0a4010"
+      ],
+      "response_bytes": [
+        283203
+      ],
+      "response_items": [
+        47
+      ],
+      "first": {
+        "status": 200,
+        "ms": 1188.4587928652763,
+        "bytes": 283203,
+        "sha256": "023356c0ad963e95b8b385d1dd567ed347338ef8ae7bbca42adf92bd0f0a4010",
+        "items": 47
+      }
+    },
+    {
+      "source_file": "target-baseline-http-visible.json",
+      "label": "baseline",
+      "case": "visible",
+      "concurrency": 1,
+      "count": 20,
+      "duration_seconds": 3.6444730423390865,
+      "statuses": {
+        "200": 20
+      },
+      "p50_ms": 172.03869111835957,
+      "p95_ms": 207.86348916590214,
+      "p99_ms": 208.14417637884617,
+      "complete_response_sha256": [
+        "85cccf2ecc853f785c5a719340da67f6d4cbe735971335f587f3a9396dac048a"
+      ],
+      "response_bytes": [
+        301093
+      ],
+      "response_items": [
+        50
+      ],
+      "first": {
+        "status": 200,
+        "ms": 1707.9786080867052,
+        "bytes": 301093,
+        "sha256": "85cccf2ecc853f785c5a719340da67f6d4cbe735971335f587f3a9396dac048a",
+        "items": 50
+      }
+    },
+    {
+      "source_file": "target-baseline-http-visible.json",
+      "label": "baseline",
+      "case": "visible",
+      "concurrency": 10,
+      "count": 50,
+      "duration_seconds": 9.86990418843925,
+      "statuses": {
+        "200": 50
+      },
+      "p50_ms": 1862.3136011883616,
+      "p95_ms": 2745.7942727953196,
+      "p99_ms": 2791.2724011950195,
+      "complete_response_sha256": [
+        "85cccf2ecc853f785c5a719340da67f6d4cbe735971335f587f3a9396dac048a"
+      ],
+      "response_bytes": [
+        301093
+      ],
+      "response_items": [
+        50
+      ],
+      "first": {
+        "status": 200,
+        "ms": 1707.9786080867052,
+        "bytes": 301093,
+        "sha256": "85cccf2ecc853f785c5a719340da67f6d4cbe735971335f587f3a9396dac048a",
+        "items": 50
+      }
+    },
+    {
+      "source_file": "target-baseline-http-visible.json",
+      "label": "baseline",
+      "case": "visible",
+      "concurrency": 50,
+      "count": 100,
+      "duration_seconds": 28.20820608921349,
+      "statuses": {
+        "200": 100
+      },
+      "p50_ms": 11366.614823229611,
+      "p95_ms": 20829.13293791935,
+      "p99_ms": 21599.489522725344,
+      "complete_response_sha256": [
+        "85cccf2ecc853f785c5a719340da67f6d4cbe735971335f587f3a9396dac048a"
+      ],
+      "response_bytes": [
+        301093
+      ],
+      "response_items": [
+        50
+      ],
+      "first": {
+        "status": 200,
+        "ms": 1707.9786080867052,
+        "bytes": 301093,
+        "sha256": "85cccf2ecc853f785c5a719340da67f6d4cbe735971335f587f3a9396dac048a",
+        "items": 50
+      }
+    },
+    {
+      "source_file": "target-final8-http-visible.json",
+      "label": "final8",
+      "case": "visible",
+      "concurrency": 1,
+      "count": 20,
+      "duration_seconds": 2.3743398133665323,
+      "statuses": {
+        "200": 20
+      },
+      "p50_ms": 110.5498168617487,
+      "p95_ms": 134.76903941482306,
+      "p99_ms": 136.07044111937284,
+      "complete_response_sha256": [
+        "85cccf2ecc853f785c5a719340da67f6d4cbe735971335f587f3a9396dac048a"
+      ],
+      "response_bytes": [
+        301093
+      ],
+      "response_items": [
+        50
+      ],
+      "first": {
+        "status": 200,
+        "ms": 1665.5378807336092,
+        "bytes": 301093,
+        "sha256": "85cccf2ecc853f785c5a719340da67f6d4cbe735971335f587f3a9396dac048a",
+        "items": 50
+      }
+    },
+    {
+      "source_file": "target-final8-http-visible.json",
+      "label": "final8",
+      "case": "visible",
+      "concurrency": 10,
+      "count": 50,
+      "duration_seconds": 4.7900064792484045,
+      "statuses": {
+        "200": 50
+      },
+      "p50_ms": 949.0381488576531,
+      "p95_ms": 969.1429222002625,
+      "p99_ms": 971.3511971011758,
+      "complete_response_sha256": [
+        "85cccf2ecc853f785c5a719340da67f6d4cbe735971335f587f3a9396dac048a"
+      ],
+      "response_bytes": [
+        301093
+      ],
+      "response_items": [
+        50
+      ],
+      "first": {
+        "status": 200,
+        "ms": 1665.5378807336092,
+        "bytes": 301093,
+        "sha256": "85cccf2ecc853f785c5a719340da67f6d4cbe735971335f587f3a9396dac048a",
+        "items": 50
+      }
+    },
+    {
+      "source_file": "target-final8-http-visible.json",
+      "label": "final8",
+      "case": "visible",
+      "concurrency": 50,
+      "count": 100,
+      "duration_seconds": 9.822186594828963,
+      "statuses": {
+        "200": 100
+      },
+      "p50_ms": 4681.406941264868,
+      "p95_ms": 4897.768361307681,
+      "p99_ms": 4965.256171710789,
+      "complete_response_sha256": [
+        "85cccf2ecc853f785c5a719340da67f6d4cbe735971335f587f3a9396dac048a"
+      ],
+      "response_bytes": [
+        301093
+      ],
+      "response_items": [
+        50
+      ],
+      "first": {
+        "status": 200,
+        "ms": 1665.5378807336092,
+        "bytes": 301093,
+        "sha256": "85cccf2ecc853f785c5a719340da67f6d4cbe735971335f587f3a9396dac048a",
+        "items": 50
+      }
+    },
+    {
+      "source_file": "target-baseline-http-history.json",
+      "label": "baseline",
+      "case": "history",
+      "concurrency": 1,
+      "count": 20,
+      "duration_seconds": 13.533356938511133,
+      "statuses": {
+        "200": 20
+      },
+      "p50_ms": 636.2138641998172,
+      "p95_ms": 776.0533165186644,
+      "p99_ms": 776.9473253935575,
+      "complete_response_sha256": [
+        "8f58e2a44cd967024c700a9cc895670f3d3e10a2b284e6043c958bf37d9b02c4"
+      ],
+      "response_bytes": [
+        313387
+      ],
+      "response_items": [
+        50
+      ],
+      "first": {
+        "status": 200,
+        "ms": 2006.0793422162533,
+        "bytes": 313387,
+        "sha256": "8f58e2a44cd967024c700a9cc895670f3d3e10a2b284e6043c958bf37d9b02c4",
+        "items": 50
+      }
+    },
+    {
+      "source_file": "target-baseline-http-history.json",
+      "label": "baseline",
+      "case": "history",
+      "concurrency": 10,
+      "count": 50,
+      "duration_seconds": 74.69648168422282,
+      "statuses": {
+        "200": 50
+      },
+      "p50_ms": 14359.784512780607,
+      "p95_ms": 18915.801597759128,
+      "p99_ms": 18986.80290263146,
+      "complete_response_sha256": [
+        "8f58e2a44cd967024c700a9cc895670f3d3e10a2b284e6043c958bf37d9b02c4"
+      ],
+      "response_bytes": [
+        313387
+      ],
+      "response_items": [
+        50
+      ],
+      "first": {
+        "status": 200,
+        "ms": 2006.0793422162533,
+        "bytes": 313387,
+        "sha256": "8f58e2a44cd967024c700a9cc895670f3d3e10a2b284e6043c958bf37d9b02c4",
+        "items": 50
+      }
+    },
+    {
+      "source_file": "target-baseline-http-history.json",
+      "label": "baseline",
+      "case": "history",
+      "concurrency": 50,
+      "count": 100,
+      "duration_seconds": 60.11449692025781,
+      "statuses": {
+        "error": 100
+      },
+      "complete_response_sha256": [],
+      "response_bytes": [],
+      "response_items": [],
+      "first": {
+        "status": 200,
+        "ms": 2006.0793422162533,
+        "bytes": 313387,
+        "sha256": "8f58e2a44cd967024c700a9cc895670f3d3e10a2b284e6043c958bf37d9b02c4",
+        "items": 50
+      }
+    },
+    {
+      "source_file": "target-final8-http-history.json",
+      "label": "final8",
+      "case": "history",
+      "concurrency": 1,
+      "count": 20,
+      "duration_seconds": 2.59655948728323,
+      "statuses": {
+        "200": 20
+      },
+      "p50_ms": 127.6124520227313,
+      "p95_ms": 132.02583473175764,
+      "p99_ms": 140.47873552888632,
+      "complete_response_sha256": [
+        "8f58e2a44cd967024c700a9cc895670f3d3e10a2b284e6043c958bf37d9b02c4"
+      ],
+      "response_bytes": [
+        313387
+      ],
+      "response_items": [
+        50
+      ],
+      "first": {
+        "status": 200,
+        "ms": 2218.3265313506126,
+        "bytes": 313387,
+        "sha256": "8f58e2a44cd967024c700a9cc895670f3d3e10a2b284e6043c958bf37d9b02c4",
+        "items": 50
+      }
+    },
+    {
+      "source_file": "target-final8-http-history.json",
+      "label": "final8",
+      "case": "history",
+      "concurrency": 10,
+      "count": 50,
+      "duration_seconds": 5.598237935453653,
+      "statuses": {
+        "200": 50
+      },
+      "p50_ms": 1103.625848889351,
+      "p95_ms": 1128.5600857809186,
+      "p99_ms": 1141.5200336650014,
+      "complete_response_sha256": [
+        "8f58e2a44cd967024c700a9cc895670f3d3e10a2b284e6043c958bf37d9b02c4"
+      ],
+      "response_bytes": [
+        313387
+      ],
+      "response_items": [
+        50
+      ],
+      "first": {
+        "status": 200,
+        "ms": 2218.3265313506126,
+        "bytes": 313387,
+        "sha256": "8f58e2a44cd967024c700a9cc895670f3d3e10a2b284e6043c958bf37d9b02c4",
+        "items": 50
+      }
+    },
+    {
+      "source_file": "target-final8-http-history.json",
+      "label": "final8",
+      "case": "history",
+      "concurrency": 50,
+      "count": 100,
+      "duration_seconds": 13.993489310145378,
+      "statuses": {
+        "200": 100
+      },
+      "p50_ms": 6853.597204200923,
+      "p95_ms": 6957.139115873724,
+      "p99_ms": 7037.94426407665,
+      "complete_response_sha256": [
+        "8f58e2a44cd967024c700a9cc895670f3d3e10a2b284e6043c958bf37d9b02c4"
+      ],
+      "response_bytes": [
+        313387
+      ],
+      "response_items": [
+        50
+      ],
+      "first": {
+        "status": 200,
+        "ms": 2218.3265313506126,
+        "bytes": 313387,
+        "sha256": "8f58e2a44cd967024c700a9cc895670f3d3e10a2b284e6043c958bf37d9b02c4",
+        "items": 50
+      }
+    },
+    {
+      "source_file": "target-baseline-http-hotspots.json",
+      "label": "baseline",
+      "case": "hotspots",
+      "concurrency": 1,
+      "count": 20,
+      "duration_seconds": 4.0459145326167345,
+      "statuses": {
+        "200": 20
+      },
+      "p50_ms": 185.9523756429553,
+      "p95_ms": 235.22625872865328,
+      "p99_ms": 313.16642316058267,
+      "complete_response_sha256": [
+        "19d57622b61024c4e35bd7058abab3a18ff4e2db4b360be2be8bf85269f04e7a"
+      ],
+      "response_bytes": [
+        25192
+      ],
+      "response_items": [
+        20
+      ],
+      "first": {
+        "status": 200,
+        "ms": 2674.2130257189274,
+        "bytes": 25192,
+        "sha256": "19d57622b61024c4e35bd7058abab3a18ff4e2db4b360be2be8bf85269f04e7a",
+        "items": 20
+      }
+    },
+    {
+      "source_file": "target-baseline-http-hotspots.json",
+      "label": "baseline",
+      "case": "hotspots",
+      "concurrency": 10,
+      "count": 50,
+      "duration_seconds": 24.417575851082802,
+      "statuses": {
+        "200": 50
+      },
+      "p50_ms": 4967.560804449022,
+      "p95_ms": 5455.85906971246,
+      "p99_ms": 5682.187290880829,
+      "complete_response_sha256": [
+        "19d57622b61024c4e35bd7058abab3a18ff4e2db4b360be2be8bf85269f04e7a"
+      ],
+      "response_bytes": [
+        25192
+      ],
+      "response_items": [
+        20
+      ],
+      "first": {
+        "status": 200,
+        "ms": 2674.2130257189274,
+        "bytes": 25192,
+        "sha256": "19d57622b61024c4e35bd7058abab3a18ff4e2db4b360be2be8bf85269f04e7a",
+        "items": 20
+      }
+    },
+    {
+      "source_file": "target-baseline-http-hotspots.json",
+      "label": "baseline",
+      "case": "hotspots",
+      "concurrency": 50,
+      "count": 100,
+      "duration_seconds": 60.11629914678633,
+      "statuses": {
+        "200": 64,
+        "error": 36
+      },
+      "p50_ms": 26948.35922215134,
+      "p95_ms": 28942.93525116518,
+      "p99_ms": 29194.306015707552,
+      "complete_response_sha256": [
+        "19d57622b61024c4e35bd7058abab3a18ff4e2db4b360be2be8bf85269f04e7a"
+      ],
+      "response_bytes": [
+        25192
+      ],
+      "response_items": [
+        20
+      ],
+      "first": {
+        "status": 200,
+        "ms": 2674.2130257189274,
+        "bytes": 25192,
+        "sha256": "19d57622b61024c4e35bd7058abab3a18ff4e2db4b360be2be8bf85269f04e7a",
+        "items": 20
+      }
+    },
+    {
+      "source_file": "target-final8-http-hotspots.json",
+      "label": "final8",
+      "case": "hotspots",
+      "concurrency": 1,
+      "count": 20,
+      "duration_seconds": 3.5466048140078783,
+      "statuses": {
+        "200": 20
+      },
+      "p50_ms": 162.4268675222993,
+      "p95_ms": 218.4479140676558,
+      "p99_ms": 221.12870769575238,
+      "complete_response_sha256": [
+        "19d57622b61024c4e35bd7058abab3a18ff4e2db4b360be2be8bf85269f04e7a"
+      ],
+      "response_bytes": [
+        25192
+      ],
+      "response_items": [
+        20
+      ],
+      "first": {
+        "status": 200,
+        "ms": 2672.1454467624426,
+        "bytes": 25192,
+        "sha256": "19d57622b61024c4e35bd7058abab3a18ff4e2db4b360be2be8bf85269f04e7a",
+        "items": 20
+      }
+    },
+    {
+      "source_file": "target-final8-http-hotspots.json",
+      "label": "final8",
+      "case": "hotspots",
+      "concurrency": 10,
+      "count": 50,
+      "duration_seconds": 3.3648495245724916,
+      "statuses": {
+        "200": 50
+      },
+      "p50_ms": 283.2910604774952,
+      "p95_ms": 2693.2917840778828,
+      "p99_ms": 2758.3193437941372,
+      "complete_response_sha256": [
+        "19d57622b61024c4e35bd7058abab3a18ff4e2db4b360be2be8bf85269f04e7a"
+      ],
+      "response_bytes": [
+        25192
+      ],
+      "response_items": [
+        20
+      ],
+      "first": {
+        "status": 200,
+        "ms": 2672.1454467624426,
+        "bytes": 25192,
+        "sha256": "19d57622b61024c4e35bd7058abab3a18ff4e2db4b360be2be8bf85269f04e7a",
+        "items": 20
+      }
+    },
+    {
+      "source_file": "target-final8-http-hotspots.json",
+      "label": "final8",
+      "case": "hotspots",
+      "concurrency": 50,
+      "count": 100,
+      "duration_seconds": 2.6908914148807526,
+      "statuses": {
+        "200": 100
+      },
+      "p50_ms": 1174.392276443541,
+      "p95_ms": 1297.204282041639,
+      "p99_ms": 1345.6620477139954,
+      "complete_response_sha256": [
+        "19d57622b61024c4e35bd7058abab3a18ff4e2db4b360be2be8bf85269f04e7a"
+      ],
+      "response_bytes": [
+        25192
+      ],
+      "response_items": [
+        20
+      ],
+      "first": {
+        "status": 200,
+        "ms": 2672.1454467624426,
+        "bytes": 25192,
+        "sha256": "19d57622b61024c4e35bd7058abab3a18ff4e2db4b360be2be8bf85269f04e7a",
+        "items": 20
+      }
+    }
+  ],
+  "strength": [
+    {
+      "source_file": "target-baseline-http-strength-stock-c1.json",
+      "label": "baseline",
+      "case": "stock",
+      "concurrency": 1,
+      "cold": {
+        "status": 200,
+        "ms": 547.6154759526253,
+        "bytes": 11395,
+        "started_offset_ms": 1.2711286544799805,
+        "raw_sha256": "8bc0328b07417e396674fb0055c5c268aef15e852aaa7b893768416ffd7a48bf",
+        "content_encoding": "identity"
+      },
+      "summary": {
+        "count": 10,
+        "statuses": {
+          "200": 10
+        },
+        "successes": 10,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 30.42333573102951,
+        "p95_ms": 137.65007462352494,
+        "p99_ms": 206.15350645035508,
+        "max_ms": 223.27936440706253
+      },
+      "health": {
+        "count": 5,
+        "statuses": {
+          "200": 5
+        },
+        "successes": 5,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 17.582247033715248,
+        "p95_ms": 362.2663203626871,
+        "p99_ms": 397.81636513769627,
+        "max_ms": 406.70387633144855
+      },
+      "duration_seconds": 0.5006527379155159,
+      "ticker": "ZETA",
+      "response_structures": {
+        "8bc0328b07417e396674fb0055c5c268aef15e852aaa7b893768416ffd7a48bf": {
+          "bytes": 11395,
+          "gzip_bytes": 3615,
+          "structure_sha256": "86d07eeeeebbe729b92096074f535e107d6db0223a68324a68f27f52c5e6b54f",
+          "counts": {},
+          "metadata": {
+            "as_of": "2026-10-09",
+            "score_data_through": "2026-10-09",
+            "_stale": false,
+            "source_status": "active",
+            "stale_reason": null,
+            "effective_algorithm": "eod_limited_v1",
+            "context_as_of": "2026-10-12T02:11:41.451253+00:00",
+            "context_source_status": "degraded",
+            "ticker": "ZETA"
+          }
+        }
+      }
+    },
+    {
+      "source_file": "target-baseline-http-strength-stock-c10.json",
+      "label": "baseline",
+      "case": "stock",
+      "concurrency": 10,
+      "cold": {
+        "status": 200,
+        "ms": 614.7696673870087,
+        "bytes": 11395,
+        "started_offset_ms": 1.6247760504484177,
+        "raw_sha256": "8bc0328b07417e396674fb0055c5c268aef15e852aaa7b893768416ffd7a48bf",
+        "content_encoding": "identity"
+      },
+      "summary": {
+        "count": 30,
+        "statuses": {
+          "200": 30
+        },
+        "successes": 30,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 475.0331277027726,
+        "p95_ms": 818.8918945379552,
+        "p99_ms": 890.7433697395027,
+        "max_ms": 898.9467993378639
+      },
+      "health": {
+        "count": 7,
+        "statuses": {
+          "200": 7
+        },
+        "successes": 7,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 200.7368803024292,
+        "p95_ms": 497.4153647199273,
+        "p99_ms": 499.5550187304616,
+        "max_ms": 500.08993223309517
+      },
+      "duration_seconds": 1.6142751518636942,
+      "ticker": "ZETA",
+      "response_structures": {
+        "8bc0328b07417e396674fb0055c5c268aef15e852aaa7b893768416ffd7a48bf": {
+          "bytes": 11395,
+          "gzip_bytes": 3615,
+          "structure_sha256": "86d07eeeeebbe729b92096074f535e107d6db0223a68324a68f27f52c5e6b54f",
+          "counts": {},
+          "metadata": {
+            "as_of": "2026-10-09",
+            "score_data_through": "2026-10-09",
+            "_stale": false,
+            "source_status": "active",
+            "stale_reason": null,
+            "effective_algorithm": "eod_limited_v1",
+            "context_as_of": "2026-10-12T02:11:41.451253+00:00",
+            "context_source_status": "degraded",
+            "ticker": "ZETA"
+          }
+        }
+      }
+    },
+    {
+      "source_file": "target-baseline-http-strength-stock-c50.json",
+      "label": "baseline",
+      "case": "stock",
+      "concurrency": 50,
+      "cold": {
+        "status": 200,
+        "ms": 597.8934001177549,
+        "bytes": 11395,
+        "started_offset_ms": 1.2204069644212723,
+        "raw_sha256": "8bc0328b07417e396674fb0055c5c268aef15e852aaa7b893768416ffd7a48bf",
+        "content_encoding": "identity"
+      },
+      "summary": {
+        "count": 60,
+        "statuses": {
+          "200": 60
+        },
+        "successes": 60,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 1752.9079178348184,
+        "p95_ms": 2625.6682091392577,
+        "p99_ms": 2855.4709700681256,
+        "max_ms": 3071.7143658548594
+      },
+      "health": {
+        "count": 5,
+        "statuses": {
+          "200": 5
+        },
+        "successes": 5,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 303.40701155364513,
+        "p95_ms": 1968.9286213368175,
+        "p99_ms": 2267.3344852775335,
+        "max_ms": 2341.9359512627125
+      },
+      "duration_seconds": 3.1633796356618404,
+      "ticker": "ZETA",
+      "response_structures": {
+        "8bc0328b07417e396674fb0055c5c268aef15e852aaa7b893768416ffd7a48bf": {
+          "bytes": 11395,
+          "gzip_bytes": 3615,
+          "structure_sha256": "86d07eeeeebbe729b92096074f535e107d6db0223a68324a68f27f52c5e6b54f",
+          "counts": {},
+          "metadata": {
+            "as_of": "2026-10-09",
+            "score_data_through": "2026-10-09",
+            "_stale": false,
+            "source_status": "active",
+            "stale_reason": null,
+            "effective_algorithm": "eod_limited_v1",
+            "context_as_of": "2026-10-12T02:11:41.451253+00:00",
+            "context_source_status": "degraded",
+            "ticker": "ZETA"
+          }
+        }
+      }
+    },
+    {
+      "source_file": "target-baseline-http-strength-full-c1.json",
+      "label": "baseline",
+      "case": "full",
+      "concurrency": 1,
+      "cold": {
+        "status": 200,
+        "ms": 581.2184810638428,
+        "bytes": 654991,
+        "started_offset_ms": 1.3689938932657242,
+        "raw_sha256": "87c22a269e6f334c7313dd05ac8cda800a3a473a3e9b3f195068bae1d299f6fc",
+        "content_encoding": "identity"
+      },
+      "summary": {
+        "count": 10,
+        "statuses": {
+          "200": 10
+        },
+        "successes": 10,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 31.419717706739902,
+        "p95_ms": 133.81604300811867,
+        "p99_ms": 199.8051244951785,
+        "max_ms": 216.30239486694336
+      },
+      "health": {
+        "count": 6,
+        "statuses": {
+          "200": 6
+        },
+        "successes": 6,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 19.79479379951954,
+        "p95_ms": 344.3311513401568,
+        "p99_ms": 406.52372511103755,
+        "max_ms": 422.07186855375767
+      },
+      "duration_seconds": 0.5472674760967493,
+      "ticker": "ZETA",
+      "response_structures": {
+        "87c22a269e6f334c7313dd05ac8cda800a3a473a3e9b3f195068bae1d299f6fc": {
+          "bytes": 654991,
+          "gzip_bytes": 73525,
+          "structure_sha256": "30e2f944148fb6f9b99425fc7f1be327330d6818660228962c4fcef057d5424b",
+          "counts": {
+            "rows": 80,
+            "results": 80,
+            "observation_rows": 80,
+            "composite_rows": 0
+          },
+          "metadata": {
+            "count": 80,
+            "universe_count": 5704,
+            "screened_count": 5541,
+            "observation_n": 80,
+            "composite_n": 0,
+            "eligible_n": 0,
+            "watch_n": 80,
+            "as_of": "2026-10-09",
+            "served_session": "2026-10-09",
+            "score_data_through": "2026-10-09",
+            "_stale": false,
+            "source_status": "active",
+            "effective_algorithm": "eod_limited_v1",
+            "snapshot_saved_at": "2026-10-12T02:11:40.399723+00:00"
+          }
+        }
+      }
+    },
+    {
+      "source_file": "target-baseline-http-strength-full-c10.json",
+      "label": "baseline",
+      "case": "full",
+      "concurrency": 10,
+      "cold": {
+        "status": 200,
+        "ms": 703.6943007260561,
+        "bytes": 654991,
+        "started_offset_ms": 2.3712217807769775,
+        "raw_sha256": "87c22a269e6f334c7313dd05ac8cda800a3a473a3e9b3f195068bae1d299f6fc",
+        "content_encoding": "identity"
+      },
+      "summary": {
+        "count": 30,
+        "statuses": {
+          "200": 30
+        },
+        "successes": 30,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 465.2907084673643,
+        "p95_ms": 692.0439415611327,
+        "p99_ms": 719.9630144797266,
+        "max_ms": 731.0020793229342
+      },
+      "health": {
+        "count": 8,
+        "statuses": {
+          "200": 8
+        },
+        "successes": 8,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 146.33365534245968,
+        "p95_ms": 501.21473660692567,
+        "p99_ms": 530.6220012716949,
+        "max_ms": 537.9738174378872
+      },
+      "duration_seconds": 1.568699773401022,
+      "ticker": "ZETA",
+      "response_structures": {
+        "87c22a269e6f334c7313dd05ac8cda800a3a473a3e9b3f195068bae1d299f6fc": {
+          "bytes": 654991,
+          "gzip_bytes": 73525,
+          "structure_sha256": "30e2f944148fb6f9b99425fc7f1be327330d6818660228962c4fcef057d5424b",
+          "counts": {
+            "rows": 80,
+            "results": 80,
+            "observation_rows": 80,
+            "composite_rows": 0
+          },
+          "metadata": {
+            "count": 80,
+            "universe_count": 5704,
+            "screened_count": 5541,
+            "observation_n": 80,
+            "composite_n": 0,
+            "eligible_n": 0,
+            "watch_n": 80,
+            "as_of": "2026-10-09",
+            "served_session": "2026-10-09",
+            "score_data_through": "2026-10-09",
+            "_stale": false,
+            "source_status": "active",
+            "effective_algorithm": "eod_limited_v1",
+            "snapshot_saved_at": "2026-10-12T02:11:40.399723+00:00"
+          }
+        }
+      }
+    },
+    {
+      "source_file": "target-baseline-http-strength-full-c50.json",
+      "label": "baseline",
+      "case": "full",
+      "concurrency": 50,
+      "cold": {
+        "status": 200,
+        "ms": 636.6859618574381,
+        "bytes": 654991,
+        "started_offset_ms": 1.0652989149093628,
+        "raw_sha256": "87c22a269e6f334c7313dd05ac8cda800a3a473a3e9b3f195068bae1d299f6fc",
+        "content_encoding": "identity"
+      },
+      "summary": {
+        "count": 60,
+        "statuses": {
+          "200": 60
+        },
+        "successes": 60,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 1546.2995516136289,
+        "p95_ms": 2094.4896607659757,
+        "p99_ms": 2111.11589519307,
+        "max_ms": 2124.532599002123
+      },
+      "health": {
+        "count": 4,
+        "statuses": {
+          "200": 4
+        },
+        "successes": 4,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 413.93021307885647,
+        "p95_ms": 1680.3311447612937,
+        "p99_ms": 1848.896689023822,
+        "max_ms": 1891.0380750894547
+      },
+      "duration_seconds": 2.4931957591325045,
+      "ticker": "ZETA",
+      "response_structures": {
+        "87c22a269e6f334c7313dd05ac8cda800a3a473a3e9b3f195068bae1d299f6fc": {
+          "bytes": 654991,
+          "gzip_bytes": 73525,
+          "structure_sha256": "30e2f944148fb6f9b99425fc7f1be327330d6818660228962c4fcef057d5424b",
+          "counts": {
+            "rows": 80,
+            "results": 80,
+            "observation_rows": 80,
+            "composite_rows": 0
+          },
+          "metadata": {
+            "count": 80,
+            "universe_count": 5704,
+            "screened_count": 5541,
+            "observation_n": 80,
+            "composite_n": 0,
+            "eligible_n": 0,
+            "watch_n": 80,
+            "as_of": "2026-10-09",
+            "served_session": "2026-10-09",
+            "score_data_through": "2026-10-09",
+            "_stale": false,
+            "source_status": "active",
+            "effective_algorithm": "eod_limited_v1",
+            "snapshot_saved_at": "2026-10-12T02:11:40.399723+00:00"
+          }
+        }
+      }
+    },
+    {
+      "source_file": "target-final8-http-strength-stock-c1.json",
+      "label": "final8",
+      "case": "stock",
+      "concurrency": 1,
+      "cold": {
+        "status": 200,
+        "ms": 740.8095672726631,
+        "bytes": 11395,
+        "started_offset_ms": 2.1084044128656387,
+        "raw_sha256": "8bc0328b07417e396674fb0055c5c268aef15e852aaa7b893768416ffd7a48bf",
+        "content_encoding": "identity"
+      },
+      "summary": {
+        "count": 10,
+        "statuses": {
+          "200": 10
+        },
+        "successes": 10,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 6.5363142639398575,
+        "p95_ms": 7.271146774291991,
+        "p99_ms": 7.476298213005066,
+        "max_ms": 7.527586072683334
+      },
+      "health": {
+        "count": 3,
+        "statuses": {
+          "200": 3
+        },
+        "successes": 3,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 26.270752772688866,
+        "p95_ms": 423.7773977220058,
+        "p99_ms": 459.1113217175007,
+        "max_ms": 467.9448027163744
+      },
+      "duration_seconds": 0.06823616474866867,
+      "ticker": "ZETA",
+      "response_structures": {
+        "8bc0328b07417e396674fb0055c5c268aef15e852aaa7b893768416ffd7a48bf": {
+          "bytes": 11395,
+          "gzip_bytes": 3615,
+          "structure_sha256": "86d07eeeeebbe729b92096074f535e107d6db0223a68324a68f27f52c5e6b54f",
+          "counts": {},
+          "metadata": {
+            "as_of": "2026-10-09",
+            "score_data_through": "2026-10-09",
+            "_stale": false,
+            "source_status": "active",
+            "stale_reason": null,
+            "effective_algorithm": "eod_limited_v1",
+            "context_as_of": "2026-10-12T02:11:41.451253+00:00",
+            "context_source_status": "degraded",
+            "ticker": "ZETA"
+          }
+        }
+      }
+    },
+    {
+      "source_file": "target-final8-http-strength-stock-c10.json",
+      "label": "final8",
+      "case": "stock",
+      "concurrency": 10,
+      "cold": {
+        "status": 200,
+        "ms": 600.2951767295599,
+        "bytes": 11395,
+        "started_offset_ms": 2.549475058913231,
+        "raw_sha256": "8bc0328b07417e396674fb0055c5c268aef15e852aaa7b893768416ffd7a48bf",
+        "content_encoding": "identity"
+      },
+      "summary": {
+        "count": 30,
+        "statuses": {
+          "200": 30
+        },
+        "successes": 30,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 51.48961488157511,
+        "p95_ms": 56.57007927075028,
+        "p99_ms": 57.644997499883175,
+        "max_ms": 57.690899819135666
+      },
+      "health": {
+        "count": 4,
+        "statuses": {
+          "200": 4
+        },
+        "successes": 4,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 31.482571735978127,
+        "p95_ms": 313.26685780659307,
+        "p99_ms": 351.8562300689518,
+        "max_ms": 361.5035731345415
+      },
+      "duration_seconds": 0.16335689462721348,
+      "ticker": "ZETA",
+      "response_structures": {
+        "8bc0328b07417e396674fb0055c5c268aef15e852aaa7b893768416ffd7a48bf": {
+          "bytes": 11395,
+          "gzip_bytes": 3615,
+          "structure_sha256": "86d07eeeeebbe729b92096074f535e107d6db0223a68324a68f27f52c5e6b54f",
+          "counts": {},
+          "metadata": {
+            "as_of": "2026-10-09",
+            "score_data_through": "2026-10-09",
+            "_stale": false,
+            "source_status": "active",
+            "stale_reason": null,
+            "effective_algorithm": "eod_limited_v1",
+            "context_as_of": "2026-10-12T02:11:41.451253+00:00",
+            "context_source_status": "degraded",
+            "ticker": "ZETA"
+          }
+        }
+      }
+    },
+    {
+      "source_file": "target-final8-http-strength-stock-c50.json",
+      "label": "final8",
+      "case": "stock",
+      "concurrency": 50,
+      "cold": {
+        "status": 200,
+        "ms": 668.6614267528057,
+        "bytes": 11395,
+        "started_offset_ms": 2.5972649455070496,
+        "raw_sha256": "8bc0328b07417e396674fb0055c5c268aef15e852aaa7b893768416ffd7a48bf",
+        "content_encoding": "identity"
+      },
+      "summary": {
+        "count": 60,
+        "statuses": {
+          "200": 60
+        },
+        "successes": 60,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 144.45138908922672,
+        "p95_ms": 260.9690454788506,
+        "p99_ms": 264.3690085783601,
+        "max_ms": 264.8965250700712
+      },
+      "health": {
+        "count": 4,
+        "statuses": {
+          "200": 4
+        },
+        "successes": 4,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 126.77770759910345,
+        "p95_ms": 396.16180406883353,
+        "p99_ms": 419.7114724852144,
+        "max_ms": 425.5988895893097
+      },
+      "duration_seconds": 0.3352082557976246,
+      "ticker": "ZETA",
+      "response_structures": {
+        "8bc0328b07417e396674fb0055c5c268aef15e852aaa7b893768416ffd7a48bf": {
+          "bytes": 11395,
+          "gzip_bytes": 3615,
+          "structure_sha256": "86d07eeeeebbe729b92096074f535e107d6db0223a68324a68f27f52c5e6b54f",
+          "counts": {},
+          "metadata": {
+            "as_of": "2026-10-09",
+            "score_data_through": "2026-10-09",
+            "_stale": false,
+            "source_status": "active",
+            "stale_reason": null,
+            "effective_algorithm": "eod_limited_v1",
+            "context_as_of": "2026-10-12T02:11:41.451253+00:00",
+            "context_source_status": "degraded",
+            "ticker": "ZETA"
+          }
+        }
+      }
+    },
+    {
+      "source_file": "target-final8-http-strength-full-c1.json",
+      "label": "final8",
+      "case": "full",
+      "concurrency": 1,
+      "cold": {
+        "status": 200,
+        "ms": 689.3935035914183,
+        "bytes": 654991,
+        "started_offset_ms": 2.431882545351982,
+        "raw_sha256": "87c22a269e6f334c7313dd05ac8cda800a3a473a3e9b3f195068bae1d299f6fc",
+        "content_encoding": "identity"
+      },
+      "summary": {
+        "count": 10,
+        "statuses": {
+          "200": 10
+        },
+        "successes": 10,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 4.883056506514549,
+        "p95_ms": 6.380983162671328,
+        "p99_ms": 6.465831492096186,
+        "max_ms": 6.4870435744524
+      },
+      "health": {
+        "count": 4,
+        "statuses": {
+          "200": 4
+        },
+        "successes": 4,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 19.190283492207527,
+        "p95_ms": 362.63695154339064,
+        "p99_ms": 410.3474136069416,
+        "max_ms": 422.27502912282944
+      },
+      "duration_seconds": 0.08679977618157864,
+      "ticker": "ZETA",
+      "response_structures": {
+        "87c22a269e6f334c7313dd05ac8cda800a3a473a3e9b3f195068bae1d299f6fc": {
+          "bytes": 654991,
+          "gzip_bytes": 73525,
+          "structure_sha256": "30e2f944148fb6f9b99425fc7f1be327330d6818660228962c4fcef057d5424b",
+          "counts": {
+            "rows": 80,
+            "results": 80,
+            "observation_rows": 80,
+            "composite_rows": 0
+          },
+          "metadata": {
+            "count": 80,
+            "universe_count": 5704,
+            "screened_count": 5541,
+            "observation_n": 80,
+            "composite_n": 0,
+            "eligible_n": 0,
+            "watch_n": 80,
+            "as_of": "2026-10-09",
+            "served_session": "2026-10-09",
+            "score_data_through": "2026-10-09",
+            "_stale": false,
+            "source_status": "active",
+            "effective_algorithm": "eod_limited_v1",
+            "snapshot_saved_at": "2026-10-12T02:11:40.399723+00:00"
+          }
+        }
+      }
+    },
+    {
+      "source_file": "target-final8-http-strength-full-c10.json",
+      "label": "final8",
+      "case": "full",
+      "concurrency": 10,
+      "cold": {
+        "status": 200,
+        "ms": 739.3283993005753,
+        "bytes": 654991,
+        "started_offset_ms": 1.3518519699573517,
+        "raw_sha256": "87c22a269e6f334c7313dd05ac8cda800a3a473a3e9b3f195068bae1d299f6fc",
+        "content_encoding": "identity"
+      },
+      "summary": {
+        "count": 30,
+        "statuses": {
+          "200": 30
+        },
+        "successes": 30,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 24.052917025983334,
+        "p95_ms": 30.303884949535128,
+        "p99_ms": 32.23670143634081,
+        "max_ms": 32.882433384656906
+      },
+      "health": {
+        "count": 4,
+        "statuses": {
+          "200": 4
+        },
+        "successes": 4,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 22.784121334552765,
+        "p95_ms": 399.8940811492501,
+        "p99_ms": 452.8157085366546,
+        "max_ms": 466.0461153835058
+      },
+      "duration_seconds": 0.09235342778265476,
+      "ticker": "ZETA",
+      "response_structures": {
+        "87c22a269e6f334c7313dd05ac8cda800a3a473a3e9b3f195068bae1d299f6fc": {
+          "bytes": 654991,
+          "gzip_bytes": 73525,
+          "structure_sha256": "30e2f944148fb6f9b99425fc7f1be327330d6818660228962c4fcef057d5424b",
+          "counts": {
+            "rows": 80,
+            "results": 80,
+            "observation_rows": 80,
+            "composite_rows": 0
+          },
+          "metadata": {
+            "count": 80,
+            "universe_count": 5704,
+            "screened_count": 5541,
+            "observation_n": 80,
+            "composite_n": 0,
+            "eligible_n": 0,
+            "watch_n": 80,
+            "as_of": "2026-10-09",
+            "served_session": "2026-10-09",
+            "score_data_through": "2026-10-09",
+            "_stale": false,
+            "source_status": "active",
+            "effective_algorithm": "eod_limited_v1",
+            "snapshot_saved_at": "2026-10-12T02:11:40.399723+00:00"
+          }
+        }
+      }
+    },
+    {
+      "source_file": "target-final8-http-strength-full-c50.json",
+      "label": "final8",
+      "case": "full",
+      "concurrency": 50,
+      "cold": {
+        "status": 200,
+        "ms": 629.0006898343563,
+        "bytes": 654991,
+        "started_offset_ms": 2.574525773525238,
+        "raw_sha256": "87c22a269e6f334c7313dd05ac8cda800a3a473a3e9b3f195068bae1d299f6fc",
+        "content_encoding": "identity"
+      },
+      "summary": {
+        "count": 60,
+        "statuses": {
+          "200": 60
+        },
+        "successes": 60,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 59.39119774848223,
+        "p95_ms": 114.67297272756694,
+        "p99_ms": 123.47205642610787,
+        "max_ms": 125.76634995639324
+      },
+      "health": {
+        "count": 4,
+        "statuses": {
+          "200": 4
+        },
+        "successes": 4,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 67.42062792181969,
+        "p95_ms": 329.19836780056346,
+        "p99_ms": 359.78010294958943,
+        "max_ms": 367.42553673684597
+      },
+      "duration_seconds": 0.19049429707229137,
+      "ticker": "ZETA",
+      "response_structures": {
+        "87c22a269e6f334c7313dd05ac8cda800a3a473a3e9b3f195068bae1d299f6fc": {
+          "bytes": 654991,
+          "gzip_bytes": 73525,
+          "structure_sha256": "30e2f944148fb6f9b99425fc7f1be327330d6818660228962c4fcef057d5424b",
+          "counts": {
+            "rows": 80,
+            "results": 80,
+            "observation_rows": 80,
+            "composite_rows": 0
+          },
+          "metadata": {
+            "count": 80,
+            "universe_count": 5704,
+            "screened_count": 5541,
+            "observation_n": 80,
+            "composite_n": 0,
+            "eligible_n": 0,
+            "watch_n": 80,
+            "as_of": "2026-10-09",
+            "served_session": "2026-10-09",
+            "score_data_through": "2026-10-09",
+            "_stale": false,
+            "source_status": "active",
+            "effective_algorithm": "eod_limited_v1",
+            "snapshot_saved_at": "2026-10-12T02:11:40.399723+00:00"
+          }
+        }
+      }
+    },
+    {
+      "source_file": "target-final8-http-strength-compact-c1.json",
+      "label": "final8",
+      "case": "compact",
+      "concurrency": 1,
+      "cold": {
+        "status": 200,
+        "ms": 622.4944088608027,
+        "bytes": 458843,
+        "started_offset_ms": 2.3709535598754883,
+        "raw_sha256": "f39e440b751b44040316350dfe0f958082ee9f0b98866dbc5ea94a2bd326ce16",
+        "content_encoding": "identity"
+      },
+      "summary": {
+        "count": 10,
+        "statuses": {
+          "200": 10
+        },
+        "successes": 10,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 4.488375037908554,
+        "p95_ms": 5.057744774967432,
+        "p99_ms": 5.112187582999468,
+        "max_ms": 5.125798285007477
+      },
+      "health": {
+        "count": 3,
+        "statuses": {
+          "200": 3
+        },
+        "successes": 3,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 21.661387756466866,
+        "p95_ms": 334.41496025770897,
+        "p99_ms": 362.215277813375,
+        "max_ms": 369.1653572022915
+      },
+      "duration_seconds": 0.07132944837212563,
+      "ticker": "ZETA",
+      "response_structures": {
+        "f39e440b751b44040316350dfe0f958082ee9f0b98866dbc5ea94a2bd326ce16": {
+          "bytes": 458843,
+          "gzip_bytes": 51908,
+          "structure_sha256": "89e0cbc4f8ee0d8971a63a81ce2e0cda4292af78ca8cbdfab3108a8ade790f39",
+          "counts": {
+            "rows": 80,
+            "results": 80
+          },
+          "metadata": {
+            "count": 80,
+            "universe_count": 5704,
+            "screened_count": 5541,
+            "observation_n": 80,
+            "composite_n": 0,
+            "eligible_n": 0,
+            "watch_n": 80,
+            "as_of": "2026-10-09",
+            "served_session": "2026-10-09",
+            "score_data_through": "2026-10-09",
+            "_stale": false,
+            "source_status": "active",
+            "effective_algorithm": "eod_limited_v1",
+            "snapshot_saved_at": "2026-10-12T02:11:40.399723+00:00"
+          }
+        }
+      }
+    },
+    {
+      "source_file": "target-final8-http-strength-compact-c10.json",
+      "label": "final8",
+      "case": "compact",
+      "concurrency": 10,
+      "cold": {
+        "status": 200,
+        "ms": 620.0406868010759,
+        "bytes": 458843,
+        "started_offset_ms": 2.29538232088089,
+        "raw_sha256": "f39e440b751b44040316350dfe0f958082ee9f0b98866dbc5ea94a2bd326ce16",
+        "content_encoding": "identity"
+      },
+      "summary": {
+        "count": 30,
+        "statuses": {
+          "200": 30
+        },
+        "successes": 30,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 24.36410915106535,
+        "p95_ms": 29.90948222577572,
+        "p99_ms": 32.11548523977399,
+        "max_ms": 33.003970980644226
+      },
+      "health": {
+        "count": 4,
+        "statuses": {
+          "200": 4
+        },
+        "successes": 4,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 19.85165011137724,
+        "p95_ms": 313.54655725881446,
+        "p99_ms": 354.5654096268117,
+        "max_ms": 364.82012271881104
+      },
+      "duration_seconds": 0.0976149570196867,
+      "ticker": "ZETA",
+      "response_structures": {
+        "f39e440b751b44040316350dfe0f958082ee9f0b98866dbc5ea94a2bd326ce16": {
+          "bytes": 458843,
+          "gzip_bytes": 51908,
+          "structure_sha256": "89e0cbc4f8ee0d8971a63a81ce2e0cda4292af78ca8cbdfab3108a8ade790f39",
+          "counts": {
+            "rows": 80,
+            "results": 80
+          },
+          "metadata": {
+            "count": 80,
+            "universe_count": 5704,
+            "screened_count": 5541,
+            "observation_n": 80,
+            "composite_n": 0,
+            "eligible_n": 0,
+            "watch_n": 80,
+            "as_of": "2026-10-09",
+            "served_session": "2026-10-09",
+            "score_data_through": "2026-10-09",
+            "_stale": false,
+            "source_status": "active",
+            "effective_algorithm": "eod_limited_v1",
+            "snapshot_saved_at": "2026-10-12T02:11:40.399723+00:00"
+          }
+        }
+      }
+    },
+    {
+      "source_file": "target-final8-http-strength-compact-c50.json",
+      "label": "final8",
+      "case": "compact",
+      "concurrency": 50,
+      "cold": {
+        "status": 200,
+        "ms": 616.4683904498816,
+        "bytes": 458843,
+        "started_offset_ms": 1.3650953769683838,
+        "raw_sha256": "f39e440b751b44040316350dfe0f958082ee9f0b98866dbc5ea94a2bd326ce16",
+        "content_encoding": "identity"
+      },
+      "summary": {
+        "count": 60,
+        "statuses": {
+          "200": 60
+        },
+        "successes": 60,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 93.02748832851648,
+        "p95_ms": 140.36863576620817,
+        "p99_ms": 143.8982759974897,
+        "max_ms": 144.1979482769966
+      },
+      "health": {
+        "count": 4,
+        "statuses": {
+          "200": 4
+        },
+        "successes": 4,
+        "timeouts": 0,
+        "exceptions": 0,
+        "p50_ms": 79.90835793316364,
+        "p95_ms": 319.80276629328716,
+        "p99_ms": 346.19735881686205,
+        "max_ms": 352.7960069477558
+      },
+      "duration_seconds": 0.21508693136274815,
+      "ticker": "ZETA",
+      "response_structures": {
+        "f39e440b751b44040316350dfe0f958082ee9f0b98866dbc5ea94a2bd326ce16": {
+          "bytes": 458843,
+          "gzip_bytes": 51908,
+          "structure_sha256": "89e0cbc4f8ee0d8971a63a81ce2e0cda4292af78ca8cbdfab3108a8ade790f39",
+          "counts": {
+            "rows": 80,
+            "results": 80
+          },
+          "metadata": {
+            "count": 80,
+            "universe_count": 5704,
+            "screened_count": 5541,
+            "observation_n": 80,
+            "composite_n": 0,
+            "eligible_n": 0,
+            "watch_n": 80,
+            "as_of": "2026-10-09",
+            "served_session": "2026-10-09",
+            "score_data_through": "2026-10-09",
+            "_stale": false,
+            "source_status": "active",
+            "effective_algorithm": "eod_limited_v1",
+            "snapshot_saved_at": "2026-10-12T02:11:40.399723+00:00"
+          }
+        }
+      }
+    }
+  ],
+  "content_checks": {
+    "feed": {
+      "baseline_response_sha256": [
+        "023356c0ad963e95b8b385d1dd567ed347338ef8ae7bbca42adf92bd0f0a4010"
+      ],
+      "all_final_responses_match_baseline": true
+    },
+    "visible": {
+      "baseline_response_sha256": [
+        "85cccf2ecc853f785c5a719340da67f6d4cbe735971335f587f3a9396dac048a"
+      ],
+      "all_final_responses_match_baseline": true
+    },
+    "history": {
+      "baseline_response_sha256": [
+        "8f58e2a44cd967024c700a9cc895670f3d3e10a2b284e6043c958bf37d9b02c4"
+      ],
+      "all_final_responses_match_baseline": true
+    },
+    "hotspots": {
+      "baseline_response_sha256": [
+        "19d57622b61024c4e35bd7058abab3a18ff4e2db4b360be2be8bf85269f04e7a"
+      ],
+      "all_final_responses_match_baseline": true
+    },
+    "strength-stock": {
+      "raw_response_hashes": [
+        "8bc0328b07417e396674fb0055c5c268aef15e852aaa7b893768416ffd7a48bf"
+      ],
+      "all_final_responses_match_baseline": true
+    },
+    "strength-full": {
+      "raw_response_hashes": [
+        "87c22a269e6f334c7313dd05ac8cda800a3a473a3e9b3f195068bae1d299f6fc"
+      ],
+      "all_final_responses_match_baseline": true
+    }
+  },
+  "hotspot_pool_operations": {
+    "test_scope": "isolated final application lifecycle and process recovery; fixed paired clock; no production mutations",
+    "role_checks": {
+      "requests": 40,
+      "full_content_equal": true,
+      "reference": "original facade read inline in parent; same status, projection and clock",
+      "references": {
+        "False": {
+          "status": 200,
+          "ms": 2577.478712424636,
+          "sha256": "19d57622b61024c4e35bd7058abab3a18ff4e2db4b360be2be8bf85269f04e7a"
+        },
+        "True": {
+          "status": 200,
+          "ms": 147.1686102449894,
+          "sha256": "19d57622b61024c4e35bd7058abab3a18ff4e2db4b360be2be8bf85269f04e7a"
+        }
+      }
+    },
+    "initial_pool": {
+      "parent_pid": 1,
+      "available": true,
+      "workers": [
+        {
+          "pid": 70,
+          "alive": true,
+          "leased": false
+        },
+        {
+          "pid": 71,
+          "alive": true,
+          "leased": false
+        },
+        {
+          "pid": 72,
+          "alive": true,
+          "leased": false
+        },
+        {
+          "pid": 73,
+          "alive": true,
+          "leased": false
+        },
+        {
+          "pid": 74,
+          "alive": true,
+          "leased": false
+        },
+        {
+          "pid": 75,
+          "alive": true,
+          "leased": false
+        },
+        {
+          "pid": 76,
+          "alive": true,
+          "leased": false
+        },
+        {
+          "pid": 77,
+          "alive": true,
+          "leased": false
+        }
+      ]
+    },
+    "memory_after_mixed_reads": {
+      "processes": {
+        "1": {
+          "VmRSS": 245727232,
+          "VmHWM": 245792768
+        },
+        "70": {
+          "VmRSS": 120573952,
+          "VmHWM": 120610816
+        },
+        "71": {
+          "VmRSS": 120397824,
+          "VmHWM": 120463360
+        },
+        "72": {
+          "VmRSS": 120127488,
+          "VmHWM": 120160256
+        },
+        "73": {
+          "VmRSS": 120389632,
+          "VmHWM": 120422400
+        },
+        "74": {
+          "VmRSS": 120795136,
+          "VmHWM": 120844288
+        },
+        "75": {
+          "VmRSS": 120528896,
+          "VmHWM": 120561664
+        },
+        "76": {
+          "VmRSS": 120111104,
+          "VmHWM": 120143872
+        },
+        "77": {
+          "VmRSS": 120381440,
+          "VmHWM": 120414208
+        }
+      },
+      "rss_total_bytes": 1209032704
+    },
+    "crash_recovery": {
+      "victim": 70,
+      "response": {
+        "status": 200,
+        "ms": 6179.090991616249,
+        "sha256": "19d57622b61024c4e35bd7058abab3a18ff4e2db4b360be2be8bf85269f04e7a"
+      },
+      "pool": {
+        "parent_pid": 1,
+        "available": true,
+        "workers": [
+          {
+            "pid": 413,
+            "alive": true,
+            "leased": false
+          },
+          {
+            "pid": 71,
+            "alive": true,
+            "leased": false
+          },
+          {
+            "pid": 72,
+            "alive": true,
+            "leased": false
+          },
+          {
+            "pid": 73,
+            "alive": true,
+            "leased": false
+          },
+          {
+            "pid": 74,
+            "alive": true,
+            "leased": false
+          },
+          {
+            "pid": 75,
+            "alive": true,
+            "leased": false
+          },
+          {
+            "pid": 76,
+            "alive": true,
+            "leased": false
+          },
+          {
+            "pid": 77,
+            "alive": true,
+            "leased": false
+          }
+        ]
+      }
+    },
+    "timeout_recovery": {
+      "victim": 413,
+      "timeout_response": {
+        "status": 200,
+        "ms": 30056.72776326537,
+        "sha256": "7c120d2864bba3d01b4ee4f23300a8189ffdf9a07bdfb11c63602e1bdb72f1c3"
+      },
+      "response": {
+        "status": 200,
+        "ms": 6239.455845206976,
+        "sha256": "19d57622b61024c4e35bd7058abab3a18ff4e2db4b360be2be8bf85269f04e7a"
+      },
+      "pool": {
+        "parent_pid": 1,
+        "available": true,
+        "workers": [
+          {
+            "pid": 428,
+            "alive": true,
+            "leased": false
+          },
+          {
+            "pid": 71,
+            "alive": true,
+            "leased": false
+          },
+          {
+            "pid": 72,
+            "alive": true,
+            "leased": false
+          },
+          {
+            "pid": 73,
+            "alive": true,
+            "leased": false
+          },
+          {
+            "pid": 74,
+            "alive": true,
+            "leased": false
+          },
+          {
+            "pid": 75,
+            "alive": true,
+            "leased": false
+          },
+          {
+            "pid": 76,
+            "alive": true,
+            "leased": false
+          },
+          {
+            "pid": 77,
+            "alive": true,
+            "leased": false
+          }
+        ]
+      }
+    },
+    "memory_after_recovery": {
+      "processes": {
+        "1": {
+          "VmRSS": 239222784,
+          "VmHWM": 245792768
+        },
+        "428": {
+          "VmRSS": 120135680,
+          "VmHWM": 120135680
+        },
+        "71": {
+          "VmRSS": 120397824,
+          "VmHWM": 120463360
+        },
+        "72": {
+          "VmRSS": 120127488,
+          "VmHWM": 120160256
+        },
+        "73": {
+          "VmRSS": 120389632,
+          "VmHWM": 120422400
+        },
+        "74": {
+          "VmRSS": 120795136,
+          "VmHWM": 120844288
+        },
+        "75": {
+          "VmRSS": 120528896,
+          "VmHWM": 120561664
+        },
+        "76": {
+          "VmRSS": 120111104,
+          "VmHWM": 120143872
+        },
+        "77": {
+          "VmRSS": 120381440,
+          "VmHWM": 120414208
+        }
+      },
+      "rss_total_bytes": 1202089984
+    },
+    "passed": true,
+    "health": {
+      "requests": 444,
+      "successes": 444,
+      "p50_ms": 4.000628367066383,
+      "max_ms": 98.63477200269699
+    }
+  },
+  "shared_host_health": [
+    {
+      "file": "target-baseline-http-feed-shared-host-health.json",
+      "samples": 8,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 22045167616
+    },
+    {
+      "file": "target-baseline-http-history-shared-host-health.json",
+      "samples": 32,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 19667689472
+    },
+    {
+      "file": "target-baseline-http-hotspots-shared-host-health.json",
+      "samples": 20,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21774372864
+    },
+    {
+      "file": "target-baseline-http-strength-full-c1-shared-host-health.json",
+      "samples": 3,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 22159941632
+    },
+    {
+      "file": "target-baseline-http-strength-full-c10-shared-host-health.json",
+      "samples": 3,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 22105812992
+    },
+    {
+      "file": "target-baseline-http-strength-full-c50-shared-host-health.json",
+      "samples": 3,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 22089887744
+    },
+    {
+      "file": "target-baseline-http-strength-stock-c1-shared-host-health.json",
+      "samples": 3,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 22120284160
+    },
+    {
+      "file": "target-baseline-http-strength-stock-c10-shared-host-health.json",
+      "samples": 3,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 22116401152
+    },
+    {
+      "file": "target-baseline-http-strength-stock-c50-shared-host-health.json",
+      "samples": 3,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 22111715328
+    },
+    {
+      "file": "target-baseline-http-visible-shared-host-health.json",
+      "samples": 11,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 22056894464
+    },
+    {
+      "file": "target-final8-http-feed-shared-host-health.json",
+      "samples": 6,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21369155584
+    },
+    {
+      "file": "target-final8-http-history-shared-host-health.json",
+      "samples": 8,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21362606080
+    },
+    {
+      "file": "target-final8-http-hotspots-shared-host-health.json",
+      "samples": 15,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21315133440
+    },
+    {
+      "file": "target-final8-http-strength-compact-c1-shared-host-health.json",
+      "samples": 4,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21400567808
+    },
+    {
+      "file": "target-final8-http-strength-compact-c10-shared-host-health.json",
+      "samples": 4,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21399502848
+    },
+    {
+      "file": "target-final8-http-strength-compact-c50-shared-host-health.json",
+      "samples": 4,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21400678400
+    },
+    {
+      "file": "target-final8-http-strength-contract-c1-shared-host-health.json",
+      "samples": 4,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21397090304
+    },
+    {
+      "file": "target-final8-http-strength-full-c1-shared-host-health.json",
+      "samples": 4,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21400952832
+    },
+    {
+      "file": "target-final8-http-strength-full-c10-shared-host-health.json",
+      "samples": 4,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21397594112
+    },
+    {
+      "file": "target-final8-http-strength-full-c50-shared-host-health.json",
+      "samples": 4,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21386428416
+    },
+    {
+      "file": "target-final8-http-strength-stock-c1-shared-host-health.json",
+      "samples": 4,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21398233088
+    },
+    {
+      "file": "target-final8-http-strength-stock-c10-shared-host-health.json",
+      "samples": 4,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21402136576
+    },
+    {
+      "file": "target-final8-http-strength-stock-c50-shared-host-health.json",
+      "samples": 4,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21372669952
+    },
+    {
+      "file": "target-final8-http-visible-shared-host-health.json",
+      "samples": 7,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21377622016
+    },
+    {
+      "file": "target-hotspot-http-hotspots-limit1-shared-host-health.json",
+      "samples": 8,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 22222229504
+    },
+    {
+      "file": "target-hotspot-http-hotspots-limit2-shared-host-health.json",
+      "samples": 8,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 22187843584
+    },
+    {
+      "file": "target-release-http-feed-limit1-shared-host-health.json",
+      "samples": 6,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 22162583552
+    },
+    {
+      "file": "target-release-http-feed-limit2-shared-host-health.json",
+      "samples": 6,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 22144905216
+    },
+    {
+      "file": "target-release-http-feed-limit4-shared-host-health.json",
+      "samples": 6,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 22150348800
+    },
+    {
+      "file": "target-release-http-history-limit1-shared-host-health.json",
+      "samples": 7,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 22112260096
+    },
+    {
+      "file": "target-release-http-history-limit2-shared-host-health.json",
+      "samples": 8,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 22103166976
+    },
+    {
+      "file": "target-release-http-history-limit4-shared-host-health.json",
+      "samples": 8,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 22097080320
+    },
+    {
+      "file": "target-release-http-hotspots-limit1-shared-host-health.json",
+      "samples": 8,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 22222356480
+    },
+    {
+      "file": "target-release-http-hotspots-limit2-shared-host-health.json",
+      "samples": 8,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 22224793600
+    },
+    {
+      "file": "target-release-http-hotspots-limit4-shared-host-health.json",
+      "samples": 11,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 22190764032
+    },
+    {
+      "file": "target-release-http-hotspots-shared-host-health.json",
+      "samples": 21,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21766164480
+    },
+    {
+      "file": "target-release-http-visible-limit1-shared-host-health.json",
+      "samples": 7,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 22158684160
+    },
+    {
+      "file": "target-release-http-visible-limit2-shared-host-health.json",
+      "samples": 7,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 22151258112
+    },
+    {
+      "file": "target-release-http-visible-limit4-shared-host-health.json",
+      "samples": 7,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 22130827264
+    },
+    {
+      "file": "target-tuned-http-feed-shared-host-health.json",
+      "samples": 6,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21781155840
+    },
+    {
+      "file": "target-tuned-http-history-shared-host-health.json",
+      "samples": 8,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21742608384
+    },
+    {
+      "file": "target-tuned-http-hotspots-shared-host-health.json",
+      "samples": 16,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21769068544
+    },
+    {
+      "file": "target-tuned-http-hotspots-workers16-shared-host-health.json",
+      "samples": 16,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 20526399488
+    },
+    {
+      "file": "target-tuned-http-hotspots-workers8-shared-host-health.json",
+      "samples": 15,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21349576704
+    },
+    {
+      "file": "target-tuned-http-strength-compact-c1-shared-host-health.json",
+      "samples": 4,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21781094400
+    },
+    {
+      "file": "target-tuned-http-strength-compact-c10-shared-host-health.json",
+      "samples": 4,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21779718144
+    },
+    {
+      "file": "target-tuned-http-strength-compact-c50-shared-host-health.json",
+      "samples": 4,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21778911232
+    },
+    {
+      "file": "target-tuned-http-strength-contract-c1-shared-host-health.json",
+      "samples": 4,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21776547840
+    },
+    {
+      "file": "target-tuned-http-strength-full-c1-shared-host-health.json",
+      "samples": 4,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21781983232
+    },
+    {
+      "file": "target-tuned-http-strength-full-c10-shared-host-health.json",
+      "samples": 4,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21782687744
+    },
+    {
+      "file": "target-tuned-http-strength-full-c50-shared-host-health.json",
+      "samples": 4,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21783678976
+    },
+    {
+      "file": "target-tuned-http-strength-stock-c1-shared-host-health.json",
+      "samples": 4,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21782380544
+    },
+    {
+      "file": "target-tuned-http-strength-stock-c10-shared-host-health.json",
+      "samples": 4,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21778591744
+    },
+    {
+      "file": "target-tuned-http-strength-stock-c50-shared-host-health.json",
+      "samples": 4,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21776134144
+    },
+    {
+      "file": "target-tuned-http-visible-shared-host-health.json",
+      "samples": 7,
+      "all_services_healthy": true,
+      "minimum_available_memory_bytes": 21774311424
+    }
+  ],
+  "backend_validation": {
+    "started_utc": "2026-10-12T05:02:21.008892Z",
+    "completed_utc": "2026-10-12T05:10:31.659926Z",
+    "pytest_summary": "7739 passed, 7 skipped, 8 warnings, 7 subtests passed in 488.80s (0:08:08)",
+    "pytest_exit_code": 0,
+    "compileall_exit_code": 0,
+    "source_stable": true,
+    "source_python_file_count_before": 605,
+    "source_python_file_count_after": 605,
+    "scope": "full local suite on four-process implementation; final change to eight processes independently reviewed and verified in 22 targeted checks; complete final commit is validated by its CI run",
+    "final_worker_setting_tests": {
+      "passed": 22,
+      "log_sha256": "cde4dcd6e7f2637c1def1ebd94bbaad2deb9672ab1f76773daaaa87437a7799f",
+      "module_sha256": "0e9ca2d56901fb7001e3275c2d704510e16bc05c2d57814e057e83c36b73032d"
+    },
+    "versions": {
+      "fastapi": "0.139.0",
+      "starlette": "1.3.1",
+      "anyio": "4.14.2",
+      "pytest": "9.1.1"
+    }
+  },
+  "strength_contract": {
+    "compact_omits_auxiliary_lists": true,
+    "compact_equals_full_minus_auxiliary_lists": true,
+    "full_structure_sha256": "30e2f944148fb6f9b99425fc7f1be327330d6818660228962c4fcef057d5424b",
+    "trimmed_structure_sha256": "89e0cbc4f8ee0d8971a63a81ce2e0cda4292af78ca8cbdfab3108a8ade790f39",
+    "compact_structure_sha256": "89e0cbc4f8ee0d8971a63a81ce2e0cda4292af78ca8cbdfab3108a8ade790f39",
+    "legacy_ignores_compact": false
+  },
+  "hotspot_worker_selection": [
+    {
+      "workers": 4,
+      "p50_ms": 2305.2355712279677,
+      "p95_ms": 2471.0100474767387,
+      "whole_batch_seconds": 4.8966109957546,
+      "statuses": {
+        "200": 100
+      },
+      "summed_process_rss_bytes": 715603968,
+      "selected": false
+    },
+    {
+      "workers": 8,
+      "p50_ms": 1312.3519122600555,
+      "p95_ms": 1456.2232438474894,
+      "whole_batch_seconds": 2.920609565451741,
+      "statuses": {
+        "200": 100
+      },
+      "summed_process_rss_bytes": 1208901632,
+      "selected": true
+    },
+    {
+      "workers": 16,
+      "p50_ms": 1230.147677473724,
+      "p95_ms": 2994.464540667831,
+      "whole_batch_seconds": 4.137331008911133,
+      "statuses": {
+        "200": 100
+      },
+      "summed_process_rss_bytes": 2191327232,
+      "selected": false
+    }
+  ],
+  "early_two_cpu_results": "diagnostic only; superseded by the target-host results above"
+}

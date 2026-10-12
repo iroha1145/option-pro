@@ -14,10 +14,9 @@ import Icon from '@/components/icons';
 import AnalysisIcon from '@/components/shared/AnalysisIcon';
 import CollapsePresence from '@/components/shared/CollapsePresence';
 import EmptyState from '@/components/shared/EmptyState';
-import IconSwap, { BusyIcon } from '@/components/shared/IconSwap';
+import { BusyIcon } from '@/components/shared/IconSwap';
 import { SkeletonBlock, SkeletonText } from '@/components/shared/Skeleton';
 import SoftBadge from '@/components/shared/SoftBadge';
-import Spinner from '@/components/shared/Spinner';
 import StaleStrip from '@/components/shared/StaleStrip';
 import StatusNotice from '@/components/shared/StatusNotice';
 import TextSwap from '@/components/shared/TextSwap';
@@ -255,14 +254,13 @@ export default function MarketBriefCard({ className }: { className?: string }) {
           {isOwner ? (
             <button
               type="button"
-              className="btn-ai"
+              className={busy ? "touch-target text-caption text-ai-600" : "btn-ai"}
               onClick={() => setConfirmOpen(true)}
               /* 首次读取未回来时先不让点：跟进要拿点击那一刻的读数当基准。 */
               disabled={busy || latestQ.loading}
               aria-busy={busy}
             >
-              <IconSwap state={busy ? 'b' : 'a'} a={<AnalysisIcon size={14} />} b={<Spinner size={12} tone="muted" />} />
-              <TextSwap swapKey={busy ? 'busy' : 'idle'}>{busy ? t('生成中') : t('现在生成')}</TextSwap>
+              {busy ? <ThinkingLabel>{t('生成中')}</ThinkingLabel> : <><AnalysisIcon size={14} /><TextSwap swapKey="idle">{t('现在生成')}</TextSwap></>}
             </button>
           ) : !accessLoading && isVisitor ? (
             <span className="text-micro text-ink-400">{t('登录后可手动生成')}</span>
@@ -290,7 +288,6 @@ export default function MarketBriefCard({ className }: { className?: string }) {
         <div className="mt-4 border-t border-line">
           {busy && (
             <p role="status" className="mt-3 flex items-center gap-1.5 text-caption text-ink-500">
-              <span className="size-1.5 shrink-0 animate-led-pulse rounded-full bg-ai-600" aria-hidden="true" />
               <ThinkingLabel>{t('模型正在生成报告，通常需要几分钟')}</ThinkingLabel>
             </p>
           )}

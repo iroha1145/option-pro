@@ -16,7 +16,9 @@ integer rule ``10 * complete >= 9 * eligible``.
 from __future__ import annotations
 
 import dataclasses
+import gc
 import os
+import weakref
 from datetime import date
 from pathlib import Path
 
@@ -370,13 +372,47 @@ def _fail_batch_replace(monkeypatch, root: Path) -> None:
 
 def test_publish_batch_only_ever_renames_a_whole_file_into_place(monkeypatch, tmp_path):
     before = _publish_previous(tmp_path)
+    cached = read_batch(tmp_path)
     _fail_batch_replace(monkeypatch, tmp_path)
     outcome = publish_batch(_new_batch(), root=tmp_path)
     assert outcome == {"ok": False, "publish_failed": True, "integrity": "stale_previous_retained",
                        "served_session": PREVIOUS, "attempted_session": SESSION.isoformat()}
     assert snapshot_path(tmp_path).read_bytes() == before
     assert _listing(tmp_path) == ["batch.json"]  # the complete temp file was removed
-    assert read_batch(tmp_path)["served_session"] == PREVIOUS
+    assert read_batch(tmp_path) is cached
+    assert cached["served_session"] == PREVIOUS
+
+
+def test_successful_publish_releases_previous_batch_without_another_read(monkeypatch, tmp_path):
+    from app.services.eod_limited import store
+    from app.services.snapshot_read_cache import FingerprintedFileCache
+
+    class ObservedBatch(dict):
+        pass
+
+    class ObservedCache(FingerprintedFileCache):
+        def read(self, path, loader, **kwargs):
+            return super().read(path, lambda raw: ObservedBatch(loader(raw)), **kwargs)
+
+    cache = ObservedCache("eod_release_test", max_paths=2, max_bytes=256 * 1024 * 1024)
+    monkeypatch.setattr(store, "_batch_documents", cache)
+    _publish_previous(tmp_path)
+    previous = read_batch(tmp_path)
+    reference = weakref.ref(previous)
+    del previous
+    gc.collect()
+    assert reference() is not None  # the cache owns the old document
+
+    other_root = tmp_path / "other"
+    _publish_previous(other_root)
+    other = read_batch(other_root)
+    outcome = publish_batch(_new_batch(), root=tmp_path)
+    gc.collect()
+    assert outcome["ok"] is True
+    assert reference() is None
+    assert cache.stats()["entries"] == 1
+    assert read_batch(other_root) is other
+    assert read_batch(tmp_path)["served_session"] == SESSION.isoformat()
 
 
 def test_a_half_written_batch_never_replaces_the_served_one(monkeypatch, tmp_path):

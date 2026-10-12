@@ -210,6 +210,7 @@ function mapScanRow(r: Record<string, unknown>): ScreenerRow | null {
 /** live 仅下发契约白名单参数（sector → sector_id），其余 UI 参数客户端套用 */
 function liveScan(params: ScanParams, force = false): Promise<StrengthScanEnvelope> {
   const qs = toQuery({
+    compact: true,
     universe: params.universe ?? 'all_market',
     timeframe: params.timeframe,
     profile: params.profile,

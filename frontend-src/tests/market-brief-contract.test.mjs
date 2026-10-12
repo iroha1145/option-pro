@@ -359,11 +359,11 @@ test('POST /runs 的受理结果：新排队与已在跑都跟进，冷却中不
   assert.equal(reply({}).follow, true, '202 不带正文时按新排队处理');
 });
 
-test('卡片：Owner 用 .btn-ai 并在途 aria-busy，访客有登录提示，重试是 control-button；不写免责，AI 正文不经 t()', () => {
+test('卡片：Owner 空闲时用 .btn-ai，在途用青蓝文字并保留 aria-busy，访客有登录提示，重试是 control-button；不写免责，AI 正文不经 t()', () => {
   const card = read('components/home/MarketBriefCard.tsx');
   const content = read('components/home/MarketBriefContent.tsx');
   const text = read('components/home/marketBriefText.ts');
-  assert.match(card, /className="btn-ai"[\s\S]{0,240}disabled=\{busy \|\| latestQ\.loading\}\s*aria-busy=\{busy\}/);
+  assert.match(card, /className=\{busy \? "touch-target text-caption text-ai-600" : "btn-ai"\}[\s\S]{0,240}disabled=\{busy \|\| latestQ\.loading\}\s*aria-busy=\{busy\}/);
   assert.match(card, /t\('登录后可手动生成'\)/);
   assert.match(card, /className="control-button"/);
   assert.match(card, /<StaleStrip onRetry=\{retry\}/);

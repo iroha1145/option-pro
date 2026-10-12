@@ -236,3 +236,48 @@ def test_http_final_admission_race_returns_actual_ten_use_quota(app_state, monke
     assert quota["limit"] == 10 and quota["used"] == 10 and quota["remaining"] == 0
     with app_state.repo._connect() as connection:
         assert connection.execute("SELECT COUNT(*) FROM ai_jobs").fetchone()[0] == 10
+
+
+def test_http_failed_refresh_and_ordinary_post_preserve_receipt_then_explicit_retry(app_state):
+    from test_stock_analysis_quota import fail_stock
+    client, account = client_for(app_state, 'failed-reader')
+    first = client.post('/api/signals/stock/BE/ai-analysis', json={}, headers=HEADERS).json()
+    fail_stock(app_state.repo, first)
+    refreshed = client.get('/api/signals/stock/BE/ai-analysis').json()
+    assert refreshed['current_job']['job_id'] == first['job_id']
+    assert refreshed['current_job']['error_code'] == 'provider_empty_response'
+    assert refreshed['can_generate'] is False and refreshed['can_retry'] is True
+    ordinary = client.post('/api/signals/stock/BE/ai-analysis', json={}, headers=HEADERS).json()
+    assert ordinary['job_id'] == first['job_id'] and ordinary['quota']['used'] == 1
+    explicit = client.post('/api/signals/stock/BE/ai-analysis', json={'retry_of_job_id': first['job_id']}, headers=HEADERS).json()
+    assert explicit['job_id'] != first['job_id'] and explicit['quota']['used'] == 2
+    duplicate = client.post('/api/signals/stock/BE/ai-analysis', json={'retry_of_job_id': first['job_id']}, headers=HEADERS).json()
+    assert duplicate['job_id'] == explicit['job_id'] and duplicate['quota']['used'] == 2
+
+
+def test_http_unknown_refresh_does_not_offer_or_allow_paid_retry(app_state):
+    from test_stock_analysis_quota import fail_stock
+    client, account = client_for(app_state, 'unknown-reader')
+    first = client.post('/api/signals/stock/BE/ai-analysis', json={}, headers=HEADERS).json()
+    fail_stock(app_state.repo, first, 'submission_outcome_unknown')
+    refreshed = client.get('/api/signals/stock/BE/ai-analysis').json()
+    assert refreshed['current_job']['error_code'] == 'submission_outcome_unknown'
+    assert refreshed['can_generate'] is False and refreshed['can_retry'] is False
+    for body in [{}, {'retry_of_job_id': first['job_id']}]:
+        reused = client.post('/api/signals/stock/BE/ai-analysis', json=body, headers=HEADERS).json()
+        assert reused['job_id'] == first['job_id'] and reused['quota']['used'] == 1
+
+
+def test_http_invalid_completed_receipt_can_be_deliberately_retried(app_state):
+    client, account = client_for(app_state, 'invalid-reader')
+    first = client.post('/api/signals/stock/BE/ai-analysis', json={}, headers=HEADERS).json()
+    with app_state.repo._connect() as connection:
+        connection.execute("UPDATE ai_jobs SET status='completed',result_json='{}' WHERE job_id=?", (first['job_id'],))
+        connection.commit()
+    refreshed = client.get('/api/signals/stock/BE/ai-analysis').json()
+    assert refreshed['can_generate'] is False and refreshed['can_retry'] is True
+    assert refreshed['current_job']['error_code'] == 'legacy_output_hidden'
+    retried = client.post('/api/signals/stock/BE/ai-analysis', json={'retry_of_job_id': first['job_id']}, headers=HEADERS)
+    assert retried.status_code == 202
+    assert retried.json()['job_id'] != first['job_id']
+    assert retried.json()['quota']['used'] == 2

@@ -1,3 +1,4 @@
+import ThinkingLabel from '@/components/shared/ThinkingLabel';
 /** 催化剂页共享小件：LED / 分类 chip / 分析状态 chip / 置信度·影响标注 / 代码 chip / 热度计 */
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -57,6 +58,9 @@ const ANALYSIS_STYLE: Record<NewsAnalysisStatus, { label: string; tone: BadgeTon
 
 export function AnalysisStatusChip({ status, className }: { status: NewsAnalysisStatus; className?: string }) {
   const s = ANALYSIS_STYLE[status];
+  if (status === 'queued' || status === 'in_progress') {
+    return <ThinkingLabel live={status === 'in_progress'} className={className}>{s.label}</ThinkingLabel>;
+  }
   return (
     <SoftBadge tone={s.tone} className={className}>
       {s.led && <Led tone={s.led} pulse={s.pulse} className="size-1.5" />}

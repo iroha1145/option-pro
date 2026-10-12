@@ -50,7 +50,7 @@ import Icon from '@/components/icons';
 import { BusyIcon } from '@/components/shared/IconSwap';
 import { pageRegionProps } from '@/lib/pageRegion';
 import { loginReturnState } from '@/lib/loginReturn';
-import { getLocale, t } from '../i18n/core.ts';
+import { t } from '../i18n/core.ts';
 
 /* ---------------- B1 小件：涨跌宽度比条 ---------------- */
 function AdvanceDeclineBar({
@@ -666,7 +666,6 @@ export default function Watchlist() {
   const displayedCount = canManageWatchlist
     ? (personal.loading ? null : items.length)
     : (loading ? DEFAULT_WATCHLIST_TICKERS.length : items.length);
-  const uncoveredTickers = items.filter((row) => !Number.isFinite(row.price)).map((row) => row.ticker);
   // 唯一排序实现见 watchlistSort：卡片、表格与渐进切片必须消费同一份排序结果，
   // 否则「先切片再排序」会把局部样本冒充成完整结果。
   const cardItems = useMemo(() => sortWatchlistItems(items, sort), [items, sort]);
@@ -850,12 +849,6 @@ export default function Watchlist() {
             <p className="mt-3 flex flex-wrap items-center gap-2 text-caption text-ink-500" role="status">
               <SoftBadge tone="warn" className="whitespace-normal">{t('行情暂时读取失败，关注列表已保留。')}</SoftBadge>
               <button className="control-button" disabled={wl.refreshing} onClick={() => wl.refresh({ force: true })}>{t('重试')}</button>
-            </p>
-          )}
-          {!err && uncoveredTickers.length > 0 && (
-            <p className="mt-3 flex flex-wrap items-center gap-1.5 text-caption text-ink-500" role="status">
-              <SoftBadge tone="warn" className="whitespace-normal">{t('暂无行情：')}{uncoveredTickers.join(getLocale() === 'en' ? ', ' : '、')}</SoftBadge>
-              <span className="ml-1 text-ink-500">{t('（暂无覆盖数据，可在股票详情页手动获取）')}</span>
             </p>
           )}
 

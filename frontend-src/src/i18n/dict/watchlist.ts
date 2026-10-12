@@ -92,13 +92,6 @@ export const WATCHLIST: Dict = {
   '关注数据更新失败': ['Watchlist update failed', 'ウォッチリストの更新に失敗しました'],
   '数据更新暂不可用': ['Update is temporarily unavailable', '更新は一時的に利用できません'],
 
-  /* ---------------- 覆盖缺口 / 个人自选读取失败 / 默认池提示横幅 ---------------- */
-  '暂无行情：': ['No quotes available:', '相場データなし：'],
-  '（暂无覆盖数据，可在股票详情页手动获取）': [
-    '(Outside current coverage — you can fetch it manually on the ticker page)',
-    '（現在のカバー範囲外です。個別銘柄ページで手動取得できます）',
-  ],
-
   /* ---------------- 空态（items.length === 0） ---------------- */
   '暂无关注': ['Your watchlist is empty', 'ウォッチリストは空です'],
   '登录后可将关注股票保存在账号里，换设备也能查看。': [
