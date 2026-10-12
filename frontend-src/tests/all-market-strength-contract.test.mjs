@@ -97,7 +97,7 @@ test('覆盖统计中的真实零值保持为零', async () => {
 test('默认实时读取、轮询路径和刷新请求均使用同一全市场范围', async () => {
   const { strengthApi, strengthScanPath, calls } = apiFor({ rows: [] });
   await strengthApi.scanEnvelope();
-  assert.equal(calls[0].path, '/strength/scan?universe=all_market');
+  assert.equal(calls[0].path, '/strength/scan?compact=true&universe=all_market');
   assert.equal(strengthScanPath({}), calls[0].path);
   const request = buildStrengthScanRequest(DEFAULT_FILTERS);
   assert.equal(request.apiParams.universe, 'all_market');

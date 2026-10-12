@@ -859,7 +859,7 @@ function focusHarness({ latest, previous, trigger, poll }) {
 }
 
 function triggerButton(tree) {
-  return findNode(tree, (node) => node.type === 'button' && /更新热点|重试分析|热点分析中/.test(textOf(node)));
+  return findNode(tree, (node) => node.type === 'button' && /更新热点|重试分析|热点分析中|排队中/.test(textOf(node)));
 }
 
 async function startFocus(h) {
@@ -886,6 +886,7 @@ test('FE-6 焦点周期状态读取失败按退避重试，不停表清任务，
   h.mount();
   await settle();
   await startFocus(h);
+  assert.match(textOf(triggerButton(h.tree())), /排队中/, '排队任务不冒充已在分析');
   assert.equal(h.refreshed[0]?.cacheCleared, true, '2-E：API 层已清缓存，页面只重读');
   await h.clock.advance(2_000);
   assert.equal(h.calls.poll.length, 1);
@@ -899,8 +900,10 @@ test('FE-6 焦点周期状态读取失败按退避重试，不停表清任务，
   await h.clock.advance(1);
   assert.equal(h.calls.poll.length, 3);
   assert.doesNotMatch(textOf(h.tree()), /暂时读不到/);
+  assert.match(textOf(triggerButton(h.tree())), /热点分析中/, '真实进行中恢复分析文案');
   await h.clock.advance(2_000);
   assert.ok(h.toasts.some((row) => row[0] === 'success' && row[1] === '新一轮热点分析已生成'));
+  assert.doesNotMatch(textOf(triggerButton(h.tree())), /热点分析中|排队中/, '完成后恢复更新入口');
   h.unmount();
 });
 

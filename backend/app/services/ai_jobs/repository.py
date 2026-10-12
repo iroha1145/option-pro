@@ -320,6 +320,35 @@ _RETRY_LINEAGE_INDEX_CHECKSUM = hashlib.sha256(
 ).hexdigest()
 
 
+# Additive lookup migration: do not rewrite the original schema checksum.
+_PAYLOAD_LOOKUP_INDEX_VERSION = "ai-job-payload-lookups-v1"
+_PAYLOAD_LOOKUP_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_ai_jobs_news_identity
+ON ai_jobs(json_extract(payload_json,'$.news_id')) WHERE job_type='news_impact';
+CREATE INDEX IF NOT EXISTS idx_ai_jobs_focus_cycle
+ON ai_jobs(json_extract(payload_json,'$.cycle_id')) WHERE job_type='market_focus';
+CREATE INDEX IF NOT EXISTS idx_ai_jobs_report_identity
+ON ai_jobs(json_extract(payload_json,'$.report_id')) WHERE job_type='earnings_impact';
+"""
+_PAYLOAD_LOOKUP_INDEX_CHECKSUM = hashlib.sha256(
+    _PAYLOAD_LOOKUP_INDEX_SQL.encode("utf-8")
+).hexdigest()
+
+
+# Keep budget reads off historical task payload pages. This separate migration
+# preserves all existing schema and lookup migration checksums.
+_BUDGET_READ_INDEX_VERSION = "ai-job-budget-reads-v1"
+_BUDGET_READ_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_ai_jobs_submission_started
+ON ai_jobs(submission_started_at) WHERE submission_started_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_ai_jobs_credit_failure
+ON ai_jobs(updated_at) WHERE error_code='provider_credit_exhausted';
+"""
+_BUDGET_READ_INDEX_CHECKSUM = hashlib.sha256(
+    _BUDGET_READ_INDEX_SQL.encode("utf-8")
+).hexdigest()
+
+
 def _public_evidence_url(value: Any) -> bool:
     if (not isinstance(value, str) or not 1 <= len(value) <= 2048
             or any(ord(char) <= 32 or ord(char) == 127 for char in value)):
@@ -807,6 +836,30 @@ class AIJobRepository:
                 "INSERT OR IGNORE INTO ai_job_schema(version,checksum,applied_at) VALUES(?,?,?)",
                 (_RETRY_LINEAGE_INDEX_VERSION, _RETRY_LINEAGE_INDEX_CHECKSUM, _iso()),
             )
+            lookup_indexes = connection.execute(
+                "SELECT checksum FROM ai_job_schema WHERE version=?",
+                (_PAYLOAD_LOOKUP_INDEX_VERSION,),
+            ).fetchone()
+            if lookup_indexes is not None and lookup_indexes["checksum"] != _PAYLOAD_LOOKUP_INDEX_CHECKSUM:
+                raise RuntimeError("ai_job_payload_lookup_index_checksum_mismatch")
+            for statement in _statements(_PAYLOAD_LOOKUP_INDEX_SQL):
+                connection.execute(statement)
+            connection.execute(
+                "INSERT OR IGNORE INTO ai_job_schema(version,checksum,applied_at) VALUES(?,?,?)",
+                (_PAYLOAD_LOOKUP_INDEX_VERSION, _PAYLOAD_LOOKUP_INDEX_CHECKSUM, _iso()),
+            )
+            budget_indexes = connection.execute(
+                "SELECT checksum FROM ai_job_schema WHERE version=?",
+                (_BUDGET_READ_INDEX_VERSION,),
+            ).fetchone()
+            if budget_indexes is not None and budget_indexes["checksum"] != _BUDGET_READ_INDEX_CHECKSUM:
+                raise RuntimeError("ai_job_budget_read_index_checksum_mismatch")
+            for statement in _statements(_BUDGET_READ_INDEX_SQL):
+                connection.execute(statement)
+            connection.execute(
+                "INSERT OR IGNORE INTO ai_job_schema(version,checksum,applied_at) VALUES(?,?,?)",
+                (_BUDGET_READ_INDEX_VERSION, _BUDGET_READ_INDEX_CHECKSUM, _iso()),
+            )
             # Rows from before source-aware identities cannot be classified.
             # Keep those conservative: only the manual switch may release them.
             if backfill is None or backfill.missing_sources:
@@ -1097,6 +1150,7 @@ class AIJobRepository:
         batch_position: int | None = None,
         earnings_featured_verified: bool = False,
         stock_analysis_account_id: str | None = None,
+        stock_analysis_retry_job_id: str | None = None,
     ) -> tuple[dict[str, Any], bool]:
         if execution_mode != "background":
             raise ValueError("background_execution_required")
@@ -1188,6 +1242,15 @@ class AIJobRepository:
                 if shared is not None:
                     connection.commit()
                     return shared, False
+                receipt = self._stock_analysis_receipt(connection, stock_analysis_account_id, str(payload.get("ticker", "")), stock_period.key)
+                if receipt is not None and (
+                    stock_analysis_retry_job_id != receipt["job_id"]
+                    or not self.stock_analysis_retryable(receipt)
+                ):
+                    connection.commit()
+                    return receipt, False
+                if stock_analysis_retry_job_id is not None and receipt is None:
+                    raise ValueError("stock_analysis_retry_not_current")
                 spent = self._stock_allowance_used(connection, stock_analysis_account_id, stock_period.key)
                 if spent >= STOCK_ANALYSIS_PERIOD_LIMIT:
                     connection.rollback()
@@ -1304,7 +1367,10 @@ class AIJobRepository:
                         if int(row["execution_number"])
                         == meaningful_max_execution
                     ]
-                unknown_exists = any(
+                # Stock submissions already checked unresolved receipts by
+                # ticker above, including whether a later valid report replaced
+                # them. Historical request-hash rows must not undo that decision.
+                unknown_exists = stock_period is None and any(
                     row.get("error_code") == "submission_outcome_unknown"
                     for row in matches
                 )
@@ -1453,7 +1519,7 @@ class AIJobRepository:
                 submission_source=submission_source,
                 priority=priority,
                 now=now,
-                retry_of_job_id=None,
+                retry_of_job_id=stock_analysis_retry_job_id,
                 execution_number=1,
                 batch_id=batch_id,
                 batch_position=batch_position,
@@ -1524,6 +1590,53 @@ class AIJobRepository:
             used = self._stock_allowance_used(connection, account_id, period.key)
         return public_stock_quota(period, used=used)
 
+    @staticmethod
+    def stock_analysis_retryable(row: dict) -> bool:
+        if row["status"] == "completed":
+            return AIJobRepository._completed_result_state(row) == "invalid"
+        return row["status"] in {"failed", "cancelled", "budget_blocked"} and not (
+            row.get("error_code") in _RESERVATION_HOLDING_ERRORS
+            or (row.get("openai_response_id") and row.get("error_code") in RECOVERABLE_FAILURE_CODES)
+        )
+
+    @staticmethod
+    def _stock_analysis_receipt(connection, account_id: str, ticker: str, period_start: str) -> dict | None:
+        # Keep paid receipts independent of changing market evidence/model identity.
+        # Unknown or recoverable provider outcomes remain protected across resets
+        # and accounts; a new payload must not turn them into a second paid call.
+        rows = connection.execute(
+            """SELECT j.*,s.submission_source FROM ai_jobs j
+               JOIN ai_job_sources s ON s.job_id=j.job_id
+               WHERE j.job_type='signal_analysis'
+                 AND upper(json_extract(j.payload_json,'$.ticker'))=?
+                 AND j.status='failed'
+                 AND (j.error_code IN ('submission_outcome_unknown','provider_poll_timeout')
+                      OR (j.openai_response_id IS NOT NULL AND j.error_code IN
+                          ('schema_validation_failed','provider_unavailable','local_storage_error',
+                           'news_identity_mismatch','market_focus_input_hash_mismatch')))
+               ORDER BY j.created_at DESC LIMIT 1""", (ticker.upper(),),
+        ).fetchone()
+        if rows is not None:
+            newer_reports = connection.execute(
+                """SELECT * FROM ai_jobs WHERE job_type='signal_analysis'
+                   AND upper(json_extract(payload_json,'$.ticker'))=? AND status='completed'
+                   AND julianday(created_at)>julianday(?) ORDER BY created_at DESC""",
+                (ticker.upper(), rows["created_at"]),
+            ).fetchall()
+            # A later valid report supersedes historical unknown receipts. This
+            # permits future close periods after an already resolved incident.
+            if not any(AIJobRepository._completed_result_state(dict(report)) != "invalid" for report in newer_reports):
+                return dict(rows)
+        row = connection.execute(
+            """SELECT j.*,s.submission_source FROM ai_stock_analysis_allowances a
+               JOIN ai_jobs j ON j.job_id=a.job_id
+               JOIN ai_job_sources s ON s.job_id=j.job_id
+               WHERE a.account_id=? AND a.period_start=? AND j.job_type='signal_analysis'
+                 AND upper(json_extract(j.payload_json,'$.ticker'))=?
+               ORDER BY a.use_number DESC LIMIT 1""", (account_id, period_start, ticker.upper()),
+        ).fetchone()
+        return dict(row) if row is not None else None
+
     def stock_analysis_snapshot(self, account_id: str, ticker: str, **identity) -> dict:
         self.ensure_initialized()
         with self._connect() as connection:
@@ -1535,7 +1648,8 @@ class AIJobRepository:
             cached = shared if shared and shared["status"] == "completed" else self._shared_signal_analysis(
                 connection, ticker, **identity, **bounds, completed_only=True,
             )
-            return {"quota": quota, "shared_job": shared, "cached_job": cached}
+            return {"quota": quota, "shared_job": shared, "cached_job": cached,
+                    "current_job": shared or self._stock_analysis_receipt(connection, account_id, ticker, period.key)}
 
     @staticmethod
     def _request_hash_source_legacy(
@@ -3894,8 +4008,8 @@ class AIJobRepository:
         with self._connect() as connection:
             connection.execute("BEGIN")
             shared_totals = model_budget_totals(connection, observed, shared_budget_start_at) if shared_budget_enabled else None
-            # submission_started_at has no index: the day's rows cost a full
-            # scan, so one scan returns them with the day totals on each row.
+            # The submission-time index limits this read to the day's rows;
+            # window totals keep accounting and token reservations on one view.
             token_rows = connection.execute(
                 """SELECT job_type,model,submission_started_at,status,error_code,openai_response_id,
                           usage_total_tokens,

@@ -478,11 +478,11 @@ for (const [name, render] of [['个股 AI 卡片', renderSignalCard], ['期权�
   test(`${name}：失败按共用表说明原因，取消与旧结果隐藏各有说法`, async () => {
     const credit = await render({ job: { id: 'job-1', status: 'failed', progress: null, error: 'provider_credit_exhausted' } });
     assert.match(credit.text, /模型服务余额不足，需充值/);
-    if (name === '个股 AI 卡片') assert.ok(credit.buttons.some((b) => b.label === '生成分析' && b.disabled));
+    if (name === '个股 AI 卡片') assert.ok(!credit.buttons.some((b) => b.label === '生成分析'), '未恢复服务端失败记录前不显示重新生成入口');
     else assert.ok(credit.buttons.some((b) => b.label === '关闭'), '重试也会被挡下时按钮写「关闭」');
     const schema = await render({ job: { id: 'job-1', status: 'failed', progress: null, error: 'schema_validation_failed' } });
     assert.match(schema.text, /分析结果未通过格式检查，请重试/);
-    if (name === '个股 AI 卡片') assert.ok(schema.buttons.some((b) => b.label === '生成分析' && b.disabled));
+    if (name === '个股 AI 卡片') assert.ok(!schema.buttons.some((b) => b.label === '生成分析'), '重试须由服务端原任务记录明确授权');
     else assert.ok(schema.buttons.some((b) => b.label === '重试'));
     const cancelled = await render({ job: { id: 'job-1', status: 'cancelled', progress: null, error: 'global_concurrency_limit' } });
     assert.match(cancelled.text, /任务已取消/);
@@ -737,7 +737,7 @@ test('completed stock analysis labels its recorded model rather than the current
 test('unknown stock analysis submission cannot start another paid job during the same quota period', async () => {
   const view = await renderSignalCard({ job: { id: 'unknown', status: 'failed', error: 'submission_outcome_unknown' } });
   assert.match(view.text, /停止重复提交/);
-  assert.ok(view.buttons.some((button) => button.label === '生成分析' && button.disabled));
+  assert.ok(!view.buttons.some((button) => button.label === '生成分析'), '结果未知时不显示付费提交入口');
   assert.match(view.text, /今日剩余 0\/1 次/);
   assert.ok(view.buttons.some((button) => button.label === '继续查询原任务'));
   assert.doesNotMatch(view.text, /模型分析中/);

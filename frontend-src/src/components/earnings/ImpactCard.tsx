@@ -36,7 +36,6 @@ import Icon from '@/components/icons';
 import SourceNote from '@/components/shared/SourceNote';
 import { SkeletonText } from '@/components/shared/Skeleton';
 import ThinkingLabel from '@/components/shared/ThinkingLabel';
-import PulseDot from './PulseDot';
 import type { EarningsRow } from './types';
 import { exNum } from './types';
 import { t as __t } from '../../i18n/core.ts';
@@ -127,8 +126,7 @@ function JobSteps({ analysis }: { analysis: EarningsReportAnalysis }) {
   return (
     <div role="status">
       <p className="flex items-center gap-2 text-caption text-ink-500">
-        <PulseDot className="bg-ai-600" size={8} />
-        {queued ? __t('等待分析') : __t('正在分析财报')}
+        <ThinkingLabel live={!queued}>{queued ? __t('等待分析') : __t('正在分析财报')}</ThinkingLabel>
       </p>
       <div className="mt-2 h-1 overflow-hidden rounded-pill bg-line" role="progressbar" aria-label={__t("财报分析处理中")}>
         <motion.div
@@ -616,8 +614,7 @@ export default function ImpactCard({ ticker, row, analysisEligible, onAnalyzed, 
           {phase === 'finalizing' && (
             <div className="py-8" role="status" aria-live="polite">
               <div className="flex items-center gap-2">
-                <PulseDot className="bg-ai-600" size={8} />
-                <h3 className="text-h3 text-ink-800">{__t('正在生成最终分析 ·')} {ticker}</h3>
+                <h3><ThinkingLabel live={!pollPaused}>{`${__t('正在生成最终分析 ·')} ${ticker}`}</ThinkingLabel></h3>
               </div>
               <p className="mt-2 text-caption leading-5 text-ink-500">
                 {__t('财报已公布，正在根据实际业绩更新分析。')}
@@ -706,10 +703,9 @@ export default function ImpactCard({ ticker, row, analysisEligible, onAnalyzed, 
                     <button
                       onClick={() => void startJob()}
                       disabled={submitting}
-                      className="btn-ai flex-1"
+                      className={submitting ? "touch-target flex-1 text-caption text-ai-600" : "btn-ai flex-1"}
                     >
-                      <AnalysisIcon size={13} />
-                      <TextSwap swapKey={submitting ? 'busy' : 'idle'}>{submitting ? __t('正在提交…') : __t('生成分析')}</TextSwap>
+                      {submitting ? <ThinkingLabel live={false}>{__t('正在提交…')}</ThinkingLabel> : <><AnalysisIcon size={13} /><TextSwap swapKey="idle">{__t('生成分析')}</TextSwap></>}
                     </button>
                     <button
                       onClick={() => setConfirming(false)}
@@ -735,8 +731,7 @@ export default function ImpactCard({ ticker, row, analysisEligible, onAnalyzed, 
           {phase === 'job' && analysis && (
             <div>
               <div className="flex items-center gap-2">
-                <PulseDot className="bg-ai-600" size={8} />
-                <h3 className="text-h3 text-ink-800">{__t('正在分析 ·')} {ticker}</h3>
+                <h3 className="text-caption text-ai-600">{__t('正在分析 ·')} {ticker}</h3>
                 <span className="ml-auto text-micro text-ai-600">
                   <ThinkingLabel live={!pollPaused}>
                     {['queued', 'pending', 'preparing'].includes(normalizedStage(analysis.status))
@@ -823,10 +818,7 @@ export default function ImpactCard({ ticker, row, analysisEligible, onAnalyzed, 
                       {__t('最终分析')}
                     </SoftBadge>
                   ) : isImpactFinalizing(impact) ? (
-                    <SoftBadge tone="ai" className="ml-auto">
-                      <PulseDot className="bg-ai-600" size={6} />
-                      {__t('分析更新中')}
-                    </SoftBadge>
+                    <ThinkingLabel className="ml-auto">{__t('分析更新中')}</ThinkingLabel>
                   ) : (
                     <SoftBadge tone="ai" className="ml-auto">
                       {completedStageLabel(impact)}
@@ -840,10 +832,9 @@ export default function ImpactCard({ ticker, row, analysisEligible, onAnalyzed, 
                   {impact.reportDate ? __t(' · 财报日 {date}', { date: impact.reportDate }) : ''}
                 </p>
                 {isImpactFinalizing(impact) && !isFinalImpact(impact) && (
-                  <div className="mt-3 rounded-md border border-ai-600/25 bg-ai-50 px-3 py-2.5" role="status" aria-live="polite">
+                  <div className="mt-3" role="status" aria-live="polite">
                     <p className="flex items-center gap-2 text-caption font-medium text-ai-600">
-                      <PulseDot className="bg-ai-600" size={7} />
-                      {__t('财报已公布，正在更新分析')}
+                      <ThinkingLabel live={!pollPaused}>{__t('财报已公布，正在更新分析')}</ThinkingLabel>
                     </p>
                     {!pollPaused && (
                       <p className="mt-1 text-micro text-ink-500">

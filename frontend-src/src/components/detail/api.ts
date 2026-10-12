@@ -565,7 +565,9 @@ export function getStockAnalysisView(ticker: string, signal?: AbortSignal): Prom
       const job = saved ? fx2.getAiJob(saved.id) : null;
       const running = !!job && !['succeeded', 'failed', 'cancelled'].includes(job.status);
       const cached = job?.status === 'succeeded' && saved?.periodStart === mockStockPeriodStart;
-      return { ticker: symbol, enabled: true, canGenerate: used < 10 && !running && !cached,
+      return { ticker: symbol, enabled: true, canGenerate: used < 10 && !running && !cached && !(job && saved?.periodStart === mockStockPeriodStart),
+        currentJob: running || saved?.periodStart === mockStockPeriodStart ? job : null,
+        canRetry: used < 10 && saved?.periodStart === mockStockPeriodStart && !!job && ['failed', 'cancelled'].includes(job.status),
         quota: { limit: 10, used, remaining: 10 - used,
           resetAt: mockStockResetAt, periodStart: mockStockPeriodStart },
         activeJob: running ? job : null,
@@ -597,7 +599,7 @@ function mockStockPrincipal(): string {
 }
 
 /** signal_analysis 任务（已登录主体）；轮询/取消复用 aiJobsApi.get / cancel */
-export function createSignalAnalysisJob(ticker: string): Promise<AiJob> {
+export function createSignalAnalysisJob(ticker: string, retryOfJobId?: string): Promise<AiJob> {
   const symbol = quoteSymbol(ticker);
   return mockOr(
     () => {
@@ -611,6 +613,7 @@ export function createSignalAnalysisJob(ticker: string): Promise<AiJob> {
       const saved = existing ? fx2.getAiJob(existing.id) : null;
       if (saved && (!['succeeded', 'failed', 'cancelled'].includes(saved.status)
         || (saved.status === 'succeeded' && existing?.periodStart === mockStockPeriodStart))) return saved;
+      if (saved && existing?.periodStart === mockStockPeriodStart && retryOfJobId !== saved.id) return saved;
       const used = mockStockUsed.get(principal) ?? 0;
       if (used >= 10) throw new ApiError(429, __t('今日分析额度已用完，额度重置后再试'), { bizCode: 'stock_analysis_daily_limit' });
       const job = fx2.createAiJob('signal-analysis' as AiJob['kind'], text);
@@ -619,7 +622,7 @@ export function createSignalAnalysisJob(ticker: string): Promise<AiJob> {
       return job;
     },
     // 契约：登录主体+同源请求 → 202 + Location（job_id 可能仅在 Location 头）
-    () => postAiJob(`/signals/stock/${encodeURIComponent(symbol)}/ai-analysis`, { force: false }),
+    () => postAiJob(`/signals/stock/${encodeURIComponent(symbol)}/ai-analysis`, { force: false, ...(retryOfJobId ? { retry_of_job_id: retryOfJobId } : {}) }),
   );
 }
 

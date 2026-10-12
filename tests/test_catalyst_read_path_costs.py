@@ -887,3 +887,154 @@ def test_an_article_written_without_the_quality_columns_is_recomputed(
     assert row["quality_article_checked_at"] == checked_at
     assert row["quality_reason_article"] is None
     assert local_module._news_quality_reason(row, as_of=as_of) is None
+
+
+def test_concurrent_cold_feed_builds_shared_items_once(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+    import time
+
+    intelligence = _analyzed_store(tmp_path, monkeypatch)
+    barrier = threading.Barrier(10)
+    calls = 0
+    count_lock = threading.Lock()
+    original = intelligence._published_item
+
+    def counted(*args, **kwargs):
+        nonlocal calls
+        with count_lock:
+            calls += 1
+        time.sleep(0.001)  # Let other requests reach the missing cache entry.
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(intelligence, "_published_item", counted)
+
+    def read(_):
+        with request_owner_access_context(False):
+            barrier.wait(timeout=10)
+            return intelligence.feed(as_of=NOW, window_hours=24, limit=20)
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        results = list(executor.map(read, range(10)))
+    assert calls == 12
+    assert all(result == results[0] for result in results)
+
+
+def test_public_chinese_validation_cache_preserves_context_and_bounds(monkeypatch):
+    from app.services.catalysts import personal_service as service
+
+    service._valid_zh_text_cached.cache_clear()
+    original = service.validate_simplified_chinese_text
+    calls = []
+
+    def counted(value, field, **kwargs):
+        calls.append((value, kwargs))
+        return original(value, field, **kwargs)
+
+    monkeypatch.setattr(service, "validate_simplified_chinese_text", counted)
+    for value in ("公司公布最新业绩", "這是繁體字", "", "NVDA 发布最新芯片"):
+        for codes, sources in (((), ()), (("NVDA",), ()), ((), ("original",))):
+            expected = service._validate_zh_text(value, codes, sources)
+            before = len(calls)
+            assert service._valid_zh_text(value, allowed_codes=list(codes), source_texts=list(sources)) == expected
+            assert service._valid_zh_text(value, allowed_codes=codes, source_texts=sources) == expected
+            assert len(calls) == before + 1
+    before = service._valid_zh_text_cached.cache_info()
+    service._valid_zh_text("公司" * 5000)
+    assert service._valid_zh_text_cached.cache_info() == before
+    service._valid_zh_text_cached.cache_clear()
+
+
+def test_empty_focus_retry_does_not_read_any_ai_history(tmp_path, monkeypatch):
+    intelligence = _stack(tmp_path)
+    def unexpected(**kwargs):
+        pytest.fail(f"empty candidates must not load AI history: {kwargs}")
+    monkeypatch.setattr(intelligence, "_ai_job_snapshot", unexpected)
+    assert intelligence._scheduled_focus_retry_cycle(999, observed=NOW) == (None, False)
+
+
+def test_payload_lookup_indexes_upgrade_existing_store_without_changing_rows(tmp_path):
+    from app.services.ai_jobs import repository as repository_module
+    intelligence = _stack(tmp_path)
+    _create_news_job(intelligence.ai_repository, 401)
+    with intelligence.ai_repository._connect() as connection:
+        before = [tuple(row) for row in connection.execute("SELECT * FROM ai_jobs")]
+        for name in ("idx_ai_jobs_news_identity", "idx_ai_jobs_focus_cycle", "idx_ai_jobs_report_identity"):
+            connection.execute(f"DROP INDEX {name}")
+        connection.execute("DELETE FROM ai_job_schema WHERE version=?", (repository_module._PAYLOAD_LOOKUP_INDEX_VERSION,))
+        connection.commit()
+    intelligence.ai_repository.initialize()
+    with intelligence.ai_repository._connect() as connection:
+        assert [tuple(row) for row in connection.execute("SELECT * FROM ai_jobs")] == before
+        for job_type, field, index in (
+            ("news_impact", "news_id", "idx_ai_jobs_news_identity"),
+            ("market_focus", "cycle_id", "idx_ai_jobs_focus_cycle"),
+            ("earnings_impact", "report_id", "idx_ai_jobs_report_identity"),
+        ):
+            plan = " ".join(str(row[3]) for row in connection.execute(
+                f"EXPLAIN QUERY PLAN SELECT * FROM ai_jobs WHERE job_type='{job_type}' AND json_extract(payload_json,'$.{field}')=?", (401,),
+            ))
+            assert index in plan and "SEARCH" in plan
+
+
+def test_focus_cycle_snapshot_preserves_full_receipt_and_latest_order(tmp_path):
+    intelligence = _stack(tmp_path)
+    # Start with valid durable rows, then put offline focus payloads in them.
+    for news_id in (401, 402, 403):
+        _create_news_job(intelligence.ai_repository, news_id)
+    with intelligence.ai_repository._connect() as connection:
+        rows = connection.execute("SELECT job_id,payload_json FROM ai_jobs").fetchall()
+        for row in rows:
+            news_id = json.loads(row["payload_json"])["news_id"]
+            connection.execute(
+                "UPDATE ai_jobs SET job_type='market_focus',payload_json=?,created_at=?,provider_result_json=?,result_json=? WHERE job_id=?",
+                (json.dumps({"cycle_id": "target" if news_id != 403 else "other"}),
+                 f"2026-10-09T14:0{news_id - 400}:00Z", '{"paid_receipt":"preserved"}', '{"result":"preserved"}', row["job_id"]),
+            )
+        connection.commit()
+    full = intelligence._ai_job_snapshot()
+    selected = intelligence._ai_job_snapshot(focus_cycle_ids=["target"])
+    expected = {key: value for key, value in full.items() if json.loads(value["payload_json"])["cycle_id"] == "target"}
+    assert selected == expected
+    assert list(selected) == list(expected)
+    assert all(job["provider_result_json"] == '{"paid_receipt":"preserved"}' for job in selected.values())
+
+
+def test_owner_feed_reads_while_another_connection_holds_write_reservation(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    intelligence = _analyzed_store(tmp_path, monkeypatch)
+    with intelligence._connect() as writer:
+        writer.execute("BEGIN IMMEDIATE")
+        def read():
+            with request_owner_access_context(True):
+                return intelligence.feed(as_of=NOW, window_hours=24, limit=4)
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            payload = executor.submit(read).result(timeout=2)
+        assert len(payload["items"]) == 4
+        writer.rollback()
+    # The ordinary owner write path remains usable afterward.
+    assert intelligence.reconcile()["prepared_revision"] >= 1
+
+
+def test_retention_positive_status_filter_is_equivalent_and_indexed(tmp_path):
+    from typing import get_args
+    from app.services.ai_jobs.models import AIJobStatus
+    from app.services.ai_jobs import repository as repository_module
+    intelligence = _stack(tmp_path)
+    assert set(get_args(AIJobStatus)) - repository_module._TERMINAL == {"pending", "queued", "in_progress"}
+    statuses = get_args(AIJobStatus)
+    for index, status in enumerate(statuses):
+        _create_news_job(intelligence.ai_repository, 500 + index)
+    with intelligence.ai_repository._connect() as connection:
+        rows = connection.execute("SELECT job_id FROM ai_jobs ORDER BY job_id").fetchall()
+        for row, status in zip(rows, statuses):
+            connection.execute("UPDATE ai_jobs SET status=? WHERE job_id=?", (status, row[0]))
+        connection.commit()
+        query = "SELECT job_id,json_extract(payload_json,'$.news_id') FROM ai_jobs WHERE status IN ('pending','queued','in_progress')"
+        positive = {tuple(row) for row in connection.execute(query)}
+        marks = ','.join('?' for _ in repository_module._TERMINAL)
+        negative = {tuple(row) for row in connection.execute(
+            f"SELECT job_id,json_extract(payload_json,'$.news_id') FROM ai_jobs WHERE status NOT IN ({marks})", tuple(repository_module._TERMINAL))}
+        assert positive == negative
+        plan = ' '.join(str(row[3]) for row in connection.execute('EXPLAIN QUERY PLAN ' + query))
+        assert 'SEARCH ai_jobs USING INDEX idx_ai_jobs_due' in plan

@@ -35,7 +35,7 @@ def create(repo, account="account-a", ticker="AMD", **overrides):
     model = overrides.pop("model", runtime.SONNET_MODEL)
     version, digest = runtime.schema_identity("signal_analysis", model=model)
     return repo.create_job(
-        job_type="signal_analysis", payload={**payload(), "ticker": ticker},
+        job_type="signal_analysis", payload=overrides.pop("payload", {**payload(), "ticker": ticker}),
         model=model, reasoning="xhigh", execution_mode="background",
         prompt_version=runtime.PROMPT_VERSIONS["signal_analysis"],
         schema_version=version, schema_sha256=digest, max_queued=100,
@@ -164,7 +164,7 @@ def test_previous_period_completed_report_does_not_block_current_failed_retry(re
     for n in range(9):
         create(repo, ticker=f"STOCK{n}")
     with pytest.raises(StockAnalysisQuotaExceeded):
-        create(repo, force_retry=True)
+        create(repo, force_retry=True, stock_analysis_retry_job_id=second["job_id"])
     third, created = create(repo, account="account-b")
     assert created and third["job_id"] != second["job_id"]
     assert third["execution_number"] == 3
@@ -300,3 +300,83 @@ def test_v2_checksum_mismatch_stops_initialization_without_losing_usage(repo):
         AIJobRepository(repo.path).initialize()
     with repo._connect() as connection:
         assert connection.execute("SELECT COUNT(*) FROM ai_stock_analysis_allowances").fetchone()[0] == 1
+
+
+def fail_stock(repo, row, code='provider_empty_response', response_id=None):
+    with repo._connect() as connection:
+        connection.execute("UPDATE ai_jobs SET status='failed',error_code=?,openai_response_id=? WHERE job_id=?", (code, response_id, row['job_id']))
+        connection.commit()
+
+
+def test_failed_receipt_survives_restart_and_plain_post_never_spends_again(repo):
+    first, _ = create(repo)
+    fail_stock(repo, first)
+    restarted = AIJobRepository(repo.path)
+    snapshot = restarted.stock_analysis_snapshot('account-a', 'AMD', **identity())
+    assert snapshot['current_job']['job_id'] == first['job_id']
+    assert snapshot['current_job']['error_code'] == 'provider_empty_response'
+    reused, created = create(restarted, force_retry=True)
+    assert not created and reused['job_id'] == first['job_id']
+    assert restarted.stock_analysis_quota('account-a')['used'] == 1
+
+
+@pytest.mark.parametrize('code,response_id', [('submission_outcome_unknown', None), ('provider_poll_timeout', 'resp_original'), ('schema_validation_failed', 'resp_original')])
+def test_unknown_or_recoverable_receipt_blocks_changed_identity_and_other_accounts(repo, monkeypatch, code, response_id):
+    first, _ = create(repo)
+    fail_stock(repo, first, code, response_id)
+    monkeypatch.setattr(storage, '_utcnow', lambda: at('2026-10-12T20:00:00Z'))
+    reused, created = create(repo, account='account-b', model='claude-haiku-5-5', stock_analysis_retry_job_id=first['job_id'])
+    assert not created and reused['job_id'] == first['job_id']
+    assert repo.stock_analysis_quota('account-b')['used'] == 0
+
+
+def test_concurrent_explicit_retry_spends_once_and_stale_retry_reuses_new_failure(repo):
+    first, _ = create(repo)
+    fail_stock(repo, first)
+    barrier = threading.Barrier(2)
+    def retry(_):
+        barrier.wait()
+        return create(AIJobRepository(repo.path), stock_analysis_retry_job_id=first['job_id'])
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        answers = list(pool.map(retry, range(2)))
+    assert sum(created for _, created in answers) == 1
+    assert len({row['job_id'] for row, _ in answers}) == 1
+    second = answers[0][0]
+    assert second['retry_of_job_id'] == first['job_id']
+    assert repo.stock_analysis_quota('account-a')['used'] == 2
+    fail_stock(repo, second)
+    stale, created = create(repo, stock_analysis_retry_job_id=first['job_id'])
+    assert not created and stale['job_id'] == second['job_id']
+    assert repo.stock_analysis_quota('account-a')['used'] == 2
+
+
+def test_later_valid_report_supersedes_old_unknown_in_next_period(repo, monkeypatch):
+    first, _ = create(repo)
+    fail_stock(repo, first, 'submission_outcome_unknown')
+    # Reproduce pre-fix history: a second task was admitted despite the unknown.
+    monkeypatch.setattr(storage, '_utcnow', lambda: at('2026-10-10T20:00:00Z'))
+    second, _ = create(repo, account=None, model='claude-haiku-5-5')
+    with repo._connect() as connection:
+        connection.execute("UPDATE ai_jobs SET model=? WHERE job_id=?", (runtime.SONNET_MODEL, second['job_id']))
+        connection.commit()
+    complete(repo, second)
+    monkeypatch.setattr(storage, '_utcnow', lambda: at('2026-10-12T20:00:00Z'))
+    assert repo.stock_analysis_snapshot('account-a', 'AMD', **identity())['current_job'] is None
+    assert create(repo, account='account-b')[1]
+
+
+def test_changed_market_evidence_does_not_bypass_unknown_receipt(repo):
+    first, _ = create(repo)
+    fail_stock(repo, first, 'submission_outcome_unknown')
+    changed = {**payload(), 'evidence_as_of': '2026-10-10T19:00:00Z'}
+    reused, created = create(repo, payload=changed)
+    assert not created and reused['job_id'] == first['job_id']
+    assert repo.stock_analysis_quota('account-a')['used'] == 1
+
+
+def test_explicit_retry_keeps_receipt_lineage_when_model_configuration_changes(repo):
+    first, _ = create(repo)
+    fail_stock(repo, first)
+    second, created = create(repo, model='claude-haiku-5-5', stock_analysis_retry_job_id=first['job_id'])
+    assert created and second['retry_of_job_id'] == first['job_id']
+    assert repo.stock_analysis_quota('account-a')['used'] == 2

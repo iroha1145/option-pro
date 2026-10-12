@@ -9,12 +9,13 @@ import json
 import math
 import re
 import sqlite3
+import sys
 import threading
 import time
 import uuid
 from collections import Counter, OrderedDict
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager, nullcontext
+from contextlib import closing, contextmanager, nullcontext
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -498,14 +499,69 @@ TIMESTAMP_NORMALIZATION_CHECKSUM = hashlib.sha256(
 # so a write by any process (web or worker share the SQLite file) invalidates
 # immediately on the next read. The age cap only bounds how far the *window
 # lower bound* may lag behind wall clock while no writes happen; it is not a
-# correctness boundary. Historical `as_of` reads (cursor pagination anchors)
-# bypass the cache entirely and keep exact point-in-time semantics.
+# correctness boundary. Historical `as_of` reads use a separate byte-bounded
+# cache keyed by their exact timestamp; they never reuse a near-now window.
 # ---------------------------------------------------------------------------
 _REVISION_CACHE: dict[tuple[str, int], dict[str, Any]] = {}
 _REVISION_CACHE_LOCK = threading.Lock()
+# Fixed stripes bound lock memory even when cache entries are invalidated.
+_REVISION_BUILD_LOCKS = tuple(threading.Lock() for _ in range(32))
 _REVISION_CACHE_MAX_ENTRIES = 32
 _REVISION_CACHE_MAX_AGE_SECONDS = 300.0
 _REVISION_CACHE_AS_OF_TOLERANCE_SECONDS = 90.0
+# Historical bundles contain no owner state and use exact timestamps. Retain
+# at most 64 MiB of Python objects across eight entries. In-flight bookkeeping
+# is separately capped: excess distinct keys take the ordinary uncached path.
+_HISTORICAL_REVISION_CACHE: OrderedDict[tuple[Any, ...], tuple[list[dict[str, Any]], list[dict[str, Any]], int]] = OrderedDict()
+_HISTORICAL_REVISION_CACHE_LOCK = threading.Lock()
+_HISTORICAL_REVISION_CACHE_MAX_ENTRIES = 8
+_HISTORICAL_REVISION_CACHE_MAX_BYTES = 64 * 1024 * 1024
+_HISTORICAL_REVISION_CACHE_BYTES = 0
+_HISTORICAL_REVISION_BUILDS: dict[tuple[Any, ...], threading.Event] = {}
+
+
+class _CatalystConnection(sqlite3.Connection):
+    """Ordinary SQLite connection with its opened file identity attached."""
+
+    _revision_file_identity: tuple[int, int] | None = None
+
+
+def _revision_file_stamp(path: Path) -> tuple[int, int, int, int] | None:
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    # The inode detects replacement; size/mtime also conservatively invalidate
+    # an in-place restored main file whose store cursor happens to be equal.
+    return stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns
+
+
+def _historical_bundle_size(value: Any, limit: int) -> int:
+    """Conservative retained-object count, including container allocations.
+
+    Shared objects count once within an entry, but again in another entry.
+    Stop early above the cap: oversized results are returned without caching.
+    The extra allowance covers the cache's OrderedDict/key bookkeeping.
+    """
+
+    total = 512
+    seen: set[int] = set()
+    pending = [value]
+    while pending and total <= limit:
+        current = pending.pop()
+        identity = id(current)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        total += sys.getsizeof(current)
+        if isinstance(current, dict):
+            pending.extend(current.keys())
+            pending.extend(current.values())
+        elif isinstance(current, (list, tuple)):
+            pending.extend(current)
+    return total
+
+
 VISIBLE_FEED_SCAN_BUDGET = 108
 _FEED_QUERY_HASH_KEYS = (
     "window_hours",
@@ -555,8 +611,12 @@ _WINDOW_ACTIVE_REVISIONS_SQL = """
 
 
 def _reset_revision_cache() -> None:
+    global _HISTORICAL_REVISION_CACHE_BYTES
     with _REVISION_CACHE_LOCK:
         _REVISION_CACHE.clear()
+    with _HISTORICAL_REVISION_CACHE_LOCK:
+        _HISTORICAL_REVISION_CACHE.clear()
+        _HISTORICAL_REVISION_CACHE_BYTES = 0
 
 
 def _normalize_page_mode(value: Any) -> str | None:
@@ -713,6 +773,10 @@ def _copy_feed_item(item: dict[str, Any]) -> dict[str, Any]:
         value = copied.get(key)
         if isinstance(value, list):
             copied[key] = list(value)
+    for key in ("analysis_sources", "analysis_input", "_validation_article"):
+        value = copied.get(key)
+        if isinstance(value, (dict, list)):
+            copied[key] = copy.deepcopy(value)
     analysis = copied.get("analysis")
     if isinstance(analysis, dict):
         analysis_copy = copy.deepcopy(analysis)
@@ -1851,6 +1915,7 @@ class LocalCatalystIntelligence:
         manual_refresh_cooldown_seconds: int = 30,
         article_fetcher: Callable[..., dict[str, Any]] | None = None,
         scheduled_skip_template_commentary: bool = True,
+        _read_only: bool = False,
     ) -> None:
         if mode not in {"off", "read", "manual", "scheduled"}:
             raise ValueError("invalid catalyst mode")
@@ -1859,6 +1924,7 @@ class LocalCatalystIntelligence:
         if isinstance(max_queued, bool) or not 1 <= max_queued <= 10_000:
             raise ValueError("max_queued is invalid")
         self.db_path = Path(db_path)
+        self._read_only = _read_only
         self.ai_repository = ai_repository
         self.mode = mode
         self.model = news_model or model
@@ -1898,13 +1964,17 @@ class LocalCatalystIntelligence:
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        owner_access = current_request_is_owner()
+        owner_access = current_request_is_owner() and not self._read_only
+        before_open = _revision_file_stamp(self.db_path)
         if owner_access:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
-            connection = sqlite3.connect(self.db_path, timeout=5.0)
+            connection = sqlite3.connect(self.db_path, timeout=5.0, factory=_CatalystConnection)
         else:
             uri = f"file:{quote(self.db_path.resolve().as_posix(), safe='/')}?mode=ro"
-            connection = sqlite3.connect(uri, uri=True, timeout=5.0)
+            connection = sqlite3.connect(uri, uri=True, timeout=5.0, factory=_CatalystConnection)
+        after_open = _revision_file_stamp(self.db_path)
+        if before_open is not None and after_open is not None and before_open[:2] == after_open[:2]:
+            connection._revision_file_identity = after_open[:2]
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute("PRAGMA busy_timeout=5000")
@@ -2095,11 +2165,13 @@ class LocalCatalystIntelligence:
         active_jobs: list[tuple[str, int | None]] = []
         job_path = Path(self.ai_repository.path)
         if job_path.is_file():
-            with sqlite3.connect(f"{job_path.resolve().as_uri()}?mode=ro", uri=True) as jobs:
-                marks = ",".join("?" for _ in ai_job_store._TERMINAL)
+            with closing(sqlite3.connect(f"{job_path.resolve().as_uri()}?mode=ro", uri=True)) as jobs:
+                # These are exactly the nonterminal states admitted by the
+                # ai_jobs CHECK constraint. Positive matches use idx_ai_jobs_due
+                # and never deserialize the completed history's payloads.
                 active_jobs = [(row[0], row[1]) for row in jobs.execute(
-                    f"SELECT job_id,json_extract(payload_json,'$.news_id') FROM ai_jobs WHERE status NOT IN ({marks})",
-                    tuple(ai_job_store._TERMINAL),
+                    """SELECT job_id,json_extract(payload_json,'$.news_id') FROM ai_jobs
+                       WHERE status IN ('pending','queued','in_progress')""",
                 )]
         with self._connect() as connection:
             connection.execute("CREATE TEMP TABLE retention_active(job_id TEXT PRIMARY KEY,news_id INTEGER)")
@@ -2535,6 +2607,7 @@ class LocalCatalystIntelligence:
         allow_write_contention: bool = True,
         job_ids: Iterable[str] | None = None,
         news_ids: Iterable[int] | None = None,
+        focus_cycle_ids: Iterable[str] | None = None,
         created_since: datetime | None = None,
         input_only: bool = False,
         state_only: bool = False,
@@ -2552,10 +2625,10 @@ class LocalCatalystIntelligence:
             raise ValueError("input_only and state_only require explicit job_ids")
         if input_only and state_only:
             raise ValueError("input_only and state_only are mutually exclusive")
-        if job_ids is not None and news_ids is not None:
-            raise ValueError("job_ids and news_ids are mutually exclusive")
+        if sum(value is not None for value in (job_ids, news_ids, focus_cycle_ids)) > 1:
+            raise ValueError("job_ids, news_ids and focus_cycle_ids are mutually exclusive")
         if created_since is not None and (
-            job_ids is not None or news_ids is not None
+            job_ids is not None or news_ids is not None or focus_cycle_ids is not None
         ):
             raise ValueError("created_since only bounds the full snapshot")
         requested_ids = (
@@ -2574,7 +2647,11 @@ class LocalCatalystIntelligence:
             if news_ids is not None
             else None
         )
-        if requested_ids == [] or requested_news_ids == []:
+        requested_cycle_ids = (
+            sorted({cycle_id for cycle_id in focus_cycle_ids if isinstance(cycle_id, str) and cycle_id})
+            if focus_cycle_ids is not None else None
+        )
+        if requested_ids == [] or requested_news_ids == [] or requested_cycle_ids == []:
             return {}
         path = Path(self.ai_repository.path)
         if not path.is_file():
@@ -2585,14 +2662,17 @@ class LocalCatalystIntelligence:
             connection = sqlite3.connect(uri, uri=True, timeout=2.0)
             connection.row_factory = sqlite3.Row
             connection.execute("PRAGMA query_only=ON")
-            if requested_ids is None and requested_news_ids is None:
+            if requested_ids is None and requested_news_ids is None and requested_cycle_ids is None:
                 created_filter = (
                     "" if created_since is None else "AND j.created_at>=?"
                 )
-                rows = connection.execute(
+                # Materialize the final dictionaries directly. Keeping all
+                # sqlite3.Row tuples until a second full dictionary pass made
+                # the peak include both representations of every wide row.
+                rows = [dict(row) for row in connection.execute(
                     _FULL_JOB_SNAPSHOT_SQL.format(created_filter=created_filter),
                     () if created_since is None else (_iso(created_since),),
-                ).fetchall()
+                )]
                 # Newest first, sorted here: in SQL the ORDER BY built a temp
                 # B-tree of every full row (production: 100MB+ per reconcile)
                 # that spilled to SQLITE_TMPDIR on the data volume.
@@ -2624,6 +2704,19 @@ class LocalCatalystIntelligence:
                             tuple(chunk),
                         ).fetchall()
                     )
+            elif requested_cycle_ids is not None:
+                rows = []
+                for offset in range(0, len(requested_cycle_ids), 500):
+                    chunk = requested_cycle_ids[offset : offset + 500]
+                    placeholders = ",".join("?" for _item in chunk)
+                    rows.extend(connection.execute(
+                        f"""SELECT j.*,COALESCE(s.submission_source,'manual') AS submission_source
+                            FROM ai_jobs j LEFT JOIN ai_job_sources s ON s.job_id=j.job_id
+                            WHERE j.job_type='market_focus'
+                              AND json_extract(j.payload_json,'$.cycle_id') IN ({placeholders})""",
+                        tuple(chunk),
+                    ).fetchall())
+                rows.sort(key=lambda row: row["created_at"] or "", reverse=True)
             else:
                 assert requested_news_ids is not None
                 rows = []
@@ -2652,7 +2745,7 @@ class LocalCatalystIntelligence:
         finally:
             if connection is not None:
                 connection.close()
-        return {str(row["job_id"]): dict(row) for row in rows}
+        return {str(row["job_id"]): row if isinstance(row, dict) else dict(row) for row in rows}
 
     def _ai_job_snapshot_or_empty(
         self,
@@ -3326,7 +3419,8 @@ class LocalCatalystIntelligence:
         """Find an already-created exact job without creating work on GET."""
 
         jobs, _available = self._ai_job_snapshot_or_empty(
-            "catalyst_focus_intent_ai_jobs"
+            "catalyst_focus_intent_ai_jobs",
+            focus_cycle_ids=[str(intent["cycle_id"])],
         )
         candidates = sorted(
             jobs.values(),
@@ -4514,6 +4608,78 @@ class LocalCatalystIntelligence:
             return handed_out(built_rows), None
         return handed_out(built_rows), store_cursor
 
+    def _historical_revision_bundle(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        as_of: datetime,
+        window_hours: int,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]] | None:
+        """Exact-as-of, store-only rows/items; None uses the uncached path."""
+
+        global _HISTORICAL_REVISION_CACHE_BYTES
+        identity = getattr(connection, "_revision_file_identity", None)
+        if identity is None or _HISTORICAL_REVISION_CACHE_MAX_BYTES <= 0:
+            return None
+        waited_for_build = False
+        while True:
+            stamp = _revision_file_stamp(self.db_path)
+            if stamp is None or stamp[:2] != identity:
+                # A still-open connection may belong to a replaced old file.
+                return None
+            cursor = _revision_store_cursor(connection)
+            if not cursor or cursor[0] == "unversioned":
+                return None
+            key = (
+                str(self.db_path.resolve()), stamp, int(window_hours), _iso(as_of),
+                self.scheduled_skip_template_commentary, cursor,
+            )
+            if _revision_file_stamp(self.db_path) != stamp:
+                return None
+            with _HISTORICAL_REVISION_CACHE_LOCK:
+                cached = _HISTORICAL_REVISION_CACHE.get(key)
+                if cached is not None:
+                    _HISTORICAL_REVISION_CACHE.move_to_end(key)
+                    return cached[0], cached[1]
+                if waited_for_build:
+                    # Oversized results, failed builds, or immediate eviction
+                    # must not turn all waiters into serial rebuilds. After
+                    # one wait, a miss uses the ordinary independent read.
+                    return None
+                waiting = _HISTORICAL_REVISION_BUILDS.get(key)
+                if waiting is None:
+                    if len(_HISTORICAL_REVISION_BUILDS) >= _HISTORICAL_REVISION_CACHE_MAX_ENTRIES:
+                        return None
+                    building = threading.Event()
+                    _HISTORICAL_REVISION_BUILDS[key] = building
+                    break
+            # No read transaction is opened here. Recheck both the connection's
+            # file and its current store cursor after the builder completes.
+            waiting.wait()
+            waited_for_build = True
+        try:
+            rows = self._active_revisions_query(connection, as_of=as_of, window_hours=window_hours)
+            items = [self._published_item(connection, row, as_of=as_of) for row in rows]
+            size = _historical_bundle_size((key, rows, items), _HISTORICAL_REVISION_CACHE_MAX_BYTES)
+            if (size <= _HISTORICAL_REVISION_CACHE_MAX_BYTES
+                    and _revision_store_cursor(connection) == cursor
+                    and _revision_file_stamp(self.db_path) == stamp):
+                with _HISTORICAL_REVISION_CACHE_LOCK:
+                    while _HISTORICAL_REVISION_CACHE and (
+                        len(_HISTORICAL_REVISION_CACHE) >= _HISTORICAL_REVISION_CACHE_MAX_ENTRIES
+                        or _HISTORICAL_REVISION_CACHE_BYTES + size > _HISTORICAL_REVISION_CACHE_MAX_BYTES
+                    ):
+                        _old_key, old = _HISTORICAL_REVISION_CACHE.popitem(last=False)
+                        _HISTORICAL_REVISION_CACHE_BYTES -= old[2]
+                    _HISTORICAL_REVISION_CACHE[key] = (rows, items, size)
+                    _HISTORICAL_REVISION_CACHE_BYTES += size
+            return rows, items
+        finally:
+            with _HISTORICAL_REVISION_CACHE_LOCK:
+                if _HISTORICAL_REVISION_BUILDS.get(key) is building:
+                    del _HISTORICAL_REVISION_BUILDS[key]
+                building.set()
+
     def _active_revision_bundle(
         self,
         connection: sqlite3.Connection,
@@ -4527,7 +4693,7 @@ class LocalCatalystIntelligence:
         Shared item payloads (``_published_item``) are deterministic per row
         set, so they ride the same cache entry. They carry no job state, so
         owner reads use them too and ``_window_items`` layers live job state
-        on top. Historical (non-cacheable) reads get items=None.
+        on top. Historical reads use a separate exact-as-of cache when safe.
 
         Rows and items are shared with the cache entry: callers only read
         them and copy the items they return (one page instead of the window).
@@ -4537,6 +4703,12 @@ class LocalCatalystIntelligence:
         original slow path (which fingerprints again after the query).
         """
         key = self._revision_cache_key(as_of=as_of, window_hours=window_hours)
+        if want_items and key is None and window_hours is not None:
+            historical = self._historical_revision_bundle(
+                connection, as_of=as_of, window_hours=window_hours,
+            )
+            if historical is not None:
+                return historical
         if want_items and key is not None:
             with _REVISION_CACHE_LOCK:
                 cached = _REVISION_CACHE.get(key)
@@ -4560,42 +4732,46 @@ class LocalCatalystIntelligence:
         )
         if not want_items or key is None:
             return rows, None
-        store_cursor = (
-            _revision_store_cursor(connection) if source_cursor is not None else None
-        )
-        with _REVISION_CACHE_LOCK:
-            cached = _REVISION_CACHE.get(key)
-            if (
-                cached is not None
-                and source_cursor is not None
-                and source_cursor == store_cursor
-                and cached["cursor"] == source_cursor
-                and _revision_cache_fresh(cached, store_cursor, as_of=as_of)
-                # Equal DB cursors can still represent different as_of row
-                # sets. Do not reuse another request's projected window.
-                and cached["rows"] == rows
-                and self._anon_items_usable(cached)
-            ):
-                return rows, cached["anon_items"]
-        built_items = [
-            self._published_item(connection, row, as_of=as_of)
-            for row in rows
-        ]
-        if source_cursor is not None and source_cursor == store_cursor:
+        # Only serialize item construction. Revision queries must remain
+        # independent so a newer writer/read can progress while an older
+        # point-in-time query is still running. Recheck freshness after waiting.
+        with _REVISION_BUILD_LOCKS[hash(key) % len(_REVISION_BUILD_LOCKS)]:
+            store_cursor = (
+                _revision_store_cursor(connection) if source_cursor is not None else None
+            )
             with _REVISION_CACHE_LOCK:
                 cached = _REVISION_CACHE.get(key)
                 if (
                     cached is not None
-                    and cached["cursor"] == store_cursor
-                    and cached["query_as_of"] <= as_of
-                    and cached.get("anon_items") is None
-                    # IDs alone miss a different revision of the same news.
+                    and source_cursor is not None
+                    and source_cursor == store_cursor
+                    and cached["cursor"] == source_cursor
+                    and _revision_cache_fresh(cached, store_cursor, as_of=as_of)
+                    # Equal DB cursors can still represent different as_of row
+                    # sets. Do not reuse another request's projected window.
                     and cached["rows"] == rows
-                    and _anon_items_match_rows(built_items, cached.get("rows") or ())
+                    and self._anon_items_usable(cached)
                 ):
-                    cached["anon_items"] = built_items
-                    cached["anon_skip_templates"] = self.scheduled_skip_template_commentary
-        return rows, built_items
+                    return rows, cached["anon_items"]
+            built_items = [
+                self._published_item(connection, row, as_of=as_of)
+                for row in rows
+            ]
+            if source_cursor is not None and source_cursor == store_cursor:
+                with _REVISION_CACHE_LOCK:
+                    cached = _REVISION_CACHE.get(key)
+                    if (
+                        cached is not None
+                        and cached["cursor"] == store_cursor
+                        and cached["query_as_of"] <= as_of
+                        and cached.get("anon_items") is None
+                        # IDs alone miss a different revision of the same news.
+                        and cached["rows"] == rows
+                        and _anon_items_match_rows(built_items, cached.get("rows") or ())
+                    ):
+                        cached["anon_items"] = built_items
+                        cached["anon_skip_templates"] = self.scheduled_skip_template_commentary
+            return rows, built_items
 
     def _anon_items_usable(self, cached: Mapping[str, Any]) -> bool:
         """Cached shared items match the row set and this skip setting.
@@ -4680,7 +4856,7 @@ class LocalCatalystIntelligence:
             rows = connection.execute(
                 head
                 + """
-                         SELECT l.*,
+                         SELECT l.news_id,l.change_sequence,l.content_hash,l.job_id,l.created_at,
                                 ROW_NUMBER() OVER (
                                     PARTITION BY l.news_id,l.change_sequence,
                                                  l.content_hash
@@ -5330,7 +5506,7 @@ class LocalCatalystIntelligence:
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """Window rows and their items as this reader sees them.
 
-        Everyone shares the store-derived items (cached for near-now reads).
+        Everyone shares the store-derived items (with bounded revision caches).
         An owner also sees each unpublished item's job status, read from the
         AI store on every call: one snapshot of the jobs those items link to,
         state columns only, and one schema identity per model and variant.
@@ -6757,7 +6933,7 @@ class LocalCatalystIntelligence:
         *,
         expected_analysis_revision: int,
     ) -> dict[str, Any] | None:
-        jobs = self._ai_job_snapshot(allow_write_contention=False)
+        jobs = self._ai_job_snapshot(allow_write_contention=False, news_ids=[int(row["news_id"])])
         if not jobs:
             return None
         with self._connect() as connection:
@@ -7896,7 +8072,25 @@ class LocalCatalystIntelligence:
                    ORDER BY updated_at DESC,created_at DESC""",
                 (prepared_revision,),
             ).fetchall()
-        jobs = self._ai_job_snapshot(allow_write_contention=False)
+        if not candidates:
+            return None, False
+        # Retry counting compares the complete payload, so a matching attempt
+        # must share its cycle_id. Keep a full fallback for legacy payloads
+        # without that field, and always load explicitly linked jobs as well:
+        # a mismatched/corrupted paid job must still block a replacement.
+        payloads = [_loads(candidate["payload_json"], None) for candidate in candidates]
+        if any(isinstance(payload, dict) and (not isinstance(payload.get("cycle_id"), str) or not payload.get("cycle_id"))
+               for payload in payloads):
+            jobs = self._ai_job_snapshot(allow_write_contention=False)
+        else:
+            cycle_ids = {str(candidate["cycle_id"]) for candidate in candidates}
+            cycle_ids.update(payload["cycle_id"] for payload in payloads
+                             if isinstance(payload, dict) and payload.get("cycle_id"))
+            jobs = self._ai_job_snapshot(allow_write_contention=False, focus_cycle_ids=cycle_ids)
+            jobs.update(self._ai_job_snapshot(
+                allow_write_contention=False,
+                job_ids=[str(candidate["job_id"]) for candidate in candidates],
+            ))
         observed_hour = _hour_bucket(observed)
         for candidate in candidates:
             payload = _loads(candidate["payload_json"], None)

@@ -58,7 +58,7 @@ class _SignalRepositoryStub:
     @classmethod
     def stock_analysis_snapshot(cls, account_id, ticker, **identity):
         shared = cls.shared_signal_analysis(ticker, **identity)
-        return {"quota": cls.stock_analysis_quota(account_id), "shared_job": shared,
+        return {"quota": cls.stock_analysis_quota(account_id), "shared_job": shared, "current_job": shared,
                 "cached_job": shared if shared and shared["status"] == "completed" else None}
 
 

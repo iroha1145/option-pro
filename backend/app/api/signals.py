@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import math
 import re
@@ -11,7 +12,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
-from pydantic import StrictBool
+from pydantic import StrictBool, Field
 
 from app.json_validation import canonical_json_text
 from app.api.ai import (
@@ -58,6 +59,7 @@ _TICKER_PATTERN = re.compile(
 
 class SignalAnalysisJobCreateRequest(StrictModel):
     force: StrictBool = False
+    retry_of_job_id: str | None = Field(default=None, pattern=r"^aij_[a-f0-9]{32}$")
 
 
 # 进程内按票合并证据采集，仓库事务另行保证跨进程的共享任务与账号额度。
@@ -399,6 +401,7 @@ async def get_stock_ai_analysis(ticker: str, http_request: Request):
     repository = _job_repository()
     snapshot = await asyncio.to_thread(repository.stock_analysis_snapshot, account_id, symbol, **_signal_analysis_identity())
     quota, shared = snapshot["quota"], snapshot["shared_job"]
+    current = snapshot["current_job"]
     latest = await asyncio.to_thread(repository.latest_completed, "signal_analysis", symbol)
     active = shared if shared and shared["status"] in {"pending", "queued", "in_progress"} else None
     if snapshot["cached_job"]:
@@ -411,7 +414,9 @@ async def get_stock_ai_analysis(ticker: str, http_request: Request):
         "schema_version": "stock-analysis-view-v1",
         "ticker": symbol,
         "enabled": enabled,
-        "can_generate": enabled and quota["remaining"] > 0 and shared is None,
+        "can_generate": enabled and quota["remaining"] > 0 and current is None,
+        "can_retry": enabled and quota["remaining"] > 0 and shared is None and current is not None and repository.stock_analysis_retryable(current),
+        "current_job": _public_signal_analysis(current) if current else None,
         "quota": quota,
         "cache_reset_at": quota["reset_at"],
         "latest_job_cached": snapshot["cached_job"] is not None,
@@ -440,15 +445,22 @@ async def stock_ai_analysis(
         raise HTTPException(status_code=403, detail={"code": "owner_access_required", "message": "仅站主可强制重试"})
     symbol = _normalize_ticker(ticker)
     async with _signal_analysis_lock(symbol):
-        return await _queue_signal_analysis(symbol, force=request.force, account_id=account_id)
+        return await _queue_signal_analysis(symbol, force=request.force, account_id=account_id, retry_of_job_id=request.retry_of_job_id)
 
 
-async def _queue_signal_analysis(symbol: str, *, force: bool, account_id: str) -> JSONResponse:
+async def _queue_signal_analysis(symbol: str, *, force: bool, account_id: str, retry_of_job_id: str | None = None) -> JSONResponse:
     # 先复用同股票、同模型配置的共享报告；最终额度与创建在仓库事务内重查。
     # 同步仓库调用在线程中运行，写锁等待不会阻塞其他请求。
     repository = _job_repository()
     snapshot = await asyncio.to_thread(repository.stock_analysis_snapshot, account_id, symbol, **_signal_analysis_identity())
     quota, active = snapshot["quota"], snapshot["shared_job"]
+    receipt = snapshot["current_job"]
+    if active is None and receipt is not None and (
+        retry_of_job_id != receipt["job_id"] or not repository.stock_analysis_retryable(receipt)
+    ):
+        active = receipt
+    if retry_of_job_id is not None and receipt is None:
+        raise HTTPException(409, detail={"code": "stock_analysis_retry_not_current"})
     if active is not None:
         public = _public_signal_analysis(active, cached=active["status"] == "completed")
         public["quota"] = quota
@@ -466,6 +478,15 @@ async def _queue_signal_analysis(symbol: str, *, force: bool, account_id: str) -
             "message": "本时段的个股分析额度已用完，美股收盘后恢复",
             "reset_at": quota["reset_at"], "quota": quota,
         })
+    if retry_of_job_id is not None:
+        row, created = await asyncio.to_thread(
+            _create_job, "signal_analysis", json.loads(receipt["payload_json"]),
+            force_retry=True, stock_analysis_account_id=account_id,
+            stock_analysis_retry_job_id=retry_of_job_id,
+        )
+        public = _public_signal_analysis(row, cached=not created and row["status"] == "completed")
+        public["quota"] = await asyncio.to_thread(repository.stock_analysis_quota, account_id)
+        return JSONResponse(public, status_code=202, headers={"Location": f"/api/ai/jobs/{row['job_id']}", "Retry-After": "2"})
     try:
         signals, saved, snapshot_source = (
             await _owner_stock_signal_evidence(symbol)

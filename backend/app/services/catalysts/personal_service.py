@@ -4,6 +4,7 @@ import json
 import sqlite3
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Literal, Protocol, cast
@@ -100,6 +101,29 @@ def _valid_zh_text(
 ) -> str | None:
     if not isinstance(value, str):
         return None
+    # Bound retained text as well as entry count. Large detail bodies still
+    # receive the same validation, without occupying the shared read cache.
+    codes, sources = tuple(allowed_codes), tuple(source_texts)
+    if not all(isinstance(text, str) for text in (*codes, *sources)):
+        return _validate_zh_text(value, codes, sources)
+    validator = (
+        _valid_zh_text_cached
+        if len(value) + sum(map(len, codes)) + sum(map(len, sources)) <= 8192
+        else _validate_zh_text
+    )
+    return validator(value, codes, sources)
+
+
+@lru_cache(maxsize=2048)
+def _valid_zh_text_cached(
+    value: str, allowed_codes: tuple[str, ...], source_texts: tuple[str, ...],
+) -> str | None:
+    return _validate_zh_text(value, allowed_codes, source_texts)
+
+
+def _validate_zh_text(
+    value: str, allowed_codes: tuple[str, ...], source_texts: tuple[str, ...],
+) -> str | None:
     try:
         return validate_simplified_chinese_text(
             value,
@@ -1970,6 +1994,26 @@ class PersonalCatalystService:
             # empty. A visitor reads only groups with a published analysis,
             # filtered before the engine's own LIMIT.
             requested_limit = min(100, max(1, int(limit)))
+            from .hotspot_reads import HotspotRead, current_hotspot_read_pool
+
+            pool = current_hotspot_read_pool()
+            if (pool is not None
+                    and not self._intelligence_injected and not self._ai_repository_injected):
+                engine = self.intelligence
+                return pool.read(HotspotRead(
+                    db_path=str(engine.db_path),
+                    ai_db_path=str(self.ai_repository.path),
+                    mode=engine.mode,
+                    canonical_tickers=tuple(sorted(engine.canonical_tickers)),
+                    model=engine.model, reasoning=engine.reasoning,
+                    focus_model=engine.focus_model, focus_reasoning=engine.focus_reasoning,
+                    max_queued=engine.max_queued,
+                    manual_refresh_cooldown_seconds=engine.manual_refresh_cooldown_seconds,
+                    scheduled_skip_template_commentary=engine.scheduled_skip_template_commentary,
+                    limit=requested_limit, now=now,
+                    owner_context=current_request_is_owner(),
+                    include_owner_state=include_owner_state,
+                ))
             payload = self.intelligence.hotspots(
                 limit=max(requested_limit, _HOTSPOT_PROJECTION_SCAN_LIMIT),
                 now=now,

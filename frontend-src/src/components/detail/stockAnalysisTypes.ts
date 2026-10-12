@@ -4,7 +4,7 @@ export interface StockAnalysisQuota {
   limit: 10; used: number; remaining: number; resetAt: string; periodStart: string;
 }
 export interface StockAnalysisView {
-  ticker: string; enabled: boolean; canGenerate: boolean;
+  ticker: string; enabled: boolean; canGenerate: boolean; canRetry?: boolean; currentJob?: AiJob | null;
   quota: StockAnalysisQuota | null; activeJob: AiJob | null; latestJob: AiJob | null;
   latestJobCached: boolean; cacheResetAt: string | null;
 }
@@ -37,18 +37,19 @@ export function parseStockAnalysisView(raw: unknown, ticker: string): StockAnaly
     && quota.used + quota.remaining === 10
     && stamp(quota.reset_at) && stamp(quota.period_start)
     && Date.parse(quota.reset_at as string) > Date.parse(quota.period_start as string);
-  const job = (value: unknown, completed: boolean) => {
+  const job = (value: unknown, completed: boolean | null) => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
     const normalized = normalizeAiJob(value);
     if (!normalized.id || normalized.kind !== 'signal-analysis') return null;
-    if (completed ? normalized.status !== 'succeeded' : !['queued', 'in_progress', 'running'].includes(normalized.status)) return null;
+    if (completed !== null && (completed ? normalized.status !== 'succeeded' : !['queued', 'in_progress', 'running'].includes(normalized.status))) return null;
     const asset = normalized.result && typeof normalized.result === 'object' ? normalized.result.asset : null;
     if (typeof asset === 'string' && asset.toUpperCase() !== ticker) return null;
     return normalized;
   };
   const latestJob = job(body.latest_job, true);
+  const currentJob = job(body.current_job, null);
   const cacheResetAt = validQuota && body.cache_reset_at === quota.reset_at ? quota.reset_at as string : null;
-  return { ticker, enabled: body.enabled === true, canGenerate: body.can_generate === true && validQuota && (quota.remaining as number) > 0,
+  return { ticker, currentJob, canRetry: body.can_retry === true && validQuota && (quota.remaining as number) > 0 && !!currentJob && (['failed', 'cancelled'].includes(currentJob.status) || currentJob.error === 'legacy_output_hidden'), enabled: body.enabled === true, canGenerate: body.can_generate === true && validQuota && (quota.remaining as number) > 0,
     quota: validQuota ? { limit: 10, used: quota.used as number, remaining: quota.remaining as number,
       resetAt: quota.reset_at as string, periodStart: quota.period_start as string } : null,
     activeJob: job(body.active_job, false), latestJob,

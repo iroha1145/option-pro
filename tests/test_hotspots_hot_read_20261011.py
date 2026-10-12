@@ -154,7 +154,7 @@ def test_cycle_inputs_are_read_once_per_cycle_not_per_candidate(verified_rounds,
     calls: list[str] = []
     real_connect = sqlite3.connect
 
-    class Counting(sqlite3.Connection):
+    class CountFunctions:
         def create_function(self, name, narg, func, **kwargs):
             if name == "focus_input_intact":
                 original = func
@@ -165,7 +165,15 @@ def test_cycle_inputs_are_read_once_per_cycle_not_per_candidate(verified_rounds,
 
             return super().create_function(name, narg, func, **kwargs)
 
-    monkeypatch.setattr(sqlite3, "connect", lambda *args, **kwargs: real_connect(*args, factory=Counting, **kwargs))
+    def counting_connect(*args, **kwargs):
+        factory = kwargs.pop("factory", sqlite3.Connection)
+
+        class Counting(CountFunctions, factory):
+            pass
+
+        return real_connect(*args, factory=Counting, **kwargs)
+
+    monkeypatch.setattr(sqlite3, "connect", counting_connect)
     result = _visitor(intelligence.hotspots, limit=20, now=clock[0])
 
     # Eight candidates and four cycles: the coverage test used to run for every

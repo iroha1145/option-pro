@@ -173,7 +173,7 @@ test('unknown submission rereads the same task without creating or spending agai
     const retry = h.nodes().find(node => node.type === 'button' && node.props.children === '继续查询原任务');
     assert.ok(retry); await retry.props.onClick(); await h.settle();
     assert.deepEqual(ids, ['unknown-job']); assert.equal(h.creates, 0);
-    assert.ok(h.nodes().find(node => node.type === 'button' && node.props.children === '生成分析').props.disabled);
+    assert.ok(!h.nodes().some(node => node.type === 'button' && node.props.children === '生成分析'));
     assert.ok(!h.nodes().some(node => node.type === 'report'));
     assert.doesNotMatch(h.text(), /模型分析中/);
   } finally { h.close(); }
@@ -189,4 +189,32 @@ test('a late unknown-task reread cannot adopt its result after the account compo
   h.close(); resolve({ ...done, id: 'unknown-job' }); await request; await Promise.resolve();
   assert.equal(h.adopted.length, before, 'the old account must not adopt the late completed report');
   assert.equal(h.creates, 0); assert.ok(!h.nodes().some(node => node.type === 'report'));
+});
+
+test('refresh restores failed receipt without rendering it as a completed report and offers deliberate retry', async () => {
+  const failed = { ...done, id: 'failed-original', status: 'failed', result: null, error: 'provider_empty_response' };
+  const h = harness({ response: { ticker: 'AAPL', enabled: true, canGenerate: false, canRetry: true, quota: { ...quota, used: 1, remaining: 9 }, currentJob: failed, activeJob: null, latestJob: null } });
+  try {
+    h.render(); await h.settle();
+    assert.equal(h.adopted[0].id, 'failed-original');
+    assert.match(h.text(), /provider_empty_response/);
+    assert.equal(h.nodes().some(node => node.type === 'report'), false);
+    const retry = h.nodes().find(node => node.type === 'button' && node.props.children === '重试分析');
+    assert.equal(retry.props.disabled, false); retry.props.onClick(); h.render();
+    assert.match(h.text(), /确认重试将再使用今日 1 次额度/);
+    assert.equal(h.creates, 0);
+  } finally { h.close(); }
+});
+
+test('refresh restores unknown outcome and prevents a second paid submission', async () => {
+  const failed = { ...done, id: 'unknown-original', status: 'failed', result: null, error: 'submission_outcome_unknown' };
+  const h = harness({ response: { ticker: 'AAPL', enabled: true, canGenerate: false, canRetry: false, quota: { ...quota, used: 1, remaining: 9 }, currentJob: failed, activeJob: null, latestJob: null } });
+  try {
+    h.render(); await h.settle();
+    assert.equal(h.adopted[0].id, 'unknown-original');
+    assert.match(h.text(), /submission_outcome_unknown/);
+    assert.ok(h.nodes().some(node => node.type === 'button' && node.props.children === '继续查询原任务'));
+    assert.equal(h.nodes().some(node => node.type === 'button' && node.props.children === '生成分析'), false);
+    assert.equal(h.creates, 0);
+  } finally { h.close(); }
 });

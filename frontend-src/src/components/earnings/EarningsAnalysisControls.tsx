@@ -8,8 +8,7 @@ import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/hooks/useToast';
 import CollapsePresence from '@/components/shared/CollapsePresence';
 import Icon from '@/components/icons';
-import IconSwap from '@/components/shared/IconSwap';
-import Spinner from '@/components/shared/Spinner';
+import ThinkingLabel from '@/components/shared/ThinkingLabel';
 import SoftBadge from '@/components/shared/SoftBadge';
 import { cn } from '@/lib/utils';
 import { t } from '../../i18n/core.ts';
@@ -275,14 +274,13 @@ export default function EarningsAnalysisControls({
                 disabled={!taskReady || running}
                 title={!taskReady ? t('财报分析服务暂不可用') : t('分析未来 5 天内重点公司尚未安排分析的财报')}
                 aria-busy={running}
-                className="btn-ai"
+                className={running ? "touch-target text-caption text-ai-600" : "btn-ai"}
               >
-                <IconSwap state={running ? 'b' : 'a'} a={<AnalysisIcon size={14} />} b={<Spinner size={12} tone="muted" />} />
-                <TextSwap swapKey={running ? 'busy' : 'idle'}>{running ? t('正在检查财报…') : t('分析新财报')}</TextSwap>
+                {running ? <ThinkingLabel>{t('正在检查财报…')}</ThinkingLabel> : <><AnalysisIcon size={14} /><TextSwap swapKey="idle">{t('分析新财报')}</TextSwap></>}
               </button>
             </div>
 
-            <p className="mt-2 tnum text-micro text-ink-400">{statusText}</p>
+            <p className="mt-2 tnum text-micro text-ink-400">{running || loading ? <ThinkingLabel live={running}>{statusText}</ThinkingLabel> : statusText}</p>
             {(lastRun || lastRunNote) && (
               <p className="mt-2 border-t border-line pt-2 text-micro text-ink-500" role="status" aria-live="polite">
                 <span className="mr-2 text-ink-400">{t('最近检查')}</span>

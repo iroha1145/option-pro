@@ -27,7 +27,7 @@ import {
 import { catalystsContract } from './api';
 import type { CatalystNewsItem, NewsAnalysisJob, TrustedStockImpact } from './api';
 import { newsAnalysisFailureText } from './analysisErrorText';
-import { AnalysisStatusChip, ClassificationChip, ConfidenceLabel, ImpactValue, Led, StaleChip, TickerChip } from './bits';
+import { AnalysisStatusChip, ClassificationChip, ConfidenceLabel, ImpactValue, StaleChip, TickerChip } from './bits';
 import ConfirmDialog from './ConfirmDialog';
 import { t as __t } from '../../i18n/core.ts';
 
@@ -75,7 +75,6 @@ function JobStepper({ job }: { job: NewsAnalysisJob }) {
   return (
     <div className="rounded-sm border border-line bg-card px-3 py-2.5">
       <div className="flex min-w-0 items-center gap-2">
-        <Led tone="brand" pulse={job.status === 'in_progress'} />
         <p className="truncate text-body-s text-ink-700">
           <ThinkingLabel live={!job.cancelRequested && job.status === 'in_progress'}>{label}</ThinkingLabel>
         </p>
@@ -722,7 +721,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
               {jobMissing
                 ? <SoftBadge tone="warn">{__t('任务记录缺失')}</SoftBadge>
                 : running && job.cancelRequested
-                  ? <SoftBadge tone="warn">{__t('取消中')}</SoftBadge>
+                  ? <ThinkingLabel live={false}>{__t('取消中')}</ThinkingLabel>
                   : showCancelled
                     ? <SoftBadge>{__t('已取消')}</SoftBadge>
                     : chipStatus && <AnalysisStatusChip status={chipStatus} />}

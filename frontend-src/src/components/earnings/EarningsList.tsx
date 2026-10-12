@@ -1,3 +1,4 @@
+import ThinkingLabel from '@/components/shared/ThinkingLabel';
 import AnalysisIcon from '@/components/shared/AnalysisIcon';
 /**
  * B2 即将公布表（earnings.md）· 按日期分组
@@ -198,11 +199,10 @@ function ImpactAction({ row, onSelect }: { row: EarningsRow; onSelect: () => voi
         onSelect();
       }}
       title={title}
-      className={cn('control-button ai-action shrink-0', (locked || finalizing || ready === true) && 'is-ready')}
+      className={finalizing ? 'touch-target shrink-0 text-caption text-ai-600' : cn('control-button ai-action shrink-0', (locked || ready === true) && 'is-ready')}
       aria-label={`${row.ticker} ${title}`}
     >
-      <AnalysisIcon size={14} />
-      {label}
+      {finalizing ? <ThinkingLabel>{label}</ThinkingLabel> : <><AnalysisIcon size={14} />{label}</>}
     </button>
   );
 }

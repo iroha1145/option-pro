@@ -3217,7 +3217,7 @@ async def _load_stock_chart(
     if range_key == "1d":
         bars = payload.get("bars") if isinstance(payload, dict) else None
         if not isinstance(bars, list) or not bars:
-            raise RuntimeError("Daily stock chart provider returned no bars")
+            raise _StockChartProviderUnavailable("Daily stock chart provider returned no bars")
     if range_key in {"5m", "15m", "1h"} and isinstance(payload, dict):
         bars = payload.get("bars") if isinstance(payload.get("bars"), list) else []
         from app.services.technical.chart_analysis import assemble_intraday_analysis, mark_intraday_closed
@@ -3242,6 +3242,10 @@ async def _load_stock_chart(
 # 叠加线必须落在用户正看着的那套蜡烛上，换一份数据源就会画错位。
 _TECHNICAL_TTL = 600
 _TECHNICAL_MAX_AGE = 24 * 60 * 60
+
+
+class _StockChartProviderUnavailable(RuntimeError):
+    """Only the final provider fetch failed; chart/structure bugs stay distinct."""
 
 
 async def _guest_daily_chart_snapshot(symbol: str) -> dict[str, Any] | None:
@@ -3314,13 +3318,23 @@ async def _load_stock_technical(symbol: str, owner: bool) -> dict[str, Any]:
     from app.services.technical.structure import compute_technical_structure
 
     await _hydrate_stock_pull_resource(symbol, "daily_chart", f"chart:{symbol}:1d:raw")
-    chart = await _stale_while_revalidate_endpoint(
-        f"chart:{symbol}:1d:raw",
-        _CHART_TTL.get("1d", 600),
-        _CHART_MAX_AGE.get("1d", 24 * 60 * 60),
-        lambda: _load_stock_chart(symbol, "1d", "raw"),
-        allow_refresh=owner,
-    )
+    try:
+        chart = await _stale_while_revalidate_endpoint(
+            f"chart:{symbol}:1d:raw",
+            _CHART_TTL.get("1d", 600),
+            _CHART_MAX_AGE.get("1d", 24 * 60 * 60),
+            lambda: _load_stock_chart(symbol, "1d", "raw"),
+            allow_refresh=owner,
+        )
+    except _StockChartProviderUnavailable as exc:
+        record_fallback_failure("stocks_technical_unavailable", exc, symbol=symbol)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "stock_technical_provider_unavailable",
+                "message": "Stock technical data is currently unavailable",
+            },
+        ) from None
     bars = chart.get("bars") if isinstance(chart, dict) else None
     spy_closes = await _spy_closes_by_date(owner)
     # 结构计算是纯 CPU（≈500 根日线几毫秒），但仍不占事件循环。
@@ -3583,13 +3597,20 @@ async def _stock_chart_impl(ticker: str, range: str, adjustment: str = "raw"):
             record_fallback_failure("stocks_chart_massive", exc, symbol=symbol)
             hist = None
         if hist is None or hist.empty:
-            tk = yf.Ticker(massive_provider.to_yahoo_symbol(symbol))
-            hist = tk.history(
-                period=yf_period,
-                interval=interval,
-                prepost=prepost,
-                auto_adjust=auto_adjust,
-            )
+            yahoo_symbol = massive_provider.to_yahoo_symbol(symbol)
+            try:
+                tk = yf.Ticker(yahoo_symbol)
+                hist = tk.history(
+                    period=yf_period,
+                    interval=interval,
+                    prepost=prepost,
+                    auto_adjust=auto_adjust,
+                )
+            except Exception as exc:
+                record_fallback_failure("stocks_chart_yahoo", exc, symbol=symbol)
+                # Keep the provider boundary narrow: malformed frames and
+                # indicator/structure calculation errors still propagate.
+                raise _StockChartProviderUnavailable("Stock chart provider unavailable") from None
         if hist.empty:
             return {
                 **response_metadata(

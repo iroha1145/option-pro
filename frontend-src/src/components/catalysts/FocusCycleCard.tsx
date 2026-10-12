@@ -1,3 +1,4 @@
+import ThinkingLabel from '@/components/shared/ThinkingLabel';
 import CollapsibleAnalysisSources from '@/components/shared/CollapsibleAnalysisSources';
 import AnalysisIcon from '@/components/shared/AnalysisIcon';
 import SoftBadge from '@/components/shared/SoftBadge';
@@ -13,7 +14,7 @@ import { AI_JOB_POLL_FAILURE_WAITS_MS, AI_JOB_POLL_WAITS_MS, boundedReadRetryDel
 import { catalystsContract } from './api';
 import type { FocusCycleJob, MarketFocusCycle, NewsClassification } from './api';
 import { focusCycleOutcome } from './analysisErrorText';
-import { ImpactValue, Led } from './bits';
+import { ImpactValue } from './bits';
 import ConfirmDialog from './ConfirmDialog';
 import { FocusAssessmentNote, FocusEventList, FocusLead } from './FocusDigest';
 import { buildFocusView } from './focusText';
@@ -145,12 +146,9 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
           {cycle.dominantEvent}
         </h3>
         {cycle.isHistorical && <SoftBadge>{t('历史分析')}</SoftBadge>}
-        {statusCn && (
-          <SoftBadge tone="warn">
-            <Led tone="warn" pulse={cycle.status === 'in_progress' || cycle.status === 'cancel_requested'} className="size-1.5" />
-            {statusCn}
-          </SoftBadge>
-        )}
+        {statusCn && (ACTIVE_CYCLE_STATUSES.has(cycle.status ?? '') || cycle.status === 'preparing'
+          ? <ThinkingLabel live={cycle.status === 'in_progress'}>{statusCn}</ThinkingLabel>
+          : <SoftBadge tone="warn">{statusCn}</SoftBadge>)}
       </div>
       {failure && <p className="mt-2 text-caption leading-5 text-ink-500">{failure.reason}</p>}
       <p className="mt-2 text-micro leading-5 text-ink-400 tnum">
@@ -397,6 +395,9 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
   }, [abandonPoll, later, latestQ, onDataRefreshed, stopPoll, toast]);
 
   const busy = Boolean(running) || latestActive;
+  const activeStatus = running ? job.status : latestQ.data?.status;
+  const busyLabel = ['pending', 'queued'].includes(activeStatus ?? '') ? t('排队中') : t('热点分析中');
+  const busyText = running && job.progress !== null ? `${busyLabel} ${job.progress}%` : busyLabel;
   const outcomeUnknown = job?.errorCode === 'submission_outcome_unknown'
     || latestQ.data?.latestAttempt?.errorCode === 'submission_outcome_unknown'
     || latestQ.data?.errorCode === 'submission_outcome_unknown';
@@ -428,13 +429,12 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
             onClick={() => setConfirmOpen(true)}
             disabled={busy || outcomeUnknown}
             aria-busy={busy}
-            className="btn-primary"
+            className={busy ? "touch-target text-caption text-ai-600" : "btn-primary"}
           >
             {busy ? (
-              <>
-                <Led tone="ai" pulse className="size-1.5 bg-white" />
-                {t('热点分析中')}{running && job.progress !== null ? ` ${job.progress}%` : ''}
-              </>
+              <ThinkingLabel live={activeStatus === 'in_progress'}>
+                {busyText}
+              </ThinkingLabel>
             ) : (
               <>
                 <AnalysisIcon size={14} />
