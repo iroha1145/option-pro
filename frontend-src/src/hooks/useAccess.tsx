@@ -7,7 +7,7 @@ import { identityRetryDelayMs } from '@/lib/identityRetry';
 import { dropSharedReads } from '@/api/sharedRead';
 import { setQueryPrincipal } from '@/api/queryRegistry';
 import { resetMarketReadState } from '@/api/marketRead';
-import { clearCatalystReadCache } from '@/components/catalysts/api';
+import { notifyCatalystReadsInvalidated } from '@/components/catalysts/resourceSignals';
 import {
   bindPreferenceWritePrincipal,
   invalidatePreferenceWriteQueue,
@@ -121,7 +121,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
         // 上一个主体的响应不得复用给下一个。
         dropSharedReads();
         resetMarketReadState();
-        clearCatalystReadCache({ userInitiated: true, principalChanged: true });
+        notifyCatalystReadsInvalidated({ userInitiated: true, principalChanged: true });
         invalidatePreferenceWriteQueue();
       }
       identityRef.current = identity;
@@ -189,7 +189,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     // 上一个身份那份。三层读缓存一起清。
     dropSharedReads();
     resetMarketReadState();
-    clearCatalystReadCache({ userInitiated: true });
+    notifyCatalystReadsInvalidated({ userInitiated: true });
     return readInto(generationRef.current);
   }, [readInto]);
 
@@ -220,7 +220,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       setQueryPrincipal(null);
       dropSharedReads();
       resetMarketReadState();
-      clearCatalystReadCache({ userInitiated: true, principalChanged: true });
+      notifyCatalystReadsInvalidated({ userInitiated: true, principalChanged: true });
       invalidatePreferenceWriteQueue();
       setIdentityUnavailable(true);
       setStatus((current) => ({
@@ -265,7 +265,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       dropSharedReads();
       invalidatePreferenceWriteQueue();
       resetMarketReadState();
-      clearCatalystReadCache({ userInitiated: true, principalChanged: true });
+      notifyCatalystReadsInvalidated({ userInitiated: true, principalChanged: true });
       let written = false;
       try {
         await write();

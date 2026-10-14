@@ -93,10 +93,10 @@ class TTLCache:
     """
 
     # Purge expired entries (and their locks) once the store grows past this.
-    _PURGE_THRESHOLD = 256
-    _MAX_ENTRIES = 512
-    _MAX_TOTAL_BYTES = 64 * 1024 * 1024
-    _MAX_ITEM_BYTES = 16 * 1024 * 1024
+    _PURGE_THRESHOLD = 1024
+    _MAX_ENTRIES = 4096
+    _MAX_TOTAL_BYTES = 512 * 1024 * 1024
+    _MAX_ITEM_BYTES = 32 * 1024 * 1024
 
     def __init__(self) -> None:
         self._store: dict[str, tuple[float, Any]] = {}

@@ -22,6 +22,7 @@ from app.json_validation import (
 )
 from app.data_paths import get_data_paths
 from app.failure_diagnostics import record_fallback_failure
+from app.file_identity import path_has_symlink_boundary as _path_has_symlink_boundary
 from app.services.snapshot_read_cache import FingerprintedFileCache
 
 
@@ -1446,15 +1447,6 @@ async def read_owner_public_home_entry_async(
         path=path,
         now=now,
     )
-
-
-def _path_has_symlink_boundary(path: Path) -> bool:
-    """Reject an attacker-controlled target or immediate data directory."""
-
-    try:
-        return path.is_symlink() or path.parent.is_symlink()
-    except OSError:
-        return True
 
 
 def write_public_home_snapshot(

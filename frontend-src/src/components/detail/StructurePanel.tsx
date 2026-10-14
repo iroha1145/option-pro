@@ -85,7 +85,6 @@ export default function StructurePanel({ technical }: { technical: TechnicalStru
   const vpmMeasured = vpm.status === 'active';
   const springWhen = barsAgoText(pa.spring_bars_ago);
   const upthrustWhen = barsAgoText(pa.upthrust_bars_ago);
-  const provisionalNote = technical.last_bar && technical.last_bar.closed === false;
   return (
     <div className="mt-3 space-y-3">
       {/* 高低点结构 */}
@@ -227,7 +226,6 @@ export default function StructurePanel({ technical }: { technical: TechnicalStru
 
       <p className="text-micro text-ink-400">
         {technical.data_through && t('计算截至 {date} 收盘', { date: technical.data_through })}
-        {provisionalNote && <span> · {t('末根未收盘，不计入指标')}</span>}
         {technical.series_break_at && <span> · {t('检测到 {date} 处序列断裂，仅分析其后数据', { date: technical.series_break_at })}</span>}
       </p>
     </div>

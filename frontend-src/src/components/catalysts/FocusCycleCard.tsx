@@ -136,8 +136,8 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
         <StatusNotice className="mb-4">
           <p>{attemptNotice(cycle.latestAttempt.status)}</p>
           <p className="mt-1 text-micro text-ink-500">{attempt.reason}</p>
-          <p className="mt-1 break-all text-micro text-ink-400 tnum">
-            {cycle.latestAttempt.cycleId} · {fmtCycleDate(cycle.latestAttempt.startedAt, true)}
+          <p className="mt-1 text-micro text-ink-400 tnum">
+            {fmtCycleDate(cycle.latestAttempt.startedAt, true)}
           </p>
         </StatusNotice>
       )}
@@ -230,8 +230,8 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
           ))}
         </ul>
       )}
-      <p className="mt-4 break-all text-micro leading-5 text-ink-400 tnum">
-        {cycle.cycleId} · {cycle.trigger === 'manual' ? t('手动触发') : t('定时生成')}{cycle.model.trim() ? ` · ${aiModelLabel(cycle.model, cycle.reasoning)}` : ''}
+      <p className="mt-4 text-micro leading-5 text-ink-400 tnum">
+        {cycle.trigger === 'manual' ? t('手动触发') : t('定时生成')}{cycle.model.trim() ? ` · ${aiModelLabel(cycle.model, cycle.reasoning)}` : ''}
       </p>
       <CollapsibleAnalysisSources sources={cycle.evidenceSources} />
     </div>
@@ -417,7 +417,7 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
       aria-label={t("热点追踪")}
       className="card-surface p-4 sm:p-5 lg:p-6"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
+      <div className="flex min-h-11 flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
         <div className="flex items-center gap-2.5">
           <span className="flex size-8 items-center justify-center rounded-md bg-ai-50 text-ai-600" aria-hidden="true">
             <AnalysisIcon size={17} />
@@ -529,7 +529,7 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
       <ConfirmDialog
         open={confirmOpen}
         title={t("生成新一轮热点分析？")}
-        description={t("根据当前热点生成新的市场分析，将消耗模型用量并计入每日额度；已有分析也会重新计算。")}
+        description={t("根据当前热点重新生成市场分析（计入每日额度）。")}
         confirmLabel={t("生成分析")}
         onConfirm={() => void startJob()}
         onCancel={() => setConfirmOpen(false)}

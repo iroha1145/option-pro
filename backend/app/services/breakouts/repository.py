@@ -734,6 +734,9 @@ class BreakoutRepository:
         connection.execute(f"PRAGMA busy_timeout={self.busy_timeout_ms}")
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute("PRAGMA synchronous=FULL")
+        connection.execute("PRAGMA temp_store=MEMORY")
+        connection.execute("PRAGMA cache_size=-65536")
+        connection.execute("PRAGMA mmap_size=268435456")
         return connection
 
     def _read_connection(self) -> sqlite3.Connection:
@@ -749,6 +752,9 @@ class BreakoutRepository:
         connection.row_factory = sqlite3.Row
         connection.execute(f"PRAGMA busy_timeout={self.busy_timeout_ms}")
         connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute("PRAGMA temp_store=MEMORY")
+        connection.execute("PRAGMA cache_size=-65536")
+        connection.execute("PRAGMA mmap_size=268435456")
         connection.execute("PRAGMA query_only=ON")
         connection.create_function("radar_is_leveraged_etf", 2, is_leveraged_etf, deterministic=True)
         return connection

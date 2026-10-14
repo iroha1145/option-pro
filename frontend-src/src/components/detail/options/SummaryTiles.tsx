@@ -23,7 +23,6 @@ export default function SummaryTiles({ chain }: { chain: OptionChain }) {
     <div className="col-span-2 border-t border-line bg-paper-2/50 px-4 py-4 md:col-span-1 md:border-l md:border-t-0">
       <dt className="text-caption text-ink-500">{t('需关注合约')}</dt>
       <dd className="metric-value mt-1.5 text-data-l text-ink-900">{alerts}<span className="ml-1.5 text-caption font-normal tracking-normal text-ink-500">{t('份')}</span></dd>
-      <p className="mt-1 text-micro text-ink-500">{t('当前到期日')}</p>
     </div>
   </dl>;
 }

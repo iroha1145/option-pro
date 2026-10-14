@@ -52,7 +52,7 @@ export default function Market() {
   const bias: TrendBias | null = useMemo(() => {
     const classify = (v: number): TrendBias['label'] => (v >= 60 ? '偏多' : v <= 40 ? '偏空' : '中性');
     if (mean !== null) {
-      return { label: classify(mean), basis: t('推导依据：六项均分 {mean}（≥60 偏多 · ≤40 偏空）', { mean: mean.toFixed(1) }) };
+      return { label: classify(mean), basis: t('六项均分 {mean}', { mean: mean.toFixed(1) }) };
     }
     return null;
   }, [mean]);

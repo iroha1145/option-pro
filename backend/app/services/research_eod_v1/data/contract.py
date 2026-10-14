@@ -2,29 +2,9 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime
-from pathlib import Path
-from typing import Any, Sequence
-
-UNSUPPORTED = "UNSUPPORTED"
-
-
-@dataclass(frozen=True)
-class SecurityIdentity:
-    security_id: str
-    provider_symbol: str
-    share_class: str | None
-    security_type: str
-    primary_mic: str | None
-    listing_country: str
-    asset_track: str
-    listed_at: date | None = None
-    delisted_at: date | None = None
-    aliases: tuple[str, ...] = ()
-    identity_confidence: str = "unverified"
+from typing import Sequence
 
 
 @dataclass(frozen=True)
@@ -51,67 +31,6 @@ class ResearchBar:
     finalized_at: datetime | None = None
     vintage_status: str = "download_time_not_pit"
     partial: bool = False
-
-
-@dataclass(frozen=True)
-class CorporateAction:
-    security_id: str
-    session_date: date
-    kind: str
-    value: float | None
-    economic_known_at: datetime | None = None
-    known_at: datetime | None = None
-    effective_at: date | None = None
-    pay_date: date | None = None
-    settlement_at: date | None = None
-    raw_value: str | None = None
-    contraticker: str | None = None
-    contraname: str | None = None
-    economic_status: str = "ok"
-    reason: str | None = None
-
-
-@dataclass(frozen=True)
-class ProviderCapabilities:
-    provider: str
-    dataset_id: str
-    dataset_version: str
-    probe_status: str
-    daily_bars: str
-    corporate_actions: str
-    classification_history: str
-    security_master: str
-    delisted_coverage: str
-    volume_session_scope: str
-    raw_price_verified: bool
-    notes: tuple[str, ...] = ()
-    capability_level: str = "DOCUMENTED_ONLY"
-    account_scope: str | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass
-class DatasetMeta:
-    provider: str
-    dataset_id: str
-    dataset_version: str
-    retrieved_at: str
-    request_params_redacted: dict[str, Any] = field(default_factory=dict)
-    content_sha256: str = ""
-
-
-def hash_payload(payload: Any) -> str:
-    blob = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
-    return hashlib.sha256(blob).hexdigest()
-
-
-def hash_file_bytes(paths: Sequence[Path]) -> str:
-    digest = hashlib.sha256()
-    for path in sorted(paths, key=lambda item: str(item)):
-        digest.update(Path(path).read_bytes())
-    return digest.hexdigest()
 
 
 def validate_research_bars(bars: Sequence[ResearchBar]) -> None:

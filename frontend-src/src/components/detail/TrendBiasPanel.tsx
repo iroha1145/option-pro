@@ -209,11 +209,9 @@ export default function TrendBiasPanel({
           }`}
         </p>
       )}
-      <p className="mt-4 text-micro text-ink-400">
-        {t('分项根据该股信号计算')}
-        <InfoHint hint={SCORE_HINTS.trendBiasFactors} size={11} className="mx-0.5" />
-        {' · '}
-        {t('更新于 {time}', { time: fmtTimeHHMMSS(new Date(data.as_of)) })}
+      <p className="mt-4 flex items-center gap-1 text-micro text-ink-400">
+        <span>{t('更新于 {time}', { time: fmtTimeHHMMSS(new Date(data.as_of)) })}</span>
+        <InfoHint hint={SCORE_HINTS.trendBiasFactors} size={11} />
       </p>
     </div>
   );

@@ -248,8 +248,8 @@ def test_runtime_services_keep_the_container_security_baseline() -> None:
         assert service["read_only"] is True
         assert service["security_opt"] == ["no-new-privileges:true"]
         assert service["cap_drop"] == ["ALL"]
-        assert service["pids_limit"] == 512
-        assert "/tmp:rw,noexec,nosuid,size=134217728,mode=1777" in service["tmpfs"]
+        assert service["pids_limit"] == 4096
+        assert "/tmp:rw,noexec,nosuid,size=1073741824,mode=1777" in service["tmpfs"]
 
 
 @pytest.mark.parametrize(

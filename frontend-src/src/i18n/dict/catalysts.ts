@@ -6,10 +6,6 @@
 import type { Dict } from './types';
 
 export const CATALYSTS: Dict = {
-  '雷达默认排序只在页面未指定排序、或选了「跟随默认」时生效。': [
-    'The radar default sort applies only when the page does not specify a sort or “Follow default” is selected.',
-    'レーダーのデフォルトの並び順は、ページで並び順を指定していないか、「デフォルトに従う」を選んだときにのみ適用されます。',
-  ],
   /* ---------------- AnalysisProgressCard.tsx ---------------- */
   '暂无新闻分析任务': ['No news analysis tasks', 'ニュース分析タスクなし'],
   '最近一批任务已结束': ['Latest batch finished', '直近バッチ終了'],
@@ -26,7 +22,6 @@ export const CATALYSTS: Dict = {
   '当前队列': ['Queue', '現在のキュー'],
   '条 · 等待': ['· waiting', '件 · 待機'],
   '· 进行中': ['· in progress', '· 進行中'],
-  '新闻编号': ['News ID', 'ニュース番号'],
   '另有': ['Another', '他に'],
   '条因取消、信息不足或预算限制结束': [
     'ended due to cancellation, insufficient info, or budget limits',
@@ -103,7 +98,7 @@ export const CATALYSTS: Dict = {
     'しばらくしてからページを再読み込みすると結果を確認できます',
   ],
   '提交失败': ['Submission failed', '送信に失敗しました'],
-  '根据当前热点生成新的市场分析，将消耗模型用量并计入每日额度；已有分析也会重新计算。': ['Generate a new market analysis from current hotspots. Counts toward today\'s AI quota, even if an analysis already exists.', '現在のホットテーマから市場分析を新たに作成します。既存の分析があっても再計算し、モデルの利用量と1日の利用枠を消費します。'],
+  '根据当前热点重新生成市场分析（计入每日额度）。': ['Regenerate market analysis from current hotspots (counts toward daily quota).', '現在の注目テーマから市場分析を再生成します（1日の利用枠を使用）。'],
 
   /* ---------------- HotspotsStrip.tsx ---------------- */
   '查看代表新闻': ['View representative news', '代表ニュースを見る'],
@@ -120,9 +115,7 @@ export const CATALYSTS: Dict = {
   '已有任务正在进行': ['A task is already in progress', 'すでに処理が進行中です'],
   '运行设置已保存': ['Runtime settings saved', '実行設定を保存しました'],
   '已重新载入最新版本': ['Reloaded the latest version', '最新バージョンを再読み込みしました'],
-  '更新所选数据，不消耗分析额度': ['Update selected data without using analysis quota', '選択したデータを更新します。分析の利用枠は消費しません'],
   '后台任务': ['Background tasks', 'バックグラウンドタスク'],
-  '任务在后台执行，30 秒内重复点击不会新建任务': ['Runs in the background. Clicking again within 30 seconds does not start another.', '処理はバックグラウンドで実行します。30秒以内に再度押しても、新しい処理は追加されません。'],
   '后台状态不可用 ·': ['Background status unavailable ·', 'バックグラウンド状態を取得できません ·'],
   '运行设置': ['Runtime settings', '実行設定'],
   '正在读取运行设置': ['Loading runtime settings', '実行設定を読み込み中'],
@@ -147,7 +140,6 @@ export const CATALYSTS: Dict = {
   '任务记录已不存在': ['Task record no longer exists', 'タスク記録は既に存在しません'],
   '任务记录缺失': ['Task record missing', 'タスク記録なし'],
   '暂时无法确认是否有待分析新闻，请稍后重试': ['Could not check whether any news is waiting for analysis. Try again shortly.', '分析待ちのニュースがあるか確認できません。しばらくしてから再試行してください。'],
-  '· 列表摘要仍然有效': ["· the list summary is still valid", '· 一覧の要約は引き続き有効です'],
   '未能获取正文': ['Article text unavailable', '記事本文を取得できませんでした'],
   'AI 生成于': ['AI-generated at', 'AI生成日時'],
   '资料不足': ['Insufficient information', '資料不足'],
@@ -157,8 +149,8 @@ export const CATALYSTS: Dict = {
   '依据代表新闻的分析，尚未经过多来源核验': ['Based on the lead article\'s analysis; not yet checked against other sources', '代表記事の分析に基づく内容で、複数ソースでの検証はまだです'],
   '信息不足 · 未调用模型': ['Insufficient info · model not called', '情報不足 · モデル未呼び出し'],
   '登录后可用模型分析': ['Sign in to use model analysis', 'ログインするとモデル分析を利用できます'],
-  '分析这条新闻的市场倾向与可能影响，将消耗模型用量，并计入每日额度和任务数量。': ['Analyze this news item\'s sentiment and likely impact. Counts toward the daily AI quota and task limit.', 'ニュースの市場への方向性と影響を分析します。モデルの利用量を消費し、1日の利用枠と処理件数に加算されます。'],
-  '重新生成这条新闻的分析，将再次消耗模型用量并计入每日额度。操作过于频繁或分析功能关闭时无法执行。': ['Regenerate the analysis for this news item. Counts toward the daily AI quota again. Unavailable if requests are too frequent or analysis is turned off.', '分析を作り直し、モデルの利用量と1日の利用枠を再度消費します。連続操作の制限中や、分析機能が無効な場合は実行できません。'],
+  '生成这条新闻的市场影响分析（计入每日额度）。': ['Generate market impact analysis for this news item (counts toward daily quota).', 'このニュースの市場影響分析を生成します（1日の利用枠を使用）。'],
+  '重新生成这条新闻的分析（计入每日额度）。': ['Regenerate the analysis for this news item (counts toward daily quota).', 'このニュースの分析を再生成します（1日の利用枠を使用）。'],
   '重新分析': ['Re-analyze', '再分析'],
   '取消后可重新发起分析。': ['You can start a new analysis after canceling.', 'キャンセル後も、あらためて分析を開始できます。'],
 

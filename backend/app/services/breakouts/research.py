@@ -13,15 +13,18 @@ import csv
 import hashlib
 import io
 import json
-import os
-import tempfile
 from collections import Counter
 from itertools import combinations_with_replacement
 from pathlib import Path
 from statistics import fmean, median
 from typing import Any, Iterable, Mapping, Sequence
 
-from app.json_validation import canonical_json_text
+from app.file_identity import replace_file_atomically
+from app.json_validation import (
+    canonical_json_text,
+    reject_duplicate_json_keys,
+    reject_non_finite_json,
+)
 
 from .repository import BreakoutRepository
 from .research_validation import (
@@ -114,19 +117,6 @@ def _decode_json(value: str | None) -> Any:
     return json.loads(value) if value is not None else None
 
 
-def _reject_json_constant(value: str) -> None:
-    raise ValueError(f"non-finite JSON number is not allowed: {value}")
-
-
-def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError(f"duplicate JSON key is not allowed: {key}")
-        result[key] = value
-    return result
-
-
 def load_forward_price_dataset(path: str | Path) -> dict[str, Any]:
     """Load a bounded JSON price file and attach its source-byte checksum."""
 
@@ -149,8 +139,12 @@ def load_forward_price_dataset(path: str | Path) -> dict[str, Any]:
     try:
         payload = json.loads(
             text,
-            object_pairs_hook=_unique_json_object,
-            parse_constant=_reject_json_constant,
+            object_pairs_hook=lambda pairs: reject_duplicate_json_keys(
+                pairs, error_message="duplicate JSON key is not allowed"
+            ),
+            parse_constant=lambda value: reject_non_finite_json(
+                value, error_message=f"non-finite JSON number is not allowed: {value}"
+            ),
         )
     except json.JSONDecodeError as exc:
         raise ValueError("price dataset must contain valid JSON") from exc
@@ -501,21 +495,7 @@ def _safe_output_path(database_path: str | Path, output_path: str | Path) -> Pat
 
 
 def _atomic_write(path: Path, content: str) -> None:
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
-    )
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as handle:
-            handle.write(content)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary_name, path)
-    except BaseException:
-        try:
-            os.unlink(temporary_name)
-        except FileNotFoundError:
-            pass
-        raise
+    replace_file_atomically(path, content.encode("utf-8"))
 
 
 def export_events(database_path: str | Path, output_path: str | Path) -> int:

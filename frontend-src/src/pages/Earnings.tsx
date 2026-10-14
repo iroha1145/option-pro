@@ -399,6 +399,12 @@ export default function Earnings() {
   /* 页头右侧：AI 状态点（更新日历在右栏的「财报设置」里，仅管理员可见） */
   const headerMeta = (
     <>
+      {q.loading && q.data && (
+        <span className="text-micro text-ink-500">{t('正在检查更新…')}</span>
+      )}
+      {!q.loading && q.error && q.data && (
+        <span className="text-micro text-warn-700">{t('刷新失败 · 显示已有数据')}</span>
+      )}
       <SoftBadge
         tone={aiAvailable ? 'ai' : aiEnabled ? 'warn' : 'neutral'}
         size="md"
@@ -438,12 +444,6 @@ export default function Earnings() {
           </>
         )}
       </SoftBadge>
-      {q.loading && q.data && (
-        <span className="text-micro text-ink-500">{t('正在检查更新…')}</span>
-      )}
-      {!q.loading && q.error && q.data && (
-        <span className="text-micro text-warn-700">{t('刷新失败 · 显示已有数据')}</span>
-      )}
     </>
   );
 

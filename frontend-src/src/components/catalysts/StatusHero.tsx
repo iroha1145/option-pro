@@ -96,8 +96,8 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
 
   return (
     <motion.section
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
       transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
       aria-label={t("来源状态")}
       className="card-surface news-status mt-5 sm:mt-6"

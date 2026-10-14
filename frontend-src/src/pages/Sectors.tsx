@@ -163,7 +163,7 @@ export default function Sectors() {
       )}
       {!strengthQ.error && strengthEnvelope.stale && (
         <StatusNotice className="mt-4">
-          {t('部分行业数据已过期，请结合各项数据日期查看。')}
+          {t('部分行业数据已过期。')}
         </StatusNotice>
       )}
 

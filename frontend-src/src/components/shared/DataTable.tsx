@@ -135,7 +135,6 @@ export default function DataTable<T>({
             return (
               <motion.tr
                 key={key}
-                layout={reducedMotion ? false : 'position'}
                 transition={{ duration: reducedMotion ? 0 : DUR_UI, ease: EASE_PAPER }}
                 /* Preserve native table semantics; columns supply real links or
                    buttons for keyboard users. Nested controls own their clicks. */

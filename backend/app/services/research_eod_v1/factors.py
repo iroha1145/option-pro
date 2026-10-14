@@ -830,26 +830,3 @@ def extract_raw(
         turnover_is_proxy=series.turnover_is_proxy,
         missing_reasons=tuple(missing),
     )
-
-
-def assemble_unranked_factors(raw: RawComponents, residual_for_d: bool) -> dict[str, float | None]:
-    """Local pieces that do not need a cross-section. Ranked pieces stay None."""
-
-    er_term = None if raw.er63 is None else clip100(50.0 + 50.0 * raw.er63)
-    t_local = raw.ma_state
-    s = raw.structure_score
-    b = raw.b_score
-    p = raw.p_score
-    return {
-        "T": None if raw.slope50 is None or er_term is None or t_local is None else None,
-        "T_er": er_term,
-        "T_ma": t_local,
-        "M": None,
-        "S": s,
-        "B": b,
-        "P": p,
-        "V": None,
-        "R": None,
-        "G": None,
-        "residual_raw": raw.residual.raw if residual_for_d else None,
-    }

@@ -35,7 +35,6 @@ export const EARNINGS: Dict = {
   '分析设置': ["Analysis settings", "分析設定"],
   '正在更新日历…': ["Updating the calendar…", "カレンダーを更新中…"],
   '未来 5 天': ["Next 5 days", "今後5日間"],
-  "为未来 5 天内重点公司的财报安排分析，同一份财报不会重复安排。": ["Schedules analysis for key-company earnings in the next 5 days. Reports already scheduled are skipped.", "今後5日以内の重点企業の決算を分析対象に追加します。同じ決算は重複して追加しません。"],
   '每日自动分析': ["Daily auto-analysis", "毎日自動分析"],
   "财报分析服务暂不可用": ["Earnings analysis is temporarily unavailable", "決算分析は一時的に利用できません"],
   "分析未来 5 天内重点公司尚未安排分析的财报": ["Analyze key-company earnings in the next 5 days that are not yet scheduled", "今後5日以内の重点企業の決算のうち、未手配のものを分析します"],
@@ -115,12 +114,7 @@ export const EARNINGS: Dict = {
   'EPS 预期与实际对照图': ["EPS estimate vs. actual chart", "EPS予想・実績比較チャート"],
   'EPS 图表加载中': ['Loading EPS chart', 'EPSチャートを読み込み中'],
   'EPS 图表加载失败': ['Failed to load EPS chart', 'EPSチャートの読み込みに失敗しました'],
-  '列表与分析仍可查看。可单独重试图表。': [
-    'The list and analysis are still available. You can retry the chart on its own.',
-    'リストと分析は引き続き表示できます。チャートだけ再試行できます。',
-  ],
   '重试图表': ['Retry chart', 'チャートを再試行'],
-  "这些公司尚未公布业绩。": ["These companies have not reported results yet.", "これらの企業はまだ決算を発表していません。"],
 
   // ---------------- ImpactCard.tsx ----------------
   '排队中': ["Queued", "キュー待ち"],
@@ -253,7 +247,6 @@ export const EARNINGS: Dict = {
   '查看全部公司': ['View all companies', '全企業を見る'],
   "按期权报价估算，部分合约未提供报价时间。": ["Estimated from option quotes; quote times are unavailable for some contracts.", "オプション気配値から推定。一部の契約では気配時刻が未提供です。"],
   "当前显示 {n} 家公司的财报，部分公司数据缺失。": ["Showing earnings for {n} company. Some company data is missing.||Showing earnings for {n} companies. Some company data is missing.", "{n}社の決算を表示しています。一部企業のデータが不足しています。"],
-  "分析 {ticker} 的财报对相关公司的影响。": ["Analyze how {ticker} earnings may affect related companies.", "{ticker}の決算が関連企業に与える影響を分析します。"],
   "为 {ticker} 生成本次财报分析。": ["Generate an analysis of this earnings report for {ticker}.", "{ticker}の今回の決算を分析します。"],
   /* 审计修复 2026-09-25：轮询停表、读取失败、限流与取消文案 */
   '暂时读不到最新状态，正在自动重试': ['The latest status is temporarily unavailable. Retrying automatically…', '最新の状態を一時的に取得できません。自動で再試行しています…'],

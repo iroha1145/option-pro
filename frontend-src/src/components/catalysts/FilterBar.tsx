@@ -127,12 +127,12 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
               value={filters.ticker}
               onChange={(e) => set({ ticker: e.target.value.toUpperCase().replace(/[^A-Z0-9.^-]/g, '').slice(0, 12) })}
               placeholder={t("股票代码")}
-              className="h-8 w-28 rounded-md border border-line bg-card pl-7 pr-2 tnum text-caption text-ink-800 placeholder:text-ink-400 focus:border-brand-400 focus:outline-none"
+              className="h-9 w-28 rounded-md border border-line bg-card pl-7 pr-2 tnum text-caption text-ink-800 placeholder:text-ink-400 focus:border-brand-400 focus:outline-none [@media(pointer:coarse)]:min-h-11"
               aria-label={t("按股票代码筛选")}
             />
           </div>
           {filters.ticker && (
-            <button onClick={() => set({ ticker: '' })} className="rounded-sm p-1 text-ink-400 hover:text-ink-600" aria-label={t("取消股票代码筛选")}>
+            <button onClick={() => set({ ticker: '' })} className="touch-target inline-flex items-center justify-center rounded-sm p-1 text-ink-400 hover:text-ink-600" aria-label={t("取消股票代码筛选")}>
               <Icon name="x" size={12} />
             </button>
           )}
@@ -153,7 +153,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
         />
 
         {/* 清空条件与条数常显，不随展开区收起 */}
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex min-h-8 items-center gap-3 [@media(pointer:coarse)]:min-h-11">
           {activeCount > 0 && (
             <button
               onClick={() => onChange({ ...DEFAULT_FILTERS })}

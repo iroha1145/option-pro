@@ -266,9 +266,6 @@ export default function RowExpansion({ row, layout = 'table', dollarVolume, sign
                 {t('支撑')} {row.knownSupport ?? '—'} · {t('失效')} {row.plannedInvalidation ?? '—'}
               </p>
             )}
-            {!row.dollarLiquidityVerified && (
-              <p className="text-micro text-ink-400">{t('成交额口径未核实，不能当作已通过流动性门槛')}</p>
-            )}
           </div>
         )}
       </div>
@@ -303,7 +300,7 @@ export default function RowExpansion({ row, layout = 'table', dollarVolume, sign
               <span className="skeleton-shimmer h-5 w-14 rounded-xs" />
             </div>
           ) : signals.state === 'error' ? (
-            <p><SoftBadge tone="warn" className="whitespace-normal">{t('信号读取失败 · 收起后重新展开可重试')}</SoftBadge></p>
+            <p><SoftBadge tone="warn" className="whitespace-normal">{t('信号读取失败')}</SoftBadge></p>
           ) : signals.signals.length === 0 ? (
             <p className="text-caption text-ink-400">{t('暂无信号')}</p>
           ) : (
@@ -317,9 +314,6 @@ export default function RowExpansion({ row, layout = 'table', dollarVolume, sign
             {dollarVolume === null ? '—' : `$${fmtCompact(dollarVolume)}`}
           </span>
         </div>
-        {row.dollarVolumeProxyAvailable && (
-          <p className="mt-2 text-micro text-ink-400">{t('按原始收盘价乘日成交量估算；成交额与成交时段资格仍需核实。')}</p>
-        )}
       </div>
     </div>
   );

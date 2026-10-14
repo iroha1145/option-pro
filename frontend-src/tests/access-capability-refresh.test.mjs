@@ -67,7 +67,7 @@ function harness(t) {
     '@/api/client': { ApiError: Error, PRINCIPAL_INVALID_EVENT: 'invalid' },
     '@/lib/identityRetry': { identityRetryDelayMs: () => 1000 },
     '@/api/sharedRead': { dropSharedReads() {} }, '@/api/queryRegistry': { setQueryPrincipal() {} },
-    '@/api/marketRead': { resetMarketReadState() {} }, '@/components/catalysts/api': { clearCatalystReadCache() {} },
+    '@/api/marketRead': { resetMarketReadState() {} }, '@/components/catalysts/resourceSignals': { notifyCatalystReadsInvalidated() {} },
     '@/lib/viewPreferenceWrites': { bindPreferenceWritePrincipal() {}, invalidatePreferenceWriteQueue() {} },
   }, env);
   const read = runner.mount(() => AccessProvider({ children: null }));

@@ -214,7 +214,7 @@ function loadCatalystApi({ get, post, postCreate } = {}) {
     '../../api/aiBudget.ts': aiBudget,
     '../../api/evidenceSources.ts': evidenceSources,
     '../../i18n/core.ts': i18n,
-    './resourceSignals': { notifyCatalystReadsInvalidated: () => { calls.invalidations += 1; } },
+    './resourceSignals': { notifyCatalystReadsInvalidated: () => { calls.invalidations += 1; }, onCatalystReadsInvalidated: () => () => {} },
   });
   return { api, calls };
 }

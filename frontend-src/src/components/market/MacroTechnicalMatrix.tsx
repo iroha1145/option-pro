@@ -118,14 +118,11 @@ export default function MacroTechnicalMatrix({
             : technical === null
               ? t('走势评分暂不可用')
               : t('宏观数据暂不可用')}
-          {t(' · 不按中性计')}
         </p>
       )}
       {moduleText && (
         <p className="mt-2 text-micro text-ink-400">{t('结构性宏观 =')} {moduleText}</p>
       )}
-      {/* 两套分界线不一样，说出来，免得读者拿象限和顺风/逆风对不上。 */}
-      <p className="mt-1 text-micro text-ink-400">{t(MACRO_QUADRANT_NOTE)}</p>
     </div>
   );
 }

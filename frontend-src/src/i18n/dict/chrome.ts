@@ -43,7 +43,6 @@ export const CHROME: Dict = {
   '访客只读模式': ['Guest · read-only', 'ゲスト · 閲覧のみ'],
   "登录后可保存关注股票、手动更新数据": ["Sign in to save your watchlist and update data", "ログインするとウォッチリストの保存とデータの手動更新ができます"],
   "已退出管理员账号": ["Signed out of the admin account", "管理者アカウントからログアウトしました"],
-  '当前为访客只读模式': ['Now browsing as a read-only guest', '現在はゲストの閲覧専用モードです'],
 
   /* AI 状态胶囊 */
   '分析任务处理中': ['Analysis task in progress', '分析タスクを実行中'],

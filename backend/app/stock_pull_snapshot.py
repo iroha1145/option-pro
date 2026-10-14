@@ -21,6 +21,7 @@ from app.json_validation import (
 from app.data_paths import get_data_paths
 from app.file_identity import (
     path_file_identity as _path_file_identity,
+    path_has_symlink_boundary as _path_has_symlink_boundary,
     regular_file_identity as _regular_file_identity,
 )
 
@@ -76,15 +77,6 @@ def stock_pull_snapshot_path(path: Path | None = None) -> Path:
 
 def _snapshot_cache_key(path: Path) -> str:
     return os.path.abspath(os.fspath(path))
-
-
-def _path_has_symlink_boundary(path: Path) -> bool:
-    """Reject the target and its containing directory when either is a link."""
-
-    try:
-        return path.is_symlink() or path.parent.is_symlink()
-    except OSError:
-        return True
 
 
 def _cache_document(

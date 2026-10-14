@@ -154,11 +154,18 @@ def _prepare_existing_catalyst_jobs(path):
 
 @asynccontextmanager
 async def _lifespan(application: FastAPI):
+    from concurrent.futures import ThreadPoolExecutor
+    import anyio.to_thread
     from app.config import get_settings
     from app.services import massive
     from app.services.realtime_quotes import QuoteHub
     from app.services.catalysts.hotspot_reads import HotspotReadPool
     from app.personal_config import get_personal_config
+
+    anyio.to_thread.current_default_thread_limiter().total_tokens = 128
+    loop = asyncio.get_running_loop()
+    io_executor = ThreadPoolExecutor(max_workers=128, thread_name_prefix="optix-io")
+    loop.set_default_executor(io_executor)
 
     configuration = get_settings()
     application.state.quote_settings = configuration
@@ -202,6 +209,7 @@ async def _lifespan(application: FastAPI):
                         massive.close()
                     finally:
                         application.state.quote_hub = None
+                        io_executor.shutdown(wait=False)
 
 
 app = FastAPI(

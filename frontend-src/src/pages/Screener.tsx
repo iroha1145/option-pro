@@ -928,11 +928,6 @@ export default function Screener() {
                 {scanMeta?.historicalExample && !scanMeta.synthetic && (
                   <SoftBadge tone="warn" data-testid="screener-eod-historical">{__t('历史示例')}</SoftBadge>
                 )}
-                {scanMeta && (scanMeta.observationN != null || scanMeta.compositeN != null) && (
-                  <span className="text-micro text-ink-400 tnum" data-testid="screener-eod-counts">
-                    {__t('观察候选')} {scanMeta.observationN ?? 0} · {__t('合格候选')} {scanMeta.compositeN ?? 0}
-                  </span>
-                )}
                 {scanMeta && (
                   <span className="text-micro text-ink-400 tnum" data-testid="screener-market-coverage">
                     {scanMeta.universe === 'all_market' ? __t('全市场股票与基金') : __t('股票范围')} {scanMeta.universeCount}
@@ -1069,22 +1064,18 @@ export default function Screener() {
                     variant="error"
                     image="/empty-chart.svg"
                     title={
-                      isEodLimitedPreparing(scanError)
+                      isEodLimitedPreparing(scanError) || isStrengthSnapshotPreparing(scanError)
                         ? __t('排序数据准备中')
                         : isEodLimitedSnapshotProblem(scanError)
                           ? __t('选股数据暂不可用')
-                        : isStrengthSnapshotPreparing(scanError)
-                        ? __t('排序数据准备中')
-                        : scanError?.code === 503 ? __t('扫描数据不可用') : __t('扫描失败')
+                          : scanError?.code === 503 ? __t('扫描数据不可用') : __t('扫描失败')
                     }
                     description={
-                      isEodLimitedPreparing(scanError)
+                      isEodLimitedPreparing(scanError) || isStrengthSnapshotPreparing(scanError)
                         ? __t('选股数据正在后台生成，请稍候。')
                         : isEodLimitedSnapshotProblem(scanError)
                           ? __t('暂时没有可用的选股数据，请等待后台完成后重试。')
-                        : isStrengthSnapshotPreparing(scanError)
-                        ? __t('选股数据正在后台生成，请稍候。')
-                        : scanError?.code === 503 ? __t('稍后刷新再试') : scanError?.message
+                          : scanError?.code === 503 ? __t('稍后刷新再试') : scanError?.message
                     }
                     action={
                       <button

@@ -99,7 +99,7 @@ function HeatRow({
   const leader = sector.leaders[0] ?? null;
 
   return (
-    <motion.div layout="position" transition={{ duration: DUR_UI, ease: EASE_PAPER }}>
+    <motion.div layout="position" layoutDependency={sector.period} transition={{ duration: DUR_UI, ease: EASE_PAPER }}>
       <button
         type="button"
         onClick={onToggle}

@@ -40,7 +40,6 @@ export default class ChartLoadErrorBoundary extends Component<Props, State> {
         aria-label={t('EPS 图表加载失败')}
       >
         <p className="text-caption text-ink-600">{t('EPS 图表加载失败')}</p>
-        <p className="mt-1 text-micro text-ink-400">{t('列表与分析仍可查看。可单独重试图表。')}</p>
         <button
           type="button"
           onClick={this.retry}

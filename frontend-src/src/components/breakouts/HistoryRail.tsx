@@ -140,8 +140,6 @@ export default function HistoryRail({
           {events.length !== loadedCount && (
             <span className="tnum"> {t('· 筛选出')} {events.length} {t('条')}</span>
           )}
-          <span className="mx-1 text-ink-300" aria-hidden="true">·</span>
-          {t('点击记录查看事件详情')}
         </p>
       </div>
 

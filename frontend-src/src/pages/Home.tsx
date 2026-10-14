@@ -43,6 +43,7 @@ import StockDataCoverage from '@/components/shared/StockDataCoverage';
 import SessionLED from '@/components/shared/SessionLED';
 import SoftBadge from '@/components/shared/SoftBadge';
 import { strengthBarClass } from '@/lib/strengthColor';
+import { routeIntentHandlers } from '@/lib/prefetchRouteChunk';
 import ChangeBadge from '@/components/shared/ChangeBadge';
 import IndexCard, { IndexCardSkeleton } from '@/components/shared/IndexCard';
 import TickerLogo from '@/components/shared/TickerLogo';
@@ -116,6 +117,7 @@ function SectionCard({
         <h2 className="text-h3 text-ink-900">{title}</h2>
         <Link
           to={to}
+          {...routeIntentHandlers(to)}
           /* 文字链只有 16px 高：粗指针下用上下内边距补到 44px，负外边距抵消，版面不动 */
           className="link-learn shrink-0 text-caption font-medium text-brand-700 transition-colors duration-fast hover:text-brand-600 [@media(pointer:coarse)]:-my-3.5 [@media(pointer:coarse)]:py-3.5"
         >
@@ -509,6 +511,7 @@ export default function Home() {
             <h2 className="text-h3 text-ink-900">{t('CTA 趋势资金')}</h2>
             <Link
               to="/cta"
+              {...routeIntentHandlers('/cta')}
               className="link-learn shrink-0 text-caption font-medium text-brand-700 transition-colors duration-fast hover:text-brand-600 [@media(pointer:coarse)]:-my-3.5 [@media(pointer:coarse)]:py-3.5"
             >
               {t('查看全部')}

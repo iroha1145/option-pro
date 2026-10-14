@@ -143,12 +143,6 @@ function AiOptionInsight({
         )}
       </div>
 
-      {!job && !confirming && chain && evidence.length === 0 && (
-        <p className="mt-2.5 text-caption text-ink-500">
-          {t('当前到期日没有符合条件的异动，可切换到期日查看。')}
-        </p>
-      )}
-
       {!job && starting && (
         <p className="mt-2.5"><ThinkingLabel live={false}>{t('正在准备分析…')}</ThinkingLabel></p>
       )}

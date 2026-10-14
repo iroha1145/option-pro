@@ -24,8 +24,14 @@
     };
     prefetch("/api/access/status");
     var path = location.pathname;
+    if (path !== "/login" && path !== "/login/") {
+      prefetch("/api/market/status");
+      prefetch("/api/market/indices");
+    }
     if ((path === "/catalysts" || path === "/catalysts/") && !location.search) {
       prefetch("/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&page_mode=visible&limit=12");
+    } else if ((path === "/earnings" || path === "/earnings/") && !location.search) {
+      prefetch("/api/earnings/upcoming");
     }
     window.__OPTIX_PREFETCH__ = bag;
   } catch (e) { /* fetch 不可用时主包仍走原请求 */ }

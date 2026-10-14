@@ -180,6 +180,7 @@ export default function Breakouts() {
   useEffect(() => {
     setRadarSort(readAlgorithmPreferences(principal).radarSortAlgorithm);
     applyHistoryFirstPage(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [principal]);
   useEffect(() => {
     return () => {
@@ -238,6 +239,7 @@ export default function Breakouts() {
   useEffect(() => {
     // 首页重新加载后丢弃已续读的部分，避免与新首页重复。
     applyHistoryFirstPage(eventsQ.data?.nextCursor ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventsQ.data, radarSort]);
   const loadMoreHistory = useCallback(async () => {
     if (!historyCursor || historyLoadingMore) return;
@@ -676,11 +678,10 @@ export default function Breakouts() {
       {/* 手机上说明会折成两行，首帧就留出两行，快照到达后下面的信号区不被推下。
           跟随默认时快照未到，按试用排序的完整说明叠一份隐形样例留出行数（2026-10-09 生产默认是它）：
           英文、日文的说明在桌面上也会折行。 */}
-      <div className="mt-2 grid min-h-[2lh] text-caption text-ink-500 md:min-h-0">
+      <div className="mt-2 grid min-h-5 text-caption text-ink-500 md:min-h-0">
         {radarSort === 'follow_default' && !currentQ.data && (
           <div aria-hidden="true" className="invisible col-start-1 row-start-1 flex flex-wrap content-start items-center gap-x-2">
             <span>{__t('默认排序：{name}', { name: __t('日线量价优先（试用）') })}</span>
-            <span>{__t('满足固定日线量价条件的事件会在同一交易日组内优先。其余事件不删除。待收盘或数据不足时保持原顺序。')}</span>
           </div>
         )}
         <div className="col-start-1 row-start-1 flex flex-wrap content-start items-center gap-x-2">
@@ -690,9 +691,6 @@ export default function Breakouts() {
             <span data-testid="radar-effective-algorithm">
               {__t('默认排序：{name}', { name: !currentQ.data ? '…' : showT1 ? __t('日线量价优先（试用）') : __t('原雷达排序') })}
             </span>
-          )}
-          {showT1 && (
-            <span>{__t('满足固定日线量价条件的事件会在同一交易日组内优先。其余事件不删除。待收盘或数据不足时保持原顺序。')}</span>
           )}
           {showT1 && t1PendingCount > 0 && (
             <span className="text-warn-700">{__t('{n} 条待收盘确认', { n: t1PendingCount })}</span>

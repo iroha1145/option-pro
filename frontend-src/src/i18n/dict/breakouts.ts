@@ -50,7 +50,6 @@ export const BREAKOUTS: Dict = {
   '历史事件 ·': ['Event history ·', 'イベント履歴 ·'],
   '最新在前': ['Newest first', '新しい順'],
   '· 筛选出': ['· Filtered', '· 絞り込み'],
-  '点击记录查看事件详情': ['Click a row to open event details', '行をクリックして詳細を表示'],
   '历史事件数据暂不可用': ['Event data unavailable', 'イベントデータは現在利用できません'],
   '历史事件读取失败': ['Failed to load events', 'イベントの読み込みに失敗しました'],
   '没有符合条件的历史事件': ['No matching events', '一致する履歴イベントなし'],
@@ -215,10 +214,6 @@ export const BREAKOUTS: Dict = {
   '原雷达排序': ['Original radar sort', '従来のレーダー順'],
   '日线量价优先（试用）': ['Daily volume-price first (trial)', '日足の価格・出来高条件を優先（試用）'],
   '雷达排序算法': ['Radar sort algorithm', 'レーダー並び替えアルゴリズム'],
-  '满足固定日线量价条件的事件会在同一交易日组内优先。其余事件不删除。待收盘或数据不足时保持原顺序。': [
-    'Events that meet the fixed daily volume-price conditions move first inside the same session group. Other events stay visible. Incomplete or missing daily data keeps the original order.',
-    '固定の日足の価格・出来高条件を満たすイベントは、同じ取引日グループ内で先に並びます。他のイベントは削除しません。未確定やデータ不足のときは従来の順序を保ちます。',
-  ],
   '{n} 条待收盘确认': ['{n} waiting for the session close', '{n} 件は取引終了待ち'],
   '{n} 条日线数据不足': ['{n} missing daily data', '{n} 件は日足データ不足'],
   '日线量价优先': ['Daily volume-price first', '日足の価格・出来高を優先'],

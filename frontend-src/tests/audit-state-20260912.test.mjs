@@ -169,7 +169,7 @@ function accessHarness() {
     '@/api/modules/access': { accessApi }, '@/api/client': { ApiError, PRINCIPAL_INVALID_EVENT: 'invalid' },
     '@/lib/identityRetry': { identityRetryDelayMs: () => 1000 },
     '@/api/sharedRead': { dropSharedReads: h.q.dropQueryRegistry }, '@/api/queryRegistry': h.q,
-    '@/api/marketRead': { resetMarketReadState() {} }, '@/components/catalysts/api': { clearCatalystReadCache() {} },
+    '@/api/marketRead': { resetMarketReadState() {} }, '@/components/catalysts/resourceSignals': { notifyCatalystReadsInvalidated() {} },
     '@/lib/viewPreferenceWrites': { bindPreferenceWritePrincipal() {}, invalidatePreferenceWriteQueue() {} },
     '../i18n/core.ts': translate,
   }, h.env);

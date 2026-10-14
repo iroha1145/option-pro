@@ -73,7 +73,7 @@ export const WIRED: Dict = {
   '{ticker} 财报影响分析已生成': ['{ticker} earnings impact analysis generated', '{ticker} の決算影響分析を生成しました'],
   '约 {n}s 后重试': ['Retry in ~{n}s', '約{n}秒後に再試行'],
   "暂时无法为 {name} 生成分析，请稍后重试。": ["Unable to start the analysis for {name}. Try again later.", "{name} の分析を開始できません。しばらくしてから再試行してください。"],
-  ' · 财报日 {date}': [' · Earnings date {date}', ' · 決算発表日 {date}'],
+  '财报日 {date}': ['Earnings date {date}', '決算発表日 {date}'],
   '查看 {ticker}：{label}': ['View {ticker}: {label}', '{ticker} を見る：{label}'],
   '{md}，{n} 条财报': ['{md}, {n} earnings report||{md}, {n} earnings reports', '{md}、決算 {n}件'],
   '{ticker} {timing}财报，查看财报影响分析': ['{ticker} {timing} earnings, view impact analysis', '{ticker} {timing}決算、決算影響分析を見る'],
@@ -95,7 +95,7 @@ export const WIRED: Dict = {
   '日历已更新 · {n} 条': ['Calendar updated · {n} item||Calendar updated · {n} items', 'カレンダーを更新しました · {n}件'],
   '冷却中，{n}s 后可更新': ['Cooling down; update in {n}s', 'クールダウン中、{n}秒後に更新可能'],
   '已登录 {name}': ['Signed in as {name}', '{name} でログインしました'],
-  '推导依据：六项均分 {mean}（≥60 偏多 · ≤40 偏空）': ["Basis: six-item average {mean} (≥60 bullish · ≤40 bearish)", "根拠：6項目平均 {mean}（≥60 強気 · ≤40 弱気）"],
+  '六项均分 {mean}': ['6-item avg {mean}', '6項目平均 {mean}'],
   '没有找到 {path} 对应的页面。链接可能已失效或地址输入有误。': ['No page found for {path}. The link may be broken or the address mistyped.', '{path} に該当するページが見つかりません。リンクが無効か、アドレスが誤っている可能性があります。'],
   '价格、行业、分档与最低分筛选仅适用于已载入的 {returned} 只股票；已评分股票共 {screened} 只。': ['Price, sector, tier, and minimum-score filters apply only to the {returned} loaded stocks; {screened} stocks have been scored in total.', '価格・セクター・区分・最低スコアの条件は、読み込み済みの{returned}銘柄に適用されます。スコア算出済みの銘柄は合計{screened}件です。'],
   '移除条件 {label}': ['Remove filter {label}', '条件 {label} を削除'],
@@ -113,7 +113,6 @@ export const WIRED: Dict = {
   '评分≥{n}': ["Score ≥{n}", "スコア ≥{n}"],
   '统计截至 {time}': ['As of {time}', '{time} 時点の集計'],
   '移除关注 {ticker}': ['Remove {ticker} from watchlist', '{ticker} をウォッチリストから削除'],
-  '关注股票保存在账号 {username} 下': ['Watchlist saved under account {username}', 'ウォッチリストはアカウント {username} に保存されます'],
 
   // ── 期权异动证据（detail/optionAnalysis）────────────────────────────
   '成交量/持仓量 {ratio} 倍': ['Volume/OI {ratio}×', '出来高/建玉 {ratio}倍'],

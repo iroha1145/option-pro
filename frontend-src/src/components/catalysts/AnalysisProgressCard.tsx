@@ -103,8 +103,8 @@ function OwnerAnalysisProgressCard() {
 
   return (
     <motion.section
-      initial={reduceMotion ? false : { opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={reduceMotion ? false : { opacity: 0 }}
+      animate={{ opacity: 1 }}
       transition={reduceMotion ? { duration: 0 } : { duration: DUR_SECTION, ease: EASE_PAPER }}
       aria-label={t("分析进度")}
       aria-live="polite"
@@ -175,9 +175,6 @@ function OwnerAnalysisProgressCard() {
         <span className="tnum">
           {t('当前队列')} {progress.queueTotal} {t('条 · 等待')} {progress.queueWaiting} {t('· 进行中')} {progress.queueInProgress}
         </span>
-        {progress.currentNewsId !== null && (
-          <span className="tnum">{t('新闻编号')} {progress.currentNewsId}</span>
-        )}
         {otherTerminal > 0 && (
           <span>
             {t('另有')} {otherTerminal} {t('条因取消、信息不足或预算限制结束')}

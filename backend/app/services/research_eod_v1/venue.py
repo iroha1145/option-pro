@@ -63,12 +63,6 @@ def classify_venue(metadata: Mapping[str, Any] | None) -> VenueDecision:
     return VenueDecision(False, "MISSING_SECURITY_TYPE", None, "required_fields")
 
 
-def ticker_dot_is_not_a_venue_test(ticker: str) -> bool:
-    """Documented invariant: eligibility must ignore '.' in the symbol."""
-
-    return "." in str(ticker or "")
-
-
 # Current-theme membership only. These are 2026-09 static notes for U_current
 # audit, not point-in-time listings and not a permission to backfill history.
 CURRENT_UNIVERSE_VENUE_NOTES: dict[str, dict[str, str]] = {

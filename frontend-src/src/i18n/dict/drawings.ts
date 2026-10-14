@@ -83,10 +83,6 @@ export const DRAWINGS: Dict = {
   '颜色 青色': ['Color teal', '色 ティール'],
   '颜色 墨色': ['Color ink', '色 インク'],
   '面积图不支持副图与均线叠加': ['Area mode does not support indicator panes or moving averages', '面グラフでは副チャートと移動平均を重ねられません'],
-  '1小时图无法在没有 5 分钟数据时绘制开盘区间': [
-    '1h charts cannot draw the opening range without 5-minute data',
-    '1時間足は5分足データなしではオープニングレンジを描けません',
-  ],
   '上升支撑': ['Rising support', '上昇サポート'],
   '下降阻力': ['Falling resistance', '下降レジスタンス'],
   '上升通道': ['Rising channel', '上昇チャネル'],
