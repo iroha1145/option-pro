@@ -180,6 +180,7 @@ export default function Breakouts() {
   useEffect(() => {
     setRadarSort(readAlgorithmPreferences(principal).radarSortAlgorithm);
     applyHistoryFirstPage(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [principal]);
   useEffect(() => {
     return () => {
@@ -238,6 +239,7 @@ export default function Breakouts() {
   useEffect(() => {
     // 首页重新加载后丢弃已续读的部分，避免与新首页重复。
     applyHistoryFirstPage(eventsQ.data?.nextCursor ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventsQ.data, radarSort]);
   const loadMoreHistory = useCallback(async () => {
     if (!historyCursor || historyLoadingMore) return;

@@ -116,11 +116,11 @@ export default function MonthCalendar({
   return (
     <section className="card-surface overflow-hidden" aria-label={t("财报月历")}>
       {/* 头部：‹ › + Serif 月标题 + 今天 */}
-      <div className="flex h-12 items-center justify-between border-b border-line px-4">
+      <div className="flex h-12 items-center justify-between border-b border-line px-4 [@media(pointer:coarse)]:h-14">
         <button
           onClick={() => goMonth(-1)}
           disabled={cursor <= minMonth}
-          className="flex size-7 items-center justify-center rounded-pill border border-line bg-card text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:text-ink-500"
+          className="flex size-7 items-center justify-center rounded-pill border border-line bg-card text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:text-ink-500 [@media(pointer:coarse)]:size-11"
           aria-label={t("上个月")}
         >
           <Icon name="chevron-right" size={14} className="rotate-180" />
@@ -131,7 +131,7 @@ export default function MonthCalendar({
           </p>
           <button
             onClick={goToday}
-            className="rounded-pill border border-line bg-card px-2 py-1 text-caption text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
+            className="rounded-pill border border-line bg-card px-2 py-1 text-caption text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:px-3"
           >
             {t('今天')}
           </button>
@@ -139,7 +139,7 @@ export default function MonthCalendar({
         <button
           onClick={() => goMonth(1)}
           disabled={cursor >= maxMonth}
-          className="flex size-7 items-center justify-center rounded-pill border border-line bg-card text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:text-ink-500"
+          className="flex size-7 items-center justify-center rounded-pill border border-line bg-card text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:text-ink-500 [@media(pointer:coarse)]:size-11"
           aria-label={t("下个月")}
         >
           <Icon name="chevron-right" size={14} />

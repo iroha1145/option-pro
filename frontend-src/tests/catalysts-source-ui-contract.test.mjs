@@ -124,7 +124,7 @@ function loadCatalystsModule(responses = {}) {
     if (id === '../../api/aiBudget.ts') return aiBudget;
     if (id === '../../api/evidenceSources.ts') return evidenceSources;
     if (id === '../../i18n/core.ts') return { t: stubT };
-    if (id === './resourceSignals') return { notifyCatalystReadsInvalidated: () => {} };
+    if (id === './resourceSignals') return { notifyCatalystReadsInvalidated: () => {}, onCatalystReadsInvalidated: () => () => {} };
     throw new Error(`unexpected import: ${id}`);
   };
   vm.runInNewContext(compiled, {

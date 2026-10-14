@@ -48,8 +48,8 @@ function StockImpactCard({ imp, index }: { imp: TrustedStockImpact; index: numbe
   const { openTicker } = useShell();
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
       transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: Math.min(0.08 + index * 0.05, 0.3) }}
       className="rounded-md border border-line bg-card p-3"
     >
@@ -763,8 +763,8 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
             {/* 已完成分析 */}
             {showCompleted && (
               <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
                 transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
                 className="mt-4"
               >

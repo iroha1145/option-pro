@@ -50,7 +50,7 @@ function mappedNews(raw) {
       if (id === '../../api/aiBudget.ts') return aiBudget;
     if (id === '../../api/evidenceSources.ts') return evidenceSources;
     if (id === '../../i18n/core.ts') return { t: (value) => value };
-      if (id === './resourceSignals') return { notifyCatalystReadsInvalidated() {} };
+      if (id === './resourceSignals') return { notifyCatalystReadsInvalidated() {}, onCatalystReadsInvalidated: () => () => {} };
       throw new Error(id);
     },
   });

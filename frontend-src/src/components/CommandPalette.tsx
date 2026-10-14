@@ -7,7 +7,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { ApiError } from '@/api/client';
-import { stocksApi } from '@/api/modules/stocks';
 import { useAccess } from '@/hooks/useAccess';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
@@ -136,6 +135,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
     let cancelled = false;
     const t = setTimeout(async () => {
       try {
+        const { stocksApi } = await import('@/api/modules/stocks');
         const next = await stocksApi.search(q);
         if (!cancelled) {
           setResults(next);

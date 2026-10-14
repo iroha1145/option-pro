@@ -20,6 +20,14 @@ def path_file_identity(path: Path) -> tuple[int, int, int] | None:
         return None
 
 
+def path_has_symlink_boundary(path: Path) -> bool:
+    """Reject the target and its containing directory when either is a link."""
+    try:
+        return path.is_symlink() or path.parent.is_symlink()
+    except OSError:
+        return True
+
+
 def replace_file_atomically(path: Path, data: bytes) -> None:
     """Write beside ``path``, fsync, then rename over it so readers see old or new bytes."""
     path.parent.mkdir(parents=True, exist_ok=True)

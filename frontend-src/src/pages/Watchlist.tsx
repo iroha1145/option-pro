@@ -779,7 +779,7 @@ export default function Watchlist() {
             ].map((node, i) => (
               <motion.div
                 key={i}
-                variants={{ hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { duration: DUR_SECTION, ease: EASE_PAPER } } }}
+                variants={{ hidden: { opacity: 0 }, show: { opacity: 1, transition: { duration: DUR_SECTION, ease: EASE_PAPER } } }}
                 className="min-w-0"
               >
                 {node}
@@ -819,11 +819,11 @@ export default function Watchlist() {
               <SortDropdown sort={sort} onChange={setSort} />
               {canManageWatchlist ? (
                 <button type="button" onClick={() => setManagerKey(personal.key)} disabled={!personal.enabled || personal.loading || personal.busy || myTickers === null}
-                  className="btn-primary">
+                  className="btn-primary btn-sm">
                   <Icon name="plus" size={15} />{t('管理关注')}
                 </button>
               ) : (
-                <Link to="/login" state={loginReturnState(location)} className="inline-flex min-h-11 items-center gap-1.5 rounded-pill border border-line-strong bg-card px-3 text-caption text-ink-600 hover:border-brand-400 hover:text-brand-600">
+                <Link to="/login" state={loginReturnState(location)} className="inline-flex min-h-9 items-center gap-1.5 rounded-pill border border-line-strong bg-card px-3 text-caption text-ink-600 hover:border-brand-400 hover:text-brand-600 [@media(pointer:coarse)]:min-h-11">
                   <Icon name="plus" size={15} />{t('登录后管理关注')}
                 </Link>
               )}

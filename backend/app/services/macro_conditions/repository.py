@@ -325,6 +325,9 @@ class MacroRepository:
         connection.execute(f"PRAGMA busy_timeout={self.busy_timeout_ms}")
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute("PRAGMA synchronous=FULL")
+        connection.execute("PRAGMA temp_store=MEMORY")
+        connection.execute("PRAGMA cache_size=-32768")
+        connection.execute("PRAGMA mmap_size=134217728")
         return connection
 
     def _read_connection(self) -> sqlite3.Connection:
@@ -340,6 +343,9 @@ class MacroRepository:
         connection.row_factory = sqlite3.Row
         connection.execute(f"PRAGMA busy_timeout={self.busy_timeout_ms}")
         connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute("PRAGMA temp_store=MEMORY")
+        connection.execute("PRAGMA cache_size=-32768")
+        connection.execute("PRAGMA mmap_size=134217728")
         connection.execute("PRAGMA query_only=ON")
         return connection
 

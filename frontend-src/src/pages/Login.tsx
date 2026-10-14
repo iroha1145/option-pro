@@ -16,9 +16,10 @@ import { accessApi } from '@/api/modules/access';
 import { ApiError } from '@/api/client';
 import { useToast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
-import { DUR_SECTION, EASE_PAPER, SPRING_INDICATOR } from '@/lib/motion';
+import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { useCatalogShake } from '@/lib/transitions';
 import Icon from '@/components/icons';
+import GlidePill from '@/components/shared/GlidePill';
 import Spinner from '@/components/shared/Spinner';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
 import SelectionViewport from '@/components/shared/SelectionViewport';
@@ -112,8 +113,8 @@ function CharStagger({ text, className, delayBase = 0 }: { text: string; classNa
               <motion.span
                 key={index}
                 className="inline-block"
-                initial={{ opacity: 0, y: 24 }}
-                animate={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
                 transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: delayBase + characterIndex++ * 0.03 }}
               >
                 {ch}
@@ -353,8 +354,8 @@ export default function Login() {
         {/* L1 左侧编辑区 */}
         <div className="lg:col-span-7">
           <motion.div
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
             className="flex items-center gap-3"
           >
@@ -374,8 +375,8 @@ export default function Login() {
             {FEATURES.map((f, i) => (
               <motion.div
                 key={f.title}
-                initial={{ opacity: 0, y: 14 }}
-                animate={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
                 transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: 0.42 + i * 0.12 }}
                 className="flex items-center gap-3"
               >
@@ -391,8 +392,8 @@ export default function Login() {
         {/* L2 右侧登录卡 */}
         <div className="flex justify-center lg:col-span-5">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: reduced ? 0 : 0.2 }}
             className="glass w-full max-w-[400px] rounded-xl border border-line p-9 shadow-sh-3 max-lg:p-6"
           >
@@ -421,15 +422,13 @@ export default function Login() {
                     )}
                   >
                     {mode === value && (
-                      <motion.span
-                        data-selection-decoration=""
+                      <GlidePill
                         layoutId={modePillId}
-                        layoutDependency={mode}
-                        className="selection-indicator absolute inset-0"
-                        transition={SPRING_INDICATOR}
+                        dependency={mode}
+                        className="inset-0"
                       />
                     )}
-                    <span className="relative">{value === 'login' ? t('登录') : t('注册账号')}</span>
+                    <span className="relative z-10">{value === 'login' ? t('登录') : t('注册账号')}</span>
                   </button>
                 ))}
               </div>

@@ -280,14 +280,6 @@ def request_budget_reservation_microusd(config: Any, max_tokens: int | None = No
     return input_allowance + (ceiling * PRICE_OUTPUT_PER_MTOK + 999_999) // 1_000_000 + config.web_search_max_uses * PRICE_WEB_SEARCH_EACH
 
 
-def request_reservation_microusd(request: Mapping[str, Any], *, max_tokens: int) -> int:
-    """Application allowance, not a hard provider bill limit."""
-    ttl = (request.get("system") or [{}])[0].get("cache_control", {}).get("ttl", "5m")
-    input_allowance = PRICE_CACHE_WRITE_1H_PER_MTOK if ttl == "1h" else PRICE_CACHE_WRITE_5M_PER_MTOK
-    searches = sum(int(tool.get("max_uses", 0)) for tool in request.get("tools", []) if tool.get("name") == "web_search")
-    return input_allowance + (max_tokens * PRICE_OUTPUT_PER_MTOK + 999_999) // 1_000_000 + searches * PRICE_WEB_SEARCH_EACH
-
-
 class RequestAdmissionRejected(RuntimeError):
     def __init__(self, code: str):
         super().__init__(code)

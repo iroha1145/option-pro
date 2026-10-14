@@ -38,7 +38,7 @@ import {
 import { normalizeAiBudgetSnapshot } from '../../api/aiBudget.ts';
 import { normalizeEvidenceSources } from '../../api/evidenceSources.ts';
 import { t as __t } from '../../i18n/core.ts';
-import { notifyCatalystReadsInvalidated, type CatalystInvalidateOptions } from './resourceSignals';
+import { notifyCatalystReadsInvalidated, onCatalystReadsInvalidated, type CatalystInvalidateOptions } from './resourceSignals';
 
 export type {
   CatalystFeedQuery,
@@ -774,6 +774,9 @@ const PUBLIC_BATCH_MAX_LIMIT = 5;
  */
 const READ_CACHE_TTL_MS = 30_000;
 const readCache = new Map<string, { at: number; promise: Promise<unknown> }>();
+onCatalystReadsInvalidated(() => {
+  readCache.clear();
+});
 
 export function clearCatalystReadCache(options?: CatalystInvalidateOptions): void {
   readCache.clear();

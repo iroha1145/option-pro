@@ -543,6 +543,9 @@ class AccountStore:
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("PRAGMA busy_timeout=10000")
             connection.execute("PRAGMA foreign_keys=ON")
+            connection.execute("PRAGMA temp_store=MEMORY")
+            connection.execute("PRAGMA cache_size=-16384")
+            connection.execute("PRAGMA mmap_size=67108864")
             with connection:
                 yield connection
         finally:

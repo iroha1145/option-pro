@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
@@ -28,6 +29,7 @@ from .diagnostics import (
     REFERENCE_PROFILE, REFERENCE_HORIZON,
 )
 from .diagnostic_store import DiagnosticWriter, prune_old_generations
+from .geometry_parallel import MAX_GEOMETRY_WORKERS
 from .inference import precompute_session_raws, precompute_theme_raws, score_eod_session
 from .panel import bars_to_panel, prepare_limited_panel, select_universe_tickers
 from .store import publish_batch, read_batch, variant_key
@@ -283,7 +285,7 @@ def run_eod_limited_job(
             panel, target, registry=registry,
             horizons=list(dict.fromkeys(item_horizon for _, item_horizon in wanted)),
             themes=themes,
-            geometry_workers=4,
+            geometry_workers=min(MAX_GEOMETRY_WORKERS, max(4, (os.cpu_count() or 4) // 2)),
             options=scoring_options,
         )
     writer = DiagnosticWriter(

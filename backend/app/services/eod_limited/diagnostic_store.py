@@ -51,7 +51,7 @@ _ROW_FIELDS = frozenset({
 
 
 def _encoded(value: Any) -> bytes:
-    return zlib.compress(json.dumps(value, ensure_ascii=False, default=json_default, separators=(",", ":"), allow_nan=False).encode("utf-8"), 6)
+    return zlib.compress(json.dumps(value, ensure_ascii=False, default=json_default, separators=(",", ":"), allow_nan=False).encode("utf-8"), 1)
 
 
 def _decoded(value: bytes) -> Any:
@@ -86,8 +86,10 @@ class DiagnosticWriter:
         self.final_path = directory / name
         self.temp_path = directory / f"{name}.tmp"
         self.connection = sqlite3.connect(self.temp_path)
-        self.connection.execute("PRAGMA journal_mode=DELETE")
-        self.connection.execute("PRAGMA synchronous=FULL")
+        self.connection.execute("PRAGMA journal_mode=MEMORY")
+        self.connection.execute("PRAGMA synchronous=OFF")
+        self.connection.execute("PRAGMA temp_store=MEMORY")
+        self.connection.execute("PRAGMA cache_size=-65536")
         # Full-market compressed paths are 1.3–1.9 KB each. A WITHOUT ROWID
         # index spills each payload to an overflow page at the default 4 KB
         # page size; ordinary table leaves pack these records together.
@@ -162,6 +164,9 @@ class DiagnosticWriter:
 
     def finish(self) -> dict[str, Any]:
         self.connection.commit()
+        self.connection.execute("PRAGMA journal_mode=DELETE")
+        self.connection.execute("PRAGMA synchronous=FULL")
+        self.connection.commit()
         result = self.connection.execute("PRAGMA quick_check").fetchone()
         if result is None or result[0] != "ok":
             raise RuntimeError("diagnostic_store_integrity_check_failed")
@@ -192,6 +197,9 @@ class DiagnosticWriter:
     def _metadata_value(self, key: str) -> Any:
         # Metadata was written before closing; reread the immutable result.
         with closing(sqlite3.connect(f"file:{quote(str(self.final_path))}?mode=ro&immutable=1", uri=True)) as connection:
+            connection.execute("PRAGMA temp_store=MEMORY")
+            connection.execute("PRAGMA cache_size=-32768")
+            connection.execute("PRAGMA mmap_size=268435456")
             row = connection.execute("SELECT value FROM metadata WHERE key=?", (key,)).fetchone()
         return json.loads(row[0]) if row else None
 
@@ -321,6 +329,9 @@ def read_security_diagnostics(
     if not isinstance(variant, Mapping):
         return {**base, "data_status": "variant_diagnostics_unavailable", "display": None}
     with closing(sqlite3.connect(f"file:{quote(str(path))}?mode=ro&immutable=1", uri=True)) as connection:
+        connection.execute("PRAGMA temp_store=MEMORY")
+        connection.execute("PRAGMA cache_size=-32768")
+        connection.execute("PRAGMA mmap_size=268435456")
         metadata = {item[0]: json.loads(item[1]) for item in connection.execute("SELECT key, value FROM metadata")}
         expected_metadata = {
             "schema_version": SCHEMA_VERSION,

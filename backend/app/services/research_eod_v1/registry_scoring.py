@@ -7,11 +7,9 @@ Python 3.10+; standard library only.
 """
 from __future__ import annotations
 
-import argparse
 import json
 import math
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -179,79 +177,3 @@ def common_rejections(data: Mapping[str, Any], sector: str, algorithm: str,
     )
     reasons.extend(reason for rejected, reason in checks if rejected)
     return tuple(reasons)
-
-
-@dataclass(frozen=True)
-class Capacity:
-    shares: int
-    notional: float
-    planned_risk_fraction: float
-    adv_participation: float
-    planned_risk_distance_fraction: float
-
-
-def position_capacity(capital: float, close: float, known_invalidation: float,
-                      atr: float, adv20: float, profile: Mapping[str, Any]) -> Capacity:
-    """Plan at T close, not an assured T+1 fill or a guaranteed maximum loss."""
-    for name, value in [('capital', capital), ('close', close), ('atr', atr), ('adv20', adv20)]:
-        if finite(value, name=name, minimum=0) == 0:
-            raise ValueError(f'{name} must be positive')
-    finite(known_invalidation, name='known_invalidation', minimum=0)
-    if known_invalidation >= close:
-        raise ValueError('a long position needs an invalidation below close')
-    max_w = finite(profile['max_position_fraction'], name='max_weight', minimum=0, maximum=1)
-    risk = finite(profile['position_risk_budget_fraction'], name='risk_budget', minimum=0, maximum=1)
-    part = finite(profile['max_order_adv_fraction'], name='participation', minimum=0, maximum=1)
-    distance = max((close - known_invalidation) / close, atr / close)
-    amount = min(capital * max_w, capital * risk / distance, adv20 * part)
-    shares = math.floor(amount / close)
-    actual = shares * close
-    return Capacity(shares, actual, actual * distance / capital, actual / adv20, distance)
-
-
-def validate_information_cutoff(*, signal_time: datetime, session_close: datetime,
-                                source_available_at: datetime) -> None:
-    for value in (signal_time, session_close, source_available_at):
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError('all timestamps must be timezone-aware')
-    if source_available_at < session_close:
-        raise ValueError('completed-session data cannot be available before the session closes')
-    if signal_time < source_available_at:
-        raise ValueError('signal predates source availability')
-
-
-def capped_selection(rows: Sequence[Mapping[str, Any]], top_k: int,
-                     score_floor: float) -> list[Mapping[str, Any]]:
-    """Eligible means all upstream setup gates passed, NOT merely scored."""
-    if type(top_k) is not int or top_k < 0:
-        raise ValueError('top_k must be a nonnegative integer')
-    floor = finite(score_floor, name='score_floor', minimum=0, maximum=100)
-    admitted: dict[str, Mapping[str, Any]] = {}
-    for row in rows:
-        security_id = row.get('security_id')
-        if not isinstance(security_id, str) or not security_id:
-            raise ValueError('stable security_id required')
-        if security_id in admitted:
-            raise ValueError('deduplicate/calibrate multi-theme rows before final selection')
-        if row.get('status') != 'eligible' or row.get('score') is None:
-            continue
-        score = finite(row['score'], name='row.score', minimum=0, maximum=100)
-        if score >= floor:
-            admitted[security_id] = row
-    return sorted(admitted.values(), key=lambda row: (-float(row['score']), row['security_id']))[:top_k]
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--registry', type=Path, default=DEFAULT_REGISTRY_PATH)
-    args = parser.parse_args()
-    data = load_registry(args.registry)
-    print(json.dumps({'sectors': len(data['sectors']), 'families': 4, 'profiles': 3,
-                      'horizons': 3, 'registered_primary_evaluations': 864,
-                      'market_backtests_executed_by_this_program': 0,
-                      'example_weights': resolve_weights(data, 'semiconductors', 'A_trend_quality')},
-                     ensure_ascii=False, indent=2))
-
-
-if __name__ == '__main__':
-    main()

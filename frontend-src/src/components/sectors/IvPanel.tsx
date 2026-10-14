@@ -112,7 +112,7 @@ export default function IvPanel({
           <button
             type="button"
             onClick={() => setDesc((v) => !v)}
-            className="flex h-7 items-center gap-1 rounded-pill border border-line bg-card px-2 text-caption text-ink-500 shadow-btn transition-colors duration-fast hover:border-line-strong hover:text-ink-800"
+            className="touch-target flex h-7 items-center gap-1 rounded-pill border border-line bg-card px-2 text-caption text-ink-500 shadow-btn transition-colors duration-fast hover:border-line-strong hover:text-ink-800"
             aria-label={t('切换排序，当前行业排位{order}', { order: desc ? t('降序') : t('升序') })}
           >
             <Icon name={desc ? 'arrow-down' : 'arrow-up'} size={12} />

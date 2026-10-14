@@ -131,10 +131,9 @@ export default function ResultTable({
             return (
               <Fragment key={r.ticker}>
                 <motion.tr
-                  layout="position"
                   initial={page === 1 ? { opacity: 0 } : false}
                   animate={{ opacity: 1 }}
-                  transition={{ duration: DUR_UI, ease: EASE_PAPER, delay: page === 1 ? Math.min(i * 0.03, 0.3) : 0, layout: { duration: DUR_UI, ease: EASE_PAPER } }}
+                  transition={{ duration: DUR_UI, ease: EASE_PAPER, delay: page === 1 ? Math.min(i * 0.03, 0.3) : 0 }}
                   onClick={(event) => {
                     // Tooltip/link controls keep their own pointer and keyboard actions.
                     if (event.target instanceof Element && event.target.closest('button, a, input, select, textarea, [role="button"], [tabindex]')) return;

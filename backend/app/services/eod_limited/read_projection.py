@@ -16,7 +16,7 @@ class Projection(dict):
 
 
 class ProjectionCache:
-    def __init__(self, max_entries: int = 12, max_bytes: int = 64 * 1024 * 1024):
+    def __init__(self, max_entries: int = 128, max_bytes: int = 512 * 1024 * 1024):
         self.max_entries = max_entries
         self.max_bytes = max_bytes
         self._lock = threading.RLock()

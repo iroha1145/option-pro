@@ -22,7 +22,7 @@ class BatchDocument(dict):
 
 
 BATCH_NAME = "batch.json"
-_batch_documents = FingerprintedFileCache("eod_market", max_paths=2, max_bytes=256 * 1024 * 1024)
+_batch_documents = FingerprintedFileCache("eod_market", max_paths=8, max_bytes=1024 * 1024 * 1024)
 
 
 def snapshot_dir(root: Path | None = None) -> Path:

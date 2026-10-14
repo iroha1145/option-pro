@@ -345,8 +345,8 @@ export default function EventDetail({
                     {(event.evidence ?? []).map((line, i) => (
                     <motion.li
                       key={i}
-                      initial={{ opacity: 0, x: 8 }}
-                      animate={{ opacity: 1, x: 0 }}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
                       transition={{ duration: DUR_UI, ease: EASE_PAPER, delay: 0.12 + i * 0.03 }}
                       className="relative py-1.5"
                     >

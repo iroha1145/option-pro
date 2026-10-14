@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -87,21 +87,9 @@ def make_series(
     )
 
 
-def trending_close(n: int, start: float = 50.0, drift: float = 0.15) -> np.ndarray:
-    return start + drift * np.arange(n, dtype=float)
-
-
 def structured_close(n: int, start: float = 50.0, drift: float = 0.12, cycle: int = 16) -> np.ndarray:
     """Uptrend with periodic pullbacks so confirmed HH/HL pivots exist."""
 
     x = np.arange(n, dtype=float)
     amplitude = max(1.6, abs(drift) * cycle * 0.85)
     return start + drift * x + amplitude * np.sin(2.0 * np.pi * x / cycle)
-
-
-def as_of_after_close(session: date) -> datetime:
-    return datetime(session.year, session.month, session.day, 17, 0, tzinfo=ET)
-
-
-def utc_as_of_after_close(session: date) -> datetime:
-    return as_of_after_close(session).astimezone(timezone.utc)

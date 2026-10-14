@@ -1069,22 +1069,18 @@ export default function Screener() {
                     variant="error"
                     image="/empty-chart.svg"
                     title={
-                      isEodLimitedPreparing(scanError)
+                      isEodLimitedPreparing(scanError) || isStrengthSnapshotPreparing(scanError)
                         ? __t('排序数据准备中')
                         : isEodLimitedSnapshotProblem(scanError)
                           ? __t('选股数据暂不可用')
-                        : isStrengthSnapshotPreparing(scanError)
-                        ? __t('排序数据准备中')
-                        : scanError?.code === 503 ? __t('扫描数据不可用') : __t('扫描失败')
+                          : scanError?.code === 503 ? __t('扫描数据不可用') : __t('扫描失败')
                     }
                     description={
-                      isEodLimitedPreparing(scanError)
+                      isEodLimitedPreparing(scanError) || isStrengthSnapshotPreparing(scanError)
                         ? __t('选股数据正在后台生成，请稍候。')
                         : isEodLimitedSnapshotProblem(scanError)
                           ? __t('暂时没有可用的选股数据，请等待后台完成后重试。')
-                        : isStrengthSnapshotPreparing(scanError)
-                        ? __t('选股数据正在后台生成，请稍候。')
-                        : scanError?.code === 503 ? __t('稍后刷新再试') : scanError?.message
+                          : scanError?.code === 503 ? __t('稍后刷新再试') : scanError?.message
                     }
                     action={
                       <button

@@ -6,7 +6,6 @@ import hashlib
 import json
 import math
 from collections import defaultdict
-from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Mapping
 
@@ -258,34 +257,6 @@ def _assemble_factors(
         "R": None if r is None else float(r),
         "G": None if g is None else float(g),
     }
-
-
-@dataclass(frozen=True)
-class SnapshotRow:
-    security_id: str
-    ticker_at_signal: str
-    session_date: str
-    feature_version: str
-    algorithm_id: str
-    config_hash: str
-    sector_context: str
-    theme_ids: tuple[str, ...]
-    primary_industry_id: str | None
-    score: float | None
-    score_components: dict[str, float]
-    configured_weights: dict[str, float]
-    effective_weights: dict[str, float]
-    observed_feature_coverage: float
-    setup_state: str
-    gate_results: dict[str, Any]
-    rejection_reasons: tuple[str, ...]
-    known_support: float | None
-    known_resistance: float | None
-    planned_invalidation: float | None
-    event_data_status: str
-    capacity_status: str
-    stock_or_etf_track: str
-    status: str
 
 
 def _structured_reject_row(
@@ -751,8 +722,3 @@ def compute_snapshot(
         "rows": rows,
         "network_calls": 0,
     }
-
-
-def snapshot_fingerprint(payload: Mapping[str, Any]) -> str:
-    clone = {k: v for k, v in payload.items() if k != "as_of"}
-    return hashlib.sha256(json.dumps(clone, sort_keys=True, default=str).encode()).hexdigest()

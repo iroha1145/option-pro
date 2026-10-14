@@ -39,12 +39,12 @@ x-optix-runtime: &optix-runtime
     - optix-data:/data
   read_only: true
   tmpfs:
-    - /tmp:rw,noexec,nosuid,size=134217728,mode=1777
+    - /tmp:rw,noexec,nosuid,size=1073741824,mode=1777
   security_opt:
     - no-new-privileges:true
   cap_drop:
     - ALL
-  pids_limit: 512
+  pids_limit: 4096
   stop_grace_period: 60s
   logging:
     driver: local

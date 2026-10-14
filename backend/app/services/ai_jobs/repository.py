@@ -698,6 +698,9 @@ class AIJobRepository:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute("PRAGMA busy_timeout=5000")
+        connection.execute("PRAGMA temp_store=MEMORY")
+        connection.execute("PRAGMA cache_size=-65536")
+        connection.execute("PRAGMA mmap_size=268435456")
         try:
             yield connection
         finally:

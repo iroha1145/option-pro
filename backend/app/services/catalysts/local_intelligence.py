@@ -506,16 +506,16 @@ _REVISION_CACHE: dict[tuple[str, int], dict[str, Any]] = {}
 _REVISION_CACHE_LOCK = threading.Lock()
 # Fixed stripes bound lock memory even when cache entries are invalidated.
 _REVISION_BUILD_LOCKS = tuple(threading.Lock() for _ in range(32))
-_REVISION_CACHE_MAX_ENTRIES = 32
+_REVISION_CACHE_MAX_ENTRIES = 128
 _REVISION_CACHE_MAX_AGE_SECONDS = 300.0
 _REVISION_CACHE_AS_OF_TOLERANCE_SECONDS = 90.0
 # Historical bundles contain no owner state and use exact timestamps. Retain
-# at most 64 MiB of Python objects across eight entries. In-flight bookkeeping
+# at most 256 MiB of Python objects across eight entries. In-flight bookkeeping
 # is separately capped: excess distinct keys take the ordinary uncached path.
 _HISTORICAL_REVISION_CACHE: OrderedDict[tuple[Any, ...], tuple[list[dict[str, Any]], list[dict[str, Any]], int]] = OrderedDict()
 _HISTORICAL_REVISION_CACHE_LOCK = threading.Lock()
 _HISTORICAL_REVISION_CACHE_MAX_ENTRIES = 8
-_HISTORICAL_REVISION_CACHE_MAX_BYTES = 64 * 1024 * 1024
+_HISTORICAL_REVISION_CACHE_MAX_BYTES = 256 * 1024 * 1024
 _HISTORICAL_REVISION_CACHE_BYTES = 0
 _HISTORICAL_REVISION_BUILDS: dict[tuple[Any, ...], threading.Event] = {}
 
@@ -694,11 +694,11 @@ def _store_revision_cache(
             and existing["built_at"] >= started_at
         ):
             return False
-        if (
+        while (
             len(_REVISION_CACHE) >= _REVISION_CACHE_MAX_ENTRIES
             and key not in _REVISION_CACHE
         ):
-            _REVISION_CACHE.clear()
+            _REVISION_CACHE.pop(next(iter(_REVISION_CACHE)), None)
         _REVISION_CACHE[key] = {
             "cursor": store_cursor,
             "built_at": time.monotonic(),
@@ -1981,6 +1981,8 @@ class LocalCatalystIntelligence:
         # Window views sort revision rows with their article bodies; spilling
         # those sorts to SQLITE_TMPDIR rewrote and deleted megabytes per read.
         connection.execute("PRAGMA temp_store=MEMORY")
+        connection.execute("PRAGMA cache_size=-65536")
+        connection.execute("PRAGMA mmap_size=268435456")
         if not owner_access:
             connection.execute("PRAGMA query_only=ON")
         try:

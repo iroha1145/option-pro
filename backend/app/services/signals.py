@@ -224,10 +224,10 @@ def _bulk_history(symbols: list[str], period: str = "1y") -> dict[str, pd.DataFr
     requests. Falls back to per-symbol fetch for anything missing."""
     out: dict[str, pd.DataFrame] = {}
     remaining = list(dict.fromkeys(symbols))
-    # Massive 主源批量(并发 4);未覆盖的余量继续走 yfinance 批下载
+    # Massive 主源批量(并发 12);未覆盖的余量继续走 yfinance 批下载
     if remaining and massive.configured():
         try:
-            with ThreadPoolExecutor(max_workers=4) as pool:
+            with ThreadPoolExecutor(max_workers=min(12, len(remaining))) as pool:
                 for symbol, frame in zip(remaining, pool.map(lambda s: _massive_daily(s, period), remaining)):
                     if not frame.empty:
                         out[symbol] = frame
@@ -268,7 +268,7 @@ def _bulk_history(symbols: list[str], period: str = "1y") -> dict[str, pd.DataFr
     missing = [symbol for symbol in remaining if symbol not in out]
     if missing:
         try:
-            with ThreadPoolExecutor(max_workers=min(4, len(missing))) as pool:
+            with ThreadPoolExecutor(max_workers=min(12, len(missing))) as pool:
                 for symbol, frame in zip(
                     missing,
                     pool.map(lambda s: _yahoo_history(s, period), missing),

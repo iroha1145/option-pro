@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, time as datetime_time, timedelta, timezone
-import math
 import threading
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -10,6 +9,7 @@ from zoneinfo import ZoneInfo
 from app.failure_diagnostics import record_fallback_failure
 from app.services.market_calendar import options_close_minutes
 from app.services.key_locks import acquire_key_lock, release_key_lock
+from app.services.numeric import rounded_number as _safe_float
 from app.services.option_capability import (
     CAPABILITY_VERSION,
     PROVIDER_YAHOO,
@@ -774,14 +774,6 @@ def get_last_price(ticker: str) -> float | None:
         return _safe_float(_get_ticker(ticker).fast_info.last_price)
     except Exception as exc:
         record_fallback_failure("yahoo_last_price", exc, symbol=ticker)
-        return None
-
-
-def _safe_float(v) -> float | None:
-    try:
-        f = float(v)
-        return None if (math.isnan(f) or math.isinf(f)) else round(f, 4)
-    except Exception:
         return None
 
 

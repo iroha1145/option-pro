@@ -103,8 +103,8 @@ function OwnerAnalysisProgressCard() {
 
   return (
     <motion.section
-      initial={reduceMotion ? false : { opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={reduceMotion ? false : { opacity: 0 }}
+      animate={{ opacity: 1 }}
       transition={reduceMotion ? { duration: 0 } : { duration: DUR_SECTION, ease: EASE_PAPER }}
       aria-label={t("分析进度")}
       aria-live="polite"

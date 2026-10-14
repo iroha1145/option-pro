@@ -10,16 +10,16 @@ from typing import Any, Iterable, Iterator
 from app.services.research_eod_v1.factors import RawComponents, apply_sector_gates
 from app.services.research_eod_v1.series import SecuritySeries
 
-MAX_GEOMETRY_WORKERS = 4
-GEOMETRY_BATCH_SIZE = 128
-GEOMETRY_CHUNK_SIZE = 8
+MAX_GEOMETRY_WORKERS = 24
+GEOMETRY_BATCH_SIZE = 512
+GEOMETRY_CHUNK_SIZE = 16
 GeometryTask = tuple[str, RawComponents, SecuritySeries, list[tuple[str, dict[str, Any]]]]
 GeometryResult = tuple[str, list[tuple[str, RawComponents]]]
 
 
 def validate_geometry_workers(workers: int) -> None:
     if isinstance(workers, bool) or not isinstance(workers, int) or not 1 <= workers <= MAX_GEOMETRY_WORKERS:
-        raise ValueError("geometry_workers must be an integer between 1 and 4")
+        raise ValueError(f"geometry_workers must be an integer between 1 and {MAX_GEOMETRY_WORKERS}")
 
 
 def _security_geometry(task: GeometryTask) -> GeometryResult:

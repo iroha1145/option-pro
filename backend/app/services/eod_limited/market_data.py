@@ -84,6 +84,9 @@ def _connect(path: Path) -> sqlite3.Connection:
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA journal_mode=WAL")
     connection.execute("PRAGMA foreign_keys=ON")
+    connection.execute("PRAGMA temp_store=MEMORY")
+    connection.execute("PRAGMA cache_size=-131072")
+    connection.execute("PRAGMA mmap_size=1073741824")
     connection.executescript(
         """
         CREATE TABLE IF NOT EXISTS market_sessions (

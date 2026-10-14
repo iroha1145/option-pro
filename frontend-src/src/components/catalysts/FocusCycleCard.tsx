@@ -417,7 +417,7 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
       aria-label={t("热点追踪")}
       className="card-surface p-4 sm:p-5 lg:p-6"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
+      <div className="flex min-h-11 flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
         <div className="flex items-center gap-2.5">
           <span className="flex size-8 items-center justify-center rounded-md bg-ai-50 text-ai-600" aria-hidden="true">
             <AnalysisIcon size={17} />

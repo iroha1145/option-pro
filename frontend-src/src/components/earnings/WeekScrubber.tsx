@@ -177,8 +177,8 @@ export default function WeekScrubber({
                         return (
                           <motion.button
                             key={it.ticker}
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: 1, scale: 1 }}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
                             transition={{ ...SPRING_POP, delay: di * 0.035 + ci * 0.02 }}
                             onClick={(e) => {
                               e.stopPropagation();

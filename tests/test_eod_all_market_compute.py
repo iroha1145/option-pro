@@ -199,7 +199,7 @@ def test_parallel_geometry_crosses_128_security_boundary_and_keeps_short_history
         assert raw.frozen_setup is None
 
 
-@pytest.mark.parametrize("workers", [0, -1, 5, True, False, None, 1.0, "4"])
+@pytest.mark.parametrize("workers", [0, -1, 25, True, False, None, 1.0, "4"])
 def test_geometry_worker_count_is_strictly_bounded(workers):
     registry = load_market_registry()
     with pytest.raises(ValueError, match="geometry_workers"):

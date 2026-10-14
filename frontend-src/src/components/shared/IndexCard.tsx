@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 import ChangeBadge from '@/components/shared/ChangeBadge';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import Sparkline from '@/components/charts/Sparkline';
+import { routeIntentHandlers } from '@/lib/prefetchRouteChunk';
 import { t } from '../../i18n/core.ts';
 
 type Target =
@@ -96,7 +97,7 @@ export default function IndexCard(props: IndexCardProps) {
     >
       {/* 联合类型保证 to 与 ref 的元素类型成对出现；解构后 TS 不再收窄，这里按分支断言 */}
       {to !== undefined ? (
-        <Link ref={ref as Ref<HTMLAnchorElement> | undefined} to={to} className={surface} aria-label={label}>
+        <Link ref={ref as Ref<HTMLAnchorElement> | undefined} to={to} {...routeIntentHandlers(to)} className={surface} aria-label={label}>
           {body}
         </Link>
       ) : (

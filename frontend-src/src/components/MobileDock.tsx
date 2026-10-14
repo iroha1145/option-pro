@@ -14,6 +14,7 @@ import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/hooks/useToast';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { useGlideLayoutId } from '@/hooks/useGlideLayoutId';
 import { overlayVisible, useOverlayPhase } from '@/lib/transitions';
 import { isTopFocusScope } from '@/lib/focusScope';
 import { loginReturnState } from '@/lib/loginReturn';
@@ -52,17 +53,14 @@ const MORE_ITEMS: { label: string; path: string; icon: IconName }[] = NAV_GROUPS
 type MobileDockProps = { onHeightChange?: (height: number) => void };
 
 export default function MobileDock({ onHeightChange }: MobileDockProps) {
-  const { pathname } = useLocation();
-  return <MobileDockContent key={pathname} onHeightChange={onHeightChange} />;
-}
-
-function MobileDockContent({ onHeightChange }: MobileDockProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { isOwner, isSignedIn, username, logout } = useAccess();
   const toast = useToast();
   const [loggingOut, setLoggingOut] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
+  const [morePath, setMorePath] = useState<string | null>(null);
+  const moreOpen = morePath === location.pathname;
+  const setMoreOpen = (open: boolean) => setMorePath(open ? location.pathname : null);
   const dockRef = useRef<HTMLElement | null>(null);
   // 字号、语言和屏宽都会改变底栏高度；页尾留白跟随实高，不让导航盖住最后一行。
   useEffect(() => {
@@ -82,8 +80,8 @@ function MobileDockContent({ onHeightChange }: MobileDockProps) {
   const overlayId = useId();
   const morePhase = useOverlayPhase(moreOpen, 150);
   useBodyScrollLock(overlayVisible(moreOpen, morePhase));
-  // The pathname key unmounts the sheet synchronously on navigation; it cannot
-  // cover a newly mounted page while waiting for an exit animation.
+  // Keying AnimatePresence by pathname unmounts the sheet synchronously on
+  // navigation while keeping the persistent <nav> mounted so the dock pill glides.
 
   /* 「更多」sheet 声明了 aria-modal，就要有配套行为（审计 2.5.5）：
      Escape 可关 + 打开期间锁背景滚动。 */
@@ -93,7 +91,7 @@ function MobileDockContent({ onHeightChange }: MobileDockProps) {
       if (e.key !== 'Escape' || e.defaultPrevented || e.isComposing || e.keyCode === 229 || !isTopFocusScope(sheetRef.current)) return;
       e.preventDefault();
       e.stopImmediatePropagation();
-      setMoreOpen(false);
+      setMorePath(null);
     };
     document.addEventListener('keydown', onKey);
     return () => {
@@ -102,7 +100,9 @@ function MobileDockContent({ onHeightChange }: MobileDockProps) {
   }, [moreOpen]);
 
   const moreActive = MORE_ITEMS.some((m) => isNavPathActive(location.pathname, m.path));
-  const dockGlideId = useId();
+  const activeDockItem = DOCK_ITEMS.find((item) => isNavGroupActive(location.pathname, item.group));
+  const activeKey = activeDockItem?.path ?? (moreActive ? '__more__' : location.pathname);
+  const dockGlideId = useGlideLayoutId('dock');
 
   const renderItem = (item: (typeof DOCK_ITEMS)[number]) => {
     /* 高亮口径与顶栏共用 isNavPathActive 语义：根路径精确匹配（裸 startsWith('/')
@@ -111,7 +111,7 @@ function MobileDockContent({ onHeightChange }: MobileDockProps) {
     return (
       <div key={item.path} className="relative flex min-w-0 flex-1">
         {active && (
-          <GlidePill layoutId={dockGlideId} className="inset-1 rounded-md bg-brand-50 shadow-none" />
+          <GlidePill layoutId={dockGlideId} dependency={activeKey} className="inset-1 rounded-md bg-brand-50 shadow-none" />
         )}
         <Link
           to={item.path}
@@ -141,7 +141,7 @@ function MobileDockContent({ onHeightChange }: MobileDockProps) {
           {DOCK_ITEMS.map(renderItem)}
           <div className="relative flex min-w-0 flex-1">
             {moreActive && (
-              <GlidePill layoutId={dockGlideId} className="inset-1 rounded-md bg-brand-50 shadow-none" />
+              <GlidePill layoutId={dockGlideId} dependency={activeKey} className="inset-1 rounded-md bg-brand-50 shadow-none" />
             )}
             <button
               onClick={() => setMoreOpen(true)}
@@ -157,7 +157,7 @@ function MobileDockContent({ onHeightChange }: MobileDockProps) {
       </nav>
 
       {/* 「更多」上弹 sheet */}
-      <AnimatePresence>
+      <AnimatePresence key={location.pathname}>
         {moreOpen && (
           <>
             <motion.div

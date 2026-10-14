@@ -49,7 +49,7 @@ function identityHarness() {
     '@/api/sharedRead': { dropSharedReads() {} },
     '@/api/queryRegistry': { setQueryPrincipal() {} },
     '@/api/marketRead': { resetMarketReadState() {} },
-    '@/components/catalysts/api': { clearCatalystReadCache() {} },
+    '@/components/catalysts/resourceSignals': { notifyCatalystReadsInvalidated() {} },
     '@/lib/viewPreferenceWrites': { bindPreferenceWritePrincipal() {}, invalidatePreferenceWriteQueue() {} },
   }, { window: { ...clock, setInterval: () => 1, clearInterval() {}, addEventListener() {}, removeEventListener() {} }, document: { addEventListener() {}, removeEventListener() {} } });
   return { ...stub, requests, clock, read: stub.mount(() => AccessProvider({ children: null })) };

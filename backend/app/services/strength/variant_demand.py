@@ -11,7 +11,6 @@ import fcntl
 import json
 import os
 import stat
-import tempfile
 import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -19,6 +18,7 @@ from pathlib import Path
 from typing import Any, Iterator, Mapping
 
 from app.data_paths import get_data_paths
+from app.file_identity import replace_file_atomically
 from app.services.algorithm_modes import (
     A0_ALGORITHM,
     EOD_LIMITED_V1,
@@ -68,20 +68,7 @@ def _demand_lock(directory: Path) -> Iterator[None]:
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     encoded = json.dumps(dict(payload), ensure_ascii=True, separators=(",", ":")).encode("utf-8")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent))
-    try:
-        with os.fdopen(fd, "wb") as handle:
-            handle.write(encoded)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(tmp, path)
-    finally:
-        if os.path.exists(tmp):
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
+    replace_file_atomically(path, encoded)
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:

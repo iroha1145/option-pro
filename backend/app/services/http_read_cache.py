@@ -44,9 +44,9 @@ _GZIP_LEVEL = 5
 # Small responses are cheap to re-encode; only bodies at least this large are
 # worth holding in the bytes cache. Everything still gets an ETag.
 _STORE_MIN_BYTES = 8 * 1024
-_MAX_ITEM_BYTES = 12 * 1024 * 1024
-_MAX_TOTAL_BYTES = 48 * 1024 * 1024
-_MAX_ENTRIES = 32
+_MAX_ITEM_BYTES = 32 * 1024 * 1024
+_MAX_TOTAL_BYTES = 512 * 1024 * 1024
+_MAX_ENTRIES = 256
 
 
 class _SerializedStore:

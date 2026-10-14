@@ -540,7 +540,7 @@ def download_massive_history(
 
     frames: dict[tuple[str, str], pd.Series] = {}
     missing: list[str] = []
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    with ThreadPoolExecutor(max_workers=min(12, max(1, len(tickers)))) as pool:
         for ticker, bars in pool.map(_one, tickers):
             rows = _validated_massive_history(
                 [bar for bar in (bars or []) if isinstance(bar, dict)],

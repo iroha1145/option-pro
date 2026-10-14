@@ -507,7 +507,7 @@ def _clean_strength_snapshot_payload(
 _strength_documents = FingerprintedFileCache(
     "strength",
     max_paths=_STRENGTH_SNAPSHOT_VARIANT_LIMIT + 8,
-    max_bytes=8 * _STRENGTH_SNAPSHOT_MAX_BYTES,
+    max_bytes=32 * _STRENGTH_SNAPSHOT_MAX_BYTES,
 )
 
 
