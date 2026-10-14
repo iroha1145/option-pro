@@ -656,7 +656,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
             <Icon name="doc-quote" size={26} />
           </span>
           <h3 className="mt-4 text-h3 text-ink-800">{__t('详情不可用')}</h3>
-          <p className="mt-1.5 text-body-s text-ink-500">{loadError} {__t('· 列表摘要仍然有效')}</p>
+          <p className="mt-1.5 text-body-s text-ink-500">{loadError}</p>
           <button type="button" className="control-button mt-4" onClick={retryDetail}>{__t('重试')}</button>
         </div>
       )}
@@ -862,7 +862,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
       <ConfirmDialog
         open={confirm === 'create'}
         title={__t("生成新闻分析？")}
-        description={__t("分析这条新闻的市场倾向与可能影响，将消耗模型用量，并计入每日额度和任务数量。")}
+        description={__t("生成这条新闻的市场影响分析（计入每日额度）。")}
         confirmLabel={__t("生成分析")}
         onConfirm={() => void startAnalysis(false)}
         onCancel={() => setConfirm(null)}
@@ -870,7 +870,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
       <ConfirmDialog
         open={confirm === 'force'}
         title={__t("重新生成新闻分析？")}
-        description={__t("重新生成这条新闻的分析，将再次消耗模型用量并计入每日额度。操作过于频繁或分析功能关闭时无法执行。")}
+        description={__t("重新生成这条新闻的分析（计入每日额度）。")}
         confirmLabel={__t("重新分析")}
         onConfirm={() => void startAnalysis(true)}
         onCancel={() => setConfirm(null)}

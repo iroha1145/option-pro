@@ -71,8 +71,6 @@ export default function EpsHatchChart({ items, title = t('EPS 预期 vs 实际')
 
   if (rows.length === 0) return null;
 
-  const hasActual = rows.some((r) => r.epsActual != null);
-
   return (
     <section className="card-surface p-5" data-eps-chart="" aria-label={t("EPS 预期与实际对照图")}>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -99,9 +97,6 @@ export default function EpsHatchChart({ items, title = t('EPS 预期 vs 实际')
           ariaLabel={t('EPS 预期与实际对照柱状图，共 {n} 只标的，斜纹为预期值，实心为实际值', { n: rows.length })}
         />
       </div>
-      {!hasActual && (
-        <p className="mt-2 border-t border-line pt-2.5 text-micro text-ink-400">{t('这些公司尚未公布业绩。')}</p>
-      )}
     </section>
   );
 }

@@ -101,7 +101,6 @@ export default function ChainBrowser({ chain }: { chain: OptionChain }) {
           </button>
         </li>)}
       </ul> : <p className="px-4 py-4 text-caption text-ink-500">{t('当前到期日暂无异动合约。')}</p>}
-      <p className="border-t border-line px-4 py-2.5 text-micro leading-relaxed text-ink-500">{t('按成交量、持仓量和估算金额筛选。')}</p>
     </section>
 
     {selected && <div ref={detailRef} tabIndex={-1} className="scroll-mt-24" onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); closeDetail(); } }}><ContractDetail contract={selected} onClose={closeDetail} /></div>}
@@ -154,11 +153,8 @@ export default function ChainBrowser({ chain }: { chain: OptionChain }) {
           <Icon name="chevron-down" size={14} className="shrink-0 transition-transform duration-fast group-open/howto:rotate-180 motion-reduce:transition-none" />
         </summary>
         <dl className="mt-2 grid gap-3 pb-2 sm:grid-cols-2">
-          <div><dt className="font-medium text-ink-800">{t('行权价')}</dt><dd className="mt-1 leading-relaxed">{t('行使期权时，按这个价格买入或卖出股票。')}</dd></div>
           <div><dt className="font-medium text-ink-800">{t('成交量与持仓量')}</dt><dd className="mt-1 leading-relaxed">{t('成交量是当天累计成交的张数；持仓量是上次更新时尚未平仓的张数。')}</dd></div>
           <div><dt className="font-medium text-ink-800">{t('关注规则')}</dt><dd className="mt-1 leading-relaxed">{t('满足任一条件即标记：成交量达到持仓量的 3 倍、零持仓有成交、成交至少 5,000 张，或估算金额至少 50 万美元。')}</dd></div>
-          <div><dt className="font-medium text-ink-800">{t('缺失与估算')}</dt><dd className="mt-1 leading-relaxed">{t('「—」表示暂无数据。持仓量为零时，无法计算成交量与持仓量的倍数。')}</dd></div>
-          <div><dt className="font-medium text-ink-800">{t('统计范围')}</dt><dd className="mt-1 leading-relaxed">{t('仅统计当前股票、所选到期日的期权合约。')}</dd></div>
         </dl>
       </details>
     </section>

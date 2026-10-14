@@ -222,17 +222,6 @@ export default function StockDetail() {
     );
   }
 
-  /* 概览未覆盖该标的：基础行情来自强度扫描行，如实提示口径 */
-  const scopeBanner = detail.snapshotScope === 'strength-row' && (
-    <div className="mt-3 rounded-md border border-warn-600/25 bg-warn-50 px-3 py-2" role="status">
-      <p className="flex items-start gap-2 text-caption leading-[18px] text-warn-700">
-        <Icon name="flag" size={13} className="mt-px shrink-0" />
-        {__t('当前只有筛选结果里的基础行情，日线与技术指标按实际情况显示')}
-      </p>
-      <ManualStockPull ticker={detail.ticker} onPulled={handlePulled} compact className="mt-2" />
-    </div>
-  );
-
   const techError = technical ? null : techQ.error;
   const techSnapshotMissing = techError?.bizCode === 'public_snapshot_unavailable';
   const techRetryRow = (
@@ -255,10 +244,13 @@ export default function StockDetail() {
         {toolbar}
       </div>
       <PriceHeader detail={detail} />
-      {scopeBanner}
-      {detail.snapshotScope !== 'strength-row' && (
-        <ManualStockPull ticker={detail.ticker} onPulled={handlePulled} compact quiet className="mt-3" />
-      )}
+      <ManualStockPull
+        ticker={detail.ticker}
+        onPulled={handlePulled}
+        compact
+        quiet={detail.snapshotScope !== 'strength-row'}
+        className="mt-3"
+      />
 
       {/* 行1: K线(8) + 右栏(4: 关键数据 / 技术指标)。两列等高：右栏随行拉伸，
           关键数据卡吸收差额（52 周区间贴底），图下与右栏下都不留空。 */}

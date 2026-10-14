@@ -243,9 +243,6 @@ export default function EarningsAnalysisControls({
                     {t('未来 5 天')}
                   </SoftBadge>
                 </div>
-                <p className="mt-1 text-micro leading-5 text-ink-400">
-                  {t('为未来 5 天内重点公司的财报安排分析，同一份财报不会重复安排。')}
-                </p>
               </div>
             </div>
 

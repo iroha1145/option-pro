@@ -57,7 +57,6 @@ function StockNewsPanel({ ticker }: { ticker: string }) {
         variant="error"
         icon="doc-quote"
         title={t('消息数据读取失败')}
-        description={t('只是读取失败，不代表该股近期没有消息')}
         action={
           <button
             onClick={() => newsQ.refresh()}
@@ -84,7 +83,6 @@ function StockNewsPanel({ ticker }: { ticker: string }) {
               <Icon name="spark-ai" size={15} className="text-ai-600" />
               {t('AI 财报影响')}
             </span>
-            <span className="rounded-xs border border-ai-600/20 bg-card px-1.5 py-px text-micro font-medium text-ai-600">{t('简体中文')}</span>
             <Link to="/earnings" className="ml-auto flex items-center gap-1 text-caption font-medium text-ai-600 hover:text-ai-600/80">
               {t('查看财报')}
               <Icon name="chevron-right" size={13} />
@@ -99,7 +97,6 @@ function StockNewsPanel({ ticker }: { ticker: string }) {
         <EmptyState
           image="/empty-news.svg"
           title={t("近 72 小时无相关消息")}
-          description={t("有相关消息时会在此显示")}
           action={
             <Link
               to={`/catalysts?ticker=${encodeURIComponent(ticker)}`}

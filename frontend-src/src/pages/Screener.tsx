@@ -928,11 +928,6 @@ export default function Screener() {
                 {scanMeta?.historicalExample && !scanMeta.synthetic && (
                   <SoftBadge tone="warn" data-testid="screener-eod-historical">{__t('历史示例')}</SoftBadge>
                 )}
-                {scanMeta && (scanMeta.observationN != null || scanMeta.compositeN != null) && (
-                  <span className="text-micro text-ink-400 tnum" data-testid="screener-eod-counts">
-                    {__t('观察候选')} {scanMeta.observationN ?? 0} · {__t('合格候选')} {scanMeta.compositeN ?? 0}
-                  </span>
-                )}
                 {scanMeta && (
                   <span className="text-micro text-ink-400 tnum" data-testid="screener-market-coverage">
                     {scanMeta.universe === 'all_market' ? __t('全市场股票与基金') : __t('股票范围')} {scanMeta.universeCount}

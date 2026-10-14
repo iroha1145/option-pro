@@ -86,9 +86,9 @@ export const SECTORS: Dict = {
   '统计时间 —': ['Stats as of —', '統計時点 —'],
   '收益周期': ['Return period', 'リターン集計期間'],
   '行业列表已加载，涨跌幅与评分数据暂不可用。': ["The sector list is loaded, but return and score data are unavailable.", "セクター一覧は読み込み済みですが、騰落率とスコアのデータは利用できません。"],
-  '部分行业数据已过期，请结合各项数据日期查看。': [
-    'Some sector data is stale. Check the date shown for each metric.',
-    '一部のセクターデータは期限切れです。各指標の日付をご確認ください。',
+  '部分行业数据已过期。': [
+    'Some sector data is stale.',
+    '一部のセクターデータは期限切れです。',
   ],
   '行业总览': ['Sector overview', 'セクター概要'],
   '行业目录加载失败': ['Failed to load sector directory', 'セクターリストの読み込みに失敗しました'],

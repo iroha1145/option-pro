@@ -421,7 +421,7 @@ function WatchCard({
 
 /* ================= 页面主体 ================= */
 export default function Watchlist() {
-  const { isVisitor, isOwner, canManageWatchlist, username, identityUnavailable, loading: identityLoading } = useAccess();
+  const { isOwner, canManageWatchlist, username, identityUnavailable, loading: identityLoading } = useAccess();
   const { openTicker } = useShell();
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -915,15 +915,8 @@ export default function Watchlist() {
                   title={t("暂无关注")}
                   description={
                     canManageWatchlist
-                      ? t('点击管理关注，添加股票或一次输入多个代码。')
+                      ? t('添加股票代码以跟踪行情、评分与异动。')
                       : t('登录后可将关注股票保存在账号里，换设备也能查看。')
-                  }
-                  footnote={
-                    canManageWatchlist
-                      ? t('关注股票保存在账号 {username} 下', { username: username ?? 'admin' })
-                      : isVisitor
-                        ? t('当前为访客只读模式')
-                        : undefined
                   }
                   action={canManageWatchlist ? (
                     <button

@@ -38,7 +38,6 @@ export const WATCHLIST: Dict = {
   "登录后管理关注": ["Sign in to manage watchlist", "ログインしてウォッチリストを管理"],
   "暂时读不到关注列表，请重试。": ["Unable to load your watchlist. Try again.", "ウォッチリストを読み込めません。再試行してください。"],
   "关注读取失败": ["Unable to load watchlist", "ウォッチリストの読み込みに失敗しました"],
-  "点击管理关注，添加股票或一次输入多个代码。": ["Open Manage watchlist to add stocks or enter several tickers at once.", "「ウォッチリストを管理」から銘柄の追加やコードの一括入力ができます。"],
   "暂无行情": ["No quotes yet", "相場データなし"],
   '指数': ['Index', '指数'],
   '当日': ['Today', '当日'],
@@ -94,6 +93,10 @@ export const WATCHLIST: Dict = {
 
   /* ---------------- 空态（items.length === 0） ---------------- */
   '暂无关注': ['Your watchlist is empty', 'ウォッチリストは空です'],
+  '添加股票代码以跟踪行情、评分与异动。': [
+    'Add tickers to track quotes, scores, and signals.',
+    '銘柄を追加して相場・スコア・シグナルを追跡します。',
+  ],
   '登录后可将关注股票保存在账号里，换设备也能查看。': [
     "Sign in to save your watchlist to your account. It will follow you across devices.",
     'ログインすると、ウォッチリストの銘柄をアカウントに保存でき、端末を変えても確認できます。',

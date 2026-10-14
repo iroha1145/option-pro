@@ -64,11 +64,11 @@ function errText(e: unknown): string {
   return e instanceof Error ? e.message : __t('请求失败');
 }
 
-function SectionCard({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }) {
+function SectionCard({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="rounded-md border border-line bg-card p-4">
       <p className="text-body-s font-medium text-ink-800">{title}</p>
-      <p className="mt-0.5 text-micro text-ink-400">{hint}</p>
+      {hint && <p className="mt-0.5 text-micro text-ink-400">{hint}</p>}
       <div className="mt-3">{children}</div>
     </div>
   );
@@ -308,7 +308,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
         )}
       </div>
       <div className="grid grid-cols-1 gap-3 px-5 py-4 lg:grid-cols-3">
-        <SectionCard title={__t("更新数据")} hint={__t("更新所选数据，不消耗分析额度")}>
+        <SectionCard title={__t("更新数据")}>
           <div className="flex flex-wrap gap-2">
             {REFRESH_OPS.map((o) => (
               <ActionButton key={o.op} label={o.label} busy={busyOp === `r-${o.op}`} onClick={() => void runRefresh(o.op, o.label)} />
@@ -316,7 +316,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
           </div>
         </SectionCard>
 
-        <SectionCard title={__t("后台任务")} hint={__t("任务在后台执行，30 秒内重复点击不会新建任务")}>
+        <SectionCard title={__t("后台任务")}>
           <div className="flex flex-wrap gap-2">
             {WORKER_ACTIONS.map((a) => (
               <ActionButton key={a.action} label={a.label} busy={busyOp === `w-${a.action}`} onClick={() => void runWorkerAction(a.action, a.label)} />
@@ -360,9 +360,6 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
                   })}
                 />
               </div>
-              <p className="text-micro text-ink-400">
-                {__t('雷达默认排序只在页面未指定排序、或选了「跟随默认」时生效。')}
-              </p>
               <div className="flex items-center justify-end gap-2 pt-1">
                 <button
                   onClick={() => void rollback()}

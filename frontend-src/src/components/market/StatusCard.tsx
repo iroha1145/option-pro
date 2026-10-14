@@ -21,8 +21,8 @@ const PHASE_LABEL: Record<string, string> = {
   premarket: t('盘前交易 · 纽约时间 4:00–9:30'),
   'after-hours': t('盘后交易 · 纽约时间 16:00–20:00'),
   postmarket: t('盘后交易 · 纽约时间 16:00–20:00'),
-  overnight: t('隔夜休市 · 等待下一交易时段'),
-  weekend: t('周末休市 · 等待下一个交易日'),
+  overnight: t('隔夜休市'),
+  weekend: t('周末休市'),
   holiday: t('节假日休市'),
 };
 
@@ -127,7 +127,7 @@ export default function StatusCard({
         <p className="text-data-xl text-ink-900 tnum" suppressHydrationWarning>
           {fmtNyTime(new Date(now))}
         </p>
-        <p className="mt-1 text-micro text-ink-400">{t('纽约时间（ET）· 每秒更新')}</p>
+        <p className="mt-1 text-micro text-ink-400">{t('纽约时间（ET）')}</p>
       </div>
       <div className="mt-4">
         <CountdownRow label={t("距开盘")} at={data.next_open} now={now} />

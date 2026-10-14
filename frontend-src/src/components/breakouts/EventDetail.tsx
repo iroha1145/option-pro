@@ -384,7 +384,6 @@ export default function EventDetail({
               >
                 {__t('全部事件')}
               </button>
-              <span className="ml-auto min-w-0 max-w-full break-all text-right font-mono text-micro text-ink-400 tnum">{event.event_id}</span>
             </div>
           </motion.div>
         </div>

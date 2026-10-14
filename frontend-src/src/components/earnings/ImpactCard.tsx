@@ -690,9 +690,6 @@ export default function ImpactCard({ ticker, row, analysisEligible, onAnalyzed, 
                 <AnalysisIcon size={22} />
               </span>
               <h3 className="mt-3 text-h3 text-ink-800">{__t('尚未生成财报影响分析')}</h3>
-              <p className="mt-1 max-w-[280px] text-caption text-ink-500">
-                {__t('分析 {ticker} 的财报对相关公司的影响。', { ticker })}
-              </p>
               {confirming ? (
                 <div className="mt-4 w-full rounded-md border border-ai-600/30 bg-ai-50 p-3 text-left">
                   <p className="text-caption text-ink-600">
@@ -825,12 +822,14 @@ export default function ImpactCard({ ticker, row, analysisEligible, onAnalyzed, 
                     </SoftBadge>
                   )}
                 </div>
-                <p className="mt-1 text-micro text-ink-400">
-                  {/* zh-CN 是给机器看的语言代码；同一含义在个股新闻页是中文
-                      chip「简体中文」（审计 2.3.5） */}
-                  {impact.outputLanguage === 'zh-CN' ? __t('简体中文') : impact.outputLanguage}
-                  {impact.reportDate ? __t(' · 财报日 {date}', { date: impact.reportDate }) : ''}
-                </p>
+                {(impact.reportDate || (impact.outputLanguage && impact.outputLanguage !== 'zh-CN')) && (
+                  <p className="mt-1 text-micro text-ink-400">
+                    {impact.outputLanguage && impact.outputLanguage !== 'zh-CN' ? impact.outputLanguage : ''}
+                    {impact.reportDate
+                      ? `${impact.outputLanguage && impact.outputLanguage !== 'zh-CN' ? ' · ' : ''}${__t('财报日 {date}', { date: impact.reportDate })}`
+                      : ''}
+                  </p>
+                )}
                 {isImpactFinalizing(impact) && !isFinalImpact(impact) && (
                   <div className="mt-3" role="status" aria-live="polite">
                     <p className="flex items-center gap-2 text-caption font-medium text-ai-600">

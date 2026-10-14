@@ -73,7 +73,6 @@ export default function MacroFitPanel({
             )}
           </>
         )}
-        <p className="text-micro text-ink-400">{t('宏观评分单独展示')}</p>
       </div>
     </div>
   );

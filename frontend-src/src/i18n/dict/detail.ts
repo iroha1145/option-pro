@@ -137,7 +137,6 @@ export const DETAIL: Dict = {
   '该到期日的期权链暂不可用': ['The options chain for this expiration is unavailable', 'この満期日のオプションチェーンは現在利用できません'],
   "可切换到其他到期日查看": ["View another expiration", "別の満期日をご確認ください"],
   '重试该到期日': ['Retry this expiration', 'この満期日を再試行'],
-  '当前只有筛选结果里的基础行情，日线与技术指标按实际情况显示': ['Only the basic quote from the screener result is available. Daily bars and technical indicators appear where available.', '現在はスクリーナー結果の基礎的な相場データのみです。日足とテクニカル指標は取得できた分だけ表示します。'],
 
   /* src/components/detail/AiAnalysisCard.tsx */
   '重试分析': ['Retry analysis', '分析を再試行'],
@@ -246,7 +245,6 @@ export const DETAIL: Dict = {
   'AI 财报影响': ['AI earnings impact', 'AI 決算影響'],
   '查看财报': ['View earnings', '決算を見る'],
   '预期：': ['Expected: ', '予想：'],
-  "有相关消息时会在此显示": ["Related news will appear here", "関連ニュースが届くと、ここに表示されます"],
   '浏览新闻': ['Browse news', 'ニュースを見る'],
   '更多新闻': ['More news', 'ニュースをもっと見る'],
 
@@ -277,7 +275,6 @@ export const DETAIL: Dict = {
   /* src/components/detail/SignalList.tsx */
   '已达成': ['Hit', '達成'],
   "近期暂无信号": ["No recent signals", "直近のシグナルはありません"],
-  '突破 / 放量 / 回踩等触发后将在此出现': ['Breakout, volume surge, pullback, and other triggers will show up here', 'ブレイクアウト・出来高急増・押し目などのトリガーが発生すると、ここに表示されます'],
 
   /* src/components/detail/TrendBiasPanel.tsx */
   '部分指标缺失': ['Some indicators missing', '一部指標が欠測'],
@@ -285,7 +282,6 @@ export const DETAIL: Dict = {
   '趋势偏向分数据不足': ['Not enough data for the trend bias score', 'トレンドバイアススコアのデータ不足'],
   '暂无技术信号数据': ['No technical signal data', 'テクニカルシグナルのデータがありません'],
   "暂无分项信号": ["No component signals available", "内訳のシグナルはありません"],
-  "分项根据该股信号计算": ["Components are calculated from this stock's signals", "各項目はこの銘柄のシグナルから算出"],
   '更新于 {time}': ['Updated at {time}', '{time} 更新'],
 
   /* src/components/detail/api.ts */
@@ -331,9 +327,7 @@ export const DETAIL: Dict = {
   '突破事件读取失败': ['Failed to load breakout events', 'ブレイクアウトイベントの読み込みに失敗しました'],
   "暂无突破事件记录": ["No breakout events on record", "ブレイクアウトの記録はありません"],
   '消息数据读取失败': ['Failed to load news data', 'ニュースデータの読み込みに失敗しました'],
-  '只是读取失败，不代表该股近期没有消息': ['This is a load error. It does not mean the stock has no recent news.', '読み込みに失敗しただけで、この銘柄に最近ニュースがないという意味ではありません'],
   '信号数据读取失败': ['Failed to load signal data', 'シグナルデータの読み込みに失敗しました'],
-  '只是读取失败，不代表该股没有信号': ['This is a load error. It does not mean the stock has no signals.', '読み込みに失敗しただけで、この銘柄にシグナルがないという意味ではありません'],
 
   /* ---- 个股整页 v2：技术指标 / K线结构分析 / 图上技术点位（与日股工作台同源词条） ---- */
   技术指标: ['Technical indicators', 'テクニカル指標'],
@@ -417,7 +411,6 @@ export const DETAIL: Dict = {
   '量价配合': ['Volume/price behavior', '出来高と価格の関係'],
   '突破质量修正': ['Breakout quality adj.', 'ブレイク品質補正'],
   '计算截至 {date} 收盘': ['Computed through the {date} close', '{date} の終値まで計算'],
-  '末根未收盘，不计入指标': ['the last bar is not closed and is excluded from indicators', '最終足は未確定のため指標に含めません'],
   '检测到 {date} 处序列断裂，仅分析其后数据': ['a series break was detected at {date}; only data after it is analyzed', '{date} に系列の断絶を検出したため、それ以降のみ分析します'],
   'MACD 柱变化（柱{sign}）': ['MACD hist. change (hist {sign})', 'MACD ヒストグラム変化（柱{sign}）'],
   'MACD 柱变化': ['MACD hist. change', 'MACD ヒストグラム変化'],

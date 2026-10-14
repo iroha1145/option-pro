@@ -30,7 +30,6 @@ export const MACRO: Dict = {
   '走势评分与宏观数据都暂不可用': ["Trend scores and macro data are both unavailable", "地合いスコアとマクロデータはいずれも利用できません"],
   '走势评分暂不可用': ["Trend scores are unavailable", "地合いスコアは現在利用できません"],
   '宏观数据暂不可用': ["Macro data unavailable", "マクロデータは利用できません"],
-  ' · 不按中性计': [' · not treated as neutral', ' · 中立扱いにはしません'],
   '结构性宏观 =': ['Structural macro =', '構造的マクロ ='],
 
   /* ============ src/components/market/macro/CompositeCard.tsx ============ */
@@ -198,7 +197,6 @@ export const MACRO: Dict = {
   '该行业各宏观指标方向不明显': ["No clear directional signal from this sector's macro indicators", "このセクターのマクロ指標に明確な方向性はありません"],
   ' · 价格明显跑在环境前面': [' · Price is clearly running ahead of the backdrop', ' · 価格が環境に明らかに先行'],
   ' · 宏观先行改善，价格未跟上': [" · Macro improving first, price hasn't caught up", ' · マクロが先に改善、価格が追いついていない'],
-  '宏观评分单独展示': ['Macro score shown separately', 'マクロスコアを別途表示'],
 
   /* ============ MacroConditionsPanel.tsx：刷新状态提示（不在原 msgid 清单里，人工补录） ============ */
   '更新仍在进行，完成后自动显示最新数据。': ["The update is still running. New data will appear automatically.", "更新処理が続いています。完了後、最新データを自動で表示します。"],

@@ -122,7 +122,6 @@ export default function DetailBand({
 
         {sector.scoreBasis === 'full_theme_balanced_mid_A' && (
           <div className="mt-2 space-y-1 text-micro text-ink-500" data-testid="sector-full-score-basis">
-            <p>{t('均分采用全体有有效评分的成员，固定为均衡、中期、趋势质量。')}</p>
             <p>{t('基准收益')} {sector.benchmarkTicker ?? '—'} {sector.benchmarkReturn != null ? fmtPct(sector.benchmarkReturn) : '—'}
               {' · '}{t('较基准')} {sector.excessReturn != null ? `${sector.excessReturn >= 0 ? '+' : ''}${sector.excessReturn.toFixed(2)}` : '—'} {t('个百分点')}</p>
             {Object.keys(sector.scoreMissingReasons ?? {}).length > 0 && (

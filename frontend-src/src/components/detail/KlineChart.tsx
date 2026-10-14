@@ -929,12 +929,6 @@ export default function KlineChart({
           >
             {t('自动画线')}
           </button>
-          {mode === 'area' && (
-            <span className="text-micro text-ink-400">{t('面积图不支持副图与均线叠加')}</span>
-          )}
-          {range === '1h' && (
-            <span className="text-micro text-ink-400">{t('1小时图无法在没有 5 分钟数据时绘制开盘区间')}</span>
-          )}
           {measureActive && mode === 'candle' && (
             <button
               type="button"

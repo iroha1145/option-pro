@@ -122,7 +122,6 @@ function FactorDetails({ path, sources }: {
               <span>{t('有效权重')}{t('：')}{diagnosticPercent(effective[factor])}</span>
               <span>{t('分数贡献')}{t('：')}{diagnosticNumber(components[factor], 2)}</span>
             </div>
-            {factor === 'G' && (path.track === 'PRICE_ONLY_DIAGNOSTIC' || path.track === 'D_MARKET_RESIDUAL_DIAGNOSTIC') && <p className="mt-1 text-micro text-ink-500">{t('当前评分模式不使用行业因子，不把缺失的行业数据当作零分。')}</p>}
           </div>
         ))}
       </div>
@@ -185,12 +184,12 @@ function PathCard({ path, sources }: {
         </div>
         <div>
           <h5 className="font-medium text-ink-800">{t('资格与成交额')}</h5>
-          <p className="mt-1 text-micro text-ink-500">{t('20 日平均成交额')}{t('：')}{money(path.adv20)} · {t('成交额数据可作参考，但代理口径尚未认证，不能视为已通过流动性门槛。')}</p>
+          <p className="mt-1 text-micro text-ink-500">{t('20 日平均成交额')}{t('：')}{money(path.adv20)}</p>
           <p className="mt-1 text-micro text-ink-500">{t('成交额资格')}{t('：')}{verifiedText(flags.dollar_liquidity_verified)} · {t('成交量时段')}{t('：')}{verifiedText(flags.volume_session_verified)}</p>
           {Object.keys(gates).length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">
             {Object.entries(gates).filter(([key]) => key !== 'score' && key !== 'coverage').map(([key, value]) => <span key={key} className="rounded border border-line px-2 py-1 text-micro text-ink-500">{gateNames[key] ?? t('其他条件')}: {key === 'adv20' && value === true && flags.dollar_liquidity_verified !== true ? t('代理值达到数值门槛，资格未认证') : gateText(value)}</span>)}
           </div>}
-          {path.gate_results_source === 'upstream_full_model' && <p className="mt-1 text-micro text-ink-500">{t('原始模型的形态门只作对照；最终评分以上方当前模式的结果为准。')}</p>}
+          {path.gate_results_source === 'upstream_full_model' && <p className="mt-1 text-micro text-ink-500">{t('原始形态条件仅作对照。')}</p>}
         </div>
         <FactorDetails path={path} sources={sources} />
       </div>
@@ -319,7 +318,6 @@ export default function SecurityDiagnostics({ profile, timeframe, publicationKey
             <span className="break-all sm:col-span-2">{t('来源标识')}{t('：')}{textValue(shown.source_hash)}</span>
           </div>
           {shown.coverage && <p className="mt-2 text-micro text-ink-500">{t('目录覆盖状态')}{t('：')}{diagnosticCoverageStatus(shown.coverage.status)}</p>}
-          {shown._stale && <p className="mt-2 text-body-s text-ink-700">{t('当前不是最新一轮收盘数据，请核对数据截至日期。')}</p>}
         </div>
         <div>
           <h4 className="text-body-s font-medium text-ink-800">{t('完整评分路径')} <span className="tnum">{paths.length}</span></h4>
