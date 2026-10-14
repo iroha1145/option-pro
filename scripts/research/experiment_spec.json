@@ -1,0 +1,84 @@
+{
+  "protocol": "us-eod-screener-gate-candidates-v1",
+  "authored_date": "2026-09-21",
+  "production_anchor": "d16b25e3812dce9adf16e2ca993b4f2c38d7b1ef",
+  "status": "exploratory_not_production_not_claimed_profitable",
+  "layer": "restricted_current_membership_exploratory",
+  "holdout_sealed_from": "2024-07-01",
+  "last_open_research_session": "2024-06-28",
+  "seen_or_unseen": "open_development_zone_only",
+  "weights_changed": false,
+  "factor_prior_reapplied": false,
+  "g_restored_without_trusted_grouping": false,
+  "d_residual_window_changed": false,
+  "bc_pattern_confirmation_changed": false,
+  "etf_algorithm_changed": false,
+  "m1_mixed_into_best_score_board": false,
+  "winrate_page_added": false,
+  "frozen_reference": {
+    "min_raw_price_usd": 5.0,
+    "min_adv20_usd": 20000000,
+    "min_history_sessions": 252,
+    "min_reference_n": 30,
+    "upper_median": "sorted[n//2]",
+    "note": "frozen experimental settings, not claimed optima"
+  },
+  "variants": {
+    "B0_current": "current stock-track score and gates",
+    "G1_stock_reference": "replace shared HIGH_ATR reference only",
+    "G2_extension_discovery": "G1 plus EXTENDED as discovery risk hint",
+    "G3_risk_discovery": "G2 plus HIGH_ATR as discovery risk hint"
+  },
+  "labels": {
+    "primary": "T_close_to_T_plus_H_close",
+    "primary_note": "future price performance only, not an execution fill",
+    "execution_proxy": "next_session_open_to_E_plus_H_open",
+    "horizons_sessions": [5, 20, 63],
+    "overlapping_labels_are_not_independent_trades": true,
+    "bootstrap": {
+      "seed": 174,
+      "replicates": 2000,
+      "block_lengths": ["H", "2H"],
+      "method": "circular_moving_block_on_complete_trading_day_sequence"
+    }
+  },
+  "source_reports": {
+    "pr163": {
+      "head": "91f3731959343a8cfca9f4f144a80ed0edaf68aa",
+      "findings": "docs/research/screener-radar/findings.md",
+      "round2": "docs/research/screener-radar/round2/"
+    },
+    "pr164": {
+      "head": "adac675c272fb0d3900f275c1ae0195b4f74a7c5",
+      "report": "docs/research/screener-radar/algorithm-round/report.md",
+      "note": "old strength-v3, not a direct current EOD baseline"
+    },
+    "pr174": {
+      "head": "ec14a1663051ec3425cb4fcfeecc8dc34cc698f3",
+      "files": [
+        "research/option_pro_us_eod_v1/return_pack/algorithm_round2_audit.md",
+        "research/option_pro_us_eod_v1/return_pack/algorithm_round2_evidence_table.json",
+        "research/option_pro_us_eod_v1/return_pack/algorithm_round2_freeze_audit.md",
+        "research/option_pro_us_eod_v1/return_pack/algorithm_fixed_matrix_audit.md",
+        "research/option_pro_us_eod_v1/return_pack/algorithm_data_readiness_inventory.json"
+      ]
+    }
+  },
+  "expected_caches": [
+    {
+      "path": "research/option_pro_us_eod_v1/data/cache/round3_yahoo_abcd/bars.pkl",
+      "bytes": 90212441,
+      "sha256": "d910d86505e1914eb14aaacea2ddabc8d61b1f097ab83c513f07750539f32d48",
+      "securities_n": 214,
+      "first": "2018-01-02",
+      "last": "2026-09-16",
+      "last_allowed": "2024-06-28"
+    },
+    {
+      "path": "research/option_pro_us_eod_v1/return_pack/measurement_factor_rows.jsonl",
+      "bytes": 4129370382,
+      "sha256": "b490ba6d83965a0c3fe60c76afab8205fc2a0d76cc6577cdf23cb838e447f75a",
+      "note": "B0 feature/label tape, not raw prints"
+    }
+  ]
+}
