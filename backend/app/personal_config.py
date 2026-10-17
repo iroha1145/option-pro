@@ -30,9 +30,9 @@ HOURLY_ANALYSIS_TIMES_ET = tuple(f"{hour:02d}:00" for hour in range(24))
 #: asserted equal in tests.
 MACRO_SCORING_VERSION = "optix-macro-score-v1"
 #: Mirror of the largest ``app.services.ai_jobs.runtime.token_reservation`` over
-#: every job type and job model (a Luna news task without an article body).
+#: every job type and job model (the Claude tool-enabled task reservation).
 #: Kept as a literal for the same reason; the two are asserted equal in tests.
-LARGEST_TASK_TOKEN_RESERVATION = 1_050_000
+LARGEST_TASK_TOKEN_RESERVATION = 1_000_000
 #: Mirror of ``app.services.ai_jobs.runtime.OPENAI_REASONING_EFFORTS``: the
 #: reasoning efforts a GPT model accepts. Claude models accept only ``xhigh``.
 #: Kept as a literal for the same reason; the two are asserted equal in tests.

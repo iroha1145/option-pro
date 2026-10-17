@@ -79,18 +79,14 @@ def test_known_openai_usage_is_not_capped_by_a_small_reservation(model, expected
     ) == expected
 
 
-def test_luna_submission_keeps_selected_identity_and_requires_missing_body_search():
+def test_luna_submission_keeps_selected_identity_without_web_tools():
     selected = runtime.settings_for_job(settings(openai_news_model='gpt-5.6-luna'), 'news_impact')
     payload = {'news_id':1,'change_sequence':1,'content_hash':'a'*64,'allowed_tickers':[]}
     params = runtime._create_params(selected, 'news_impact', payload)
     assert params['model']=='gpt-5.6-luna'
     assert params['reasoning']=={'effort':'max'}
-    assert params['tools'] == [{
-        'type':'web_search','search_context_size':'low','external_web_access':True,
-    }]
-    assert params['tool_choice'] == 'required'
-    assert params['max_tool_calls'] == 1
-    assert params['include'] == ['web_search_call.action.sources']
+    assert not {'tools', 'tool_choice', 'max_tool_calls', 'include'} & set(params)
+    assert '只分析标题与摘要内容，不联网' in params['instructions']
 
 
 @pytest.mark.parametrize('returned_model',[None,'gpt-5.6-terra','gpt-5.6-luna-unverified-snapshot'])

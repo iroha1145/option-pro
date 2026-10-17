@@ -282,5 +282,5 @@ def test_other_models_do_not_receive_luna_normalization(provider, model):
 def test_normalization_preserves_luna_runtime_schema_identity():
     assert (
         runtime.schema_identity("news_impact", model=runtime.LUNA_MODEL)
-        == runtime.LUNA_WEB_NEWS_IDENTITY
+        == runtime.LUNA_SUMMARY_NEWS_IDENTITY
     )

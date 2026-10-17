@@ -39,14 +39,14 @@ LEGACY_LUNA_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "d0e6936d8749cc96ed7fa8b3bf
 LUNA_ALWAYS_WEB_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "719aed2113e2b6ab0f08349c2968706147201ab24e9b8642a8b9e3014cc9ca98")
 # 2026-10-10（PR #237）：缺正文时联网，工具调用最多 3 次。
 LUNA_THREE_CALL_WEB_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "cda8f76d5306ceaeb712f52e3b1b1a85dfa49aae5e640d4ab24009cf22092308")
-# 现行 Luna 新闻身份按载荷分三种：缺正文且摘要不够长时联网（最多 1 次）；有正文时
-# 不联网；缺正文但来源摘要够长时只按摘要分析、不联网。
+# 保留旧联网身份供历史结果和已提交任务读取。新 Luna 新闻请求一律不联网：
+# 有正文时分析正文，缺正文时只分析已有标题与摘要。
 LUNA_WEB_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "135ee2bf6c3460581e209ae15caf8c6a1479362d0290d3e86bfff1a1a84fa1fc")
 LUNA_ARTICLE_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "e64f425270938c5aed9f470d1cb59d34f4d4da99e941d6063f805bc8c61c7ca3")
 LUNA_SUMMARY_NEWS_IDENTITY = ("news_impact_zh_cn_v6", "b13ab0647d03e8cf295f15691f793532a4617724549dddfab8f158ec80bee796")
-# Luna 新闻请求的三种形态，顺序无意义。
-LUNA_NEWS_MODES = ("search", "article", "summary")
-# 联网任务的内置工具调用（搜索、打开网页、页内查找）合计上限。
+# 新 Luna 新闻请求的两种形态，顺序无意义。
+LUNA_NEWS_MODES = ("article", "summary")
+# 旧联网请求的身份与费用核验仍按当时的单次工具上限处理。
 LUNA_MAX_TOOL_CALLS = 1
 # 缺正文时，来源摘要去掉 HTML 标签、连续空白合并成一个空格、去掉首尾空白后至少
 # 这么多个字符，就只按摘要分析。口径与取证时按原始长度统计的一致。
@@ -220,7 +220,7 @@ VERIFIED_FOCUS_IDENTITY = ("market_focus_verified_zh_cn_v2", "b40394467f8a064651
 # 改结果结构。只按「确切的现行身份 → 上一版身份」放行：待处理任务按现行策略
 # 提交，已完成结果照常可读；策略再变时现行身份不再等于这里的键，旧任务照常判
 # runtime_configuration_changed。3 次联网身份的待处理任务没有正文，按载荷落到
-# 联网或摘要两种现行形态之一，所以它是这两者的上一版。
+# 当时的联网或摘要形态之一。关闭联网后，旧联网身份也接受摘要形态提交。
 _IDENTITY_PREDECESSORS: dict[tuple[str, str], frozenset[tuple[str, str]]] = {
     TERRA_NEWS_IDENTITY: frozenset({NEWS_CONTENT_SCHEMA_IDENTITY}),
     LUNA_WEB_NEWS_IDENTITY: frozenset({
@@ -228,7 +228,8 @@ _IDENTITY_PREDECESSORS: dict[tuple[str, str], frozenset[tuple[str, str]]] = {
     }),
     LUNA_ARTICLE_NEWS_IDENTITY: frozenset({LUNA_ALWAYS_WEB_NEWS_IDENTITY, LEGACY_LUNA_NEWS_IDENTITY}),
     LUNA_SUMMARY_NEWS_IDENTITY: frozenset({
-        LUNA_THREE_CALL_WEB_NEWS_IDENTITY, LUNA_ALWAYS_WEB_NEWS_IDENTITY, LEGACY_LUNA_NEWS_IDENTITY,
+        LUNA_WEB_NEWS_IDENTITY, LUNA_THREE_CALL_WEB_NEWS_IDENTITY,
+        LUNA_ALWAYS_WEB_NEWS_IDENTITY, LEGACY_LUNA_NEWS_IDENTITY,
     }),
     OPENAI_EARNINGS_IDENTITY: frozenset({LEGACY_OPENAI_EARNINGS_IDENTITY}),
     FOCUS_CLAUDE_IDENTITY: frozenset({LEGACY_FOCUS_CLAUDE_IDENTITY}),
@@ -449,9 +450,9 @@ def luna_news_mode(
 ) -> str | None:
     """The request a Luna news task makes, decided by its own payload.
 
-    ``article`` analyzes the fetched body, ``summary`` analyzes a long enough
-    feed summary, and ``search`` (no body, short summary) searches the web.
-    Other models and job types have no mode.
+    ``article`` analyzes the fetched body; otherwise ``summary`` uses only the
+    supplied title and summary, regardless of length. Other models and job
+    types have no mode. New Luna requests never search the web.
     """
 
     if job_type != "news_impact" or model != LUNA_MODEL:
@@ -459,13 +460,13 @@ def luna_news_mode(
     data = payload or {}
     if news_article_available(data):
         return "article"
-    return "summary" if news_summary_sufficient(data) else "search"
+    return "summary"
 
 
 def task_uses_web_search(
     job_type: str, payload: Mapping[str, Any] | None, *, model: str | None = None,
 ) -> bool:
-    """Luna 新闻只在没有正文、摘要又不够长时联网；其余任务的 OpenAI 请求从不联网。"""
+    """新增 OpenAI 请求均不联网；旧联网回执仍按实际工具记录核验。"""
 
     return luna_news_mode(job_type, payload, model=model) == "search"
 
@@ -651,6 +652,8 @@ def _runtime_request(
             "必须写明“未证实”或“与来源不符”，不得当作事实。"
         )
     if job_type == "news_impact" and model == LUNA_MODEL:
+        # Kept only to calculate historical search identities. Payload-based
+        # request construction now selects article or summary, never search.
         use_web_search = mode == "search"
         if use_web_search:
             instructions = instructions.replace(
@@ -697,9 +700,9 @@ def schema_identity(
     """The runtime contract's identity hash for a job type.
 
     ``payload`` selects the task's own variant where the contract depends on
-    it: a Luna news task with an article body, or with a long enough feed
-    summary, is a no-search request (``luna_news_mode``). Without a payload
-    the identity is the searching variant.
+    it: a Luna news task uses either the article body or the supplied title
+    and summary, without search (``luna_news_mode``). Without a payload the
+    identity is the summary variant.
 
     Deliberately **not** memoized, even though the feed reads it once per item.
     It folds in ``max_output_tokens_for``, which reads the mutable module policy
@@ -845,8 +848,7 @@ def schema_identity_current(
         return True
     currents = {current}
     if job_type == "news_impact" and model == LUNA_MODEL:
-        # Whether a Luna news task searches depends on its own payload; every
-        # variant of the current policy is current.
+        # Both offline variants, and their explicit predecessors, stay readable.
         currents.update(identity(mode) for mode in LUNA_NEWS_MODES)
     if job_type == "news_impact":
         return any(

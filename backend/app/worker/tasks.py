@@ -1364,6 +1364,15 @@ class FocusTask:
             )
         )
         payload = payload if isinstance(payload, dict) else {}
+        next_focus = getattr(self._intelligence, "scheduled_focus_next_at", None)
+        if callable(next_focus):
+            due = await _call_local(next_focus)
+            if due is not None:
+                # Keep the normal news polling cadence while waking exactly
+                # when a successful hotspot publication reaches six hours.
+                remaining = (due - datetime.now(timezone.utc)).total_seconds()
+                if remaining > 0:
+                    delay = min(delay, remaining)
         return TaskResult(
             status="idle",
             details={

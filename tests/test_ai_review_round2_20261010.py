@@ -372,20 +372,21 @@ def test_s8r2_the_config_mirror_is_the_largest_task_reservation():
         runtime.token_reservation(job_type, model=model)
         for job_type in runtime.AI_TASK_MAX_OUTPUT_TOKENS
         for model in JOB_MODELS
-    ) == runtime.token_reservation("news_impact", model=runtime.LUNA_MODEL)
+    ) == runtime.CLAUDE_TOOL_TOKEN_RESERVATION
+    assert runtime.token_reservation("news_impact", model=runtime.LUNA_MODEL) < LARGEST_TASK_TOKEN_RESERVATION
 
 
-@pytest.mark.parametrize("limit", [102_400, 1_049_999])
+@pytest.mark.parametrize("limit", [102_400, 999_999])
 def test_s8r2_token_only_budget_below_one_task_is_a_config_error(limit):
     from pydantic import ValidationError
 
-    with pytest.raises(ValidationError, match="largest single-task token reservation 1050000"):
+    with pytest.raises(ValidationError, match="largest single-task token reservation 1000000"):
         _personal_config(ai={**_LUNA_NEWS, "daily_token_limit": limit}, model_budget={"daily_budget_usd": 0})
 
 
 @pytest.mark.parametrize(
     ("limit", "shared_budget"),
-    [(1_050_000, 0), (10_000_000, 0), (102_400, 10.0)],
+    [(1_000_000, 0), (1_050_000, 0), (10_000_000, 0), (102_400, 10.0)],
 )
 def test_s8r2_limits_that_admit_one_task_or_a_shared_budget_are_accepted(limit, shared_budget):
     _personal_config(

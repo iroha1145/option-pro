@@ -2952,9 +2952,11 @@ def test_read_and_off_focus_ignore_stale_enabled_runtime_switches(
         assert connection.execute("SELECT count(*) FROM ai_jobs").fetchone()[0] == 0
 
 
+@pytest.mark.parametrize("seconds_until_refresh", [None, 90])
 def test_scheduled_focus_calls_local_scheduler_once(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    seconds_until_refresh: int | None,
 ) -> None:
     calls: list[str] = []
 
@@ -2964,6 +2966,10 @@ def test_scheduled_focus_calls_local_scheduler_once(
 
         def initialize(self) -> None:
             calls.append("initialize")
+
+        def scheduled_focus_next_at(self):
+            return (datetime.now(timezone.utc) + timedelta(seconds=seconds_until_refresh)
+                    if seconds_until_refresh is not None else None)
 
         def run_scheduled(self, **kwargs) -> dict:
             assert kwargs["scheduled_times_et"] == ("08:00", "12:00", "16:00")
@@ -3000,7 +3006,10 @@ def test_scheduled_focus_calls_local_scheduler_once(
 
     assert result.status == "idle"
     assert result.details == {"result": "scheduled", "queued": 1, "skipped": 2}
-    assert result.next_delay_seconds == 601
+    if seconds_until_refresh is None:
+        assert result.next_delay_seconds == 601
+    else:
+        assert 85 < result.next_delay_seconds <= seconds_until_refresh
     assert calls == ["initialize", "run_scheduled"]
 
 

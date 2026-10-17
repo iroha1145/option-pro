@@ -1,8 +1,7 @@
 """2026-10-10 cost controls for GPT-5.6 Luna news analysis.
 
-1. A Luna news task without a body whose feed summary is long enough is
-   analyzed from that summary alone, without web search.
-2. A searching Luna news task makes at most one tool call.
+1. Luna news tasks use only the supplied title, summary and article body.
+2. New requests have no web tools; historical search receipts remain readable.
 3. Scheduled analysis skips Zacks template articles; reads mark them skipped.
 4. GPT models accept the max, xhigh and high reasoning efforts.
 
@@ -140,11 +139,12 @@ def test_long_summary_without_a_body_is_analyzed_without_search(tmp_path, reason
     assert sent["summary"] == LONG_SUMMARY
 
 
-def test_a_short_summary_still_searches(tmp_path):
-    almost = summary_payload(summary="y" * 299)
-    assert runtime.task_uses_web_search("news_impact", almost, model=runtime.LUNA_MODEL)
-    params = runtime._create_params(luna_settings(tmp_path / "x"), "news_impact", almost)
-    assert params["tools"][0]["type"] == "web_search"
+@pytest.mark.parametrize("summary", ["", "y" * 299, "y" * 300])
+def test_missing_or_short_summaries_never_enable_web_search(tmp_path, summary):
+    data = summary_payload(summary=summary)
+    assert not runtime.task_uses_web_search("news_impact", data, model=runtime.LUNA_MODEL)
+    params = runtime._create_params(luna_settings(tmp_path / "x"), "news_impact", data)
+    assert not {"tools", "tool_choice", "max_tool_calls", "include"} & set(params)
 
 
 def test_summary_tasks_reserve_like_article_tasks():
@@ -162,7 +162,7 @@ def test_summary_tasks_have_their_own_identity_and_keep_the_queue_current():
     prompt = runtime.PROMPT_VERSIONS["news_impact"]
     summary = runtime.schema_identity("news_impact", model=model, payload=summary_payload())
     assert summary == runtime.LUNA_SUMMARY_NEWS_IDENTITY
-    assert runtime.schema_identity("news_impact", model=model, payload=luna_payload()) == runtime.LUNA_WEB_NEWS_IDENTITY
+    assert runtime.schema_identity("news_impact", model=model, payload=luna_payload()) == runtime.LUNA_SUMMARY_NEWS_IDENTITY
     assert runtime.schema_identity("news_impact", model=model, payload=article_payload()) == runtime.LUNA_ARTICLE_NEWS_IDENTITY
     # The body variant did not move; the searching one did (one tool call).
     assert runtime.LUNA_ARTICLE_NEWS_IDENTITY[1].startswith("e64f4252")
@@ -180,12 +180,13 @@ def test_summary_tasks_have_their_own_identity_and_keep_the_queue_current():
         runtime.LEGACY_LUNA_NEWS_IDENTITY,
     ):
         assert runtime.schema_identity_current("news_impact", prompt, *stored, current_identity=summary, model=model)
-    # Readers check a stored job against the model's default (searching)
-    # identity; a finished summary-only job must stay current there too.
-    assert runtime.schema_identity("news_impact", model=model) == runtime.LUNA_WEB_NEWS_IDENTITY
+    # Readers use the offline summary identity by default; every explicitly
+    # supported historical variant remains readable.
+    assert runtime.schema_identity("news_impact", model=model) == runtime.LUNA_SUMMARY_NEWS_IDENTITY
     for stored in (runtime.LUNA_SUMMARY_NEWS_IDENTITY, runtime.LUNA_ARTICLE_NEWS_IDENTITY):
         assert runtime.schema_identity_current("news_impact", prompt, *stored, model=model)
     assert runtime._IDENTITY_PREDECESSORS[runtime.LUNA_SUMMARY_NEWS_IDENTITY] == {
+        runtime.LUNA_WEB_NEWS_IDENTITY,
         runtime.LUNA_THREE_CALL_WEB_NEWS_IDENTITY,
         runtime.LUNA_ALWAYS_WEB_NEWS_IDENTITY,
         runtime.LEGACY_LUNA_NEWS_IDENTITY,
@@ -219,13 +220,12 @@ def test_queued_three_call_job_with_a_long_summary_is_submitted_without_search(t
     assert "以下输入中的summary是来源提供的摘要" in params["instructions"]
 
 
-def test_queued_three_call_job_with_a_short_summary_searches_once(tmp_path, monkeypatch):
+def test_queued_three_call_job_with_a_short_summary_is_submitted_offline(tmp_path, monkeypatch):
     repo = AIJobRepository(tmp_path / "news.db")
     job_id = _pending_luna_job(repo, luna_payload(), runtime.LUNA_THREE_CALL_WEB_NEWS_IDENTITY)
     (params,) = _submit_pending(repo, monkeypatch)
     assert repo.get_job(job_id)["error_code"] is None
-    assert params["tool_choice"] == "required"
-    assert params["max_tool_calls"] == 1
+    assert not {"tools", "tool_choice", "max_tool_calls", "include"} & set(params)
 
 
 def test_a_summary_receipt_publishes_the_reading_without_sources():
@@ -240,11 +240,11 @@ def test_a_searching_receipt_without_sources_stays_insufficient():
     # Submitted with tools before this change, and the search found nothing.
     failed = runtime.openai_receipt(luna_response(calls=[search(status="failed")]))
     assert runtime.receipt_result(failed, "news_impact", summary_payload())["insufficient_context"] is True
-    # A short summary is a searching task even without a recorded call.
+    # New offline requests can publish a valid reading of a short summary.
     plain = runtime.openai_receipt(luna_response())
-    unsupported = runtime.receipt_result(plain, "news_impact", luna_payload())
-    assert unsupported["insufficient_context"] is True
-    assert unsupported["affected_stocks"] == []
+    offline = runtime.receipt_result(plain, "news_impact", luna_payload())
+    assert offline["insufficient_context"] is False
+    assert not any("联网" in note for note in offline["uncertainty_notes"])
     # With sources the note about separately retrieved sources stays.
     searched = runtime.receipt_result(
         runtime.openai_receipt(luna_response(calls=[search()])), "news_impact", luna_payload(),
@@ -261,20 +261,17 @@ def test_the_summary_rule_is_luna_only():
     assert runtime.schema_identity("news_impact", model=runtime.OFFICIAL_OPENAI_MODEL, payload=data) == runtime.TERRA_NEWS_IDENTITY
 
 
-# --- 2. One tool call for a searching task ------------------------------------
+# --- 2. New requests have no tools or search reservation ----------------------
 
 
-def test_a_searching_task_makes_at_most_one_tool_call(tmp_path):
+def test_new_luna_requests_have_no_tool_calls_or_search_reservation(tmp_path):
     model = runtime.LUNA_MODEL
     params = runtime._create_params(luna_settings(tmp_path / "x"), "news_impact", luna_payload())
-    assert params["tools"][0]["type"] == "web_search"
-    assert params["tool_choice"] == "required"
-    assert params["max_tool_calls"] == runtime.LUNA_MAX_TOOL_CALLS == 1
-    assert "只能调用一次，用这一次搜索原始事件" in params["instructions"]
-    assert runtime.max_tool_calls_for("news_impact", model=model, payload=luna_payload()) == 1
-    # The input bound is still the context window; one search at $0.01 replaces three.
-    assert runtime.token_reservation("news_impact", model=model, payload=luna_payload()) == 1_050_000
-    assert runtime.budget_reservation_microusd("news_impact", model=model, payload=luna_payload()) == 620_197
+    assert not {"tools", "tool_choice", "max_tool_calls", "include"} & set(params)
+    assert "必须先联网" not in params["instructions"]
+    assert runtime.max_tool_calls_for("news_impact", model=model, payload=luna_payload()) == 0
+    assert runtime.token_reservation("news_impact", model=model, payload=luna_payload()) == 139_264
+    assert runtime.budget_reservation_microusd("news_impact", model=model, payload=luna_payload()) == 97_076
 
 
 # --- 3. Zacks template articles -------------------------------------------------
@@ -654,7 +651,7 @@ def test_news_effort_reaches_the_request(tmp_path, effort):
 
 def test_a_queued_job_from_another_effort_is_retired_before_submission(tmp_path, monkeypatch):
     repo = AIJobRepository(tmp_path / "news.db")
-    job_id = _pending_luna_job(repo, luna_payload(), runtime.LUNA_WEB_NEWS_IDENTITY)
+    job_id = _pending_luna_job(repo, luna_payload(), runtime.LUNA_SUMMARY_NEWS_IDENTITY)
     assert repo.get_job(job_id)["reasoning"] == "max"
 
     async def no_submission(*_args, **_kwargs):
