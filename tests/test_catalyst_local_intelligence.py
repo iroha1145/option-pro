@@ -4917,10 +4917,14 @@ def test_completed_previous_identity_focus_is_reused_without_paid_retry(
     assert audit == ("accepted", raw_result)
     assert restored == ("completed", None, raw_result)
 
-    assert intelligence.run_scheduled(now=clock["now"]) == {
-        "queued": 0,
-        "skipped": 1,
-    }
+    # A successful historical result starts the same six-hour refresh clock.
+    # Until it is due, no focus candidate is attempted (or counted as skipped).
+    for observed in (first_now, first_now + timedelta(hours=6) - timedelta(seconds=1)):
+        clock["now"] = observed
+        assert intelligence.run_scheduled(now=observed) == {"queued": 0, "skipped": 0}
+        historical = intelligence.latest_market_focus_cycle(now=observed)["latest_successful_cycle"]
+        assert historical["cycle_id"] == cycle["cycle_id"]
+        assert historical["result"] == focus_result
     with sqlite3.connect(ai.path) as connection:
         jobs = connection.execute(
             """SELECT job_id,status,prompt_version FROM ai_jobs
@@ -4929,6 +4933,27 @@ def test_completed_previous_identity_focus_is_reused_without_paid_retry(
     assert jobs == [
         (cycle["job_id"], "completed", "market-focus-zh-cn-v2")
     ]
+
+    # Refreshing at six hours creates a new cycle; it does not retry or
+    # overwrite the completed job whose older prompt identity was accepted.
+    clock["now"] = first_now + timedelta(hours=6)
+    assert intelligence.run_scheduled(now=clock["now"])["queued"] == 1
+    assert intelligence.run_scheduled(now=clock["now"])["queued"] == 0
+    with sqlite3.connect(ai.path) as connection:
+        refreshed_jobs = connection.execute(
+            "SELECT job_id,status,prompt_version,payload_json FROM ai_jobs "
+            "WHERE job_type='market_focus' ORDER BY rowid"
+        ).fetchall()
+    assert len(refreshed_jobs) == 2
+    assert refreshed_jobs[0][:3] == jobs[0]
+    assert refreshed_jobs[1][0] != cycle["job_id"]
+    refreshed_payload = json.loads(refreshed_jobs[1][3])
+    assert refreshed_payload["prepared_revision"] == prepared
+    assert refreshed_payload["force"] is True
+    latest = intelligence.latest_market_focus_cycle(now=clock["now"])
+    assert latest["cycle"]["job_id"] == refreshed_jobs[1][0]
+    assert latest["latest_successful_cycle"]["cycle_id"] == cycle["cycle_id"]
+    assert latest["latest_successful_cycle"]["result"] == focus_result
 
 
 def test_completed_focus_payload_mismatch_is_not_retried_automatically(

@@ -140,8 +140,8 @@ def test_r3s2_token_only_budget_rejects_a_low_daily_token_limit(monkeypatch):
     assert response.status_code == 422
     detail = response.json()["detail"]
     assert detail["code"] == "token_limit_below_task_reservation"
-    assert detail["minimum"] == 1_050_000
-    assert "1,050,000" in detail["message"] and "model_budget" in detail["message"]
+    assert detail["minimum"] == 1_000_000
+    assert "1,000,000" in detail["message"] and "model_budget" in detail["message"]
     assert store.read().version == 1
 
 
@@ -162,7 +162,7 @@ def test_r3s2_rollback_to_a_low_limit_is_refused_under_a_token_only_budget(monke
     assert store.read().settings.ai.daily_token_limit == 9_000_000
 
 
-@pytest.mark.parametrize(("shared_budget", "limit"), [(0, 1_050_000), (0, 9_000_000), (10.0, 102_400)])
+@pytest.mark.parametrize(("shared_budget", "limit"), [(0, 1_000_000), (0, 1_050_000), (0, 9_000_000), (10.0, 102_400)])
 def test_r3s2_limits_that_admit_one_task_or_a_shared_budget_are_saved(monkeypatch, shared_budget, limit):
     client, store = _settings_client(monkeypatch, shared_budget)
     response = _write_token_limit(client, 1, limit)
