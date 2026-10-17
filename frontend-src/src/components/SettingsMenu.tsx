@@ -9,7 +9,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { overlayClassName, overlayVisible, readRootDurationMs, useOverlayPhase } from '@/lib/transitions';
-import { setThemePreference, type ThemePreference } from '@/lib/themePreference.ts';
+import { type ThemePreference } from '@/lib/themePreference.ts';
+import { revealThemePreference } from '@/lib/themeReveal.ts';
+import { flushSync } from 'react-dom';
 import { useThemePreference } from '@/hooks/useAppearance.ts';
 import { setColorMode, type ColorMode } from '@/lib/colorPreference.ts';
 import { useColorMode } from '@/hooks/useColorMode.ts';
@@ -33,6 +35,7 @@ const ITEM_CLASS =
 
 export default function SettingsMenu({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
+  const [themeMenuClosed, setThemeMenuClosed] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -100,10 +103,14 @@ export default function SettingsMenu({ className }: { className?: string }) {
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          setThemeMenuClosed(false);
+          setOpen((v) => !v);
+        }}
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             e.preventDefault();
+            setThemeMenuClosed(false);
             setOpen(true);
           }
         }}
@@ -118,7 +125,7 @@ export default function SettingsMenu({ className }: { className?: string }) {
           <Icon name="sliders" size={15} motion />
         </span>
       </button>
-      {mounted && (
+      {mounted && !themeMenuClosed && (
         <div
           ref={menuRef}
           role="menu"
@@ -165,7 +172,14 @@ export default function SettingsMenu({ className }: { className?: string }) {
                   role="menuitemradio"
                   aria-checked={active}
                   tabIndex={-1}
-                  onClick={() => choose(() => setThemePreference(option.value))}
+                  onClick={() => {
+                    flushSync(() => {
+                      setThemeMenuClosed(true);
+                      setOpen(false);
+                    });
+                    triggerRef.current?.focus();
+                    revealThemePreference(option.value, triggerRef.current);
+                  }}
                   className={cn(ITEM_CLASS, active ? 'text-brand-600' : 'text-ink-700 hover:bg-paper-2')}
                 >
                   <Icon name={option.icon} motion size={14} className="w-5 shrink-0 text-ink-400" />

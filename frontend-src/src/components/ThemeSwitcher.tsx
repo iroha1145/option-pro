@@ -10,7 +10,9 @@ import {
   readRootDurationMs,
   useOverlayPhase,
 } from '@/lib/transitions';
-import { setThemePreference, type ThemePreference } from '@/lib/themePreference.ts';
+import { type ThemePreference } from '@/lib/themePreference.ts';
+import { revealThemePreference } from '@/lib/themeReveal.ts';
+import { flushSync } from 'react-dom';
 import { useAppearance, useThemePreference } from '@/hooks/useAppearance.ts';
 import { t } from '../i18n/core.ts';
 import Icon, { type IconName } from '@/components/icons';
@@ -29,6 +31,7 @@ function preferenceLabel(preference: ThemePreference): string {
 
 export default function ThemeSwitcher({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
+  const [themeMenuClosed, setThemeMenuClosed] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -87,10 +90,14 @@ export default function ThemeSwitcher({ className }: { className?: string }) {
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          setThemeMenuClosed(false);
+          setOpen((v) => !v);
+        }}
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             e.preventDefault();
+            setThemeMenuClosed(false);
             setOpen(true);
           }
         }}
@@ -105,7 +112,7 @@ export default function ThemeSwitcher({ className }: { className?: string }) {
       >
         <Icon name={triggerIcon} size={14} />
       </button>
-      {mounted && (
+      {mounted && !themeMenuClosed && (
         <div
           role="menu"
           aria-labelledby="theme-appearance-label"
@@ -126,9 +133,12 @@ export default function ThemeSwitcher({ className }: { className?: string }) {
                     role="menuitemradio"
                     aria-checked={active}
                     onClick={() => {
-                      setThemePreference(option.value);
-                      setOpen(false);
+                      flushSync(() => {
+                        setThemeMenuClosed(true);
+                        setOpen(false);
+                      });
                       triggerRef.current?.focus();
+                      revealThemePreference(option.value, triggerRef.current);
                     }}
                     className={cn(
                       'flex w-full items-center gap-2 rounded-xs px-2 py-1.5 text-left text-body-s transition-colors duration-fast focus-visible:bg-paper-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600',
