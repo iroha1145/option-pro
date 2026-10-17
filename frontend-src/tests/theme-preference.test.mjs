@@ -229,12 +229,12 @@ test('页头设置菜单（桌面与手机同一入口）与登录页都有外�
   const switcher = codeOf(await source('components/ThemeSwitcher.tsx'));
   assert.match(navbar, /<SettingsMenu\s*\/>/);
   assert.doesNotMatch(navbar, /<SettingsMenu[^>]*hidden/);
-  assert.match(settings, /setThemePreference\(option\.value\)/);
+  assert.match(settings, /revealThemePreference\(option\.value, triggerRef\.current\)/);
   assert.match(settings, /跟随系统/);
   assert.match(settings, /useThemePreference\(\)/);
   assert.match(login, /<ThemeSwitcher\s*\/>/);
   assert.match(switcher, /useThemePreference\(\)/);
-  assert.match(switcher, /setThemePreference/);
+  assert.match(switcher, /revealThemePreference/);
   assert.match(switcher, /role="menuitemradio"/);
 });
 
