@@ -128,6 +128,7 @@ SCHEDULED_NEWS_WINDOW_HOURS = 72
 SCHEDULED_NEWS_MAX_ATTEMPTS = ai_runtime.SCHEDULED_MAX_ATTEMPTS
 SCHEDULED_FOCUS_MAX_ATTEMPTS = ai_runtime.SCHEDULED_MAX_ATTEMPTS
 SCHEDULED_FOCUS_EVENT_LIMIT = 20
+SCHEDULED_FOCUS_REFRESH_SECONDS = 21_600
 # A visitor's strip skips groups without a published analysis. It looks at
 # this many top-ranked groups, so untranslated leaders cannot fill the LIMIT.
 PUBLISHED_HOTSPOT_CANDIDATES = 200
@@ -6350,7 +6351,11 @@ class LocalCatalystIntelligence:
             "prepared_hot_count": count,
             "prepared_since": revision["prepared_at"] if revision else None,
             "last_cycle_at": last_cycle["created_at"] if last_cycle else None,
-            "next_scheduled_at": None,
+            "next_scheduled_at": (
+                _iso(due) if self.mode == "scheduled"
+                and (due := self.scheduled_focus_next_at(now=observed)) is not None
+                else None
+            ),
             "model": self.focus_model,
             "reasoning": self.focus_reasoning,
             "data_through": revision["data_through"] if revision else None,
@@ -7738,10 +7743,10 @@ class LocalCatalystIntelligence:
                         resumed_focus_cycle_id = None
         slot: tuple[str, str] | None = None
         claim_marker: str | None = None
+        news_due = scheduled_times_et is None
         if scheduled_times_et is not None:
             slot = self._scheduled_slot(observed, scheduled_times_et)
-            if slot is None:
-                return {"queued": queued, "skipped": skipped}
+        if slot is not None:
             claim_now = _utc_now()
             claim_marker = "claim:" + _iso(claim_now)
             with self._connect() as connection:
@@ -7784,8 +7789,9 @@ class LocalCatalystIntelligence:
                             ),
                         ).rowcount
                 connection.commit()
-            if claimed != 1:
-                return {"queued": queued, "skipped": skipped}
+            news_due = claimed == 1
+            if not news_due:
+                slot = None
         snapshot = (self._prepared_hotspots if self.focus_verification_enabled else self.hotspots)(
             limit=SCHEDULED_FOCUS_EVENT_LIMIT, now=observed,
         )
@@ -7836,7 +7842,7 @@ class LocalCatalystIntelligence:
             # Scan beyond queue capacity so permanent failures near the front
             # cannot occupy every candidate position and starve later news.
             limit=max(self.max_queued * 10, batch_capacity + len(seen)),
-        )
+        ) if news_due else []
         for row in recent:
             news_id = int(row["news_id"])
             if news_id in seen:
@@ -7942,6 +7948,11 @@ class LocalCatalystIntelligence:
                     focus_pending_news_ids.discard(news_id)
                 skipped += 1
                 continue
+            # Inspect existing outcomes even outside a news slot: a terminal
+            # unpublished article must not hold back a due hotspot refresh.
+            # Only new news submissions and retries follow the news clock.
+            if not news_due:
+                continue
             if queued >= batch_capacity:
                 # Inspect terminal jobs before honoring the news capacity.
                 # Otherwise a permanently failed hotspot can occupy the
@@ -7993,12 +8004,13 @@ class LocalCatalystIntelligence:
             and not focus_pending_news_ids
             and active_queue + queued < self.max_queued
             and resumed_focus_cycle_id is None
+            and self._scheduled_focus_due(observed)
         ):
             with self._connect() as connection:
                 existing_focus = connection.execute(
                     """SELECT 1 FROM catalyst_local_focus_cycles
                        WHERE prepared_revision=?
-                         AND status IN ('pending','queued','in_progress','completed')
+                         AND status IN ('pending','queued','in_progress')
                        LIMIT 1""",
                     (prepared_revision,),
                 ).fetchone()
@@ -8020,6 +8032,10 @@ class LocalCatalystIntelligence:
                             retry_cycle_id=retry_cycle_id,
                             as_of=observed,
                             submission_source="scheduled",
+                            force=(
+                                retry_cycle_id is None
+                                and not self.hotspot_status(now=observed)["has_new_hotspots"]
+                            ),
                         )
                     except CatalystError:
                         skipped += 1
@@ -8048,6 +8064,23 @@ class LocalCatalystIntelligence:
                 connection.commit()
         return {"queued": queued, "skipped": skipped}
 
+    def scheduled_focus_next_at(self, *, now: datetime | None = None) -> datetime | None:
+        """The next automatic hotspot refresh, measured from a successful publication."""
+        observed = now or _utc_now()
+        with self._connect() as connection:
+            row = connection.execute(
+                """SELECT MAX(completed_at) FROM catalyst_local_focus_cycles
+                   WHERE status='completed' AND completed_at<=?""",
+                (_iso(observed),),
+            ).fetchone()
+        completed = _parse_time(row[0]) if row and row[0] else None
+        return (completed + timedelta(seconds=SCHEDULED_FOCUS_REFRESH_SECONDS)
+                if completed is not None else None)
+
+    def _scheduled_focus_due(self, observed: datetime) -> bool:
+        due = self.scheduled_focus_next_at(now=observed)
+        return due is None or due <= observed
+
     def _scheduled_focus_retry_cycle(
         self,
         prepared_revision: int,
@@ -8069,8 +8102,12 @@ class LocalCatalystIntelligence:
                    FROM catalyst_local_focus_cycles
                    WHERE prepared_revision=?
                      AND status IN ('failed','budget_blocked')
+                     AND created_at>COALESCE((
+                         SELECT MAX(completed_at) FROM catalyst_local_focus_cycles
+                         WHERE status='completed' AND completed_at<=?
+                     ),'')
                    ORDER BY updated_at DESC,created_at DESC""",
-                (prepared_revision,),
+                (prepared_revision, _iso(observed)),
             ).fetchall()
         if not candidates:
             return None, False
@@ -8530,6 +8567,20 @@ class LocalCatalystIntelligence:
                         counts_for_circuit=False,
                     )
                 self._recover_stale_preparing_focus(connection, now=observed)
+                if submission_source == "scheduled":
+                    success = connection.execute(
+                        """SELECT MAX(completed_at) FROM catalyst_local_focus_cycles
+                           WHERE status='completed' AND completed_at<=?""",
+                        (_iso(observed),),
+                    ).fetchone()
+                    completed = _parse_time(success[0]) if success and success[0] else None
+                    if (completed is not None and observed < completed + timedelta(
+                        seconds=SCHEDULED_FOCUS_REFRESH_SECONDS
+                    )):
+                        raise CatalystError(
+                            "focus_refresh_not_due", "Hotspot refresh is not due yet",
+                            counts_for_circuit=False,
+                        )
                 if force:
                     existing = connection.execute(
                         """SELECT cycle_id FROM catalyst_local_focus_cycles

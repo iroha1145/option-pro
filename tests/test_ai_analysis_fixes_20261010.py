@@ -455,7 +455,7 @@ def test_queued_job_from_the_previous_policy_is_submitted_under_the_new_one(
     assert row["status"] in {"queued", "in_progress"}
     assert row["openai_response_id"] == "resp_policy_transition"
     assert params["max_output_tokens"] == 65_536
-    assert params["tools"][0]["type"] == "web_search"
+    assert not {"tools", "tool_choice", "max_tool_calls", "include"} & set(params)
 
 
 def test_completed_always_web_result_stays_in_the_feed_without_a_new_paid_job(tmp_path):
@@ -486,7 +486,7 @@ def test_completed_always_web_result_stays_in_the_feed_without_a_new_paid_job(tm
         assert db.execute("SELECT count(*) FROM ai_jobs").fetchone()[0] == 1
 
 
-# --- B. Luna searches only when the article body is missing ------------------
+# --- B. Luna uses supplied news content without web tools --------------------
 
 
 def test_luna_request_tools_follow_each_tasks_article():
@@ -494,27 +494,25 @@ def test_luna_request_tools_follow_each_tasks_article():
     without = luna_payload()
     with_article = {**luna_payload(), "article_status": "available", "article": _ARTICLE}
 
-    searching = runtime._create_params(settings, "news_impact", without)
-    assert searching["tools"][0]["type"] == "web_search"
-    assert searching["tool_choice"] == "required"
-    assert searching["max_tool_calls"] == 1
-    assert "必须先联网搜索原始事件" in searching["instructions"]
-    assert "不得附加网址、Markdown链接或括号中的网站域名" in searching["instructions"]
+    summary = runtime._create_params(settings, "news_impact", without)
+    assert not {"tools", "tool_choice", "max_tool_calls", "include"} & set(summary)
+    assert "只分析标题与摘要内容，不联网，不要臆测全文" in summary["instructions"]
+    assert "不得附加网址、Markdown链接或括号中的网站域名" in summary["instructions"]
 
     plain = runtime._create_params(settings, "news_impact", with_article)
     assert not {"tools", "tool_choice", "max_tool_calls", "include"} & set(plain)
     assert "不浏览网页" in plain["instructions"]
     assert "联网搜索" not in plain["instructions"]
     assert "不得照抄输入或输出的字段名与状态值" in plain["instructions"]
-    assert plain["max_output_tokens"] == searching["max_output_tokens"] == 65_536
+    assert plain["max_output_tokens"] == summary["max_output_tokens"] == 65_536
 
-    assert runtime.schema_identity("news_impact", model=runtime.LUNA_MODEL, payload=without) == runtime.LUNA_WEB_NEWS_IDENTITY
+    assert runtime.schema_identity("news_impact", model=runtime.LUNA_MODEL, payload=without) == runtime.LUNA_SUMMARY_NEWS_IDENTITY
     assert runtime.schema_identity("news_impact", model=runtime.LUNA_MODEL, payload=with_article) == runtime.LUNA_ARTICLE_NEWS_IDENTITY
-    assert runtime.max_tool_calls_for("news_impact", model=runtime.LUNA_MODEL, payload=without) == 1
+    assert runtime.max_tool_calls_for("news_impact", model=runtime.LUNA_MODEL, payload=without) == 0
     assert runtime.max_tool_calls_for("news_impact", model=runtime.LUNA_MODEL, payload=with_article) == 0
     assert runtime.budget_reservation_microusd(
         "news_impact", model=runtime.LUNA_MODEL, payload=with_article,
-    ) < runtime.budget_reservation_microusd(
+    ) == runtime.budget_reservation_microusd(
         "news_impact", model=runtime.LUNA_MODEL, payload=without,
     )
 

@@ -399,5 +399,5 @@ def test_validation_contract_and_task_identities_do_not_move():
     assert runtime.schema_identity("market_focus", model="claude-haiku-5-5") == runtime.FOCUS_CLAUDE_IDENTITY
     assert runtime.schema_identity("market_focus", model="gpt-5.6-terra") == runtime.FOCUS_OPENAI_IDENTITY
     assert runtime.schema_identity("news_impact", model="gpt-5.6-terra") == runtime.TERRA_NEWS_IDENTITY
-    assert runtime.schema_identity("news_impact", model=runtime.LUNA_MODEL) == runtime.LUNA_WEB_NEWS_IDENTITY
+    assert runtime.schema_identity("news_impact", model=runtime.LUNA_MODEL) == runtime.LUNA_SUMMARY_NEWS_IDENTITY
     assert runtime.schema_identity("earnings_impact", model="gpt-5.6-terra") == runtime.OPENAI_EARNINGS_IDENTITY

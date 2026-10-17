@@ -8298,3 +8298,126 @@ def test_ten_day_focus_and_audit_retention_keeps_boundaries_and_active_tasks(tmp
         )] == [("audit-boundary", "accepted"), ("recent-negative", "accepted"), ("recent-negative", "rejected")]
     again = intelligence.prune_journal(retention_days=10, now=now)
     assert not any(again.values())
+
+
+@pytest.fixture
+def six_hour_focus(tmp_path, monkeypatch):
+    etl, ai, intelligence = _stack(tmp_path, mode="scheduled")
+    clock = {"now": datetime(2026, 10, 17, 12, 0, tzinfo=timezone.utc)}
+    monkeypatch.setattr(local_module, "_utc_now", lambda: clock["now"])
+    monkeypatch.setattr(ai_jobs_repository_module, "_utcnow", lambda: clock["now"])
+    _apply_news(etl, [_news_change(1, 901, available_at=clock["now"] - timedelta(minutes=5))],
+                as_of=clock["now"] - timedelta(minutes=1))
+    intelligence.reconcile()
+    news = intelligence.request_analysis(901, force=False)
+    _finish_job(ai, news["job_id"], _news_result(news_id=901, change_sequence=1, content_hash="hash-901-1"))
+    intelligence.reconcile()
+    revision = intelligence.hotspot_status()["prepared_revision"]
+    cycle = intelligence.request_market_focus_cycle(expected_prepared_revision=revision)
+    _finish_job(ai, cycle["job_id"], _focus_result(ai, cycle))
+    intelligence.reconcile()
+    due = intelligence.scheduled_focus_next_at()
+    assert due == clock["now"] + timedelta(hours=6)
+    return etl, ai, intelligence, clock, revision, due
+
+
+def test_hotspot_refresh_repeats_same_content_after_six_hours_outside_news_slot(six_hour_focus):
+    _etl, ai, intelligence, clock, revision, due = six_hour_focus
+    clock["now"] = due - timedelta(seconds=1)
+    assert intelligence.run_scheduled(scheduled_times_et=("00:00",), now=clock["now"])["queued"] == 0
+    clock["now"] = due
+    assert intelligence.run_scheduled(scheduled_times_et=("00:00",), now=due)["queued"] == 1
+    assert intelligence.run_scheduled(scheduled_times_et=("00:00",), now=due)["queued"] == 0
+    with intelligence._connect() as connection:
+        cycles = connection.execute("SELECT * FROM catalyst_local_focus_cycles ORDER BY created_at,cycle_id").fetchall()
+    assert len(cycles) == 2
+    latest = next(row for row in cycles if row["status"] != "completed")
+    assert latest["prepared_revision"] == revision
+    assert json.loads(latest["payload_json"])["force"] is True
+    pending = intelligence.market_focus_cycle(latest["cycle_id"])
+    _finish_job(ai, pending["job_id"], _focus_result(ai, pending))
+    intelligence.reconcile()
+    assert intelligence.scheduled_focus_next_at() == due + timedelta(hours=6)
+    assert intelligence.hotspot_status()["next_scheduled_at"] == _iso(due + timedelta(hours=6))
+
+
+def test_new_hotspot_does_not_bypass_six_hours_and_news_keeps_hourly_slots(six_hour_focus):
+    etl, ai, intelligence, clock, _revision, _due = six_hour_focus
+    clock["now"] += timedelta(hours=1)
+    _apply_news(etl, [_news_change(2, 902, available_at=clock["now"] - timedelta(minutes=5), tickers=("AMD",))],
+                as_of=clock["now"] - timedelta(minutes=1))
+    intelligence.reconcile()
+    slots = tuple(f"{hour:02d}:00" for hour in range(24))
+    assert intelligence.run_scheduled(scheduled_times_et=slots, now=clock["now"])["queued"] == 1
+    assert intelligence.run_scheduled(scheduled_times_et=slots, now=clock["now"])["queued"] == 0
+    with sqlite3.connect(ai.path) as connection:
+        job_id = connection.execute("SELECT job_id FROM ai_jobs WHERE job_type='news_impact' AND json_extract(payload_json,'$.news_id')=902").fetchone()[0]
+    _finish_job(ai, job_id, _news_result(news_id=902, change_sequence=2, content_hash="hash-902-2", ticker="AMD"))
+    intelligence.reconcile()
+    assert intelligence.hotspot_status()["has_new_hotspots"] is True
+    clock["now"] += timedelta(hours=1)
+    intelligence.run_scheduled(scheduled_times_et=slots, now=clock["now"])
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM ai_jobs WHERE job_type='market_focus'").fetchone()[0] == 1
+
+
+def test_concurrent_six_hour_refresh_creates_only_one_cycle(six_hour_focus):
+    _etl, _ai, intelligence, clock, _revision, due = six_hour_focus
+    clock["now"] = due
+    peer = LocalCatalystIntelligence(
+        intelligence.db_path, _ai, mode="scheduled",
+        canonical_tickers=("NVDA", "AMD", "AI", "ON", "CAT"),
+    )
+    peer.initialize()
+    barrier = threading.Barrier(2)
+    errors = []
+    def run(engine):
+        with request_owner_access_context(True):
+            try:
+                barrier.wait(timeout=5)
+                engine.run_scheduled(scheduled_times_et=("00:00",), now=due)
+            except BaseException as error:
+                errors.append(error)
+    threads = [threading.Thread(target=run, args=(engine,)) for engine in (intelligence, peer)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+        assert not thread.is_alive()
+    assert not errors
+    with intelligence._connect() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM catalyst_local_focus_cycles").fetchone()[0] == 2
+
+
+def test_six_hour_refresh_ignores_permanently_failed_news_outside_news_slot(six_hour_focus):
+    etl, ai, intelligence, clock, _revision, due = six_hour_focus
+    clock["now"] = due - timedelta(hours=1)
+    _apply_news(
+        etl,
+        [_news_change(2, 903, available_at=clock["now"] - timedelta(minutes=5),
+                      title="AMD announces a new processor", tickers=("AMD",))],
+        as_of=clock["now"] - timedelta(minutes=1),
+    )
+    intelligence.reconcile()
+    slots = tuple(f"{hour:02d}:00" for hour in range(24))
+    assert intelligence.run_scheduled(scheduled_times_et=slots, now=clock["now"])["queued"] == 1
+    with sqlite3.connect(ai.path) as connection:
+        news_job = connection.execute(
+            "SELECT job_id FROM ai_jobs WHERE job_type='news_impact' "
+            "AND json_extract(payload_json,'$.news_id')=903"
+        ).fetchone()[0]
+    _fail_job(ai, news_job, "schema_validation_failed")
+    clock["now"] = due
+    assert intelligence.run_scheduled(scheduled_times_et=("00:00",), now=due) == {
+        "queued": 1, "skipped": 1,
+    }
+    with sqlite3.connect(ai.path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM ai_jobs WHERE job_type='news_impact'"
+        ).fetchone()[0] == 2
+        payload = json.loads(connection.execute(
+            "SELECT payload_json FROM ai_jobs WHERE job_type='market_focus' "
+            "ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()[0])
+    assert len(payload["events"]) == 1
+    assert payload["allowed_tickers"] == ["NVDA"]

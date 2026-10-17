@@ -343,11 +343,11 @@ def test_a_blank_article_body_counts_as_missing_when_publishing():
 
     blank = {**_ARTICLE, "text": "  "}
     data = {**luna_payload(), "article_status": "available", "article": blank}
-    # The request gate already treats a blank body as missing and searches.
-    assert runtime.task_uses_web_search("news_impact", data, model=runtime.LUNA_MODEL)
+    # A blank body falls back to the supplied summary without enabling search.
+    assert not runtime.task_uses_web_search("news_impact", data, model=runtime.LUNA_MODEL)
     assert runtime.claude_tools_for("news_impact", data)
 
-    unsupported = runtime.receipt_result(runtime.openai_receipt(luna_response()), "news_impact", data)
+    unsupported = runtime.receipt_result(runtime.openai_receipt(luna_response(calls=[search(status="failed")])), "news_impact", data)
     assert unsupported["insufficient_context"] is True
     assert unsupported["affected_stocks"] == []
 
@@ -357,21 +357,18 @@ def test_a_blank_article_body_counts_as_missing_when_publishing():
     assert searched["uncertainty_notes"][-1] == "原始正文未取得；分析采用另行联网检索的来源，请查阅来源链接。"
 
 
-# --- Suggestion: a Luna search request is bounded by Luna's context window ----
+# --- Offline Luna requests reserve only their supplied input -----------------
 
 
-def test_luna_search_reservation_uses_the_published_context_window():
+def test_luna_without_a_body_reserves_the_bounded_offline_input():
     from test_luna_news_web_fallback import payload as luna_payload
 
-    searching = luna_payload()
+    without_article = luna_payload()
     with_article = {**luna_payload(), "article_status": "available", "article": _ARTICLE}
     model = runtime.LUNA_MODEL
-    # gpt-5.6-luna: 1,050,000-token context window, of which 65,536 is output.
     assert runtime.max_output_tokens_for("news_impact", model=model) == 65_536
-    assert runtime.max_input_tokens_for("news_impact", model=model, payload=searching) == 984_464
-    assert runtime.token_reservation("news_impact", model=model, payload=searching) == 1_050_000
+    assert runtime.max_input_tokens_for("news_impact", model=model, payload=without_article) == 73_728
+    assert runtime.token_reservation("news_impact", model=model, payload=without_article) == 139_264
     assert runtime.token_reservation("news_impact", model=model, payload=with_article) == 139_264
-    # Over 272K input takes the long-context rates: 984,464 x $0.50/M input,
-    # 65,536 x $1.80/M output, plus one search at $0.01.
-    assert runtime.budget_reservation_microusd("news_impact", model=model, payload=searching) == 620_197
+    assert runtime.budget_reservation_microusd("news_impact", model=model, payload=without_article) == 97_076
     assert runtime.budget_reservation_microusd("news_impact", model=model, payload=with_article) == 97_076

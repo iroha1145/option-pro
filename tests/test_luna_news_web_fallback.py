@@ -62,11 +62,8 @@ def test_request_is_model_aware_and_bounded(tmp_path):
     params = runtime._create_params(settings(tmp_path / "x"), "news_impact", payload())
     assert params["model"] == runtime.LUNA_MODEL
     assert params["reasoning"] == {"effort": "max"}
-    assert params["tools"] == [{"type": "web_search", "search_context_size": "low", "external_web_access": True}]
-    assert params["tool_choice"] == "required"
-    assert params["max_tool_calls"] == 1
-    assert params["include"] == ["web_search_call.action.sources"]
-    assert "不浏览网页" not in params["instructions"]
+    assert not {"tools", "tool_choice", "max_tool_calls", "include"} & set(params)
+    assert "不浏览网页" in params["instructions"]
     assert not runtime.build_runtime_request("news_impact", payload(), model=runtime.OFFICIAL_CLAUDE_MODEL).use_web_search
     assert not runtime.build_runtime_request("market_focus", {}, model=runtime.SONNET_MODEL).use_web_search
 
@@ -86,7 +83,7 @@ def test_search_open_and_unknown_accounting():
 
 
 def test_generated_url_never_becomes_evidence_and_no_sources_is_safe():
-    receipt = runtime.openai_receipt(response(text='{"url":"https://fake.example.com/"}'))
+    receipt = runtime.openai_receipt(response(text='{"url":"https://fake.example.com/"}', calls=[search(status="failed")]))
     assert receipt["evidence_sources"] == []
     result = runtime.receipt_result(receipt, "news_impact", payload())
     assert result["insufficient_context"] is True
@@ -145,10 +142,10 @@ def test_terminal_worker_saves_evidence_before_result(tmp_path, monkeypatch, wit
         assert bool(result["insufficient_context"]) is not with_sources
         return original_complete(job_id, owner, result, usage)
     monkeypatch.setattr(repo, "complete", checked_complete)
-    asyncio.run(worker._finish_response(repo, settings(repo.path), job, "owner", response(calls=[search()] if with_sources else [])))
+    asyncio.run(worker._finish_response(repo, settings(repo.path), job, "owner", response(calls=[search()] if with_sources else [search(status="failed")])))
     row = repo.get_job(job["job_id"])
     assert row["status"] == "completed"
-    assert repo.public(row)["usage"]["web_search_requests"] == int(with_sources)
+    assert repo.public(row)["usage"]["web_search_requests"] == (1 if with_sources else None)
 
 
 def test_legacy_terminal_plain_response_is_not_rewritten(tmp_path):

@@ -77,7 +77,7 @@ def test_the_rule_moves_neither_the_prompt_nor_the_task_identity():
     # 选择「保留提示词要求但不校验」：改提示词会移动任务身份。
     request = runtime.build_runtime_request("news_impact", {}, model=runtime.LUNA_MODEL)
     assert "news_id、change_sequence和content_hash必须原样复制" in request.instructions
-    assert runtime.schema_identity("news_impact", model=runtime.LUNA_MODEL) == runtime.LUNA_WEB_NEWS_IDENTITY
+    assert runtime.schema_identity("news_impact", model=runtime.LUNA_MODEL) == runtime.LUNA_SUMMARY_NEWS_IDENTITY
     assert runtime.schema_identity("news_impact", model=runtime.OFFICIAL_OPENAI_MODEL) == runtime.TERRA_NEWS_IDENTITY
 
 
